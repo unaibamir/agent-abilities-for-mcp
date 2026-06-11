@@ -108,25 +108,18 @@ function aafm_perm_get_comments( array $input ): bool {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 
 	// No post targeted: the whole-site approved listing is readable by any logged-in
-	// caller and only ever returns approved bodies.
+	// caller. The execute callback post-filters the results to comments whose parent
+	// post the caller can read, so a hidden post's approved comments never leak.
 	if ( $post_id <= 0 ) {
 		return current_user_can( 'read' );
 	}
 
-	$post = get_post( $post_id );
-	if ( ! $post instanceof WP_Post ) {
+	if ( ! get_post( $post_id ) instanceof WP_Post ) {
 		// Default-deny on a missing post so the ability can't probe for ids.
 		return false;
 	}
 
-	$status_object = get_post_status_object( (string) get_post_status( $post ) );
-	$is_public     = null !== $status_object && ! empty( $status_object->public );
-
-	if ( $is_public && '' === (string) $post->post_password ) {
-		return current_user_can( 'read' );
-	}
-
-	return current_user_can( 'read_post', $post_id );
+	return aafm_comment_post_is_readable( $post_id );
 }
 
 /**
@@ -141,17 +134,64 @@ function aafm_perm_get_comments( array $input ): bool {
  * @return array<string,mixed>
  */
 function aafm_exec_get_comments( array $input ): array {
-	$paging   = aafm_paginate_args( $input, 50 );
+	$paging  = aafm_paginate_args( $input, 50 );
+	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+
 	$comments = get_comments(
 		array(
-			'post_id' => isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0,
+			'post_id' => $post_id,
 			'status'  => 'approve',
 			'number'  => $paging['per_page'],
 			'paged'   => $paging['page'],
 		)
 	);
 
+	// Whole-site listing (no post_id): a low-privilege caller must never receive a
+	// comment whose parent post they cannot read. A caller who can moderate comments
+	// already sees every comment in the dashboard, so the post-filter only applies to
+	// everyone else. This mirrors the per-object visibility guard in
+	// aafm_perm_get_comments() for the site-wide branch — "approved" is not "public"
+	// when the parent post is private, draft, or password-protected.
+	if ( $post_id <= 0 && ! current_user_can( 'moderate_comments' ) ) {
+		$comments = array_filter(
+			(array) $comments,
+			static fn( $comment ): bool => $comment instanceof WP_Comment
+				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
+		);
+	}
+
 	return array( 'comments' => aafm_redact_comments( $comments ) );
+}
+
+/**
+ * Whether the current user may read the post a comment belongs to.
+ *
+ * Approved comments on a public, non-password-protected post are readable by any
+ * logged-in caller; for every other post (draft, private, scheduled, pending,
+ * password-protected, or missing) the caller must be able to read the post itself.
+ * This is the per-comment form of the visibility logic in aafm_perm_get_comments().
+ *
+ * @param int $post_id Parent post id.
+ * @return bool
+ */
+function aafm_comment_post_is_readable( int $post_id ): bool {
+	if ( $post_id <= 0 ) {
+		return false;
+	}
+
+	$post = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return false;
+	}
+
+	$status_object = get_post_status_object( (string) get_post_status( $post ) );
+	$is_public     = null !== $status_object && ! empty( $status_object->public );
+
+	if ( $is_public && '' === (string) $post->post_password ) {
+		return current_user_can( 'read' );
+	}
+
+	return current_user_can( 'read_post', $post_id );
 }
 
 /**

@@ -31,4 +31,16 @@ final class MetadataTest extends TestCase {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
 		$this->assertSame( $this->plugin_headers()['Version'], AAFM_VERSION );
 	}
+
+	public function test_release_version_is_one_zero_zero(): void {
+		$this->assertSame( '1.0.0', AAFM_VERSION );
+	}
+
+	public function test_readme_stable_tag_matches_version(): void {
+		// Reading our own bundled readme from a local path — not a remote fetch.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
+		$this->assertSame( 1, preg_match( '/^Stable tag:\s*(.+)$/m', $readme, $matches ) );
+		$this->assertSame( AAFM_VERSION, trim( $matches[1] ) );
+	}
 }

@@ -1,0 +1,127 @@
+<?php
+/**
+ * Registration wrapper: permission enforcement + audit logging on success/error/deny.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Abilities;
+
+use AAFM\Tests\TestCase;
+
+final class RegisterWrapperTest extends TestCase {
+
+	public function set_up(): void {
+		parent::set_up();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->ensure_categories();
+	}
+
+	/**
+	 * Register the plugin categories inside a simulated categories-init action.
+	 *
+	 * The Abilities API only permits category registration while the
+	 * 'wp_abilities_api_categories_init' action is running; aafm_register_categories()
+	 * is idempotent, so this is safe to call before every test.
+	 */
+	private function ensure_categories(): void {
+		global $wp_current_filter;
+		$wp_current_filter[] = 'wp_abilities_api_categories_init';
+		aafm_register_categories();
+		array_pop( $wp_current_filter );
+	}
+
+	/**
+	 * Register an ability through the wrapper inside a simulated abilities-init action.
+	 *
+	 * @param string              $name Ability name.
+	 * @param array<string,mixed> $args Ability args.
+	 * @return mixed The wrapper return value (WP_Ability or null).
+	 */
+	private function register( string $name, array $args ) {
+		global $wp_current_filter;
+		$wp_current_filter[] = 'wp_abilities_api_init';
+		$result              = aafm_register_ability_with_log( $name, $args );
+		array_pop( $wp_current_filter );
+		return $result;
+	}
+
+	public function test_missing_permission_callback_is_refused(): void {
+		$this->setExpectedIncorrectUsage( 'aafm_register_ability_with_log' );
+		$ability = $this->register(
+			'aafm/no-perm',
+			array(
+				'label'            => 'No Perm',
+				'description'      => 'Should not register.',
+				'category'         => 'aafm-reads',
+				'output_schema'    => array( 'type' => 'object' ),
+				'execute_callback' => static fn() => array(),
+				// permission_callback intentionally omitted.
+			)
+		);
+		$this->assertNull( $ability );
+	}
+
+	public function test_successful_call_logs_before_and_after(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/echo-ok',
+			array(
+				'label'               => 'Echo',
+				'description'         => 'Returns ok.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array(
+					'type'       => 'object',
+					'properties' => array( 'ok' => array( 'type' => 'boolean' ) ),
+				),
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'properties'           => array( 'foo' => array( 'type' => 'string' ) ),
+					'additionalProperties' => false,
+				),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$result = wp_get_ability( 'aafm/echo-ok' )->execute( array( 'foo' => 'bar' ) );
+		$this->assertSame( array( 'ok' => true ), $result );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertCount( 1, $rows ); // started row updated in place — not a second row.
+		$this->assertSame( 'success', $rows[0]['status'] );
+		$this->assertSame( 'aafm/echo-ok', $rows[0]['ability'] );
+		$this->assertSame( 'foo', $rows[0]['arg_keys'] ); // keys, not values.
+	}
+
+	public function test_denied_call_is_logged_as_denied(): void {
+		$this->acting_as( 'subscriber' );
+		$this->register(
+			'aafm/needs-admin',
+			array(
+				'label'               => 'Needs Admin',
+				'description'         => 'Admin only.',
+				'category'            => 'aafm-writes',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'done' => true ),
+				'permission_callback' => static fn() => current_user_can( 'manage_options' ),
+			)
+		);
+
+		$ability = wp_get_ability( 'aafm/needs-admin' );
+		$allowed = $ability->check_permissions( array() );
+		$this->assertFalse( $allowed );
+
+		$rows = aafm_query_activity( array( 'status' => 'denied' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'aafm/needs-admin', $rows[0]['ability'] );
+	}
+
+	public function test_categories_are_registered(): void {
+		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-reads' ) );
+		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-writes' ) );
+	}
+}

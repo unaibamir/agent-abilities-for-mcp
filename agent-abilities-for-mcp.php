@@ -39,5 +39,9 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/helpers.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
+
+	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 }
 add_action( 'plugins_loaded', 'aafm_bootstrap' );

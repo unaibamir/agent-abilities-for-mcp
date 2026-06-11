@@ -2,12 +2,16 @@
 /wp/
 
 # Dependencies
-/vendor/
+# vendor/ is bundled and shipped (mcp-adapter); do not ignore.
 /node_modules/
 
 # Build artifacts
 /build/
 *.zip
+
+# PHPUnit caches
+/.phpunit.cache/
+/.phpunit.result.cache
 
 # Environment / secrets
 .env

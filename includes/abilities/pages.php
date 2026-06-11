@@ -368,6 +368,9 @@ function aafm_perm_trash_page( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_trash_page( array $input ) {
+	if ( ! aafm_trash_is_enabled() ) {
+		return aafm_trash_disabled_error();
+	}
 	$id   = absint( $input['page_id'] );
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {

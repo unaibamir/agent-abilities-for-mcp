@@ -188,3 +188,36 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
 function aafm_generic_error(): WP_Error {
 	return new WP_Error( 'aafm_error', __( 'The request could not be completed.', 'agent-abilities-for-mcp' ) );
 }
+
+/**
+ * Whether WordPress will move trashed content to the Trash instead of deleting it.
+ *
+ * Core's wp_trash_post()/wp_trash_comment() force a permanent, unrecoverable delete
+ * when EMPTY_TRASH_DAYS is 0 or falsy. The trash abilities advertise "recoverable,
+ * never permanently deleted", so they consult this before trashing and refuse when
+ * the Trash is off rather than silently destroy content.
+ *
+ * @return bool True when the Trash is enabled (content is recoverable).
+ */
+function aafm_trash_is_enabled(): bool {
+	$enabled = defined( 'EMPTY_TRASH_DAYS' ) && EMPTY_TRASH_DAYS;
+
+	/**
+	 * Filters whether the plugin treats the Trash as enabled.
+	 *
+	 * @param bool $enabled True when EMPTY_TRASH_DAYS is truthy.
+	 */
+	return (bool) apply_filters( 'aafm_trash_is_enabled', $enabled );
+}
+
+/**
+ * The error returned when a trash ability is asked to act on a Trash-disabled site.
+ *
+ * @return WP_Error
+ */
+function aafm_trash_disabled_error(): WP_Error {
+	return new WP_Error(
+		'aafm_trash_disabled',
+		__( 'Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it.', 'agent-abilities-for-mcp' )
+	);
+}

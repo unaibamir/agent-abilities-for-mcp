@@ -549,6 +549,9 @@ function aafm_perm_trash_post( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_trash_post( array $input ) {
+	if ( ! aafm_trash_is_enabled() ) {
+		return aafm_trash_disabled_error();
+	}
 	$id = absint( $input['post_id'] );
 	$ok = wp_trash_post( $id );
 	if ( ! $ok ) {

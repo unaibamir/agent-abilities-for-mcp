@@ -385,6 +385,11 @@ function aafm_exec_moderate_comment( array $input ) {
 			$ok = (bool) wp_spam_comment( $id );
 			break;
 		case 'trash':
+			if ( ! aafm_trash_is_enabled() ) {
+				// wp_trash_comment() force-deletes when the Trash is disabled;
+				// refuse rather than permanently destroy the comment.
+				return aafm_trash_disabled_error();
+			}
 			$ok = (bool) wp_trash_comment( $id );
 			break;
 		default:

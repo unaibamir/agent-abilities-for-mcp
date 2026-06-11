@@ -349,10 +349,31 @@ final class SecurityRegressionTest extends TestCase {
 				$src,
 				'Permanent wp_delete_comment(...,true) in ' . $file->getFilename()
 			);
-			$this->assertStringNotContainsString(
-				'EMPTY_TRASH_DAYS',
+		}
+	}
+
+	/**
+	 * Trash-disabled safety: the trash abilities consult aafm_trash_is_enabled()
+	 * and refuse on Trash-disabled sites, where wp_trash_post()/wp_trash_comment()
+	 * would otherwise force a permanent delete. Asserts the guard is present on
+	 * every trash execute path (behavioral coverage lives in TrashDisabledTest).
+	 */
+	public function test_trash_paths_guard_against_disabled_trash(): void {
+		$includes = dirname( __DIR__, 2 ) . '/includes';
+		$sources  = array(
+			$includes . '/abilities/posts.php',
+			$includes . '/abilities/pages.php',
+			$includes . '/abilities/comments.php',
+		);
+
+		foreach ( $sources as $path ) {
+			// Reading our own bundled source for a static scan — not a remote fetch.
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+			$src = (string) file_get_contents( $path );
+			$this->assertStringContainsString(
+				'aafm_trash_is_enabled()',
 				$src,
-				'Trash-bypass constant referenced in ' . $file->getFilename()
+				'Missing Trash-disabled guard in ' . basename( $path )
 			);
 		}
 	}

@@ -28,6 +28,16 @@ define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 
+// Bound the activity log so a chatty (or adversarial deny-loop) agent can't grow it
+// without limit. Pruned on insert, keeping the newest AAFM_LOG_MAX_ROWS rows. Both
+// values are filterable (aafm_log_max_rows / aafm_log_prune_interval).
+if ( ! defined( 'AAFM_LOG_MAX_ROWS' ) ) {
+	define( 'AAFM_LOG_MAX_ROWS', 10000 );
+}
+if ( ! defined( 'AAFM_LOG_PRUNE_INTERVAL' ) ) {
+	define( 'AAFM_LOG_PRUNE_INTERVAL', 200 );
+}
+
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );

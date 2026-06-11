@@ -4,7 +4,7 @@
  * Plugin URI:        https://github.com/unaibamir/agent-abilities-for-mcp
  * Description:       Exposes WordPress abilities to AI agents over the Model Context Protocol (MCP).
  * Version:           0.1.0
- * Requires at least: 6.6
+ * Requires at least: 6.9
  * Requires PHP:      8.0
  * Author:            Unaib Amir
  * Author URI:        https://github.com/unaibamir

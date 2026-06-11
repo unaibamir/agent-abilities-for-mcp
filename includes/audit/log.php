@@ -39,7 +39,7 @@ function aafm_install_activity_log(): void {
 		status VARCHAR(20) NOT NULL DEFAULT '',
 		arg_keys TEXT NULL,
 		source_ip VARCHAR(45) NOT NULL DEFAULT '',
-		created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
 		KEY ability (ability),

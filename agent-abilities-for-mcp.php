@@ -27,6 +27,10 @@ define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 
+// Audit log is required early so the activation hook can install its table.
+require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

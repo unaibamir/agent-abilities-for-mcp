@@ -31,6 +31,28 @@ abstract class TestCase extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Whether the activity log table exists for the current blog.
+	 *
+	 * The WordPress test suite rewrites every plugin `CREATE TABLE` / `DROP TABLE`
+	 * to its `TEMPORARY` form so each test gets an isolated, rolled-back table.
+	 * `SHOW TABLES` does not list temporary tables, so existence is probed with a
+	 * trivial select instead, which sees the temporary table the same way the
+	 * plugin's own queries do.
+	 *
+	 * @return bool
+	 */
+	protected function activity_log_table_exists(): bool {
+		global $wpdb;
+		$table      = $wpdb->prefix . 'aafm_activity_log';
+		$suppressed = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "SELECT 1 FROM {$table} LIMIT 0" );
+		$error = $wpdb->last_error;
+		$wpdb->suppress_errors( $suppressed );
+		return '' === $error;
+	}
+
+	/**
 	 * Create a user with a single explicit role and switch to it.
 	 *
 	 * @param string $role WordPress role slug.

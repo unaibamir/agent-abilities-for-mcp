@@ -19,10 +19,7 @@ final class LogTest extends TestCase {
 	}
 
 	public function test_table_exists_after_install(): void {
-		global $wpdb;
-		$table = $wpdb->prefix . 'aafm_activity_log';
-		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-		$this->assertSame( $table, $found );
+		$this->assertTrue( $this->activity_log_table_exists() );
 	}
 
 	public function test_write_then_query_returns_row_with_arg_keys_only(): void {

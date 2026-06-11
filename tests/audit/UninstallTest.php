@@ -14,15 +14,13 @@ use AAFM\Tests\TestCase;
 final class UninstallTest extends TestCase {
 
 	public function test_cleanup_drops_table_and_option(): void {
-		global $wpdb;
 		aafm_install_activity_log();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+		$this->assertTrue( $this->activity_log_table_exists() );
 
 		aafm_uninstall_site();
 
 		$this->assertFalse( get_option( 'aafm_enabled_abilities' ) );
-		$table = $wpdb->prefix . 'aafm_activity_log';
-		$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
-		$this->assertNull( $found );
+		$this->assertFalse( $this->activity_log_table_exists() );
 	}
 }

@@ -19,10 +19,3 @@ tests_add_filter(
 );
 
 require $_tests_dir . '/includes/bootstrap.php';
-
-// The plugin ships a custom table created on activation. Install it once here,
-// before any per-test transaction, so table-existence checks are reliable
-// across MySQL (strict mode, atomic DDL) and MariaDB.
-if ( function_exists( 'aafm_install_activity_log' ) ) {
-	aafm_install_activity_log();
-}

@@ -37,6 +37,6 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
  * @return void
  */
 function aafm_bootstrap() {
-	// Plugin initialization will be wired up here.
+	require_once AAFM_PLUGIN_DIR . 'includes/registry.php';
 }
 add_action( 'plugins_loaded', 'aafm_bootstrap' );

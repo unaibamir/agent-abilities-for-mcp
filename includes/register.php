@@ -154,6 +154,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 function aafm_register_enabled_abilities(): void {
 	$registry = aafm_get_abilities_registry();
 	foreach ( aafm_get_enabled_abilities() as $name ) {
+		// Idempotent: re-firing wp_abilities_api_init (in tests, or if another consumer
+		// triggers the action) must not re-register and emit "already registered".
+		if ( function_exists( 'wp_has_ability' ) && wp_has_ability( $name ) ) {
+			continue;
+		}
 		if ( empty( $registry[ $name ]['args_builder'] ) || ! is_callable( $registry[ $name ]['args_builder'] ) ) {
 			continue;
 		}

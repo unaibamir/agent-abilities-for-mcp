@@ -191,12 +191,43 @@ function aafm_render_abilities_tab(): void {
 	echo '</form>';
 }
 
-// Temporary stub — replaced by the real implementation in Task 5.3 (Activity Log tab).
-if ( ! function_exists( 'aafm_render_activity_tab' ) ) {
-	/**
-	 * Placeholder for the Activity Log tab (implemented in Task 5.3).
-	 *
-	 * @return void
-	 */
-	function aafm_render_activity_tab(): void {}
+/**
+ * Render the Activity Log tab (includes denials and errors).
+ *
+ * Every cell renders stored audit data, so each value is escaped on output. The log
+ * only ever holds argument KEYS (never values) and a REMOTE_ADDR source IP, so there is
+ * no PII to redact here beyond standard escaping.
+ *
+ * @return void
+ */
+function aafm_render_activity_tab(): void {
+	$rows = aafm_query_activity( array( 'per_page' => 100 ) );
+
+	echo '<div class="aafm-activity">';
+	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
+	echo '<p><button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span></p>';
+	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
+	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Ability', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Arg keys', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '</tr></thead><tbody>';
+
+	if ( empty( $rows ) ) {
+		echo '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
+	}
+	foreach ( $rows as $row ) {
+		printf(
+			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-status aafm-status-%4$s">%5$s</span></td><td>%6$s</td></tr>',
+			esc_html( (string) ( $row['created_at'] ?? '' ) ),
+			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
+			esc_html( (string) ( $row['ability'] ?? '' ) ),
+			esc_attr( (string) ( $row['status'] ?? '' ) ),
+			esc_html( (string) ( $row['status'] ?? '' ) ),
+			esc_html( (string) ( $row['arg_keys'] ?? '' ) )
+		);
+	}
+	echo '</tbody></table>';
+	echo '</div>';
 }

@@ -174,3 +174,20 @@ function aafm_clear_activity_log(): void {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$wpdb->query( "TRUNCATE TABLE {$table}" );
 }
+
+/**
+ * Remove all plugin data for the current blog: the enabled-abilities option and the
+ * activity log table. Called once per site by uninstall.php (multisite-aware there).
+ *
+ * Only this plugin's own option and table are touched — never another plugin's data.
+ *
+ * @return void
+ */
+function aafm_uninstall_site(): void {
+	global $wpdb;
+	delete_option( 'aafm_enabled_abilities' );
+	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
+	$table = esc_sql( aafm_activity_log_table() );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+}

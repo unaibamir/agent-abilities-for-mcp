@@ -37,13 +37,15 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-    env:
+    steps:
       # Keep the throwaway WordPress install outside the workspace. The plugin
       # is symlinked to the repo root, so a WP install inside the workspace
       # would sit under the symlink target and Plugin Check would recurse the
-      # whole core tree.
-      WP_DIR: ${{ runner.temp }}/wp-pcp
-    steps:
+      # whole core tree. runner.temp is only available in steps, not in a
+      # job-level env block, so resolve WP_DIR here.
+      - name: Resolve install path
+        run: echo "WP_DIR=${{ runner.temp }}/wp-pcp" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:

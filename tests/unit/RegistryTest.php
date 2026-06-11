@@ -51,6 +51,50 @@ final class RegistryTest extends TestCase {
 		remove_filter( 'aafm_abilities_registry', $cb );
 	}
 
+	public function test_registry_is_memoized_within_a_request(): void {
+		$runs = 0;
+		$cb   = static function ( array $r ) use ( &$runs ): array {
+			++$runs;
+			return $r;
+		};
+		add_filter( 'aafm_abilities_registry', $cb );
+
+		aafm_get_abilities_registry();
+		aafm_get_abilities_registry();
+		aafm_get_abilities_registry();
+
+		remove_filter( 'aafm_abilities_registry', $cb );
+
+		// The filter set is fixed within a request, so the catalog is built once and
+		// the heavy __()/array churn doesn't repeat on every call.
+		$this->assertSame( 1, $runs, 'aafm_abilities_registry filter re-ran instead of being memoized.' );
+	}
+
+	public function test_registry_cache_flush_rebuilds(): void {
+		// Prime the memo with the current (no-demo) catalog.
+		$this->assertArrayNotHasKey( 'aafm/flush-demo', aafm_get_abilities_registry() );
+
+		$cb = static function ( array $r ): array {
+			$r['aafm/flush-demo'] = array(
+				'label' => 'Flush Demo',
+				'group' => 'reads',
+			);
+			return $r;
+		};
+		add_filter( 'aafm_abilities_registry', $cb );
+
+		// Without a flush the memo still holds the pre-filter catalog.
+		$this->assertArrayNotHasKey( 'aafm/flush-demo', aafm_get_abilities_registry() );
+
+		// Flushing rebuilds, so the new filter contribution appears.
+		aafm_flush_registry_cache();
+		$this->assertArrayHasKey( 'aafm/flush-demo', aafm_get_abilities_registry() );
+
+		remove_filter( 'aafm_abilities_registry', $cb );
+		aafm_flush_registry_cache();
+		$this->assertArrayNotHasKey( 'aafm/flush-demo', aafm_get_abilities_registry() );
+	}
+
 	public function test_enabled_list_is_intersected_with_known_registry(): void {
 		$cb = static function ( array $r ): array {
 			$r['aafm/get-posts'] = array(

@@ -18,12 +18,59 @@ defined( 'ABSPATH' ) || exit;
  * @return array<string,array<string,mixed>>
  */
 function aafm_get_abilities_registry(): array {
+	static $cache = null;
+
+	if ( aafm_registry_cache_should_flush() ) {
+		$cache = null;
+	}
+
+	if ( null !== $cache ) {
+		return $cache;
+	}
+
 	/**
 	 * Filters the static ability registry.
 	 *
 	 * @param array<string,array<string,mixed>> $registry Registry keyed by ability name.
 	 */
-	return (array) apply_filters( 'aafm_abilities_registry', array() );
+	$cache = (array) apply_filters( 'aafm_abilities_registry', array() );
+
+	return $cache;
+}
+
+/**
+ * Whether the registry memo should be flushed on the next read, consuming the flag.
+ *
+ * The catalog is fixed once the plugin loads (every domain file adds its filter at
+ * include time), so production never raises this. It exists so tests that add or
+ * remove an 'aafm_abilities_registry' filter mid-run can force one rebuild.
+ *
+ * @param bool|null $set Internal: true to raise the flush flag, null to read+consume.
+ * @return bool True when the caller should rebuild the memo.
+ */
+function aafm_registry_cache_should_flush( ?bool $set = null ): bool {
+	static $flush = false;
+
+	if ( true === $set ) {
+		$flush = true;
+		return false;
+	}
+
+	if ( $flush ) {
+		$flush = false;
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Flush the in-request registry memo so the next read rebuilds it.
+ *
+ * @return void
+ */
+function aafm_flush_registry_cache(): void {
+	aafm_registry_cache_should_flush( true );
 }
 
 /**

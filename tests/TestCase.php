@@ -22,6 +22,12 @@ abstract class TestCase extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 		delete_option( 'aafm_enabled_abilities' );
+		// The registry catalog is memoized per request; tests mutate the
+		// aafm_abilities_registry filter set between cases, so start each one with a
+		// fresh build (the next registry read rebuilds).
+		if ( function_exists( 'aafm_flush_registry_cache' ) ) {
+			aafm_flush_registry_cache();
+		}
 	}
 
 	/**

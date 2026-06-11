@@ -91,10 +91,15 @@ function aafm_redact_post( WP_Post $post ): array {
 /**
  * Reduce a user to id, display name, roles, and post count — never PII.
  *
- * @param WP_User|false $user User object.
+ * Pass $post_count to use a pre-computed count (e.g. batched via
+ * count_many_users_posts() over the whole listing) and avoid a per-user COUNT(*).
+ * When null, the count is resolved individually — fine for single-user shapes.
+ *
+ * @param WP_User|false $user       User object.
+ * @param int|null      $post_count Pre-computed post count, or null to resolve here.
  * @return array<string,mixed>
  */
-function aafm_redact_user( $user ): array {
+function aafm_redact_user( $user, ?int $post_count = null ): array {
 	if ( ! $user instanceof WP_User ) {
 		return array();
 	}
@@ -102,7 +107,7 @@ function aafm_redact_user( $user ): array {
 		'id'           => (int) $user->ID,
 		'display_name' => $user->display_name,
 		'roles'        => array_values( $user->roles ),
-		'post_count'   => (int) count_user_posts( $user->ID ),
+		'post_count'   => null !== $post_count ? $post_count : (int) count_user_posts( $user->ID ),
 	);
 }
 

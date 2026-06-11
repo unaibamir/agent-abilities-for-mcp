@@ -133,4 +133,66 @@ final class UsersReadTest extends TestCase {
 			$this->assertContains( 'editor', $u['roles'] );
 		}
 	}
+
+	/**
+	 * Post counts must stay accurate after the batch-count refactor: each user's
+	 * count is their own post total, never another user's.
+	 */
+	public function test_post_count_is_accurate_per_user(): void {
+		$admin    = $this->acting_as( 'administrator' );
+		$author_a = self::factory()->user->create( array( 'role' => 'author' ) );
+		$author_b = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		self::factory()->post->create_many( 3, array( 'post_author' => $author_a ) );
+		self::factory()->post->create( array( 'post_author' => $author_b ) );
+
+		$out    = wp_get_ability( 'aafm/get-users' )->execute( array() );
+		$counts = array();
+		foreach ( $out['users'] as $u ) {
+			$counts[ $u['id'] ] = $u['post_count'];
+		}
+
+		$this->assertSame( 3, $counts[ $author_a ] );
+		$this->assertSame( 1, $counts[ $author_b ] );
+		// The acting admin authored nothing in this test.
+		$this->assertSame( 0, $counts[ $admin ] );
+	}
+
+	/**
+	 * No N+1: the post counts are resolved in one batched query, so the total query
+	 * count for the listing does not grow per user. The old code fired one
+	 * count_user_posts() COUNT(*) per row.
+	 */
+	public function test_post_counts_do_not_fan_out_per_user(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+
+		// Baseline: query cost to list a small user set.
+		$baseline_users = self::factory()->user->create_many( 3, array( 'role' => 'author' ) );
+		foreach ( $baseline_users as $uid ) {
+			self::factory()->post->create( array( 'post_author' => $uid ) );
+		}
+		wp_cache_flush();
+		$before_q = $wpdb->num_queries;
+		wp_get_ability( 'aafm/get-users' )->execute( array( 'per_page' => 50 ) );
+		$small_cost = $wpdb->num_queries - $before_q;
+
+		// Add many more authored users; a per-user COUNT(*) would scale the cost up.
+		$more = self::factory()->user->create_many( 12, array( 'role' => 'author' ) );
+		foreach ( $more as $uid ) {
+			self::factory()->post->create( array( 'post_author' => $uid ) );
+		}
+		wp_cache_flush();
+		$before_q = $wpdb->num_queries;
+		wp_get_ability( 'aafm/get-users' )->execute( array( 'per_page' => 50 ) );
+		$large_cost = $wpdb->num_queries - $before_q;
+
+		// With batching the cost is flat-ish; the old N+1 added ~12 extra COUNT(*)
+		// queries for the 12 added users. Allow a small constant slack.
+		$this->assertLessThanOrEqual(
+			$small_cost + 2,
+			$large_cost,
+			'get-users query count scaled with the number of users — the N+1 count is back.'
+		);
+	}
 }

@@ -122,5 +122,23 @@ function aafm_exec_get_users( array $input ): array {
 
 	$users = get_users( $args );
 
-	return array( 'users' => array_values( array_map( 'aafm_redact_user', $users ) ) );
+	// Resolve every user's post count in ONE batched query instead of a COUNT(*)
+	// per row. count_many_users_posts() uses the same defaults as count_user_posts()
+	// (post_type 'post', all statuses), so the numbers match the per-user path.
+	$user_ids = array_map(
+		static fn( $user ): int => $user instanceof WP_User ? (int) $user->ID : 0,
+		$users
+	);
+	$counts   = count_many_users_posts( array_values( array_filter( $user_ids ) ) );
+
+	$redacted = array();
+	foreach ( $users as $user ) {
+		if ( ! $user instanceof WP_User ) {
+			continue;
+		}
+		$count      = isset( $counts[ $user->ID ] ) ? (int) $counts[ $user->ID ] : 0;
+		$redacted[] = aafm_redact_user( $user, $count );
+	}
+
+	return array( 'users' => $redacted );
 }

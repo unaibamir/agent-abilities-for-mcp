@@ -74,14 +74,28 @@ jobs:
           wp core install --path="$WP_DIR" --url=http://localhost --title=PCP \
             --admin_user=admin --admin_password=admin --admin_email=pcp@example.com --skip-email
           wp plugin install plugin-check --activate --path="$WP_DIR"
-          ln -s "$GITHUB_WORKSPACE" "$WP_DIR/wp-content/plugins/agent-abilities-for-mcp"
+
+      - name: Stage the distributable plugin
+        run: |
+          set -euo pipefail
+          # Check the tree that actually ships to wordpress.org, not the dev
+          # repo. rsync reads .distignore as its exclude list (same rules the
+          # release deploy applies), so dev-only files such as phpunit.xml.dist
+          # and the dotfiles never reach the scan.
+          dest="$WP_DIR/wp-content/plugins/agent-abilities-for-mcp"
+          mkdir -p "$dest"
+          rsync -a --exclude-from="$GITHUB_WORKSPACE/.distignore" \
+            "$GITHUB_WORKSPACE/" "$dest/"
 
       - name: Run Plugin Check
         run: |
           set -euo pipefail
+          # vendor (third-party, shipped) and languages (generated) are part of
+          # the distribution but not our source to fix, so keep them out of the
+          # scan. The dev-only files are already gone via .distignore above.
           wp plugin check agent-abilities-for-mcp --path="$WP_DIR" \
             --format=csv --fields=line,column,type,code,message \
-            --exclude-directories=vendor,tests,bin,wp,.ddev,.github,languages \
+            --exclude-directories=vendor,languages \
             | tee pcp-report.csv
           # Fail only on errors. The single DirectDB warning on the internal,
           # constant-name audit table is an accepted false positive.

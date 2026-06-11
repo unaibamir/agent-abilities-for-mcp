@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<ruleset name="Agent Abilities for MCP">
+	<description>WordPress Coding Standards for agent-abilities-for-mcp.</description>
+
+	<file>.</file>
+
+	<!-- Scope: our source only. Never lint throwaway core, bundled deps, DDEV tooling, or tests fixtures. -->
+	<exclude-pattern>*/wp/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/.ddev/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="parallel" value="8"/>
+	<arg value="ps"/>
+
+	<config name="minimum_wp_version" value="6.9"/>
+	<config name="testVersion" value="8.0-"/>
+
+	<rule ref="WordPress">
+		<!-- Allow short array syntax across the codebase (modern PHP house style). -->
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="agent-abilities-for-mcp"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="aafm"/>
+				<element value="AAFM"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="PHPCompatibilityWP"/>
+</ruleset>

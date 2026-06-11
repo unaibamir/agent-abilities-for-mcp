@@ -95,6 +95,24 @@ final class PagesReadTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
+	public function test_get_pages_status_guard_uses_the_page_read_private_cap(): void {
+		// read_private_pages and read_private_posts are distinct primitives on stock WP.
+		// get-pages pins post_type to page, so its private-status guard must consult
+		// read_private_pages, not the post default. An actor holding only the page cap
+		// may request status=private; one holding only the post cap may not.
+		$may_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_userdata( $may_id )->add_cap( 'read_private_pages' );
+		wp_set_current_user( $may_id );
+		$allowed = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'private' ) );
+		$this->assertArrayHasKey( 'posts', $allowed );
+
+		$may_not_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_userdata( $may_not_id )->add_cap( 'read_private_posts' );
+		wp_set_current_user( $may_not_id );
+		$denied = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'private' ) );
+		$this->assertInstanceOf( WP_Error::class, $denied );
+	}
+
 	public function test_get_page_denies_private_to_low_priv(): void {
 		$this->acting_as( 'subscriber' );
 		$priv = self::factory()->post->create(

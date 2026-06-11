@@ -139,7 +139,12 @@ function aafm_exec_get_posts( array $input ) {
 		return $type;
 	}
 
-	$can_private = current_user_can( 'read_private_posts' );
+	// Resolve the read-private capability from the post type's own cap map so a page
+	// query is gated by read_private_pages (and a custom type by its own cap), not the
+	// post default — get-pages delegates here with post_type pinned to 'page'.
+	$type_object = get_post_type_object( $type );
+	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_posts';
+	$can_private = current_user_can( $private_cap );
 	$status      = aafm_validate_post_status( isset( $input['status'] ) ? (string) $input['status'] : 'publish', $can_private );
 	if ( is_wp_error( $status ) ) {
 		return $status;

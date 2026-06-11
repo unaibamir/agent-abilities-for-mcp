@@ -491,7 +491,14 @@ function aafm_exec_update_post( array $input ) {
 	if ( is_wp_error( $result ) ) {
 		return aafm_generic_error();
 	}
-	$updated = get_post( $id );
+
+	// Re-fetch by the id wp_update_post() returned. A destructive save_post/post_updated
+	// hook (or a TOCTOU race) can delete the post during the update, so this can be null;
+	// guard it so the typed aafm_redact_post() degrades to a generic error, never a fatal.
+	$updated = get_post( (int) $result );
+	if ( ! $updated instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
 	return array( 'post' => aafm_redact_post( $updated ) );
 }
 

@@ -304,6 +304,42 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->assertSame( 'publish', get_post_status( $post ) );
 	}
 
+	public function test_update_post_execute_degrades_when_post_vanishes_post_update(): void {
+		// The top-of-execute guard sees the post, wp_update_post succeeds, then a
+		// destructive hook deletes it before the redacting re-fetch. Without an
+		// instanceof guard the typed aafm_redact_post() throws an uncaught TypeError
+		// (fatal); the contract is a clean generic WP_Error instead.
+		$admin = $this->acting_as( 'administrator' );
+		$post  = self::factory()->post->create(
+			array(
+				'post_author' => $admin,
+				'post_status' => 'publish',
+			)
+		);
+
+		$nuke = static function ( $post_id ) use ( $post ): void {
+			if ( (int) $post_id === (int) $post ) {
+				wp_delete_post( (int) $post, true );
+			}
+		};
+		add_action( 'post_updated', $nuke, 10, 1 );
+
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $post,
+				'title'   => 'Will vanish',
+			)
+		);
+
+		remove_action( 'post_updated', $nuke, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		// Must be the plugin's own clean generic error — not the Abilities API's
+		// 'ability_callback_exception' wrapper, which would mean a raw TypeError
+		// escaped the execute callback.
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
+	}
+
 	public function test_set_featured_image_execute_rejects_missing_post(): void {
 		$this->acting_as( 'administrator' );
 		// Real image attachment, phantom post id.

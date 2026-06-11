@@ -136,7 +136,9 @@ function aafm_query_activity( array $args ): array {
 	$per_page = isset( $args['per_page'] ) ? min( 200, max( 1, (int) $args['per_page'] ) ) : 50;
 	$page     = isset( $args['page'] ) ? max( 1, (int) $args['page'] ) : 1;
 	$offset   = ( $page - 1 ) * $per_page;
-	$table    = aafm_activity_log_table();
+	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
+	// never user input; esc_sql() makes that explicit for the static analyzers.
+	$table = esc_sql( aafm_activity_log_table() );
 
 	$where  = '1=1';
 	$params = array();
@@ -167,7 +169,8 @@ function aafm_query_activity( array $args ): array {
  */
 function aafm_clear_activity_log(): void {
 	global $wpdb;
-	$table = aafm_activity_log_table();
+	// Internal constant table name; esc_sql() is belt-and-suspenders for the analyzers.
+	$table = esc_sql( aafm_activity_log_table() );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$wpdb->query( "TRUNCATE TABLE {$table}" );
 }

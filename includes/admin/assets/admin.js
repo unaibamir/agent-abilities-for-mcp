@@ -2,18 +2,12 @@
 /**
  * Admin UI for Agent Abilities for MCP.
  *
- * Every value that comes back from an AJAX response is treated as untrusted: plain text
- * goes through textContent (never innerHTML), and the rare HTML insert runs through
- * escapeHtml first. All requests carry the admin nonce and same-origin credentials.
+ * Every value that comes back from an AJAX response is treated as untrusted and reaches
+ * the DOM through textContent only — this file never assigns innerHTML, so there is no
+ * raw-HTML sink to audit. All requests carry the admin nonce and same-origin credentials.
  */
 ( () => {
 	'use strict';
-
-	const escapeHtml = ( value ) =>
-		String( value ).replace(
-			/[&<>"']/g,
-			( c ) => ( { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ c ] )
-		);
 
 	class AafmAdmin {
 		#ajaxUrl = aafmAdmin.ajaxUrl;
@@ -115,10 +109,7 @@
 					return;
 				}
 				if ( json?.success ) {
-					// user_id is server-generated, but escape it anyway before it touches markup.
-					status.innerHTML = `Created user #${ escapeHtml(
-						json.data.user_id
-					) }. Now create its Application Password under Users &rarr; Profile.`;
+					status.textContent = `Created user #${ json.data.user_id }. Now create its Application Password under Users → Profile.`;
 				} else {
 					status.textContent = `Error: ${ json?.data?.message ?? 'unknown' }`;
 				}

@@ -1,0 +1,106 @@
+name: Plugin Check
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+# Default to no permissions; grant the minimum per job.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  plugin-check:
+    name: Run Plugin Check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      # Keep the throwaway WordPress install outside the workspace. The plugin
+      # is symlinked to the repo root, so a WP install inside the workspace
+      # would sit under the symlink target and Plugin Check would recurse the
+      # whole core tree. runner.temp is only available in steps, not in a
+      # job-level env block, so resolve WP_DIR here.
+      - name: Resolve install path
+        run: echo "WP_DIR=${{ runner.temp }}/wp-pcp" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: '8.3'
+          extensions: mysqli, zip, gd
+          coverage: none
+          tools: wp-cli
+
+      # Production dependencies only — this is what ships to wordpress.org.
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+        with:
+          composer-options: '--no-dev'
+
+      - name: Set up WordPress + Plugin Check
+        run: |
+          set -euo pipefail
+          wp core download --path="$WP_DIR" --version=latest
+          wp config create --path="$WP_DIR" --dbname=wordpress_pcp --dbuser=root --dbpass=root --dbhost=127.0.0.1
+          wp db create --path="$WP_DIR"
+          wp core install --path="$WP_DIR" --url=http://localhost --title=PCP \
+            --admin_user=admin --admin_password=admin --admin_email=pcp@example.com --skip-email
+          wp plugin install plugin-check --activate --path="$WP_DIR"
+
+      - name: Stage the distributable plugin
+        run: |
+          set -euo pipefail
+          # Check the tree that actually ships to wordpress.org, not the dev
+          # repo. rsync reads .distignore as its exclude list (same rules the
+          # release deploy applies), so dev-only files such as phpunit.xml.dist
+          # and the dotfiles never reach the scan.
+          dest="$WP_DIR/wp-content/plugins/agent-abilities-for-mcp"
+          mkdir -p "$dest"
+          rsync -a --exclude-from="$GITHUB_WORKSPACE/.distignore" \
+            "$GITHUB_WORKSPACE/" "$dest/"
+
+      - name: Run Plugin Check
+        run: |
+          set -euo pipefail
+          # vendor (third-party, shipped) and languages (generated) are part of
+          # the distribution but not our source to fix, so keep them out of the
+          # scan. The dev-only files are already gone via .distignore above.
+          wp plugin check agent-abilities-for-mcp --path="$WP_DIR" \
+            --format=csv --fields=line,column,type,code,message \
+            --exclude-directories=vendor,languages \
+            | tee pcp-report.csv
+          # Fail only on errors. The single DirectDB warning on the internal,
+          # constant-name audit table is an accepted false positive.
+          if grep -iqE '(^|,)error(,|$)' pcp-report.csv; then
+            echo "::error::Plugin Check reported one or more errors."
+            exit 1
+          fi
+          echo "Plugin Check passed with no errors."

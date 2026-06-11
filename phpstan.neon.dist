@@ -1,0 +1,21 @@
+includes:
+	- phpstan-baseline.neon
+
+parameters:
+	level: 8
+	phpVersion: 80000
+	paths:
+		- agent-abilities-for-mcp.php
+		- includes
+		- uninstall.php
+	bootstrapFiles:
+		- vendor/autoload.php
+		- tests/phpstan-bootstrap.php
+	scanDirectories:
+		- vendor/wordpress/mcp-adapter
+	excludePaths:
+		- wp/*
+		- tests/*
+		- vendor/*
+	treatPhpDocTypesAsCertain: false
+	reportUnmatchedIgnoredErrors: false

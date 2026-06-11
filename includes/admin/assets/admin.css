@@ -1,0 +1,102 @@
+/* Agent Abilities for MCP — admin settings page.
+   Scoped under .aafm-wrap, native CSS nesting, wp-admin-native colors. */
+
+.aafm-wrap {
+	.aafm-endpoint {
+		display: inline-block;
+		padding-block: 4px;
+		padding-inline: 8px;
+		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+		background: #f6f7f7;
+		border: 1px solid #dcdcde;
+		border-radius: 3px;
+	}
+
+	.aafm-snippet {
+		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+	}
+
+	.aafm-ability-table {
+		margin-block-end: 12px;
+
+		td {
+			vertical-align: middle;
+		}
+	}
+
+	.aafm-badge {
+		display: inline-block;
+		padding-block: 2px;
+		padding-inline: 8px;
+		border-radius: 3px;
+		font-size: 11px;
+		line-height: 1.6;
+		text-transform: uppercase;
+
+		&.aafm-badge-read {
+			background: #e7f5ea;
+			color: #1a7f37;
+		}
+
+		&.aafm-badge-write {
+			background: #fcf3d6;
+			color: #8a6d00;
+		}
+
+		&.aafm-badge-destructive {
+			background: #fce4e4;
+			color: #b32d2e;
+		}
+	}
+
+	.aafm-diagnostics {
+		max-inline-size: 760px;
+
+		.aafm-dot {
+			display: inline-block;
+			inline-size: 10px;
+			block-size: 10px;
+			border-radius: 50%;
+
+			&.aafm-dot-pass {
+				background: #1a7f37;
+			}
+
+			&.aafm-dot-warn {
+				background: #dba617;
+			}
+
+			&.aafm-dot-fail {
+				background: #b32d2e;
+			}
+		}
+	}
+
+	.aafm-status {
+		font-weight: 600;
+
+		&.aafm-status-denied {
+			color: #b32d2e;
+		}
+
+		&.aafm-status-error {
+			color: #8a6d00;
+		}
+
+		&.aafm-status-success {
+			color: #1a7f37;
+		}
+
+		&.aafm-status-started {
+			color: #646970;
+		}
+	}
+
+	.aafm-save-status,
+	.aafm-user-status,
+	.aafm-test-status,
+	.aafm-clear-status {
+		margin-inline-start: 8px;
+		color: #646970;
+	}
+}

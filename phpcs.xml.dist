@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<ruleset name="Agent Abilities for MCP">
+	<description>WordPress Coding Standards for agent-abilities-for-mcp.</description>
+
+	<file>.</file>
+
+	<!-- Scope: our source only. Never lint throwaway core, bundled deps, DDEV tooling, or tests fixtures. -->
+	<exclude-pattern>*/wp/*</exclude-pattern>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/.ddev/*</exclude-pattern>
+
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg name="colors"/>
+	<arg name="parallel" value="8"/>
+	<arg value="ps"/>
+
+	<config name="minimum_wp_version" value="6.9"/>
+	<config name="testVersion" value="8.0-"/>
+
+	<rule ref="WordPress">
+		<!-- Allow short array syntax across the codebase (modern PHP house style). -->
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="agent-abilities-for-mcp"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
+		<properties>
+			<property name="prefixes" type="array">
+				<element value="aafm"/>
+				<element value="AAFM"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Tests use PSR-4 StudlyCase filenames, self-documenting method names, and the
+	     canonical WP test-bootstrap idioms ($_tests_dir, short ternary). WordPress
+	     file-naming, doc-comment, prefix, and short-ternary sniffs do not apply to them. -->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.ClassComment.Missing">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionComment.Missing">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.Operators.DisallowShortTernary.Found">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+
+	<!-- Tests assert directly against the database (table existence, row state) by design;
+	     the direct-query and caching advisories do not apply to throwaway test queries. -->
+	<rule ref="WordPress.DB.DirectDatabaseQuery">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+
+	<!-- Tests simulate the Abilities API init actions by pushing onto $wp_current_filter,
+	     the documented idiom used by core's own ability test trait. -->
+	<rule ref="WordPress.WP.GlobalVariablesOverride">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+</ruleset>

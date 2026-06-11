@@ -1,0 +1,21 @@
+# Files and directories excluded from the WordPress.org build/deploy.
+# Mirrors .gitattributes export-ignore; used by the release workflow's
+# 10up/action-wordpress-plugin-deploy step.
+
+/.git
+/.github
+/.ddev
+/.claude
+/tests
+/bin
+/wp
+/.distignore
+/.gitattributes
+/.gitignore
+/.editorconfig
+/composer.json
+/composer.lock
+/phpcs.xml.dist
+/phpstan.neon.dist
+/phpstan-baseline.neon
+/phpunit.xml.dist

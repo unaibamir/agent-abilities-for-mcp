@@ -12,7 +12,8 @@ database:
 performance_mode: none
 use_dns_when_possible: true
 composer_version: "2"
-web_environment: []
+web_environment:
+    - WP_TESTS_DIR=/tmp/wordpress-tests-lib
 corepack_enable: false
 
 # Key features of DDEV's config.yaml:

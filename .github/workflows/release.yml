@@ -1,0 +1,77 @@
+name: Release
+
+# Publishes a tagged release to the WordPress.org plugin SVN repository and
+# attaches a production build to the GitHub Release.
+#
+# DORMANT until the plugin is approved on wordpress.org AND these repository
+# secrets are set:
+#   - SVN_USERNAME : your wordpress.org account username
+#   - SVN_PASSWORD : your wordpress.org account password
+# Until SVN_PASSWORD exists the wp.org deploy step is skipped, so cutting a
+# GitHub Release before approval still succeeds (it just builds the zip).
+#
+# Before going live, repin the 10up actions below from @stable to a commit SHA.
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # Upload the build asset to the GitHub Release.
+    env:
+      SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+      SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # v2.37.1
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      # Production-only vendor tree — exactly what ships.
+      - name: Install Composer dependencies (production)
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+        with:
+          composer-options: '--no-dev --optimize-autoloader'
+
+      - name: Deploy to WordPress.org
+        id: deploy
+        if: ${{ env.SVN_PASSWORD != '' }}
+        uses: 10up/action-wordpress-plugin-deploy@stable
+        env:
+          SLUG: agent-abilities-for-mcp
+        with:
+          generate-zip: true
+
+      - name: Build zip (when wp.org deploy is skipped)
+        if: ${{ env.SVN_PASSWORD == '' }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p build
+          # Honors .gitattributes export-ignore so dev files stay out of the zip.
+          git archive --format=zip --prefix=agent-abilities-for-mcp/ HEAD -o build/agent-abilities-for-mcp.zip
+
+      - name: Attach build to the GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          files: |
+            ${{ steps.deploy.outputs.zip-path || 'build/agent-abilities-for-mcp.zip' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,249 @@
+<?php
+/**
+ * Post write abilities: draft-forcing, publish gate, per-object caps, recoverable
+ * trash, and the anti-escalation guards (author-forcing, type/status pinning,
+ * content sanitization).
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Abilities;
+
+use AAFM\Tests\TestCase;
+use WP_Error;
+use WP_Post;
+
+final class PostsWriteTest extends TestCase {
+
+	public function set_up(): void {
+		parent::set_up();
+		// The audited registration wrapper logs every permission check and execute to
+		// the custom table, so it must exist before any ability is invoked.
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+
+		// Register categories + enabled abilities inside their gated init actions,
+		// simulated by pushing the action name onto $wp_current_filter — the idiom
+		// WP core's own ability test trait uses. wp_register_ability() refuses to run
+		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
+		// hookname sniff (Phase 1 carried issue).
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option(
+			'aafm_enabled_abilities',
+			array( 'aafm/create-draft', 'aafm/create-post', 'aafm/update-post', 'aafm/trash-post' )
+		);
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	/**
+	 * Run a callback inside a simulated Abilities API init action.
+	 *
+	 * @param string   $action   Action name to simulate.
+	 * @param callable $callback Callback to invoke while the action is "running".
+	 */
+	private function in_action( string $action, callable $callback ): void {
+		global $wp_current_filter;
+		$wp_current_filter[] = $action;
+		$callback();
+		array_pop( $wp_current_filter );
+	}
+
+	public function test_writes_are_in_registry_as_writes(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertSame( 'writes', $registry['aafm/create-draft']['group'] );
+		$this->assertSame( 'write', $registry['aafm/create-draft']['risk'] );
+		$this->assertSame( 'writes', $registry['aafm/create-post']['group'] );
+		$this->assertSame( 'writes', $registry['aafm/update-post']['group'] );
+		$this->assertSame( 'destructive', $registry['aafm/trash-post']['risk'] );
+	}
+
+	public function test_create_draft_forces_draft_status(): void {
+		$this->acting_as( 'author' );
+		// Even if the agent asks to publish, create-draft must produce a draft.
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Agent draft',
+				'content' => 'Body',
+				'status'  => 'publish',
+			)
+		);
+		$this->assertSame( 'draft', get_post_status( $out['post']['id'] ) );
+	}
+
+	public function test_create_draft_needs_only_edit_posts_not_publish(): void {
+		// A contributor can edit_posts but not publish_posts.
+		$this->acting_as( 'contributor' );
+		$this->assertTrue( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-post' )->check_permissions( array() ) );
+	}
+
+	public function test_create_post_requires_publish_cap_and_publishes(): void {
+		$this->acting_as( 'author' );
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Live post',
+				'content' => 'Body',
+			)
+		);
+		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
+	}
+
+	public function test_subscriber_denied_create_draft_is_audited(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/create-draft', $abilities );
+	}
+
+	public function test_create_post_rejects_smuggled_author_and_forces_current_user(): void {
+		// A second user the agent will try to impersonate as the post author.
+		$victim = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$agent = $this->acting_as( 'author' );
+
+		// 1) A caller-supplied post_author is an undeclared field. The closed input
+		// schema (additionalProperties:false) rejects the whole call before execute,
+		// so the spoof can never reach wp_insert_post.
+		$rejected = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'       => 'Whose post is this',
+				'content'     => 'Body',
+				'post_author' => $victim,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $rejected );
+
+		// 2) On a clean call, authorship is forced to the current (agent) user —
+		// wp_insert_post defaults post_author to the current user; we never thread it.
+		$out     = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'My own post',
+				'content' => 'Body',
+			)
+		);
+		$created = get_post( $out['post']['id'] );
+		$this->assertInstanceOf( WP_Post::class, $created );
+		$this->assertSame( $agent, (int) $created->post_author );
+		$this->assertNotSame( $victim, (int) $created->post_author );
+	}
+
+	public function test_create_post_rejects_smuggled_post_type_and_pins_to_post(): void {
+		$this->acting_as( 'editor' );
+
+		// 1) post_type is undeclared in the closed schema → the call is rejected.
+		$rejected = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'     => 'Not a nav item',
+				'content'   => 'Body',
+				'post_type' => 'nav_menu_item',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $rejected );
+
+		// 2) A clean create pins the type to 'post' regardless — the agent has no say.
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Ordinary post',
+				'content' => 'Body',
+			)
+		);
+		$this->assertSame( 'post', get_post_type( $out['post']['id'] ) );
+	}
+
+	public function test_create_draft_sanitizes_script_in_content(): void {
+		$this->acting_as( 'editor' );
+		$out    = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'XSS attempt',
+				'content' => 'Hello<script>alert(1)</script> world',
+			)
+		);
+		$stored = get_post( $out['post']['id'] );
+		$this->assertInstanceOf( WP_Post::class, $stored );
+		$this->assertStringNotContainsString( '<script', $stored->post_content );
+		$this->assertStringContainsString( 'Hello', $stored->post_content );
+	}
+
+	public function test_create_draft_strips_script_tags_from_title(): void {
+		$this->acting_as( 'editor' );
+		$out    = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Clean<script>alert(1)</script>Title',
+				'content' => 'Body',
+			)
+		);
+		$stored = get_post( $out['post']['id'] );
+		$this->assertStringNotContainsString( '<script', $stored->post_title );
+	}
+
+	public function test_update_post_enforces_per_object_cap(): void {
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		$post  = self::factory()->post->create(
+			array(
+				'post_author' => $owner,
+				'post_status' => 'publish',
+			)
+		);
+
+		// A different author may not edit someone else's post.
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-post' )->check_permissions( array( 'post_id' => $post ) )
+		);
+	}
+
+	public function test_update_post_publish_requires_publish_cap(): void {
+		// A contributor owns a draft: may edit it, but may NOT publish it.
+		$contributor = $this->acting_as( 'contributor' );
+		$post        = self::factory()->post->create(
+			array(
+				'post_author' => $contributor,
+				'post_status' => 'draft',
+			)
+		);
+
+		// Editing without a status change is allowed for the owner-contributor.
+		$this->assertTrue(
+			wp_get_ability( 'aafm/update-post' )->check_permissions( array( 'post_id' => $post ) )
+		);
+		// Attempting to flip to publish is gated by publish_posts, which a contributor lacks.
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-post' )->check_permissions(
+				array(
+					'post_id' => $post,
+					'status'  => 'publish',
+				)
+			)
+		);
+	}
+
+	public function test_trash_post_requires_per_object_delete_cap(): void {
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		$post  = self::factory()->post->create(
+			array(
+				'post_author' => $owner,
+				'post_status' => 'publish',
+			)
+		);
+
+		// A different author cannot delete someone else's post.
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/trash-post' )->check_permissions( array( 'post_id' => $post ) )
+		);
+	}
+
+	public function test_trash_post_is_recoverable_not_permanent(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post ) );
+
+		$this->assertSame( 'trash', get_post_status( $post ) );
+		// Still recoverable — not permanently deleted.
+		$this->assertInstanceOf( WP_Post::class, get_post( $post ) );
+	}
+}

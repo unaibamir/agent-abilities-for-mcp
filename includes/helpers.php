@@ -128,6 +128,24 @@ function aafm_redact_comment( $comment ): array {
 }
 
 /**
+ * Reduce a term to a safe, public-facing shape.
+ *
+ * @param WP_Term $term Term object.
+ * @return array<string,mixed>
+ */
+function aafm_redact_term( WP_Term $term ): array {
+	return array(
+		'id'          => (int) $term->term_id,
+		'name'        => $term->name,
+		'slug'        => $term->slug,
+		'taxonomy'    => $term->taxonomy,
+		'parent'      => (int) $term->parent,
+		'count'       => (int) $term->count,
+		'description' => $term->description,
+	);
+}
+
+/**
  * Reduce an attachment to a safe inventory shape (public URL/alt/mime/dims only).
  *
  * @param WP_Post $attachment Attachment post.

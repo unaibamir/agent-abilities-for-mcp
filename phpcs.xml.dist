@@ -61,4 +61,10 @@
 	<rule ref="Universal.Operators.DisallowShortTernary.Found">
 		<exclude-pattern>*/tests/*</exclude-pattern>
 	</rule>
+
+	<!-- Tests assert directly against the database (table existence, row state) by design;
+	     the direct-query and caching advisories do not apply to throwaway test queries. -->
+	<rule ref="WordPress.DB.DirectDatabaseQuery">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
 </ruleset>

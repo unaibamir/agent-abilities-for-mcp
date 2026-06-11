@@ -42,4 +42,23 @@
 	</rule>
 
 	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Tests use PSR-4 StudlyCase filenames, self-documenting method names, and the
+	     canonical WP test-bootstrap idioms ($_tests_dir, short ternary). WordPress
+	     file-naming, doc-comment, prefix, and short-ternary sniffs do not apply to them. -->
+	<rule ref="WordPress.Files.FileName">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.ClassComment.Missing">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Squiz.Commenting.FunctionComment.Missing">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.Operators.DisallowShortTernary.Found">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
 </ruleset>

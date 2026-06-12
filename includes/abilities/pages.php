@@ -23,6 +23,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'description'  => __( 'List pages filtered by status and search term.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_pages',
 	);
 	$registry['aafm/get-page']    = array(
@@ -30,6 +31,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'description'  => __( 'Retrieve a single page by ID.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_page',
 	);
 	$registry['aafm/create-page'] = array(
@@ -37,6 +39,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'description'  => __( 'Create and publish a page (requires publish_pages).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_page',
 	);
 	$registry['aafm/update-page'] = array(
@@ -44,6 +47,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'description'  => __( 'Update an existing page by ID (publishing is a separate gate).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_page',
 	);
 	$registry['aafm/trash-page']  = array(
@@ -51,6 +55,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 		'description'  => __( 'Move a page to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_page',
 	);
 	return $registry;

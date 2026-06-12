@@ -23,6 +23,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'description'  => __( 'List terms (with counts) for a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_terms',
 	);
 	$registry['aafm/create-term'] = array(
@@ -30,6 +31,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_create_term',
 	);
 	$registry['aafm/update-term'] = array(
@@ -37,6 +39,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term',
 	);
 	return $registry;

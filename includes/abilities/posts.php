@@ -23,6 +23,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'List posts filtered by type, status, and search term.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
 	$registry['aafm/get-post']     = array(
@@ -30,6 +31,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'Retrieve a single post by ID.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post',
 	);
 	$registry['aafm/create-draft'] = array(
@@ -37,6 +39,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_draft',
 	);
 	$registry['aafm/create-post']  = array(
@@ -44,6 +47,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'Create and publish a post (requires publish capability).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_post',
 	);
 	$registry['aafm/update-post']  = array(
@@ -51,6 +55,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'Update an existing post by ID (publishing is a separate gate).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post',
 	);
 	$registry['aafm/trash-post']   = array(
@@ -58,6 +63,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
+		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_post',
 	);
 	return $registry;

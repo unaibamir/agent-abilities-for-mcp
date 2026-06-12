@@ -16,10 +16,33 @@
 		constructor() {
 			this.#bindCopy();
 			this.#bindOsTabs();
+			this.#bindSubjectTabs();
 			this.#bindSaveAbilities();
 			this.#bindCreateUser();
 			this.#bindTestConnection();
 			this.#bindClearLog();
+		}
+
+		#bindSubjectTabs() {
+			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
+			if ( ! tabs.length ) {
+				return;
+			}
+			tabs.forEach( ( tab ) => {
+				tab.addEventListener( 'click', () => {
+					const subject = tab.dataset.subject;
+					tabs.forEach( ( t ) => {
+						const active = t === tab;
+						t.classList.toggle( 'is-active', active );
+						t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
+					} );
+					document
+						.querySelectorAll( '.aafm-subject-panel[data-subject]' )
+						.forEach( ( panel ) => {
+							panel.hidden = panel.dataset.subject !== subject;
+						} );
+				} );
+			} );
 		}
 
 		#bindOsTabs() {

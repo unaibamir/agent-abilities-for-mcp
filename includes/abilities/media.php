@@ -24,6 +24,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'description'  => __( 'List media library items (URL, alt, mime, dimensions).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'media',
 		'args_builder' => 'aafm_args_get_media',
 	);
 	$registry['aafm/set-featured-image'] = array(
@@ -31,6 +32,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'description'  => __( "Set a post's featured image to an existing image attachment ID.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'media',
 		'args_builder' => 'aafm_args_set_featured_image',
 	);
 	$registry['aafm/upload-media']       = array(
@@ -38,6 +40,7 @@ function aafm_register_media_definitions( array $registry ): array {
 		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'media',
 		'args_builder' => 'aafm_args_upload_media',
 	);
 	return $registry;

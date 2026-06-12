@@ -324,11 +324,19 @@ function aafm_render_connection_tab(): void {
 		esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent', 'windows' ) )
 	);
 
-	$note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab. If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
+	$kses_code = array( 'code' => array() );
+
+	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above.', 'agent-abilities-for-mcp' );
+
+	$cert_note = __( 'If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
 	if ( aafm_site_is_local() ) {
-		$note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
+		$cert_note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
 	}
-	echo '<p class="description aafm-os-note">' . wp_kses( $note, array( 'code' => array() ) ) . '</p>';
+
+	echo '<div class="aafm-os-note notice notice-info inline">';
+	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
+	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
+	echo '</div>';
 
 	echo '<h3>' . esc_html__( 'Step 3 — Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p>' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';

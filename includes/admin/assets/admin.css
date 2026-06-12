@@ -34,6 +34,110 @@
 		code {
 			font-size: 12px;
 		}
+
+		/* Info callout: separate the Windows and certificate guidance into scannable rows. */
+		&.notice {
+			padding-block: 10px;
+			padding-inline: 12px;
+
+			.aafm-os-note-row {
+				display: flex;
+				gap: 10px;
+				margin-block: 4px;
+				align-items: baseline;
+			}
+
+			.aafm-os-note-label {
+				flex: 0 0 auto;
+				min-inline-size: 86px;
+				font-weight: 600;
+				font-size: 11px;
+				text-transform: uppercase;
+				letter-spacing: 0.02em;
+				color: #2271b1;
+			}
+
+			.aafm-os-note-text {
+				flex: 1 1 auto;
+				color: #3c434a;
+			}
+		}
+	}
+
+	.aafm-help {
+		max-inline-size: 820px;
+
+		.aafm-help-intro {
+			margin-block-end: 16px;
+		}
+
+		h3 {
+			margin-block-start: 24px;
+		}
+
+		.aafm-help-entry {
+			margin-block-end: 6px;
+			border: 1px solid #dcdcde;
+			border-radius: 4px;
+			background: #fff;
+
+			summary {
+				padding-block: 10px;
+				padding-inline: 14px;
+				cursor: pointer;
+				font-weight: 600;
+				color: #1d2327;
+				list-style-position: inside;
+
+				&:hover {
+					color: #2271b1;
+				}
+			}
+
+			&[open] {
+				summary {
+					border-block-end: 1px solid #f0f0f1;
+				}
+			}
+
+			.aafm-help-body {
+				padding-block: 4px 12px;
+				padding-inline: 14px;
+				color: #3c434a;
+
+				p {
+					margin-block: 8px;
+				}
+
+				ul {
+					margin-block: 8px;
+					margin-inline-start: 18px;
+					list-style: disc;
+				}
+
+				code {
+					font-size: 12px;
+					padding-block: 1px;
+					padding-inline: 5px;
+					background: #f6f7f7;
+					border: 1px solid #dcdcde;
+					border-radius: 3px;
+				}
+			}
+		}
+
+		.aafm-help-copy-line {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			margin-block: 6px;
+
+			code {
+				flex: 1 1 auto;
+				overflow-x: auto;
+				white-space: nowrap;
+			}
+		}
 	}
 
 	.aafm-ability-table {

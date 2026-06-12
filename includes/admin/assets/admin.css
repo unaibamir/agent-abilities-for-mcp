@@ -16,6 +16,26 @@
 		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
 	}
 
+	.aafm-os-tabs {
+		display: flex;
+		gap: 4px;
+		margin-block-end: 8px;
+
+		.aafm-os-tab.is-active {
+			background: #f0f0f1;
+			border-color: #8c8f94;
+			box-shadow: none;
+		}
+	}
+
+	.aafm-os-note {
+		max-inline-size: 760px;
+
+		code {
+			font-size: 12px;
+		}
+	}
+
 	.aafm-ability-table {
 		margin-block-end: 12px;
 

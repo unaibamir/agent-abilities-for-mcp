@@ -15,10 +15,33 @@
 
 		constructor() {
 			this.#bindCopy();
+			this.#bindOsTabs();
 			this.#bindSaveAbilities();
 			this.#bindCreateUser();
 			this.#bindTestConnection();
 			this.#bindClearLog();
+		}
+
+		#bindOsTabs() {
+			const tabs = document.querySelectorAll( '.aafm-os-tab' );
+			if ( ! tabs.length ) {
+				return;
+			}
+			tabs.forEach( ( tab ) => {
+				tab.addEventListener( 'click', () => {
+					const os = tab.dataset.os;
+					tabs.forEach( ( t ) => {
+						const active = t === tab;
+						t.classList.toggle( 'is-active', active );
+						t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
+					} );
+					document
+						.querySelectorAll( '.aafm-snippet[data-os]' )
+						.forEach( ( box ) => {
+							box.hidden = box.dataset.os !== os;
+						} );
+				} );
+			} );
 		}
 
 		/**

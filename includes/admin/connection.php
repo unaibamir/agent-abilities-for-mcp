@@ -19,6 +19,49 @@ function aafm_endpoint_url(): string {
 }
 
 /**
+ * Whether this site looks like a local/development install.
+ *
+ * Local stacks (DDEV, Local, Valet, wp-env) serve a self-signed or
+ * locally-trusted TLS certificate. The MCP client proxies run under Node,
+ * which rejects such certificates by default, so a snippet generated for a
+ * local site needs a TLS hint to connect. Production sites, with a
+ * publicly-trusted certificate, never need it and never get it.
+ *
+ * Detection uses the WordPress environment type first, then falls back to the
+ * common local host suffixes so a stock DDEV install (which reports as
+ * "production") is still recognised.
+ *
+ * @return bool
+ */
+function aafm_site_is_local(): bool {
+	$is_local = in_array( wp_get_environment_type(), array( 'local', 'development' ), true );
+
+	if ( ! $is_local ) {
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		if ( is_string( $host ) ) {
+			$host = strtolower( $host );
+			if ( 'localhost' === $host || '127.0.0.1' === $host ) {
+				$is_local = true;
+			} else {
+				foreach ( array( '.test', '.local', '.localhost', '.ddev.site', '.wip' ) as $suffix ) {
+					if ( str_ends_with( $host, $suffix ) ) {
+						$is_local = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Filters whether the connection snippet treats this site as a local install.
+	 *
+	 * @param bool $is_local Whether the site is considered local/development.
+	 */
+	return (bool) apply_filters( 'aafm_site_is_local', $is_local );
+}
+
+/**
  * Run the lean, read-only connection diagnostics shown on the Connection tab.
  *
  * @return array<int,array{id:string,label:string,status:string,detail:string}>
@@ -100,22 +143,48 @@ function aafm_create_agent_user( string $login ) {
  * The snippet never contains a real secret — it carries a paste placeholder so the
  * operator drops in the Application Password they generate through WordPress core.
  *
+ * Two shapes are produced from the same data:
+ *
+ * - unix    — `npx` is launched directly (macOS, Linux).
+ * - windows — the launcher is wrapped in `cmd /c` because Windows MCP clients
+ *             cannot spawn the `npx` shim by name.
+ *
+ * On a local install (see {@see aafm_site_is_local()}) the env block also carries
+ * `NODE_TLS_REJECT_UNAUTHORIZED=0` so the Node proxy will accept the self-signed
+ * certificate during local testing. Production snippets never include it.
+ *
  * @param string $client   Target client (reserved for future per-client shaping).
  * @param string $username The agent username.
+ * @param string $os       Target OS shape: 'unix' (default) or 'windows'.
  * @return string
  */
-function aafm_client_snippet( string $client, string $username ): string {
+function aafm_client_snippet( string $client, string $username, string $os = 'unix' ): string {
 	unset( $client );
+
+	$env = array(
+		'WP_API_URL'      => aafm_endpoint_url(),
+		'WP_API_USERNAME' => $username,
+		'WP_API_PASSWORD' => 'PASTE-APPLICATION-PASSWORD-HERE',
+	);
+	if ( aafm_site_is_local() ) {
+		$env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
+	}
+
+	$package = '@automattic/mcp-wordpress-remote@latest';
+	if ( 'windows' === $os ) {
+		$command = 'cmd';
+		$args    = array( '/c', 'npx', '-y', $package );
+	} else {
+		$command = 'npx';
+		$args    = array( '-y', $package );
+	}
+
 	$cfg = array(
 		'mcpServers' => array(
 			'agent-abilities' => array(
-				'command' => 'npx',
-				'args'    => array( '-y', '@automattic/mcp-wordpress-remote@latest' ),
-				'env'     => array(
-					'WP_API_URL'      => aafm_endpoint_url(),
-					'WP_API_USERNAME' => $username,
-					'WP_API_PASSWORD' => 'PASTE-APPLICATION-PASSWORD-HERE',
-				),
+				'command' => $command,
+				'args'    => $args,
+				'env'     => $env,
 			),
 		),
 	);
@@ -234,7 +303,32 @@ function aafm_render_connection_tab(): void {
 
 	echo '<h3>' . esc_html__( 'Step 2 — Connect your client', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p>' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), then paste this config into your client:', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '<textarea readonly rows="14" class="large-text code aafm-snippet">' . esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent' ) ) . '</textarea>';
+
+	echo '<div class="aafm-os-tabs" role="tablist">';
+	printf(
+		'<button type="button" class="button aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
+		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
+	);
+	printf(
+		'<button type="button" class="button aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
+		esc_html__( 'Windows', 'agent-abilities-for-mcp' )
+	);
+	echo '</div>';
+
+	printf(
+		'<textarea readonly rows="14" class="large-text code aafm-snippet" data-os="unix">%s</textarea>',
+		esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent', 'unix' ) )
+	);
+	printf(
+		'<textarea readonly rows="16" class="large-text code aafm-snippet" data-os="windows" hidden>%s</textarea>',
+		esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent', 'windows' ) )
+	);
+
+	$note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab. If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
+	if ( aafm_site_is_local() ) {
+		$note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
+	}
+	echo '<p class="description aafm-os-note">' . wp_kses( $note, array( 'code' => array() ) ) . '</p>';
 
 	echo '<h3>' . esc_html__( 'Step 3 — Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p>' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';

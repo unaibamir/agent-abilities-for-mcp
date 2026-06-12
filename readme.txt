@@ -47,6 +47,14 @@ Only the abilities you have enabled, and only within the bound user's capabiliti
 
 Any MCP client that can reach a WordPress REST endpoint with an Application Password. Claude Desktop, Claude Code, Cursor, and Windsurf connect through the @automattic/mcp-wordpress-remote proxy. ChatGPT and Gemini remote connectors expect streamable HTTP/SSE, which the underlying adapter does not yet serve natively.
 
+= I'm on Windows and the config won't start. =
+
+Windows MCP clients can't launch the npx shim by name. Wrap it in cmd: set "command" to "cmd" and put "/c", "npx" at the front of "args". The Connection tab has a Windows tab that generates this for you.
+
+= My agent can't connect to a local or staging site. =
+
+Local stacks like DDEV, Local, and Valet serve a self-signed certificate that Node rejects, so the proxy never reaches WordPress. For local testing only, add "NODE_TLS_REJECT_UNAUTHORIZED": "0" to the "env" block (the Connection tab adds it automatically when it detects a local site). Don't ship that setting to production — a public site has a trusted certificate and doesn't need it.
+
 = Is there rate limiting? =
 
 Not in this release. Bind the agent to a low-privilege user and enable only the abilities you need. Per-connection rate limiting is planned for a later version.

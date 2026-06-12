@@ -58,4 +58,37 @@ final class ConnectionTest extends TestCase {
 		// The wizard never embeds a real secret — only the paste placeholder.
 		$this->assertStringContainsString( 'PASTE-APPLICATION-PASSWORD-HERE', $snippet );
 	}
+
+	public function test_unix_snippet_launches_npx_directly(): void {
+		$cfg    = json_decode( aafm_client_snippet( 'claude', 'mcp-agent', 'unix' ), true );
+		$server = $cfg['mcpServers']['agent-abilities'];
+		$this->assertSame( 'npx', $server['command'] );
+		$this->assertSame( array( '-y', '@automattic/mcp-wordpress-remote@latest' ), $server['args'] );
+	}
+
+	public function test_windows_snippet_wraps_launcher_in_cmd(): void {
+		$cfg    = json_decode( aafm_client_snippet( 'claude', 'mcp-agent', 'windows' ), true );
+		$server = $cfg['mcpServers']['agent-abilities'];
+		$this->assertSame( 'cmd', $server['command'] );
+		$this->assertSame(
+			array( '/c', 'npx', '-y', '@automattic/mcp-wordpress-remote@latest' ),
+			$server['args']
+		);
+	}
+
+	public function test_local_site_snippet_carries_tls_bypass(): void {
+		add_filter( 'aafm_site_is_local', '__return_true' );
+		$cfg = json_decode( aafm_client_snippet( 'claude', 'mcp-agent' ), true );
+		remove_filter( 'aafm_site_is_local', '__return_true' );
+		$env = $cfg['mcpServers']['agent-abilities']['env'];
+		$this->assertSame( '0', $env['NODE_TLS_REJECT_UNAUTHORIZED'] );
+	}
+
+	public function test_production_site_snippet_omits_tls_bypass(): void {
+		add_filter( 'aafm_site_is_local', '__return_false' );
+		$cfg = json_decode( aafm_client_snippet( 'claude', 'mcp-agent' ), true );
+		remove_filter( 'aafm_site_is_local', '__return_false' );
+		$env = $cfg['mcpServers']['agent-abilities']['env'];
+		$this->assertArrayNotHasKey( 'NODE_TLS_REJECT_UNAUTHORIZED', $env );
+	}
 }

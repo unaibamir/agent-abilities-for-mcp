@@ -185,17 +185,24 @@ function aafm_args_set_featured_image(): array {
 }
 
 /**
- * Permission for aafm/set-featured-image: per-object edit_post on the TARGET post.
+ * Permission for aafm/set-featured-image: routes the TARGET post through the shared
+ * write chokepoint.
  *
- * A caller who cannot edit the specific post cannot change its thumbnail. The
- * denial is audited by the registration wrapper before any change is attempted.
+ * Setting a thumbnail is a `_thumbnail_id` write that fires save_post and bumps
+ * modified_gmt, so it is gated exactly like update-post/trash-post: the target type
+ * must clear the eligibility floor AND the default-deny allowlist AND be
+ * map_meta_cap===true, then the per-object edit cap is checked. A bare
+ * current_user_can('edit_post') is NOT enough — on a non-mapped type it degrades to a
+ * singular primitive that can fail open. The denial is audited by the registration
+ * wrapper before any change is attempted.
  *
  * @param array<string,mixed> $input Input.
  * @return bool
  */
 function aafm_perm_set_featured_image( array $input ): bool {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	return $post_id > 0 && current_user_can( 'edit_post', $post_id );
+	$post    = $post_id ? get_post( $post_id ) : null;
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
 /**
@@ -212,7 +219,11 @@ function aafm_exec_set_featured_image( array $input ) {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$att_id  = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
 
-	if ( $post_id <= 0 || ! get_post( $post_id ) instanceof WP_Post ) {
+	// Defense-in-depth: re-confirm the target exists AND its type is writable through the
+	// chokepoint, so a non-allowlisted / non-mapped type is refused even if the permission
+	// callback were ever bypassed.
+	$target = $post_id ? get_post( $post_id ) : null;
+	if ( ! $target instanceof WP_Post || ! aafm_can_edit_post_object( $target ) ) {
 		return aafm_generic_error();
 	}
 

@@ -167,6 +167,78 @@ final class CptGovernanceTest extends TestCase {
 		$role->remove_cap( 'delete_aafm_unmapped' );
 	}
 
+	public function test_set_featured_image_denied_on_non_allowlisted_cpt(): void {
+		register_post_type(
+			'aafm_book',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => true,
+				'capability_type' => 'post',
+				'label'           => 'Books',
+			)
+		);
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create(
+			array(
+				'post_type'   => 'aafm_book',
+				'post_status' => 'publish',
+			)
+		);
+
+		// Not opted in: even an administrator (who can edit_post) must be refused,
+		// because the type is not exposed to agents.
+		delete_option( 'aafm_allowed_post_types' );
+		$this->assertFalse(
+			aafm_perm_set_featured_image( array( 'post_id' => $id ) ),
+			'Featured-image write must be denied on a non-allowlisted CPT.'
+		);
+	}
+
+	public function test_set_featured_image_refuses_map_meta_cap_false_footgun(): void {
+		register_post_type(
+			'aafm_unmapped',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => false,
+				'capability_type' => array( 'aafm_unmapped', 'aafm_unmappeds' ),
+				'label'           => 'Unmapped',
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'aafm_unmapped' ) );
+
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		$obj   = self::factory()->post->create(
+			array(
+				'post_type'   => 'aafm_unmapped',
+				'post_status' => 'draft',
+				'post_author' => $owner,
+			)
+		);
+
+		$agent = self::factory()->user->create( array( 'role' => 'author' ) );
+		$role  = get_role( 'author' );
+		$role->add_cap( 'edit_aafm_unmapped' );
+		wp_set_current_user( $agent );
+
+		// The footgun: bare edit_post on a non-mapped type degrades to the singular
+		// edit_aafm_unmapped, which would let the agent re-thumbnail ANOTHER author's draft.
+		$this->assertFalse(
+			aafm_perm_set_featured_image( array( 'post_id' => $obj ) ),
+			'Featured-image write on a map_meta_cap=false CPT must be refused.'
+		);
+
+		$role->remove_cap( 'edit_aafm_unmapped' );
+	}
+
+	public function test_set_featured_image_still_works_for_a_normal_post(): void {
+		$this->acting_as( 'administrator' );
+		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->assertTrue(
+			aafm_perm_set_featured_image( array( 'post_id' => $post ) ),
+			'Featured-image write on a normal post must still be allowed (no regression).'
+		);
+	}
+
 	public function test_closed_schema_rejects_smuggled_fields(): void {
 		// The write schema is additionalProperties:false, so post_type / post_author / meta_input
 		// are not declared and are rejected before execute runs. Assert the schema shape directly.

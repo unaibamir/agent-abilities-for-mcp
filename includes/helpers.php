@@ -16,12 +16,23 @@ defined( 'ABSPATH' ) || exit;
  * @return string|WP_Error Sanitized type, or error if not allowed.
  */
 function aafm_validate_post_type( string $type ) {
-	$type    = sanitize_key( $type );
-	$allowed = get_post_types( array( 'public' => true ), 'names' );
-	if ( ! in_array( $type, $allowed, true ) ) {
-		return new WP_Error( 'aafm_invalid_post_type', __( 'Unsupported post type.', 'agent-abilities-for-mcp' ) );
+	$type = sanitize_key( $type );
+
+	// post and page are built-in but are our shipped, supported content types.
+	if ( in_array( $type, array( 'post', 'page' ), true ) ) {
+		return $type;
 	}
-	return $type;
+
+	// Everything else must be a registered, public, NON-internal content type.
+	// Resolve the object and read its booleans — get_post_types( ['public'=>true] )
+	// wrongly includes the built-in `attachment` type, which has its own redacted
+	// media path and must never be reachable through the content abilities.
+	$obj = get_post_type_object( $type );
+	if ( $obj instanceof WP_Post_Type && true === $obj->public && false === $obj->_builtin ) {
+		return $type;
+	}
+
+	return new WP_Error( 'aafm_invalid_post_type', __( 'Unsupported post type.', 'agent-abilities-for-mcp' ) );
 }
 
 /**

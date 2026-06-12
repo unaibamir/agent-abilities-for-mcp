@@ -233,11 +233,9 @@ function aafm_perm_get_post( array $input ): bool {
 	if ( ! $post instanceof WP_Post ) {
 		return false;
 	}
-	$public_statuses = get_post_stati( array( 'public' => true ) );
-	if ( in_array( $post->post_status, $public_statuses, true ) ) {
-		return true;
-	}
-	return current_user_can( 'edit_post', $id );
+	// Single chokepoint: type must be exposed (floor + allowlist), and non-public
+	// statuses are gated per-object (mapped types only). Closes the attachment leak.
+	return aafm_can_read_post_object( $post );
 }
 
 /**
@@ -449,12 +447,15 @@ function aafm_args_update_post(): array {
  * @return bool
  */
 function aafm_perm_update_post( array $input ): bool {
-	$id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	if ( ! $id || ! current_user_can( 'edit_post', $id ) ) {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
 	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
-		return current_user_can( 'publish_posts' );
+		$caps = aafm_type_caps( $post->post_type );
+		return $caps['object'] instanceof WP_Post_Type
+			&& current_user_can( (string) $caps['object']->cap->publish_posts );
 	}
 	return true;
 }
@@ -551,8 +552,9 @@ function aafm_args_trash_post(): array {
  * @return bool
  */
 function aafm_perm_trash_post( array $input ): bool {
-	$id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
-	return $id > 0 && current_user_can( 'delete_post', $id );
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
 }
 
 /**

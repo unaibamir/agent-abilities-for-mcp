@@ -73,4 +73,11 @@ final class PostTypesSaveTest extends TestCase {
 		$html = (string) ob_get_clean();
 		$this->assertStringNotContainsString( 'name="aafm_post_types[]"', $html );
 	}
+
+	public function test_privacy_policy_content_is_hooked_on_admin_init(): void {
+		$this->assertNotFalse(
+			has_action( 'admin_init', 'aafm_register_privacy_policy_content' ),
+			'Privacy-policy content must be registered on admin_init.'
+		);
+	}
 }

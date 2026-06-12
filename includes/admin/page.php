@@ -118,6 +118,21 @@ function aafm_ajax_save_post_types(): void {
 }
 
 /**
+ * Contribute suggested privacy-policy text describing what an exposed content type leaks.
+ *
+ * @return void
+ */
+function aafm_register_privacy_policy_content(): void {
+	if ( ! function_exists( 'wp_add_privacy_policy_content' ) ) {
+		return;
+	}
+	$content = wp_kses_post(
+		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. No custom field (post meta) values are ever exposed. Only expose content types whose title, slug, and excerpt do not contain personal data.', 'agent-abilities-for-mcp' ) . '</p>'
+	);
+	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ), $content );
+}
+
+/**
  * AJAX: clear the activity log.
  *
  * @return void

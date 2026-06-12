@@ -66,6 +66,11 @@ function aafm_bootstrap() {
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 
+	// Registered unconditionally: admin_init only fires on admin requests (where
+	// includes/admin/page.php is loaded), so this is behavior-identical to gating it
+	// behind is_admin(), while remaining wired at plugin load for deterministic tests.
+	add_action( 'admin_init', 'aafm_register_privacy_policy_content' );
+
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	if ( is_admin() ) {

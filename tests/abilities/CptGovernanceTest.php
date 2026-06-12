@@ -60,7 +60,7 @@ final class CptGovernanceTest extends TestCase {
 		$this->assertTrue( aafm_perm_get_post( array( 'post_id' => $page ) ) );
 	}
 
-	public function test_redaction_returns_exactly_nine_keys_for_a_cpt(): void {
+	public function test_redaction_returns_exactly_ten_keys_for_a_cpt(): void {
 		register_post_type(
 			'aafm_book',
 			array(

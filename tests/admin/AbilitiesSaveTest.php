@@ -55,4 +55,81 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertStringContainsString( 'name="aafm_abilities[]"', $html );
 		$this->assertStringContainsString( 'checked', $html );
 	}
+
+	public function test_every_registry_entry_declares_a_subject(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertNotEmpty( $registry );
+		$known = array_keys( aafm_abilities_subjects() );
+		foreach ( $registry as $name => $meta ) {
+			$this->assertArrayHasKey( 'subject', $meta, "{$name} is missing a subject." );
+			$this->assertNotSame( '', (string) $meta['subject'], "{$name} has an empty subject." );
+			$this->assertContains(
+				(string) $meta['subject'],
+				$known,
+				"{$name} declares an unknown subject '{$meta['subject']}'."
+			);
+		}
+	}
+
+	public function test_abilities_tab_renders_a_sub_tab_per_used_subject(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// Every subject that has at least one ability must get a sub-tab.
+		$registry      = aafm_get_abilities_registry();
+		$used_subjects = array();
+		foreach ( $registry as $meta ) {
+			$used_subjects[ (string) $meta['subject'] ] = true;
+		}
+		foreach ( array_keys( $used_subjects ) as $slug ) {
+			$this->assertStringContainsString(
+				'aafm-subject-tab',
+				$html,
+				'The subject sub-tab bar should render.'
+			);
+			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $html, "Missing sub-tab for {$slug}." );
+		}
+	}
+
+	public function test_each_ability_appears_under_its_subject_with_reads_before_writes(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// The Content panel holds posts + pages; its Reads heading must precede its Writes heading,
+		// and its checkboxes must sit inside that panel (not in another subject's panel).
+		$content_open = strpos( $html, 'class="aafm-subject-panel" data-subject="content"' );
+		$this->assertNotFalse( $content_open, 'Content panel should render.' );
+		$content_close = strpos( $html, '</div>', $content_open );
+		$content_panel = substr( $html, $content_open, ( false === $content_close ? null : $content_close - $content_open ) );
+
+		$reads_pos  = strpos( $content_panel, '>Reads<' );
+		$writes_pos = strpos( $content_panel, '>Writes<' );
+		$this->assertNotFalse( $reads_pos, 'Content panel should have a Reads heading.' );
+		$this->assertNotFalse( $writes_pos, 'Content panel should have a Writes heading.' );
+		$this->assertLessThan( $writes_pos, $reads_pos, 'Reads must come before Writes.' );
+
+		// A content read and a content write both live in the content panel.
+		$this->assertStringContainsString( 'value="aafm/get-posts"', $content_panel );
+		$this->assertStringContainsString( 'value="aafm/trash-post"', $content_panel );
+
+		// A media ability must NOT bleed into the content panel.
+		$this->assertStringNotContainsString( 'value="aafm/get-media"', $content_panel );
+	}
+
+	public function test_saving_ability_from_a_non_default_subject_persists(): void {
+		// 'aafm/get-media' lives under the Media sub-tab, which is never the default (Content is).
+		// The save path is the same flat list regardless of which sub-tab was visible.
+		$posted  = array( 'aafm_abilities' => array( 'aafm/get-media' ) );
+		$enabled = aafm_sanitize_enabled_input( $posted );
+		update_option( 'aafm_enabled_abilities', $enabled );
+
+		$this->assertContains( 'aafm/get-media', aafm_get_enabled_abilities() );
+		$this->assertTrue( aafm_is_ability_enabled( 'aafm/get-media' ) );
+	}
 }

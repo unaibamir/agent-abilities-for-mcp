@@ -23,6 +23,7 @@ function aafm_register_structure_definitions( array $registry ): array {
 		'description'  => __( 'List public taxonomies registered on the site.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_taxonomies',
 	);
 	$registry['aafm/get-post-types'] = array(
@@ -30,6 +31,7 @@ function aafm_register_structure_definitions( array $registry ): array {
 		'description'  => __( 'List public post types registered on the site.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_post_types',
 	);
 	$registry['aafm/get-site-info']  = array(
@@ -37,6 +39,7 @@ function aafm_register_structure_definitions( array $registry ): array {
 		'description'  => __( 'Retrieve the site name, tagline, URL, and language.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_site_info',
 	);
 	return $registry;

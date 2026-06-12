@@ -23,6 +23,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 		'description'  => __( 'List approved comments for a post (email and IP are never returned).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_get_comments',
 	);
 	$registry['aafm/get-pending-comments'] = array(
@@ -30,6 +31,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 		'description'  => __( 'List the moderation queue (requires moderate_comments).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_get_pending_comments',
 	);
 	$registry['aafm/moderate-comment']     = array(
@@ -37,6 +39,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 		'description'  => __( 'Approve, unapprove, spam, or trash a comment (requires moderate_comments).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
+		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_moderate_comment',
 	);
 	return $registry;

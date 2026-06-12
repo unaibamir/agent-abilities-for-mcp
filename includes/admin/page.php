@@ -155,7 +155,32 @@ function aafm_render_admin_page(): void {
 }
 
 /**
- * Render the Abilities tab: grouped toggles, all OFF by default.
+ * The ordered subject sub-tabs for the Abilities tab.
+ *
+ * Keys are the `subject` slugs each ability declares in the registry; values are the
+ * display labels. Order here is the order the sub-tabs render in. A subject is only
+ * shown if at least one registered ability claims it, so this map can safely list
+ * subjects that have no abilities yet.
+ *
+ * @return array<string,string>
+ */
+function aafm_abilities_subjects(): array {
+	return array(
+		'content'    => __( 'Content', 'agent-abilities-for-mcp' ),
+		'taxonomies' => __( 'Taxonomies & Terms', 'agent-abilities-for-mcp' ),
+		'comments'   => __( 'Comments', 'agent-abilities-for-mcp' ),
+		'users'      => __( 'Users', 'agent-abilities-for-mcp' ),
+		'media'      => __( 'Media', 'agent-abilities-for-mcp' ),
+		'site'       => __( 'Site & structure', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
+ * Render the Abilities tab: subject sub-tabs, each split Reads then Writes, all OFF by default.
+ *
+ * This is presentation only. Every checkbox across every sub-tab lives inside the one
+ * form, so hidden panels still submit — the saved option stays a flat list of enabled
+ * ability names regardless of which sub-tab was visible at save time.
  *
  * @return void
  */
@@ -163,36 +188,90 @@ function aafm_render_abilities_tab(): void {
 	$registry = aafm_get_abilities_registry();
 	$enabled  = aafm_get_enabled_abilities();
 
+	// Bucket the registry by subject so each panel only walks its own abilities.
+	$by_subject = array();
+	foreach ( $registry as $name => $meta ) {
+		$subject                  = (string) ( $meta['subject'] ?? '' );
+		$by_subject[ $subject ][] = array( 'name' => (string) $name ) + $meta;
+	}
+
+	// Keep only subjects that actually have abilities, in the declared order.
+	$subjects = array();
+	foreach ( aafm_abilities_subjects() as $slug => $label ) {
+		if ( ! empty( $by_subject[ $slug ] ) ) {
+			$subjects[ $slug ] = $label;
+		}
+	}
+
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
+
+	// Sub-tab bar — reuses the shared .aafm-os-tabs styling; .aafm-subject-tab is the JS hook.
+	$first = array_key_first( $subjects );
+	echo '<div class="aafm-os-tabs aafm-subject-tabs" role="tablist">';
+	foreach ( $subjects as $slug => $label ) {
+		$is_active = ( $slug === $first );
+		printf(
+			'<button type="button" class="button aafm-os-tab aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s</button>',
+			$is_active ? ' is-active' : '',
+			$is_active ? 'true' : 'false',
+			esc_attr( $slug ),
+			esc_html( $label )
+		);
+	}
+	echo '</div>';
 
 	$groups = array(
 		'reads'  => __( 'Reads', 'agent-abilities-for-mcp' ),
 		'writes' => __( 'Writes', 'agent-abilities-for-mcp' ),
 	);
 
-	foreach ( $groups as $group => $heading ) {
-		echo '<h3>' . esc_html( $heading ) . '</h3>';
-		echo '<table class="widefat striped aafm-ability-table"><tbody>';
-		foreach ( $registry as $name => $meta ) {
-			if ( ( $meta['group'] ?? '' ) !== $group ) {
+	foreach ( $subjects as $slug => $label ) {
+		$is_active = ( $slug === $first );
+		printf(
+			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel"%2$s>',
+			esc_attr( $slug ),
+			$is_active ? '' : ' hidden'
+		);
+
+		// Future: the Content panel gains a "which post types are exposed" allowlist selector
+		// here once parameterized post-type abilities land (see note 14, Option A).
+
+		foreach ( $groups as $group => $heading ) {
+			$rows = array();
+			foreach ( $by_subject[ $slug ] as $ability ) {
+				if ( ( $ability['group'] ?? '' ) === $group ) {
+					$rows[] = $ability;
+				}
+			}
+			if ( empty( $rows ) ) {
 				continue;
 			}
-			$risk = (string) ( $meta['risk'] ?? 'read' );
-			printf(
-				'<tr><td><label><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s> %3$s</label></td><td><span class="aafm-badge aafm-badge-%4$s">%4$s</span></td><td>%5$s</td></tr>',
-				esc_attr( (string) $name ),
-				checked( in_array( (string) $name, $enabled, true ), true, false ),
-				esc_html( (string) ( $meta['label'] ?? $name ) ),
-				esc_attr( $risk ),
-				esc_html( (string) ( $meta['description'] ?? '' ) )
-			);
+			echo '<h3>' . esc_html( $heading ) . '</h3>';
+			echo '<table class="widefat striped aafm-ability-table"><tbody>';
+			foreach ( $rows as $ability ) {
+				$name = (string) $ability['name'];
+				$risk = (string) ( $ability['risk'] ?? 'read' );
+				printf(
+					'<tr><td><label><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s> %3$s</label></td><td><span class="aafm-badge aafm-badge-%4$s">%4$s</span></td><td>%5$s</td></tr>',
+					esc_attr( $name ),
+					checked( in_array( $name, $enabled, true ), true, false ),
+					esc_html( (string) ( $ability['label'] ?? $name ) ),
+					esc_attr( $risk ),
+					esc_html( (string) ( $ability['description'] ?? '' ) )
+				);
+			}
+			echo '</tbody></table>';
 		}
-		echo '</tbody></table>';
+
+		echo '</div>';
 	}
 
 	echo '<p><button type="submit" class="button button-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
 	echo '</form>';
+
+	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
+	// feature — it would filter $enabled per principal here rather than at render time.
 }
 
 /**

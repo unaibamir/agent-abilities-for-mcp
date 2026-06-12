@@ -26,6 +26,7 @@ function aafm_register_users_definitions( array $registry ): array {
 		'description'  => __( 'List users (id, display name, roles, post count only — no email or login).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
+		'subject'      => 'users',
 		'args_builder' => 'aafm_args_get_users',
 	);
 	return $registry;

@@ -29,6 +29,32 @@ final class HelpersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'revision' ) );
 	}
 
+	public function test_eligibility_floor_accepts_post_page_and_public_cpt(): void {
+		register_post_type( 'aafm_book', array( 'public' => true, 'label' => 'Books' ) );
+		$this->assertTrue( aafm_post_type_is_eligible( 'post' ) );
+		$this->assertTrue( aafm_post_type_is_eligible( 'page' ) );
+		$this->assertTrue( aafm_post_type_is_eligible( 'aafm_book' ) );
+	}
+
+	public function test_eligibility_floor_rejects_builtin_internal_and_private(): void {
+		register_post_type( 'aafm_secret', array( 'public' => false, 'label' => 'Secret' ) );
+		// attachment is public AND built-in — the one public-but-internal case.
+		$this->assertFalse( aafm_post_type_is_eligible( 'attachment' ) );
+		$this->assertFalse( aafm_post_type_is_eligible( 'revision' ) );
+		$this->assertFalse( aafm_post_type_is_eligible( 'nav_menu_item' ) );
+		$this->assertFalse( aafm_post_type_is_eligible( 'aafm_secret' ) );
+		$this->assertFalse( aafm_post_type_is_eligible( 'totally_fake' ) );
+	}
+
+	public function test_eligible_post_types_lists_public_non_builtin(): void {
+		register_post_type( 'aafm_book', array( 'public' => true, 'label' => 'Books' ) );
+		$eligible = aafm_eligible_post_types();
+		$this->assertContains( 'aafm_book', $eligible );
+		$this->assertContains( 'post', $eligible );
+		$this->assertNotContains( 'attachment', $eligible );
+		$this->assertNotContains( 'revision', $eligible );
+	}
+
 	public function test_taxonomy_allowlist(): void {
 		$this->assertSame( 'category', aafm_validate_taxonomy( 'category' ) );
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_taxonomy( 'nav_menu' ) );

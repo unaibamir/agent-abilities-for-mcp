@@ -36,6 +36,41 @@ function aafm_validate_post_type( string $type ) {
 }
 
 /**
+ * The hard eligibility floor for an exposed content type, independent of the allowlist.
+ *
+ * Reads the RESOLVED WP_Post_Type object rather than get_post_types(['public'=>true]),
+ * which wrongly includes the built-in `attachment` type. post/page are built-in but are
+ * our shipped surface, so they are allowed by explicit special-case. Every internal type
+ * (revision, nav_menu_item, wp_block, wp_template, …) is caught by public===false and/or
+ * _builtin===true; `attachment` is the lone public-but-internal case, caught by _builtin.
+ *
+ * @param string $type Post type slug.
+ * @return bool True when the type may be exposed at all.
+ */
+function aafm_post_type_is_eligible( string $type ): bool {
+	$type = sanitize_key( $type );
+	if ( in_array( $type, array( 'post', 'page' ), true ) ) {
+		return true;
+	}
+	$obj = get_post_type_object( $type );
+	return $obj instanceof WP_Post_Type && true === $obj->public && false === $obj->_builtin;
+}
+
+/**
+ * Every registered post type that clears the eligibility floor.
+ *
+ * Includes post/page (they are eligible); the admin selector excludes those two because
+ * they are always-on. Used to populate the "Exposed content types" UI and to intersect
+ * posted allowlist input down to real, eligible types.
+ *
+ * @return list<string>
+ */
+function aafm_eligible_post_types(): array {
+	$types = get_post_types( array(), 'names' );
+	return array_values( array_filter( $types, 'aafm_post_type_is_eligible' ) );
+}
+
+/**
  * Validate a taxonomy against the public allow-list.
  *
  * @param string $taxonomy Requested taxonomy.

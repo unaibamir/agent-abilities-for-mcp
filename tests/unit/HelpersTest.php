@@ -22,6 +22,11 @@ final class HelpersTest extends TestCase {
 	public function test_post_type_allowlist_rejects_unknown_or_private(): void {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'nav_menu_item' ) );
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'totally_fake' ) );
+		// `attachment` is public AND built-in. It must never pass the content floor —
+		// media has its own redacted path; the content abilities must not touch it.
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'attachment' ) );
+		// Other built-in internal types stay rejected even though some are queryable.
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'revision' ) );
 	}
 
 	public function test_taxonomy_allowlist(): void {

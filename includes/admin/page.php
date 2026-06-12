@@ -82,6 +82,42 @@ function aafm_ajax_save_abilities(): void {
 }
 
 /**
+ * Sanitize posted "exposed content types" down to eligible, opt-in types.
+ *
+ * The post and page types are always-on (forced by aafm_allowed_post_types()), so they are
+ * intentionally dropped here rather than persisted. Every remaining value must clear the
+ * eligibility floor, so attachment, revision, private CPTs, and junk can never be stored.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled here).
+ * @return list<string>
+ */
+function aafm_sanitize_allowed_post_types_input( array $posted ): array {
+	$types = array();
+	if ( isset( $posted['aafm_post_types'] ) && is_array( $posted['aafm_post_types'] ) ) {
+		foreach ( wp_unslash( $posted['aafm_post_types'] ) as $type ) {
+			$types[] = sanitize_key( (string) $type );
+		}
+	}
+	$types = array_diff( $types, array( 'post', 'page' ) );
+	return array_values( array_filter( array_unique( $types ), 'aafm_post_type_is_eligible' ) );
+}
+
+/**
+ * AJAX: save the exposed-content-types allowlist.
+ *
+ * @return void
+ */
+function aafm_ajax_save_post_types(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	update_option( 'aafm_allowed_post_types', $types );
+	wp_send_json_success( array( 'post_types' => $types ) );
+}
+
+/**
  * AJAX: clear the activity log.
  *
  * @return void

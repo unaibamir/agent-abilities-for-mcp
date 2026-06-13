@@ -250,7 +250,25 @@
 					json = { success: false };
 				}
 				if ( status ) {
-					status.textContent = json?.success ? 'Saved' : 'Error saving';
+					if ( ! json?.success ) {
+						// A failed save never wrote anything — say so plainly.
+						status.textContent =
+							'Could not save — your previous settings are still in effect.';
+					} else {
+						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
+						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
+							? json.data.aafm_ip_allowlist.length
+							: 0;
+						if ( dropped > 0 && kept === 0 ) {
+							// Every line was invalid: the list is now empty, which means allow-all.
+							status.textContent =
+								'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.';
+						} else if ( dropped > 0 ) {
+							status.textContent = `Saved. Dropped ${ dropped } line(s) that were not a valid IP or range — check the allowlist.`;
+						} else {
+							status.textContent = 'Saved';
+						}
+					}
 				}
 				// Reflect the cleaned allowlist so any dropped (invalid) lines visibly disappear.
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.

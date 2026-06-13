@@ -61,6 +61,22 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertSame( array( '10.0.0.0/24' ), $out['aafm_ip_allowlist'] );
 	}
 
+	public function test_settings_sanitizer_reports_all_invalid_collapses_to_empty(): void {
+		// All-invalid input collapses to an empty (allow-all) list — the dangerous case.
+		$out = aafm_sanitize_settings_input(
+			array(
+				'aafm_ip_allowlist' => "garbage\nnot-an-ip\n10.0.0.0/99",
+			)
+		);
+		$this->assertSame( array(), $out['aafm_ip_allowlist'] );
+	}
+
+	public function test_dropped_ip_line_count(): void {
+		$this->assertSame( 2, aafm_count_dropped_ip_lines( "10.0.0.1\ngarbage\n192.168.0.0/24\nbad/99" ) );
+		$this->assertSame( 0, aafm_count_dropped_ip_lines( "10.0.0.1\n192.168.0.0/24" ) );
+		$this->assertSame( 0, aafm_count_dropped_ip_lines( '' ) );
+	}
+
 	public function test_settings_render_uses_warning_notice(): void {
 		ob_start();
 		aafm_render_settings_tab();

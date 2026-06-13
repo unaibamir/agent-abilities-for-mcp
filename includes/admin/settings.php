@@ -55,11 +55,40 @@ function aafm_sanitize_settings_input( array $posted ): array {
 }
 
 /**
+ * Count how many submitted allowlist lines are invalid and would be dropped on save.
+ *
+ * Mirrors the sanitizer's line handling — split on newlines, trim, drop blanks — then counts
+ * the non-blank lines that fail aafm_is_valid_ip_or_cidr(). Counting invalid lines explicitly
+ * (rather than diffing submitted vs. kept counts) keeps a duplicate-but-valid line from being
+ * miscounted as a drop. The result drives the save-time warning so an admin who pastes only
+ * garbage — collapsing the list to empty, which means allow-all — is told instead of seeing a
+ * bare "Saved".
+ *
+ * @param string $raw Raw newline-separated allowlist text as posted.
+ * @return int Number of non-blank lines that are not a valid IP or CIDR range.
+ */
+function aafm_count_dropped_ip_lines( string $raw ): int {
+	$dropped = 0;
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$line = trim( sanitize_text_field( (string) $line ) );
+		if ( '' === $line ) {
+			continue;
+		}
+		if ( ! aafm_is_valid_ip_or_cidr( $line ) ) {
+			++$dropped;
+		}
+	}
+	return $dropped;
+}
+
+/**
  * AJAX: save the safety settings.
  *
  * Nonce + manage_options gated. The sanitizer bounds every value, so the stored options are
  * always safe. The cleaned values (with the allowlist as both an array and a newline string
- * for the textarea) are echoed back so the UI can show which IP lines were dropped on save.
+ * for the textarea) are echoed back, along with a count of dropped invalid IP lines, so the UI
+ * can warn when lines were silently removed — including the dangerous case where every line is
+ * invalid and the list collapses to empty (allow-all).
  *
  * @return void
  */
@@ -68,7 +97,11 @@ function aafm_ajax_save_settings(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$clean = aafm_sanitize_settings_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$clean  = aafm_sanitize_settings_input( $posted );
+
+	$raw_allowlist = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
+	$dropped       = aafm_count_dropped_ip_lines( $raw_allowlist );
 
 	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
@@ -82,6 +115,7 @@ function aafm_ajax_save_settings(): void {
 			'aafm_force_draft'        => $clean['aafm_force_draft'],
 			'aafm_ip_allowlist'       => $clean['aafm_ip_allowlist'],
 			'aafm_ip_allowlist_text'  => implode( "\n", $clean['aafm_ip_allowlist'] ),
+			'aafm_ip_dropped'         => $dropped,
 		)
 	);
 }
@@ -116,7 +150,7 @@ function aafm_render_settings_tab(): void {
 		'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
 		esc_attr( (string) aafm_rate_limit_per_min() )
 	);
-	echo '<p class="description">' . esc_html__( 'How many MCP calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description">' . esc_html__( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</td></tr>';
 
 	// IP allowlist.

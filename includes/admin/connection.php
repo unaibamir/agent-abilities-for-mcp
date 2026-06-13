@@ -392,6 +392,8 @@ function aafm_render_connection_tab(): void {
 		$cert_note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
 	}
 
+	// Bespoke notice chrome on purpose: this callout needs two labelled rows (Windows, Certificate),
+	// which aafm_render_notice()'s single dashicon + single body block cannot express.
 	echo '<div class="aafm-os-note notice notice-info inline">';
 	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
 	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';

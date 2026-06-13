@@ -207,3 +207,17 @@ function aafm_max_title_len(): int {
 	 */
 	return (int) apply_filters( 'aafm_max_title_len', max( 0, (int) get_option( 'aafm_max_title_len', 0 ) ) );
 }
+
+/**
+ * Whether a title is within the configured maximum length.
+ *
+ * Off (cap <= 0) always passes. Counted with mb_strlen so multibyte titles
+ * are measured in characters, not bytes.
+ *
+ * @param string $title Sanitized title to measure.
+ * @return bool True when within the cap (or the cap is off).
+ */
+function aafm_title_within_limit( string $title ): bool {
+	$max = aafm_max_title_len();
+	return $max <= 0 || mb_strlen( $title ) <= $max;
+}

@@ -225,4 +225,99 @@ final class SafetyEnforcementTest extends TestCase {
 		$out = aafm_exec_create_post( array( 'title' => 'Published Hello' ) );
 		$this->assertSame( 'publish', $out['post']['status'] );
 	}
+
+	public function test_max_title_blocks_create_and_update(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_max_title_len', 5 );
+
+		// Create over limit -> WP_Error.
+		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => 'TooLongTitle' ) ) );
+		// Update over limit -> WP_Error.
+		$id = self::factory()->post->create( array( 'post_author' => $uid ) );
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			aafm_exec_update_post(
+				array(
+					'post_id' => $id,
+					'title'   => 'AlsoTooLong',
+				)
+			)
+		);
+		// Under limit create -> ok (has a 'post' key).
+		$this->assertArrayHasKey( 'post', (array) aafm_exec_create_post( array( 'title' => 'Hi' ) ) );
+	}
+
+	public function test_max_title_boundary_is_inclusive(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_max_title_len', 5 );
+		// Exactly 5 chars -> allowed (inclusive boundary).
+		$this->assertArrayHasKey( 'post', (array) aafm_exec_create_post( array( 'title' => 'Hello' ) ) );
+		// 6 chars -> rejected.
+		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => 'Hello!' ) ) );
+	}
+
+	public function test_max_title_blocks_create_page_and_update_page(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_max_title_len', 5 );
+
+		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_page( array( 'title' => 'LongPageTitle' ) ) );
+		$pid = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_author' => $uid,
+			)
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			aafm_exec_update_page(
+				array(
+					'page_id' => $pid,
+					'title'   => 'AlsoTooLong',
+				)
+			)
+		);
+	}
+
+	public function test_max_title_off_allows_long_titles(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		// Zero is the default and disables the cap.
+		update_option( 'aafm_max_title_len', 0 );
+		$out = aafm_exec_create_post( array( 'title' => 'A Very Long Title That Would Otherwise Be Rejected' ) );
+		$this->assertArrayHasKey( 'post', (array) $out );
+	}
+
+	public function test_max_title_update_without_title_is_unaffected(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_max_title_len', 5 );
+		$id = self::factory()->post->create(
+			array(
+				'post_author' => $uid,
+				'post_title'  => 'Existing Long Title',
+			)
+		);
+		// Update only the content, no title field -> must NOT be rejected by max-title.
+		$out = aafm_exec_update_post(
+			array(
+				'post_id' => $id,
+				'content' => 'new body',
+			)
+		);
+		$this->assertArrayHasKey( 'post', (array) $out );
+	}
+
+	public function test_max_title_counts_multibyte_correctly(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_max_title_len', 3 );
+		// 3 multibyte chars = within a 3-char limit (mb_strlen=3), even though byte length > 3.
+		$out = aafm_exec_create_post( array( 'title' => '今日は' ) ); // 3 CJK chars.
+		$this->assertArrayHasKey( 'post', (array) $out );
+		// 4 multibyte chars -> over a 3-char limit.
+		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => '今日はね' ) ) );
+	}
 }

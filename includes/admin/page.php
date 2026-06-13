@@ -131,7 +131,7 @@ function aafm_ajax_save_post_types(): void {
 function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_meta_keys'] ) ? (string) $posted['aafm_meta_keys'] : '';
 	$keys = array();
-	foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
 		$key = sanitize_text_field( trim( (string) $line ) );
 		if ( '' === $key || aafm_hard_blocked_meta_key( $key ) ) {
 			continue;

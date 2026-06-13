@@ -118,10 +118,18 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 		return true;
 	}
 	$builtin = array(
-		'session_tokens', '_application_passwords', 'wp_capabilities', 'wp_user_level',
-		'wp_user-settings', 'wp_user-settings-time', 'default_password_nonce',
-		'_password_reset_key', 'community-events-location', '_new_email',
-		$wpdb->prefix . 'capabilities', $wpdb->prefix . 'user_level',
+		'session_tokens',
+		'_application_passwords',
+		'wp_capabilities',
+		'wp_user_level',
+		'wp_user-settings',
+		'wp_user-settings-time',
+		'default_password_nonce',
+		'_password_reset_key',
+		'community-events-location',
+		'_new_email',
+		$wpdb->prefix . 'capabilities',
+		$wpdb->prefix . 'user_level',
 	);
 	/**
 	 * Filters EXTRA meta keys to hard-block. Built-ins are re-merged after, so this

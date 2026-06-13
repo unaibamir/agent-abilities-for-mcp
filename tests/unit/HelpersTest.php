@@ -300,10 +300,18 @@ final class HelpersTest extends TestCase {
 	public function test_hard_block_catches_protected_auth_and_cap_keys(): void {
 		global $wpdb;
 		foreach ( array(
-			'_thumbnail_id', '_edit_lock', 'session_tokens', '_application_passwords',
-			'wp_capabilities', 'wp_user_level', 'default_password_nonce', '_new_email',
-			$wpdb->prefix . 'capabilities', $wpdb->prefix . 'user_level',
-			$wpdb->prefix . '2_capabilities', '',
+			'_thumbnail_id',
+			'_edit_lock',
+			'session_tokens',
+			'_application_passwords',
+			'wp_capabilities',
+			'wp_user_level',
+			'default_password_nonce',
+			'_new_email',
+			$wpdb->prefix . 'capabilities',
+			$wpdb->prefix . 'user_level',
+			$wpdb->prefix . '2_capabilities',
+			'',
 		) as $key ) {
 			$this->assertTrue( aafm_hard_blocked_meta_key( $key ), "$key must be hard-blocked" );
 		}

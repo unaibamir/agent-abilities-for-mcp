@@ -81,7 +81,7 @@ function aafm_args_get_post_meta(): array {
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'meta_key' => array(
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'      => 'string',
 					'minLength' => 1,
 				),
@@ -93,7 +93,7 @@ function aafm_args_get_post_meta(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'post_id'  => array( 'type' => 'integer' ),
-				'meta_key' => array( 'type' => 'string' ),
+				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 				'value'    => array(
 					'type' => array( 'string', 'number', 'boolean', 'null' ),
 				),
@@ -142,7 +142,7 @@ function aafm_exec_get_post_meta( array $input ) {
 	}
 	return array(
 		'post_id'  => $id,
-		'meta_key' => $key,
+		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
 		'value'    => $value,
 	);
 }
@@ -164,7 +164,7 @@ function aafm_args_update_post_meta(): array {
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'meta_key' => array(
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'      => 'string',
 					'minLength' => 1,
 				),
@@ -179,7 +179,7 @@ function aafm_args_update_post_meta(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'post_id'  => array( 'type' => 'integer' ),
-				'meta_key' => array( 'type' => 'string' ),
+				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 				'value'    => array(
 					'type' => array( 'string', 'number', 'boolean', 'integer' ),
 				),
@@ -235,7 +235,7 @@ function aafm_exec_update_post_meta( array $input ) {
 	}
 	return array(
 		'post_id'  => $id,
-		'meta_key' => $key,
+		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
 		'value'    => $value,
 	);
 }
@@ -257,7 +257,7 @@ function aafm_args_delete_post_meta(): array {
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'meta_key' => array(
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'      => 'string',
 					'minLength' => 1,
 				),

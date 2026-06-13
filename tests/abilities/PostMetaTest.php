@@ -31,20 +31,20 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
 		$this->assertSame(
 			array(
 				'post_id'  => $id,
-				'meta_key' => 'subtitle',
+				'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				'value'    => 'A scalar',
 			),
 			aafm_exec_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -52,7 +52,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'unlisted',
+					'meta_key' => 'unlisted', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -60,7 +60,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => '_edit_lock',
+					'meta_key' => '_edit_lock', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -77,7 +77,7 @@ final class PostMetaTest extends TestCase {
 			aafm_exec_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'data',
+					'meta_key' => 'data', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -94,7 +94,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_get_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -114,7 +114,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => 'x',
 				)
 			)
@@ -122,7 +122,7 @@ final class PostMetaTest extends TestCase {
 		aafm_exec_update_post_meta(
 			array(
 				'post_id'  => $id,
-				'meta_key' => 'subtitle',
+				'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				'value'    => 'New <b>title</b>',
 			)
 		);
@@ -132,7 +132,7 @@ final class PostMetaTest extends TestCase {
 			aafm_exec_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => array( 1 ),
 				)
 			)
@@ -149,7 +149,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => 'x',
 				)
 			)
@@ -159,7 +159,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => '_edit_lock',
+					'meta_key' => '_edit_lock', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => 'x',
 				)
 			)
@@ -168,7 +168,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'unlisted',
+					'meta_key' => 'unlisted', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => 'x',
 				)
 			)
@@ -189,7 +189,7 @@ final class PostMetaTest extends TestCase {
 			$first = aafm_exec_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => $key,
+					'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => $val,
 				)
 			);
@@ -199,7 +199,7 @@ final class PostMetaTest extends TestCase {
 			$second = aafm_exec_update_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => $key,
+					'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 					'value'    => $val,
 				)
 			);
@@ -219,7 +219,7 @@ final class PostMetaTest extends TestCase {
 			aafm_exec_delete_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -237,7 +237,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_delete_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'subtitle',
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -246,7 +246,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_delete_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => '_edit_lock',
+					'meta_key' => '_edit_lock', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);
@@ -254,7 +254,7 @@ final class PostMetaTest extends TestCase {
 			aafm_perm_delete_post_meta(
 				array(
 					'post_id'  => $id,
-					'meta_key' => 'unlisted',
+					'meta_key' => 'unlisted', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				)
 			)
 		);

@@ -218,8 +218,10 @@ function aafm_exec_update_post_meta( array $input ) {
 		return $value;
 	}
 	if ( false === update_post_meta( $id, $key, wp_slash( $value ) ) ) {
-		// update_post_meta returns false on no-op (same value) too; treat a genuine read-back as truth.
-		if ( get_post_meta( $id, $key, true ) !== $value ) {
+		// update_post_meta returns false on a same-value no-op too. Meta round-trips through a
+		// longtext column, so the stored value reads back as a string; compare stringified forms
+		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
+		if ( (string) get_post_meta( $id, $key, true ) !== (string) $value ) {
 			return aafm_generic_error();
 		}
 	}

@@ -46,4 +46,50 @@ final class SafetyTest extends TestCase {
 		$this->assertSame( array( '192.168.0.5' ), aafm_ip_allowlist() ); // Filter output re-floored.
 		remove_filter( 'aafm_ip_allowlist', $inject );
 	}
+
+	public function test_cidr_match_ipv4_and_ipv6(): void {
+		$this->assertTrue( aafm_cidr_match( '192.168.1.50', '192.168.1.0/24' ) );
+		$this->assertFalse( aafm_cidr_match( '192.168.2.50', '192.168.1.0/24' ) );
+		$this->assertTrue( aafm_cidr_match( '10.0.0.7', '10.0.0.7' ) );        // Bare IP == /32.
+		$this->assertTrue( aafm_cidr_match( '2001:db8::1', '2001:db8::/32' ) );
+		$this->assertFalse( aafm_cidr_match( '2001:dead::1', '2001:db8::/32' ) );
+		$this->assertFalse( aafm_cidr_match( 'garbage', '192.168.1.0/24' ) );
+	}
+
+	public function test_ip_is_allowed_empty_allows_all_else_restricts(): void {
+		update_option( 'aafm_ip_allowlist', array() );
+		$this->assertTrue( aafm_ip_is_allowed( '203.0.113.9' ) );           // Empty = allow all.
+		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
+		$this->assertTrue( aafm_ip_is_allowed( '10.1.2.3' ) );
+		$this->assertFalse( aafm_ip_is_allowed( '203.0.113.9' ) );          // Not in list -> blocked.
+	}
+
+	public function test_cidr_match_partial_byte_masks(): void {
+		// IPv4 /20 -> mask 255.255.240.0; remainder 4 bits in the 3rd byte (0xF0).
+		$this->assertTrue( aafm_cidr_match( '192.168.16.5', '192.168.16.0/20' ) );    // 0x10 & 0xF0 == 0x10
+		$this->assertTrue( aafm_cidr_match( '192.168.31.255', '192.168.16.0/20' ) );  // top of the /20 block.
+		$this->assertFalse( aafm_cidr_match( '192.168.32.5', '192.168.16.0/20' ) );   // 0x20 & 0xF0 != 0x10 — just outside
+		// IPv4 /28 -> last-nibble boundary (0xF0 in the 4th byte).
+		$this->assertTrue( aafm_cidr_match( '10.0.0.5', '10.0.0.0/28' ) );
+		$this->assertFalse( aafm_cidr_match( '10.0.0.20', '10.0.0.0/28' ) );          // .20 = 0x14, outside .0/28
+		// IPv6 /35 -> partial byte 0xE0 (top 3 bits of the 5th byte).
+		$this->assertTrue( aafm_cidr_match( '2001:db8:2000::1', '2001:db8:2000::/35' ) );
+		$this->assertFalse( aafm_cidr_match( '2001:db8:4000::1', '2001:db8:2000::/35' ) );
+	}
+
+	public function test_cidr_match_is_fail_closed_on_malformed(): void {
+		$this->assertFalse( aafm_cidr_match( '192.168.1.1', 'not-a-cidr' ) );
+		$this->assertFalse( aafm_cidr_match( '192.168.1.1', '192.168.1.0/999' ) ); // Out-of-range prefix.
+		$this->assertFalse( aafm_cidr_match( '192.168.1.1', '192.168.1.0/-1' ) );
+		$this->assertFalse( aafm_cidr_match( '192.168.1.1', '' ) );
+		$this->assertFalse( aafm_cidr_match( '', '192.168.1.0/24' ) );
+		$this->assertFalse( aafm_cidr_match( '192.168.1.1', '2001:db8::/32' ) ); // Family mismatch v4 vs v6.
+		$this->assertFalse( aafm_cidr_match( '2001:db8::1', '192.168.1.0/24' ) ); // Family mismatch v6 vs v4.
+	}
+
+	public function test_ip_is_allowed_nonempty_all_invalid_blocks_not_allows_all(): void {
+		// CRITICAL fail-closed: a non-empty list that happens to be all-garbage must NOT silently allow everyone.
+		update_option( 'aafm_ip_allowlist', array( 'garbage', 'not-a-cidr' ) );
+		$this->assertFalse( aafm_ip_is_allowed( '203.0.113.9' ) );
+	}
 }

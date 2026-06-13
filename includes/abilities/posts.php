@@ -342,10 +342,21 @@ function aafm_perm_publish_posts(): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_insert_post( array $input, string $status, string $type ) {
+	// Force-draft override applies to every create that routes here (post + page).
+	if ( aafm_force_draft() ) {
+		$status = 'draft';
+	}
+
+	// Max-title guard covers create (post + page via delegation) and, in the updater, update (post + page).
+	$title = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
+	if ( ! aafm_title_within_limit( $title ) ) {
+		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
+	}
+
 	$postarr = array(
 		'post_type'    => $type,
 		'post_status'  => $status,
-		'post_title'   => isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '',
+		'post_title'   => $title,
 		'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
 		'post_excerpt' => isset( $input['excerpt'] ) ? sanitize_text_field( (string) $input['excerpt'] ) : '',
 	);
@@ -478,7 +489,11 @@ function aafm_exec_update_post( array $input ) {
 
 	$postarr = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
-		$postarr['post_title'] = sanitize_text_field( (string) $input['title'] );
+		$title = sanitize_text_field( (string) $input['title'] );
+		if ( ! aafm_title_within_limit( $title ) ) {
+			return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
+		}
+		$postarr['post_title'] = $title;
 	}
 	if ( isset( $input['content'] ) ) {
 		$postarr['post_content'] = wp_kses_post( (string) $input['content'] );

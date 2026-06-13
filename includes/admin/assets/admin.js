@@ -20,6 +20,7 @@
 			this.#bindSaveAbilities();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
+			this.#bindSaveSettings();
 			this.#bindMetaChips();
 			this.#bindCreateUser();
 			this.#bindTestConnection();
@@ -207,6 +208,72 @@
 				}
 				if ( status ) {
 					status.textContent = json?.success ? 'Saved' : 'Error saving';
+				}
+			} );
+		}
+
+		#bindSaveSettings() {
+			const form = document.querySelector( '#aafm-settings-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				const status = form.querySelector( '.aafm-save-status' );
+				const rate = form.querySelector( 'input[name="aafm_rate_limit_per_min"]' );
+				const title = form.querySelector( 'input[name="aafm_max_title_len"]' );
+				const draft = form.querySelector( 'input[name="aafm_force_draft"]' );
+				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
+
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_settings' );
+				body.append( 'nonce', this.#nonce );
+				body.append( 'aafm_rate_limit_per_min', rate?.value ?? '0' );
+				body.append( 'aafm_max_title_len', title?.value ?? '0' );
+				if ( draft?.checked ) {
+					body.append( 'aafm_force_draft', '1' );
+				}
+				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
+
+				if ( status ) {
+					status.textContent = 'Saving…';
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					if ( ! json?.success ) {
+						// A failed save never wrote anything — say so plainly.
+						status.textContent =
+							'Could not save — your previous settings are still in effect.';
+					} else {
+						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
+						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
+							? json.data.aafm_ip_allowlist.length
+							: 0;
+						if ( dropped > 0 && kept === 0 ) {
+							// Every line was invalid: the list is now empty, which means allow-all.
+							status.textContent =
+								'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.';
+						} else if ( dropped > 0 ) {
+							status.textContent = `Saved. Dropped ${ dropped } line(s) that were not a valid IP or range — check the allowlist.`;
+						} else {
+							status.textContent = 'Saved';
+						}
+					}
+				}
+				// Reflect the cleaned allowlist so any dropped (invalid) lines visibly disappear.
+				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
+				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
+					allowlist.value = json.data.aafm_ip_allowlist_text;
 				}
 			} );
 		}

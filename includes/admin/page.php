@@ -229,6 +229,7 @@ function aafm_render_admin_page(): void {
 	$tabs = array(
 		'connection' => __( 'Connection', 'agent-abilities-for-mcp' ),
 		'abilities'  => __( 'Abilities', 'agent-abilities-for-mcp' ),
+		'settings'   => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'   => __( 'Activity Log', 'agent-abilities-for-mcp' ),
 		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
 	);
@@ -263,6 +264,9 @@ function aafm_render_admin_page(): void {
 	switch ( $active ) {
 		case 'abilities':
 			aafm_render_abilities_tab();
+			break;
+		case 'settings':
+			aafm_render_settings_tab();
 			break;
 		case 'activity':
 			aafm_render_activity_tab();

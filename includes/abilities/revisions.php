@@ -294,6 +294,12 @@ function aafm_perm_restore_revision( array $input ): bool {
  * snapshots the current state as a fresh revision — making the restore reversible. The
  * validator guarantees the revision belongs to the named parent before any write.
  *
+ * On failure, wp_restore_post_revision() may return null/false (nothing restored) OR the
+ * WP_Error bubbled up from the underlying wp_update_post() — its documented int|false|null
+ * return is incomplete. A WP_Error is a truthy object, so a falsy-only guard would treat a
+ * failed write as success; we reject WP_Error and any non-positive int and surface the
+ * generic error instead.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
@@ -304,7 +310,7 @@ function aafm_exec_restore_revision( array $input ) {
 		return aafm_generic_error();
 	}
 	$restored = wp_restore_post_revision( $revision_id );
-	if ( ! $restored ) {
+	if ( is_wp_error( $restored ) || (int) $restored < 1 ) {
 		return aafm_generic_error();
 	}
 	return array(

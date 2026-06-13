@@ -144,6 +144,70 @@ final class RevisionsTest extends TestCase {
 		$this->assertGreaterThan( $before, count( wp_get_post_revisions( $pid ) ) ); // a new revision was written.
 	}
 
+	/**
+	 * A restore whose underlying write fails must surface the generic error, never a false
+	 * {restored:true}. wp_restore_post_revision() returns the wp_update_post() result, which is
+	 * falsy (0/false/null) on failure and — per its documented int|false|null contract being
+	 * incomplete — may be a WP_Error. A WP_Error is a truthy object, so the old falsy-only guard
+	 * would have reported success for a failed write and the audit layer would have logged it as
+	 * one. We force the restore write to fail (via wp_insert_post_empty_content, which makes
+	 * wp_update_post bail), then assert the guard returns a WP_Error.
+	 */
+	public function test_restore_failure_returns_error_not_false_success(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'v1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v2',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v3',
+			)
+		);
+		$revs   = wp_get_post_revisions( $pid );
+		$oldest = end( $revs );
+
+		// Force the restore's wp_update_post() to bail. Returning true from this filter makes
+		// wp_insert_post treat the write as empty and return a falsy 0, so the real production
+		// path (wp_restore_post_revision → wp_update_post) yields a non-positive int.
+		$fail_restore = static fn (): bool => true;
+		add_filter( 'wp_insert_post_empty_content', $fail_restore );
+
+		try {
+			$out = aafm_exec_restore_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $oldest->ID,
+				)
+			);
+		} finally {
+			remove_filter( 'wp_insert_post_empty_content', $fail_restore );
+		}
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertFalse( is_array( $out ) ); // never a false {restored:true}.
+
+		// The filter is gone: a subsequent restore on the same post now succeeds, proving no leak.
+		$out2 = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $oldest->ID,
+			)
+		);
+		$this->assertIsArray( $out2 );
+		$this->assertTrue( $out2['restored'] );
+	}
+
 	public function test_restore_revision_enforces_parent_editable(): void {
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $owner );

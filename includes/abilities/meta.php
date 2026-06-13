@@ -1,0 +1,132 @@
+<?php
+/**
+ * Governed post-meta abilities (read + write). Every meta operation passes the
+ * shared aafm_can_access_post_meta() gate: the post must be editable by the agent
+ * (Unit 1 per-object resolver) AND the key must clear the hard-block + allowlist.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+defined( 'ABSPATH' ) || exit;
+
+add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
+
+/**
+ * Contribute the post-meta definitions to the registry.
+ *
+ * @param array<string,array<string,mixed>> $registry Registry.
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_register_meta_definitions( array $registry ): array {
+	$registry['aafm/get-post-meta'] = array(
+		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_get_post_meta',
+	);
+	return $registry;
+}
+
+/**
+ * Shared meta gate: the post must be editable by the agent (Unit 1 resolver) AND the key
+ * must clear the hard-block + allowlist. Used by all three meta permission callbacks.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_can_access_post_meta( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
+		return false;
+	}
+	$key = isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '';
+	return ! is_wp_error( aafm_validate_meta_key( $key ) );
+}
+
+/**
+ * Args for aafm/get-post-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_post_meta(): array {
+	return array(
+		'label'               => __( 'Get post meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array(
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+			),
+			'required'             => array( 'post_id', 'meta_key' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id'  => array( 'type' => 'integer' ),
+				'meta_key' => array( 'type' => 'string' ),
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'null' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_post_meta',
+		'permission_callback' => 'aafm_perm_get_post_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/get-post-meta: the shared per-object + per-key gate.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_get_post_meta( array $input ): bool {
+	return aafm_can_access_post_meta( $input );
+}
+
+/**
+ * Execute aafm/get-post-meta.
+ *
+ * Re-validates the key (defence in depth — the permission callback already gated it),
+ * then reads a single value. Non-scalar values are refused so a serialized array/object
+ * can never be dumped to the agent.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_post_meta( array $input ) {
+	$id  = absint( $input['post_id'] );
+	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
+	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$value = get_post_meta( $id, $key, true );
+	if ( '' !== $value && ! is_scalar( $value ) ) {
+		return aafm_generic_error(); // never dump arrays/serialized blobs.
+	}
+	return array(
+		'post_id'  => $id,
+		'meta_key' => $key,
+		'value'    => $value,
+	);
+}

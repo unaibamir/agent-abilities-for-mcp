@@ -1,0 +1,106 @@
+<?php
+/**
+ * Governed post-meta abilities: the shared per-object + per-key gate, and the
+ * scalar-only read path that refuses to leak arrays/serialized blobs.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Abilities;
+
+use AAFM\Tests\TestCase;
+use WP_Error;
+
+final class PostMetaTest extends TestCase {
+
+	public function test_get_meta_happy_path_and_gates(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create(
+			array(
+				'post_author' => $author,
+				'post_type'   => 'post',
+			)
+		);
+		update_post_meta( $id, 'subtitle', 'A scalar' );
+
+		$this->assertTrue(
+			aafm_perm_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => 'subtitle',
+				)
+			)
+		);
+		$this->assertSame(
+			array(
+				'post_id'  => $id,
+				'meta_key' => 'subtitle',
+				'value'    => 'A scalar',
+			),
+			aafm_exec_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => 'subtitle',
+				)
+			)
+		);
+		$this->assertFalse(
+			aafm_perm_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => 'unlisted',
+				)
+			)
+		);
+		$this->assertFalse(
+			aafm_perm_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => '_edit_lock',
+				)
+			)
+		);
+	}
+
+	public function test_get_meta_refuses_non_scalar_value(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'data' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'data', array( 'x' => 1 ) );
+		$this->assertInstanceOf(
+			WP_Error::class,
+			aafm_exec_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => 'data',
+				)
+			)
+		);
+	}
+
+	public function test_get_meta_denies_other_authors_post(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		$id    = self::factory()->post->create( array( 'post_author' => $owner ) );
+		update_post_meta( $id, 'subtitle', 'x' );
+		wp_set_current_user( $other );
+		$this->assertFalse(
+			aafm_perm_get_post_meta(
+				array(
+					'post_id'  => $id,
+					'meta_key' => 'subtitle',
+				)
+			)
+		);
+	}
+
+	public function test_perm_callback_returns_false_on_empty_input(): void {
+		$this->assertFalse( aafm_perm_get_post_meta( array() ) );
+	}
+}

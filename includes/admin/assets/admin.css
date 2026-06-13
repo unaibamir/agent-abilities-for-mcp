@@ -4,12 +4,14 @@
 .aafm-wrap {
 	.aafm-endpoint {
 		display: inline-block;
+		max-inline-size: 100%;
 		padding-block: 4px;
 		padding-inline: 8px;
 		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
 		background: #f6f7f7;
 		border: 1px solid #dcdcde;
 		border-radius: 3px;
+		overflow-wrap: anywhere;
 	}
 
 	.aafm-snippet {
@@ -336,5 +338,121 @@
 			margin-block: 10px;
 			max-width: 40em;
 		}
+	}
+
+	/* Per-client quickstarts: a toggle reveals a responsive grid of paste-ready cards. */
+	.aafm-quickstarts {
+		margin-block: 12px;
+
+		.aafm-quickstart-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+			gap: 16px;
+			margin-block-start: 8px;
+		}
+
+		.aafm-quickstart-card {
+			padding: 12px;
+			background: #fff;
+			border: 1px solid #dcdcde;
+			border-radius: 4px;
+
+			.aafm-quickstart-name {
+				margin-block: 0 4px;
+				font-size: 13px;
+			}
+
+			.aafm-quickstart-where {
+				margin-block: 0 8px;
+				color: #646970;
+				font-size: 12px;
+			}
+		}
+	}
+
+	/* Dashboard: a responsive grid of small read-only status cards. */
+	.aafm-dashboard {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		gap: 16px;
+		align-items: start;
+
+		.aafm-dashboard-intro {
+			max-inline-size: 760px;
+			color: #3c434a;
+			grid-column: 1 / -1;
+		}
+
+		.aafm-card {
+			padding: 14px 16px;
+			background: #fff;
+			border: 1px solid #dcdcde;
+			border-radius: 4px;
+
+			h3 {
+				margin-block: 0 8px;
+				font-size: 13px;
+			}
+
+			.aafm-card-list {
+				margin: 0;
+
+				li {
+					display: flex;
+					justify-content: space-between;
+					gap: 12px;
+					margin-block: 4px;
+				}
+
+				.aafm-card-key {
+					color: #646970;
+				}
+
+				.aafm-card-val {
+					font-weight: 600;
+				}
+			}
+
+			.aafm-card-figure {
+				margin-block: 0 6px;
+				font-size: 22px;
+				font-weight: 600;
+				color: #1d2327;
+			}
+		}
+	}
+
+	/* Wraps to a single column on narrow viewports. */
+	@media (max-width: 600px) {
+		.aafm-dashboard {
+			grid-template-columns: 1fr;
+		}
+
+		.aafm-quickstarts .aafm-quickstart-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	/* Abilities tab: count pill, read-only badge, and the per-ability helper line. */
+	.aafm-count-badge {
+		display: inline-block;
+		padding-block: 1px;
+		padding-inline: 8px;
+		border-radius: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #646970;
+		background: #f0f0f1;
+		border: 1px solid #dcdcde;
+	}
+
+	.aafm-badge.aafm-badge-readonly {
+		background: #e6f0f7;
+		color: #0a4b78;
+	}
+
+	.aafm-ability-hint {
+		color: #646970;
+		font-size: 12px;
 	}
 }

@@ -153,14 +153,17 @@ function aafm_create_agent_user( string $login ) {
  * `NODE_TLS_REJECT_UNAUTHORIZED=0` so the Node proxy will accept the self-signed
  * certificate during local testing. Production snippets never include it.
  *
- * @param string $client   Target client (reserved for future per-client shaping).
+ * Per-client shaping: most clients read the server map under an `mcpServers` key, so
+ * that is the default. VS Code is the exception — its `.vscode/mcp.json` uses a `servers`
+ * key — so a client of 'vscode' switches the top-level wrapper. The proxy package, env
+ * block, local-cert handling, and Windows handling stay identical across every client.
+ *
+ * @param string $client   Target client slug (see {@see aafm_quickstart_clients()}).
  * @param string $username The agent username.
  * @param string $os       Target OS shape: 'unix' (default) or 'windows'.
  * @return string
  */
 function aafm_client_snippet( string $client, string $username, string $os = 'unix' ): string {
-	unset( $client );
-
 	$env = array(
 		'WP_API_URL'      => aafm_endpoint_url(),
 		'WP_API_USERNAME' => $username,
@@ -179,16 +182,72 @@ function aafm_client_snippet( string $client, string $username, string $os = 'un
 		$args    = array( '-y', $package );
 	}
 
-	$cfg = array(
-		'mcpServers' => array(
-			'agent-abilities' => array(
-				'command' => $command,
-				'args'    => $args,
-				'env'     => $env,
-			),
+	$server = array(
+		'agent-abilities' => array(
+			'command' => $command,
+			'args'    => $args,
+			'env'     => $env,
 		),
 	);
+
+	// VS Code keys the server map as "servers"; every other client uses "mcpServers".
+	$root_key = ( 'vscode' === $client ) ? 'servers' : 'mcpServers';
+	$cfg      = array( $root_key => $server );
+
 	return (string) wp_json_encode( $cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+}
+
+/**
+ * The MCP clients we ship copy-paste quickstarts for: slug => display label.
+ *
+ * Only clients that connect over the mcp-wordpress-remote proxy are listed. Hosted
+ * assistants that cannot run a local stdio server (ChatGPT, the hosted Gemini app) are
+ * deliberately left out so the grid never hands out a config that can't work.
+ *
+ * @return array<string,string> Slug-keyed labels, in the order shown in the UI.
+ */
+function aafm_quickstart_clients(): array {
+	return array(
+		'claude-desktop' => __( 'Claude Desktop', 'agent-abilities-for-mcp' ),
+		'claude-code'    => __( 'Claude Code', 'agent-abilities-for-mcp' ),
+		'cursor'         => __( 'Cursor', 'agent-abilities-for-mcp' ),
+		'vscode'         => __( 'VS Code', 'agent-abilities-for-mcp' ),
+		'windsurf'       => __( 'Windsurf', 'agent-abilities-for-mcp' ),
+		'gemini-cli'     => __( 'Gemini CLI', 'agent-abilities-for-mcp' ),
+		'manus'          => __( 'Manus', 'agent-abilities-for-mcp' ),
+		'generic'        => __( 'Generic', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
+ * The one-line "where do I put this?" note for each quickstart client.
+ *
+ * Kept as plain prose with no markup so the render can escape each line wholesale.
+ *
+ * @param string $client Client slug.
+ * @return string Localized note, or an empty string for an unknown slug.
+ */
+function aafm_quickstart_note( string $client ): string {
+	switch ( $client ) {
+		case 'claude-desktop':
+			return __( 'Paste into claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude.', 'agent-abilities-for-mcp' );
+		case 'claude-code':
+			return __( "Add it to your project's .mcp.json, or run claude mcp add.", 'agent-abilities-for-mcp' );
+		case 'cursor':
+			return __( 'Add it to ~/.cursor/mcp.json (or Settings → MCP), then reload.', 'agent-abilities-for-mcp' );
+		case 'vscode':
+			return __( 'Save it as .vscode/mcp.json in your workspace. Note the key is "servers", not "mcpServers".', 'agent-abilities-for-mcp' );
+		case 'windsurf':
+			return __( "Add it under Windsurf's MCP config (mcp_config.json) and refresh the server list.", 'agent-abilities-for-mcp' );
+		case 'gemini-cli':
+			return __( 'Add it to the mcpServers block in your Gemini CLI settings.json.', 'agent-abilities-for-mcp' );
+		case 'manus':
+			return __( "Add it to Manus's MCP server config.", 'agent-abilities-for-mcp' );
+		case 'generic':
+			return __( 'For any client that speaks MCP over the mcp-wordpress-remote proxy, use this block.', 'agent-abilities-for-mcp' );
+		default:
+			return '';
+	}
 }
 
 /**
@@ -336,6 +395,29 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-os-note notice notice-info inline">';
 	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
 	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
+	echo '</div>';
+
+	// Per-client quickstarts: a JS-toggled grid of ready-to-paste configs, one per client.
+	echo '<div class="aafm-quickstarts">';
+	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
+	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
+	foreach ( aafm_quickstart_clients() as $slug => $label ) {
+		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
+		echo '<div class="aafm-quickstart-card">';
+		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
+		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';
+		printf(
+			'<textarea readonly rows="12" class="large-text code aafm-snippet">%s</textarea>',
+			esc_textarea( $snippet )
+		);
+		printf(
+			'<p><button type="button" class="button aafm-copy" data-copy="%1$s">%2$s</button></p>',
+			esc_attr( $snippet ),
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		);
+		echo '</div>';
+	}
+	echo '</div>';
 	echo '</div>';
 
 	echo '<h3>' . esc_html__( 'Step 3 — Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';

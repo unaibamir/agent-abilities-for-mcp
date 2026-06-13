@@ -118,6 +118,46 @@ function aafm_ajax_save_post_types(): void {
 }
 
 /**
+ * Sanitize the posted "exposed meta keys" textarea into a clean, de-duplicated allowlist.
+ *
+ * Splits on newlines, trims each line (meta keys are case-sensitive, so case is preserved;
+ * only surrounding whitespace and control chars are stripped via sanitize_text_field), drops
+ * empties, drops any hard-blocked key so a blocked key can never even be stored, de-duplicates,
+ * and re-indexes. The read path (aafm_allowed_meta_keys) re-floors anyway; this is best-effort.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled here).
+ * @return list<string>
+ */
+function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_meta_keys'] ) ? (string) $posted['aafm_meta_keys'] : '';
+	$keys = array();
+	foreach ( preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key || aafm_hard_blocked_meta_key( $key ) ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
+ * AJAX: save the exposed-meta-keys allowlist.
+ *
+ * @return void
+ */
+function aafm_ajax_save_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$keys = aafm_sanitize_allowed_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	update_option( 'aafm_allowed_meta_keys', $keys );
+	delete_transient( 'aafm_detected_meta_keys' );
+	wp_send_json_success( array( 'meta_keys' => $keys ) );
+}
+
+/**
  * Contribute suggested privacy-policy text describing what an exposed content type leaks.
  *
  * @return void

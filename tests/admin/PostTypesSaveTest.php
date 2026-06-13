@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\TestCase;
+use WP_Privacy_Policy_Content;
 
 final class PostTypesSaveTest extends TestCase {
 
@@ -78,6 +79,29 @@ final class PostTypesSaveTest extends TestCase {
 		$this->assertNotFalse(
 			has_action( 'admin_init', 'aafm_register_privacy_policy_content' ),
 			'Privacy-policy content must be registered on admin_init.'
+		);
+	}
+
+	public function test_privacy_policy_content_registers_our_suggested_text(): void {
+		// Prove the callback actually contributes suggested privacy text — not just that
+		// it is wired. wp_add_privacy_policy_content guards on is_admin() + admin_init, so
+		// stand up that context the canonical way (set_current_screen) before invoking.
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		set_current_screen( 'admin_init' );
+		global $wp_actions;
+		$wp_actions['admin_init'] = ( $wp_actions['admin_init'] ?? 0 ) + 1;
+
+		aafm_register_privacy_policy_content();
+
+		$entries = WP_Privacy_Policy_Content::get_suggested_policy_text();
+		$ours    = wp_list_filter( $entries, array( 'plugin_name' => 'Agent Abilities for MCP' ) );
+		$this->assertNotEmpty( $ours, 'Our plugin must contribute a suggested privacy-policy entry.' );
+
+		$entry = reset( $ours );
+		$this->assertStringContainsString(
+			'No custom field',
+			(string) $entry['policy_text'],
+			'Suggested text must state that post meta is never exposed.'
 		);
 	}
 }

@@ -14,6 +14,39 @@ use WP_Error;
 
 final class CptGovernanceTest extends TestCase {
 
+	/**
+	 * Register the write abilities so the smuggle test can invoke update-post end-to-end.
+	 *
+	 * Mirrors the idiom in PostsWriteTest: push the gated init action name onto
+	 * $wp_current_filter so wp_register_ability() will run, without firing the core
+	 * hook directly (which trips the WPCS non-prefixed-hookname sniff).
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option(
+			'aafm_enabled_abilities',
+			array( 'aafm/create-draft', 'aafm/create-post', 'aafm/update-post', 'aafm/trash-post' )
+		);
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	/**
+	 * Run a callback inside a simulated Abilities API init action.
+	 *
+	 * @param string   $action   Action name to simulate.
+	 * @param callable $callback Callback to invoke while the action is "running".
+	 */
+	private function in_action( string $action, callable $callback ): void {
+		global $wp_current_filter;
+		$wp_current_filter[] = $action;
+		$callback();
+		array_pop( $wp_current_filter );
+	}
+
 	public function test_get_post_denies_cpt_object_until_allowlisted(): void {
 		register_post_type(
 			'aafm_book',
@@ -240,13 +273,42 @@ final class CptGovernanceTest extends TestCase {
 	}
 
 	public function test_closed_schema_rejects_smuggled_fields(): void {
-		// The write schema is additionalProperties:false, so post_type / post_author / meta_input
-		// are not declared and are rejected before execute runs. Assert the schema shape directly.
+		// Part 1 — the static shape: the write schema is additionalProperties:false, so
+		// post_type / post_author / meta_input are not declared.
 		$schema = aafm_write_content_schema( true );
 		$this->assertFalse( $schema['additionalProperties'] );
 		$this->assertArrayNotHasKey( 'post_type', $schema['properties'] );
 		$this->assertArrayNotHasKey( 'post_author', $schema['properties'] );
 		$this->assertArrayNotHasKey( 'meta_input', $schema['properties'] );
+
+		// Part 2 — runtime proof that the smuggle is INERT, not just that the constant says so.
+		// Observed Abilities-API behaviour in this version: a call carrying an undeclared field
+		// is REJECTED with a WP_Error before the execute callback runs (it does not silently
+		// strip + proceed). This matches PostsWriteTest's create-post smuggle assertions.
+		$owner  = $this->acting_as( 'editor' );
+		$id     = self::factory()->post->create(
+			array(
+				'post_author' => $owner,
+				'post_status' => 'draft',
+			)
+		);
+		$victim = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$rejected = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id'     => $id,
+				'title'       => 'x',
+				'post_author' => $victim, // undeclared → closed schema rejects the whole call.
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'Smuggled post_author must be rejected before execute.' );
+
+		// The smuggled re-assignment never reached wp_update_post: authorship is unchanged.
+		$after = get_post( $id );
+		$this->assertSame( $owner, (int) $after->post_author, 'Author must be unchanged after a rejected smuggle.' );
+		$this->assertNotSame( $victim, (int) $after->post_author );
+		// And the declared-but-companion field did not apply either (the whole call was rejected).
+		$this->assertNotSame( 'x', $after->post_title );
 	}
 
 	public function test_allowlist_empty_by_default_is_post_and_page_only(): void {

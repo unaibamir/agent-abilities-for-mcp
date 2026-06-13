@@ -41,7 +41,7 @@ No. The agent authenticates as whatever WordPress user you bind it to. Point it 
 
 = What can an agent actually do? =
 
-Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, and site structure. There is no ability to change options or post meta arbitrarily, create users, change roles, fetch a remote URL, or run code. Deletes move content to Trash so they are recoverable.
+Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, and site structure. There is no ability to change options arbitrarily, create users, change roles, fetch a remote URL, or run code. An agent can only write post meta for keys an administrator has explicitly allowlisted, and protected, underscore-prefixed, and authentication keys can never be allowlisted. Deletes move content to Trash so they are recoverable.
 
 = Which AI clients work? =
 

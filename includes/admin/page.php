@@ -857,7 +857,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Windsurf:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it under its MCP / plugins config (mcp_config.json) and refresh the server list.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>'
 			. '<p>' . esc_html__( 'Copy the config straight from Connection → Step 2 — do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'ChatGPT and Gemini are not supported in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Their remote connectors expect a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet — they cannot use the proxy the way the clients above do.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p><strong>' . esc_html__( 'The hosted ChatGPT and Gemini apps cannot connect in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Their web connectors expect a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet, so they cannot reach the proxy the way the clients above do. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

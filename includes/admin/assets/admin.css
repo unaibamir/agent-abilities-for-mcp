@@ -150,6 +150,39 @@
 		}
 	}
 
+	/* Detected meta-key chips: a wrapping row of pill buttons under the textarea. */
+	.aafm-meta-keys {
+		.aafm-meta-chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+			margin-block: 8px;
+		}
+
+		.aafm-meta-chip {
+			padding-block: 2px;
+			padding-inline: 10px;
+			font-size: 12px;
+			line-height: 1.8;
+			border-radius: 12px;
+			background: #f6f7f7;
+			border: 1px solid #dcdcde;
+			cursor: pointer;
+
+			&:hover {
+				background: #f0f0f1;
+				border-color: #2271b1;
+				color: #2271b1;
+			}
+
+			&:focus-visible {
+				border-color: #2271b1;
+				box-shadow: 0 0 0 1px #2271b1;
+				outline: none;
+			}
+		}
+	}
+
 	.aafm-ability-table {
 		margin-block-end: 12px;
 

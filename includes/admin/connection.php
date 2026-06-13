@@ -297,7 +297,7 @@ function aafm_render_connection_tab(): void {
 	);
 
 	echo '<h3>' . esc_html__( 'Step 1 — Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p>' . esc_html__( 'Give the agent its own low-privilege user. It can only do what that user is allowed to do.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p>' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
 	echo '<p><input type="text" id="aafm-agent-login" value="mcp-agent" class="regular-text"> <button type="button" class="button" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 

@@ -142,6 +142,8 @@ function aafm_render_dashboard_tab(): void {
 
 	echo '<div class="aafm-dashboard">';
 
+	echo '<p class="aafm-dashboard-intro">' . esc_html__( 'This plugin starts from least privilege. Nothing is exposed until you turn it on, and the agent\'s reach stays capped by its user role.', 'agent-abilities-for-mcp' ) . '</p>';
+
 	// Endpoint card.
 	echo '<div class="aafm-card aafm-card-endpoint">';
 	echo '<h3>' . esc_html__( 'Endpoint', 'agent-abilities-for-mcp' ) . '</h3>';

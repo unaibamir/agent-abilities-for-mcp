@@ -873,6 +873,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Deletes are trash, not destroy.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Delete-style abilities move content to the Trash, where you can restore it; they do not permanently erase it.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',
 			$inline
 		)

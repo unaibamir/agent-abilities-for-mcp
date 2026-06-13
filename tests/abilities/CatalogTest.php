@@ -41,6 +41,7 @@ final class CatalogTest extends TestCase {
 		'aafm/get-users',
 		'aafm/list-revisions',
 		'aafm/get-revision',
+		'aafm/search-content',
 	);
 
 	/**
@@ -118,9 +119,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			30,
+			31,
 			$registry,
-			'The catalog must contain exactly 30 abilities — 15 reads + 15 writes.'
+			'The catalog must contain exactly 31 abilities — 16 reads + 15 writes.'
 		);
 	}
 
@@ -135,8 +136,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 15 reads — no drift.' );
-		$this->assertCount( 15, $reads, 'Exactly 15 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 16 reads — no drift.' );
+		$this->assertCount( 16, $reads, 'Exactly 16 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -160,7 +161,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 30 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 31 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -174,9 +175,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			30,
+			31,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(15) + writes(15) must equal the full catalog (30).'
+			'reads(16) + writes(15) must equal the full catalog (31).'
 		);
 	}
 

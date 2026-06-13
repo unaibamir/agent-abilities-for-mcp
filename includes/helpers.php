@@ -98,6 +98,21 @@ function aafm_allowed_post_types(): array {
 }
 
 /**
+ * Resolve the post types a cross-type search may touch: the requested set intersected with
+ * the exposed allowlist (never wider). An empty/omitted request means the whole allowlist.
+ *
+ * @param array<int, string> $requested Caller-supplied post types (may be empty).
+ * @return list<string>
+ */
+function aafm_resolve_search_post_types( array $requested ): array {
+	$allowed = aafm_allowed_post_types();
+	if ( empty( $requested ) ) {
+		return $allowed;
+	}
+	return array_values( array_intersect( array_map( 'sanitize_key', $requested ), $allowed ) );
+}
+
+/**
  * Whether a meta key is permanently blocked from agent access (even if allowlisted).
  *
  * Blocks protected (`_`-prefixed) meta, the auth-sensitive denylist stolen from

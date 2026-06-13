@@ -51,6 +51,11 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'NODE_EXTRA_CA_CERTS', $html );
 		$this->assertStringContainsString( 'cmd /c', $html );
 		$this->assertStringContainsString( '@automattic/mcp-wordpress-remote', $html );
+
+		// The rate-limit answer points at the shipped Settings control, not the old "not yet" copy.
+		$this->assertStringNotContainsString( 'Not in this release', $html );
+		$this->assertStringContainsString( 'Rate limit (per minute)', $html );
+		$this->assertStringContainsString( 'per agent user', $html );
 	}
 
 	public function test_help_tab_documents_the_waf_cdn_unreachable_cluster(): void {

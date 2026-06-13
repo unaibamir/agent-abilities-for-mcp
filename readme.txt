@@ -57,7 +57,7 @@ Local stacks like DDEV, Local, and Valet serve a self-signed certificate that No
 
 = Is there rate limiting? =
 
-Not in this release. Bind the agent to a low-privilege user and enable only the abilities you need. Per-connection rate limiting is planned for a later version.
+Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
 
 = Does it send data anywhere? =
 

@@ -102,10 +102,17 @@ final class AbilitiesSaveTest extends TestCase {
 		$html = (string) ob_get_clean();
 
 		// The Content panel holds posts + pages; its Reads heading must precede its Writes heading,
-		// and its checkboxes must sit inside that panel (not in another subject's panel).
+		// and its checkboxes must sit inside that panel (not in another subject's panel). The panel
+		// runs from its own open to the next subject panel's open (or, if content is the last panel,
+		// the abilities form's save-status span), so slice on that boundary rather than the first
+		// </div> — the notice component and the meta selector both nest <div>s inside the panel,
+		// which a naive first-</div> slice would catch. The fallback keys off aafm-save-status,
+		// which the form renders exactly once after every panel, rather than the shared
+		// button-primary class that also marks the post-types and meta-keys save buttons.
 		$content_open = strpos( $html, 'class="aafm-subject-panel" data-subject="content"' );
 		$this->assertNotFalse( $content_open, 'Content panel should render.' );
-		$content_close = strpos( $html, '</div>', $content_open );
+		$next_panel    = strpos( $html, 'class="aafm-subject-panel" data-subject=', $content_open + 1 );
+		$content_close = ( false === $next_panel ) ? strpos( $html, 'aafm-save-status', $content_open ) : $next_panel;
 		$content_panel = substr( $html, $content_open, ( false === $content_close ? null : $content_close - $content_open ) );
 
 		$reads_pos  = strpos( $content_panel, '>Reads<' );

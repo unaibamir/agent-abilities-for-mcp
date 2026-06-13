@@ -387,9 +387,9 @@ function aafm_render_abilities_tab(): void {
 			echo '</tbody></table>';
 		}
 
-		// Rendered after the ability tables so the Content panel's own closing </div> is not
-		// pre-empted — the meta selector wraps its controls in a <div>, and the panel-structure
-		// test reads up to the first </div> after the panel opens.
+		// Rendered after the ability tables as a layout choice — the meta selector belongs below
+		// the abilities it governs. No test depends on this placement: the panel-structure test
+		// slices to the next subject panel (or the form's save status), not a bare </div>.
 		if ( 'content' === $slug ) {
 			aafm_render_meta_keys_selector();
 		}
@@ -422,7 +422,7 @@ function aafm_render_post_types_selector(): void {
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $eligible ) ) {
-		echo '<p class="aafm-notice aafm-notice-info">' . esc_html__( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) . '</p>';
+		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) );
 		return;
 	}
 
@@ -455,7 +455,7 @@ function aafm_render_post_types_selector(): void {
 	}
 
 	echo '</tbody></table>';
-	echo '<p class="aafm-notice aafm-notice-warning">' . esc_html__( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p><button type="button" id="aafm-post-types-save" class="button button-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
@@ -478,7 +478,7 @@ function aafm_render_meta_keys_selector(): void {
 
 	echo '<h3>' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '<p class="aafm-notice aafm-notice-warning">' . esc_html__( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
 
 	echo '<div id="aafm-meta-keys-form" class="aafm-meta-keys">';
 	printf(

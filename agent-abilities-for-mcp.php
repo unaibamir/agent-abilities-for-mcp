@@ -74,6 +74,7 @@ function aafm_bootstrap() {
 	// behind is_admin(), while remaining wired at plugin load for deterministic tests.
 	add_action( 'admin_init', 'aafm_register_privacy_policy_content' );
 
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	if ( is_admin() ) {

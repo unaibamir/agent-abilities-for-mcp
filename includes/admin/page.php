@@ -42,6 +42,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 		array(
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
+			'i18n'    => array(
+				'quickstartsShow' => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
+				'quickstartsHide' => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
+			),
 		)
 	);
 }

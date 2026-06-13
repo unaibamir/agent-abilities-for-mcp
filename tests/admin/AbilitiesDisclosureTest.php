@@ -21,6 +21,13 @@ final class AbilitiesDisclosureTest extends TestCase {
 		}
 	}
 
+	public function test_no_orphan_disclosure_keys(): void {
+		$disclosures = array_keys( aafm_ability_disclosures() );
+		$registry    = array_keys( aafm_get_abilities_registry() );
+		$orphans     = array_diff( $disclosures, $registry );
+		$this->assertSame( array(), array_values( $orphans ), 'Disclosure map has keys for abilities not in the registry: ' . implode( ', ', $orphans ) );
+	}
+
 	public function test_abilities_tab_shows_hint_and_badges(): void {
 		ob_start();
 		aafm_render_abilities_tab();

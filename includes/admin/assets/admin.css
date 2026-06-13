@@ -434,6 +434,15 @@
 	}
 
 	/* Abilities tab: count pill, read-only badge, and the per-ability helper line. */
+	.aafm-subject-heading {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-block: 0 8px;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
 	.aafm-count-badge {
 		display: inline-block;
 		padding-block: 1px;

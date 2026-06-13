@@ -38,9 +38,10 @@
 				const open = grid.hidden;
 				grid.hidden = ! open;
 				toggle.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
+				const i18n = aafmAdmin?.i18n;
 				toggle.textContent = open
-					? 'Hide client configs'
-					: 'Show config for a specific client';
+					? i18n?.quickstartsHide ?? 'Hide client configs'
+					: i18n?.quickstartsShow ?? 'Show config for a specific client';
 			} );
 		}
 

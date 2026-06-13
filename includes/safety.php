@@ -24,6 +24,43 @@ function aafm_rate_limit_per_min(): int {
 }
 
 /**
+ * Consume one token from a principal's per-minute rate-limit bucket.
+ *
+ * Keyed by the authenticated principal's user id and the current GMT-minute, so
+ * each user gets an independent window that naturally rolls over every minute.
+ * The transient TTL is 120s — longer than a single minute so the bucket survives
+ * its own window, while the GMT-minute embedded in the key is what actually rolls
+ * the counter to a fresh bucket on the next minute.
+ *
+ * This is a fixed-window counter, so a burst straddling a GMT-minute boundary can
+ * briefly allow up to 2x the limit. That is acceptable for a coarse defensive cap.
+ *
+ * The get_transient/set_transient read-modify-write is non-atomic, so under high
+ * concurrency it is best-effort and may slightly undercount. Acceptable: this is a
+ * safety throttle layered behind the real permission check, not a hard quota.
+ *
+ * Discovery / anonymous callers ($user_id <= 0) are intentionally exempt: there
+ * is no real principal to limit, and listing (tools/list) relies on the raw
+ * permission check rather than consuming a token. A limit of 0 means off.
+ *
+ * @param int $user_id Authenticated principal user id. <= 0 is never limited.
+ * @return bool True if the request is allowed; false once the limit is exceeded.
+ */
+function aafm_rate_limit_consume( int $user_id ): bool {
+	$limit = aafm_rate_limit_per_min();
+	if ( $limit <= 0 || $user_id <= 0 ) {
+		return true; // Off, or no authenticated principal to limit.
+	}
+	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
+	$count = (int) get_transient( $key );
+	if ( $count >= $limit ) {
+		return false;
+	}
+	set_transient( $key, $count + 1, 2 * MINUTE_IN_SECONDS );
+	return true;
+}
+
+/**
  * IP allowlist. Empty (the default) means no IP restriction.
  *
  * @return array<int, string> Trimmed, non-empty entries.

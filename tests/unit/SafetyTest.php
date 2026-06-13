@@ -92,4 +92,26 @@ final class SafetyTest extends TestCase {
 		update_option( 'aafm_ip_allowlist', array( 'garbage', 'not-a-cidr' ) );
 		$this->assertFalse( aafm_ip_is_allowed( '203.0.113.9' ) );
 	}
+
+	public function test_rate_limit_consume_blocks_over_limit(): void {
+		update_option( 'aafm_rate_limit_per_min', 2 );
+		$uid = 77;
+		$this->assertTrue( aafm_rate_limit_consume( $uid ) );   // 1
+		$this->assertTrue( aafm_rate_limit_consume( $uid ) );   // 2
+		$this->assertFalse( aafm_rate_limit_consume( $uid ) );  // 3 -> over
+	}
+
+	public function test_rate_limit_off_or_no_principal_always_allows(): void {
+		update_option( 'aafm_rate_limit_per_min', 0 );          // off.
+		$this->assertTrue( aafm_rate_limit_consume( 5 ) );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+		$this->assertTrue( aafm_rate_limit_consume( 0 ) );      // no real principal -> not limited.
+	}
+
+	public function test_rate_limit_is_per_principal(): void {
+		update_option( 'aafm_rate_limit_per_min', 1 );
+		$this->assertTrue( aafm_rate_limit_consume( 101 ) );    // user 101: 1st ok.
+		$this->assertFalse( aafm_rate_limit_consume( 101 ) );   // user 101: 2nd over.
+		$this->assertTrue( aafm_rate_limit_consume( 202 ) );    // user 202 independent window -> ok.
+	}
 }

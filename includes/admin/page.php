@@ -43,8 +43,31 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
 			'i18n'    => array(
-				'quickstartsShow' => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
-				'quickstartsHide' => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
+				'quickstartsShow'   => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
+				'quickstartsHide'   => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
+				'saving'            => __( 'Saving…', 'agent-abilities-for-mcp' ),
+				'saved'             => __( 'Saved', 'agent-abilities-for-mcp' ),
+				'errorSaving'       => __( 'Error saving', 'agent-abilities-for-mcp' ),
+				'creating'          => __( 'Creating…', 'agent-abilities-for-mcp' ),
+				'checking'          => __( 'Checking…', 'agent-abilities-for-mcp' ),
+				'cleared'           => __( 'Cleared', 'agent-abilities-for-mcp' ),
+				'error'             => __( 'Error', 'agent-abilities-for-mcp' ),
+				'requestFailed'     => __( 'Request failed.', 'agent-abilities-for-mcp' ),
+				'settingsNotSaved'  => __( 'Could not save — your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
+				'allowlistEmptied'  => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
+				/* translators: %d: number of allowlist lines that were dropped as invalid. */
+				'allowlistDropped'  => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'agent-abilities-for-mcp' ),
+				/* translators: %d: the new agent user's numeric ID. */
+				'userCreated'       => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
+				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
+				'connectionOk'      => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: HTTP status code returned by the endpoint. */
+				'connectionNoTools' => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
+				/* translators: %s: error message returned by the server. */
+				'errorWithMessage'  => __( 'Error: %s', 'agent-abilities-for-mcp' ),
+				'errorUnknown'      => __( 'unknown', 'agent-abilities-for-mcp' ),
+				'copyCopied'        => __( 'Copied', 'agent-abilities-for-mcp' ),
+				'copyFallback'      => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);

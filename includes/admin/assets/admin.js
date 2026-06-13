@@ -13,6 +13,35 @@
 		#ajaxUrl = aafmAdmin.ajaxUrl;
 		#nonce = aafmAdmin.nonce;
 
+		/**
+		 * Read a localized string, falling back to its English source when the
+		 * bag is missing (keeps the UI legible even if wp_localize_script fails).
+		 *
+		 * @param {string} key      Key in the aafmAdmin.i18n bag.
+		 * @param {string} fallback English source string.
+		 * @return {string} The localized string, or the fallback.
+		 */
+		#t( key, fallback ) {
+			return aafmAdmin?.i18n?.[ key ] ?? fallback;
+		}
+
+		/**
+		 * Fill a printf-style template (%s, %d, %1$s, %2$s) with positional values.
+		 * Mirrors the sprintf flavours used in the PHP-side translations so the
+		 * rendered English stays byte-identical to the old hardcoded strings.
+		 *
+		 * @param {string}        template printf-style template.
+		 * @param {...(string|number)} args Positional substitutions.
+		 * @return {string} The formatted string.
+		 */
+		#format( template, ...args ) {
+			let auto = 0;
+			return template.replace( /%(\d+\$)?[sd]/g, ( match, pos ) => {
+				const index = pos ? Number( pos.slice( 0, -1 ) ) - 1 : auto++;
+				return String( args[ index ] ?? '' );
+			} );
+		}
+
 		constructor() {
 			this.#bindCopy();
 			this.#bindOsTabs();
@@ -107,7 +136,10 @@
 				} );
 				return await res.json();
 			} catch {
-				return { success: false, data: { message: 'Request failed.' } };
+				return {
+					success: false,
+					data: { message: this.#t( 'requestFailed', 'Request failed.' ) },
+				};
 			}
 		}
 
@@ -116,9 +148,9 @@
 				btn.addEventListener( 'click', async () => {
 					try {
 						await navigator.clipboard.writeText( btn.dataset.copy ?? '' );
-						btn.textContent = 'Copied';
+						btn.textContent = this.#t( 'copyCopied', 'Copied' );
 					} catch {
-						btn.textContent = 'Press Ctrl+C';
+						btn.textContent = this.#t( 'copyFallback', 'Press Ctrl+C' );
 					}
 				} );
 			} );
@@ -142,7 +174,7 @@
 				enabled.forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
 
 				if ( status ) {
-					status.textContent = 'Saving…';
+					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
 				let json;
 				try {
@@ -156,7 +188,9 @@
 					json = { success: false };
 				}
 				if ( status ) {
-					status.textContent = json?.success ? 'Saved' : 'Error saving';
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
 				}
 			} );
 		}
@@ -179,7 +213,7 @@
 				types.forEach( ( v ) => body.append( 'aafm_post_types[]', v ) );
 
 				if ( status ) {
-					status.textContent = 'Saving…';
+					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
 				let json;
 				try {
@@ -193,7 +227,9 @@
 					json = { success: false };
 				}
 				if ( status ) {
-					status.textContent = json?.success ? 'Saved' : 'Error saving';
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
 				}
 			} );
 		}
@@ -211,7 +247,7 @@
 				body.append( 'nonce', this.#nonce );
 				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
 				if ( status ) {
-					status.textContent = 'Saving…';
+					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
 				let json;
 				try {
@@ -225,7 +261,9 @@
 					json = { success: false };
 				}
 				if ( status ) {
-					status.textContent = json?.success ? 'Saved' : 'Error saving';
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
 				}
 			} );
 		}
@@ -254,7 +292,7 @@
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
 
 				if ( status ) {
-					status.textContent = 'Saving…';
+					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
 				let json;
 				try {
@@ -270,8 +308,10 @@
 				if ( status ) {
 					if ( ! json?.success ) {
 						// A failed save never wrote anything — say so plainly.
-						status.textContent =
-							'Could not save — your previous settings are still in effect.';
+						status.textContent = this.#t(
+							'settingsNotSaved',
+							'Could not save — your previous settings are still in effect.'
+						);
 					} else {
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
 						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
@@ -279,12 +319,20 @@
 							: 0;
 						if ( dropped > 0 && kept === 0 ) {
 							// Every line was invalid: the list is now empty, which means allow-all.
-							status.textContent =
-								'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.';
+							status.textContent = this.#t(
+								'allowlistEmptied',
+								'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.'
+							);
 						} else if ( dropped > 0 ) {
-							status.textContent = `Saved. Dropped ${ dropped } line(s) that were not a valid IP or range — check the allowlist.`;
+							status.textContent = this.#format(
+								this.#t(
+									'allowlistDropped',
+									'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.'
+								),
+								dropped
+							);
 						} else {
-							status.textContent = 'Saved';
+							status.textContent = this.#t( 'saved', 'Saved' );
 						}
 					}
 				}
@@ -332,16 +380,25 @@
 				const login = document.querySelector( '#aafm-agent-login' )?.value ?? '';
 				const status = document.querySelector( '.aafm-user-status' );
 				if ( status ) {
-					status.textContent = 'Creating…';
+					status.textContent = this.#t( 'creating', 'Creating…' );
 				}
 				const json = await this.#post( 'aafm_create_agent_user', { login } );
 				if ( ! status ) {
 					return;
 				}
 				if ( json?.success ) {
-					status.textContent = `Created user #${ json.data.user_id }. Now create its Application Password under Users → Profile.`;
+					status.textContent = this.#format(
+						this.#t(
+							'userCreated',
+							'Created user #%d. Now create its Application Password under Users → Profile.'
+						),
+						json.data.user_id
+					);
 				} else {
-					status.textContent = `Error: ${ json?.data?.message ?? 'unknown' }`;
+					status.textContent = this.#format(
+						this.#t( 'errorWithMessage', 'Error: %s' ),
+						json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' )
+					);
 				}
 			} );
 		}
@@ -354,18 +411,34 @@
 			btn.addEventListener( 'click', async () => {
 				const status = document.querySelector( '.aafm-test-status' );
 				if ( status ) {
-					status.textContent = 'Checking…';
+					status.textContent = this.#t( 'checking', 'Checking…' );
 				}
 				const json = await this.#post( 'aafm_test_connection' );
 				if ( ! status ) {
 					return;
 				}
 				if ( json?.success && json.data.reachable ) {
-					status.textContent = `Reachable (HTTP ${ json.data.http_code }) — ${ json.data.admin_tool_count } tool(s) in your admin view.`;
+					status.textContent = this.#format(
+						this.#t(
+							'connectionOk',
+							'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.'
+						),
+						json.data.http_code,
+						json.data.admin_tool_count
+					);
 				} else if ( json?.success ) {
-					status.textContent = `Endpoint answered HTTP ${ json.data.http_code } but did not return a tool list.`;
+					status.textContent = this.#format(
+						this.#t(
+							'connectionNoTools',
+							'Endpoint answered HTTP %s but did not return a tool list.'
+						),
+						json.data.http_code
+					);
 				} else {
-					status.textContent = `Error: ${ json?.data?.message ?? 'unknown' }`;
+					status.textContent = this.#format(
+						this.#t( 'errorWithMessage', 'Error: %s' ),
+						json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' )
+					);
 				}
 			} );
 		}
@@ -379,7 +452,9 @@
 				const status = document.querySelector( '.aafm-clear-status' );
 				const json = await this.#post( 'aafm_clear_log' );
 				if ( status ) {
-					status.textContent = json?.success ? 'Cleared' : 'Error';
+					status.textContent = json?.success
+						? this.#t( 'cleared', 'Cleared' )
+						: this.#t( 'error', 'Error' );
 				}
 				if ( json?.success ) {
 					document

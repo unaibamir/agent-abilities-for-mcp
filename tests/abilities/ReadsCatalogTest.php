@@ -1,9 +1,9 @@
 <?php
 /**
- * Phase 3 milestone: asserts the full 15-read catalog registers with the canonical
+ * Phase 3 milestone: asserts the full read catalog registers with the canonical
  * read-ability shape and that nothing is enabled by default.
  *
- * This is the drift-catcher for Phase 3 — if any read ability is missing, misnamed,
+ * This is the drift-catcher for the reads — if any read ability is missing, misnamed,
  * miscategorized, or registered without an input/output schema, permission callback,
  * or the readonly/non-destructive annotations, this test fails loudly here rather than
  * letting the gap reach the MCP server.
@@ -78,7 +78,7 @@ final class ReadsCatalogTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
-	public function test_registry_contains_exactly_the_thirteen_reads(): void {
+	public function test_registry_contains_exactly_the_expected_reads(): void {
 		$registry = aafm_get_abilities_registry();
 
 		$reads = array_keys(

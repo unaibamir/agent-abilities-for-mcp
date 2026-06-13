@@ -1,13 +1,13 @@
 <?php
 /**
- * Phase 4 milestone: asserts the complete 30-ability catalog (15 reads + 15 writes)
- * registers with the canonical shape, exact names, and HONEST risk annotations.
+ * Phase 4 milestone: asserts the complete read+write catalog registers with the
+ * canonical shape, exact names, and HONEST risk annotations.
  *
  * This is the drift-catcher for the whole catalog. If any ability is missing,
  * misnamed, miscategorized, registered without a closed input_schema / required
  * output_schema / permission_callback, or carries a dishonest readonly/destructive
  * annotation, this test fails loudly here rather than letting the gap reach the
- * MCP server. It is the proof that "15 reads + 15 writes = 30, no drift" holds.
+ * MCP server. It is the proof that the reads + writes catalog holds with no drift.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -115,7 +115,7 @@ final class CatalogTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
-	public function test_registry_has_exactly_27_abilities(): void {
+	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
 			30,
@@ -124,7 +124,7 @@ final class CatalogTest extends TestCase {
 		);
 	}
 
-	public function test_reads_are_exactly_the_thirteen_reads(): void {
+	public function test_reads_are_exactly_the_expected_reads(): void {
 		$reads = array_keys(
 			array_filter(
 				aafm_get_abilities_registry(),
@@ -139,7 +139,7 @@ final class CatalogTest extends TestCase {
 		$this->assertCount( 15, $reads, 'Exactly 15 read abilities.' );
 	}
 
-	public function test_writes_are_exactly_the_fourteen_writes(): void {
+	public function test_writes_are_exactly_the_expected_writes(): void {
 		$writes = array_keys(
 			array_filter(
 				aafm_get_abilities_registry(),
@@ -157,7 +157,7 @@ final class CatalogTest extends TestCase {
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
 		$registry = aafm_get_abilities_registry();
 
-		// Every catalog key is one of the 27 known names — no stray ability slipped in.
+		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
 			$this->assertContains( $name, $known, $name . ' is not one of the 30 sanctioned abilities.' );

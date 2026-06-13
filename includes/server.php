@@ -140,8 +140,9 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/moderate-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
-		// Revisions: list/get/restore all gate per-object on edit_post on the parent, so
-		// discovery uses the same edit_posts floor as update-post, refined per-object at execute.
+		// Revisions: list/get/restore all gate per-object on edit_post on the parent — reads
+		// included, since a revision can hold content from when the post was private. Discovery
+		// uses the same edit_posts floor as update-post, refined per-object at execute.
 		case 'aafm/list-revisions':
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':

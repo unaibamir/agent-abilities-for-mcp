@@ -145,6 +145,9 @@
 
 		#bindCopy() {
 			document.querySelectorAll( '.aafm-copy' ).forEach( ( btn ) => {
+				// Remember the button's own label so the "Copied" flash can revert to it.
+				const original = btn.textContent;
+				let revertTimer = null;
 				btn.addEventListener( 'click', async () => {
 					try {
 						await navigator.clipboard.writeText( btn.dataset.copy ?? '' );
@@ -152,6 +155,14 @@
 					} catch {
 						btn.textContent = this.#t( 'copyFallback', 'Press Ctrl+C' );
 					}
+					// Clear any pending revert from a quick second click, then restore the label.
+					if ( revertTimer ) {
+						clearTimeout( revertTimer );
+					}
+					revertTimer = setTimeout( () => {
+						btn.textContent = original;
+						revertTimer = null;
+					}, 1500 );
 				} );
 			} );
 		}

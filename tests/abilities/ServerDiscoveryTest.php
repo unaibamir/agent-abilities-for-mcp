@@ -34,6 +34,9 @@ final class ServerDiscoveryTest extends TestCase {
 		'aafm/trash-page',
 		'aafm/set-featured-image',
 		'aafm/moderate-comment',
+		'aafm/get-post-meta',
+		'aafm/update-post-meta',
+		'aafm/delete-post-meta',
 	);
 
 	public function set_up(): void {
@@ -125,6 +128,19 @@ final class ServerDiscoveryTest extends TestCase {
 				$ability . ' should be discoverable for a capable user (editor)'
 			);
 		}
+	}
+
+	public function test_administrator_discovers_governed_post_meta_tools(): void {
+		// Governed post-meta gates on per-object edit_post (reads included). An administrator
+		// holds edit_posts, so the coarse discovery floor passes and all three meta tools must
+		// appear in the real tools/list the adapter filter produces — the ship-blocker check.
+		$this->acting_as( 'administrator' );
+
+		$names = $this->visible_tool_names();
+
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/get-post-meta' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/update-post-meta' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/delete-post-meta' ), $names );
 	}
 
 	public function test_author_discovers_update_and_trash_and_get_post(): void {

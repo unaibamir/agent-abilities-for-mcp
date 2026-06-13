@@ -116,6 +116,14 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/trash-post':
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
+		// Governed post-meta (get/update/delete): all gate on per-object edit_post (reads
+		// included — meta can hold private data), so discovery uses the same edit_posts floor
+		// as update-post, refined per-object at execute time.
+		case 'aafm/get-post-meta':
+		case 'aafm/update-post-meta':
+		case 'aafm/delete-post-meta':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
 		// Page writes: derive edit_pages/delete_pages from the page post-type object.
 		case 'aafm/update-page':
 			return static function (): bool {

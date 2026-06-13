@@ -139,6 +139,48 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 }
 
 /**
+ * Default-deny meta-key allowlist. Default empty; opt-in via the aafm_allowed_meta_keys
+ * option (admin textarea) or the matching filter. Hard-blocked keys are stripped AFTER the
+ * option read AND after the filter, so neither a junk write nor a rogue filter exposes one.
+ *
+ * @return list<string>
+ */
+function aafm_allowed_meta_keys(): array {
+	$stored = get_option( 'aafm_allowed_meta_keys', array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+	$stored = array_values( array_filter( $stored, static fn( $k ) => ! aafm_hard_blocked_meta_key( $k ) ) );
+
+	/**
+	 * Filters the meta keys exposed to AI agents. Re-floored against the hard-block
+	 * after this filter, so adding a blocked key is a no-op.
+	 *
+	 * @param list<string> $stored Allowlisted, non-blocked keys.
+	 */
+	$filtered = (array) apply_filters( 'aafm_allowed_meta_keys', $stored );
+
+	return array_values(
+		array_unique(
+			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
+		)
+	);
+}
+
+/**
+ * Validate a meta key: must be allowlisted AND not hard-blocked. One generic error code
+ * for both failure modes so a caller cannot distinguish "blocked" from "not allowlisted".
+ *
+ * @param string $key Requested meta key.
+ * @return string|WP_Error
+ */
+function aafm_validate_meta_key( string $key ) {
+	$key = trim( (string) $key );
+	if ( '' === $key || aafm_hard_blocked_meta_key( $key ) || ! in_array( $key, aafm_allowed_meta_keys(), true ) ) {
+		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+	}
+	return $key;
+}
+
+/**
  * Resolve a post type's cap object and whether it uses core's meta-cap mapping.
  *
  * The Tier-1 cap keys (edit_post, delete_post, publish_posts, read_private_posts) are

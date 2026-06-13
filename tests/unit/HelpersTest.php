@@ -318,4 +318,26 @@ final class HelpersTest extends TestCase {
 		$this->assertTrue( aafm_hard_blocked_meta_key( 'wp_capabilities' ) );
 		remove_all_filters( 'aafm_hard_blocked_meta_keys' );
 	}
+
+	public function test_allowed_meta_keys_default_empty_and_refloors(): void {
+		delete_option( 'aafm_allowed_meta_keys' );
+		$this->assertSame( array(), aafm_allowed_meta_keys() );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'wp_capabilities', '_edit_lock' ) );
+		$this->assertSame( array( 'subtitle' ), aafm_allowed_meta_keys() ); // hard-blocked stripped on read.
+	}
+
+	public function test_validate_meta_key_allowlist_and_block(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$this->assertSame( 'subtitle', aafm_validate_meta_key( 'subtitle' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'unlisted' ) );
+		// Hard-blocked beats a forced allowlist entry.
+		update_option( 'aafm_allowed_meta_keys', array( 'wp_capabilities' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'wp_capabilities' ) );
+	}
+
+	public function test_validate_meta_key_uses_one_generic_code(): void {
+		update_option( 'aafm_allowed_meta_keys', array() );
+		$this->assertSame( 'aafm_meta_key_not_allowed', aafm_validate_meta_key( 'unlisted' )->get_error_code() );
+		$this->assertSame( 'aafm_meta_key_not_allowed', aafm_validate_meta_key( '_edit_lock' )->get_error_code() );
+	}
 }

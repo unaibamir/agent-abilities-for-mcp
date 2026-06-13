@@ -63,6 +63,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/media.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/users.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/meta.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/revisions.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

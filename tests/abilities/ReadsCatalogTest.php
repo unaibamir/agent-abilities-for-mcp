@@ -1,6 +1,6 @@
 <?php
 /**
- * Phase 3 milestone: asserts the full 13-read catalog registers with the canonical
+ * Phase 3 milestone: asserts the full 15-read catalog registers with the canonical
  * read-ability shape and that nothing is enabled by default.
  *
  * This is the drift-catcher for Phase 3 — if any read ability is missing, misnamed,
@@ -38,6 +38,8 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/get-pending-comments',
 		'aafm/get-media',
 		'aafm/get-users',
+		'aafm/list-revisions',
+		'aafm/get-revision',
 	);
 
 	public function set_up(): void {
@@ -93,9 +95,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 13 Phase 3 reads — no more, no fewer.'
+			'The read group must be exactly the 15 Phase 3 reads — no more, no fewer.'
 		);
-		$this->assertCount( 13, $reads, 'Phase 3 ships exactly 13 read abilities.' );
+		$this->assertCount( 15, $reads, 'Phase 3 ships exactly 15 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

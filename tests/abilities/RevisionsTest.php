@@ -208,6 +208,14 @@ final class RevisionsTest extends TestCase {
 		$this->assertTrue( $out2['restored'] );
 	}
 
+	public function test_revision_abilities_registered_and_discoverable(): void {
+		$reg = aafm_get_abilities_registry();
+		foreach ( array( 'aafm/list-revisions', 'aafm/get-revision', 'aafm/restore-revision' ) as $name ) {
+			$this->assertArrayHasKey( $name, $reg );
+			$this->assertNotNull( aafm_ability_list_permission( $name ) );
+		}
+	}
+
 	public function test_restore_revision_enforces_parent_editable(): void {
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $owner );

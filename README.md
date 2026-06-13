@@ -1,16 +1,18 @@
-=== Agent Abilities for MCP ===
-Contributors: unaibamir
-Tags: mcp, ai, agents, abilities, model context protocol
-Requires at least: 6.9
-Tested up to: 7.0
-Requires PHP: 8.0
-Stable tag: 1.0.0
-License: GPL-2.0-or-later
-License URI: https://www.gnu.org/licenses/gpl-2.0.html
+# Agent Abilities for MCP
 
 Give an AI agent scoped, audited access to your WordPress site over the Model Context Protocol — least privilege by design, off by default.
 
-== Description ==
+| | |
+|---|---|
+| **Contributors** | unaibamir |
+| **Tags** | mcp, ai, agents, abilities, model context protocol |
+| **Requires at least** | 6.9 |
+| **Tested up to** | 7.0 |
+| **Requires PHP** | 8.0 |
+| **Stable tag** | 1.0.0 |
+| **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
+
+## Description
 
 Give an AI agent access to your WordPress site without handing it the keys. Agent Abilities for MCP connects agents over the Model Context Protocol as a WordPress user you choose — point it at a dedicated low-privilege account and it can only ever do what that account is allowed to do. Everything is off until you turn it on, and every action is logged. No admin-equivalent key, no custom transport, no custom OAuth — it is built on the WordPress Abilities API and the official MCP Adapter.
 
@@ -26,7 +28,7 @@ Highlights:
 * Optional safety controls — switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * Guided setup — create the agent user, copy a client config, and run a connection check from one screen.
 
-== Installation ==
+## Installation
 
 1. Upload the plugin files to the `/wp-content/plugins/agent-abilities-for-mcp` directory, or install through the WordPress plugins screen.
 2. Activate the plugin through the Plugins screen in WordPress.
@@ -34,41 +36,42 @@ Highlights:
 4. On the Abilities tab, enable only the abilities you want the agent to have. Everything starts off.
 5. Create an Application Password for the agent user, point your MCP client at the endpoint, and use the Connection tab to confirm it is reachable.
 
-== Frequently Asked Questions ==
+## Frequently Asked Questions
 
-= Does the agent get admin access? =
+### Does the agent get admin access?
 
 No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each ability also re-checks the user's capability before it runs, so a connection can never call a tool its user is not allowed to use.
 
-= What can an agent actually do? =
+### What can an agent actually do?
 
 Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, post meta, and site structure, plus revision history and a search that spans every post type at once. There is no ability to change options arbitrarily, create users, change roles, fetch a remote URL, or run code. An agent can only write post meta for keys an administrator has explicitly allowlisted, and protected, underscore-prefixed, and authentication keys can never be allowlisted. Deletes move content to Trash so they are recoverable.
 
-= Which AI clients work? =
+### Which AI clients work?
 
 Any MCP client that can reach a WordPress REST endpoint with an Application Password. Claude Desktop, Claude Code, Cursor, Windsurf, and Gemini CLI all connect through the @automattic/mcp-wordpress-remote proxy. The hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector, which the underlying adapter does not serve natively yet.
 
-= I'm on Windows and the config won't start. =
+### I'm on Windows and the config won't start.
 
-Windows MCP clients can't launch the npx shim by name. Wrap it in cmd: set "command" to "cmd" and put "/c", "npx" at the front of "args". The Connection tab has a Windows tab that generates this for you.
+Windows MCP clients can't launch the npx shim by name. Wrap it in cmd: set `command` to `cmd` and put `/c`, `npx` at the front of `args`. The Connection tab has a Windows tab that generates this for you.
 
-= My agent can't connect to a local or staging site. =
+### My agent can't connect to a local or staging site.
 
-Local stacks like DDEV, Local, and Valet serve a self-signed certificate that Node rejects, so the proxy never reaches WordPress. For local testing only, add "NODE_TLS_REJECT_UNAUTHORIZED": "0" to the "env" block (the Connection tab adds it automatically when it detects a local site). Don't ship that setting to production — a public site has a trusted certificate and doesn't need it.
+Local stacks like DDEV, Local, and Valet serve a self-signed certificate that Node rejects, so the proxy never reaches WordPress. For local testing only, add `"NODE_TLS_REJECT_UNAUTHORIZED": "0"` to the `env` block (the Connection tab adds it automatically when it detects a local site). Don't ship that setting to production — a public site has a trusted certificate and doesn't need it.
 
-= Is there rate limiting? =
+### Is there rate limiting?
 
 Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". Each connection can make that many agent calls a minute, counted per agent user; 0 turns the limit off. Calls over the cap are denied and logged on the Activity Log tab, so you can spot a connection that keeps hitting it.
 
-= Does it send data anywhere? =
+### Does it send data anywhere?
 
 No. The plugin contacts no external service. Your agent talks directly to your site.
 
-= What gets logged? =
+### What gets logged?
 
 Every ability call — started, succeeded, errored, or denied — with the acting user, the ability name, and the argument keys. Argument values are never stored. The activity log lives in your own database and can be cleared from the admin screen.
 
-== Changelog ==
+## Changelog
 
-= 1.0.0 =
+### 1.0.0
+
 * Initial release: 31 governed core abilities (reads and guarded writes across posts, pages, terms, comments, media, post meta, revisions, and search), least-privilege Application Password auth, per-connection tool filtering, two-layer capability gating, optional safety controls (rate limit, IP allowlist, force-draft, title-length cap), an audit log that records denials, and a guided connection wizard with diagnostics.

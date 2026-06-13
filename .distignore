@@ -13,6 +13,7 @@
 /.gitattributes
 /.gitignore
 /.editorconfig
+/README.md
 /composer.json
 /composer.lock
 /phpcs.xml.dist

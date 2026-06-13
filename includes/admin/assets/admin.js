@@ -19,6 +19,8 @@
 			this.#bindSubjectTabs();
 			this.#bindSaveAbilities();
 			this.#bindSavePostTypes();
+			this.#bindSaveMetaKeys();
+			this.#bindMetaChips();
 			this.#bindCreateUser();
 			this.#bindTestConnection();
 			this.#bindClearLog();
@@ -174,6 +176,65 @@
 				if ( status ) {
 					status.textContent = json?.success ? 'Saved' : 'Error saving';
 				}
+			} );
+		}
+		#bindSaveMetaKeys() {
+			const btn = document.querySelector( '#aafm-meta-keys-save' );
+			const root = document.querySelector( '#aafm-meta-keys-form' );
+			if ( ! btn || ! root ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				const status = root.querySelector( '.aafm-meta-keys-status' );
+				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_meta_keys' );
+				body.append( 'nonce', this.#nonce );
+				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
+				if ( status ) {
+					status.textContent = 'Saving…';
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					status.textContent = json?.success ? 'Saved' : 'Error saving';
+				}
+			} );
+		}
+
+		#bindMetaChips() {
+			const root = document.querySelector( '#aafm-meta-keys-form' );
+			if ( ! root ) {
+				return;
+			}
+			const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
+			root.querySelectorAll( '.aafm-meta-chip' ).forEach( ( chip ) => {
+				chip.addEventListener( 'click', () => {
+					const key = chip.dataset.key ?? '';
+					if ( ! key || ! textarea ) {
+						return;
+					}
+					const lines = textarea.value
+						.split( '\n' )
+						.map( ( l ) => l.trim() )
+						.filter( Boolean );
+					if ( ! lines.includes( key ) ) {
+						textarea.value = (
+							textarea.value.replace( /\n+$/, '' ) +
+							'\n' +
+							key
+						).replace( /^\n/, '' );
+					}
+				} );
 			} );
 		}
 

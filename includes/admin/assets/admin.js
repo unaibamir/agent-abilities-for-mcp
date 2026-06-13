@@ -141,15 +141,15 @@
 		}
 
 		#bindSavePostTypes() {
-			const form = document.querySelector( '#aafm-post-types-form' );
-			if ( ! form ) {
+			const btn = document.querySelector( '#aafm-post-types-save' );
+			const root = document.querySelector( '#aafm-post-types-form' );
+			if ( ! btn || ! root ) {
 				return;
 			}
-			form.addEventListener( 'submit', async ( e ) => {
-				e.preventDefault();
-				const status = form.querySelector( '.aafm-post-types-status' );
+			btn.addEventListener( 'click', async () => {
+				const status = root.querySelector( '.aafm-post-types-status' );
 				const types = [
-					...form.querySelectorAll( 'input[name="aafm_post_types[]"]:checked' ),
+					...root.querySelectorAll( 'input[name="aafm_post_types[]"]:checked' ),
 				].map( ( i ) => i.value );
 
 				const body = new URLSearchParams();

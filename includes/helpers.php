@@ -452,6 +452,40 @@ function aafm_redact_media( WP_Post $attachment ): array {
 }
 
 /**
+ * Reduce a revision to a safe, metadata-only shape. Deliberately omits post_content,
+ * excerpt, and link — the plugin never exposes raw bodies; revision diffs/content are a
+ * post-launch change-history concern.
+ *
+ * @param WP_Post $revision Revision post.
+ * @return array<string,mixed>
+ */
+function aafm_redact_revision( WP_Post $revision ): array {
+	return array(
+		'id'           => (int) $revision->ID,
+		'post_id'      => (int) $revision->post_parent,
+		'author_id'    => (int) $revision->post_author,
+		'date_gmt'     => $revision->post_date_gmt,
+		'modified_gmt' => $revision->post_modified_gmt,
+		'title'        => get_the_title( $revision ),
+	);
+}
+
+/**
+ * Resolve a revision id, enforcing that it is a real revision of $post_id.
+ *
+ * @param int $revision_id Candidate revision id.
+ * @param int $post_id     Expected parent post id.
+ * @return WP_Post|WP_Error The revision, or a generic error if it is not a revision of $post_id.
+ */
+function aafm_validate_revision( int $revision_id, int $post_id ) {
+	$revision = $revision_id ? wp_get_post_revision( $revision_id ) : null;
+	if ( ! $revision instanceof WP_Post || (int) $revision->post_parent !== $post_id ) {
+		return aafm_generic_error();
+	}
+	return $revision;
+}
+
+/**
  * Bound page/per_page arguments.
  *
  * @param array<string,mixed> $input Raw input.

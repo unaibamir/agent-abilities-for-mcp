@@ -11,6 +11,7 @@ namespace AAFM\Tests\Unit;
 
 use AAFM\Tests\TestCase;
 use WP_Error;
+use WP_Post;
 use WP_Post_Type;
 
 final class HelpersTest extends TestCase {
@@ -374,5 +375,46 @@ final class HelpersTest extends TestCase {
 		$result = aafm_sanitize_meta_value( 'aafm_array_coercer', 'plain' );
 		$this->assertInstanceOf( WP_Error::class, $result );
 		unregister_post_meta( 'post', 'aafm_array_coercer' );
+	}
+
+	public function test_redact_revision_is_metadata_only(): void {
+		$pid = self::factory()->post->create(
+			array(
+				'post_content' => 'SECRET BODY',
+				'post_title'   => 'T',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'SECRET BODY v2',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = array_shift( $revs );
+		$out  = aafm_redact_revision( $rev );
+		$this->assertSame(
+			array( 'id', 'post_id', 'author_id', 'date_gmt', 'modified_gmt', 'title' ),
+			array_keys( $out )
+		);
+		$this->assertStringNotContainsString( 'SECRET BODY', wp_json_encode( $out ) );
+		$this->assertSame( $pid, $out['post_id'] );
+	}
+
+	public function test_validate_revision_enforces_parent(): void {
+		$a = self::factory()->post->create();
+		$b = self::factory()->post->create();
+		wp_update_post(
+			array(
+				'ID'           => $a,
+				'post_content' => 'x2',
+			)
+		);
+		$revs_a = wp_get_post_revisions( $a );
+		$rev_a  = array_shift( $revs_a );
+		$this->assertInstanceOf( WP_Post::class, aafm_validate_revision( (int) $rev_a->ID, $a ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( (int) $rev_a->ID, $b ) ); // wrong parent.
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( $a, $a ) );               // not a revision.
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_revision( 0, $a ) );                // missing.
 	}
 }

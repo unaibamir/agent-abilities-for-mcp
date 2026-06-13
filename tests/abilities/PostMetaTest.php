@@ -103,4 +103,28 @@ final class PostMetaTest extends TestCase {
 	public function test_perm_callback_returns_false_on_empty_input(): void {
 		$this->assertFalse( aafm_perm_get_post_meta( array() ) );
 	}
+
+	public function test_update_meta_writes_scalar_and_blocks_array(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		$this->assertTrue( aafm_perm_update_post_meta( array( 'post_id' => $id, 'meta_key' => 'subtitle', 'value' => 'x' ) ) );
+		aafm_exec_update_post_meta( array( 'post_id' => $id, 'meta_key' => 'subtitle', 'value' => 'New <b>title</b>' ) );
+		$this->assertSame( 'New title', get_post_meta( $id, 'subtitle', true ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_exec_update_post_meta( array( 'post_id' => $id, 'meta_key' => 'subtitle', 'value' => array( 1 ) ) ) );
+	}
+
+	public function test_update_meta_denies_blocked_and_other_author(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		$id = self::factory()->post->create( array( 'post_author' => $owner ) );
+		wp_set_current_user( $other );
+		$this->assertFalse( aafm_perm_update_post_meta( array( 'post_id' => $id, 'meta_key' => 'subtitle', 'value' => 'x' ) ) );
+		wp_set_current_user( $owner );
+		$this->assertFalse( aafm_perm_update_post_meta( array( 'post_id' => $id, 'meta_key' => '_edit_lock', 'value' => 'x' ) ) );
+		$this->assertFalse( aafm_perm_update_post_meta( array( 'post_id' => $id, 'meta_key' => 'unlisted', 'value' => 'x' ) ) );
+	}
 }

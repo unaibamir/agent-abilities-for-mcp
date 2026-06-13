@@ -20,13 +20,21 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_meta_definitions( array $registry ): array {
-	$registry['aafm/get-post-meta'] = array(
+	$registry['aafm/get-post-meta']    = array(
 		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post_meta',
+	);
+	$registry['aafm/update-post-meta'] = array(
+		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_update_post_meta',
 	);
 	return $registry;
 }
@@ -123,6 +131,97 @@ function aafm_exec_get_post_meta( array $input ) {
 	$value = get_post_meta( $id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
 		return aafm_generic_error(); // never dump arrays/serialized blobs.
+	}
+	return array(
+		'post_id'  => $id,
+		'meta_key' => $key,
+		'value'    => $value,
+	);
+}
+
+/**
+ * Args for aafm/update-post-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_post_meta(): array {
+	return array(
+		'label'               => __( 'Update post meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array(
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+			'required'             => array( 'post_id', 'meta_key', 'value' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id'  => array( 'type' => 'integer' ),
+				'meta_key' => array( 'type' => 'string' ),
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_update_post_meta',
+		'permission_callback' => 'aafm_perm_update_post_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/update-post-meta: the shared per-object + per-key gate.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_update_post_meta( array $input ): bool {
+	return aafm_can_access_post_meta( $input );
+}
+
+/**
+ * Execute aafm/update-post-meta.
+ *
+ * Re-validates the key, refuses non-scalar values via aafm_sanitize_meta_value(),
+ * then writes a single value. wp_slash() guards update_post_meta()'s internal unslash.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_post_meta( array $input ) {
+	$id  = absint( $input['post_id'] );
+	$key = aafm_validate_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
+	if ( is_wp_error( $key ) || ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	$value = aafm_sanitize_meta_value( $key, $input['value'] ?? '' );
+	if ( is_wp_error( $value ) ) {
+		return $value;
+	}
+	if ( false === update_post_meta( $id, $key, wp_slash( $value ) ) ) {
+		// update_post_meta returns false on no-op (same value) too; treat a genuine read-back as truth.
+		if ( get_post_meta( $id, $key, true ) !== $value ) {
+			return aafm_generic_error();
+		}
 	}
 	return array(
 		'post_id'  => $id,

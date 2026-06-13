@@ -268,20 +268,62 @@
 	}
 
 	.aafm-notice {
+		display: flex;
+		gap: 8px;
+		align-items: flex-start;
 		border-left: 4px solid;
-		padding-block: 8px;
-		padding-inline: 12px;
-		margin-block: 8px;
-		background: #fff;
+		padding: 10px 12px;
+		margin: 12px 0;
+		background: #f0f6fc;
+
+		& .dashicons {
+			flex: 0 0 auto;
+			margin-top: 2px;
+		}
+
+		& .aafm-notice-body {
+			flex: 1 1 auto;
+		}
 
 		&.aafm-notice-warning {
-			border-color: #dba617;
+			border-left-color: #dba617;
 			background: #fcf9e8;
+
+			& .dashicons {
+				color: #dba617;
+			}
 		}
 
 		&.aafm-notice-info {
-			border-color: #72aee6;
+			border-left-color: #72aee6;
 			background: #f0f6fc;
+
+			& .dashicons {
+				color: #72aee6;
+			}
+		}
+
+		&.aafm-notice-success {
+			border-left-color: #00a32a;
+			background: #edfaef;
+
+			& .dashicons {
+				color: #00a32a;
+			}
+		}
+
+		&.aafm-notice-error {
+			border-left-color: #d63638;
+			background: #fcf0f1;
+
+			& .dashicons {
+				color: #d63638;
+			}
+		}
+
+		&.aafm-notice-inline {
+			margin: 6px 0;
+			padding: 6px 10px;
 		}
 	}
 }

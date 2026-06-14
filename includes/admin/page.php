@@ -707,7 +707,7 @@ function aafm_render_activity_tab(): void {
  * @return void
  */
 function aafm_render_help_entry( string $summary, string $body ): void {
-	echo '<details class="aafm-help-entry"><summary>' . esc_html( $summary ) . '</summary><div class="aafm-help-body">';
+	echo '<details class="aafm-help-entry"><summary><span class="dashicons dashicons-editor-help" aria-hidden="true"></span>' . esc_html( $summary ) . '</summary><div class="aafm-help-body">';
 	echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $body is built locally and run through wp_kses by the caller.
 	echo '</div></details>';
 }
@@ -765,7 +765,8 @@ function aafm_render_help_tab(): void {
 	echo '<p class="description aafm-help-intro">' . esc_html__( 'Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	// Section 1 — Connecting.
-	echo '<h3>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 1. Client won't connect / endpoint unreachable.
 	aafm_render_help_entry(
@@ -867,8 +868,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 2 — Authentication.
-	echo '<h3>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 2. Authorization header diagnostic fails.
 	aafm_render_help_entry(
@@ -896,8 +900,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 3 — Abilities & permissions.
-	echo '<h3>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 6. Agent sees fewer tools than expected.
 	aafm_render_help_entry(
@@ -923,8 +930,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 4 — Clients, privacy & limits.
-	echo '<h3>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 8. Which AI clients work, and how to set each one up.
 	aafm_render_help_entry(
@@ -979,6 +989,7 @@ function aafm_render_help_tab(): void {
 			$inline
 		)
 	);
+	echo '</div>';
 
 	echo '</div>';
 }

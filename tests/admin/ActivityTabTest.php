@@ -36,6 +36,9 @@ final class ActivityTabTest extends TestCase {
 		$this->assertStringContainsString( 'aafm/trash-post', $html );
 		$this->assertStringContainsString( 'denied', $html );
 		$this->assertStringContainsString( 'post_id', $html );
+		// Status renders inside a pill, and the presentational filter control is present.
+		$this->assertStringContainsString( 'aafm-pill', $html );
+		$this->assertStringContainsString( 'aafm-seg', $html );
 	}
 
 	public function test_tab_escapes_ability_names(): void {

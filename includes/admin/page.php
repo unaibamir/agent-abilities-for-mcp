@@ -647,7 +647,18 @@ function aafm_render_activity_tab(): void {
 
 	echo '<div class="aafm-activity">';
 	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
-	echo '<p><button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span></p>';
+
+	// Presentational status filter — static segmented control, no client-side wiring yet.
+	echo '<div class="aafm-activity-toolbar">';
+	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
+	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all">' . esc_html__( 'All', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="success">' . esc_html__( 'Success', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="error">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="denied">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '</div>';
+	echo '<button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '</div>';
+
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
@@ -659,14 +670,24 @@ function aafm_render_activity_tab(): void {
 	if ( empty( $rows ) ) {
 		echo '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
 	}
+	// Map each log status to a pill variant; the status word stays visible (never colour-only).
+	$status_variants = array(
+		'success' => 'success',
+		'error'   => 'danger',
+		'denied'  => 'warn',
+		'started' => 'neutral',
+	);
 	foreach ( $rows as $row ) {
+		$status  = (string) ( $row['status'] ?? '' );
+		$variant = $status_variants[ $status ] ?? 'neutral';
 		printf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-status aafm-status-%4$s">%5$s</span></td><td>%6$s</td></tr>',
+			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-pill aafm-pill-%4$s aafm-status aafm-status-%5$s">%6$s</span></td><td>%7$s</td></tr>',
 			esc_html( (string) ( $row['created_at'] ?? '' ) ),
 			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
 			esc_html( (string) ( $row['ability'] ?? '' ) ),
-			esc_attr( (string) ( $row['status'] ?? '' ) ),
-			esc_html( (string) ( $row['status'] ?? '' ) ),
+			esc_attr( $variant ),
+			esc_attr( $status ),
+			esc_html( $status ),
 			esc_html( (string) ( $row['arg_keys'] ?? '' ) )
 		);
 	}

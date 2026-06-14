@@ -41,6 +41,22 @@
 			font-size: 13px;
 		}
 
+		/* Leading status dot. Rendered from CSS (::before) so the markup stays
+		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> — no dot
+		   element needed. --aafm-dot is set per variant below; falls back to
+		   currentColor so the dot is always visible. */
+		--aafm-dot: currentColor;
+
+		&::before {
+			content: "";
+			flex: 0 0 auto;
+			inline-size: 7px;
+			block-size: 7px;
+			border-radius: 50%;
+			background: var(--aafm-dot);
+		}
+
+		/* Legacy explicit dot element (kept for any markup that ships one). */
 		.dot {
 			inline-size: 8px;
 			block-size: 8px;
@@ -48,6 +64,7 @@
 		}
 
 		&.aafm-pill-success {
+			--aafm-dot: var(--aafm-green);
 			background: var(--aafm-green-tint);
 			color: var(--aafm-green-text);
 
@@ -55,6 +72,7 @@
 		}
 
 		&.aafm-pill-warn {
+			--aafm-dot: var(--aafm-amber);
 			background: var(--aafm-amber-tint);
 			color: var(--aafm-amber-text);
 
@@ -62,6 +80,7 @@
 		}
 
 		&.aafm-pill-danger {
+			--aafm-dot: var(--aafm-red);
 			background: var(--aafm-red-tint);
 			color: var(--aafm-red-text);
 
@@ -69,6 +88,7 @@
 		}
 
 		&.aafm-pill-info {
+			--aafm-dot: var(--aafm-accent);
 			background: var(--aafm-accent-tint);
 			color: var(--aafm-accent-hover);
 
@@ -76,6 +96,7 @@
 		}
 
 		&.aafm-pill-neutral {
+			--aafm-dot: var(--aafm-border-strong);
 			background: var(--aafm-surface-2);
 			color: var(--aafm-text-muted);
 
@@ -934,21 +955,54 @@
 			background: var(--aafm-surface);
 
 			summary {
+				display: flex;
+				align-items: center;
+				gap: 8px;
 				padding-block: 10px;
 				padding-inline: 14px;
 				cursor: pointer;
 				font-weight: 600;
 				color: var(--aafm-text);
-				list-style-position: inside;
+
+				/* Hide the browser-default disclosure triangle; the chevron
+				   below replaces it on the right edge of the row. */
+				list-style: none;
+
+				&::-webkit-details-marker {
+					display: none;
+				}
 
 				&:hover {
 					color: var(--aafm-accent);
+				}
+
+				/* Right-aligned chevron affordance. Rotates to point down when
+				   the entry is open. CSS-only — the <details>/<summary>
+				   semantics and focus ring stay native. */
+				&::after {
+					content: "";
+					flex: 0 0 auto;
+					margin-inline-start: auto;
+					inline-size: 8px;
+					block-size: 8px;
+					border-inline-end: 2px solid var(--aafm-text-subtle);
+					border-block-end: 2px solid var(--aafm-text-subtle);
+					transform: rotate(-45deg);
+					transition: transform 0.15s ease;
+				}
+
+				&:hover::after {
+					border-color: var(--aafm-accent);
 				}
 			}
 
 			&[open] {
 				summary {
 					border-block-end: 1px solid #f0f0f1;
+
+					&::after {
+						transform: rotate(45deg);
+					}
 				}
 			}
 

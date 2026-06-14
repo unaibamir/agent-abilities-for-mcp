@@ -553,6 +553,7 @@ function aafm_render_post_types_selector(): void {
 	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types">';
 	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
@@ -581,6 +582,7 @@ function aafm_render_post_types_selector(): void {
 	}
 
 	echo '</tbody></table>';
+	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p><button type="button" id="aafm-post-types-save" class="button button-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
@@ -659,6 +661,7 @@ function aafm_render_activity_tab(): void {
 	echo '<button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '</div>';
 
+	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
@@ -692,6 +695,7 @@ function aafm_render_activity_tab(): void {
 		);
 	}
 	echo '</tbody></table>';
+	echo '</div>'; // .aafm-table-wrap
 	echo '</div>';
 }
 

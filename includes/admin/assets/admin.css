@@ -318,6 +318,7 @@
 	/* ---------- Tabs (top nav — restyle core .nav-tab to underline-active) ---------- */
 	.nav-tab-wrapper {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 2px;
 		border-block-end: 1px solid var(--aafm-border-strong);
 		margin: 18px 0 22px;
@@ -640,6 +641,26 @@
 		border-block-end: 1px solid var(--aafm-border);
 
 		&:last-child { border-block-end: 0; }
+
+		/* Flex children must allow shrinking so a wide code block scrolls
+		   inside the rail (overflow-x:auto) instead of stretching the card. */
+		> * { min-inline-size: 0; }
+	}
+
+	.aafm-step-rail { min-inline-size: 0; }
+
+	/* WP-native action buttons in the connection steps carry long labels and
+	   default to white-space:nowrap; let them wrap inside a narrow column. */
+	.aafm-step-rail .button {
+		max-inline-size: 100%;
+		white-space: normal;
+		block-size: auto;
+	}
+
+	/* The agent-login input must shrink with its column rather than hold its
+	   .regular-text width and push the row wider than the viewport. */
+	.aafm-step-rail .regular-text {
+		max-inline-size: 100%;
 	}
 
 	.aafm-step-head {
@@ -814,6 +835,9 @@
 		align-items: flex-start;
 
 		&:last-child { border-block-end: 0; }
+
+		/* Let the text column wrap instead of forcing the row wider. */
+		> div:not(.dot-lg) { min-inline-size: 0; }
 
 		.dot-lg {
 			inline-size: 11px;
@@ -991,6 +1015,13 @@
 	.aafm-quickstarts {
 		margin-block: 12px;
 
+		/* Long-label toggle must wrap inside a narrow column, not spill out. */
+		.aafm-quickstart-toggle {
+			max-inline-size: 100%;
+			white-space: normal;
+			block-size: auto;
+		}
+
 		.aafm-quickstart-grid {
 			display: grid;
 			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -999,6 +1030,7 @@
 		}
 
 		.aafm-quickstart-card {
+			min-inline-size: 0;
 			padding: 12px;
 			background: var(--aafm-surface);
 			border: 1px solid var(--aafm-border);

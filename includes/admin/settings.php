@@ -141,6 +141,10 @@ function aafm_render_settings_tab(): void {
 
 	echo '<form id="aafm-settings-form">';
 	echo '<section class="aafm-card">';
+	echo '<div class="aafm-card-head">';
+	echo '<span class="icon"><span class="dashicons dashicons-shield" aria-hidden="true"></span></span>';
+	echo '<h2>' . esc_html__( 'Safety controls', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '</div>';
 
 	// Rate limit.
 	echo '<div class="aafm-set-row">';

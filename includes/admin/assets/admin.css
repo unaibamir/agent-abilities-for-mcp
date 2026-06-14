@@ -127,7 +127,7 @@
 	.aafm-stat-grid {
 		display: grid;
 		gap: 16px;
-		grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		margin-block-start: 20px;
 	}
 
@@ -203,14 +203,32 @@
 		overflow-wrap: anywhere;
 	}
 
+	/* In the dashboard endpoint card the URL stays on one line beside the inline
+	   Copy button (matches the mockup), scrolling horizontally rather than wrapping tall. */
+	.aafm-card-endpoint .aafm-field-mono .aafm-endpoint {
+		overflow-x: auto;
+		overflow-wrap: normal;
+		white-space: nowrap;
+	}
+
 	.aafm-snippet {
 		font-family: var(--aafm-mono);
 	}
 
 	.aafm-field-mono {
 		display: flex;
-		align-items: stretch;
+		align-items: center;
 		gap: 8px;
+
+		.aafm-endpoint {
+			flex: 1;
+			min-inline-size: 0;
+		}
+
+		.aafm-copy {
+			flex: 0 0 auto;
+			white-space: nowrap;
+		}
 
 		input,
 		.val {
@@ -706,10 +724,16 @@
 	.aafm-activity-toolbar {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		flex-wrap: wrap;
 		gap: 12px;
 		margin-block-end: 14px;
+
+		/* Row count sits right after the filter; the auto margin pushes Clear log to the end. */
+		.aafm-activity-count {
+			margin-inline-end: auto;
+			color: var(--aafm-text-subtle);
+			font-size: 13px;
+		}
 	}
 
 	/* ---------- Segmented control ---------- */
@@ -1012,8 +1036,12 @@
 	}
 
 	/* ---------- Per-client quickstarts ---------- */
+	/* The per-client config cards stay in the DOM — the picker reads each card's
+	   data-config and the snippet tests reference them — but the redesigned
+	   Connection tab surfaces only the single primary codeblock for the selected
+	   client, so the expanded grid and its reveal toggle are hidden. */
 	.aafm-quickstarts {
-		margin-block: 12px;
+		display: none;
 
 		/* Long-label toggle must wrap inside a narrow column, not spill out. */
 		.aafm-quickstart-toggle {
@@ -1023,10 +1051,14 @@
 		}
 
 		.aafm-quickstart-grid {
-			display: grid;
 			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 			gap: 16px;
 			margin-block-start: 8px;
+
+			/* Visible only if the toggle reveals it (it stays display:none while [hidden]). */
+			&:not([hidden]) {
+				display: grid;
+			}
 		}
 
 		.aafm-quickstart-card {
@@ -1051,15 +1083,13 @@
 
 	/* ---------- Dashboard status cards ---------- */
 	.aafm-dashboard {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		display: flex;
+		flex-direction: column;
 		gap: 16px;
-		align-items: start;
 
 		.aafm-dashboard-intro {
 			max-inline-size: 760px;
 			color: #3c434a;
-			grid-column: 1 / -1;
 		}
 
 		.aafm-card {
@@ -1071,9 +1101,26 @@
 				font-size: 13px;
 			}
 		}
+
+		/* Lower row: endpoint (wide) beside versions (narrow). */
+		.aafm-dashboard-lower {
+			grid-template-columns: 2fr 1fr;
+			margin-block-start: 0;
+			align-items: start;
+		}
 	}
 
 	/* ---------- Responsive ---------- */
+	@media (max-width: 960px) {
+		.aafm-stat-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.aafm-dashboard .aafm-dashboard-lower {
+			grid-template-columns: 1fr;
+		}
+	}
+
 	@media (max-width: 720px) {
 		.aafm-stat.aafm-stat-span2 { grid-column: span 1; }
 	}
@@ -1083,13 +1130,13 @@
 			grid-template-columns: 1fr;
 			gap: 10px;
 		}
+
+		.aafm-stat-grid {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	@media (max-width: 600px) {
-		.aafm-dashboard {
-			grid-template-columns: 1fr;
-		}
-
 		.aafm-quickstarts .aafm-quickstart-grid {
 			grid-template-columns: 1fr;
 		}

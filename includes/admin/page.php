@@ -658,6 +658,22 @@ function aafm_render_activity_tab(): void {
 	echo '<button type="button" class="aafm-seg-btn" data-filter="error">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '<button type="button" class="aafm-seg-btn" data-filter="denied">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
+
+	// Row count: how many rows are stored against the cap the oldest rows drop at.
+	$log_rows = aafm_activity_count();
+	$log_cap  = defined( 'AAFM_LOG_MAX_ROWS' ) ? (int) AAFM_LOG_MAX_ROWS : 10000;
+	printf(
+		'<span class="aafm-activity-count">%s</span>',
+		esc_html(
+			sprintf(
+				/* translators: 1: number of rows stored, 2: maximum number of rows kept. */
+				__( '%1$s of %2$s rows', 'agent-abilities-for-mcp' ),
+				number_format_i18n( $log_rows ),
+				number_format_i18n( $log_cap )
+			)
+		)
+	);
+
 	echo '<button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '</div>';
 

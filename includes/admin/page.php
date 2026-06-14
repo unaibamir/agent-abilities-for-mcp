@@ -262,18 +262,45 @@ function aafm_render_admin_page(): void {
 		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
 	);
 
+	// Dashicon per tab, keyed by tab slug — decorative, so the spans are static literals.
+	$tab_icons = array(
+		'dashboard'  => 'dashicons-dashboard',
+		'connection' => 'dashicons-rest-api',
+		'abilities'  => 'dashicons-superhero',
+		'settings'   => 'dashicons-admin-settings',
+		'activity'   => 'dashicons-list-view',
+		'help'       => 'dashicons-editor-help',
+	);
+
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab routing, no state change.
 	$active = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';
 	if ( ! isset( $tabs[ $active ] ) ) {
 		$active = 'dashboard';
 	}
 
+	$adapter_version = aafm_loaded_adapter_version();
+	if ( null !== $adapter_version ) {
+		$pill_class = 'aafm-pill aafm-pill-success';
+		$pill_label = __( 'Endpoint live', 'agent-abilities-for-mcp' );
+	} else {
+		$pill_class = 'aafm-pill aafm-pill-warn';
+		$pill_label = __( 'Adapter not loaded', 'agent-abilities-for-mcp' );
+	}
+
 	echo '<div class="wrap aafm-wrap">';
-	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
+	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' );
+	printf(
+		' <span class="aafm-status-pill %1$s">%2$s</span>',
+		esc_attr( $pill_class ),
+		esc_html( $pill_label )
+	);
+	echo '</h1>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<h2 class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
+		$icon = $tab_icons[ $slug ];
 		printf(
-			'<a href="%s" class="nav-tab %s">%s</a>',
+			'<a href="%s" class="nav-tab %s"><span class="dashicons %s" aria-hidden="true"></span> %s</a>',
 			esc_url(
 				add_query_arg(
 					array(
@@ -284,6 +311,7 @@ function aafm_render_admin_page(): void {
 				)
 			),
 			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+			esc_attr( $icon ),
 			esc_html( $label )
 		);
 	}

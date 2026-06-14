@@ -104,6 +104,23 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-admin-agent', $html );
 	}
 
+	public function test_dashboard_renders_setup_checklist_and_stat_grid(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'aafm-setup', $html );
+		$this->assertStringContainsString( 'aafm-step', $html );
+		$this->assertStringContainsString( 'aafm-stat-grid', $html );
+		$this->assertStringContainsString( 'Enabled abilities', $html );   // Content preserved.
+	}
+
+	public function test_setup_steps_reflect_real_state(): void {
+		update_option( 'aafm_enabled_abilities', array() );
+		$steps = aafm_setup_steps();
+		$this->assertFalse( $steps[1]['done'] ); // No abilities enabled.
+	}
+
 	public function test_default_tab_is_dashboard(): void {
 		$this->acting_as( 'administrator' );
 		unset( $_GET['tab'] );

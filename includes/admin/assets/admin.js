@@ -45,6 +45,7 @@
 		constructor() {
 			this.#bindCopy();
 			this.#bindOsTabs();
+			this.#bindClientPicker();
 			this.#bindSubjectTabs();
 			this.#bindSaveAbilities();
 			this.#bindSavePostTypes();
@@ -71,6 +72,70 @@
 				toggle.textContent = open
 					? i18n?.quickstartsHide ?? 'Hide client configs'
 					: i18n?.quickstartsShow ?? 'Show config for a specific client';
+			} );
+		}
+
+		/**
+		 * Wire the client picker (the .aafm-client cards in #aafm-clients).
+		 *
+		 * Clicking a card marks it .on (clearing its siblings) and swaps the primary
+		 * config blocks to that client's snippet. The per-client unix payload already
+		 * lives on the matching .aafm-quickstart-card's data-config, so the unix block
+		 * is taken verbatim from there. Clients differ only by the JSON root key
+		 * (VS Code uses "servers"; everyone else uses "mcpServers"), so the windows
+		 * block — which has no per-client payload in the markup — is reconciled by
+		 * rewriting just that root key. Both updates touch textContent / data-copy
+		 * only, never innerHTML.
+		 *
+		 * @param {string} text   A rendered snippet (JSON text).
+		 * @param {string} client The selected client slug.
+		 * @return {string} The snippet with its root key matched to the client.
+		 */
+		#applyRootKey( text, client ) {
+			const wanted = 'vscode' === client ? 'servers' : 'mcpServers';
+			// The root key is the only "servers"/"mcpServers" token in the snippet
+			// (it never appears in any value), so swap the first one we find.
+			return text.replace( /"(?:mcp)?[sS]ervers"/, `"${ wanted }"` );
+		}
+
+		#bindClientPicker() {
+			const cards = document.querySelectorAll( '#aafm-clients .aafm-client' );
+			if ( ! cards.length ) {
+				return;
+			}
+			cards.forEach( ( card ) => {
+				card.addEventListener( 'click', () => {
+					cards.forEach( ( c ) => c.classList.toggle( 'on', c === card ) );
+
+					const client = card.dataset.client ?? '';
+					// The matching quickstart card carries the ready-made unix snippet.
+					const source = document.querySelector(
+						`.aafm-quickstart-card[data-client="${ client }"]`
+					);
+					const unixCfg = source?.dataset.config ?? '';
+
+					document
+						.querySelectorAll( '.aafm-snippet[data-os]' )
+						.forEach( ( block ) => {
+							const pre = block.querySelector( 'pre' );
+							const copy = block.querySelector( '.aafm-copy' );
+							if ( ! pre ) {
+								return;
+							}
+							let next;
+							if ( 'unix' === block.dataset.os && unixCfg ) {
+								next = unixCfg;
+							} else {
+								// No per-client windows payload exists; reconcile the
+								// already-rendered block's root key to the client.
+								next = this.#applyRootKey( pre.textContent, client );
+							}
+							pre.textContent = next;
+							if ( copy ) {
+								copy.dataset.copy = next;
+							}
+						} );
+				} );
 			} );
 		}
 

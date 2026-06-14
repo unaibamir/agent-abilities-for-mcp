@@ -1,23 +1,235 @@
-/* Agent Abilities for MCP — admin settings page.
-   Scoped under .aafm-wrap, native CSS nesting, wp-admin-native colors. */
+/* Agent Abilities for MCP — admin settings page (Direction A).
+   Tokens live on :root; every component is scoped under .aafm-wrap so it
+   never leaks into core admin chrome. WP-native neutrals, single accent. */
+
+:root {
+  --aafm-surface:#fff; --aafm-surface-2:#f6f7f7; --aafm-text:#1d2327;
+  --aafm-text-muted:#50575e; --aafm-text-subtle:#646970;
+  --aafm-border:#dcdcde; --aafm-border-strong:#c3c4c7;
+  --aafm-accent:#2271b1; --aafm-accent-hover:#135e96; --aafm-accent-tint:#f0f6fc;
+  --aafm-green:#00a32a; --aafm-green-text:#007017; --aafm-green-tint:#edfaef;
+  --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
+  --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
+  --aafm-radius:8px; --aafm-radius-sm:5px; --aafm-shadow:0 1px 2px rgba(0,0,0,.04);
+}
 
 .aafm-wrap {
+	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
+	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
+	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
+
+	color: var(--aafm-text);
+	font-size: 14px;
+	line-height: 1.5;
+
+	/* ---------- Pills / status ---------- */
+	.aafm-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		block-size: 24px;
+		padding-inline: 10px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+
+		.dashicons,
+		svg {
+			inline-size: 13px;
+			block-size: 13px;
+			font-size: 13px;
+		}
+
+		.dot {
+			inline-size: 8px;
+			block-size: 8px;
+			border-radius: 50%;
+		}
+
+		&.aafm-pill-success {
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
+
+			.dot { background: var(--aafm-green); }
+		}
+
+		&.aafm-pill-warn {
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+
+			.dot { background: var(--aafm-amber); }
+		}
+
+		&.aafm-pill-danger {
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+
+			.dot { background: var(--aafm-red); }
+		}
+
+		&.aafm-pill-info {
+			background: var(--aafm-accent-tint);
+			color: var(--aafm-accent-hover);
+
+			.dot { background: var(--aafm-accent); }
+		}
+
+		&.aafm-pill-neutral {
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text-muted);
+
+			.dot { background: var(--aafm-border-strong); }
+		}
+	}
+
+	/* ---------- Cards ---------- */
+	.aafm-card {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		box-shadow: var(--aafm-shadow);
+	}
+
+	.aafm-card-pad {
+		padding-block: 18px;
+		padding-inline: 20px;
+	}
+
+	.aafm-card-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding-block: 14px;
+		padding-inline: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+
+		h2 {
+			margin: 0;
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		.icon {
+			display: flex;
+			color: var(--aafm-text-subtle);
+
+			.dashicons,
+			svg {
+				inline-size: 18px;
+				block-size: 18px;
+				font-size: 18px;
+			}
+		}
+	}
+
+	/* ---------- Stat cards ---------- */
+	.aafm-stat-grid {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+		margin-block-start: 20px;
+	}
+
+	.aafm-stat {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		padding-block: 16px;
+		padding-inline: 18px;
+		box-shadow: var(--aafm-shadow);
+		transition: box-shadow 0.18s ease, transform 0.18s ease;
+
+		&:hover { box-shadow: var(--aafm-shadow-md); }
+
+		.stat-top {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-block-end: 8px;
+		}
+
+		.stat-label {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.02em;
+			text-transform: uppercase;
+			color: var(--aafm-text-subtle);
+		}
+
+		.stat-ic {
+			display: flex;
+			color: var(--aafm-border-strong);
+
+			.dashicons,
+			svg {
+				inline-size: 18px;
+				block-size: 18px;
+				font-size: 18px;
+			}
+		}
+
+		.stat-value {
+			font-size: 28px;
+			font-weight: 600;
+			letter-spacing: -0.02em;
+
+			small {
+				font-size: 15px;
+				color: var(--aafm-text-subtle);
+				font-weight: 500;
+			}
+		}
+
+		.stat-sub {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block-start: 4px;
+		}
+
+		&.aafm-stat-span2 { grid-column: span 2; }
+	}
+
+	/* ---------- Endpoint field (mono) ---------- */
 	.aafm-endpoint {
 		display: inline-block;
 		max-inline-size: 100%;
 		padding-block: 4px;
 		padding-inline: 8px;
-		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
-		background: #f6f7f7;
-		border: 1px solid #dcdcde;
+		font-family: var(--aafm-mono);
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
 		border-radius: 3px;
 		overflow-wrap: anywhere;
 	}
 
 	.aafm-snippet {
-		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+		font-family: var(--aafm-mono);
 	}
 
+	.aafm-field-mono {
+		display: flex;
+		align-items: stretch;
+		gap: 8px;
+
+		input,
+		.val {
+			flex: 1;
+			min-inline-size: 0;
+			font-family: var(--aafm-mono);
+			font-size: 12.5px;
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			padding-block: 9px;
+			padding-inline: 11px;
+			color: var(--aafm-text);
+			overflow-x: auto;
+			white-space: nowrap;
+		}
+	}
+
+	/* ---------- OS tabs (CLI snippet selector) ---------- */
 	.aafm-os-tabs {
 		display: flex;
 		gap: 4px;
@@ -30,52 +242,565 @@
 		}
 	}
 
-	/* Abilities subject sub-tabs: a wider bar that wraps, sitting above the panels. */
-	.aafm-subject-tabs {
-		flex-wrap: wrap;
-		margin-block: 8px 16px;
-	}
-
-	.aafm-subject-panel {
-		margin-block-start: 4px;
-	}
-
 	.aafm-os-note {
 		max-inline-size: 760px;
 
 		code {
 			font-size: 12px;
 		}
+	}
 
-		/* Info callout: separate the Windows and certificate guidance into scannable rows. */
-		&.notice {
-			padding-block: 10px;
-			padding-inline: 12px;
+	/* ---------- Notices (notices.php — restyle only, markup unchanged) ---------- */
+	.aafm-notice {
+		display: flex;
+		gap: 11px;
+		align-items: flex-start;
+		border: 1px solid var(--aafm-border);
+		border-inline-start: 4px solid var(--aafm-accent);
+		border-radius: var(--aafm-radius-sm);
+		padding: 12px 14px;
+		margin: 12px 0;
+		font-size: 13px;
+		line-height: 1.5;
+		background: var(--aafm-accent-tint);
+		color: #0a4b78;
 
-			.aafm-os-note-row {
-				display: flex;
-				gap: 10px;
-				margin-block: 4px;
-				align-items: baseline;
+		& .dashicons {
+			flex: 0 0 auto;
+			margin-block-start: 1px;
+			color: var(--aafm-accent);
+		}
+
+		& .aafm-notice-body {
+			flex: 1 1 auto;
+		}
+
+		& strong { font-weight: 600; }
+
+		&.aafm-notice-info {
+			border-inline-start-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+			color: #0a4b78;
+
+			& .dashicons { color: var(--aafm-accent); }
+		}
+
+		&.aafm-notice-warning {
+			border-inline-start-color: var(--aafm-amber);
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+
+			& .dashicons { color: var(--aafm-amber); }
+		}
+
+		&.aafm-notice-success {
+			border-inline-start-color: var(--aafm-green);
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
+
+			& .dashicons { color: var(--aafm-green); }
+		}
+
+		&.aafm-notice-error {
+			border-inline-start-color: var(--aafm-red);
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+
+			& .dashicons { color: var(--aafm-red); }
+		}
+
+		&.aafm-notice-inline {
+			margin: 6px 0;
+			padding: 6px 10px;
+		}
+	}
+
+	/* ---------- Tabs (top nav — restyle core .nav-tab to underline-active) ---------- */
+	.nav-tab-wrapper {
+		display: flex;
+		gap: 2px;
+		border-block-end: 1px solid var(--aafm-border-strong);
+		margin: 18px 0 22px;
+		padding: 0;
+
+		.nav-tab {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			margin: 0 0 -1px;
+			padding: 10px 14px;
+			border: 0;
+			border-block-end: 2px solid transparent;
+			background: transparent;
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-weight: 500;
+			font-size: 13.5px;
+			line-height: 1.4;
+			border-radius: 0;
+			transition: color 0.15s ease, border-color 0.15s ease;
+
+			.dashicons,
+			svg {
+				inline-size: 16px;
+				block-size: 16px;
+				font-size: 16px;
+				opacity: 0.85;
 			}
 
-			.aafm-os-note-label {
-				flex: 0 0 auto;
-				min-inline-size: 86px;
-				font-weight: 600;
+			&:hover,
+			&:focus {
+				color: var(--aafm-accent);
+				background: transparent;
+			}
+		}
+
+		.nav-tab-active,
+		.nav-tab-active:hover,
+		.nav-tab-active:focus {
+			color: var(--aafm-accent);
+			border-block-end-color: var(--aafm-accent);
+			font-weight: 600;
+			background: transparent;
+		}
+	}
+
+	/* ---------- Sub-tabs (abilities subject nav — pill style) ---------- */
+	.aafm-subject-tabs,
+	.aafm-subtabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-block: 8px 16px;
+
+		a,
+		button {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			block-size: 32px;
+			padding-inline: 13px;
+			border-radius: 999px;
+			border: 1px solid var(--aafm-border-strong);
+			background: var(--aafm-surface);
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-size: 13px;
+			font-weight: 500;
+			cursor: pointer;
+			transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+
+			.count {
 				font-size: 11px;
-				text-transform: uppercase;
-				letter-spacing: 0.02em;
-				color: #2271b1;
+				color: var(--aafm-text-subtle);
+				font-weight: 600;
 			}
 
-			.aafm-os-note-text {
-				flex: 1 1 auto;
-				color: #3c434a;
+			&:hover {
+				border-color: var(--aafm-accent);
+				color: var(--aafm-accent);
+			}
+
+			&.current,
+			&.is-active {
+				background: var(--aafm-accent);
+				border-color: var(--aafm-accent);
+				color: #fff;
+
+				.count { color: rgba(255, 255, 255, 0.85); }
 			}
 		}
 	}
 
+	.aafm-subject-panel {
+		margin-block-start: 4px;
+	}
+
+	.aafm-subject-heading {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-block: 0 8px;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.aafm-count-badge {
+		display: inline-block;
+		padding-block: 1px;
+		padding-inline: 8px;
+		border-radius: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--aafm-text-subtle);
+		background: #f0f0f1;
+		border: 1px solid var(--aafm-border);
+	}
+
+	.aafm-ability-hint {
+		color: var(--aafm-text-subtle);
+		font-size: 12px;
+	}
+
+	/* ---------- Toggle switch ---------- */
+	.aafm-switch {
+		position: relative;
+		display: inline-block;
+		inline-size: 38px;
+		block-size: 22px;
+		flex: 0 0 auto;
+
+		input {
+			position: absolute;
+			inset: 0;
+			inline-size: 100%;
+			block-size: 100%;
+			margin: 0;
+			opacity: 0;
+			cursor: pointer;
+		}
+
+		.aafm-switch-track {
+			position: absolute;
+			inset: 0;
+			border-radius: 999px;
+			background: var(--aafm-border-strong);
+			transition: background 0.18s ease;
+
+			&::before {
+				content: "";
+				position: absolute;
+				inset-block-start: 2px;
+				inset-inline-start: 2px;
+				inline-size: 18px;
+				block-size: 18px;
+				border-radius: 50%;
+				background: #fff;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+				transition: transform 0.18s ease;
+			}
+		}
+
+		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
+		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
+		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
+	}
+
+	/* ---------- Risk badges (preserved colors) ---------- */
+	.aafm-badge {
+		display: inline-block;
+		padding-block: 2px;
+		padding-inline: 8px;
+		border-radius: 3px;
+		font-size: 11px;
+		line-height: 1.6;
+		text-transform: uppercase;
+
+		&.aafm-badge-read {
+			background: #e7f5ea;
+			color: #1a7f37;
+		}
+
+		&.aafm-badge-write {
+			background: #fcf3d6;
+			color: #8a6d00;
+		}
+
+		&.aafm-badge-destructive {
+			background: #fce4e4;
+			color: #b32d2e;
+		}
+
+		&.aafm-badge-readonly {
+			background: #e6f0f7;
+			color: #0a4b78;
+		}
+	}
+
+	/* ---------- Ability table ---------- */
+	.aafm-ability-table {
+		margin-block-end: 12px;
+
+		td {
+			vertical-align: middle;
+		}
+	}
+
+	/* ---------- Settings rows ---------- */
+	.aafm-set-row {
+		display: grid;
+		grid-template-columns: 220px 1fr;
+		gap: 24px;
+		padding: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+
+		&:last-child { border-block-end: 0; }
+
+		.aafm-set-label {
+			font-weight: 600;
+			font-size: 13.5px;
+
+			.opt {
+				display: block;
+				font-weight: 400;
+				color: var(--aafm-text-subtle);
+				font-size: 12px;
+				margin-block-start: 2px;
+			}
+		}
+
+		.aafm-set-control {
+			max-inline-size: 560px;
+		}
+
+		.help {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block: 8px 0;
+		}
+	}
+
+	.aafm-settings {
+		.form-table .description {
+			max-inline-size: 40em;
+		}
+
+		.aafm-notice {
+			margin-block: 10px;
+			max-inline-size: 40em;
+		}
+	}
+
+	/* ---------- Stepper (Connection) ---------- */
+	.aafm-step {
+		display: flex;
+		gap: 14px;
+		padding-block: 15px;
+		padding-inline: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+
+		&:last-child { border-block-end: 0; }
+	}
+
+	.aafm-step-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-block-end: 12px;
+
+		.aafm-sidx {
+			flex: 0 0 auto;
+			inline-size: 28px;
+			block-size: 28px;
+			border-radius: 50%;
+			background: var(--aafm-accent);
+			color: #fff;
+			display: grid;
+			place-items: center;
+			font-weight: 700;
+			font-size: 13px;
+		}
+
+		h2 {
+			margin: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		.sub {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block: 1px 0;
+		}
+	}
+
+	.aafm-step-rail {
+		padding-inline-start: 13px;
+		margin-inline-start: 14px;
+		border-inline-start: 2px solid var(--aafm-border);
+		padding-block-end: 8px;
+	}
+
+	/* ---------- Segmented control ---------- */
+	.aafm-seg {
+		display: inline-flex;
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
+		border-radius: 7px;
+		padding: 3px;
+		gap: 2px;
+
+		button {
+			border: 0;
+			background: transparent;
+			font-family: inherit;
+			font-size: 12.5px;
+			font-weight: 600;
+			color: var(--aafm-text-muted);
+			padding-block: 5px;
+			padding-inline: 12px;
+			border-radius: 5px;
+			cursor: pointer;
+
+			&.on {
+				background: var(--aafm-surface);
+				color: var(--aafm-text);
+				box-shadow: var(--aafm-shadow);
+			}
+		}
+	}
+
+	/* ---------- Code block ---------- */
+	.aafm-codeblock {
+		position: relative;
+
+		pre {
+			margin: 0;
+			font-family: var(--aafm-mono);
+			font-size: 12px;
+			line-height: 1.6;
+			color: var(--aafm-text);
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			padding-block: 14px;
+			padding-inline: 16px;
+			overflow-x: auto;
+		}
+
+		.copy-fab {
+			position: absolute;
+			inset-block-start: 10px;
+			inset-inline-end: 10px;
+		}
+	}
+
+	/* ---------- Client picker grid ---------- */
+	.aafm-client-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 10px;
+	}
+
+	.aafm-client {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding-block: 11px;
+		padding-inline: 13px;
+		cursor: pointer;
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border-strong);
+		border-radius: var(--aafm-radius-sm);
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--aafm-text);
+		transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+		&:hover {
+			border-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+		}
+
+		&.on {
+			border-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+			box-shadow: inset 0 0 0 1px var(--aafm-accent);
+		}
+
+		.ci {
+			inline-size: 26px;
+			block-size: 26px;
+			border-radius: 6px;
+			background: var(--aafm-surface-2);
+			display: grid;
+			place-items: center;
+			flex: 0 0 auto;
+
+			.dashicons,
+			svg {
+				inline-size: 15px;
+				block-size: 15px;
+				font-size: 15px;
+				color: var(--aafm-text-subtle);
+			}
+		}
+	}
+
+	/* ---------- Diagnostics ---------- */
+	.aafm-diag {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.aafm-diag-row {
+		display: flex;
+		gap: 12px;
+		padding-block: 13px;
+		padding-inline: 18px;
+		border-block-end: 1px solid var(--aafm-border);
+		align-items: flex-start;
+
+		&:last-child { border-block-end: 0; }
+
+		.dot-lg {
+			inline-size: 11px;
+			block-size: 11px;
+			border-radius: 50%;
+			margin-block-start: 3px;
+			flex: 0 0 auto;
+		}
+
+		.d-ok { background: var(--aafm-green); }
+		.d-warn { background: var(--aafm-amber); }
+		.d-bad { background: var(--aafm-red); }
+
+		.d-title {
+			font-weight: 600;
+			font-size: 13px;
+		}
+
+		.d-detail {
+			color: var(--aafm-text-muted);
+			font-size: 12.5px;
+			margin-block-start: 2px;
+		}
+	}
+
+	/* Legacy diagnostics list (verification punch-list) — preserved. */
+	.aafm-diagnostics {
+		max-inline-size: 760px;
+
+		.aafm-dot {
+			display: inline-block;
+			inline-size: 10px;
+			block-size: 10px;
+			border-radius: 50%;
+
+			&.aafm-dot-pass { background: #1a7f37; }
+			&.aafm-dot-warn { background: #dba617; }
+			&.aafm-dot-fail { background: #b32d2e; }
+		}
+	}
+
+	.aafm-status {
+		font-weight: 600;
+
+		&.aafm-status-denied { color: #b32d2e; }
+		&.aafm-status-error { color: #8a6d00; }
+		&.aafm-status-success { color: #1a7f37; }
+		&.aafm-status-started { color: #646970; }
+	}
+
+	.aafm-save-status,
+	.aafm-user-status,
+	.aafm-test-status,
+	.aafm-clear-status {
+		margin-inline-start: 8px;
+		color: var(--aafm-text-subtle);
+	}
+
+	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
 	.aafm-help {
 		max-inline-size: 820px;
 
@@ -89,20 +814,20 @@
 
 		.aafm-help-entry {
 			margin-block-end: 6px;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
-			background: #fff;
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			background: var(--aafm-surface);
 
 			summary {
 				padding-block: 10px;
 				padding-inline: 14px;
 				cursor: pointer;
 				font-weight: 600;
-				color: #1d2327;
+				color: var(--aafm-text);
 				list-style-position: inside;
 
 				&:hover {
-					color: #2271b1;
+					color: var(--aafm-accent);
 				}
 			}
 
@@ -131,8 +856,8 @@
 					font-size: 12px;
 					padding-block: 1px;
 					padding-inline: 5px;
-					background: #f6f7f7;
-					border: 1px solid #dcdcde;
+					background: var(--aafm-surface-2);
+					border: 1px solid var(--aafm-border);
 					border-radius: 3px;
 				}
 			}
@@ -152,7 +877,17 @@
 		}
 	}
 
-	/* Detected meta-key chips: a wrapping row of pill buttons under the textarea. */
+	.code-inline {
+		font-family: var(--aafm-mono);
+		font-size: 12px;
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
+		border-radius: 4px;
+		padding-block: 1px;
+		padding-inline: 6px;
+	}
+
+	/* ---------- Detected meta-key chips ---------- */
 	.aafm-meta-keys {
 		.aafm-meta-chips {
 			display: flex;
@@ -167,180 +902,25 @@
 			font-size: 12px;
 			line-height: 1.8;
 			border-radius: 12px;
-			background: #f6f7f7;
-			border: 1px solid #dcdcde;
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
 			cursor: pointer;
 
 			&:hover {
 				background: #f0f0f1;
-				border-color: #2271b1;
-				color: #2271b1;
+				border-color: var(--aafm-accent);
+				color: var(--aafm-accent);
 			}
 
 			&:focus-visible {
-				border-color: #2271b1;
-				box-shadow: 0 0 0 1px #2271b1;
+				border-color: var(--aafm-accent);
+				box-shadow: 0 0 0 1px var(--aafm-accent);
 				outline: none;
 			}
 		}
 	}
 
-	.aafm-ability-table {
-		margin-block-end: 12px;
-
-		td {
-			vertical-align: middle;
-		}
-	}
-
-	.aafm-badge {
-		display: inline-block;
-		padding-block: 2px;
-		padding-inline: 8px;
-		border-radius: 3px;
-		font-size: 11px;
-		line-height: 1.6;
-		text-transform: uppercase;
-
-		&.aafm-badge-read {
-			background: #e7f5ea;
-			color: #1a7f37;
-		}
-
-		&.aafm-badge-write {
-			background: #fcf3d6;
-			color: #8a6d00;
-		}
-
-		&.aafm-badge-destructive {
-			background: #fce4e4;
-			color: #b32d2e;
-		}
-	}
-
-	.aafm-diagnostics {
-		max-inline-size: 760px;
-
-		.aafm-dot {
-			display: inline-block;
-			inline-size: 10px;
-			block-size: 10px;
-			border-radius: 50%;
-
-			&.aafm-dot-pass {
-				background: #1a7f37;
-			}
-
-			&.aafm-dot-warn {
-				background: #dba617;
-			}
-
-			&.aafm-dot-fail {
-				background: #b32d2e;
-			}
-		}
-	}
-
-	.aafm-status {
-		font-weight: 600;
-
-		&.aafm-status-denied {
-			color: #b32d2e;
-		}
-
-		&.aafm-status-error {
-			color: #8a6d00;
-		}
-
-		&.aafm-status-success {
-			color: #1a7f37;
-		}
-
-		&.aafm-status-started {
-			color: #646970;
-		}
-	}
-
-	.aafm-save-status,
-	.aafm-user-status,
-	.aafm-test-status,
-	.aafm-clear-status {
-		margin-inline-start: 8px;
-		color: #646970;
-	}
-
-	.aafm-notice {
-		display: flex;
-		gap: 8px;
-		align-items: flex-start;
-		border-left: 4px solid;
-		padding: 10px 12px;
-		margin: 12px 0;
-		background: #f0f6fc;
-
-		& .dashicons {
-			flex: 0 0 auto;
-			margin-top: 2px;
-		}
-
-		& .aafm-notice-body {
-			flex: 1 1 auto;
-		}
-
-		&.aafm-notice-warning {
-			border-left-color: #dba617;
-			background: #fcf9e8;
-
-			& .dashicons {
-				color: #dba617;
-			}
-		}
-
-		&.aafm-notice-info {
-			border-left-color: #72aee6;
-			background: #f0f6fc;
-
-			& .dashicons {
-				color: #72aee6;
-			}
-		}
-
-		&.aafm-notice-success {
-			border-left-color: #00a32a;
-			background: #edfaef;
-
-			& .dashicons {
-				color: #00a32a;
-			}
-		}
-
-		&.aafm-notice-error {
-			border-left-color: #d63638;
-			background: #fcf0f1;
-
-			& .dashicons {
-				color: #d63638;
-			}
-		}
-
-		&.aafm-notice-inline {
-			margin: 6px 0;
-			padding: 6px 10px;
-		}
-	}
-
-	.aafm-settings {
-		.form-table .description {
-			max-width: 40em;
-		}
-
-		.aafm-notice {
-			margin-block: 10px;
-			max-width: 40em;
-		}
-	}
-
-	/* Per-client quickstarts: a toggle reveals a responsive grid of paste-ready cards. */
+	/* ---------- Per-client quickstarts ---------- */
 	.aafm-quickstarts {
 		margin-block: 12px;
 
@@ -353,9 +933,9 @@
 
 		.aafm-quickstart-card {
 			padding: 12px;
-			background: #fff;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			background: var(--aafm-surface);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
 
 			.aafm-quickstart-name {
 				margin-block: 0 4px;
@@ -364,13 +944,13 @@
 
 			.aafm-quickstart-where {
 				margin-block: 0 8px;
-				color: #646970;
+				color: var(--aafm-text-subtle);
 				font-size: 12px;
 			}
 		}
 	}
 
-	/* Dashboard: a responsive grid of small read-only status cards. */
+	/* ---------- Dashboard status cards ---------- */
 	.aafm-dashboard {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -384,10 +964,8 @@
 		}
 
 		.aafm-card {
-			padding: 14px 16px;
-			background: #fff;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			padding-block: 14px;
+			padding-inline: 16px;
 
 			h3 {
 				margin-block: 0 8px;
@@ -405,7 +983,7 @@
 				}
 
 				.aafm-card-key {
-					color: #646970;
+					color: var(--aafm-text-subtle);
 				}
 
 				.aafm-card-val {
@@ -417,12 +995,23 @@
 				margin-block: 0 6px;
 				font-size: 22px;
 				font-weight: 600;
-				color: #1d2327;
+				color: var(--aafm-text);
 			}
 		}
 	}
 
-	/* Wraps to a single column on narrow viewports. */
+	/* ---------- Responsive ---------- */
+	@media (max-width: 720px) {
+		.aafm-stat.aafm-stat-span2 { grid-column: span 1; }
+	}
+
+	@media (max-width: 640px) {
+		.aafm-set-row {
+			grid-template-columns: 1fr;
+			gap: 10px;
+		}
+	}
+
 	@media (max-width: 600px) {
 		.aafm-dashboard {
 			grid-template-columns: 1fr;
@@ -433,35 +1022,15 @@
 		}
 	}
 
-	/* Abilities tab: count pill, read-only badge, and the per-ability helper line. */
-	.aafm-subject-heading {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-block: 0 8px;
-		font-size: 13px;
-		font-weight: 600;
+	.aafm-table-wrap {
+		overflow-x: auto;
 	}
+}
 
-	.aafm-count-badge {
-		display: inline-block;
-		padding-block: 1px;
-		padding-inline: 8px;
-		border-radius: 10px;
-		font-size: 11px;
-		font-weight: 600;
-		color: #646970;
-		background: #f0f0f1;
-		border: 1px solid #dcdcde;
-	}
-
-	.aafm-badge.aafm-badge-readonly {
-		background: #e6f0f7;
-		color: #0a4b78;
-	}
-
-	.aafm-ability-hint {
-		color: #646970;
-		font-size: 12px;
+@media (prefers-reduced-motion: reduce) {
+	.aafm-wrap *,
+	.aafm-wrap *::before,
+	.aafm-wrap *::after {
+		transition: none !important;
 	}
 }

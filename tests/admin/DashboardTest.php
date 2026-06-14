@@ -115,6 +115,32 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'Enabled abilities', $html );   // Content preserved.
 	}
 
+	public function test_dashboard_setup_checklist_emits_styling_classes_when_incomplete(): void {
+		// Force a partial setup so the checklist (not the "all set" notice) renders
+		// with BOTH row states reachable: an agent user with an app password makes
+		// step 1 "done", while no enabled abilities keeps step 2 "to do". The
+		// transaction fixture rolls every change back, so live state is untouched.
+		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
+		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-setup' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'aafm_enabled_abilities', array() );
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		// Checklist container + header count, proving the markup path renders.
+		$this->assertStringContainsString( 'aafm-setup', $html );
+		$this->assertStringContainsString( 'aafm-setup-count', $html );
+		// Both row states are reachable: at least one done step and the incomplete one.
+		$this->assertStringContainsString( 'aafm-step-todo', $html );
+		$this->assertStringContainsString( 'aafm-step-done', $html );
+		// State pill text is present for the to-do step.
+		$this->assertStringContainsString( 'aafm-step-state', $html );
+		// The "all set" success notice must NOT short-circuit the checklist here.
+		$this->assertStringNotContainsString( 'All set', $html );
+	}
+
 	public function test_setup_steps_reflect_real_state(): void {
 		update_option( 'aafm_enabled_abilities', array() );
 		$steps = aafm_setup_steps();

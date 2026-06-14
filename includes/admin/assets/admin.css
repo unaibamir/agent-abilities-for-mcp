@@ -56,51 +56,34 @@
 			background: var(--aafm-dot);
 		}
 
-		/* Legacy explicit dot element (kept for any markup that ships one). */
-		.dot {
-			inline-size: 8px;
-			block-size: 8px;
-			border-radius: 50%;
-		}
-
 		&.aafm-pill-success {
 			--aafm-dot: var(--aafm-green);
 			background: var(--aafm-green-tint);
 			color: var(--aafm-green-text);
-
-			.dot { background: var(--aafm-green); }
 		}
 
 		&.aafm-pill-warn {
 			--aafm-dot: var(--aafm-amber);
 			background: var(--aafm-amber-tint);
 			color: var(--aafm-amber-text);
-
-			.dot { background: var(--aafm-amber); }
 		}
 
 		&.aafm-pill-danger {
 			--aafm-dot: var(--aafm-red);
 			background: var(--aafm-red-tint);
 			color: var(--aafm-red-text);
-
-			.dot { background: var(--aafm-red); }
 		}
 
 		&.aafm-pill-info {
 			--aafm-dot: var(--aafm-accent);
 			background: var(--aafm-accent-tint);
 			color: var(--aafm-accent-hover);
-
-			.dot { background: var(--aafm-accent); }
 		}
 
 		&.aafm-pill-neutral {
 			--aafm-dot: var(--aafm-border-strong);
 			background: var(--aafm-surface-2);
 			color: var(--aafm-text-muted);
-
-			.dot { background: var(--aafm-border-strong); }
 		}
 	}
 
@@ -273,12 +256,6 @@
 		display: flex;
 		gap: 4px;
 		margin-block-end: 8px;
-
-		.aafm-os-tab.is-active {
-			background: #f0f0f1;
-			border-color: #8c8f94;
-			box-shadow: none;
-		}
 	}
 
 	.aafm-os-note {
@@ -671,8 +648,129 @@
 		}
 	}
 
-	/* ---------- Stepper (Connection) ---------- */
-	.aafm-step {
+	/* ---------- Setup checklist (Dashboard, Direction A) ----------
+	   Scoped under .aafm-setup so its .aafm-step / .aafm-sidx rows never
+	   collide with the Connection stepper, which owns the same generic
+	   class names under .aafm-connection (below). */
+	.aafm-setup {
+		overflow: hidden;
+
+		.aafm-setup-top {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			padding-block: 16px;
+			padding-inline: 20px;
+			border-block-end: 1px solid var(--aafm-border);
+
+			h2 {
+				margin: 0;
+				font-size: 15px;
+				font-weight: 600;
+				flex: 1;
+			}
+		}
+
+		.aafm-setup-count {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			font-weight: 600;
+		}
+
+		/* Checklist rows. */
+		.aafm-step {
+			display: flex;
+			gap: 14px;
+			padding-block: 15px;
+			padding-inline: 20px;
+			border-block-end: 1px solid var(--aafm-border);
+
+			&:last-child { border-block-end: 0; }
+		}
+
+		/* Numbered/state marker: green check (done) vs grey marker (to do). */
+		.aafm-sidx {
+			flex: 0 0 auto;
+			inline-size: 26px;
+			block-size: 26px;
+			border-radius: 50%;
+			display: grid;
+			place-items: center;
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text-subtle);
+			border: 1px solid var(--aafm-border-strong);
+
+			.dashicons {
+				inline-size: 16px;
+				block-size: 16px;
+				font-size: 16px;
+				line-height: 1;
+			}
+		}
+
+		.aafm-step-body {
+			flex: 1;
+			min-inline-size: 0;
+
+			h3 {
+				margin-block: 0 2px;
+				font-size: 13.5px;
+				font-weight: 600;
+			}
+
+			p {
+				margin: 0;
+				color: var(--aafm-text-muted);
+				font-size: 12.5px;
+			}
+
+			.aafm-step-act {
+				margin-block-start: 9px;
+			}
+		}
+
+		/* Right-side status pill: green "Done" / amber "To do". */
+		.aafm-step-state {
+			flex: 0 0 auto;
+			align-self: flex-start;
+			display: inline-flex;
+			align-items: center;
+			block-size: 22px;
+			padding-inline: 10px;
+			border-radius: 999px;
+			font-size: 11px;
+			font-weight: 700;
+			letter-spacing: 0.02em;
+			text-transform: uppercase;
+		}
+
+		.aafm-step-done {
+			.aafm-sidx {
+				background: var(--aafm-green);
+				color: #fff;
+				border-color: var(--aafm-green);
+			}
+
+			.aafm-step-body h3 { color: var(--aafm-text-subtle); }
+
+			.aafm-step-state {
+				background: var(--aafm-green-tint);
+				color: var(--aafm-green-text);
+			}
+		}
+
+		.aafm-step-todo {
+			.aafm-step-state {
+				background: var(--aafm-amber-tint);
+				color: var(--aafm-amber-text);
+			}
+		}
+	}
+
+	/* ---------- Stepper (Connection) ----------
+	   Scoped under .aafm-connection so .aafm-step / .aafm-sidx don't bleed
+	   onto the dashboard checklist (above), which reuses the same names. */
+	.aafm-connection .aafm-step {
 		display: flex;
 		gap: 14px;
 		padding-block: 15px;
@@ -686,11 +784,11 @@
 		> * { min-inline-size: 0; }
 	}
 
-	.aafm-step-rail { min-inline-size: 0; }
+	.aafm-connection .aafm-step-rail { min-inline-size: 0; }
 
 	/* WP-native action buttons in the connection steps carry long labels and
 	   default to white-space:nowrap; let them wrap inside a narrow column. */
-	.aafm-step-rail .button {
+	.aafm-connection .aafm-step-rail .button {
 		max-inline-size: 100%;
 		white-space: normal;
 		block-size: auto;
@@ -698,11 +796,11 @@
 
 	/* The agent-login input must shrink with its column rather than hold its
 	   .regular-text width and push the row wider than the viewport. */
-	.aafm-step-rail .regular-text {
+	.aafm-connection .aafm-step-rail .regular-text {
 		max-inline-size: 100%;
 	}
 
-	.aafm-step-head {
+	.aafm-connection .aafm-step-head {
 		display: flex;
 		align-items: center;
 		gap: 12px;
@@ -734,7 +832,7 @@
 		}
 	}
 
-	.aafm-step-rail {
+	.aafm-connection .aafm-step-rail {
 		padding-inline-start: 13px;
 		margin-inline-start: 14px;
 		border-inline-start: 2px solid var(--aafm-border);
@@ -1140,11 +1238,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
-
-		.aafm-dashboard-intro {
-			max-inline-size: 760px;
-			color: #3c434a;
-		}
 
 		.aafm-card {
 			padding-block: 14px;

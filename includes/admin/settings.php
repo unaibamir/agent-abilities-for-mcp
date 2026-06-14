@@ -178,7 +178,7 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-set-control">';
 	// Toggle switch wraps the checkbox. The <input> keeps its exact name/value/checked()
 	// contract — the save handler and its tests bind to that, not to this markup.
-	echo '<label class="aafm-switch" for="aafm-force-draft"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	echo '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<p class="help">' . esc_html__( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';

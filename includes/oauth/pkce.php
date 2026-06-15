@@ -46,5 +46,5 @@ function aafm_pkce_verify( string $verifier, string $challenge ): bool {
  * @return bool True when the challenge matches the RFC 7636 shape.
  */
 function aafm_pkce_is_valid_challenge( string $c ): bool {
-	return (bool) preg_match( '/^[A-Za-z0-9\-._~]{43,128}$/', $c );
+	return (bool) preg_match( '/^[A-Za-z0-9\-._~]{43,128}\z/', $c );
 }

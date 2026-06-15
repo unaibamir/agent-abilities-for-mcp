@@ -89,4 +89,14 @@ class PkceTest extends TestCase {
 		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . '=' ) );
 		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . ' ' ) );
 	}
+
+	/**
+	 * A challenge ending in a trailing newline is rejected.
+	 *
+	 * PCRE treats `$` as matching before a trailing newline, so the validator must
+	 * anchor with `\z` to reject a newline at the OAuth authorization trust boundary.
+	 */
+	public function test_valid_challenge_rejects_trailing_newline(): void {
+		$this->assertFalse( aafm_pkce_is_valid_challenge( str_repeat( 'a', 43 ) . "\n" ) );
+	}
 }

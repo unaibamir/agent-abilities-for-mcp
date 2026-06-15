@@ -54,6 +54,9 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/http.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/clients.php';
 
+// Authorization codes: hashed storage, 60-second TTL, atomic one-time redemption.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/codes.php';
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

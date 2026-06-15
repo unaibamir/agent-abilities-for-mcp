@@ -210,22 +210,24 @@
 
 		#bindCopy() {
 			document.querySelectorAll( '.aafm-copy' ).forEach( ( btn ) => {
-				// Remember the button's own label so the "Copied" flash can revert to it.
-				const original = btn.textContent;
+				// Swap only the label so a leading SVG icon is preserved across the
+				// "Copied" flash; fall back to the button itself for icon-less buttons.
+				const label = btn.querySelector( '.aafm-copy-label' ) ?? btn;
+				const original = label.textContent;
 				let revertTimer = null;
 				btn.addEventListener( 'click', async () => {
 					try {
 						await navigator.clipboard.writeText( btn.dataset.copy ?? '' );
-						btn.textContent = this.#t( 'copyCopied', 'Copied' );
+						label.textContent = this.#t( 'copyCopied', 'Copied' );
 					} catch {
-						btn.textContent = this.#t( 'copyFallback', 'Press Ctrl+C' );
+						label.textContent = this.#t( 'copyFallback', 'Press Ctrl+C' );
 					}
 					// Clear any pending revert from a quick second click, then restore the label.
 					if ( revertTimer ) {
 						clearTimeout( revertTimer );
 					}
 					revertTimer = setTimeout( () => {
-						btn.textContent = original;
+						label.textContent = original;
 						revertTimer = null;
 					}, 1500 );
 				} );

@@ -74,17 +74,19 @@ final class DashboardTest extends TestCase {
 		ob_start();
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
-		foreach ( array( 'Endpoint', 'PHP', 'abilities', 'Audit' ) as $needle ) {
+		foreach ( array( 'MCP endpoint', 'PHP', 'abilities', 'Audit' ) as $needle ) {
 			$this->assertStringContainsString( $needle, $html );
 		}
 	}
 
-	public function test_dashboard_warns_when_no_abilities_enabled(): void {
+	public function test_dashboard_shows_abilities_off_state(): void {
 		update_option( 'aafm_enabled_abilities', array() );
 		ob_start();
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
-		$this->assertStringContainsString( 'aafm-notice-warning', $html );
+		// The compact stat treatment replaces the embedded notice: with nothing enabled the
+		// Enabled-abilities card prompts the operator to turn some on.
+		$this->assertStringContainsString( 'Turn some on to start', $html );
 	}
 
 	public function test_dashboard_warns_when_agent_user_can_manage_site(): void {
@@ -100,7 +102,9 @@ final class DashboardTest extends TestCase {
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( 'aafm-notice-warning', $html );
+		// The security signal is preserved as a warn pill plus the offending login in the sub text.
+		$this->assertStringContainsString( 'aafm-pill aafm-pill-warn', $html );
+		$this->assertStringContainsString( 'Review role', $html );
 		$this->assertStringContainsString( 'aafm-admin-agent', $html );
 	}
 

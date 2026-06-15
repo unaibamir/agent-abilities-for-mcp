@@ -44,10 +44,11 @@ final class MetaKeysSaveTest extends TestCase {
 		// Direction A presentation: the meta-keys selector lives in a card.
 		$this->assertStringContainsString( 'aafm-card', $html );
 
-		// The privacy warning now renders through the shared notice component (a <div> with a
-		// dashicon), not the old ad-hoc <p class="aafm-notice">. The <div> never opens a form,
-		// so the one-form invariant above still holds.
+		// The privacy warning now renders through the shared notice component (a <div> with an
+		// inline SVG icon), not the old ad-hoc <p class="aafm-notice">. The <div> never opens a
+		// form, so the one-form invariant above still holds.
 		$this->assertStringContainsString( 'aafm-notice aafm-notice-warning', $html );
-		$this->assertStringContainsString( 'dashicons-warning', $html );
+		$this->assertStringContainsString( 'aafm-notice-ic', $html );
+		$this->assertStringContainsString( '<svg class="aafm-icon"', $html );
 	}
 }

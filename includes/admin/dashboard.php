@@ -216,47 +216,80 @@ function aafm_render_dashboard_tab(): void {
 				)
 			)
 		);
+		// Progress bar: filled to done / total. Width is a computed integer percent.
+		$progress_pct = $step_total > 0 ? (int) round( ( $done_count / $step_total ) * 100 ) : 0;
+		printf(
+			'<div class="aafm-progress" aria-hidden="true"><span style="width:%s%%"></span></div>',
+			esc_attr( (string) $progress_pct )
+		);
 		echo '</div>';
 
+		// The first not-done step is the "active" one (blue marker, number shown); the rest
+		// of the not-done steps are plain "to do" (grey marker, number shown). Done steps get
+		// the green check marker.
+		$active_marked = false;
+		$step_num      = 0;
 		foreach ( $steps as $step ) {
-			$is_done    = ! empty( $step['done'] );
-			$state_cls  = $is_done ? 'aafm-step-done' : 'aafm-step-todo';
-			$state_icon = $is_done ? 'dashicons-yes-alt' : 'dashicons-marker';
-			$state_text = $is_done ? __( 'Done', 'agent-abilities-for-mcp' ) : __( 'To do', 'agent-abilities-for-mcp' );
+			++$step_num;
+			$is_done = ! empty( $step['done'] );
+
+			if ( $is_done ) {
+				$state_cls  = 'aafm-step-done';
+				$pill_class = 'aafm-pill aafm-pill-success';
+				$pill_text  = __( 'Done', 'agent-abilities-for-mcp' );
+			} elseif ( ! $active_marked ) {
+				$state_cls     = 'aafm-step-active';
+				$pill_class    = 'aafm-pill aafm-pill-warn';
+				$pill_text     = __( 'To do', 'agent-abilities-for-mcp' );
+				$active_marked = true;
+			} else {
+				$state_cls  = 'aafm-step-todo';
+				$pill_class = 'aafm-pill aafm-pill-neutral';
+				$pill_text  = __( 'To do', 'agent-abilities-for-mcp' );
+			}
 
 			printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
-			printf(
-				'<span class="aafm-sidx"><span class="dashicons %1$s" aria-hidden="true"></span></span>',
-				esc_attr( $state_icon )
-			);
+			if ( $is_done ) {
+				echo '<span class="aafm-sidx">';
+				echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+				echo '</span>';
+			} else {
+				printf( '<span class="aafm-sidx">%s</span>', esc_html( (string) $step_num ) );
+			}
 			echo '<div class="aafm-step-body">';
 			printf( '<h3>%s</h3>', esc_html( (string) $step['title'] ) );
 			printf( '<p>%s</p>', esc_html( (string) $step['desc'] ) );
-			if ( ! $is_done ) {
+			// The active step gets a primary CTA with a trailing arrow; other to-do steps don't.
+			if ( 'aafm-step-active' === $state_cls ) {
 				printf(
-					'<p class="aafm-step-act"><a class="button" href="%s">%s</a></p>',
+					'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
 					esc_url( (string) $step['href'] ),
-					esc_html__( 'Go to step', 'agent-abilities-for-mcp' )
+					esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
+					aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 				);
 			}
 			echo '</div>';
 			printf(
-				'<span class="aafm-step-state">%s</span>',
-				esc_html( $state_text )
+				'<span class="aafm-step-state %1$s">%2$s</span>',
+				esc_attr( $pill_class ),
+				esc_html( $pill_text )
 			);
 			echo '</div>';
 		}
 		echo '</section>';
 	}
 
-	// Stat grid — four cards reusing the counts computed above.
+	// Stat grid — four cards reusing the counts computed above. The compact mockup
+	// treatment: a value line plus a .stat-sub and/or a small pill, no embedded notices.
 	echo '<div class="aafm-stat-grid">';
 
 	// Enabled abilities.
 	echo '<div class="aafm-stat aafm-stat-abilities">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic"><span class="dashicons dashicons-superhero" aria-hidden="true"></span></span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '</div>';
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
@@ -270,10 +303,18 @@ function aafm_render_dashboard_tab(): void {
 		)
 	);
 	if ( 0 === $enabled ) {
-		aafm_render_notice(
-			'warning',
-			__( 'No abilities are enabled, so the agent can do nothing yet. Turn on the abilities you want it to have on the Abilities tab.', 'agent-abilities-for-mcp' ),
-			array( 'inline' => true )
+		echo '<div class="stat-sub">' . esc_html__( 'Turn some on to start', 'agent-abilities-for-mcp' ) . '</div>';
+	} else {
+		$still_off = max( 0, $total - $enabled );
+		printf(
+			'<div class="stat-sub">%s</div>',
+			esc_html(
+				sprintf(
+					/* translators: %s: number of abilities still turned off. */
+					__( '%s still off', 'agent-abilities-for-mcp' ),
+					number_format_i18n( $still_off )
+				)
+			)
 		);
 	}
 	echo '</div>';
@@ -282,7 +323,9 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="aafm-stat aafm-stat-recent">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic"><span class="dashicons dashicons-groups" aria-hidden="true"></span></span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'recent' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
 	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
@@ -292,7 +335,9 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="aafm-stat aafm-stat-audit">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic"><span class="dashicons dashicons-list-view" aria-hidden="true"></span></span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'audit' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '</div>';
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
@@ -305,38 +350,35 @@ function aafm_render_dashboard_tab(): void {
 			)
 		)
 	);
-	echo '<div class="stat-sub">' . esc_html__( 'Logging is on. Every call is recorded, including denied ones; the oldest rows drop once the cap is reached.', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="stat-sub">' . esc_html__( 'Logging is on', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '</div>';
 
-	// Agent users.
+	// Agent users. The security signal is preserved: when an admin-capable agent exists,
+	// a warn pill flags it AND the sub text names the login(s).
 	echo '<div class="aafm-stat aafm-stat-agent-users">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
-	echo '<span class="stat-ic"><span class="dashicons dashicons-groups" aria-hidden="true"></span></span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'groups' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( count( $candidates ) ) ) );
 	if ( empty( $candidates ) ) {
-		aafm_render_notice(
-			'info',
-			__( 'No agent user is connected yet. Create a dedicated low-privilege user on the Connection tab and give it an Application Password.', 'agent-abilities-for-mcp' ),
-			array( 'inline' => true )
-		);
+		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';
 	} elseif ( empty( $admin_agents ) ) {
-		aafm_render_notice(
-			'success',
-			__( 'Your agent users are all low-privilege. None of them can manage the site.', 'agent-abilities-for-mcp' ),
-			array( 'inline' => true )
-		);
+		echo '<div class="stat-sub">' . esc_html__( 'All low-privilege', 'agent-abilities-for-mcp' ) . '</div>';
 	} else {
 		$logins = implode( ', ', array_map( static fn( array $c ): string => (string) $c['login'], $admin_agents ) );
-		aafm_render_notice(
-			'warning',
-			sprintf(
-				/* translators: %s: comma-separated list of user logins that can manage the site. */
-				__( 'These agent users can manage the site: %s. Give the agent its own low-privilege user instead. Move this one to a lower role, or connect a different user.', 'agent-abilities-for-mcp' ),
-				$logins
-			),
-			array( 'inline' => true )
+		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review role', 'agent-abilities-for-mcp' ) . '</span></div>';
+		printf(
+			'<div class="stat-sub">%s</div>',
+			esc_html(
+				sprintf(
+					/* translators: %s: comma-separated list of user logins that can manage the site. */
+					__( 'Can manage the site: %s. Give the agent its own low-privilege user instead.', 'agent-abilities-for-mcp' ),
+					$logins
+				)
+			)
 		);
 	}
 	echo '</div>';
@@ -349,14 +391,26 @@ function aafm_render_dashboard_tab(): void {
 	// Endpoint card — keeps the existing aafm-copy button + data-copy contract (admin.js binds to it).
 	echo '<section class="aafm-card aafm-card-endpoint">';
 	echo '<div class="aafm-card-head">';
-	echo '<span class="icon"><span class="dashicons dashicons-admin-links" aria-hidden="true"></span></span>';
-	echo '<h2>' . esc_html__( 'Endpoint', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<span class="icon">';
+	echo aafm_icon( 'endpoint' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
+	echo '<h2>' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2>';
+	// Permalink-mode info pill on the right, like the mockup.
+	$pretty          = (bool) get_option( 'permalink_structure' );
+	$permalink_label = $pretty
+		? __( 'Pretty permalinks', 'agent-abilities-for-mcp' )
+		: __( 'Plain permalinks', 'agent-abilities-for-mcp' );
+	printf(
+		'<span class="aafm-pill aafm-pill-info" style="margin-inline-start:auto">%s</span>',
+		esc_html( $permalink_label )
+	);
 	echo '</div>';
 	echo '<div class="aafm-card-pad">';
 	printf(
-		'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="button aafm-copy" data-copy="%2$s">%3$s</button></div>',
+		'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
 		esc_html( $endpoint ),
 		esc_attr( $endpoint ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -366,7 +420,9 @@ function aafm_render_dashboard_tab(): void {
 	// Versions card.
 	echo '<section class="aafm-card aafm-card-versions">';
 	echo '<div class="aafm-card-head">';
-	echo '<span class="icon"><span class="dashicons dashicons-clock" aria-hidden="true"></span></span>';
+	echo '<span class="icon">';
+	echo aafm_icon( 'clock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '<h2>' . esc_html__( 'Versions', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '</div>';
 	echo '<div class="aafm-card-pad">';

@@ -142,7 +142,9 @@ function aafm_render_settings_tab(): void {
 	echo '<form id="aafm-settings-form">';
 	echo '<section class="aafm-card">';
 	echo '<div class="aafm-card-head">';
-	echo '<span class="icon"><span class="dashicons dashicons-shield" aria-hidden="true"></span></span>';
+	echo '<span class="icon">';
+	echo aafm_icon( 'shield' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
 	echo '<h2>' . esc_html__( 'Safety controls', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '</div>';
 

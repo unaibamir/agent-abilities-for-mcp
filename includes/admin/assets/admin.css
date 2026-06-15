@@ -22,6 +22,156 @@
 	font-size: 14px;
 	line-height: 1.5;
 
+	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
+	   stat cards, client cards, buttons) override this with their own dimensions;
+	   this floor stops any un-scoped icon from ballooning to its intrinsic size. */
+	.aafm-icon {
+		inline-size: 16px;
+		block-size: 16px;
+		flex: 0 0 auto;
+	}
+
+	/* ---------- Page head (title + lede left, status pill right) ----------
+	   Ported from app.css .page-head. The status pill moves out of <h1> to the
+	   right edge of this flex row. */
+	.aafm-page-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 16px;
+		margin-block-end: 4px;
+
+		.title-wrap {
+			flex: 1;
+			min-inline-size: 0;
+		}
+
+		h1 {
+			font-size: 23px;
+			font-weight: 600;
+			margin: 0 0 4px;
+			letter-spacing: -0.01em;
+			padding: 0;
+		}
+
+		.aafm-page-lede {
+			color: var(--aafm-text-muted);
+			margin: 0;
+			max-inline-size: 70ch;
+		}
+
+		.aafm-status-pill {
+			flex: 0 0 auto;
+		}
+	}
+
+	/* ---------- Buttons (ported from app.css .btn*, renamed .aafm-btn) ----------
+	   The plugin's own button UI replaces WP-native .button / .button-primary in
+	   admin output. The icon inside a button is sized 15px to match the mockup. */
+	.aafm-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		block-size: 34px;
+		padding-inline: 14px;
+		border-radius: var(--aafm-radius-sm);
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		border: 1px solid transparent;
+		transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+		white-space: nowrap;
+		text-decoration: none;
+		font-family: inherit;
+		line-height: 1;
+		vertical-align: middle;
+
+		.aafm-icon {
+			inline-size: 15px;
+			block-size: 15px;
+		}
+
+		&:focus-visible {
+			outline: none;
+			box-shadow: var(--aafm-ring);
+		}
+	}
+
+	.aafm-btn-primary {
+		background: var(--aafm-accent);
+		color: #fff;
+
+		&:hover {
+			background: var(--aafm-accent-hover);
+			color: #fff;
+		}
+
+		&:active { background: #0a4b78; }
+	}
+
+	.aafm-btn-secondary {
+		background: var(--aafm-surface);
+		color: var(--aafm-accent);
+		border-color: var(--aafm-border-strong);
+
+		&:hover {
+			background: var(--aafm-accent-tint);
+			border-color: var(--aafm-accent);
+			color: var(--aafm-accent);
+		}
+	}
+
+	.aafm-btn-ghost {
+		background: transparent;
+		color: var(--aafm-text-muted);
+
+		&:hover {
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text);
+		}
+	}
+
+	.aafm-btn-sm {
+		block-size: 28px;
+		padding-inline: 10px;
+		font-size: 12px;
+	}
+
+	/* The copy buttons reuse the secondary button look; keep them from being
+	   stretched by a flex parent. */
+	.aafm-copy {
+		flex: 0 0 auto;
+	}
+
+	/* ---------- Mini key/value list (Versions card) ----------
+	   Ported from app.css .kv. The dashboard outputs <dl class="aafm-kv">; this
+	   was previously unstyled (the Image #1 misalignment). */
+	.aafm-kv {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 9px 16px;
+		margin: 0;
+
+		dt { color: var(--aafm-text-muted); }
+		dd { margin: 0; font-weight: 600; }
+	}
+
+	/* ---------- Progress bar (setup card) — ported from app.css .progress ---------- */
+	.aafm-progress {
+		inline-size: 130px;
+		block-size: 7px;
+		border-radius: 999px;
+		background: var(--aafm-surface-2);
+		overflow: hidden;
+		border: 1px solid var(--aafm-border);
+
+		span {
+			display: block;
+			block-size: 100%;
+			background: var(--aafm-accent);
+			border-radius: 999px;
+		}
+	}
+
 	/* ---------- Pills / status ---------- */
 	.aafm-pill {
 		display: inline-flex;
@@ -35,7 +185,8 @@
 		white-space: nowrap;
 
 		.dashicons,
-		svg {
+		svg,
+		.aafm-icon {
 			inline-size: 13px;
 			block-size: 13px;
 			font-size: 13px;
@@ -281,10 +432,16 @@
 		background: var(--aafm-accent-tint);
 		color: #0a4b78;
 
-		& .dashicons {
+		& .aafm-notice-ic {
 			flex: 0 0 auto;
 			margin-block-start: 1px;
+			display: flex;
 			color: var(--aafm-accent);
+
+			.aafm-icon {
+				inline-size: 17px;
+				block-size: 17px;
+			}
 		}
 
 		& .aafm-notice-body {
@@ -298,7 +455,7 @@
 			background: var(--aafm-accent-tint);
 			color: #0a4b78;
 
-			& .dashicons { color: var(--aafm-accent); }
+			& .aafm-notice-ic { color: var(--aafm-accent); }
 		}
 
 		&.aafm-notice-warning {
@@ -306,7 +463,7 @@
 			background: var(--aafm-amber-tint);
 			color: var(--aafm-amber-text);
 
-			& .dashicons { color: var(--aafm-amber); }
+			& .aafm-notice-ic { color: var(--aafm-amber); }
 		}
 
 		&.aafm-notice-success {
@@ -314,7 +471,7 @@
 			background: var(--aafm-green-tint);
 			color: var(--aafm-green-text);
 
-			& .dashicons { color: var(--aafm-green); }
+			& .aafm-notice-ic { color: var(--aafm-green); }
 		}
 
 		&.aafm-notice-error {
@@ -322,7 +479,7 @@
 			background: var(--aafm-red-tint);
 			color: var(--aafm-red-text);
 
-			& .dashicons { color: var(--aafm-red); }
+			& .aafm-notice-ic { color: var(--aafm-red); }
 		}
 
 		&.aafm-notice-inline {
@@ -698,8 +855,11 @@
 			background: var(--aafm-surface-2);
 			color: var(--aafm-text-subtle);
 			border: 1px solid var(--aafm-border-strong);
+			font-size: 12.5px;
+			font-weight: 700;
 
-			.dashicons {
+			.dashicons,
+			.aafm-icon {
 				inline-size: 16px;
 				block-size: 16px;
 				font-size: 16px;
@@ -728,19 +888,12 @@
 			}
 		}
 
-		/* Right-side status pill: green "Done" / amber "To do". */
+		/* Right-side status tag: a real .aafm-pill carries the colour now, so this
+		   wrapper only handles placement at the top-right of the row. */
 		.aafm-step-state {
 			flex: 0 0 auto;
 			align-self: flex-start;
-			display: inline-flex;
-			align-items: center;
-			block-size: 22px;
-			padding-inline: 10px;
-			border-radius: 999px;
-			font-size: 11px;
-			font-weight: 700;
-			letter-spacing: 0.02em;
-			text-transform: uppercase;
+			margin-inline-start: auto;
 		}
 
 		.aafm-step-done {
@@ -751,17 +904,14 @@
 			}
 
 			.aafm-step-body h3 { color: var(--aafm-text-subtle); }
-
-			.aafm-step-state {
-				background: var(--aafm-green-tint);
-				color: var(--aafm-green-text);
-			}
 		}
 
-		.aafm-step-todo {
-			.aafm-step-state {
-				background: var(--aafm-amber-tint);
-				color: var(--aafm-amber-text);
+		/* Active step: blue marker showing its number, like app.css .step--active .num. */
+		.aafm-step-active {
+			.aafm-sidx {
+				background: var(--aafm-accent);
+				color: #fff;
+				border-color: var(--aafm-accent);
 			}
 		}
 	}
@@ -1061,6 +1211,11 @@
 				cursor: pointer;
 				font-weight: 600;
 				color: var(--aafm-text);
+
+				/* The leading question glyph carries the accent, like the mockup's .qic. */
+				.aafm-icon {
+					color: var(--aafm-accent);
+				}
 
 				/* Hide the browser-default disclosure triangle; the chevron
 				   below replaces it on the right edge of the row. */

@@ -353,8 +353,9 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	printf(
-		'<button type="button" class="button aafm-copy" data-copy="%1$s">%2$s</button>',
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $url ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 	echo '</div>';
@@ -368,7 +369,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div></div>';
 	echo '<div class="aafm-step-rail"><div class="aafm-card aafm-card-pad">';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
-	echo '<p><input type="text" id="aafm-agent-login" value="mcp-agent" class="regular-text"> <button type="button" class="button" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+	echo '<p><input type="text" id="aafm-agent-login" value="mcp-agent" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	echo '</div></div>';
 	echo '</div>';
 
@@ -405,9 +406,10 @@ function aafm_render_connection_tab(): void {
 	$first = true;
 	foreach ( aafm_quickstart_clients() as $slug => $label ) {
 		printf(
-			'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci"></span>%3$s</div>',
+			'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
 			$first ? ' on' : '',
 			esc_attr( $slug ),
+			aafm_icon( 'client-' . $slug ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			esc_html( $label )
 		);
 		$first = false;
@@ -426,8 +428,9 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
 	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
 	printf(
-		'<button type="button" class="button copy-fab aafm-copy" data-copy="%1$s">%2$s</button>',
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $unix_snippet ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 	echo '</div>';
@@ -435,8 +438,9 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
 	printf( '<pre>%s</pre>', esc_html( $windows_snippet ) );
 	printf(
-		'<button type="button" class="button copy-fab aafm-copy" data-copy="%1$s">%2$s</button>',
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $windows_snippet ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 	echo '</div>';
@@ -471,8 +475,9 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-codeblock">';
 		printf( '<pre>%s</pre>', esc_html( $snippet ) );
 		printf(
-			'<button type="button" class="button copy-fab aafm-copy" data-copy="%1$s">%2$s</button>',
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 			esc_attr( $snippet ),
+			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 		);
 		echo '</div>';
@@ -495,7 +500,9 @@ function aafm_render_connection_tab(): void {
 
 	echo '<div class="aafm-step-rail"><div class="aafm-card">';
 	echo '<div class="aafm-card-pad aafm-connect-check">';
-	echo '<button type="button" class="button button-primary" id="aafm-test-connection">' . esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-test-connection">';
+	echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
 	echo '</div>';
 
 	// Diagnostics rail: one row per check, status mapped to a coloured dot.

@@ -262,16 +262,6 @@ function aafm_render_admin_page(): void {
 		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
 	);
 
-	// Dashicon per tab, keyed by tab slug — decorative, so the spans are static literals.
-	$tab_icons = array(
-		'dashboard'  => 'dashicons-dashboard',
-		'connection' => 'dashicons-rest-api',
-		'abilities'  => 'dashicons-superhero',
-		'settings'   => 'dashicons-admin-settings',
-		'activity'   => 'dashicons-list-view',
-		'help'       => 'dashicons-editor-help',
-	);
-
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab routing, no state change.
 	$active = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';
 	if ( ! isset( $tabs[ $active ] ) ) {
@@ -288,19 +278,27 @@ function aafm_render_admin_page(): void {
 	}
 
 	echo '<div class="wrap aafm-wrap">';
-	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' );
+
+	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
+	echo '<div class="aafm-page-head"><div class="title-wrap">';
+	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div>';
 	printf(
-		' <span class="aafm-status-pill %1$s">%2$s</span>',
+		'<span class="aafm-status-pill %1$s">%2$s</span>',
 		esc_attr( $pill_class ),
 		esc_html( $pill_label )
 	);
-	echo '</h1>';
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div>';
+
+	// Anchor for core's admin-notice relocation: the <h1> now sits inside
+	// .aafm-page-head, so mark where WordPress should drop notices.
+	echo '<hr class="wp-header-end">';
+
 	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
-		$icon = $tab_icons[ $slug ];
 		printf(
-			'<a href="%s" class="nav-tab %s"><span class="dashicons %s" aria-hidden="true"></span> %s</a>',
+			'<a href="%s" class="nav-tab %s">%s %s</a>',
 			esc_url(
 				add_query_arg(
 					array(
@@ -311,7 +309,7 @@ function aafm_render_admin_page(): void {
 				)
 			),
 			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
-			esc_attr( $icon ),
+			aafm_icon( $slug ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			esc_html( $label )
 		);
 	}
@@ -518,7 +516,7 @@ function aafm_render_abilities_tab(): void {
 		echo '</div>';
 	}
 
-	echo '<div class="aafm-savebar"><button type="submit" class="button button-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
@@ -584,7 +582,7 @@ function aafm_render_post_types_selector(): void {
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
-	echo '<p><button type="button" id="aafm-post-types-save" class="button button-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
+	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -623,7 +621,7 @@ function aafm_render_meta_keys_selector(): void {
 		echo '<div class="aafm-meta-chips">';
 		foreach ( $detected as $key ) {
 			printf(
-				'<button type="button" class="button aafm-meta-chip" data-key="%1$s">%2$s</button>',
+				'<button type="button" class="aafm-meta-chip" data-key="%1$s">%2$s</button>',
 				esc_attr( $key ),
 				esc_html( $key )
 			);
@@ -674,7 +672,7 @@ function aafm_render_activity_tab(): void {
 		)
 	);
 
-	echo '<button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '</div>';
 
 	echo '<div class="aafm-table-wrap">';
@@ -727,7 +725,9 @@ function aafm_render_activity_tab(): void {
  * @return void
  */
 function aafm_render_help_entry( string $summary, string $body ): void {
-	echo '<details class="aafm-help-entry"><summary><span class="dashicons dashicons-editor-help" aria-hidden="true"></span>' . esc_html( $summary ) . '</summary><div class="aafm-help-body">';
+	echo '<details class="aafm-help-entry"><summary>';
+	echo aafm_icon( 'help' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo esc_html( $summary ) . '</summary><div class="aafm-help-body">';
 	echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $body is built locally and run through wp_kses by the caller.
 	echo '</div></details>';
 }
@@ -740,9 +740,10 @@ function aafm_render_help_entry( string $summary, string $body ): void {
  */
 function aafm_help_copy_line( string $code ): string {
 	return sprintf(
-		'<div class="aafm-help-copy-line"><code>%1$s</code> <button type="button" class="button button-small aafm-copy" data-copy="%2$s">%3$s</button></div>',
+		'<div class="aafm-help-copy-line"><code>%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
 		esc_html( $code ),
 		esc_attr( $code ),
+		aafm_icon( 'copy' ), // Static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 }

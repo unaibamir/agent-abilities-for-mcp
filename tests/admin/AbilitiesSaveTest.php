@@ -114,7 +114,7 @@ final class AbilitiesSaveTest extends TestCase {
 		// </div> — the notice component and the meta selector both nest <div>s inside the panel,
 		// which a naive first-</div> slice would catch. The fallback keys off aafm-save-status,
 		// which the form renders exactly once after every panel, rather than the shared
-		// button-primary class that also marks the post-types and meta-keys save buttons.
+		// aafm-btn-primary class that also marks the post-types and meta-keys save buttons.
 		$content_open = strpos( $html, 'class="aafm-subject-panel" data-subject="content"' );
 		$this->assertNotFalse( $content_open, 'Content panel should render.' );
 		$next_panel    = strpos( $html, 'class="aafm-subject-panel" data-subject=', $content_open + 1 );

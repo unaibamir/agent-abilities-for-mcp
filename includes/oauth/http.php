@@ -13,6 +13,10 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+if ( ! defined( 'AAFM_OAUTH_RATE_WINDOW' ) ) {
+	define( 'AAFM_OAUTH_RATE_WINDOW', 60 );
+}
+
 /**
  * Whether OAuth endpoints must be served over HTTPS.
  *
@@ -52,7 +56,7 @@ function aafm_oauth_https_required(): bool {
  */
 function aafm_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
 	// phpcs:enable Universal.NamingConventions.NoReservedKeywordParameterNames.globalFound
-	$window = 60;
+	$window = AAFM_OAUTH_RATE_WINDOW;
 	$ip     = aafm_source_ip();
 
 	$ip_key     = 'rl_ip_' . md5( $bucket . '|' . $ip );

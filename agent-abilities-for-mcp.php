@@ -46,6 +46,9 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_oauth_tables' );
 
+// PKCE helpers are pure functions with nothing to hook.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

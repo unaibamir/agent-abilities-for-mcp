@@ -15,12 +15,32 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Whether a stored toggle option counts as "off".
+ *
+ * `get_option( $key, $default )` returns $default whenever the stored value is
+ * strictly === false, so a truthy default would read a literal boolean-false
+ * "off" switch as on — fail-open on a public token surface. Defaulting to '1'
+ * and treating every falsy stored form as off closes that gap: the option is on
+ * only when it was never set or holds a genuinely truthy value.
+ *
+ * @param string $key The toggle option name.
+ * @return bool True when the toggle is enabled, false when explicitly disabled.
+ */
+function aafm_oauth_option_is_on( string $key ): bool {
+	$value = get_option( $key, '1' );
+
+	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
+
+	return ! in_array( $value, $off, true ) && (bool) $value;
+}
+
+/**
  * Whether the OAuth surface is enabled.
  *
  * @return bool True unless the operator has explicitly disabled OAuth.
  */
 function aafm_oauth_enabled(): bool {
-	return (bool) get_option( 'aafm_oauth_enabled', true );
+	return aafm_oauth_option_is_on( 'aafm_oauth_enabled' );
 }
 
 /**
@@ -29,7 +49,7 @@ function aafm_oauth_enabled(): bool {
  * @return bool True unless the operator has explicitly disabled DCR.
  */
 function aafm_oauth_dcr_enabled(): bool {
-	return (bool) get_option( 'aafm_oauth_dcr_enabled', true );
+	return aafm_oauth_option_is_on( 'aafm_oauth_dcr_enabled' );
 }
 
 /**

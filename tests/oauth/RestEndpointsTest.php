@@ -162,6 +162,11 @@ class RestEndpointsTest extends TestCase {
 
 		$this->assertSame( 200, $response->get_status() );
 
+		// The token response must never be cached (RFC 6749 §5.1): it carries the
+		// bearer credential, so a shared cache holding it would leak the token.
+		$headers = $response->get_headers();
+		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+
 		$data = $response->get_data();
 		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'] );
 		$this->assertSame( 'Bearer', $data['token_type'] );
@@ -249,12 +254,19 @@ class RestEndpointsTest extends TestCase {
 		$token_response = $this->token_code_request( $client_id, $code, $redirect, $verifier );
 		$access_token   = (string) $token_response->get_data()['access_token'];
 
+		// The token is live before revocation.
+		$this->assertNotFalse( aafm_oauth_validate_access_token( $access_token ) );
+
 		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/revoke' );
 		$request->set_body_params( array( 'token' => $access_token ) );
 
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 200, $response->get_status() );
+
+		// Revocation must genuinely kill the token, not just return 200: validating
+		// the same token afterwards now reports it as dead.
+		$this->assertFalse( aafm_oauth_validate_access_token( $access_token ) );
 	}
 
 	/**
@@ -280,5 +292,95 @@ class RestEndpointsTest extends TestCase {
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 404, $response->get_status() );
+	}
+
+	/**
+	 * Every falsy stored form of the DCR toggle disables registration (404).
+	 *
+	 * The fail-open bug: the old reader cast get_option() straight to bool, so
+	 * stored strings like 'false'/'no'/'off' read as ON and kept the endpoint
+	 * live. The hardened reader treats any falsy form as off. A persisted literal
+	 * boolean false (the realistic admin-save state PR E reaches by seeding the
+	 * option on, then toggling it off) is covered as well.
+	 */
+	public function test_register_is_404_when_dcr_disabled_falsy_values(): void {
+		$falsy = array( 'false', 'no', 'off', '0', '' );
+
+		foreach ( $falsy as $value ) {
+			update_option( 'aafm_oauth_dcr_enabled', $value );
+
+			$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+			$request->set_header( 'Content-Type', 'application/json' );
+			$request->set_body(
+				wp_json_encode(
+					array(
+						'redirect_uris' => array( 'https://app.example/cb' ),
+					)
+				)
+			);
+
+			$response = rest_do_request( $request );
+
+			$this->assertSame(
+				404,
+				$response->get_status(),
+				'A falsy DCR toggle (' . wp_json_encode( $value ) . ') should disable registration.'
+			);
+		}
+
+		// Persisted literal boolean false: seed the row on, then toggle it off —
+		// WordPress only stores a literal false when the option already exists.
+		add_option( 'aafm_oauth_dcr_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', false );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) ) );
+
+		$this->assertSame( 404, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * Every falsy stored form of the OAuth toggle 404s the token endpoint.
+	 *
+	 * Same fail-open quirk as DCR, on the unauthenticated token surface: a falsy
+	 * toggle must shut the endpoint rather than leave it serving.
+	 */
+	public function test_token_is_404_when_oauth_disabled_falsy_values(): void {
+		$falsy = array( 'false', 'no', 'off', '0', '' );
+
+		foreach ( $falsy as $value ) {
+			update_option( 'aafm_oauth_enabled', $value );
+
+			$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+			$request->set_body_params(
+				array(
+					'grant_type' => 'authorization_code',
+					'code'       => 'irrelevant',
+				)
+			);
+
+			$response = rest_do_request( $request );
+
+			$this->assertSame(
+				404,
+				$response->get_status(),
+				'A falsy OAuth toggle (' . wp_json_encode( $value ) . ') should disable the token endpoint.'
+			);
+		}
+
+		// Persisted literal boolean false (see the DCR sibling above).
+		add_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_enabled', false );
+
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$request->set_body_params(
+			array(
+				'grant_type' => 'authorization_code',
+				'code'       => 'irrelevant',
+			)
+		);
+
+		$this->assertSame( 404, rest_do_request( $request )->get_status() );
 	}
 }

@@ -42,8 +42,9 @@ if ( ! defined( 'AAFM_LOG_PRUNE_INTERVAL' ) ) {
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 
-// OAuth storage schema is required early too; activation/upgrade wiring lands in a later task.
+// OAuth storage schema is required early so the activation hook can install its tables.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_oauth_tables' );
 
 /**
  * Bootstraps the plugin once all plugins are loaded.
@@ -77,6 +78,10 @@ function aafm_bootstrap() {
 	// includes/admin/page.php is loaded), so this is behavior-identical to gating it
 	// behind is_admin(), while remaining wired at plugin load for deterministic tests.
 	add_action( 'admin_init', 'aafm_register_privacy_policy_content' );
+
+	// Same admin_init rationale: keeps the OAuth schema current on real upgrades
+	// (the installer runs only when the recorded version is behind).
+	add_action( 'admin_init', 'aafm_maybe_upgrade_oauth_tables' );
 
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/icons.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';

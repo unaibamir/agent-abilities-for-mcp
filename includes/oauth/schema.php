@@ -105,6 +105,23 @@ function aafm_install_oauth_tables(): void {
 }
 
 /**
+ * Run the installer when the stored schema version is behind the current one.
+ *
+ * Cheap early return when the option already matches, so this can be hooked on
+ * every admin request without churn. dbDelta() is safe to re-run and the
+ * installer resets the option. Mirrors the audit log's activation wiring.
+ *
+ * @return void
+ */
+function aafm_maybe_upgrade_oauth_tables(): void {
+	if ( get_option( 'aafm_oauth_schema_version' ) === AAFM_OAUTH_SCHEMA_VERSION ) {
+		return;
+	}
+
+	aafm_install_oauth_tables();
+}
+
+/**
  * Drop all four OAuth tables. Used by uninstall.
  *
  * @return void

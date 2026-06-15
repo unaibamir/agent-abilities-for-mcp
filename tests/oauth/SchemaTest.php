@@ -65,4 +65,33 @@ class SchemaTest extends TestCase {
 		$this->assertTrue( $this->table_exists( 'aafm_oauth_access_tokens' ) );
 		$this->assertTrue( $this->table_exists( 'aafm_oauth_consents' ) );
 	}
+
+	/**
+	 * The upgrade runs the installer when the recorded schema version is missing.
+	 */
+	public function test_upgrade_runs_when_version_missing(): void {
+		aafm_install_oauth_tables();
+		delete_option( 'aafm_oauth_schema_version' );
+
+		aafm_maybe_upgrade_oauth_tables();
+
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' )
+		);
+	}
+
+	/**
+	 * The upgrade is a no-op when the recorded version already matches.
+	 */
+	public function test_upgrade_is_noop_when_current(): void {
+		aafm_install_oauth_tables();
+
+		aafm_maybe_upgrade_oauth_tables();
+
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' )
+		);
+	}
 }

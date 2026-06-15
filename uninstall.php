@@ -17,6 +17,22 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'includes/audit/log.php';
+require_once plugin_dir_path( __FILE__ ) . 'includes/oauth/schema.php';
+
+/**
+ * Remove this plugin's data for the current blog.
+ *
+ * Combines the audit teardown (enabled-abilities option + activity log table) with
+ * the OAuth teardown (four OAuth tables + schema-version option) so a single call
+ * leaves no table or option behind. Run once per site by aafm_run_uninstall().
+ *
+ * @return void
+ */
+function aafm_uninstall_site_data(): void {
+	aafm_uninstall_site();
+	aafm_drop_oauth_tables();
+	delete_option( 'aafm_oauth_schema_version' );
+}
 
 /**
  * Remove this plugin's data from every site, on single-site and multisite alike.
@@ -28,7 +44,7 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/audit/log.php';
  */
 function aafm_run_uninstall(): void {
 	if ( ! is_multisite() ) {
-		aafm_uninstall_site();
+		aafm_uninstall_site_data();
 		return;
 	}
 
@@ -40,7 +56,7 @@ function aafm_run_uninstall(): void {
 	);
 	foreach ( $aafm_site_ids as $aafm_site_id ) {
 		switch_to_blog( (int) $aafm_site_id );
-		aafm_uninstall_site();
+		aafm_uninstall_site_data();
 		restore_current_blog();
 	}
 }

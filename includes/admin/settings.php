@@ -121,6 +121,68 @@ function aafm_ajax_save_settings(): void {
 }
 
 /**
+ * Every option key that holds plugin configuration.
+ *
+ * This is the single source of truth for "what a reset clears" — the enabled abilities, the
+ * exposed post types and meta keys, and the four safety controls. It deliberately excludes the
+ * activity log (its own table) and anything outside the plugin's own option namespace, and it
+ * never lists users or content. Keep it in sync when a new configuration option is introduced.
+ *
+ * @return list<string> Option names, in a stable order.
+ */
+function aafm_config_option_names(): array {
+	return array(
+		'aafm_enabled_abilities',
+		'aafm_allowed_post_types',
+		'aafm_allowed_meta_keys',
+		'aafm_rate_limit_per_min',
+		'aafm_max_title_len',
+		'aafm_force_draft',
+		'aafm_ip_allowlist',
+	);
+}
+
+/**
+ * Reset the plugin to its out-of-the-box state.
+ *
+ * Deletes every configuration option (so each setting falls back to its safe default) and empties
+ * the activity log. It deliberately does NOT touch the agent user, its Application Passwords, or
+ * any content the agent created (posts, terms, media, etc.) — this clears the plugin's own
+ * configuration and audit trail only. The activity-log table itself is kept (rows truncated) so
+ * logging keeps working immediately afterwards. This cannot be undone.
+ *
+ * @return void
+ */
+function aafm_reset_plugin(): void {
+	foreach ( aafm_config_option_names() as $option ) {
+		delete_option( $option );
+	}
+	aafm_clear_activity_log();
+}
+
+/**
+ * AJAX: reset the plugin to defaults.
+ *
+ * Nonce + manage_options gated, mirroring the other admin actions. The destructive scope is fixed
+ * server-side (config options + activity log only) — there is no client-supplied target, so a
+ * tampered request can never widen what gets deleted. The browser confirms intent before calling.
+ *
+ * @return void
+ */
+function aafm_ajax_reset_plugin(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	aafm_reset_plugin();
+	wp_send_json_success(
+		array(
+			'message' => __( 'Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone.', 'agent-abilities-for-mcp' ),
+		)
+	);
+}
+
+/**
  * Render the Settings tab: a card of labelled rows for the four optional safety controls.
  *
  * Each control reads its current value through its safety.php getter (filterable, bounded,
@@ -203,7 +265,25 @@ function aafm_render_settings_tab(): void {
 		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'agent-abilities-for-mcp' )
 	);
 
-	echo '<p><button type="submit" class="button button-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
+	echo '<p><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
 	echo '</form>';
+
+	// Danger zone — a destructive, irreversible reset. Sits outside the settings <form> so the
+	// button (type=button, wired in admin.js with a confirm step) never submits the form.
+	echo '<section class="aafm-card aafm-danger">';
+	echo '<div class="aafm-card-head">';
+	echo '<span class="icon">';
+	echo aafm_icon( 'warning' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
+	echo '<h2>' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '</div>';
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
+	echo '<div class="aafm-set-control">';
+	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
+	echo '<p class="help">' . esc_html__( 'Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+	echo '</section>';
+
 	echo '</div>';
 }

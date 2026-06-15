@@ -55,6 +55,7 @@
 			this.#bindCreateUser();
 			this.#bindTestConnection();
 			this.#bindClearLog();
+			this.#bindResetPlugin();
 			this.#bindQuickstarts();
 		}
 
@@ -539,6 +540,37 @@
 						.querySelectorAll( '.aafm-log-table tbody tr' )
 						.forEach( ( r ) => r.remove() );
 				}
+			} );
+		}
+
+		#bindResetPlugin() {
+			const btn = document.querySelector( '#aafm-reset-plugin' );
+			if ( ! btn ) {
+				return;
+			}
+			const status = document.querySelector( '.aafm-reset-status' );
+			btn.addEventListener( 'click', async () => {
+				// Destructive + irreversible: require an explicit confirmation first.
+				if ( ! window.confirm( this.#t( 'resetConfirm', 'Reset the plugin to defaults? This cannot be undone.' ) ) ) {
+					return;
+				}
+				btn.disabled = true;
+				if ( status ) {
+					status.textContent = this.#t( 'resetWorking', 'Resetting…' );
+				}
+				const json = await this.#post( 'aafm_reset_plugin' );
+				if ( json?.success ) {
+					if ( status ) {
+						status.textContent = this.#t( 'resetDone', 'Reset. Reloading…' );
+					}
+					// Reload so every tab reflects the wiped configuration.
+					window.location.reload();
+					return;
+				}
+				if ( status ) {
+					status.textContent = json?.data?.message ?? this.#t( 'resetFailed', 'Reset failed.' );
+				}
+				btn.disabled = false;
 			} );
 		}
 	}

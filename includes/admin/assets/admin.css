@@ -804,6 +804,27 @@
 		}
 	}
 
+	/* ---------- Danger zone (Settings) ----------
+	   A destructive, irreversible action set apart with a red accent so it never
+	   reads as a routine control. The button itself stays WP-native (.button-link-delete). */
+	.aafm-danger {
+		border-color: var(--aafm-red);
+
+		.aafm-card-head {
+			border-block-end-color: color-mix( in srgb, var(--aafm-red) 25%, var(--aafm-border) );
+
+			.icon { color: var(--aafm-red); }
+
+			h2 { color: var(--aafm-red-text); }
+		}
+
+		.aafm-reset-status {
+			margin-inline-start: 8px;
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+		}
+	}
+
 	/* ---------- Setup checklist (Dashboard, Direction A) ----------
 	   Scoped under .aafm-setup so its .aafm-step / .aafm-sidx rows never
 	   collide with the Connection stepper, which owns the same generic

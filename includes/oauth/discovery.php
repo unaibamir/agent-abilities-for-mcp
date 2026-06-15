@@ -142,7 +142,7 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
-	// Mirrors create_server( 'aafm-server', 'agent-abilities-for-mcp', 'mcp', … ).
+	// The MCP route the adapter registers: namespace agent-abilities-for-mcp, route mcp.
 	if ( '/agent-abilities-for-mcp/mcp' !== $route ) {
 		return $response;
 	}

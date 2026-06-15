@@ -234,11 +234,7 @@ function aafm_transport_permission_callback( $request ) {
 	unset( $request );
 
 	if ( ! is_user_logged_in() ) {
-		$data = array( 'status' => 401 );
-		if ( aafm_oauth_enabled() ) {
-			$data['www_authenticate'] = aafm_oauth_challenge_header();
-		}
-		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), $data );
+		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 	}
 
 	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {

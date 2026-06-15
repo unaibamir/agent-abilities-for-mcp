@@ -106,31 +106,48 @@ function aafm_oauth_challenge_header(): string {
 }
 
 /**
- * Promote the www_authenticate error data to a real WWW-Authenticate header.
+ * Set the WWW-Authenticate challenge on the dispatched MCP 401.
  *
- * A WP_Error returned from a permission_callback is serialized into the response
- * body's `data` array, so the challenge attached by the transport never reaches
- * the wire as a header on its own. This rest_post_dispatch filter copies it up
- * onto the 401 response. Defensive by design: it acts only on a 401 carrying a
- * non-empty www_authenticate key and otherwise returns the response untouched.
+ * The bundled adapter discards a permission_callback's WP_Error (it logs the error
+ * and returns bare false), so WordPress core manufactures its own rest_forbidden
+ * 401 with no challenge data — the header can't ride on the WP_Error. This
+ * rest_post_dispatch filter therefore RE-DERIVES the condition from the request and
+ * response: OAuth enabled, a 401 status (logged-out for this route — a logged-in but
+ * unauthorized request is a 403 and must not get the beacon), and the MCP route.
  *
- * @param \WP_HTTP_Response $response The dispatch result.
- * @param \WP_REST_Server   $server   The REST server (unused).
- * @param \WP_REST_Request  $request  The request (unused).
- * @return \WP_HTTP_Response The response, with the header set when applicable.
+ * The MCP route is '/agent-abilities-for-mcp/mcp', mirroring create_server() in
+ * includes/server.php (namespace 'agent-abilities-for-mcp' + route 'mcp'). The
+ * route gate keeps the header off unrelated 401s site-wide. Defensive by design:
+ * any miss returns the response untouched and the filter never throws.
+ *
+ * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
+ * @param \WP_REST_Server $server   The REST server (unused).
+ * @param mixed           $request  The originating request (WP_REST_Request on the REST path).
+ * @return mixed The response, with the header set when the condition matches.
  */
 function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
-	unset( $server, $request );
+	unset( $server );
 
-	if ( ! $response instanceof WP_REST_Response || 401 !== $response->get_status() ) {
+	if ( ! aafm_oauth_enabled() ) {
 		return $response;
 	}
 
-	$data = $response->get_data();
-
-	if ( is_array( $data ) && ! empty( $data['data']['www_authenticate'] ) ) {
-		$response->header( 'WWW-Authenticate', (string) $data['data']['www_authenticate'] );
+	if ( ! $response instanceof WP_REST_Response ) {
+		return $response;
 	}
+
+	if ( 401 !== (int) $response->get_status() ) {
+		return $response;
+	}
+
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+
+	// Mirrors create_server( 'aafm-server', 'agent-abilities-for-mcp', 'mcp', … ).
+	if ( '/agent-abilities-for-mcp/mcp' !== $route ) {
+		return $response;
+	}
+
+	$response->header( 'WWW-Authenticate', aafm_oauth_challenge_header() );
 
 	return $response;
 }

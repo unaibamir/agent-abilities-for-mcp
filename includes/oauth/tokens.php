@@ -39,7 +39,8 @@ if ( ! defined( 'AAFM_OAUTH_REFRESH_TTL' ) ) {
 
 /**
  * Hard cap on chain-revocation traversal hops, guarding against any pathological
- * loop in the parent/child links.
+ * loop in the parent/child links. It also bounds the maximum lineage length that
+ * a single reuse-detection pass will revoke, not just the anti-infinite-loop guard.
  */
 if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
 	define( 'AAFM_OAUTH_CHAIN_MAX_HOPS', 1000 );
@@ -189,7 +190,9 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		);
 	}
 
-	// Expired refresh token: reject without rotating.
+	// Expired refresh token: reject without rotating. The PHP string compare is
+	// safe because 'Y-m-d H:i:s' is a fixed-width, zero-padded, lexicographically
+	// ordered datetime format.
 	if ( gmdate( 'Y-m-d H:i:s', time() ) >= (string) $row['refresh_expires_at'] ) {
 		return new WP_Error(
 			'invalid_grant',
@@ -197,17 +200,46 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		);
 	}
 
-	// Consume the old refresh row, then mint the chained successor.
+	// Consume the old refresh row and mint the successor as one atomic unit.
+	//
+	// Wrap both in a transaction so a crash between consume and mint can't leave
+	// the row consumed without a persisted successor (which would lock the user
+	// out). The InnoDB engine is implied by the table's get_charset_collate().
+	// The WP test harness already wraps each test in its own transaction, so this
+	// nested START/COMMIT is effectively a no-op there — it does not break test
+	// isolation.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->update(
+	$wpdb->query( 'START TRANSACTION' );
+
+	// Single-winner gate: deactivate the row only while it is still active. Under
+	// a concurrent race two presentations of the same refresh token both reach
+	// here, but exactly one UPDATE flips is_active 1 -> 0 and affects a row; the
+	// loser affects none. $wpdb->update() returns the affected-row count (or false
+	// on error). Anything other than exactly one consumed row means we did not win
+	// the race (or the query failed) — roll back and reject without minting.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$consumed = $wpdb->update(
 		$table,
 		array( 'is_active' => 0 ),
-		array( 'id' => (int) $row['id'] ),
+		array(
+			'id'        => (int) $row['id'],
+			'is_active' => 1,
+		),
 		array( '%d' ),
-		array( '%d' )
+		array( '%d', '%d' )
 	);
 
-	return aafm_oauth_mint_tokens(
+	if ( 1 !== $consumed ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'ROLLBACK' );
+
+		return new WP_Error(
+			'invalid_grant',
+			__( 'The refresh token is invalid.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	$new = aafm_oauth_mint_tokens(
 		array(
 			'client_id'         => (string) $row['client_id'],
 			'wp_user_id'        => (int) $row['wp_user_id'],
@@ -215,6 +247,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 			'refresh_parent_id' => (int) $row['id'],
 		)
 	);
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( 'COMMIT' );
+
+	return $new;
 }
 
 /**

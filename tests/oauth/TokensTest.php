@@ -264,6 +264,128 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * An expired refresh token is rejected and does not mint a successor.
+	 *
+	 * Expiry is simulated by writing a past UTC refresh_expires_at directly onto
+	 * the transaction-isolated temporary row — no sleeping. The single minted row
+	 * must remain the only one, proving rotation bailed before minting.
+	 */
+	public function test_rotate_refresh_expired_token_returns_error_and_does_not_mint(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		global $wpdb;
+		$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+		// Push refresh_expires_at into the past.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$table,
+			array( 'refresh_expires_at' => gmdate( 'Y-m-d H:i:s', time() - 120 ) ),
+			array( 'refresh_hash' => hash( 'sha256', $tokens['refresh_token'] ) ),
+			array( '%s' ),
+			array( '%s' )
+		);
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$before = (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"SELECT COUNT(*) FROM {$table}"
+		);
+
+		$res = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$this->assertInstanceOf( WP_Error::class, $res );
+
+		// No successor row was minted: the table still holds exactly one row, and
+		// the original refresh row was left untouched (still active).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$after = (int) $wpdb->get_var(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"SELECT COUNT(*) FROM {$table}"
+		);
+		$this->assertSame( $before, $after );
+
+		$row = $this->row_by_refresh( $tokens['refresh_token'] );
+		$this->assertNotNull( $row );
+		$this->assertSame( 1, (int) $row['is_active'] );
+	}
+
+	/**
+	 * Rotating the SAME refresh token twice: the second rotate is rejected.
+	 *
+	 * After a successful rotation the old row is consumed (inactive), so a second
+	 * presentation of the same raw refresh token trips reuse detection and returns
+	 * a WP_Error rather than minting a second successor. This pins the
+	 * single-winner property of the atomic consume.
+	 */
+	public function test_rotate_refresh_same_token_twice_second_is_rejected(): void {
+		aafm_install_oauth_tables();
+
+		$ctx    = $this->ctx();
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		$first = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $first );
+
+		$second = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$this->assertInstanceOf( WP_Error::class, $second );
+	}
+
+	/**
+	 * Replaying a consumed MIDDLE refresh token revokes the lineage in BOTH
+	 * directions.
+	 *
+	 * Build a three-generation chain gen0 -> gen1 -> gen2 (each linked by
+	 * refresh_parent_id). Replay the gen1 (middle) refresh token, which is already
+	 * consumed. Reuse detection must walk UP to gen0 and DOWN to gen2 and
+	 * deactivate every generation's access token.
+	 */
+	public function test_rotate_refresh_mid_lineage_replay_revokes_whole_chain(): void {
+		aafm_install_oauth_tables();
+
+		$ctx = $this->ctx();
+
+		// gen0: fresh mint.
+		$gen0 = aafm_oauth_mint_tokens( $ctx );
+
+		// gen0 -> gen1.
+		$gen1 = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen1 );
+
+		// gen1 -> gen2.
+		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$this->assertIsArray( $gen2 );
+
+		// Only the newest generation's row is still active — each rotation consumes
+		// the row it rotated from, deactivating that generation's access token too.
+		// So before the replay, gen2 is live while gen0 and gen1 are already
+		// inactive (their rows were consumed). The replay must still kill gen2.
+		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $gen2['access_token'] ) );
+
+		// Replay the MIDDLE (gen1) refresh token — already consumed by the gen2 rotation.
+		$replay = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$this->assertInstanceOf( WP_Error::class, $replay );
+
+		// The whole lineage is dead: up to gen0 and down to gen2.
+		$this->assertFalse( aafm_oauth_validate_access_token( $gen0['access_token'] ) );
+		$this->assertFalse( aafm_oauth_validate_access_token( $gen1['access_token'] ) );
+		$this->assertFalse( aafm_oauth_validate_access_token( $gen2['access_token'] ) );
+
+		// Confirm at the row level that every generation is now inactive.
+		$gen0_row = $this->row_by_access( $gen0['access_token'] );
+		$gen1_row = $this->row_by_access( $gen1['access_token'] );
+		$gen2_row = $this->row_by_access( $gen2['access_token'] );
+		$this->assertNotNull( $gen0_row );
+		$this->assertNotNull( $gen1_row );
+		$this->assertNotNull( $gen2_row );
+		$this->assertSame( 0, (int) $gen0_row['is_active'] );
+		$this->assertSame( 0, (int) $gen1_row['is_active'] );
+		$this->assertSame( 0, (int) $gen2_row['is_active'] );
+	}
+
+	/**
 	 * Replaying an unknown refresh token is rejected.
 	 */
 	public function test_rotate_refresh_unknown_token_returns_error(): void {
@@ -283,6 +405,9 @@ class TokensTest extends TestCase {
 
 		$this->assertTrue( aafm_oauth_revoke_token( $tokens['access_token'] ) );
 		$this->assertFalse( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+
+		// Revoking an already-revoked token affects no rows: idempotent, returns false.
+		$this->assertFalse( aafm_oauth_revoke_token( $tokens['access_token'] ) );
 	}
 
 	/**

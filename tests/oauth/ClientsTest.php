@@ -161,6 +161,40 @@ class ClientsTest extends TestCase {
 	}
 
 	/**
+	 * A redirect URI carrying a CRLF sequence is rejected.
+	 *
+	 * The wp_parse_url() call strips control characters before parsing, so the host
+	 * would validate clean while the raw string we persist still carries the CR/LF —
+	 * a header-splitting / open-redirect seed. Registration must reject it outright.
+	 */
+	public function test_rejects_crlf_in_redirect_uri(): void {
+		aafm_install_oauth_tables();
+
+		$res = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( "https://app.example/cb\r\nLocation: https://evil.com" ) )
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
+	 * A redirect URI carrying a bare tab or newline control char is rejected.
+	 */
+	public function test_rejects_bare_control_chars_in_redirect_uri(): void {
+		aafm_install_oauth_tables();
+
+		$tab = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( "https://app.example/cb\tpath" ) )
+		);
+		$this->assertInstanceOf( WP_Error::class, $tab );
+
+		$newline = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( "https://app.example/cb\npath" ) )
+		);
+		$this->assertInstanceOf( WP_Error::class, $newline );
+	}
+
+	/**
 	 * A redirect URI containing a wildcard is rejected.
 	 */
 	public function test_rejects_wildcard(): void {

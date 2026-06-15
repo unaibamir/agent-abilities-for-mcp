@@ -15,8 +15,9 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Register a public OAuth client.
  *
- * Validates every redirect URI, generates a 32-hex client_id, and persists the
- * client row. This is a public-client model: there is no client secret to store.
+ * Validates every redirect URI, generates a client_id (a 32-character hex string,
+ * 16 random bytes), and persists the client row. This is a public-client model:
+ * there is no client secret to store.
  *
  * @param array<string,mixed> $req {
  *     Registration request.
@@ -110,6 +111,14 @@ function aafm_oauth_register_client( array $req ) {
  */
 function aafm_oauth_validate_redirect_uri( string $uri ): bool {
 	if ( '' === $uri || strlen( $uri ) > 2048 ) {
+		return false;
+	}
+
+	// Reject C0 control characters and DEL (CR, LF, TAB, NUL, …) anywhere in the URI.
+	// wp_parse_url() strips these before parsing, so the host would validate clean while
+	// the raw string we persist still carries the control chars — a header-splitting /
+	// open-redirect seed. Validate the exact bytes we store.
+	if ( preg_match( '/[\x00-\x1F\x7F]/', $uri ) ) {
 		return false;
 	}
 

@@ -64,6 +64,7 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  * @return array{access_token:string,refresh_token:string,expires_in:int}
  */
 function aafm_oauth_mint_tokens( array $ctx ): array {
+	// keep in sync with aafm_oauth_resolve_current_user()'s prefix (AAFM_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).
 	$access_raw  = 'aafm_oat_' . bin2hex( random_bytes( 32 ) );
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
 
@@ -114,6 +115,7 @@ function aafm_oauth_validate_access_token( string $raw ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$user_id = $wpdb->get_var(
 		$wpdb->prepare(
+			// Keep this WHERE clause in sync with aafm_oauth_get_access_token_row() in validator.php — the two must never disagree on the active/unexpired predicate.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
 			"SELECT wp_user_id FROM {$table}
 			 WHERE token_hash = %s

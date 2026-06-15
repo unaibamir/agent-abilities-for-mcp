@@ -35,7 +35,10 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  * in every case except a valid, audience-bound OAuth access token — see the
  * file header for why each guard exists.
  *
- * @param int|false $user_id The user id resolved so far (false if none yet).
+ * @param int|false $user_id The user id resolved so far (false if none yet). Left
+ *                           untyped deliberately: WordPress passes int|false through
+ *                           the determine_current_user filter, and a scalar type hint
+ *                           would coerce that false to 0.
  * @return int|false The approving wp_user_id, or the incoming value unchanged.
  */
 function aafm_oauth_resolve_current_user( $user_id ) {
@@ -64,21 +67,23 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 5. Validate (active + unexpired). A present-but-invalid OAuth token must
-	// not hard-fail — it simply fails to resolve a user.
-	$resolved = aafm_oauth_validate_access_token( $credential );
-	if ( false === $resolved ) {
+	// 5. Resolve the token to its row in a single indexed lookup. The row
+	// resolver already gates on (active + unexpired), so a null row covers
+	// every present-but-invalid case — unknown, inactive, expired — and a
+	// present-but-invalid OAuth token simply fails to resolve a user rather
+	// than hard-failing the request.
+	$row = aafm_oauth_get_access_token_row( $credential );
+	if ( null === $row ) {
 		return $user_id;
 	}
 
 	// 6. Audience binding (RFC 8707): the token must have been minted for THIS
 	// endpoint. A token scoped to a different audience resolves no user here.
-	$row = aafm_oauth_get_access_token_row( $credential );
-	if ( null === $row || ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
+	if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
 		return $user_id;
 	}
 
-	return (int) $resolved;
+	return (int) $row['wp_user_id'];
 }
 
 /**
@@ -131,6 +136,7 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
+			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php — the two must never disagree on the active/unexpired predicate.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
 			"SELECT * FROM {$table}
 			 WHERE token_hash = %s

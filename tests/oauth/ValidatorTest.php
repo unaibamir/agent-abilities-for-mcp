@@ -73,6 +73,17 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * Set the credential under the FastCGI-only REDIRECT_HTTP_AUTHORIZATION key,
+	 * leaving HTTP_AUTHORIZATION unset (set_up already cleared both). tear_down
+	 * restores REDIRECT_HTTP_AUTHORIZATION from $original_auth.
+	 *
+	 * @param string $value Full header value, e.g. "Bearer aafm_oat_...".
+	 */
+	private function set_redirect_bearer( string $value ): void {
+		$_SERVER['REDIRECT_HTTP_AUTHORIZATION'] = $value;
+	}
+
+	/**
 	 * Read a token row directly so a test can mutate expires_at.
 	 *
 	 * @param string $access_raw Raw access token.
@@ -107,6 +118,25 @@ class ValidatorTest extends TestCase {
 		);
 
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * The bearer is read from the FastCGI-only REDIRECT_HTTP_AUTHORIZATION key
+	 * when HTTP_AUTHORIZATION is absent — a valid token there resolves its user.
+	 */
+	public function test_resolves_bearer_from_redirect_http_authorization(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+
+		$this->set_redirect_bearer( 'Bearer ' . $tokens['access_token'] );
 
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
 	}

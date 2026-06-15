@@ -1,6 +1,6 @@
 <?php
 /**
- * Reusable admin notice component: variant mapping, escaping, and the html/dashicon args.
+ * Reusable admin notice component: variant mapping, escaping, and the html/icon args.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -11,22 +11,21 @@ namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\TestCase;
 
-// The bootstrap require for notices.php lands in Task 2, so load it directly here.
+// Notices render inline SVGs from aafm_icon(); load both helpers directly.
+require_once AAFM_PLUGIN_DIR . 'includes/admin/icons.php';
 require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 
 final class NoticesTest extends TestCase {
 
-	public function test_each_variant_maps_to_class_and_dashicon(): void {
-		$map = array(
-			'warning' => 'dashicons-warning',
-			'info'    => 'dashicons-info',
-			'success' => 'dashicons-yes-alt',
-			'error'   => 'dashicons-dismiss',
-		);
-		foreach ( $map as $variant => $icon ) {
+	public function test_each_variant_maps_to_class_and_svg_icon(): void {
+		// Each variant renders its variant class and an inline SVG icon (no Dashicons).
+		$variants = array( 'warning', 'info', 'success', 'error' );
+		foreach ( $variants as $variant ) {
 			$html = aafm_get_notice_html( $variant, 'Hello' );
 			$this->assertStringContainsString( 'aafm-notice-' . $variant, $html );
-			$this->assertStringContainsString( $icon, $html );
+			$this->assertStringContainsString( 'aafm-notice-ic', $html );
+			$this->assertStringContainsString( '<svg class="aafm-icon"', $html );
+			$this->assertStringNotContainsString( 'dashicons', $html );
 			$this->assertStringContainsString( 'Hello', $html );
 		}
 	}
@@ -34,7 +33,8 @@ final class NoticesTest extends TestCase {
 	public function test_unknown_variant_falls_back_to_info(): void {
 		$html = aafm_get_notice_html( 'explode', 'x' );
 		$this->assertStringContainsString( 'aafm-notice-info', $html );
-		$this->assertStringContainsString( 'dashicons-info', $html );
+		$this->assertStringContainsString( '<svg class="aafm-icon"', $html );
+		$this->assertStringNotContainsString( 'dashicons', $html );
 	}
 
 	public function test_message_is_escaped_by_default(): void {
@@ -48,8 +48,18 @@ final class NoticesTest extends TestCase {
 		$this->assertStringContainsString( '<a href="#">link</a>', $html );
 	}
 
-	public function test_dashicon_override_is_honored(): void {
-		$html = aafm_get_notice_html( 'info', 'x', array( 'dashicon' => 'dashicons-shield' ) );
-		$this->assertStringContainsString( 'dashicons-shield', $html );
+	public function test_icon_override_is_honored(): void {
+		// The icon arg swaps the glyph to the named aafm_icon; the shield path is distinctive.
+		$shield = aafm_icon( 'shield' );
+		$html   = aafm_get_notice_html( 'info', 'x', array( 'icon' => 'shield' ) );
+		$this->assertStringContainsString( $shield, $html );
+	}
+
+	public function test_legacy_dashicon_arg_maps_to_svg(): void {
+		// Back-compat: the old dashicon override name maps to the closest aafm_icon glyph.
+		$shield = aafm_icon( 'shield' );
+		$html   = aafm_get_notice_html( 'info', 'x', array( 'dashicon' => 'dashicons-shield' ) );
+		$this->assertStringContainsString( $shield, $html );
+		$this->assertStringNotContainsString( 'dashicons', $html );
 	}
 }

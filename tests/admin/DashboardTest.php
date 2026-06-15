@@ -74,17 +74,19 @@ final class DashboardTest extends TestCase {
 		ob_start();
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
-		foreach ( array( 'Endpoint', 'PHP', 'abilities', 'Audit' ) as $needle ) {
+		foreach ( array( 'MCP endpoint', 'PHP', 'abilities', 'Audit' ) as $needle ) {
 			$this->assertStringContainsString( $needle, $html );
 		}
 	}
 
-	public function test_dashboard_warns_when_no_abilities_enabled(): void {
+	public function test_dashboard_shows_abilities_off_state(): void {
 		update_option( 'aafm_enabled_abilities', array() );
 		ob_start();
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
-		$this->assertStringContainsString( 'aafm-notice-warning', $html );
+		// The compact stat treatment replaces the embedded notice: with nothing enabled the
+		// Enabled-abilities card prompts the operator to turn some on.
+		$this->assertStringContainsString( 'Turn some on to start', $html );
 	}
 
 	public function test_dashboard_warns_when_agent_user_can_manage_site(): void {
@@ -100,8 +102,53 @@ final class DashboardTest extends TestCase {
 		aafm_render_dashboard_tab();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( 'aafm-notice-warning', $html );
+		// The security signal is preserved as a warn pill plus the offending login in the sub text.
+		$this->assertStringContainsString( 'aafm-pill aafm-pill-warn', $html );
+		$this->assertStringContainsString( 'Review role', $html );
 		$this->assertStringContainsString( 'aafm-admin-agent', $html );
+	}
+
+	public function test_dashboard_renders_setup_checklist_and_stat_grid(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'aafm-setup', $html );
+		$this->assertStringContainsString( 'aafm-step', $html );
+		$this->assertStringContainsString( 'aafm-stat-grid', $html );
+		$this->assertStringContainsString( 'Enabled abilities', $html );   // Content preserved.
+	}
+
+	public function test_dashboard_setup_checklist_emits_styling_classes_when_incomplete(): void {
+		// Force a partial setup so the checklist (not the "all set" notice) renders
+		// with BOTH row states reachable: an agent user with an app password makes
+		// step 1 "done", while no enabled abilities keeps step 2 "to do". The
+		// transaction fixture rolls every change back, so live state is untouched.
+		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
+		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-setup' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'aafm_enabled_abilities', array() );
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		// Checklist container + header count, proving the markup path renders.
+		$this->assertStringContainsString( 'aafm-setup', $html );
+		$this->assertStringContainsString( 'aafm-setup-count', $html );
+		// Both row states are reachable: at least one done step and the incomplete one.
+		$this->assertStringContainsString( 'aafm-step-todo', $html );
+		$this->assertStringContainsString( 'aafm-step-done', $html );
+		// State pill text is present for the to-do step.
+		$this->assertStringContainsString( 'aafm-step-state', $html );
+		// The "all set" success notice must NOT short-circuit the checklist here.
+		$this->assertStringNotContainsString( 'All set', $html );
+	}
+
+	public function test_setup_steps_reflect_real_state(): void {
+		update_option( 'aafm_enabled_abilities', array() );
+		$steps = aafm_setup_steps();
+		$this->assertFalse( $steps[1]['done'] ); // No abilities enabled.
 	}
 
 	public function test_default_tab_is_dashboard(): void {

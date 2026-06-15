@@ -60,6 +60,9 @@ final class PostTypesSaveTest extends TestCase {
 		$this->assertStringContainsString( 'name="aafm_post_types[]"', $html );
 		$this->assertStringContainsString( 'value="aafm_book"', $html );
 		$this->assertStringContainsString( 'aafm-post-types-form', $html );
+		// Direction A presentation: the Expose column uses the toggle switch.
+		$this->assertStringContainsString( 'aafm-switch', $html );
+		$this->assertStringContainsString( 'aafm-card', $html );
 		// post/page are always-on, not offered as toggles in the selector.
 		$this->assertStringNotContainsString( 'value="post"', $html );
 		// The governance note names the fields the agent can see.

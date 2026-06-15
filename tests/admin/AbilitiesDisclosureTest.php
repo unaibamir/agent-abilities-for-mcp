@@ -35,6 +35,10 @@ final class AbilitiesDisclosureTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-ability-hint', $html );
 		$this->assertStringContainsString( 'aafm-badge', $html );
 		$this->assertStringContainsString( 'aafm-count-badge', $html );
+
+		// Direction A presentation: abilities render as toggle rows inside grouped cards.
+		$this->assertStringContainsString( 'aafm-switch', $html );
+		$this->assertStringContainsString( 'aafm-ability-row', $html );
 	}
 
 	public function test_read_only_rows_carry_a_read_only_badge_and_writes_do_not(): void {

@@ -1,43 +1,412 @@
-/* Agent Abilities for MCP — admin settings page.
-   Scoped under .aafm-wrap, native CSS nesting, wp-admin-native colors. */
+/* Agent Abilities for MCP — admin settings page (Direction A).
+   Tokens live on :root; every component is scoped under .aafm-wrap so it
+   never leaks into core admin chrome. WP-native neutrals, single accent. */
+
+:root {
+  --aafm-surface:#fff; --aafm-surface-2:#f6f7f7; --aafm-text:#1d2327;
+  --aafm-text-muted:#50575e; --aafm-text-subtle:#646970;
+  --aafm-border:#dcdcde; --aafm-border-strong:#c3c4c7;
+  --aafm-accent:#2271b1; --aafm-accent-hover:#135e96; --aafm-accent-tint:#f0f6fc;
+  --aafm-green:#00a32a; --aafm-green-text:#007017; --aafm-green-tint:#edfaef;
+  --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
+  --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
+  --aafm-radius:8px; --aafm-radius-sm:5px; --aafm-shadow:0 1px 2px rgba(0,0,0,.04);
+}
 
 .aafm-wrap {
+	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
+	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
+	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
+
+	color: var(--aafm-text);
+	font-size: 14px;
+	line-height: 1.5;
+
+	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
+	   stat cards, client cards, buttons) override this with their own dimensions;
+	   this floor stops any un-scoped icon from ballooning to its intrinsic size. */
+	.aafm-icon {
+		inline-size: 16px;
+		block-size: 16px;
+		flex: 0 0 auto;
+	}
+
+	/* ---------- Page head (title + lede left, status pill right) ----------
+	   Ported from app.css .page-head. The status pill moves out of <h1> to the
+	   right edge of this flex row. */
+	.aafm-page-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 16px;
+		margin-block-end: 4px;
+
+		.title-wrap {
+			flex: 1;
+			min-inline-size: 0;
+		}
+
+		h1 {
+			font-size: 23px;
+			font-weight: 600;
+			margin: 0 0 4px;
+			letter-spacing: -0.01em;
+			padding: 0;
+		}
+
+		.aafm-page-lede {
+			color: var(--aafm-text-muted);
+			margin: 0;
+			max-inline-size: 70ch;
+		}
+
+		.aafm-status-pill {
+			flex: 0 0 auto;
+		}
+	}
+
+	/* ---------- Buttons (ported from app.css .btn*, renamed .aafm-btn) ----------
+	   The plugin's own button UI replaces WP-native .button / .button-primary in
+	   admin output. The icon inside a button is sized 15px to match the mockup. */
+	.aafm-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		block-size: 34px;
+		padding-inline: 14px;
+		border-radius: var(--aafm-radius-sm);
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		border: 1px solid transparent;
+		transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+		white-space: nowrap;
+		text-decoration: none;
+		font-family: inherit;
+		line-height: 1;
+		vertical-align: middle;
+
+		.aafm-icon {
+			inline-size: 15px;
+			block-size: 15px;
+		}
+
+		&:focus-visible {
+			outline: none;
+			box-shadow: var(--aafm-ring);
+		}
+	}
+
+	.aafm-btn-primary {
+		background: var(--aafm-accent);
+		color: #fff;
+
+		&:hover {
+			background: var(--aafm-accent-hover);
+			color: #fff;
+		}
+
+		&:active { background: #0a4b78; }
+	}
+
+	.aafm-btn-secondary {
+		background: var(--aafm-surface);
+		color: var(--aafm-accent);
+		border-color: var(--aafm-border-strong);
+
+		&:hover {
+			background: var(--aafm-accent-tint);
+			border-color: var(--aafm-accent);
+			color: var(--aafm-accent);
+		}
+	}
+
+	.aafm-btn-ghost {
+		background: transparent;
+		color: var(--aafm-text-muted);
+
+		&:hover {
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text);
+		}
+	}
+
+	.aafm-btn-sm {
+		block-size: 28px;
+		padding-inline: 10px;
+		font-size: 12px;
+	}
+
+	/* The copy buttons reuse the secondary button look; keep them from being
+	   stretched by a flex parent. */
+	.aafm-copy {
+		flex: 0 0 auto;
+	}
+
+	/* ---------- Mini key/value list (Versions card) ----------
+	   Ported from app.css .kv. The dashboard outputs <dl class="aafm-kv">; this
+	   was previously unstyled (the Image #1 misalignment). */
+	.aafm-kv {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 9px 16px;
+		margin: 0;
+
+		dt { color: var(--aafm-text-muted); }
+		dd { margin: 0; font-weight: 600; }
+	}
+
+	/* ---------- Progress bar (setup card) — ported from app.css .progress ---------- */
+	.aafm-progress {
+		inline-size: 130px;
+		block-size: 7px;
+		border-radius: 999px;
+		background: var(--aafm-surface-2);
+		overflow: hidden;
+		border: 1px solid var(--aafm-border);
+
+		span {
+			display: block;
+			block-size: 100%;
+			background: var(--aafm-accent);
+			border-radius: 999px;
+		}
+	}
+
+	/* ---------- Pills / status ---------- */
+	.aafm-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		block-size: 24px;
+		padding-inline: 10px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+
+		.dashicons,
+		svg,
+		.aafm-icon {
+			inline-size: 13px;
+			block-size: 13px;
+			font-size: 13px;
+		}
+
+		/* Leading status dot. Rendered from CSS (::before) so the markup stays
+		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> — no dot
+		   element needed. --aafm-dot is set per variant below; falls back to
+		   currentColor so the dot is always visible. */
+		--aafm-dot: currentColor;
+
+		&::before {
+			content: "";
+			flex: 0 0 auto;
+			inline-size: 7px;
+			block-size: 7px;
+			border-radius: 50%;
+			background: var(--aafm-dot);
+		}
+
+		&.aafm-pill-success {
+			--aafm-dot: var(--aafm-green);
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
+		}
+
+		&.aafm-pill-warn {
+			--aafm-dot: var(--aafm-amber);
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+		}
+
+		&.aafm-pill-danger {
+			--aafm-dot: var(--aafm-red);
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+		}
+
+		&.aafm-pill-info {
+			--aafm-dot: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+			color: var(--aafm-accent-hover);
+		}
+
+		&.aafm-pill-neutral {
+			--aafm-dot: var(--aafm-border-strong);
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text-muted);
+		}
+	}
+
+	/* ---------- Cards ---------- */
+	.aafm-card {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		box-shadow: var(--aafm-shadow);
+	}
+
+	.aafm-card-pad {
+		padding-block: 18px;
+		padding-inline: 20px;
+	}
+
+	.aafm-card-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding-block: 14px;
+		padding-inline: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+
+		h2 {
+			margin: 0;
+			font-size: 14px;
+			font-weight: 600;
+		}
+
+		.icon {
+			display: flex;
+			color: var(--aafm-text-subtle);
+
+			.dashicons,
+			svg {
+				inline-size: 18px;
+				block-size: 18px;
+				font-size: 18px;
+			}
+		}
+	}
+
+	/* ---------- Stat cards ---------- */
+	.aafm-stat-grid {
+		display: grid;
+		gap: 16px;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		margin-block-start: 20px;
+	}
+
+	.aafm-stat {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		padding-block: 16px;
+		padding-inline: 18px;
+		box-shadow: var(--aafm-shadow);
+		transition: box-shadow 0.18s ease, transform 0.18s ease;
+
+		&:hover { box-shadow: var(--aafm-shadow-md); }
+
+		.stat-top {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			margin-block-end: 8px;
+		}
+
+		.stat-label {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.02em;
+			text-transform: uppercase;
+			color: var(--aafm-text-subtle);
+		}
+
+		.stat-ic {
+			display: flex;
+			color: var(--aafm-border-strong);
+
+			.dashicons,
+			svg {
+				inline-size: 18px;
+				block-size: 18px;
+				font-size: 18px;
+			}
+		}
+
+		.stat-value {
+			font-size: 28px;
+			font-weight: 600;
+			letter-spacing: -0.02em;
+
+			small {
+				font-size: 15px;
+				color: var(--aafm-text-subtle);
+				font-weight: 500;
+			}
+		}
+
+		.stat-sub {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block-start: 4px;
+		}
+
+		&.aafm-stat-span2 { grid-column: span 2; }
+	}
+
+	/* ---------- Endpoint field (mono) ---------- */
 	.aafm-endpoint {
 		display: inline-block;
 		max-inline-size: 100%;
 		padding-block: 4px;
 		padding-inline: 8px;
-		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
-		background: #f6f7f7;
-		border: 1px solid #dcdcde;
+		font-family: var(--aafm-mono);
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
 		border-radius: 3px;
 		overflow-wrap: anywhere;
 	}
 
-	.aafm-snippet {
-		font-family: Consolas, Monaco, "Andale Mono", "Ubuntu Mono", monospace;
+	/* In the dashboard endpoint card the URL stays on one line beside the inline
+	   Copy button (matches the mockup), scrolling horizontally rather than wrapping tall. */
+	.aafm-card-endpoint .aafm-field-mono .aafm-endpoint {
+		overflow-x: auto;
+		overflow-wrap: normal;
+		white-space: nowrap;
 	}
 
+	.aafm-snippet {
+		font-family: var(--aafm-mono);
+	}
+
+	.aafm-field-mono {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		.aafm-endpoint {
+			flex: 1;
+			min-inline-size: 0;
+		}
+
+		.aafm-copy {
+			flex: 0 0 auto;
+			white-space: nowrap;
+		}
+
+		input,
+		.val {
+			flex: 1;
+			min-inline-size: 0;
+			font-family: var(--aafm-mono);
+			font-size: 12.5px;
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			padding-block: 9px;
+			padding-inline: 11px;
+			color: var(--aafm-text);
+			overflow-x: auto;
+			white-space: nowrap;
+		}
+	}
+
+	/* ---------- OS tabs (CLI snippet selector) ---------- */
 	.aafm-os-tabs {
 		display: flex;
 		gap: 4px;
 		margin-block-end: 8px;
-
-		.aafm-os-tab.is-active {
-			background: #f0f0f1;
-			border-color: #8c8f94;
-			box-shadow: none;
-		}
-	}
-
-	/* Abilities subject sub-tabs: a wider bar that wraps, sitting above the panels. */
-	.aafm-subject-tabs {
-		flex-wrap: wrap;
-		margin-block: 8px 16px;
-	}
-
-	.aafm-subject-panel {
-		margin-block-start: 4px;
 	}
 
 	.aafm-os-note {
@@ -46,153 +415,252 @@
 		code {
 			font-size: 12px;
 		}
+	}
 
-		/* Info callout: separate the Windows and certificate guidance into scannable rows. */
-		&.notice {
-			padding-block: 10px;
-			padding-inline: 12px;
+	/* ---------- Notices (notices.php — restyle only, markup unchanged) ---------- */
+	.aafm-notice {
+		display: flex;
+		gap: 11px;
+		align-items: flex-start;
+		border: 1px solid var(--aafm-border);
+		border-inline-start: 4px solid var(--aafm-accent);
+		border-radius: var(--aafm-radius-sm);
+		padding: 12px 14px;
+		margin: 12px 0;
+		font-size: 13px;
+		line-height: 1.5;
+		background: var(--aafm-accent-tint);
+		color: #0a4b78;
 
-			.aafm-os-note-row {
-				display: flex;
-				gap: 10px;
-				margin-block: 4px;
-				align-items: baseline;
+		& .aafm-notice-ic {
+			flex: 0 0 auto;
+			margin-block-start: 1px;
+			display: flex;
+			color: var(--aafm-accent);
+
+			.aafm-icon {
+				inline-size: 17px;
+				block-size: 17px;
 			}
+		}
 
-			.aafm-os-note-label {
-				flex: 0 0 auto;
-				min-inline-size: 86px;
-				font-weight: 600;
-				font-size: 11px;
-				text-transform: uppercase;
-				letter-spacing: 0.02em;
-				color: #2271b1;
-			}
+		& .aafm-notice-body {
+			flex: 1 1 auto;
+		}
 
-			.aafm-os-note-text {
-				flex: 1 1 auto;
-				color: #3c434a;
-			}
+		& strong { font-weight: 600; }
+
+		&.aafm-notice-info {
+			border-inline-start-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+			color: #0a4b78;
+
+			& .aafm-notice-ic { color: var(--aafm-accent); }
+		}
+
+		&.aafm-notice-warning {
+			border-inline-start-color: var(--aafm-amber);
+			background: var(--aafm-amber-tint);
+			color: var(--aafm-amber-text);
+
+			& .aafm-notice-ic { color: var(--aafm-amber); }
+		}
+
+		&.aafm-notice-success {
+			border-inline-start-color: var(--aafm-green);
+			background: var(--aafm-green-tint);
+			color: var(--aafm-green-text);
+
+			& .aafm-notice-ic { color: var(--aafm-green); }
+		}
+
+		&.aafm-notice-error {
+			border-inline-start-color: var(--aafm-red);
+			background: var(--aafm-red-tint);
+			color: var(--aafm-red-text);
+
+			& .aafm-notice-ic { color: var(--aafm-red); }
+		}
+
+		&.aafm-notice-inline {
+			margin: 6px 0;
+			padding: 6px 10px;
 		}
 	}
 
-	.aafm-help {
-		max-inline-size: 820px;
+	/* ---------- Tabs (top nav — restyle core .nav-tab to underline-active) ---------- */
+	.nav-tab-wrapper {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px;
+		border-block-end: 1px solid var(--aafm-border-strong);
+		margin: 18px 0 22px;
+		padding: 0;
 
-		.aafm-help-intro {
-			margin-block-end: 16px;
-		}
-
-		h3 {
-			margin-block-start: 24px;
-		}
-
-		.aafm-help-entry {
-			margin-block-end: 6px;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
-			background: #fff;
-
-			summary {
-				padding-block: 10px;
-				padding-inline: 14px;
-				cursor: pointer;
-				font-weight: 600;
-				color: #1d2327;
-				list-style-position: inside;
-
-				&:hover {
-					color: #2271b1;
-				}
-			}
-
-			&[open] {
-				summary {
-					border-block-end: 1px solid #f0f0f1;
-				}
-			}
-
-			.aafm-help-body {
-				padding-block: 4px 12px;
-				padding-inline: 14px;
-				color: #3c434a;
-
-				p {
-					margin-block: 8px;
-				}
-
-				ul {
-					margin-block: 8px;
-					margin-inline-start: 18px;
-					list-style: disc;
-				}
-
-				code {
-					font-size: 12px;
-					padding-block: 1px;
-					padding-inline: 5px;
-					background: #f6f7f7;
-					border: 1px solid #dcdcde;
-					border-radius: 3px;
-				}
-			}
-		}
-
-		.aafm-help-copy-line {
-			display: flex;
-			gap: 8px;
+		.nav-tab {
+			display: inline-flex;
 			align-items: center;
-			margin-block: 6px;
+			gap: 7px;
+			margin: 0 0 -1px;
+			padding: 10px 14px;
+			border: 0;
+			border-block-end: 2px solid transparent;
+			background: transparent;
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-weight: 500;
+			font-size: 13.5px;
+			line-height: 1.4;
+			border-radius: 0;
+			transition: color 0.15s ease, border-color 0.15s ease;
 
-			code {
-				flex: 1 1 auto;
-				overflow-x: auto;
-				white-space: nowrap;
+			.dashicons,
+			svg {
+				inline-size: 16px;
+				block-size: 16px;
+				font-size: 16px;
+				opacity: 0.85;
 			}
+
+			&:hover,
+			&:focus {
+				color: var(--aafm-accent);
+				background: transparent;
+			}
+		}
+
+		.nav-tab-active,
+		.nav-tab-active:hover,
+		.nav-tab-active:focus {
+			color: var(--aafm-accent);
+			border-block-end-color: var(--aafm-accent);
+			font-weight: 600;
+			background: transparent;
 		}
 	}
 
-	/* Detected meta-key chips: a wrapping row of pill buttons under the textarea. */
-	.aafm-meta-keys {
-		.aafm-meta-chips {
-			display: flex;
-			flex-wrap: wrap;
-			gap: 6px;
-			margin-block: 8px;
-		}
+	/* ---------- Sub-tabs (abilities subject nav — pill style) ---------- */
+	.aafm-subject-tabs,
+	.aafm-subtabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-block: 8px 16px;
 
-		.aafm-meta-chip {
-			padding-block: 2px;
-			padding-inline: 10px;
-			font-size: 12px;
-			line-height: 1.8;
-			border-radius: 12px;
-			background: #f6f7f7;
-			border: 1px solid #dcdcde;
+		a,
+		button {
+			display: inline-flex;
+			align-items: center;
+			gap: 7px;
+			block-size: 32px;
+			padding-inline: 13px;
+			border-radius: 999px;
+			border: 1px solid var(--aafm-border-strong);
+			background: var(--aafm-surface);
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-size: 13px;
+			font-weight: 500;
 			cursor: pointer;
+			transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+
+			.count {
+				font-size: 11px;
+				color: var(--aafm-text-subtle);
+				font-weight: 600;
+			}
 
 			&:hover {
-				background: #f0f0f1;
-				border-color: #2271b1;
-				color: #2271b1;
+				border-color: var(--aafm-accent);
+				color: var(--aafm-accent);
 			}
 
-			&:focus-visible {
-				border-color: #2271b1;
-				box-shadow: 0 0 0 1px #2271b1;
-				outline: none;
+			&.current,
+			&.is-active {
+				background: var(--aafm-accent);
+				border-color: var(--aafm-accent);
+				color: #fff;
+
+				.count { color: rgba(255, 255, 255, 0.85); }
 			}
 		}
 	}
 
-	.aafm-ability-table {
-		margin-block-end: 12px;
-
-		td {
-			vertical-align: middle;
-		}
+	.aafm-subject-panel {
+		margin-block-start: 4px;
 	}
 
+	.aafm-subject-heading {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-block: 0 8px;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.aafm-count-badge {
+		display: inline-block;
+		padding-block: 1px;
+		padding-inline: 8px;
+		border-radius: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--aafm-text-subtle);
+		background: #f0f0f1;
+		border: 1px solid var(--aafm-border);
+	}
+
+	.aafm-ability-hint {
+		color: var(--aafm-text-subtle);
+		font-size: 12px;
+	}
+
+	/* ---------- Toggle switch ---------- */
+	.aafm-switch {
+		position: relative;
+		display: inline-block;
+		inline-size: 38px;
+		block-size: 22px;
+		flex: 0 0 auto;
+
+		input {
+			position: absolute;
+			inset: 0;
+			inline-size: 100%;
+			block-size: 100%;
+			margin: 0;
+			opacity: 0;
+			cursor: pointer;
+		}
+
+		.aafm-switch-track {
+			position: absolute;
+			inset: 0;
+			border-radius: 999px;
+			background: var(--aafm-border-strong);
+			transition: background 0.18s ease;
+
+			&::before {
+				content: "";
+				position: absolute;
+				inset-block-start: 2px;
+				inset-inline-start: 2px;
+				inline-size: 18px;
+				block-size: 18px;
+				border-radius: 50%;
+				background: #fff;
+				box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+				transition: transform 0.18s ease;
+			}
+		}
+
+		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
+		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
+		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
+	}
+
+	/* ---------- Risk badges (preserved colors) ---------- */
 	.aafm-badge {
 		display: inline-block;
 		padding-block: 2px;
@@ -216,49 +684,506 @@
 			background: #fce4e4;
 			color: #b32d2e;
 		}
+
+		&.aafm-badge-readonly {
+			background: #e6f0f7;
+			color: #0a4b78;
+		}
 	}
 
-	.aafm-diagnostics {
-		max-inline-size: 760px;
+	/* ---------- Ability rows (grouped toggle list inside a card) ---------- */
+	.aafm-ability-group-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-block: 24px 10px;
 
-		.aafm-dot {
-			display: inline-block;
-			inline-size: 10px;
-			block-size: 10px;
+		h3 {
+			margin: 0;
+			font-size: 15px;
+			font-weight: 600;
+		}
+	}
+
+	.aafm-ability-list {
+		margin-block-end: 12px;
+	}
+
+	.aafm-ability-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 14px;
+		padding-block: 14px;
+		padding-inline: 18px;
+		border-block-end: 1px solid var(--aafm-border);
+		transition: background 0.15s ease;
+
+		&:last-child { border-block-end: 0; }
+
+		&:hover { background: var(--aafm-surface-2); }
+
+		.aafm-switch { margin-block-start: 1px; }
+	}
+
+	.aafm-ability-main {
+		flex: 1 1 auto;
+		min-inline-size: 0;
+	}
+
+	.aafm-ability-title {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		flex-wrap: wrap;
+
+		h4 {
+			margin: 0;
+			font-size: 13.5px;
+			font-weight: 600;
+		}
+	}
+
+	.aafm-ability-row .aafm-ability-hint {
+		margin-block: 4px 0;
+		max-inline-size: 80ch;
+	}
+
+	/* ---------- Save bar (sticky-feel action bar under the abilities form) ---------- */
+	.aafm-savebar {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-block-start: 24px;
+		padding-block: 12px;
+		padding-inline: 18px;
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+		position: sticky;
+		inset-block-end: 0;
+	}
+
+	/* ---------- Settings rows ---------- */
+	.aafm-set-row {
+		display: grid;
+		grid-template-columns: 220px 1fr;
+		gap: 24px;
+		padding: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+
+		&:last-child { border-block-end: 0; }
+
+		.aafm-set-label {
+			font-weight: 600;
+			font-size: 13.5px;
+
+			.opt {
+				display: block;
+				font-weight: 400;
+				color: var(--aafm-text-subtle);
+				font-size: 12px;
+				margin-block-start: 2px;
+			}
+		}
+
+		.aafm-set-control {
+			max-inline-size: 560px;
+		}
+
+		.help {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block: 8px 0;
+		}
+	}
+
+	.aafm-settings {
+		.aafm-notice {
+			margin-block: 10px;
+		}
+	}
+
+	/* ---------- Danger zone (Settings) ----------
+	   A destructive, irreversible action set apart with a red accent so it never
+	   reads as a routine control. The button itself stays WP-native (.button-link-delete). */
+	.aafm-danger {
+		border-color: var(--aafm-red);
+
+		.aafm-card-head {
+			border-block-end-color: color-mix( in srgb, var(--aafm-red) 25%, var(--aafm-border) );
+
+			.icon { color: var(--aafm-red); }
+
+			h2 { color: var(--aafm-red-text); }
+		}
+
+		.aafm-reset-status {
+			margin-inline-start: 8px;
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+		}
+	}
+
+	/* ---------- Setup checklist (Dashboard, Direction A) ----------
+	   Scoped under .aafm-setup so its .aafm-step / .aafm-sidx rows never
+	   collide with the Connection stepper, which owns the same generic
+	   class names under .aafm-connection (below). */
+	.aafm-setup {
+		overflow: hidden;
+
+		.aafm-setup-top {
+			display: flex;
+			align-items: center;
+			gap: 14px;
+			padding-block: 16px;
+			padding-inline: 20px;
+			border-block-end: 1px solid var(--aafm-border);
+
+			h2 {
+				margin: 0;
+				font-size: 15px;
+				font-weight: 600;
+				flex: 1;
+			}
+		}
+
+		.aafm-setup-count {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			font-weight: 600;
+		}
+
+		/* Checklist rows. */
+		.aafm-step {
+			display: flex;
+			gap: 14px;
+			padding-block: 15px;
+			padding-inline: 20px;
+			border-block-end: 1px solid var(--aafm-border);
+
+			&:last-child { border-block-end: 0; }
+		}
+
+		/* Numbered/state marker: green check (done) vs grey marker (to do). */
+		.aafm-sidx {
+			flex: 0 0 auto;
+			inline-size: 26px;
+			block-size: 26px;
 			border-radius: 50%;
+			display: grid;
+			place-items: center;
+			background: var(--aafm-surface-2);
+			color: var(--aafm-text-subtle);
+			border: 1px solid var(--aafm-border-strong);
+			font-size: 12.5px;
+			font-weight: 700;
 
-			&.aafm-dot-pass {
-				background: #1a7f37;
+			.dashicons,
+			.aafm-icon {
+				inline-size: 16px;
+				block-size: 16px;
+				font-size: 16px;
+				line-height: 1;
+			}
+		}
+
+		.aafm-step-body {
+			flex: 1;
+			min-inline-size: 0;
+
+			h3 {
+				margin-block: 0 2px;
+				font-size: 13.5px;
+				font-weight: 600;
 			}
 
-			&.aafm-dot-warn {
-				background: #dba617;
+			p {
+				margin: 0;
+				color: var(--aafm-text-muted);
+				font-size: 12.5px;
 			}
 
-			&.aafm-dot-fail {
-				background: #b32d2e;
+			.aafm-step-act {
+				margin-block-start: 9px;
 			}
+		}
+
+		/* Right-side status tag: a real .aafm-pill carries the colour now, so this
+		   wrapper only handles placement at the top-right of the row. */
+		.aafm-step-state {
+			flex: 0 0 auto;
+			align-self: flex-start;
+			margin-inline-start: auto;
+		}
+
+		.aafm-step-done {
+			.aafm-sidx {
+				background: var(--aafm-green);
+				color: #fff;
+				border-color: var(--aafm-green);
+			}
+
+			.aafm-step-body h3 { color: var(--aafm-text-subtle); }
+		}
+
+		/* Active step: blue marker showing its number, like app.css .step--active .num. */
+		.aafm-step-active {
+			.aafm-sidx {
+				background: var(--aafm-accent);
+				color: #fff;
+				border-color: var(--aafm-accent);
+			}
+		}
+	}
+
+	/* ---------- Stepper (Connection) ----------
+	   Scoped under .aafm-connection so .aafm-step / .aafm-sidx don't bleed
+	   onto the dashboard checklist (above), which reuses the same names. */
+	.aafm-connection .aafm-step {
+		display: flex;
+		gap: 14px;
+		padding-block: 15px;
+		padding-inline: 20px;
+		border-block-end: 1px solid var(--aafm-border);
+		flex-direction: column;
+
+		&:last-child { border-block-end: 0; }
+
+		/* Flex children must allow shrinking so a wide code block scrolls
+		   inside the rail (overflow-x:auto) instead of stretching the card. */
+		> * { min-inline-size: 0; }
+	}
+
+	.aafm-connection .aafm-step-rail { min-inline-size: 0; }
+
+	/* WP-native action buttons in the connection steps carry long labels and
+	   default to white-space:nowrap; let them wrap inside a narrow column. */
+	.aafm-connection .aafm-step-rail .button {
+		max-inline-size: 100%;
+		white-space: normal;
+		block-size: auto;
+	}
+
+	/* The agent-login input must shrink with its column rather than hold its
+	   .regular-text width and push the row wider than the viewport. */
+	.aafm-connection .aafm-step-rail .regular-text {
+		max-inline-size: 100%;
+	}
+
+	.aafm-connection .aafm-step-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-block-end: 12px;
+
+		.aafm-sidx {
+			flex: 0 0 auto;
+			inline-size: 28px;
+			block-size: 28px;
+			border-radius: 50%;
+			background: var(--aafm-accent);
+			color: #fff;
+			display: grid;
+			place-items: center;
+			font-weight: 700;
+			font-size: 13px;
+		}
+
+		h2 {
+			margin: 0;
+			font-size: 16px;
+			font-weight: 600;
+		}
+
+		.sub {
+			color: var(--aafm-text-subtle);
+			font-size: 12.5px;
+			margin-block: 1px 0;
+		}
+	}
+
+	.aafm-connection .aafm-step-rail {
+		padding-inline-start: 13px;
+		margin-inline-start: 14px;
+		border-inline-start: 2px solid var(--aafm-border);
+		padding-block-end: 8px;
+	}
+
+	/* ---------- Activity toolbar (seg filter + clear-log button) ---------- */
+	.aafm-activity-toolbar {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 12px;
+		margin-block-end: 14px;
+
+		/* Row count sits right after the filter; the auto margin pushes Clear log to the end. */
+		.aafm-activity-count {
+			margin-inline-end: auto;
+			color: var(--aafm-text-subtle);
+			font-size: 13px;
+		}
+	}
+
+	/* ---------- Segmented control ---------- */
+	.aafm-seg {
+		display: inline-flex;
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
+		border-radius: 7px;
+		padding: 3px;
+		gap: 2px;
+
+		button,
+		.aafm-seg-btn {
+			border: 0;
+			background: transparent;
+			font-family: inherit;
+			font-size: 12.5px;
+			font-weight: 600;
+			color: var(--aafm-text-muted);
+			padding-block: 5px;
+			padding-inline: 12px;
+			border-radius: 5px;
+			cursor: pointer;
+
+			&.on,
+			&.is-active {
+				background: var(--aafm-surface);
+				color: var(--aafm-text);
+				box-shadow: var(--aafm-shadow);
+			}
+		}
+	}
+
+	/* ---------- Code block ---------- */
+	.aafm-codeblock {
+		position: relative;
+
+		pre {
+			margin: 0;
+			font-family: var(--aafm-mono);
+			font-size: 12px;
+			line-height: 1.6;
+			color: var(--aafm-text);
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			padding-block: 14px;
+			padding-inline: 16px;
+			overflow-x: auto;
+		}
+
+		.copy-fab {
+			position: absolute;
+			inset-block-start: 10px;
+			inset-inline-end: 10px;
+		}
+	}
+
+	/* ---------- Client picker grid ---------- */
+	.aafm-client-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 10px;
+	}
+
+	.aafm-client {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding-block: 11px;
+		padding-inline: 13px;
+		cursor: pointer;
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border-strong);
+		border-radius: var(--aafm-radius-sm);
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--aafm-text);
+		transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+		&:hover {
+			border-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+		}
+
+		&.on {
+			border-color: var(--aafm-accent);
+			background: var(--aafm-accent-tint);
+			box-shadow: inset 0 0 0 1px var(--aafm-accent);
+		}
+
+		.ci {
+			inline-size: 26px;
+			block-size: 26px;
+			border-radius: 6px;
+			background: var(--aafm-surface-2);
+			display: grid;
+			place-items: center;
+			flex: 0 0 auto;
+
+			.dashicons,
+			svg {
+				inline-size: 15px;
+				block-size: 15px;
+				font-size: 15px;
+				color: var(--aafm-text-subtle);
+			}
+		}
+	}
+
+	/* ---------- Diagnostics ---------- */
+	.aafm-diag {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.aafm-diag-row {
+		display: flex;
+		gap: 12px;
+		padding-block: 13px;
+		padding-inline: 18px;
+		border-block-end: 1px solid var(--aafm-border);
+		align-items: flex-start;
+
+		&:last-child { border-block-end: 0; }
+
+		/* Let the text column wrap instead of forcing the row wider. */
+		> div:not(.dot-lg) { min-inline-size: 0; }
+
+		.dot-lg {
+			inline-size: 11px;
+			block-size: 11px;
+			border-radius: 50%;
+			margin-block-start: 3px;
+			flex: 0 0 auto;
+		}
+
+		.d-ok { background: var(--aafm-green); }
+		.d-warn { background: var(--aafm-amber); }
+		.d-bad { background: var(--aafm-red); }
+
+		.d-title {
+			font-weight: 600;
+			font-size: 13px;
+		}
+
+		.d-detail {
+			color: var(--aafm-text-muted);
+			font-size: 12.5px;
+			margin-block-start: 2px;
 		}
 	}
 
 	.aafm-status {
 		font-weight: 600;
 
-		&.aafm-status-denied {
-			color: #b32d2e;
-		}
-
-		&.aafm-status-error {
-			color: #8a6d00;
-		}
-
-		&.aafm-status-success {
-			color: #1a7f37;
-		}
-
-		&.aafm-status-started {
-			color: #646970;
-		}
+		&.aafm-status-denied { color: #b32d2e; }
+		&.aafm-status-error { color: #8a6d00; }
+		&.aafm-status-success { color: #1a7f37; }
+		&.aafm-status-started { color: #646970; }
 	}
 
 	.aafm-save-status,
@@ -266,96 +1191,210 @@
 	.aafm-test-status,
 	.aafm-clear-status {
 		margin-inline-start: 8px;
-		color: #646970;
+		color: var(--aafm-text-subtle);
 	}
 
-	.aafm-notice {
-		display: flex;
-		gap: 8px;
-		align-items: flex-start;
-		border-left: 4px solid;
-		padding: 10px 12px;
-		margin: 12px 0;
-		background: #f0f6fc;
+	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
+	.aafm-help {
+		max-inline-size: 820px;
 
-		& .dashicons {
-			flex: 0 0 auto;
-			margin-top: 2px;
+		.aafm-help-intro {
+			margin-block-end: 16px;
 		}
 
-		& .aafm-notice-body {
-			flex: 1 1 auto;
+		h3 {
+			margin-block-start: 24px;
 		}
 
-		&.aafm-notice-warning {
-			border-left-color: #dba617;
-			background: #fcf9e8;
+		/* Section heading above a group of <details> help entries. */
+		.aafm-acc-group {
+			margin-block-end: 26px;
 
-			& .dashicons {
-				color: #dba617;
+			> h2 {
+				margin-block: 0 10px;
+				font-size: 15px;
+				font-weight: 600;
 			}
 		}
 
-		&.aafm-notice-info {
-			border-left-color: #72aee6;
-			background: #f0f6fc;
+		.aafm-help-entry {
+			margin-block-end: 6px;
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
+			background: var(--aafm-surface);
 
-			& .dashicons {
-				color: #72aee6;
+			summary {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding-block: 10px;
+				padding-inline: 14px;
+				cursor: pointer;
+				font-weight: 600;
+				color: var(--aafm-text);
+
+				/* The leading question glyph carries the accent, like the mockup's .qic. */
+				.aafm-icon {
+					color: var(--aafm-accent);
+				}
+
+				/* Hide the browser-default disclosure triangle; the chevron
+				   below replaces it on the right edge of the row. */
+				list-style: none;
+
+				&::-webkit-details-marker {
+					display: none;
+				}
+
+				&:hover {
+					color: var(--aafm-accent);
+				}
+
+				/* Right-aligned chevron affordance. Rotates to point down when
+				   the entry is open. CSS-only — the <details>/<summary>
+				   semantics and focus ring stay native. */
+				&::after {
+					content: "";
+					flex: 0 0 auto;
+					margin-inline-start: auto;
+					inline-size: 8px;
+					block-size: 8px;
+					border-inline-end: 2px solid var(--aafm-text-subtle);
+					border-block-end: 2px solid var(--aafm-text-subtle);
+					transform: rotate(-45deg);
+					transition: transform 0.15s ease;
+				}
+
+				&:hover::after {
+					border-color: var(--aafm-accent);
+				}
+			}
+
+			&[open] {
+				summary {
+					border-block-end: 1px solid #f0f0f1;
+
+					&::after {
+						transform: rotate(45deg);
+					}
+				}
+			}
+
+			.aafm-help-body {
+				padding-block: 4px 12px;
+				padding-inline: 14px;
+				color: #3c434a;
+
+				p {
+					margin-block: 8px;
+				}
+
+				ul {
+					margin-block: 8px;
+					margin-inline-start: 18px;
+					list-style: disc;
+				}
+
+				code {
+					font-size: 12px;
+					padding-block: 1px;
+					padding-inline: 5px;
+					background: var(--aafm-surface-2);
+					border: 1px solid var(--aafm-border);
+					border-radius: 3px;
+				}
 			}
 		}
 
-		&.aafm-notice-success {
-			border-left-color: #00a32a;
-			background: #edfaef;
+		.aafm-help-copy-line {
+			display: flex;
+			gap: 8px;
+			align-items: center;
+			margin-block: 6px;
 
-			& .dashicons {
-				color: #00a32a;
+			code {
+				flex: 1 1 auto;
+				overflow-x: auto;
+				white-space: nowrap;
 			}
-		}
-
-		&.aafm-notice-error {
-			border-left-color: #d63638;
-			background: #fcf0f1;
-
-			& .dashicons {
-				color: #d63638;
-			}
-		}
-
-		&.aafm-notice-inline {
-			margin: 6px 0;
-			padding: 6px 10px;
 		}
 	}
 
-	.aafm-settings {
-		.form-table .description {
-			max-width: 40em;
+	.code-inline {
+		font-family: var(--aafm-mono);
+		font-size: 12px;
+		background: var(--aafm-surface-2);
+		border: 1px solid var(--aafm-border);
+		border-radius: 4px;
+		padding-block: 1px;
+		padding-inline: 6px;
+	}
+
+	/* ---------- Detected meta-key chips ---------- */
+	.aafm-meta-keys {
+		.aafm-meta-chips {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 6px;
+			margin-block: 8px;
 		}
 
-		.aafm-notice {
-			margin-block: 10px;
-			max-width: 40em;
+		.aafm-meta-chip {
+			padding-block: 2px;
+			padding-inline: 10px;
+			font-size: 12px;
+			line-height: 1.8;
+			border-radius: 12px;
+			background: var(--aafm-surface-2);
+			border: 1px solid var(--aafm-border);
+			cursor: pointer;
+
+			&:hover {
+				background: #f0f0f1;
+				border-color: var(--aafm-accent);
+				color: var(--aafm-accent);
+			}
+
+			&:focus-visible {
+				border-color: var(--aafm-accent);
+				box-shadow: 0 0 0 1px var(--aafm-accent);
+				outline: none;
+			}
 		}
 	}
 
-	/* Per-client quickstarts: a toggle reveals a responsive grid of paste-ready cards. */
+	/* ---------- Per-client quickstarts ---------- */
+	/* The per-client config cards stay in the DOM — the picker reads each card's
+	   data-config and the snippet tests reference them — but the redesigned
+	   Connection tab surfaces only the single primary codeblock for the selected
+	   client, so the expanded grid and its reveal toggle are hidden. */
 	.aafm-quickstarts {
-		margin-block: 12px;
+		display: none;
+
+		/* Long-label toggle must wrap inside a narrow column, not spill out. */
+		.aafm-quickstart-toggle {
+			max-inline-size: 100%;
+			white-space: normal;
+			block-size: auto;
+		}
 
 		.aafm-quickstart-grid {
-			display: grid;
 			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 			gap: 16px;
 			margin-block-start: 8px;
+
+			/* Visible only if the toggle reveals it (it stays display:none while [hidden]). */
+			&:not([hidden]) {
+				display: grid;
+			}
 		}
 
 		.aafm-quickstart-card {
+			min-inline-size: 0;
 			padding: 12px;
-			background: #fff;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			background: var(--aafm-surface);
+			border: 1px solid var(--aafm-border);
+			border-radius: var(--aafm-radius-sm);
 
 			.aafm-quickstart-name {
 				margin-block: 0 4px;
@@ -364,104 +1403,77 @@
 
 			.aafm-quickstart-where {
 				margin-block: 0 8px;
-				color: #646970;
+				color: var(--aafm-text-subtle);
 				font-size: 12px;
 			}
 		}
 	}
 
-	/* Dashboard: a responsive grid of small read-only status cards. */
+	/* ---------- Dashboard status cards ---------- */
 	.aafm-dashboard {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+		display: flex;
+		flex-direction: column;
 		gap: 16px;
-		align-items: start;
-
-		.aafm-dashboard-intro {
-			max-inline-size: 760px;
-			color: #3c434a;
-			grid-column: 1 / -1;
-		}
 
 		.aafm-card {
-			padding: 14px 16px;
-			background: #fff;
-			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			padding-block: 14px;
+			padding-inline: 16px;
 
 			h3 {
 				margin-block: 0 8px;
 				font-size: 13px;
 			}
+		}
 
-			.aafm-card-list {
-				margin: 0;
-
-				li {
-					display: flex;
-					justify-content: space-between;
-					gap: 12px;
-					margin-block: 4px;
-				}
-
-				.aafm-card-key {
-					color: #646970;
-				}
-
-				.aafm-card-val {
-					font-weight: 600;
-				}
-			}
-
-			.aafm-card-figure {
-				margin-block: 0 6px;
-				font-size: 22px;
-				font-weight: 600;
-				color: #1d2327;
-			}
+		/* Lower row: endpoint (wide) beside versions (narrow). */
+		.aafm-dashboard-lower {
+			grid-template-columns: 2fr 1fr;
+			margin-block-start: 0;
+			align-items: start;
 		}
 	}
 
-	/* Wraps to a single column on narrow viewports. */
-	@media (max-width: 600px) {
-		.aafm-dashboard {
-			grid-template-columns: 1fr;
+	/* ---------- Responsive ---------- */
+	@media (max-width: 960px) {
+		.aafm-stat-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 
+		.aafm-dashboard .aafm-dashboard-lower {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 720px) {
+		.aafm-stat.aafm-stat-span2 { grid-column: span 1; }
+	}
+
+	@media (max-width: 640px) {
+		.aafm-set-row {
+			grid-template-columns: 1fr;
+			gap: 10px;
+		}
+
+		.aafm-stat-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 600px) {
 		.aafm-quickstarts .aafm-quickstart-grid {
 			grid-template-columns: 1fr;
 		}
 	}
 
-	/* Abilities tab: count pill, read-only badge, and the per-ability helper line. */
-	.aafm-subject-heading {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		margin-block: 0 8px;
-		font-size: 13px;
-		font-weight: 600;
+	.aafm-table-wrap {
+		overflow-x: auto;
 	}
+}
 
-	.aafm-count-badge {
-		display: inline-block;
-		padding-block: 1px;
-		padding-inline: 8px;
-		border-radius: 10px;
-		font-size: 11px;
-		font-weight: 600;
-		color: #646970;
-		background: #f0f0f1;
-		border: 1px solid #dcdcde;
-	}
-
-	.aafm-badge.aafm-badge-readonly {
-		background: #e6f0f7;
-		color: #0a4b78;
-	}
-
-	.aafm-ability-hint {
-		color: #646970;
-		font-size: 12px;
+@media (prefers-reduced-motion: reduce) {
+	.aafm-wrap *,
+	.aafm-wrap *::before,
+	.aafm-wrap *::after {
+		transition: none !important;
 	}
 }

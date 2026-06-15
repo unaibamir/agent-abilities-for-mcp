@@ -68,6 +68,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'errorUnknown'      => __( 'unknown', 'agent-abilities-for-mcp' ),
 				'copyCopied'        => __( 'Copied', 'agent-abilities-for-mcp' ),
 				'copyFallback'      => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
+				'resetConfirm'      => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				'resetWorking'      => __( 'Resetting…', 'agent-abilities-for-mcp' ),
+				'resetDone'         => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
+				'resetFailed'       => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -268,12 +272,37 @@ function aafm_render_admin_page(): void {
 		$active = 'dashboard';
 	}
 
+	$adapter_version = aafm_loaded_adapter_version();
+	if ( null !== $adapter_version ) {
+		$pill_class = 'aafm-pill aafm-pill-success';
+		$pill_label = __( 'Endpoint live', 'agent-abilities-for-mcp' );
+	} else {
+		$pill_class = 'aafm-pill aafm-pill-warn';
+		$pill_label = __( 'Adapter not loaded', 'agent-abilities-for-mcp' );
+	}
+
 	echo '<div class="wrap aafm-wrap">';
+
+	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
+	echo '<div class="aafm-page-head"><div class="title-wrap">';
 	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
-	echo '<h2 class="nav-tab-wrapper">';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div>';
+	printf(
+		'<span class="aafm-status-pill %1$s">%2$s</span>',
+		esc_attr( $pill_class ),
+		esc_html( $pill_label )
+	);
+	echo '</div>';
+
+	// Anchor for core's admin-notice relocation: the <h1> now sits inside
+	// .aafm-page-head, so mark where WordPress should drop notices.
+	echo '<hr class="wp-header-end">';
+
+	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
 		printf(
-			'<a href="%s" class="nav-tab %s">%s</a>',
+			'<a href="%s" class="nav-tab %s">%s %s</a>',
 			esc_url(
 				add_query_arg(
 					array(
@@ -284,10 +313,11 @@ function aafm_render_admin_page(): void {
 				)
 			),
 			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+			aafm_icon( $slug ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			esc_html( $label )
 		);
 	}
-	echo '</h2>';
+	echo '</nav>';
 
 	switch ( $active ) {
 		case 'connection':
@@ -363,13 +393,14 @@ function aafm_render_abilities_tab(): void {
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
-	// Sub-tab bar — reuses the shared .aafm-os-tabs styling; .aafm-subject-tab is the JS hook.
+	// Sub-tab bar — pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
+	// toggle binds to and data-subject is preserved so panel switching keeps working.
 	$first = array_key_first( $subjects );
-	echo '<div class="aafm-os-tabs aafm-subject-tabs" role="tablist">';
+	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist">';
 	foreach ( $subjects as $slug => $label ) {
 		$is_active = ( $slug === $first );
 		printf(
-			'<button type="button" class="button aafm-os-tab aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s</button>',
+			'<button type="button" class="aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s</button>',
 			$is_active ? ' is-active' : '',
 			$is_active ? 'true' : 'false',
 			esc_attr( $slug ),
@@ -422,18 +453,42 @@ function aafm_render_abilities_tab(): void {
 			if ( empty( $rows ) ) {
 				continue;
 			}
-			echo '<h3>' . esc_html( $heading ) . '</h3>';
-			echo '<table class="widefat striped aafm-ability-table"><tbody>';
+
+			// Per-group enabled count for the group head.
+			$group_enabled = 0;
+			foreach ( $rows as $ability ) {
+				if ( in_array( (string) $ability['name'], $enabled, true ) ) {
+					++$group_enabled;
+				}
+			}
+
+			// Group head: the Reads/Writes heading plus an enabled-over-total count. The bare
+			// >Reads< / >Writes< text the panel-structure test keys off lives in this <h3>.
+			printf(
+				'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
+				esc_html( $heading ),
+				esc_html( (string) $group_enabled ),
+				esc_html( (string) count( $rows ) )
+			);
+
+			echo '<div class="aafm-card aafm-ability-list">';
 			foreach ( $rows as $ability ) {
 				$name = (string) $ability['name'];
 				$risk = (string) ( $ability['risk'] ?? 'read' );
 				$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
 
-				// Risk badge, plus the checkbox/label cell.
+				// Toggle switch wraps the checkbox. The <input> keeps its exact name/value/checked()
+				// contract — the save handler and its tests bind to that, not to this markup.
+				echo '<div class="aafm-ability-row">';
 				printf(
-					'<tr><td><label><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s> %3$s</label></td><td><span class="aafm-badge aafm-badge-%4$s">%4$s</span>',
+					'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
 					esc_attr( $name ),
-					checked( in_array( $name, $enabled, true ), true, false ),
+					checked( in_array( $name, $enabled, true ), true, false )
+				);
+
+				echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
+				printf(
+					'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
 					esc_html( (string) ( $ability['label'] ?? $name ) ),
 					esc_attr( $risk )
 				);
@@ -448,11 +503,11 @@ function aafm_render_abilities_tab(): void {
 				}
 
 				printf(
-					'</td><td class="aafm-ability-hint">%1$s</td></tr>',
+					'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
 					esc_html( $hint )
 				);
 			}
-			echo '</tbody></table>';
+			echo '</div>';
 		}
 
 		// Rendered after the ability tables as a layout choice — the meta selector belongs below
@@ -465,7 +520,7 @@ function aafm_render_abilities_tab(): void {
 		echo '</div>';
 	}
 
-	echo '<p><button type="submit" class="button button-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
@@ -486,15 +541,21 @@ function aafm_render_post_types_selector(): void {
 	$eligible = array_values( array_diff( aafm_eligible_post_types(), array( 'post', 'page' ) ) );
 	$allowed  = aafm_allowed_post_types();
 
-	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
-
 	if ( empty( $eligible ) ) {
+		echo '<div class="aafm-card aafm-card-pad">';
+		echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
+		echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) );
+		echo '</div>';
 		return;
 	}
 
-	echo '<div id="aafm-post-types-form" class="aafm-post-types">';
+	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
+	// may open a form here, and the save control below is a type="button" the JS binds to.
+	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types">';
+	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
@@ -510,7 +571,7 @@ function aafm_render_post_types_selector(): void {
 		$rest   = $obj instanceof WP_Post_Type && $obj->show_in_rest;
 
 		printf(
-			'<tr><td><label><input type="checkbox" name="aafm_post_types[]" value="%1$s" %2$s></label></td><td><strong>%3$s</strong> <code>%4$s</code></td><td>%5$s</td><td>%6$s</td></tr>',
+			'<tr><td><label class="aafm-switch"><input type="checkbox" name="aafm_post_types[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label></td><td><strong>%3$s</strong> <code>%4$s</code></td><td>%5$s</td><td>%6$s</td></tr>',
 			esc_attr( $type ),
 			checked( in_array( $type, $allowed, true ), true, false ),
 			esc_html( (string) $label ),
@@ -523,8 +584,9 @@ function aafm_render_post_types_selector(): void {
 	}
 
 	echo '</tbody></table>';
+	echo '</div>'; // .aafm-table-wrap
 	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
-	echo '<p><button type="button" id="aafm-post-types-save" class="button button-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
+	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -544,11 +606,13 @@ function aafm_render_meta_keys_selector(): void {
 	$allowed  = aafm_allowed_meta_keys();
 	$detected = aafm_detected_meta_keys();
 
+	// Mirrors the post-types selector: a plain <div> (never a nested <form>) with a
+	// type="button" save, so the one outer abilities <form> is never closed early.
+	echo '<div id="aafm-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
 	echo '<h3>' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
 	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
 
-	echo '<div id="aafm-meta-keys-form" class="aafm-meta-keys">';
 	printf(
 		'<textarea name="aafm_meta_keys" rows="6" class="large-text code">%s</textarea>',
 		esc_textarea( implode( "\n", $allowed ) )
@@ -561,7 +625,7 @@ function aafm_render_meta_keys_selector(): void {
 		echo '<div class="aafm-meta-chips">';
 		foreach ( $detected as $key ) {
 			printf(
-				'<button type="button" class="button aafm-meta-chip" data-key="%1$s">%2$s</button>',
+				'<button type="button" class="aafm-meta-chip" data-key="%1$s">%2$s</button>',
 				esc_attr( $key ),
 				esc_html( $key )
 			);
@@ -587,7 +651,35 @@ function aafm_render_activity_tab(): void {
 
 	echo '<div class="aafm-activity">';
 	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
-	echo '<p><button type="button" class="button" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span></p>';
+
+	// Presentational status filter — static segmented control, no client-side wiring yet.
+	echo '<div class="aafm-activity-toolbar">';
+	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
+	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all">' . esc_html__( 'All', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="success">' . esc_html__( 'Success', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="error">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="denied">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '</div>';
+
+	// Row count: how many rows are stored against the cap the oldest rows drop at.
+	$log_rows = aafm_activity_count();
+	$log_cap  = defined( 'AAFM_LOG_MAX_ROWS' ) ? (int) AAFM_LOG_MAX_ROWS : 10000;
+	printf(
+		'<span class="aafm-activity-count">%s</span>',
+		esc_html(
+			sprintf(
+				/* translators: 1: number of rows stored, 2: maximum number of rows kept. */
+				__( '%1$s of %2$s rows', 'agent-abilities-for-mcp' ),
+				number_format_i18n( $log_rows ),
+				number_format_i18n( $log_cap )
+			)
+		)
+	);
+
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '</div>';
+
+	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
@@ -599,18 +691,29 @@ function aafm_render_activity_tab(): void {
 	if ( empty( $rows ) ) {
 		echo '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
 	}
+	// Map each log status to a pill variant; the status word stays visible (never colour-only).
+	$status_variants = array(
+		'success' => 'success',
+		'error'   => 'danger',
+		'denied'  => 'warn',
+		'started' => 'neutral',
+	);
 	foreach ( $rows as $row ) {
+		$status  = (string) ( $row['status'] ?? '' );
+		$variant = $status_variants[ $status ] ?? 'neutral';
 		printf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-status aafm-status-%4$s">%5$s</span></td><td>%6$s</td></tr>',
+			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-pill aafm-pill-%4$s aafm-status aafm-status-%5$s">%6$s</span></td><td>%7$s</td></tr>',
 			esc_html( (string) ( $row['created_at'] ?? '' ) ),
 			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
 			esc_html( (string) ( $row['ability'] ?? '' ) ),
-			esc_attr( (string) ( $row['status'] ?? '' ) ),
-			esc_html( (string) ( $row['status'] ?? '' ) ),
+			esc_attr( $variant ),
+			esc_attr( $status ),
+			esc_html( $status ),
 			esc_html( (string) ( $row['arg_keys'] ?? '' ) )
 		);
 	}
 	echo '</tbody></table>';
+	echo '</div>'; // .aafm-table-wrap
 	echo '</div>';
 }
 
@@ -626,7 +729,9 @@ function aafm_render_activity_tab(): void {
  * @return void
  */
 function aafm_render_help_entry( string $summary, string $body ): void {
-	echo '<details class="aafm-help-entry"><summary>' . esc_html( $summary ) . '</summary><div class="aafm-help-body">';
+	echo '<details class="aafm-help-entry"><summary>';
+	echo aafm_icon( 'help' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo esc_html( $summary ) . '</summary><div class="aafm-help-body">';
 	echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $body is built locally and run through wp_kses by the caller.
 	echo '</div></details>';
 }
@@ -639,9 +744,10 @@ function aafm_render_help_entry( string $summary, string $body ): void {
  */
 function aafm_help_copy_line( string $code ): string {
 	return sprintf(
-		'<div class="aafm-help-copy-line"><code>%1$s</code> <button type="button" class="button button-small aafm-copy" data-copy="%2$s">%3$s</button></div>',
+		'<div class="aafm-help-copy-line"><code>%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
 		esc_html( $code ),
 		esc_attr( $code ),
+		aafm_icon( 'copy' ), // Static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
 }
@@ -684,7 +790,8 @@ function aafm_render_help_tab(): void {
 	echo '<p class="description aafm-help-intro">' . esc_html__( 'Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	// Section 1 — Connecting.
-	echo '<h3>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 1. Client won't connect / endpoint unreachable.
 	aafm_render_help_entry(
@@ -786,8 +893,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 2 — Authentication.
-	echo '<h3>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 2. Authorization header diagnostic fails.
 	aafm_render_help_entry(
@@ -815,8 +925,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 3 — Abilities & permissions.
-	echo '<h3>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 6. Agent sees fewer tools than expected.
 	aafm_render_help_entry(
@@ -842,8 +955,11 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
+	echo '</div>';
+
 	// Section 4 — Clients, privacy & limits.
-	echo '<h3>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<div class="aafm-acc-group">';
+	echo '<h2>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h2>';
 
 	// 8. Which AI clients work, and how to set each one up.
 	aafm_render_help_entry(
@@ -898,6 +1014,7 @@ function aafm_render_help_tab(): void {
 			$inline
 		)
 	);
+	echo '</div>';
 
 	echo '</div>';
 }

@@ -75,6 +75,7 @@ function aafm_bootstrap() {
 	// behind is_admin(), while remaining wired at plugin load for deterministic tests.
 	add_action( 'admin_init', 'aafm_register_privacy_policy_content' );
 
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/icons.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
@@ -89,6 +90,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );
 		add_action( 'wp_ajax_aafm_clear_log', 'aafm_ajax_clear_log' );
+		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );
 		add_action( 'wp_ajax_aafm_create_agent_user', 'aafm_ajax_create_agent_user' );
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
 	}

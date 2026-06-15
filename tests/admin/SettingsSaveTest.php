@@ -87,6 +87,8 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertStringContainsString( 'name="aafm_max_title_len"', $html );
 		$this->assertStringContainsString( 'aafm-notice-warning', $html );
 		$this->assertStringContainsString( 'id="aafm-settings-form"', $html );
+		$this->assertStringContainsString( 'aafm-set-row', $html );
+		$this->assertStringContainsString( 'aafm-switch', $html );
 	}
 
 	public function test_is_valid_ip_or_cidr_accepts_and_rejects(): void {

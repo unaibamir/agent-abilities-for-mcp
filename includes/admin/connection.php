@@ -347,42 +347,105 @@ function aafm_render_connection_tab(): void {
 
 	echo '<div class="aafm-connection">';
 
-	echo '<h3>' . esc_html__( 'Endpoint', 'agent-abilities-for-mcp' ) . '</h3>';
+	// ---- Endpoint card ----
+	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-field-mono">';
+	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	printf(
-		'<p><code class="aafm-endpoint">%1$s</code> <button type="button" class="button aafm-copy" data-copy="%2$s">%3$s</button></p>',
-		esc_html( $url ),
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $url ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 	);
+	echo '</div>';
+	echo '</section>';
 
-	echo '<h3>' . esc_html__( 'Step 1 — Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p>' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	// ---- Step 1: create a dedicated agent user ----
+	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step-head"><span class="aafm-sidx">1</span><div>';
+	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+	echo '<div class="aafm-step-rail"><div class="aafm-card aafm-card-pad">';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
-	echo '<p><input type="text" id="aafm-agent-login" value="mcp-agent" class="regular-text"> <button type="button" class="button" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+	echo '<p><input type="text" id="aafm-agent-login" value="mcp-agent" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+	echo '</div></div>';
+	echo '</div>';
 
-	echo '<h3>' . esc_html__( 'Step 2 — Connect your client', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p>' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), then paste this config into your client:', 'agent-abilities-for-mcp' ) . '</p>';
+	// ---- Step 2: connect your client ----
+	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step-head"><span class="aafm-sidx">2</span><div>';
+	echo '<h2>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
 
-	echo '<div class="aafm-os-tabs" role="tablist">';
+	echo '<div class="aafm-step-rail"><div class="aafm-card">';
+
+	// OS toggle + client picker row.
+	echo '<div class="aafm-card-pad aafm-connect-controls">';
+
+	echo '<div class="aafm-connect-os">';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+	// The .aafm-seg buttons double as the OS tabs admin.js binds (aafm-os-tab + data-os).
+	echo '<div class="aafm-seg aafm-os-tabs" role="tablist">';
 	printf(
-		'<button type="button" class="button aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
+		'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
 		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
 	);
 	printf(
-		'<button type="button" class="button aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
+		'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
 		esc_html__( 'Windows', 'agent-abilities-for-mcp' )
 	);
 	echo '</div>';
+	echo '</div>';
 
-	printf(
-		'<textarea readonly rows="14" class="large-text code aafm-snippet" data-os="unix">%s</textarea>',
-		esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent', 'unix' ) )
-	);
-	printf(
-		'<textarea readonly rows="16" class="large-text code aafm-snippet" data-os="windows" hidden>%s</textarea>',
-		esc_textarea( aafm_client_snippet( 'claude', 'mcp-agent', 'windows' ) )
-	);
+	echo '<div class="aafm-connect-client">';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-client-grid" id="aafm-clients">';
+	$first = true;
+	foreach ( aafm_quickstart_clients() as $slug => $label ) {
+		printf(
+			'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
+			$first ? ' on' : '',
+			esc_attr( $slug ),
+			aafm_icon( 'client-' . $slug ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			esc_html( $label )
+		);
+		$first = false;
+	}
+	echo '</div>';
+	echo '</div>';
 
+	echo '</div>'; // .aafm-connect-controls
+
+	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
+	echo '<div class="aafm-card-pad">';
+
+	$unix_snippet    = aafm_client_snippet( 'claude', 'mcp-agent', 'unix' );
+	$windows_snippet = aafm_client_snippet( 'claude', 'mcp-agent', 'windows' );
+
+	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
+	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
+	printf(
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+		esc_attr( $unix_snippet ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+	);
+	echo '</div>';
+
+	echo '<div class="aafm-codeblock aafm-snippet" data-os="windows" hidden>';
+	printf( '<pre>%s</pre>', esc_html( $windows_snippet ) );
+	printf(
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+		esc_attr( $windows_snippet ),
+		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+	);
+	echo '</div>';
+
+	// Windows / certificate notices.
 	$kses_code = array( 'code' => array() );
 
 	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above.', 'agent-abilities-for-mcp' );
@@ -399,44 +462,68 @@ function aafm_render_connection_tab(): void {
 	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
 	echo '</div>';
 
-	// Per-client quickstarts: a JS-toggled grid of ready-to-paste configs, one per client.
+	// Per-client quickstarts: the JS-toggled grid of ready-to-paste configs, one per client.
+	// Each client's exact snippet stays present here so the picker can surface any of them.
 	echo '<div class="aafm-quickstarts">';
 	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
 	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
 	foreach ( aafm_quickstart_clients() as $slug => $label ) {
 		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
-		echo '<div class="aafm-quickstart-card">';
+		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
 		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';
+		echo '<div class="aafm-codeblock">';
+		printf( '<pre>%s</pre>', esc_html( $snippet ) );
 		printf(
-			'<textarea readonly rows="12" class="large-text code aafm-snippet">%s</textarea>',
-			esc_textarea( $snippet )
-		);
-		printf(
-			'<p><button type="button" class="button aafm-copy" data-copy="%1$s">%2$s</button></p>',
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 			esc_attr( $snippet ),
+			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
 		);
+		echo '</div>';
 		echo '</div>';
 	}
 	echo '</div>';
 	echo '</div>';
 
-	echo '<h3>' . esc_html__( 'Step 3 — Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p>' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '<p><button type="button" class="button button-primary" id="aafm-test-connection">' . esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span></p>';
+	echo '</div>'; // .aafm-card-pad config block
 
-	echo '<h3>' . esc_html__( 'Diagnostics', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<table class="widefat striped aafm-diagnostics"><tbody>';
+	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step 2
+
+	// ---- Step 3: check the endpoint is reachable ----
+	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
+	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+
+	echo '<div class="aafm-step-rail"><div class="aafm-card">';
+	echo '<div class="aafm-card-pad aafm-connect-check">';
+	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-test-connection">';
+	echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
+	echo '</div>';
+
+	// Diagnostics rail: one row per check, status mapped to a coloured dot.
+	$dot_class = array(
+		'pass' => 'd-ok',
+		'warn' => 'd-warn',
+		'fail' => 'd-bad',
+	);
+	echo '<div class="aafm-diag">';
 	foreach ( aafm_diagnostic_checks() as $check ) {
+		$dot = $dot_class[ $check['status'] ] ?? 'd-warn';
 		printf(
-			'<tr><td><span class="aafm-dot aafm-dot-%1$s"></span></td><td>%2$s</td><td>%3$s</td></tr>',
-			esc_attr( $check['status'] ),
+			'<div class="aafm-diag-row"><span class="dot-lg %1$s"></span><div><div class="d-title">%2$s</div><div class="d-detail">%3$s</div></div></div>',
+			esc_attr( $dot ),
 			esc_html( $check['label'] ),
 			esc_html( $check['detail'] )
 		);
 	}
-	echo '</tbody></table>';
-
 	echo '</div>';
+	echo '</div></div>'; // .aafm-card / .aafm-step-rail
+	echo '</div>'; // .aafm-step 3
+
+	echo '</div>'; // .aafm-connection
 }

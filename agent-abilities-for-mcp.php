@@ -60,6 +60,10 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/codes.php';
 // Access/refresh token manager: hashed storage, refresh rotation, reuse detection.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 
+// Discovery documents: the two .well-known metadata files served before REST auth.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
+add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

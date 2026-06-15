@@ -49,6 +49,11 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_oauth_tables' );
 // PKCE helpers are pure functions with nothing to hook.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
 
+// HTTP helpers (transport policy, rate limiting) load before the client registry,
+// which calls into them and the audit log's aafm_source_ip().
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/http.php';
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/clients.php';
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

@@ -644,7 +644,6 @@
 	.aafm-settings {
 		.aafm-notice {
 			margin-block: 10px;
-			max-inline-size: 40em;
 		}
 	}
 
@@ -776,6 +775,7 @@
 		padding-block: 15px;
 		padding-inline: 20px;
 		border-block-end: 1px solid var(--aafm-border);
+		flex-direction: column;
 
 		&:last-child { border-block-end: 0; }
 

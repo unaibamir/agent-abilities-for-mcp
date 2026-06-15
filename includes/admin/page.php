@@ -296,7 +296,7 @@ function aafm_render_admin_page(): void {
 	);
 	echo '</h1>';
 	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '<h2 class="nav-tab-wrapper">';
+	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
 		$icon = $tab_icons[ $slug ];
 		printf(
@@ -315,7 +315,7 @@ function aafm_render_admin_page(): void {
 			esc_html( $label )
 		);
 	}
-	echo '</h2>';
+	echo '</nav>';
 
 	switch ( $active ) {
 		case 'connection':

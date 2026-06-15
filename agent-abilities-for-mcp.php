@@ -64,6 +64,10 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
+// OAuth REST endpoints: dynamic client registration, token, and revocation.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';
+add_action( 'rest_api_init', 'aafm_oauth_register_rest_routes' );
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

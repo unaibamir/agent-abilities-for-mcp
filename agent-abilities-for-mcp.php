@@ -84,6 +84,11 @@ add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
 // into a hard auth failure on unrelated REST routes.
 add_filter( 'rest_authentication_errors', 'aafm_oauth_rest_authentication_errors', 5 );
 
+// Authorization endpoint + consent screen: served off init at ?aafm_oauth=authorize.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/authorize.php';
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/consent-template.php';
+add_action( 'init', 'aafm_oauth_handle_authorize' );
+
 /**
  * Bootstraps the plugin once all plugins are loaded.
  *

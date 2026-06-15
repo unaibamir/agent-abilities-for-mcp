@@ -93,6 +93,49 @@ function aafm_oauth_authorization_server_metadata(): array {
 }
 
 /**
+ * The WWW-Authenticate challenge advertising the protected-resource metadata.
+ *
+ * Attached to the transport's 401 so a client that arrives unauthenticated learns
+ * where to discover the authorization server (RFC 9728 resource_metadata). Points
+ * at the same .well-known document aafm_oauth_maybe_serve_well_known() emits.
+ *
+ * @return string The Bearer challenge value for the WWW-Authenticate header.
+ */
+function aafm_oauth_challenge_header(): string {
+	return 'Bearer resource_metadata="' . home_url( '/.well-known/oauth-protected-resource' ) . '"';
+}
+
+/**
+ * Promote the www_authenticate error data to a real WWW-Authenticate header.
+ *
+ * A WP_Error returned from a permission_callback is serialized into the response
+ * body's `data` array, so the challenge attached by the transport never reaches
+ * the wire as a header on its own. This rest_post_dispatch filter copies it up
+ * onto the 401 response. Defensive by design: it acts only on a 401 carrying a
+ * non-empty www_authenticate key and otherwise returns the response untouched.
+ *
+ * @param \WP_HTTP_Response $response The dispatch result.
+ * @param \WP_REST_Server   $server   The REST server (unused).
+ * @param \WP_REST_Request  $request  The request (unused).
+ * @return \WP_HTTP_Response The response, with the header set when applicable.
+ */
+function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
+	unset( $server, $request );
+
+	if ( ! $response instanceof WP_REST_Response || 401 !== $response->get_status() ) {
+		return $response;
+	}
+
+	$data = $response->get_data();
+
+	if ( is_array( $data ) && ! empty( $data['data']['www_authenticate'] ) ) {
+		$response->header( 'WWW-Authenticate', (string) $data['data']['www_authenticate'] );
+	}
+
+	return $response;
+}
+
+/**
  * Match a request path against the two supported .well-known documents.
  *
  * The leading slash is optional and any query string is ignored by the caller

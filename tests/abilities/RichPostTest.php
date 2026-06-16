@@ -73,4 +73,33 @@ final class RichPostTest extends TestCase {
 
 		$this->assertStringContainsString( '<p>', $shape['content'] );
 	}
+
+	public function test_rich_post_uses_manual_excerpt_when_present(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => 'A hand-written excerpt.',
+				'post_content' => 'The full body that should not be trimmed here.',
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertSame( 'A hand-written excerpt.', $shape['excerpt'] );
+	}
+
+	public function test_rich_post_auto_excerpt_when_none(): void {
+		$body    = str_repeat( 'word ', 200 );
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+				'post_content' => $body,
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertNotSame( '', $shape['excerpt'] );
+		// Trimmed to 55 words + the trailing hellip from wp_trim_words.
+		$this->assertLessThan( strlen( $body ), strlen( $shape['excerpt'] ) );
+	}
 }

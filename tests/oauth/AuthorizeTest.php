@@ -208,6 +208,46 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * A code minted with the forced endpoint resource persists that exact string.
+	 *
+	 * The authorize flow forces resource => aafm_endpoint_url() at the mint call, and
+	 * the D1 token validator later audience-checks that exact string. This locks the
+	 * audience carry-forward contract at the storage boundary: read the stored row
+	 * back by the code's SHA-256 hash and assert the persisted resource is the
+	 * endpoint URL byte-for-byte.
+	 */
+	public function test_minted_code_persists_endpoint_resource(): void {
+		$client   = $this->register_client();
+		$user     = self::factory()->user->create();
+		$endpoint = aafm_endpoint_url();
+
+		$raw = aafm_oauth_mint_code(
+			array(
+				'client_id'      => $client,
+				'wp_user_id'     => $user,
+				'redirect_uri'   => 'https://app.example/cb',
+				'code_challenge' => 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+				'resource'       => $endpoint,
+			)
+		);
+		$this->assertIsString( $raw );
+
+		$hash = hash( 'sha256', $raw );
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$stored_resource = $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT resource FROM {$wpdb->prefix}aafm_oauth_codes WHERE code_hash = %s",
+				$hash
+			)
+		);
+
+		$this->assertSame( $endpoint, $stored_resource );
+	}
+
+	/**
 	 * The consent page renders a self-contained, escaped, script-free document.
 	 */
 	public function test_consent_render_is_escaped_and_self_contained(): void {

@@ -38,8 +38,14 @@ function aafm_oauth_render_consent_page( array $view ): void {
 		? $view['hidden_inputs']
 		: array();
 
+	/*
+	 * Build the headline safe-by-construction: the only untrusted input is the
+	 * client name, so it is run through esc_html() before being interpolated into
+	 * the (trusted, plugin-shipped) translation string. The resulting $headline is
+	 * therefore already HTML-safe and is echoed raw at every output site below.
+	 */
 	/* translators: %s: the application/client requesting access. */
-	$headline = sprintf( __( 'Authorize %s', 'agent-abilities-for-mcp' ), $client_name );
+	$headline = sprintf( __( 'Authorize %s', 'agent-abilities-for-mcp' ), esc_html( $client_name ) );
 
 	// Direction A design tokens, copied verbatim from includes/admin/assets/admin.css.
 	// Admin CSS is not enqueued on this front-end page, so the card styles itself.
@@ -124,13 +130,13 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	echo '<meta charset="utf-8">';
 	echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 	echo '<meta name="referrer" content="no-referrer">';
-	echo '<title>' . esc_html( $headline ) . '</title>';
+	echo '<title>' . $headline . '</title>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $headline is pre-escaped at construction (esc_html on the client name).
 	echo '<style>' . $styles . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline stylesheet, no dynamic data.
 	echo '</head>';
 	echo '<body>';
 	echo '<main class="aafm-card">';
 
-	echo '<h1>' . esc_html( $headline ) . '</h1>';
+	echo '<h1>' . $headline . '</h1>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $headline is pre-escaped at construction (esc_html on the client name).
 
 	printf(
 		'<p>%s</p>',

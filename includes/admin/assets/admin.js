@@ -47,6 +47,7 @@
 			this.#bindOsTabs();
 			this.#bindClientPicker();
 			this.#bindSubjectTabs();
+			this.#bindSectionToggles();
 			this.#bindSaveAbilities();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
@@ -231,6 +232,42 @@
 						label.textContent = original;
 						revertTimer = null;
 					}, 1500 );
+				} );
+			} );
+		}
+
+		/**
+		 * Per-section "Enable all / Disable all" buttons on the Abilities tab.
+		 * Toggles every ability checkbox inside the button's subject panel. When the
+		 * action would enable a section that holds a destructive ability, confirm first.
+		 */
+		#bindSectionToggles() {
+			const buttons = document.querySelectorAll( '.aafm-section-toggle-all' );
+			buttons.forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const subject = btn.dataset.subject;
+					const panel = document.querySelector(
+						`.aafm-subject-panel[data-subject="${ subject }"]`
+					);
+					if ( ! panel ) {
+						return;
+					}
+					const boxes = panel.querySelectorAll(
+						'input[type="checkbox"][name="aafm_abilities[]"]'
+					);
+					const enabling = Array.from( boxes ).some( ( b ) => ! b.checked );
+					if ( enabling && btn.dataset.hasDestructive === '1' ) {
+						const msg = this.#t(
+							'sectionToggleConfirm',
+							'This section includes destructive abilities (trash/delete). Enable all of them?'
+						);
+						if ( ! window.confirm( msg ) ) {
+							return;
+						}
+					}
+					boxes.forEach( ( b ) => {
+						b.checked = enabling;
+					} );
 				} );
 			} );
 		}

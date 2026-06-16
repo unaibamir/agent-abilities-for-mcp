@@ -15,10 +15,6 @@ use WP_User;
 
 final class RichPostTest extends TestCase {
 
-	public function set_up(): void {
-		parent::set_up();
-	}
-
 	public function test_rich_post_includes_all_base_redactor_keys(): void {
 		$post_id = self::factory()->post->create(
 			array(

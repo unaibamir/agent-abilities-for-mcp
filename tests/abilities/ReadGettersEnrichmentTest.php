@@ -94,6 +94,8 @@ final class ReadGettersEnrichmentTest extends TestCase {
 			$this->assertArrayHasKey( $key, $out['post'], "get-page missing {$key}" );
 		}
 		$this->assertStringContainsString( '<p>', $out['post']['content'] );
+		// Guards the get-page → post type pin: a regression to 'post' must fail here.
+		$this->assertSame( 'page', $out['post']['type'] );
 	}
 
 	public function test_get_pages_default_omits_content(): void {
@@ -110,6 +112,9 @@ final class ReadGettersEnrichmentTest extends TestCase {
 		$this->assertNotEmpty( $out['posts'] );
 		$this->assertArrayNotHasKey( 'content', $out['posts'][0] );
 		$this->assertArrayHasKey( 'terms', $out['posts'][0] );
+		// Guards the get-pages → get-posts delegation: every item must be a page,
+		// so a regression in the post_type pin (back to 'post') is caught.
+		$this->assertSame( 'page', $out['posts'][0]['type'] );
 	}
 
 	public function test_get_pages_include_content_true_adds_content(): void {

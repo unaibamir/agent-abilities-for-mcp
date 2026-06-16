@@ -386,8 +386,8 @@ function aafm_redact_post( WP_Post $post ): array {
 }
 
 /**
- * Collect a post's terms grouped by taxonomy, restricted to public/queryable
- * taxonomies registered for the post's type. Empty taxonomies are omitted.
+ * Collect a post's terms grouped by taxonomy, restricted to public taxonomies
+ * registered for the post's type. Empty taxonomies are omitted.
  *
  * @param WP_Post $post Post object.
  * @return array<string,array<int,array<string,mixed>>>

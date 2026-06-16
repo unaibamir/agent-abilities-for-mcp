@@ -514,12 +514,16 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
 	$rendered = $is_protected ? '' : (string) apply_filters( 'the_content', $post->post_content );
 
-	// A manual excerpt is always safe to surface. For a protected post WITHOUT a
-	// manual excerpt, fall back to '' — never derive an excerpt from the body
-	// ($rendered is already '' when $is_protected, so the auto-excerpt branch can
-	// only run for non-protected posts).
+	// A manual excerpt is always safe to surface. For a protected post we read the
+	// stored excerpt directly: get_the_excerpt() returns core's "no excerpt because
+	// this is a protected post" placeholder on a protected post, so it cannot be
+	// used here. Without a manual excerpt, fall back to '' — never derive an excerpt
+	// from the body ($rendered is already '' when $is_protected, so the auto-excerpt
+	// branch can only run for non-protected posts).
 	if ( has_excerpt( $post ) ) {
-		$shape['excerpt'] = get_the_excerpt( $post );
+		$shape['excerpt'] = $is_protected
+			? sanitize_text_field( (string) $post->post_excerpt )
+			: get_the_excerpt( $post );
 	} elseif ( $is_protected ) {
 		$shape['excerpt'] = '';
 	} else {

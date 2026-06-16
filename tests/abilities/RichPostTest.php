@@ -261,6 +261,30 @@ final class RichPostTest extends TestCase {
 		}
 	}
 
+	public function test_rich_post_protected_post_surfaces_manual_excerpt_but_not_body(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'   => 'publish',
+				'post_password' => 'TopSecretPass123',
+				'post_content'  => 'Body holding SECRETBODY and more.',
+				'post_excerpt'  => 'Safe summary',
+			)
+		);
+		$post    = get_post( $post_id );
+
+		foreach ( array( 'rendered', 'raw' ) as $format ) {
+			$shape = aafm_rich_post( $post, array( 'content_format' => $format ) );
+			$json  = (string) wp_json_encode( $shape );
+
+			// The hand-authored excerpt IS safe to surface.
+			$this->assertSame( 'Safe summary', $shape['excerpt'], "manual excerpt must survive ({$format})" );
+			// The body, however, never appears — no content key, no password.
+			$this->assertArrayNotHasKey( 'content', $shape, "content must be omitted for a protected post ({$format})" );
+			$this->assertStringNotContainsString( 'SECRETBODY', $json, "body leaked ({$format})" );
+			$this->assertStringNotContainsString( 'TopSecretPass123', $json, "password leaked ({$format})" );
+		}
+	}
+
 	public function test_rich_post_output_schema_declares_nested_object_shapes(): void {
 		$props = aafm_rich_post_output_properties();
 

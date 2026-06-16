@@ -53,6 +53,10 @@ class ConnectionRenderTest extends TestCase {
 		$this->assertStringContainsString( esc_html( $url ), $html );
 		$this->assertStringContainsString( 'aafm-copy', $html );
 		$this->assertStringContainsString( 'data-copy="' . esc_attr( $url ) . '"', $html );
+
+		// The card's copy button carries a disambiguating aria-label so screen-reader
+		// users can tell it apart from the other "Copy" buttons on the tab.
+		$this->assertStringContainsString( 'aria-label="Copy the MCP endpoint URL"', $html );
 	}
 
 	/**

@@ -356,10 +356,14 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-field-mono">';
 		printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 		printf(
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+			// aria-label disambiguates this from the other "Copy" buttons on the tab for
+			// screen-reader users. Only the label is added — data-copy, classes, and the
+			// .aafm-copy-label span (which the JS swaps on click) keep their contract.
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s" aria-label="%4$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 			esc_attr( $url ),
 			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
+			esc_attr__( 'Copy the MCP endpoint URL', 'agent-abilities-for-mcp' )
 		);
 		echo '</div>';
 		echo '</section>';

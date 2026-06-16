@@ -386,6 +386,29 @@ function aafm_redact_post( WP_Post $post ): array {
 }
 
 /**
+ * Assemble the enriched, agent-facing post shape: the lean redactor base plus
+ * content, excerpt, terms, author, featured image, and allowlisted meta.
+ *
+ * Read access is the caller's responsibility — every getter that calls this has
+ * already cleared its permission_callback. This helper only shapes data.
+ *
+ * SECURITY: a password-protected post never exposes its body here — no raw or
+ * rendered `content`, and no body-derived excerpt (Tasks 2-3). The single-post
+ * read gate does not inspect post_password, so this is the chokepoint.
+ *
+ * @param WP_Post             $post    Post object.
+ * @param array<string,mixed> $options {
+ *     Optional. Assembly options.
+ *     @type string $content_format  'rendered' (default) or 'raw'.
+ *     @type bool   $include_content Whether to include the heavy `content` field. Default true.
+ * }
+ * @return array<string,mixed>
+ */
+function aafm_rich_post( WP_Post $post, array $options = array() ): array {
+	return aafm_redact_post( $post );
+}
+
+/**
  * Reduce a user to id, display name, roles, and post count — never PII.
  *
  * Pass $post_count to use a pre-computed count (e.g. batched via

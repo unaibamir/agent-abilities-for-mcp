@@ -49,6 +49,7 @@ final class ResetPluginTest extends TestCase {
 		update_option( 'aafm_ip_allowlist', array( '10.0.0.1' ) );
 
 		aafm_install_activity_log();
+		aafm_install_oauth_tables();
 		$agent_id = self::factory()->user->create( array( 'role' => 'author' ) );
 		$post_id  = self::factory()->post->create( array( 'post_author' => $agent_id ) );
 		aafm_log_activity(
@@ -62,6 +63,12 @@ final class ResetPluginTest extends TestCase {
 		);
 		$this->assertGreaterThan( 0, aafm_activity_count(), 'Seed row should be present before reset.' );
 
+		// Seed one row into each of the four OAuth data tables.
+		$this->seed_oauth_rows( $agent_id );
+		foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+			$this->assertSame( 1, $this->oauth_row_count( $suffix ), "OAuth table {$suffix} should hold a seed row before reset." );
+		}
+
 		aafm_reset_plugin();
 
 		// Every configuration option is gone (default returned).
@@ -72,10 +79,55 @@ final class ResetPluginTest extends TestCase {
 		// Activity log emptied.
 		$this->assertSame( 0, aafm_activity_count(), 'Activity log should be empty after reset.' );
 
+		// Every OAuth data table emptied.
+		foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+			$this->assertSame( 0, $this->oauth_row_count( $suffix ), "OAuth table {$suffix} should be empty after reset." );
+		}
+
 		// Agent user and agent-created content survive.
 		$this->assertInstanceOf( \WP_User::class, get_user_by( 'id', $agent_id ) );
 		$this->assertNotNull( get_post( $post_id ) );
 		$this->assertSame( $agent_id, (int) get_post( $post_id )->post_author );
+	}
+
+	/**
+	 * Insert one minimal-but-valid row into each of the four OAuth data tables.
+	 *
+	 * @param int $agent_id The seeded agent user id, reused for the consent row.
+	 * @return void
+	 */
+	private function seed_oauth_rows( int $agent_id ): void {
+		global $wpdb;
+		$wpdb->insert( $wpdb->prefix . 'aafm_oauth_clients', array( 'client_id' => 'client-reset-test' ) );
+		$wpdb->insert( $wpdb->prefix . 'aafm_oauth_codes', array( 'code_hash' => 'code-reset-test' ) );
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			array(
+				'token_hash'   => 'token-reset-test',
+				'refresh_hash' => 'refresh-reset-test',
+			)
+		);
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'wp_user_id' => $agent_id,
+				'client_id'  => 'client-reset-test',
+			)
+		);
+	}
+
+	/**
+	 * Count rows in one OAuth table by suffix, seeing the temporary fixture table the
+	 * same way the plugin's own queries do.
+	 *
+	 * @param string $suffix Unprefixed OAuth table suffix.
+	 * @return int
+	 */
+	private function oauth_row_count( string $suffix ): int {
+		global $wpdb;
+		$table = $wpdb->prefix . $suffix;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 	}
 
 	/**

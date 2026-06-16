@@ -160,11 +160,12 @@ function aafm_config_option_names(): array {
 /**
  * Reset the plugin to its out-of-the-box state.
  *
- * Deletes every configuration option (so each setting falls back to its safe default) and empties
- * the activity log. It deliberately does NOT touch the agent user, its Application Passwords, or
- * any content the agent created (posts, terms, media, etc.) — this clears the plugin's own
- * configuration and audit trail only. The activity-log table itself is kept (rows truncated) so
- * logging keeps working immediately afterwards. This cannot be undone.
+ * Deletes every configuration option (so each setting falls back to its safe default), empties the
+ * activity log, and empties the four OAuth data tables (clients, codes, access tokens, consents).
+ * It deliberately does NOT touch the agent user, its Application Passwords, or any content the
+ * agent created (posts, terms, media, etc.) — this clears the plugin's own configuration, audit
+ * trail, and OAuth state only. The activity-log and OAuth tables themselves are kept (rows cleared)
+ * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
  * @return void
  */
@@ -173,6 +174,7 @@ function aafm_reset_plugin(): void {
 		delete_option( $option );
 	}
 	aafm_clear_activity_log();
+	aafm_truncate_oauth_tables();
 }
 
 /**

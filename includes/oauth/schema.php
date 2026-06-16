@@ -122,6 +122,26 @@ function aafm_maybe_upgrade_oauth_tables(): void {
 }
 
 /**
+ * Empty all four OAuth tables, keeping their structure. Used by the plugin reset.
+ *
+ * Uses DELETE rather than TRUNCATE so it stays compatible with the PHPUnit harness,
+ * which rewrites these tables to their TEMPORARY form (TRUNCATE cannot target a
+ * temporary table in some MySQL configs). Mirrors aafm_drop_oauth_tables()' escaping.
+ *
+ * @return void
+ */
+function aafm_truncate_oauth_tables(): void {
+	global $wpdb;
+
+	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
+		$table = esc_sql( $wpdb->prefix . $suffix );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( "DELETE FROM {$table}" );
+	}
+}
+
+/**
  * Drop all four OAuth tables. Used by uninstall.
  *
  * @return void

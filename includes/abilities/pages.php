@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_pages_definitions' );
 function aafm_register_pages_definitions( array $registry ): array {
 	$registry['aafm/get-pages']   = array(
 		'label'        => __( 'Get pages', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List pages filtered by status and search term.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -28,7 +28,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-page']    = array(
 		'label'        => __( 'Get page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve a single page by ID.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -69,24 +69,33 @@ function aafm_register_pages_definitions( array $registry ): array {
 function aafm_args_get_pages(): array {
 	return array(
 		'label'               => __( 'Get pages', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'List pages filtered by status and search term.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'status'   => array(
+				'status'          => array(
 					'type'    => 'string',
 					'default' => 'publish',
 				),
-				'search'   => array( 'type' => 'string' ),
-				'page'     => array(
+				'search'          => array( 'type' => 'string' ),
+				'page'            => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'per_page' => array(
+				'per_page'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 					'maximum' => 50,
+				),
+				'content_format'  => array(
+					'type'    => 'string',
+					'enum'    => array( 'rendered', 'raw' ),
+					'default' => 'rendered',
+				),
+				'include_content' => array(
+					'type'    => 'boolean',
+					'default' => false,
 				),
 			),
 			'additionalProperties' => false,
@@ -96,7 +105,10 @@ function aafm_args_get_pages(): array {
 			'properties' => array(
 				'posts' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_rich_post_output_properties(),
+					),
 				),
 				'total' => array( 'type' => 'integer' ),
 			),
@@ -131,14 +143,19 @@ function aafm_exec_get_pages( array $input ) {
 function aafm_args_get_page(): array {
 	return array(
 		'label'               => __( 'Get page', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Retrieve a single page by ID.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'page_id' => array(
+				'page_id'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+				),
+				'content_format' => array(
+					'type'    => 'string',
+					'enum'    => array( 'rendered', 'raw' ),
+					'default' => 'rendered',
 				),
 			),
 			'required'             => array( 'page_id' ),
@@ -146,7 +163,12 @@ function aafm_args_get_page(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post' => array(
+					'type'       => 'object',
+					'properties' => aafm_rich_post_output_properties(),
+				),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_get_page',
 		'permission_callback' => 'aafm_perm_get_page',
@@ -190,7 +212,10 @@ function aafm_exec_get_page( array $input ) {
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();
 	}
-	return array( 'post' => aafm_redact_post( $post ) );
+	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	return array(
+		'post' => aafm_rich_post( $post, array( 'content_format' => $format ) ),
+	);
 }
 
 /**

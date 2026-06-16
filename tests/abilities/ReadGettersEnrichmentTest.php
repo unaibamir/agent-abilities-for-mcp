@@ -76,4 +76,49 @@ final class ReadGettersEnrichmentTest extends TestCase {
 
 		$this->assertArrayHasKey( 'content', $out['posts'][0] );
 	}
+
+	public function test_get_page_returns_enriched_shape_with_content(): void {
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => "Page A.\n\nPage B.",
+			)
+		);
+		$out = aafm_exec_get_page( array( 'page_id' => $page_id ) );
+
+		foreach ( array( 'content', 'excerpt', 'terms', 'author', 'featured_image', 'meta' ) as $key ) {
+			$this->assertArrayHasKey( $key, $out['post'], "get-page missing {$key}" );
+		}
+		$this->assertStringContainsString( '<p>', $out['post']['content'] );
+	}
+
+	public function test_get_pages_default_omits_content(): void {
+		self::factory()->post->create_many(
+			2,
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$out = aafm_exec_get_pages( array() );
+
+		$this->assertArrayHasKey( 'total', $out );
+		$this->assertNotEmpty( $out['posts'] );
+		$this->assertArrayNotHasKey( 'content', $out['posts'][0] );
+		$this->assertArrayHasKey( 'terms', $out['posts'][0] );
+	}
+
+	public function test_get_pages_include_content_true_adds_content(): void {
+		self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => 'Listed page body.',
+			)
+		);
+		$out = aafm_exec_get_pages( array( 'include_content' => true ) );
+
+		$this->assertArrayHasKey( 'content', $out['posts'][0] );
+	}
 }

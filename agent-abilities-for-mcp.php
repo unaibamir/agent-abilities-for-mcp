@@ -99,6 +99,14 @@ register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 // WWW-Authenticate header on the dispatched REST error response.
 add_filter( 'rest_post_dispatch', 'aafm_oauth_filter_rest_challenge', 10, 3 );
 
+// Let browser-context (CORS) MCP clients read the OAuth challenge + MCP session
+// header off the response, and send the session/protocol headers back on follow-up
+// requests. Gated on the toggle to match the rest of the OAuth surface.
+if ( aafm_oauth_enabled() ) {
+	add_filter( 'rest_exposed_cors_headers', 'aafm_oauth_filter_exposed_cors_headers' );
+	add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers' );
+}
+
 // OAuth REST endpoints: dynamic client registration, token, and revocation.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';
 add_action( 'rest_api_init', 'aafm_oauth_register_rest_routes' );

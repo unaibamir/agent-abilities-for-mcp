@@ -170,6 +170,48 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 }
 
 /**
+ * Expose the OAuth challenge and MCP session headers to CORS (browser) clients.
+ *
+ * WordPress defaults Access-Control-Expose-Headers to X-WP-Total, X-WP-TotalPages,
+ * and Link, so per the Fetch/CORS spec a browser MCP client reading
+ * response.headers.get('WWW-Authenticate') sees null and never finds the discovery
+ * pointer on the 401. The adapter's Streamable-HTTP transport likewise issues
+ * Mcp-Session-Id on initialize and a client must read it back. Adding all three to
+ * the exposed set lets a fetch()-based client complete the handshake; dedupe keeps
+ * the header list clean when a value is already present.
+ *
+ * @param array<int, string> $headers Header names WordPress already exposes.
+ * @return array<int, string> The exposed set plus the OAuth + MCP session headers.
+ */
+function aafm_oauth_filter_exposed_cors_headers( array $headers ): array {
+	foreach ( array( 'WWW-Authenticate', 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
+		$headers[] = $header;
+	}
+
+	return array_values( array_unique( $headers ) );
+}
+
+/**
+ * Let CORS clients SEND the MCP session + protocol headers on follow-up requests.
+ *
+ * Access-Control-Allow-Headers gates which request headers a browser may include on
+ * a CORS request. The adapter REQUIRES Mcp-Session-Id on every call after initialize
+ * (and honors MCP-Protocol-Version), so without these the preflight rejects them and
+ * post-init calls fail session validation. Additive and deduped, matching the
+ * exposed-headers filter.
+ *
+ * @param array<int, string> $headers Header names WordPress already allows.
+ * @return array<int, string> The allowed set plus the MCP session + protocol headers.
+ */
+function aafm_oauth_filter_allowed_cors_headers( array $headers ): array {
+	foreach ( array( 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
+		$headers[] = $header;
+	}
+
+	return array_values( array_unique( $headers ) );
+}
+
+/**
  * Match a request path against the two supported .well-known documents.
  *
  * The leading slash is optional and any query string is ignored by the caller

@@ -64,6 +64,9 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
+// Seed the OAuth toggles to "on" at activation (add_option only — never clobbers a saved value).
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
+
 // Surface the transport's 401 challenge (resource_metadata) as a real
 // WWW-Authenticate header on the dispatched REST error response.
 add_filter( 'rest_post_dispatch', 'aafm_oauth_filter_rest_challenge', 10, 3 );

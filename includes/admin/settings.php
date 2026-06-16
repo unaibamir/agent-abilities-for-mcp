@@ -24,17 +24,24 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   capped at AAFM_SETTINGS_NUMERIC_MAX. Note max( 0, (int) ) rather than absint(), so a
  *   negative value clamps down to 0 instead of flipping to its positive magnitude.
  * - aafm_force_draft: a plain bool from presence of the field (unchecked checkbox -> false).
+ * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present,
+ *   '0' when absent. The OAuth readers default on and treat every falsy stored form as off, so
+ *   the off state must be the literal '0' string — a PHP bool false would not store as false on
+ *   a never-created option, leaving the toggle stuck on.
  * - aafm_ip_allowlist: split on newlines, trimmed, blanks dropped, and every surviving line
  *   must clear aafm_is_valid_ip_or_cidr(). Invalid lines are dropped (fail-closed), so a
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_force_draft:bool,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_force_draft:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
 	$title = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_max_title_len'] ?? 0 ) ) );
 	$draft = ! empty( $posted['aafm_force_draft'] );
+
+	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
+	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
 
 	$raw   = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$lines = array();
@@ -50,6 +57,8 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_rate_limit_per_min' => $rate,
 		'aafm_max_title_len'      => $title,
 		'aafm_force_draft'        => $draft,
+		'aafm_oauth_enabled'      => $oauth,
+		'aafm_oauth_dcr_enabled'  => $oauth_dcr,
 		'aafm_ip_allowlist'       => array_values( array_unique( $lines ) ),
 	);
 }
@@ -106,6 +115,8 @@ function aafm_ajax_save_settings(): void {
 	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
 	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
+	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
+	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
 	wp_send_json_success(
@@ -113,6 +124,8 @@ function aafm_ajax_save_settings(): void {
 			'aafm_rate_limit_per_min' => $clean['aafm_rate_limit_per_min'],
 			'aafm_max_title_len'      => $clean['aafm_max_title_len'],
 			'aafm_force_draft'        => $clean['aafm_force_draft'],
+			'aafm_oauth_enabled'      => $clean['aafm_oauth_enabled'],
+			'aafm_oauth_dcr_enabled'  => $clean['aafm_oauth_dcr_enabled'],
 			'aafm_ip_allowlist'       => $clean['aafm_ip_allowlist'],
 			'aafm_ip_allowlist_text'  => implode( "\n", $clean['aafm_ip_allowlist'] ),
 			'aafm_ip_dropped'         => $dropped,
@@ -138,6 +151,8 @@ function aafm_config_option_names(): array {
 		'aafm_rate_limit_per_min',
 		'aafm_max_title_len',
 		'aafm_force_draft',
+		'aafm_oauth_enabled',
+		'aafm_oauth_dcr_enabled',
 		'aafm_ip_allowlist',
 	);
 }
@@ -256,6 +271,37 @@ function aafm_render_settings_tab(): void {
 		esc_attr( (string) aafm_max_title_len() )
 	);
 	echo '<p class="help">' . esc_html__( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+
+	echo '</section>';
+
+	// OAuth: two additive switch rows. Same .aafm-switch / .aafm-set-row markup as the
+	// force-draft row above; the <input> name/value/checked() contract is what the save
+	// handler binds to, not this markup. Both readers default on (discovery.php).
+	echo '<section class="aafm-card">';
+	echo '<div class="aafm-card-head">';
+	echo '<span class="icon">';
+	echo aafm_icon( 'connection' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
+	echo '<h2>' . esc_html__( 'OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '</div>';
+
+	// Enable OAuth.
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-control">';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label for="aafm-oauth-enabled">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+
+	// Enable dynamic client registration.
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-control">';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label for="aafm-oauth-dcr-enabled">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '</section>';

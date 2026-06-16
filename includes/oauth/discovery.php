@@ -53,6 +53,23 @@ function aafm_oauth_dcr_enabled(): bool {
 }
 
 /**
+ * Seed the OAuth toggle options to "on" at activation, only when they are absent.
+ *
+ * The readers default on already, so a fresh install behaves correctly without any
+ * stored row. Seeding writes the explicit '1' so the Settings toggles render in their
+ * true state from the first load, and a later save that sets '0' is a real persisted
+ * value rather than a phantom default. add_option() (not update_option) is deliberate:
+ * it writes only when the option does not yet exist, so re-activation never clobbers an
+ * operator who has already turned a toggle off.
+ *
+ * @return void
+ */
+function aafm_oauth_seed_default_options(): void {
+	add_option( 'aafm_oauth_enabled', '1' );
+	add_option( 'aafm_oauth_dcr_enabled', '1' );
+}
+
+/**
  * Protected-resource metadata (RFC 9728).
  *
  * Advertises the MCP endpoint as the protected resource, this site as its

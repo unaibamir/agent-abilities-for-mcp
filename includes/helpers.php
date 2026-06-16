@@ -472,6 +472,23 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 
 	$shape['terms'] = aafm_post_terms_grouped( $post );
 
+	$author          = get_userdata( (int) $post->post_author );
+	$shape['author'] = $author instanceof WP_User
+		? array(
+			'id'           => (int) $author->ID,
+			'display_name' => $author->display_name,
+		)
+		: null;
+
+	$thumb_id                = get_post_thumbnail_id( $post );
+	$shape['featured_image'] = $thumb_id
+		? array(
+			'id'  => (int) $thumb_id,
+			'url' => (string) wp_get_attachment_url( $thumb_id ),
+			'alt' => (string) get_post_meta( $thumb_id, '_wp_attachment_image_alt', true ),
+		)
+		: null;
+
 	return $shape;
 }
 

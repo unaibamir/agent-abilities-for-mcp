@@ -131,4 +131,54 @@ final class RichPostTest extends TestCase {
 			array_keys( $shape['terms']['category'][0] )
 		);
 	}
+
+	public function test_rich_post_author_is_id_and_display_name_only(): void {
+		$user_id = self::factory()->user->create(
+			array(
+				'role'         => 'author',
+				'display_name' => 'Jane Writer',
+				'user_email'   => 'jane@example.com',
+			)
+		);
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_author' => $user_id,
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertSame(
+			array( 'id', 'display_name' ),
+			array_keys( $shape['author'] )
+		);
+		$this->assertSame( $user_id, $shape['author']['id'] );
+		$this->assertSame( 'Jane Writer', $shape['author']['display_name'] );
+		$this->assertStringNotContainsString( 'jane@example.com', (string) wp_json_encode( $shape ) );
+	}
+
+	public function test_rich_post_featured_image_null_when_absent(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertArrayHasKey( 'featured_image', $shape );
+		$this->assertNull( $shape['featured_image'] );
+	}
+
+	public function test_rich_post_featured_image_shape_when_present(): void {
+		$post_id   = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$attach_id = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg', $post_id );
+		set_post_thumbnail( $post_id, $attach_id );
+		update_post_meta( $attach_id, '_wp_attachment_image_alt', 'Canola field' );
+
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertIsArray( $shape['featured_image'] );
+		$this->assertSame(
+			array( 'id', 'url', 'alt' ),
+			array_keys( $shape['featured_image'] )
+		);
+		$this->assertSame( (int) $attach_id, $shape['featured_image']['id'] );
+		$this->assertSame( 'Canola field', $shape['featured_image']['alt'] );
+	}
 }

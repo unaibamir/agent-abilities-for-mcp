@@ -36,7 +36,7 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_register_admin_menu();
 		global $submenu;
 		$slugs = array();
-		foreach ( (array) ( $submenu['options-general.php'] ?? array() ) as $item ) {
+		foreach ( (array) ( $submenu['agent-abilities-for-mcp'] ?? array() ) as $item ) {
 			$slugs[] = $item[2];
 		}
 		$this->assertContains( 'agent-abilities-for-mcp', $slugs );

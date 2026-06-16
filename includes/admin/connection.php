@@ -347,6 +347,24 @@ function aafm_render_connection_tab(): void {
 
 	echo '<div class="aafm-connection">';
 
+	// ---- OAuth card (additive, gated; rendered first) ----
+	if ( aafm_oauth_enabled() ) {
+		echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';
+		echo '<h2>' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site URL into your agent — it negotiates access through a browser approval, no secret to copy.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="aafm-field-mono">';
+		printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
+		printf(
+			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+			esc_attr( $url ),
+			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		);
+		echo '</div>';
+		echo '</section>';
+	}
+
 	// ---- Endpoint card ----
 	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
 	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';

@@ -35,4 +35,42 @@ final class RichPostTest extends TestCase {
 		$this->assertSame( $post_id, $shape['id'] );
 		$this->assertSame( 'Base Keys Survive', $shape['title'] );
 	}
+
+	public function test_rich_post_content_rendered_by_default(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => "First para.\n\nSecond para.",
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertArrayHasKey( 'content', $shape );
+		// the_content wraps paragraphs in <p> tags via wpautop.
+		$this->assertStringContainsString( '<p>', $shape['content'] );
+	}
+
+	public function test_rich_post_content_raw_returns_stored_markup(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'Raw [shortcode] body no wpautop',
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'raw' ) );
+
+		$this->assertSame( 'Raw [shortcode] body no wpautop', $shape['content'] );
+	}
+
+	public function test_rich_post_unknown_content_format_falls_back_to_rendered(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => "Para one.\n\nPara two.",
+			)
+		);
+		$shape = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'bogus' ) );
+
+		$this->assertStringContainsString( '<p>', $shape['content'] );
+	}
 }

@@ -405,7 +405,26 @@ function aafm_redact_post( WP_Post $post ): array {
  * @return array<string,mixed>
  */
 function aafm_rich_post( WP_Post $post, array $options = array() ): array {
-	return aafm_redact_post( $post );
+	$shape = aafm_redact_post( $post );
+
+	$format          = isset( $options['content_format'] ) && 'raw' === $options['content_format'] ? 'raw' : 'rendered';
+	$include_content = ! array_key_exists( 'include_content', $options ) || (bool) $options['include_content'];
+
+	// SECURITY: a password-protected post must never expose its body — not the raw
+	// stored markup, not the rendered HTML, and not a body-derived excerpt. The
+	// single-post read gate (aafm_can_read_post_object) admits any public-status
+	// post without inspecting post_password, so this is the only place the body is
+	// withheld. Mirrors the precedent in comments.php (gate on empty password).
+	$is_protected = '' !== (string) $post->post_password;
+
+	// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
+	$rendered = $is_protected ? '' : (string) apply_filters( 'the_content', $post->post_content );
+
+	if ( $include_content && ! $is_protected ) {
+		$shape['content'] = 'raw' === $format ? (string) $post->post_content : $rendered;
+	}
+
+	return $shape;
 }
 
 /**

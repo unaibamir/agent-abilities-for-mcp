@@ -10,7 +10,10 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '1' );
+	// v2 adds the refresh_parent_id index on the access-tokens table; bumping the
+	// version makes aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing
+	// installs pick the index up.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '2' );
 }
 
 /**
@@ -84,7 +87,8 @@ function aafm_install_oauth_tables(): void {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		UNIQUE KEY token_hash (token_hash),
-		UNIQUE KEY refresh_hash (refresh_hash)
+		UNIQUE KEY refresh_hash (refresh_hash),
+		KEY refresh_parent_id (refresh_parent_id)
 	) {$charset_collate};";
 
 	$consents = "CREATE TABLE {$prefix}aafm_oauth_consents (

@@ -40,6 +40,34 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * Whether a named index exists on a plugin table.
+	 *
+	 * SHOW INDEX works on the harness's TEMPORARY tables the same way it does on
+	 * real ones, so this sees the index dbDelta applied during install.
+	 *
+	 * @param string $suffix   Unprefixed table suffix.
+	 * @param string $key_name The index name to look for.
+	 * @return bool
+	 */
+	private function index_exists( string $suffix, string $key_name ): bool {
+		global $wpdb;
+		$table = $wpdb->prefix . $suffix;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SHOW INDEX FROM {$table}" );
+
+		foreach ( (array) $rows as $row ) {
+			// Key_name is MySQL's own column name from SHOW INDEX, not a plugin property.
+			// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+			if ( isset( $row->Key_name ) && $key_name === $row->Key_name ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
 	 * Installing creates all four OAuth tables and records the schema version.
 	 */
 	public function test_install_creates_all_four_tables(): void {
@@ -51,6 +79,33 @@ class SchemaTest extends TestCase {
 		$this->assertTrue( $this->table_exists( 'aafm_oauth_consents' ) );
 
 		$this->assertNotEmpty( get_option( 'aafm_oauth_schema_version' ) );
+	}
+
+	/**
+	 * The access-tokens table carries an index on refresh_parent_id.
+	 *
+	 * The refresh-chain reuse-detection and chain-revocation walks query
+	 * WHERE refresh_parent_id = %d; without this index that is a full table scan on
+	 * a hot, security-critical path. dbDelta adds the KEY on a fresh install and on
+	 * re-run for existing v1 installs once the schema version bumps to '2'.
+	 */
+	public function test_access_tokens_indexes_refresh_parent_id(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertTrue(
+			$this->index_exists( 'aafm_oauth_access_tokens', 'refresh_parent_id' ),
+			'Expected a refresh_parent_id index on the access-tokens table.'
+		);
+	}
+
+	/**
+	 * Install records schema version 2 (the refresh_parent_id index bump).
+	 */
+	public function test_install_records_schema_version_2(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertSame( '2', get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertSame( '2', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**

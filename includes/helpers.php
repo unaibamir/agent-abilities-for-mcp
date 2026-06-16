@@ -520,11 +520,9 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	$meta = array();
 	foreach ( aafm_allowed_meta_keys() as $meta_key ) {
 		$value = get_post_meta( $post->ID, $meta_key, true );
-		if ( '' === $value || is_scalar( $value ) ) {
-			// Skip empty strings (absent keys) and never expose non-scalar blobs.
-			if ( '' !== $value ) {
-				$meta[ $meta_key ] = $value;
-			}
+		// Skip empty strings (absent keys) and never expose non-scalar blobs.
+		if ( is_scalar( $value ) && '' !== $value ) {
+			$meta[ $meta_key ] = $value;
 		}
 	}
 	$shape['meta'] = $meta;

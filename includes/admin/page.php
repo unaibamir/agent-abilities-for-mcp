@@ -48,13 +48,13 @@ function aafm_register_admin_menu(): void {
 }
 
 /**
- * Enqueue admin assets only on our settings page.
+ * Enqueue admin assets only on our top-level admin page.
  *
  * @param string $hook Current admin page hook suffix.
  * @return void
  */
 function aafm_enqueue_admin_assets( string $hook ): void {
-	if ( 'settings_page_agent-abilities-for-mcp' !== $hook ) {
+	if ( 'toplevel_page_agent-abilities-for-mcp' !== $hook ) {
 		return;
 	}
 	wp_enqueue_style( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.css', array(), AAFM_VERSION );

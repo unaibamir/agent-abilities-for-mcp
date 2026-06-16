@@ -32,4 +32,11 @@ final class MenuStructureTest extends TestCase {
 		$this->assertContains( 'agent-abilities-for-mcp&tab=connection', $slugs );
 		$this->assertContains( 'agent-abilities-for-mcp&tab=help', $slugs );
 	}
+
+	public function test_assets_enqueue_on_the_top_level_hook(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		aafm_enqueue_admin_assets( 'toplevel_page_agent-abilities-for-mcp' );
+		$this->assertTrue( wp_style_is( 'aafm-admin', 'enqueued' ) );
+		$this->assertTrue( wp_script_is( 'aafm-admin', 'enqueued' ) );
+	}
 }

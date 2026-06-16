@@ -289,19 +289,25 @@ function aafm_render_settings_tab(): void {
 	echo '</div>';
 
 	// Enable OAuth.
+	// The row title carries an id and the checkbox points at it with aria-labelledby, so
+	// the toggle's accessible name is the row title ("Enable OAuth"). The sentence <label
+	// for> below stays as the visible description — it is the existing single association,
+	// not a second one, so the redundant-`for` defect cannot recur.
 	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-set-control">';
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" aria-labelledby="aafm-oauth-enabled-title" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	echo '<label for="aafm-oauth-enabled">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	// Enable dynamic client registration.
+	// Same tie-up as the row above: title id + aria-labelledby for the accessible name,
+	// the existing sentence <label for> kept as the description.
 	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-set-control">';
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	echo '<label for="aafm-oauth-dcr-enabled">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
 	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';

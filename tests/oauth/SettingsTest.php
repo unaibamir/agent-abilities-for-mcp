@@ -107,6 +107,19 @@ class SettingsTest extends TestCase {
 			$html
 		);
 
+		// Accessibility tie-up: each row title carries an id, and the matching checkbox
+		// names that id via aria-labelledby so its accessible name is the row title.
+		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-enabled-title">', $html );
+		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">', $html );
+		$this->assertMatchesRegularExpression(
+			'/<input type="checkbox" id="aafm-oauth-enabled"[^>]*aria-labelledby="aafm-oauth-enabled-title"/',
+			$html
+		);
+		$this->assertMatchesRegularExpression(
+			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*aria-labelledby="aafm-oauth-dcr-enabled-title"/',
+			$html
+		);
+
 		// Existing controls untouched.
 		$this->assertStringContainsString( 'name="aafm_force_draft"', $html );
 		$this->assertStringContainsString( 'aafm-reset-plugin', $html );

@@ -249,6 +249,22 @@ function aafm_ajax_clear_log(): void {
 }
 
 /**
+ * The admin tab slugs → labels, shared by menu registration and the page renderer.
+ *
+ * @return array<string,string>
+ */
+function aafm_admin_tabs(): array {
+	return array(
+		'dashboard'  => __( 'Dashboard', 'agent-abilities-for-mcp' ),
+		'connection' => __( 'Connection', 'agent-abilities-for-mcp' ),
+		'abilities'  => __( 'Abilities', 'agent-abilities-for-mcp' ),
+		'settings'   => __( 'Settings', 'agent-abilities-for-mcp' ),
+		'activity'   => __( 'Activity Log', 'agent-abilities-for-mcp' ),
+		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Render the page shell + the active tab.
  *
  * @return void
@@ -257,14 +273,7 @@ function aafm_render_admin_page(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
-	$tabs = array(
-		'dashboard'  => __( 'Dashboard', 'agent-abilities-for-mcp' ),
-		'connection' => __( 'Connection', 'agent-abilities-for-mcp' ),
-		'abilities'  => __( 'Abilities', 'agent-abilities-for-mcp' ),
-		'settings'   => __( 'Settings', 'agent-abilities-for-mcp' ),
-		'activity'   => __( 'Activity Log', 'agent-abilities-for-mcp' ),
-		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
-	);
+	$tabs = aafm_admin_tabs();
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab routing, no state change.
 	$active = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';

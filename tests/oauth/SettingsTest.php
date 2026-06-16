@@ -107,16 +107,19 @@ class SettingsTest extends TestCase {
 			$html
 		);
 
-		// Accessibility tie-up: each row title carries an id, and the matching checkbox
-		// names that id via aria-labelledby so its accessible name is the row title.
+		// Accessibility tie-up: the row title and the descriptive sentence label each carry
+		// an id, and the matching checkbox names BOTH ids via aria-labelledby, so its
+		// accessible name is the title plus the sentence (not the terse title alone).
 		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-enabled-title">', $html );
 		$this->assertStringContainsString( '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">', $html );
+		$this->assertStringContainsString( '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">', $html );
+		$this->assertStringContainsString( '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">', $html );
 		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-enabled"[^>]*aria-labelledby="aafm-oauth-enabled-title"/',
+			'/<input type="checkbox" id="aafm-oauth-enabled"[^>]*aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc"/',
 			$html
 		);
 		$this->assertMatchesRegularExpression(
-			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*aria-labelledby="aafm-oauth-dcr-enabled-title"/',
+			'/<input type="checkbox" id="aafm-oauth-dcr-enabled"[^>]*aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc"/',
 			$html
 		);
 

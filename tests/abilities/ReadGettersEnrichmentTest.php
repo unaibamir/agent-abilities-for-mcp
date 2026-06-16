@@ -50,4 +50,30 @@ final class ReadGettersEnrichmentTest extends TestCase {
 
 		$this->assertSame( 'Raw body [sc] here', $out['post']['content'] );
 	}
+
+	public function test_get_posts_default_omits_content_keeps_light_fields(): void {
+		self::factory()->post->create_many( 3, array( 'post_status' => 'publish' ) );
+		$out = aafm_exec_get_posts( array() );
+
+		$this->assertArrayHasKey( 'posts', $out );
+		$this->assertArrayHasKey( 'total', $out );
+		$this->assertNotEmpty( $out['posts'] );
+		$first = $out['posts'][0];
+		$this->assertArrayNotHasKey( 'content', $first );
+		$this->assertArrayHasKey( 'excerpt', $first );
+		$this->assertArrayHasKey( 'terms', $first );
+		$this->assertArrayHasKey( 'author', $first );
+	}
+
+	public function test_get_posts_include_content_true_adds_content(): void {
+		self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_content' => 'Listed body.',
+			)
+		);
+		$out = aafm_exec_get_posts( array( 'include_content' => true ) );
+
+		$this->assertArrayHasKey( 'content', $out['posts'][0] );
+	}
 }

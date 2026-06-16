@@ -420,6 +420,34 @@ function aafm_post_terms_grouped( WP_Post $post ): array {
 }
 
 /**
+ * JSON-schema property fragment describing the enriched rich-post output shape.
+ * Shared by every read getter's output_schema so the contract stays in one place.
+ * Defined here in helpers.php (loaded before posts.php/pages.php/search.php) so
+ * every ability file can reference it regardless of include order.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_rich_post_output_properties(): array {
+	return array(
+		'id'             => array( 'type' => 'integer' ),
+		'title'          => array( 'type' => 'string' ),
+		'status'         => array( 'type' => 'string' ),
+		'type'           => array( 'type' => 'string' ),
+		'slug'           => array( 'type' => 'string' ),
+		'link'           => array( 'type' => 'string' ),
+		'author_id'      => array( 'type' => 'integer' ),
+		'author'         => array( 'type' => array( 'object', 'null' ) ),
+		'date_gmt'       => array( 'type' => 'string' ),
+		'modified_gmt'   => array( 'type' => 'string' ),
+		'content'        => array( 'type' => 'string' ),
+		'excerpt'        => array( 'type' => 'string' ),
+		'terms'          => array( 'type' => 'object' ),
+		'featured_image' => array( 'type' => array( 'object', 'null' ) ),
+		'meta'           => array( 'type' => 'object' ),
+	);
+}
+
+/**
  * Assemble the enriched, agent-facing post shape: the lean redactor base plus
  * content, excerpt, terms, author, featured image, and allowlisted meta.
  *

@@ -28,7 +28,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-post']     = array(
 		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve a single post by ID.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -190,14 +190,19 @@ function aafm_exec_get_posts( array $input ) {
 function aafm_args_get_post(): array {
 	return array(
 		'label'               => __( 'Get post', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Retrieve a single post by ID.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id' => array(
+				'post_id'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+				),
+				'content_format' => array(
+					'type'    => 'string',
+					'enum'    => array( 'rendered', 'raw' ),
+					'default' => 'rendered',
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -205,7 +210,12 @@ function aafm_args_get_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'post' => array(
+					'type'       => 'object',
+					'properties' => aafm_rich_post_output_properties(),
+				),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_get_post',
 		'permission_callback' => 'aafm_perm_get_post',
@@ -250,7 +260,10 @@ function aafm_exec_get_post( array $input ) {
 	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'post' => aafm_redact_post( $post ) );
+	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	return array(
+		'post' => aafm_rich_post( $post, array( 'content_format' => $format ) ),
+	);
 }
 
 /**

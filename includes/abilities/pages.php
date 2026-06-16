@@ -28,7 +28,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-page']    = array(
 		'label'        => __( 'Get page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected pages), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -143,7 +143,7 @@ function aafm_exec_get_pages( array $input ) {
 function aafm_args_get_page(): array {
 	return array(
 		'label'               => __( 'Get page', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected pages), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

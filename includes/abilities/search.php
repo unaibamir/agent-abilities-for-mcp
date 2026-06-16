@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_search_definitions' );
 function aafm_register_search_definitions( array $registry ): array {
 	$registry['aafm/search-content'] = array(
 		'label'        => __( 'Search content', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Search across the exposed content types in one query.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -37,31 +37,40 @@ function aafm_register_search_definitions( array $registry ): array {
 function aafm_args_search_content(): array {
 	return array(
 		'label'               => __( 'Search content', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Search across the exposed content types in one query.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'search'     => array(
+				'search'          => array(
 					'type'      => 'string',
 					'minLength' => 1,
 				),
-				'post_types' => array(
+				'post_types'      => array(
 					'type'  => 'array',
 					'items' => array( 'type' => 'string' ),
 				),
-				'status'     => array(
+				'status'          => array(
 					'type'    => 'string',
 					'default' => 'publish',
 				),
-				'page'       => array(
+				'page'            => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'per_page'   => array(
+				'per_page'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 					'maximum' => 50,
+				),
+				'content_format'  => array(
+					'type'    => 'string',
+					'enum'    => array( 'rendered', 'raw' ),
+					'default' => 'rendered',
+				),
+				'include_content' => array(
+					'type'    => 'boolean',
+					'default' => false,
 				),
 			),
 			'required'             => array( 'search' ),
@@ -72,7 +81,10 @@ function aafm_args_search_content(): array {
 			'properties' => array(
 				'results' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_rich_post_output_properties(),
+					),
 				),
 				'total'   => array( 'type' => 'integer' ),
 			),
@@ -152,8 +164,19 @@ function aafm_exec_search_content( array $input ) {
 		)
 	);
 	$objects = array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post );
+
+	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	$include_content = ! empty( $input['include_content'] );
+	$options         = array(
+		'content_format'  => $format,
+		'include_content' => $include_content,
+	);
+
 	return array(
-		'results' => array_values( array_map( 'aafm_redact_post', $objects ) ),
+		'results' => array_map(
+			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
+			array_values( $objects )
+		),
 		'total'   => (int) $query->found_posts,
 	);
 }

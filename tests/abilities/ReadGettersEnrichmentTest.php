@@ -121,4 +121,42 @@ final class ReadGettersEnrichmentTest extends TestCase {
 
 		$this->assertArrayHasKey( 'content', $out['posts'][0] );
 	}
+
+	public function test_search_content_default_omits_content_keeps_light_fields(): void {
+		self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'Findme Alpha',
+				'post_content' => 'Body alpha.',
+			)
+		);
+		$out = aafm_exec_search_content( array( 'search' => 'Findme' ) );
+
+		$this->assertArrayHasKey( 'results', $out );
+		$this->assertArrayHasKey( 'total', $out );
+		$this->assertNotEmpty( $out['results'] );
+		$first = $out['results'][0];
+		$this->assertArrayNotHasKey( 'content', $first );
+		$this->assertArrayHasKey( 'excerpt', $first );
+		$this->assertArrayHasKey( 'terms', $first );
+		$this->assertArrayHasKey( 'author', $first );
+	}
+
+	public function test_search_content_include_content_true_adds_content(): void {
+		self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'Findme Beta',
+				'post_content' => 'Body beta.',
+			)
+		);
+		$out = aafm_exec_search_content(
+			array(
+				'search'          => 'Findme',
+				'include_content' => true,
+			)
+		);
+
+		$this->assertArrayHasKey( 'content', $out['results'][0] );
+	}
 }

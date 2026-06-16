@@ -386,7 +386,7 @@ function aafm_oauth_show_consent( array $valid ): void {
  * Handle the authorization endpoint, hooked on `init`.
  *
  * Runs only for ?aafm_oauth=authorize. Enforces the surface toggle, HTTPS, rate
- * limiting, login (auth_redirect bounces logged-out users to wp-login and back), and
+ * limiting, login (logged-out users go to wp-login and return to this exact URL), and
  * a capability gate, then validates and acts on the request per HTTP method.
  *
  * @return void
@@ -419,9 +419,32 @@ function aafm_oauth_handle_authorize(): void {
 		exit;
 	}
 
-	// Require login. auth_redirect() exits internally for logged-out users, sending
-	// them to wp-login and back to this exact authorize URL after they sign in.
-	auth_redirect();
+	// Require login. The authorize URL is a FRONT-END path (?aafm_oauth=authorize on
+	// home_url(), not under /wp-admin), so we must NOT call auth_redirect() here: it
+	// validates the secure_auth cookie scheme whenever is_ssl() || force_ssl_admin(),
+	// and that cookie is scoped to /wp-admin (+ /wp-content/plugins), never to "/".
+	// On a real-HTTPS or FORCE_SSL_ADMIN site the secure_auth cookie is never sent on
+	// "/", so auth_redirect() would fail validation and bounce a fully logged-in user
+	// to wp-login forever. The logged_in cookie IS scoped to "/" and is what determines
+	// front-end login state, so gate on is_user_logged_in() instead and send only
+	// genuinely logged-out users to wp-login, returning to this exact authorize URL.
+	if ( ! is_user_logged_in() ) {
+		// Reconstruct the current authorize URL from the request path so the user
+		// returns to this exact endpoint after signing in. Built off home_url() + the
+		// raw REQUEST_URI rather than add_query_arg( array(), null ), which reads the
+		// superglobal implicitly and warns when it is absent.
+		$request_uri = isset( $_SERVER['REQUEST_URI'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+			: '';
+		$return_to   = home_url( '/' );
+		if ( '' !== $request_uri ) {
+			$return_to = home_url( $request_uri );
+		}
+		// wp-login on our own host; redirect_to is WP's own param, so wp_safe_redirect
+		// is appropriate (it rejects off-host targets).
+		wp_safe_redirect( wp_login_url( esc_url_raw( $return_to ) ) );
+		exit;
+	}
 
 	// Capability gate. A failure here is a LOCAL authorization failure, not an OAuth
 	// error to hand back to the client, so render a local 403 (never redirect).

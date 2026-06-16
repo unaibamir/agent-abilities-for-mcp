@@ -248,6 +248,142 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * Drive the full init handler for one authorize GET, capturing the first redirect
+	 * or any rendered output without letting it exit the process.
+	 *
+	 * The handler calls wp_redirect()/wp_safe_redirect() and then exit on every
+	 * terminal branch. wp_safe_redirect() routes through the `wp_redirect` filter, so
+	 * we short-circuit there: record the target and throw to unwind before exit. Output
+	 * branches (the consent screen) never redirect, so they are captured via the buffer.
+	 *
+	 * Every terminal branch ends in exit, which would kill the test process, so both
+	 * are short-circuited with a throw that unwinds the stack:
+	 *   - redirects route through the `wp_redirect` filter (records target, throws);
+	 *   - the consent screen and every local error page call status_header(), so that
+	 *     filter records the HTTP code and throws.
+	 * The consent path sets 200; failure pages set 400/403/404/429, so the captured
+	 * status cleanly distinguishes "reached consent" from any error branch without
+	 * depending on output that exit() would otherwise discard.
+	 *
+	 * @param array<string,string> $params Authorize query params to place in $_GET.
+	 * @return array{redirect:?string,status:?int} Captured redirect target and HTTP status.
+	 */
+	private function run_authorize_get( array $params ): array {
+		$captured = array(
+			'redirect' => null,
+			'status'   => null,
+		);
+
+		$catch_redirect = static function ( $location ) use ( &$captured ) {
+			$captured['redirect'] = (string) $location;
+			throw new \RuntimeException( 'aafm_test_redirect' );
+		};
+		$catch_status   = static function ( $header, $code ) use ( &$captured ) {
+			$captured['status'] = (int) $code;
+			throw new \RuntimeException( 'aafm_test_status' );
+		};
+		add_filter( 'wp_redirect', $catch_redirect, 1 );
+		add_filter( 'status_header', $catch_status, 1, 2 );
+
+		// The route marker selects this handler; valid_params() omits it by design.
+		$params['aafm_oauth'] = 'authorize';
+
+		// Snapshot the request superglobals so unrelated tests that run after this one
+		// keep the harness-seeded REQUEST_URI etc. (restored byte-for-byte below).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- snapshot only, restored verbatim in the finally block.
+		$prev_get    = $_GET;
+		$prev_server = $_SERVER;
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- test harness seeds the request.
+		$_GET                      = $params;
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['REQUEST_URI']    = '/?' . http_build_query( $params );
+		// The handler requires HTTPS in a production environment (the test env type).
+		// Present the request as TLS so the realistic FORCE_SSL_ADMIN scenario is
+		// exercised: is_ssl() true is exactly the condition under which the old
+		// auth_redirect() gate looped.
+		$_SERVER['HTTPS'] = 'on';
+
+		// The consent and error branches emit raw header() calls before status_header().
+		// Under the CLI test SAPI headers are already "sent" (bootstrap printed), so
+		// header() would raise a warning the suite escalates to an exception before our
+		// status_header capture runs. Demote that one warning so execution reaches the
+		// status_header filter; real requests send headers cleanly.
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- test harness only: demotes the CLI "headers already sent" warning so the status_header capture runs.
+		set_error_handler(
+			static function ( $errno, $errstr ) {
+				return str_contains( $errstr, 'Cannot modify header information' );
+			},
+			E_WARNING
+		);
+
+		ob_start();
+		try {
+			aafm_oauth_handle_authorize();
+		} catch ( \RuntimeException $e ) {
+			// Expected: a capture filter threw to unwind before the handler's exit.
+			unset( $e );
+		} finally {
+			ob_end_clean();
+			restore_error_handler();
+			remove_filter( 'wp_redirect', $catch_redirect, 1 );
+			remove_filter( 'status_header', $catch_status, 1 );
+			$_GET    = $prev_get;
+			$_SERVER = $prev_server;
+		}
+
+		return array(
+			'redirect' => $captured['redirect'],
+			'status'   => $captured['status'],
+		);
+	}
+
+	/**
+	 * A LOGGED-OUT request to the authorize endpoint is sent to wp-login, with the
+	 * authorize URL carried as redirect_to so the user returns after signing in.
+	 *
+	 * This is the regression test for the FORCE_SSL_ADMIN loop. The handler must NOT
+	 * call core auth_redirect() (which validates the secure_auth cookie scoped to
+	 * /wp-admin and never sent on "/"); it must gate on is_user_logged_in() and send a
+	 * genuinely logged-out user to wp_login_url(). Full real-HTTPS cookie-scheme
+	 * behavior is an integration concern; this unit test proves the branch logic that
+	 * the bug broke: logged-out goes to login.
+	 */
+	public function test_logged_out_request_redirects_to_login(): void {
+		wp_set_current_user( 0 );
+		$client = $this->register_client();
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		$this->assertNotNull( $result['redirect'], 'A logged-out user must be redirected.' );
+		$this->assertStringContainsString( 'wp-login.php', (string) $result['redirect'] );
+		$this->assertStringContainsString( 'redirect_to=', (string) $result['redirect'] );
+		// The return target is the authorize URL, so sign-in lands back on this flow.
+		$this->assertStringContainsString( rawurlencode( 'aafm_oauth=authorize' ), (string) $result['redirect'] );
+	}
+
+	/**
+	 * A LOGGED-IN user with the required capability PROCEEDS to the consent screen
+	 * instead of being bounced to login.
+	 *
+	 * This is the guard that proves the loop is fixed: under the old auth_redirect()
+	 * gate a fully logged-in user was still redirected to wp-login on a FORCE_SSL_ADMIN
+	 * site because the secure_auth cookie is absent on "/". With the is_user_logged_in()
+	 * gate the same user reaches the consent screen and never redirects. The consent
+	 * render sets a 200 status; any failure branch (HTTPS/cap/nonce/disabled/rate) sets
+	 * a 4xx, so 200 with no redirect proves the gate passed.
+	 */
+	public function test_logged_in_user_reaches_consent_screen(): void {
+		$this->acting_as( 'administrator' );
+		$client = $this->register_client();
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		$this->assertNull( $result['redirect'], 'A logged-in user must not be redirected to login.' );
+		$this->assertSame( 200, $result['status'], 'A logged-in user must reach the 200 consent screen, not an error page.' );
+	}
+
+	/**
 	 * The consent page renders a self-contained, escaped, script-free document.
 	 */
 	public function test_consent_render_is_escaped_and_self_contained(): void {

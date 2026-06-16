@@ -276,6 +276,11 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( 'value="approve"', $html );
 		$this->assertStringContainsString( 'value="deny"', $html );
 
+		// Keyboard focus indicator (WCAG 2.4.7): the buttons paint a visible ring on
+		// :focus-visible. The admin ring token is not enqueued on this standalone page,
+		// so the inline styles must carry their own focus rule.
+		$this->assertStringContainsString( '.aafm-btn:focus-visible', $html );
+
 		// The agent user login is shown.
 		$this->assertStringContainsString( 'mcp-agent', $html );
 

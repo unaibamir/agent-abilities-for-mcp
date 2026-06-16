@@ -107,6 +107,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 			font-weight: 600;
 			cursor: pointer;
 		}
+		.aafm-btn:focus-visible { outline: 2px solid var(--aafm-accent); outline-offset: 2px; }
 		.aafm-btn-primary {
 			background: var(--aafm-accent);
 			color: #fff;

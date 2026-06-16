@@ -39,4 +39,14 @@ final class MenuStructureTest extends TestCase {
 		$this->assertTrue( wp_style_is( 'aafm-admin', 'enqueued' ) );
 		$this->assertTrue( wp_script_is( 'aafm-admin', 'enqueued' ) );
 	}
+
+	public function test_tab_links_use_admin_php_not_settings(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		aafm_install_activity_log();
+		ob_start();
+		aafm_render_admin_page();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'admin.php?page=agent-abilities-for-mcp', $html );
+		$this->assertStringNotContainsString( 'options-general.php?page=agent-abilities-for-mcp', $html );
+	}
 }

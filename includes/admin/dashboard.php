@@ -138,7 +138,7 @@ function aafm_setup_steps(): array {
 				'page' => 'agent-abilities-for-mcp',
 				'tab'  => $tab,
 			),
-			admin_url( 'options-general.php' )
+			admin_url( 'admin.php' )
 		);
 	};
 

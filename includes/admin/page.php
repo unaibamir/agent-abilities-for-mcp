@@ -341,7 +341,7 @@ function aafm_render_admin_page(): void {
 						'page' => 'agent-abilities-for-mcp',
 						'tab'  => $slug,
 					),
-					admin_url( 'options-general.php' )
+					admin_url( 'admin.php' )
 				)
 			),
 			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),

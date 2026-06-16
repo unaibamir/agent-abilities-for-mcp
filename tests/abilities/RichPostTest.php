@@ -181,4 +181,26 @@ final class RichPostTest extends TestCase {
 		$this->assertSame( (int) $attach_id, $shape['featured_image']['id'] );
 		$this->assertSame( 'Canola field', $shape['featured_image']['alt'] );
 	}
+
+	public function test_rich_post_meta_only_includes_allowlisted_scalar_keys(): void {
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		update_post_meta( $post_id, 'subtitle', 'A Governed Subtitle' );
+		update_post_meta( $post_id, 'secret_internal', 'should-never-leak' );
+		update_post_meta( $post_id, 'structured', array( 'a', 'b' ) );
+
+		add_filter(
+			'aafm_allowed_meta_keys',
+			static fn(): array => array( 'subtitle', 'structured' )
+		);
+
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertArrayHasKey( 'meta', $shape );
+		$this->assertSame( 'A Governed Subtitle', $shape['meta']['subtitle'] );
+		// Non-allowlisted key is absent.
+		$this->assertArrayNotHasKey( 'secret_internal', $shape['meta'] );
+		// Allowlisted-but-non-scalar value is skipped, never dumped.
+		$this->assertArrayNotHasKey( 'structured', $shape['meta'] );
+		$this->assertStringNotContainsString( 'should-never-leak', (string) wp_json_encode( $shape ) );
+	}
 }

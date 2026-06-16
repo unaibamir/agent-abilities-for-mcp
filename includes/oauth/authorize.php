@@ -248,16 +248,75 @@ function aafm_oauth_read_authorize_params(): array {
 }
 
 /**
+ * Reduce a validated redirect_uri to its bare origin (scheme://host[:port]).
+ *
+ * Used to scope the consent CSP's form-action to the one approved client origin. Only
+ * the scheme, host, and explicit non-default port are kept — never the path or query —
+ * so the CSP source is a clean origin and nothing the client can otherwise control
+ * leaks into the header. Returns '' if the URI cannot be parsed into scheme+host.
+ *
+ * The caller MUST pass the redirect_uri that was already exact-matched against the
+ * client's registered allowlist, never raw request input, so the origin is trusted.
+ *
+ * @param string $redirect_uri The allowlist-validated client redirect URI.
+ * @return string The origin, or '' when the URI lacks a scheme/host.
+ */
+function aafm_oauth_redirect_uri_origin( string $redirect_uri ): string {
+	$scheme = wp_parse_url( $redirect_uri, PHP_URL_SCHEME );
+	$host   = wp_parse_url( $redirect_uri, PHP_URL_HOST );
+
+	if ( ! is_string( $scheme ) || '' === $scheme || ! is_string( $host ) || '' === $host ) {
+		return '';
+	}
+
+	$origin = strtolower( $scheme ) . '://' . $host;
+
+	$port = wp_parse_url( $redirect_uri, PHP_URL_PORT );
+	if ( is_int( $port ) ) {
+		$origin .= ':' . $port;
+	}
+
+	return $origin;
+}
+
+/**
+ * Build the Content-Security-Policy for the consent render.
+ *
+ * The form-action directive governs not only where the form may POST but also where the
+ * resulting response may REDIRECT. The consent form POSTs same-origin, but on Approve the server
+ * answers with a 302 to the client's external redirect_uri — a cross-origin hop the
+ * browser blocks against a bare 'self'. So when a validated client origin is supplied
+ * it is added to form-action ('self' <origin>), permitting the redirect to exactly that
+ * one approved origin and nothing else. Local error pages pass no origin and stay at
+ * 'self' alone, since they never redirect off-site.
+ *
+ * @param string $redirect_origin Validated client origin (scheme://host[:port]) to
+ *                                 allow in form-action, or '' for 'self' only.
+ * @return string The CSP header value.
+ */
+function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
+	$form_action = "form-action 'self'";
+	if ( '' !== $redirect_origin ) {
+		$form_action .= ' ' . $redirect_origin;
+	}
+
+	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; {$form_action}; base-uri 'none'; frame-ancestors 'none'";
+}
+
+/**
  * Send the strict security headers used on the consent render.
  *
  * No external scripts or styles, framing denied, and no referrer leakage of the
- * authorize URL (which carries the PKCE challenge and state). form-action is scoped
- * to 'self' because the consent form posts back to the same authorize URL.
+ * authorize URL (which carries the PKCE challenge and state). The form-action source
+ * list is built by aafm_oauth_consent_csp(); see it for why the validated client origin
+ * is allowed there on the consent page but not on local error pages.
  *
+ * @param string $redirect_origin Validated client origin to allow in form-action, or
+ *                                 '' for 'self' only.
  * @return void
  */
-function aafm_oauth_send_consent_headers(): void {
-	header( "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" );
+function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
+	header( 'Content-Security-Policy: ' . aafm_oauth_consent_csp( $redirect_origin ) );
 	header( 'X-Frame-Options: DENY' );
 	header( 'Referrer-Policy: no-referrer' );
 }
@@ -375,7 +434,13 @@ function aafm_oauth_show_consent( array $valid ): void {
 		'hidden_inputs' => $hidden_inputs,
 	);
 
-	aafm_oauth_send_consent_headers();
+	// The consent form's POST is answered with a 302 to this validated client origin,
+	// so it must be permitted in form-action or the browser blocks the cross-origin
+	// redirect and the client never receives the code. The redirect_uri here came
+	// straight from the allowlist-validated $valid set, never raw request input.
+	$redirect_origin = aafm_oauth_redirect_uri_origin( $valid['redirect_uri'] );
+
+	aafm_oauth_send_consent_headers( $redirect_origin );
 	status_header( 200 );
 	header( 'Content-Type: text/html; charset=utf-8' );
 	aafm_oauth_render_consent_page( $view );

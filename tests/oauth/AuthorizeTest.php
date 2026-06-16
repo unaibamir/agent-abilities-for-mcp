@@ -434,4 +434,57 @@ class AuthorizeTest extends TestCase {
 		// The malicious client_name comes back HTML-escaped, never as a raw tag.
 		$this->assertStringContainsString( '&lt;script&gt;alert(1)&lt;/script&gt;', $html );
 	}
+
+	/**
+	 * The redirect-origin helper reduces a redirect_uri to scheme://host[:port] and
+	 * strips the path and query, so only a bare origin can ever reach the CSP.
+	 */
+	public function test_redirect_uri_origin_strips_path_and_query(): void {
+		$this->assertSame(
+			'https://app.example',
+			aafm_oauth_redirect_uri_origin( 'https://app.example/cb?foo=bar#frag' )
+		);
+		// An explicit non-default port is preserved; the path is still dropped.
+		$this->assertSame(
+			'https://app.example:8443',
+			aafm_oauth_redirect_uri_origin( 'https://app.example:8443/callback' )
+		);
+		// A URI with no scheme/host yields '', which keeps form-action at 'self' only.
+		$this->assertSame( '', aafm_oauth_redirect_uri_origin( '/relative/only' ) );
+	}
+
+	/**
+	 * The consent CSP allows the resulting cross-origin redirect: when the validated
+	 * client origin is supplied, form-action carries BOTH 'self' and that origin, never
+	 * the path. This is the fix for the form-action redirect block — without the origin
+	 * the browser aborts the 302 to the client and the code never arrives.
+	 */
+	public function test_consent_csp_form_action_includes_validated_client_origin(): void {
+		$origin = aafm_oauth_redirect_uri_origin( 'https://app.example/cb' );
+		$csp    = aafm_oauth_consent_csp( $origin );
+
+		$this->assertStringContainsString( "form-action 'self' https://app.example;", $csp );
+		// The path of the redirect_uri must never leak into the policy.
+		$this->assertStringNotContainsString( '/cb', $csp );
+		// Every other hardened directive is preserved exactly.
+		$this->assertStringContainsString( "default-src 'none';", $csp );
+		$this->assertStringContainsString( "style-src 'unsafe-inline';", $csp );
+		$this->assertStringContainsString( 'img-src data:;', $csp );
+		$this->assertStringContainsString( "base-uri 'none';", $csp );
+		$this->assertStringContainsString( "frame-ancestors 'none'", $csp );
+		// The policy must not be widened to a wildcard form-action source.
+		$this->assertStringNotContainsString( '*', $csp );
+	}
+
+	/**
+	 * The local error page never redirects to the client, so its form-action stays at
+	 * 'self' alone with no client origin appended.
+	 */
+	public function test_local_error_csp_keeps_form_action_self_only(): void {
+		$csp = aafm_oauth_consent_csp();
+
+		$this->assertStringContainsString( "form-action 'self';", $csp );
+		$this->assertStringNotContainsString( 'app.example', $csp );
+		$this->assertStringNotContainsString( 'https://', $csp );
+	}
 }

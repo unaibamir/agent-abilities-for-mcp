@@ -18,6 +18,49 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * Upper bound (in bytes) for free-form OAuth endpoint string inputs.
+ *
+ * Generous enough for any legitimate authorization code, refresh token, client_id,
+ * or redirect URI we issue (all far shorter), but tight enough that an attacker
+ * cannot push unbounded strings through hashing and DB lookups. Redirect URIs are
+ * already capped at 2048 bytes in aafm_oauth_validate_redirect_uri(); this is the
+ * matching guard for the token endpoint's opaque fields.
+ */
+if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
+	define( 'AAFM_OAUTH_MAX_FIELD_LEN', 4096 );
+}
+
+/**
+ * Upper bound (in bytes) for a registered client_name.
+ *
+ * The storage column is VARCHAR(191); 255 leaves headroom while refusing an
+ * abusive name outright rather than silently truncating it.
+ */
+if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
+	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 255 );
+}
+
+/**
+ * PKCE code-verifier length bounds (RFC 7636 §4.1): 43 to 128 characters.
+ */
+if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MIN' ) ) {
+	define( 'AAFM_OAUTH_PKCE_VERIFIER_MIN', 43 );
+}
+if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MAX' ) ) {
+	define( 'AAFM_OAUTH_PKCE_VERIFIER_MAX', 128 );
+}
+
+/**
+ * Whether a string exceeds the generic OAuth field length cap.
+ *
+ * @param string $value The candidate value.
+ * @return bool True when the value is longer than AAFM_OAUTH_MAX_FIELD_LEN bytes.
+ */
+function aafm_oauth_field_too_long( string $value ): bool {
+	return strlen( $value ) > AAFM_OAUTH_MAX_FIELD_LEN;
+}
+
+/**
  * Register the three OAuth REST routes.
  *
  * Hooked on `rest_api_init`. All routes accept POST only and authenticate via the
@@ -195,8 +238,18 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 
 	$params = aafm_oauth_rest_params( $request );
 
-	$redirect_uris  = isset( $params['redirect_uris'] ) && is_array( $params['redirect_uris'] ) ? $params['redirect_uris'] : array();
-	$client_name    = isset( $params['client_name'] ) && is_scalar( $params['client_name'] ) ? (string) $params['client_name'] : '';
+	$redirect_uris = isset( $params['redirect_uris'] ) && is_array( $params['redirect_uris'] ) ? $params['redirect_uris'] : array();
+	$client_name   = isset( $params['client_name'] ) && is_scalar( $params['client_name'] ) ? (string) $params['client_name'] : '';
+
+	// Refuse an abusive client_name outright rather than silently truncating it.
+	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
+		return aafm_oauth_rest_error(
+			'invalid_client_metadata',
+			__( 'The client name is too long.', 'agent-abilities-for-mcp' ),
+			400
+		);
+	}
+
 	$grant_types    = isset( $params['grant_types'] ) && is_array( $params['grant_types'] ) ? $params['grant_types'] : array( 'authorization_code', 'refresh_token' );
 	$response_types = isset( $params['response_types'] ) && is_array( $params['response_types'] ) ? $params['response_types'] : array( 'code' );
 
@@ -304,6 +357,20 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 		return $invalid_grant;
 	}
 
+	// Length bounds BEFORE redemption: an out-of-range field is rejected up front so
+	// an over-long verifier can never burn an otherwise-valid code, and no oversized
+	// string reaches hashing or the DB. RFC 7636 fixes the verifier at 43-128 chars.
+	$verifier_len = strlen( $code_verifier );
+	if (
+		aafm_oauth_field_too_long( $code )
+		|| aafm_oauth_field_too_long( $redirect_uri )
+		|| aafm_oauth_field_too_long( $client_id )
+		|| $verifier_len < AAFM_OAUTH_PKCE_VERIFIER_MIN
+		|| $verifier_len > AAFM_OAUTH_PKCE_VERIFIER_MAX
+	) {
+		return $invalid_grant;
+	}
+
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
 	// enforced inside aafm_oauth_redeem_code().
 	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );
@@ -337,7 +404,11 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 	$refresh_token = aafm_oauth_rest_param( $request, 'refresh_token' );
 	$client_id     = aafm_oauth_rest_param( $request, 'client_id' );
 
-	if ( '' === $refresh_token || '' === $client_id ) {
+	if (
+		'' === $refresh_token || '' === $client_id
+		|| aafm_oauth_field_too_long( $refresh_token )
+		|| aafm_oauth_field_too_long( $client_id )
+	) {
 		return aafm_oauth_rest_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),

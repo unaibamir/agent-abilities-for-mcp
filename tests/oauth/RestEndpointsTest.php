@@ -334,6 +334,89 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
+	 * An over-long PKCE code_verifier is rejected with 400 before any redemption.
+	 *
+	 * RFC 7636 bounds the verifier to 43-128 characters. A 5000-character verifier
+	 * is refused up front with a generic invalid_grant, so an attacker cannot use
+	 * the token endpoint to push unbounded strings through hashing/DB work.
+	 */
+	public function test_token_rejects_overlong_code_verifier(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id = $this->register_client( $redirect );
+		$code      = $this->mint_code( $client_id, $redirect, $challenge );
+
+		// A 5000-character verifier — far outside the RFC 7636 43-128 window.
+		$overlong = str_repeat( 'a', 5000 );
+
+		$response = $this->token_code_request( $client_id, $code, $redirect, $overlong );
+
+		$this->assertSame( 400, $response->get_status() );
+
+		// The code must NOT have been consumed: an over-long verifier is rejected
+		// before redemption, so the legitimate verifier still works afterwards.
+		$retry = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		$this->assertSame( 200, $retry->get_status() );
+	}
+
+	/**
+	 * A too-short PKCE code_verifier is rejected with 400 (RFC 7636 lower bound).
+	 */
+	public function test_token_rejects_too_short_code_verifier(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id = $this->register_client( $redirect );
+		$code      = $this->mint_code( $client_id, $redirect, $challenge );
+
+		// 10 characters — below the RFC 7636 minimum of 43.
+		$response = $this->token_code_request( $client_id, $code, $redirect, 'short12345' );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * An over-long client_name on registration is rejected with 400.
+	 */
+	public function test_register_rejects_overlong_client_name(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => str_repeat( 'n', 5000 ),
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * An over-long refresh_token is rejected with 400 before any DB lookup.
+	 */
+	public function test_token_rejects_overlong_refresh_token(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$request->set_body_params(
+			array(
+				'grant_type'    => 'refresh_token',
+				'refresh_token' => str_repeat( 'r', 5000 ),
+				'client_id'     => 'abc123',
+			)
+		);
+
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
 	 * When DCR is disabled, registration returns 404.
 	 */
 	public function test_register_is_404_when_dcr_disabled(): void {

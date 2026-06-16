@@ -1,4 +1,10 @@
 <?php
+/**
+ * Admin menu structure: shared tabs map, top-level menu, asset hook, and tab links.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
 declare( strict_types=1 );
 
 namespace AAFM\Tests\Admin;
@@ -21,7 +27,11 @@ final class MenuStructureTest extends TestCase {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 
 		global $menu, $submenu, $admin_page_hooks, $_registered_pages, $_parent_pages;
-		$menu = $submenu = $admin_page_hooks = $_registered_pages = $_parent_pages = array();
+		$menu              = array();
+		$submenu           = array();
+		$admin_page_hooks  = array();
+		$_registered_pages = array();
+		$_parent_pages     = array();
 
 		aafm_register_admin_menu();
 

@@ -43,7 +43,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => "First para.\n\nSecond para.",
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'content', $shape );
 		// the_content wraps paragraphs in <p> tags via wpautop.
@@ -57,7 +57,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Raw [shortcode] body no wpautop',
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'raw' ) );
+		$shape   = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'raw' ) );
 
 		$this->assertSame( 'Raw [shortcode] body no wpautop', $shape['content'] );
 	}
@@ -69,7 +69,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => "Para one.\n\nPara two.",
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'bogus' ) );
+		$shape   = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'bogus' ) );
 
 		$this->assertStringContainsString( '<p>', $shape['content'] );
 	}
@@ -82,7 +82,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'The full body that should not be trimmed here.',
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertSame( 'A hand-written excerpt.', $shape['excerpt'] );
 	}
@@ -96,7 +96,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => $body,
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertNotSame( '', $shape['excerpt'] );
 		// Trimmed to 55 words + the trailing hellip from wp_trim_words.
@@ -146,7 +146,7 @@ final class RichPostTest extends TestCase {
 				'post_author' => $user_id,
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertSame(
 			array( 'id', 'display_name' ),
@@ -211,7 +211,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Heavy body here.',
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ), array( 'include_content' => false ) );
+		$shape   = aafm_rich_post( get_post( $post_id ), array( 'include_content' => false ) );
 
 		$this->assertArrayNotHasKey( 'content', $shape );
 		// Light fields still present.
@@ -229,8 +229,35 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Body present.',
 			)
 		);
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape   = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'content', $shape );
+	}
+
+	public function test_rich_post_protected_published_post_never_leaks_body(): void {
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'   => 'publish',
+				'post_password' => 'TopSecretPass123',
+				'post_content'  => 'Body holding SECRETMARKER and more.',
+				// Explicit empty excerpt: the WP test factory injects a default
+				// "Post excerpt N" otherwise, and get_the_excerpt() on a protected
+				// post would then return the core protected-post placeholder.
+				'post_excerpt'  => '',
+			)
+		);
+		$post    = get_post( $post_id );
+
+		foreach ( array( 'rendered', 'raw' ) as $format ) {
+			$shape = aafm_rich_post( $post, array( 'content_format' => $format ) );
+			$json  = (string) wp_json_encode( $shape );
+
+			$this->assertArrayNotHasKey( 'content', $shape, "content must be omitted for a protected post ({$format})" );
+			$this->assertStringNotContainsString( 'TopSecretPass123', $json, "password leaked ({$format})" );
+			$this->assertStringNotContainsString( 'SECRETMARKER', $json, "body marker leaked ({$format})" );
+			$this->assertStringNotContainsString( 'Body holding', $json, "raw body leaked ({$format})" );
+			// No manual excerpt → must fall back to '' (never the auto-excerpt of the body).
+			$this->assertSame( '', $shape['excerpt'], "excerpt leaked the body ({$format})" );
+		}
 	}
 }

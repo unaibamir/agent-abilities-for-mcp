@@ -137,6 +137,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/set-featured-image':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 		case 'aafm/trash-post':
+		case 'aafm/delete-post':
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
 		// CPT writes: the type isn't known at discovery time (empty input), so use the
@@ -171,6 +172,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->edit_posts );
 			};
 		case 'aafm/trash-page':
+		case 'aafm/delete-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->delete_posts );

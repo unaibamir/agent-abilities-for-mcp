@@ -75,4 +75,28 @@ final class PermanentDeleteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'delete-page must reject a non-page id.' );
 		$this->assertNotNull( get_post( $post ), 'the post must be untouched.' );
 	}
+
+	public function test_discovery_floors_match_the_trash_abilities(): void {
+		// An admin holds delete_posts and the page delete_posts cap, so both tools show up.
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-post' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-page' ) );
+
+		// A contributor holds the coarse delete_posts floor (exactly like trash-post), so it
+		// discovers delete-post — per-object delete_post still denies it on others' content at
+		// execute time (proven above). It lacks the page delete cap, so delete-page stays hidden.
+		$this->acting_as( 'contributor' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-post' ) );
+		$this->assertSame(
+			aafm_user_can_discover_ability( 'aafm/trash-post' ),
+			aafm_user_can_discover_ability( 'aafm/delete-post' ),
+			'delete-post must share the trash-post discovery floor.'
+		);
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-page' ) );
+
+		// A subscriber holds neither floor cap, so neither tool is discoverable.
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-post' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-page' ) );
+	}
 }

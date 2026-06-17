@@ -87,6 +87,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-user'          => __( 'Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-user'          => __( 'Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-user-meta'     => __( 'Removes an allowlisted user meta key from a user the agent can edit. This cannot be undone. Auth and capability keys can never be touched.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-post'          => __( 'Permanently deletes a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead. Requires delete access to that post. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-page'          => __( 'Permanently deletes a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/update-site-settings' => __( 'Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page). It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
 	);
 }

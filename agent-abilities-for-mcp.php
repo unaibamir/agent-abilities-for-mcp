@@ -140,6 +140,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bootstrap.php';
 
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';

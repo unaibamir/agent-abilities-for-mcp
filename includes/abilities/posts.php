@@ -74,6 +74,14 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_cpt_item',
 	);
+	$registry['aafm/update-cpt-item'] = array(
+		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability).', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_update_cpt_item',
+	);
 	return $registry;
 }
 
@@ -741,6 +749,82 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 	return array( 'post' => aafm_redact_post( $updated ) );
+}
+
+/**
+ * Args for aafm/update-cpt-item.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_cpt_item(): array {
+	$schema                          = aafm_write_content_schema( false );
+	$schema['properties']['post_id'] = array(
+		'type'    => 'integer',
+		'minimum' => 1,
+	);
+	$schema['required']              = array( 'post_id' );
+
+	return array(
+		'label'               => __( 'Update content item', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => $schema,
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+		),
+		'execute_callback'    => 'aafm_exec_update_cpt_item',
+		'permission_callback' => 'aafm_perm_update_cpt_item',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/update-cpt-item: per-object edit on a type that clears the floor+allowlist
+ * AND is map_meta_cap (via aafm_can_edit_post_object), plus the type's publish cap when the
+ * request asks to publish. The post_id resolves the type, so no post_type arg is needed here —
+ * editing is per-object and the object knows its own type.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_update_cpt_item( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
+		return false;
+	}
+	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+		$caps = aafm_type_caps( $post->post_type );
+		return $caps['object'] instanceof WP_Post_Type
+			&& current_user_can( (string) $caps['object']->cap->publish_posts );
+	}
+	return true;
+}
+
+/**
+ * Execute aafm/update-cpt-item.
+ *
+ * Loads the target, re-validates its post_type against the allowlist+floor at execute time
+ * (defense in depth against a de-allowlist race), then delegates to the existing, type-generic
+ * aafm_exec_update_post() so the CPT update inherits status validation, content sanitization,
+ * the force-draft public-status coercion, and the C2 enrichment with no duplicated logic.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_cpt_item( array $input ) {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	if ( ! $post instanceof WP_Post || is_wp_error( aafm_validate_post_type( $post->post_type ) ) ) {
+		return aafm_generic_error();
+	}
+	return aafm_exec_update_post( $input );
 }
 
 /**

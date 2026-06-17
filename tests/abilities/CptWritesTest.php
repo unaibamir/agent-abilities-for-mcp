@@ -175,4 +175,109 @@ final class CptWritesTest extends TestCase {
 		$this->assertSame( 'draft', get_post_status( $out['post']['id'] ) );
 		delete_option( 'aafm_force_draft' );
 	}
+
+	public function test_update_cpt_item_edits_an_allowlisted_cpt_item(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'edit_others_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT,
+				'post_status' => 'draft',
+				'post_title'  => 'Old',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-cpt-item' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'New title',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'New title', get_post_field( 'post_title', $post_id ) );
+	}
+
+	public function test_update_cpt_item_denied_for_non_allowlisted_type(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
+		// A post of the NON-allowlisted CPT — even an admin must be denied.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT_DENIED,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-cpt-item' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+	}
+
+	public function test_update_cpt_item_publish_requires_the_types_publish_cap(): void {
+		// Holds edit caps but NOT publish_aafm_books → publishing must be denied at permission time.
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'edit_others_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT,
+				'post_status' => 'draft',
+			)
+		);
+
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-cpt-item' )->check_permissions(
+				array(
+					'post_id' => $post_id,
+					'status'  => 'publish',
+				)
+			)
+		);
+	}
+
+	public function test_update_cpt_item_applies_enrichment_meta(): void {
+		// Allowlist a governed meta key so the enrichment path is exercised end to end.
+		// The governed-meta allowlist is a single filter, aafm_allowed_meta_keys.
+		add_filter(
+			'aafm_allowed_meta_keys',
+			static function ( array $keys ): array {
+				$keys[] = 'aafm_demo_key';
+				return $keys;
+			}
+		);
+
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'edit_others_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT,
+				'post_status' => 'draft',
+			)
+		);
+
+		wp_get_ability( 'aafm/update-cpt-item' )->execute(
+			array(
+				'post_id' => $post_id,
+				'meta'    => array( 'aafm_demo_key' => 'enriched' ),
+			)
+		);
+
+		$this->assertSame( 'enriched', get_post_meta( $post_id, 'aafm_demo_key', true ) );
+	}
 }

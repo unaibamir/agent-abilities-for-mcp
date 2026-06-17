@@ -294,4 +294,20 @@ final class CptWritesTest extends TestCase {
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-cpt-item' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-cpt-item' ) );
 	}
+
+	public function test_cpt_writes_are_grouped_under_the_content_subject(): void {
+		// The Abilities admin tab buckets the registry by `subject`, then splits each panel
+		// into reads/writes by `group`. Proving both keys here proves the two new abilities
+		// surface under the content tab's writes section with no admin-render change.
+		// (Default-OFF is guaranteed structurally by CatalogTest::test_nothing_is_enabled_by_default;
+		//  this set_up() enables them for the harness, so it is NOT the place to assert opt-in.)
+		$registry = aafm_get_abilities_registry();
+
+		$this->assertArrayHasKey( 'aafm/create-cpt-item', $registry );
+		$this->assertArrayHasKey( 'aafm/update-cpt-item', $registry );
+		$this->assertSame( 'content', $registry['aafm/create-cpt-item']['subject'] );
+		$this->assertSame( 'content', $registry['aafm/update-cpt-item']['subject'] );
+		$this->assertSame( 'writes', $registry['aafm/create-cpt-item']['group'] );
+		$this->assertSame( 'writes', $registry['aafm/update-cpt-item']['group'] );
+	}
 }

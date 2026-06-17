@@ -140,4 +140,99 @@ final class UsersWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'demoting the sole admin must be refused.' );
 		$this->assertContains( 'administrator', (array) get_userdata( $admin )->roles, 'sole admin must stay an admin.' );
 	}
+
+	public function test_delete_user_requires_delete_users_and_reassign(): void {
+		$this->acting_as( 'administrator' );
+		$victim   = self::factory()->user->create( array( 'role' => 'author' ) );
+		$reassign = self::factory()->user->create( array( 'role' => 'editor' ) );
+
+		// Missing reassign target → refused (orphaned-content guard), NOT a schema rejection.
+		$res = wp_get_ability( 'aafm/delete-user' )->execute( array( 'user_id' => $victim ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'delete-user must require a reassign target.' );
+		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'victim must survive the missing-reassign refusal.' );
+
+		// With a reassign target → deleted.
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => $victim,
+				'reassign_to' => $reassign,
+			)
+		);
+		$this->assertIsArray( $res );
+		$this->assertFalse( get_userdata( $victim ), 'victim must be gone.' );
+	}
+
+	public function test_delete_user_cannot_delete_self(): void {
+		$admin = $this->acting_as( 'administrator' );
+		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$res   = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => $admin,
+				'reassign_to' => $other,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'must never delete self.' );
+		$this->assertInstanceOf( \WP_User::class, get_userdata( $admin ) );
+	}
+
+	public function test_delete_user_is_destructive(): void {
+		$ann = wp_get_ability( 'aafm/delete-user' )->get_meta_item( 'annotations' );
+		$this->assertTrue( $ann['destructive'], 'delete-user is a permanent removal.' );
+	}
+
+	/**
+	 * Reviewer note M1: prove the last-admin guard in ISOLATION from the self-guard.
+	 *
+	 * The actor must be capable (delete_users + delete_user) but must NOT be the victim,
+	 * and the victim must be the sole remaining administrator. We grant the actor
+	 * delete_users on a non-admin role so the administrator-role count sees only the
+	 * victim — exercising the last-admin branch, never the self branch.
+	 */
+	public function test_delete_user_cannot_delete_the_sole_remaining_admin_when_actor_is_not_the_victim(): void {
+		// Normalize the fixture to exactly one administrator: the victim.
+		foreach ( get_users(
+			array(
+				'role'   => 'administrator',
+				'fields' => 'ID',
+			)
+		) as $existing_admin ) {
+			wp_update_user(
+				array(
+					'ID'   => (int) $existing_admin,
+					'role' => 'subscriber',
+				)
+			);
+		}
+		$victim_admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$reassign     = self::factory()->user->create( array( 'role' => 'editor' ) );
+
+		// A SEPARATE actor (not the victim) who can delete users but is not an administrator,
+		// so the administrator-role count below is exactly one (the victim).
+		$actor      = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$actor_user = get_userdata( $actor );
+		$actor_user->add_cap( 'delete_users' );
+		$actor_user->add_cap( 'delete_user' );
+		wp_set_current_user( $actor );
+
+		$this->assertCount(
+			1,
+			get_users(
+				array(
+					'role'   => 'administrator',
+					'fields' => 'ID',
+				)
+			),
+			'fixture must leave the victim as the only administrator.'
+		);
+		$this->assertNotSame( $actor, $victim_admin, 'actor must differ from the victim (isolate the last-admin branch).' );
+
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
+			array(
+				'user_id'     => $victim_admin,
+				'reassign_to' => $reassign,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'deleting the sole remaining admin must be refused even by another actor.' );
+		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim_admin ), 'the last admin must survive.' );
+	}
 }

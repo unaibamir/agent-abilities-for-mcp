@@ -58,6 +58,14 @@ function aafm_register_users_definitions( array $registry ): array {
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_update_user',
 	);
+	$registry['aafm/delete-user'] = array(
+		'label'        => __( 'Delete user', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'users',
+		'args_builder' => 'aafm_args_delete_user',
+	);
 	return $registry;
 }
 
@@ -481,4 +489,118 @@ function aafm_exec_update_user( array $input ) {
 	}
 
 	return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+}
+
+/**
+ * Args for aafm/delete-user.
+ *
+ * Closed schema: user_id required; reassign_to optional IN THE SCHEMA so the execute body
+ * can refuse a missing target with the orphaned-content message rather than a bare schema
+ * rejection. The reassign is mandatory in practice — the execute callback rejects when it
+ * is absent.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_user(): array {
+	return array(
+		'label'               => __( 'Delete user', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently delete a user and reassign their content to another user (required). Never deletes you or the last administrator. Requires the delete-users capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'user_id'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'reassign_to' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'user_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted' => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_user',
+		'permission_callback' => 'aafm_perm_delete_user',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-user: delete_users AND per-object delete_user on the id.
+ *
+ * Returns false with empty input (no id), so discovery uses the object-independent
+ * delete_users floor in server.php; this per-object check still runs at execute time.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_perm_delete_user( array $input ): bool {
+	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	return $id > 0 && current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
+}
+
+/**
+ * Execute aafm/delete-user.
+ *
+ * Permanently removes a user via core wp_delete_user(), reassigning their content to
+ * another existing user. Three guards: a reassign target is mandatory and must exist and
+ * differ from the victim; the current user can never delete themselves; the last
+ * administrator can never be deleted (a lockout guard). Uses wp_delete_user() — never raw
+ * SQL — which lives in wp-admin/includes/user.php.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_user( array $input ) {
+	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
+	$victim   = $id ? get_userdata( $id ) : false;
+	if ( ! $victim instanceof WP_User ) {
+		return aafm_generic_error();
+	}
+
+	// Never delete the current user.
+	if ( get_current_user_id() === $id ) {
+		return aafm_generic_error();
+	}
+
+	// The reassign target is mandatory, must exist, and must not be the victim.
+	if ( ! $reassign || $reassign === $id || ! get_userdata( $reassign ) instanceof WP_User ) {
+		return aafm_generic_error();
+	}
+
+	// Never delete the last administrator.
+	if ( in_array( 'administrator', (array) $victim->roles, true ) ) {
+		$admins = get_users(
+			array(
+				'role'   => 'administrator',
+				'fields' => 'ID',
+				'number' => 2,
+			)
+		);
+		if ( count( $admins ) <= 1 ) {
+			return aafm_generic_error();
+		}
+	}
+
+	require_once ABSPATH . 'wp-admin/includes/user.php';
+	$ok = wp_delete_user( $id, $reassign );
+	if ( ! $ok ) {
+		return aafm_generic_error();
+	}
+
+	return array( 'deleted' => true );
 }

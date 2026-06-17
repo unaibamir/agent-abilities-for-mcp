@@ -119,6 +119,10 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// answer. Discovery is proven in SiteSettingsTest (an admin sees them, an editor
 		// does not). Documented here so a future maintainer doesn't add a redundant case.
 
+		// aafm/get-activity-log gates on manage_options (object-independent, no per-object
+		// branch), so it needs no case — it falls through to its real permission_callback
+		// with empty input, the correct answer. Proven in ActivityLogTest.
+
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input — so the per-object permission_callback would
 		// hide the tool from every capable admin at discovery. Use the object-independent

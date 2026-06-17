@@ -249,10 +249,13 @@ final class SecurityRegressionTest extends TestCase {
 		// The governed post-meta and term-meta abilities are the sanctioned exception to the
 		// generic 'meta' ban: each is gated by per-object edit_post / edit_term + a permanent
 		// hard-block denylist + a default-deny allowlist (see includes/abilities/meta.php and
-		// the term-meta abilities in includes/abilities/terms.php). A *generic* option/meta
-		// surface remains banned.
+		// the term-meta abilities in includes/abilities/terms.php). The bulk reader
+		// get-all-post-meta carries the identical gate (per-object edit_post + the same
+		// hard-block + default-deny allowlist) and is sanctioned on the same basis. A *generic*
+		// option/meta surface remains banned.
 		$sanctioned = array(
 			'aafm/get-post-meta',
+			'aafm/get-all-post-meta',
 			'aafm/update-post-meta',
 			'aafm/delete-post-meta',
 			'aafm/get-term-meta',

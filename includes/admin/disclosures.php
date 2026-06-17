@@ -50,6 +50,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/search-content'       => __( 'Searches the content types you have exposed in a single query, returning the same curated fields.', 'agent-abilities-for-mcp' ),
 		'aafm/list-plugins'         => __( 'Lists installed plugins with their name, version, and active state. Read-only — it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-activity-log'     => __( "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp), most recent first. Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'aafm/list-blocks'          => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and date. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'aafm/get-block'            => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
 
 		// Writes.
 		'aafm/create-draft'         => __( 'Creates a new draft post. The agent drafts, a human publishes. It never goes live on its own.', 'agent-abilities-for-mcp' ),
@@ -74,11 +76,14 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-term-meta'     => __( 'Writes one allowlisted scalar meta value to a term you can edit. Only allowlisted keys; protected keys are blocked.', 'agent-abilities-for-mcp' ),
 		'aafm/restore-revision'     => __( 'Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible.', 'agent-abilities-for-mcp' ),
 		'aafm/update-user'          => __( 'Edits a user\'s display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
+		'aafm/create-block'         => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'aafm/update-block'         => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
 
 		// Destructive (still recoverable).
 		'aafm/trash-post'           => __( 'Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),
 		'aafm/trash-page'           => __( 'Moves a page to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-post-meta'     => __( 'Removes an allowlisted meta key and all its values from a post the agent can edit. Only allowlisted keys.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-block'         => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
 
 		// Destructive (permanent).
 		'aafm/delete-revision'      => __( "Permanently removes one revision from a post's history. The live post is unchanged, but the deleted revision cannot be recovered. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),

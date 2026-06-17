@@ -493,6 +493,7 @@ final class SecurityRegressionTest extends TestCase {
 			$includes . '/abilities/posts.php',
 			$includes . '/abilities/pages.php',
 			$includes . '/abilities/comments.php',
+			$includes . '/abilities/blocks.php',
 		);
 
 		foreach ( $sources as $path ) {

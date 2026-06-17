@@ -123,6 +123,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// branch), so it needs no case — it falls through to its real permission_callback
 		// with empty input, the correct answer. Proven in ActivityLogTest.
 
+		// Reusable-block reads/writes: get-block, update-block, and delete-block gate
+		// per-object on edit_post/delete_post on the wp_block id, which is false with empty
+		// input at discovery — so use the object-independent edit_posts/delete_posts floor;
+		// the per-object permission_callback refines at execute. list-blocks and create-block
+		// gate on the object-independent edit_posts floor directly, so they need no case here
+		// (they fall through to aafm_perm_blocks_floor, the correct answer).
+		case 'aafm/get-block':
+		case 'aafm/update-block':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+		case 'aafm/delete-block':
+			return static fn(): bool => current_user_can( 'delete_posts' );
+
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input — so the per-object permission_callback would
 		// hide the tool from every capable admin at discovery. Use the object-independent

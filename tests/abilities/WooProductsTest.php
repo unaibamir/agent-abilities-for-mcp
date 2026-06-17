@@ -147,4 +147,213 @@ final class WooProductsTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/wc-list-products' ) );
 	}
+
+	/**
+	 * WC1.2: create + update writes.
+	 */
+	public function test_create_product_persists_and_returns_the_full_shape(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'New Gadget',
+				'type'          => 'simple',
+				'status'        => 'publish',
+				'description'   => 'A useful gadget.',
+				'regular_price' => '9.50',
+				'sku'           => 'GADGET-1',
+				'stock_status'  => 'instock',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'New Gadget', $res['name'] );
+		$this->assertSame( 'GADGET-1', $res['sku'] );
+		$this->assertArrayHasKey( 'id', $res );
+		$this->assertGreaterThan( 0, $res['id'] );
+
+		// The product is now readable through the store.
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( (int) $res['id'] ) );
+	}
+
+	public function test_create_product_sanitizes_description_and_name(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'        => '<script>alert(1)</script>Clean Name',
+				'description' => '<script>alert(2)</script><strong>bold</strong>',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertStringNotContainsString( '<script>', $res['name'], 'The name is flattened to text.' );
+		$this->assertStringNotContainsString( '<script>', $res['description'], 'The description drops scripts.' );
+		$this->assertStringContainsString( '<strong>', $res['description'], 'The description keeps benign markup.' );
+	}
+
+	public function test_create_product_requires_name(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'sku' => 'NO-NAME' ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'name is required on create.' );
+	}
+
+	public function test_create_product_rejects_a_smuggled_top_level_field(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'        => 'Sneaky',
+				'post_author' => 999999,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled top-level field.' );
+	}
+
+	public function test_create_product_rejects_a_smuggled_nested_attribute_field(): void {
+		// MEDIUM-4: every nested object in a write schema is itself additionalProperties:false. A
+		// smuggled key INSIDE an attributes item must be rejected, not just a top-level smuggle.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'       => 'Has Attributes',
+				'attributes' => array(
+					array(
+						'name'       => 'Color',
+						'options'    => array( 'Red', 'Blue' ),
+						'evil_field' => 'x',
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A smuggled key inside an attributes item must be rejected by the nested closed schema.'
+		);
+	}
+
+	public function test_create_product_accepts_a_clean_nested_attribute(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'       => 'Clean Attributes',
+				'attributes' => array(
+					array(
+						'name'    => 'Size',
+						'options' => array( 'S', 'M', 'L' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A clean nested attribute must be accepted.' );
+	}
+
+	public function test_create_product_denies_an_editor(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-create-product' )->check_permissions( array( 'name' => 'X' ) )
+		);
+	}
+
+	public function test_update_product_patches_by_id(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'name'       => 'Renamed Widget',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Renamed Widget', $res['name'] );
+		// Untouched fields survive the PATCH.
+		$this->assertSame( 'WIDGET-101', $res['sku'], 'A PATCH leaves unsent fields intact.' );
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$this->assertSame( 'Renamed Widget', $read['name'], 'The update must round-trip.' );
+	}
+
+	public function test_update_product_requires_product_id(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute( array( 'name' => 'No id' ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'product_id is required on update.' );
+	}
+
+	public function test_update_product_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 999999,
+				'name'       => 'Ghost',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_update_product_rejects_a_smuggled_nested_attribute_field(): void {
+		// MEDIUM-4 on the update schema too.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'attributes' => array(
+					array(
+						'name'       => 'Color',
+						'options'    => array( 'Red' ),
+						'evil_field' => 'x',
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A smuggled nested attribute key must be rejected on update too.' );
+	}
+
+	public function test_update_product_denies_an_editor(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-update-product' )->check_permissions( array( 'product_id' => 101 ) )
+		);
+	}
+
+	public function test_create_product_write_is_audited(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Audited Create' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-create-product', $abilities );
+	}
+
+	public function test_create_product_denied_is_audited(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-create-product' )->check_permissions( array( 'name' => 'X' ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-create-product', $abilities );
+	}
+
+	public function test_update_product_write_is_audited(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'name'       => 'Audited Update',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-update-product', $abilities );
+	}
+
+	public function test_update_product_denied_is_audited(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-update-product' )->check_permissions( array( 'product_id' => 101 ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-update-product', $abilities );
+	}
 }

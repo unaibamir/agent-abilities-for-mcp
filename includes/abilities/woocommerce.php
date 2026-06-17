@@ -349,3 +349,309 @@ function aafm_exec_wc_get_product( array $input ) {
 	}
 	return aafm_rich_wc_product( $product );
 }
+
+/**
+ * The shared writable product-field properties for the create/update input schemas.
+ *
+ * MEDIUM-4: every nested object/array-of-objects here is itself additionalProperties:false. The
+ * `attributes` items ({name, options}) close their own schema so a smuggled key inside an attribute
+ * is rejected before execute, not just a smuggled top-level field. `images` is a flat int list (no
+ * nested object to close). The top-level schema layered on top is also closed by each args builder.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wc_product_write_properties(): array {
+	return array(
+		'type'              => array(
+			'type' => 'string',
+			'enum' => array( 'simple', 'grouped', 'external', 'variable' ),
+		),
+		'status'            => array(
+			'type' => 'string',
+			'enum' => array( 'publish', 'draft', 'pending', 'private' ),
+		),
+		'description'       => array( 'type' => 'string' ),
+		'short_description' => array( 'type' => 'string' ),
+		'sku'               => array( 'type' => 'string' ),
+		'regular_price'     => array( 'type' => 'string' ),
+		'sale_price'        => array( 'type' => 'string' ),
+		'stock_status'      => array(
+			'type' => 'string',
+			'enum' => array( 'instock', 'outofstock', 'onbackorder' ),
+		),
+		'stock_quantity'    => array( 'type' => 'integer' ),
+		'manage_stock'      => array( 'type' => 'boolean' ),
+		'featured'          => array( 'type' => 'boolean' ),
+		'categories'        => array(
+			'type'  => 'array',
+			'items' => array(
+				'type'    => 'integer',
+				'minimum' => 1,
+			),
+		),
+		'tags'              => array(
+			'type'  => 'array',
+			'items' => array(
+				'type'    => 'integer',
+				'minimum' => 1,
+			),
+		),
+		'image_id'          => array(
+			'type'    => 'integer',
+			'minimum' => 0,
+		),
+		'images'            => array(
+			'type'  => 'array',
+			'items' => array(
+				'type'    => 'integer',
+				'minimum' => 1,
+			),
+		),
+		'attributes'        => array(
+			'type'  => 'array',
+			'items' => array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'name'    => array( 'type' => 'string' ),
+					'options' => array(
+						'type'  => 'array',
+						'items' => array( 'type' => 'string' ),
+					),
+				),
+				'required'             => array( 'name' ),
+				// MEDIUM-4: close the nested attribute object so a smuggled key is rejected.
+				'additionalProperties' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Apply a sanitized, validated input map onto a WC_Product via its setters. Only the keys present in
+ * $input are written (PATCH semantics), so an update leaves unsent fields intact. Every value is
+ * sanitized for its kind before it reaches a setter; caller input never reaches a setter raw.
+ *
+ * @param \WC_Product         $product The product to mutate.
+ * @param array<string,mixed> $input   Validated input (already schema-checked).
+ * @return void
+ */
+function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void {
+	if ( array_key_exists( 'name', $input ) ) {
+		$product->set_name( sanitize_text_field( (string) $input['name'] ) );
+	}
+	if ( array_key_exists( 'status', $input ) ) {
+		$product->set_status( sanitize_key( (string) $input['status'] ) );
+	}
+	if ( array_key_exists( 'sku', $input ) ) {
+		$product->set_sku( sanitize_text_field( (string) $input['sku'] ) );
+	}
+	if ( array_key_exists( 'description', $input ) ) {
+		$product->set_description( wp_kses_post( (string) $input['description'] ) );
+	}
+	if ( array_key_exists( 'short_description', $input ) ) {
+		$product->set_short_description( wp_kses_post( (string) $input['short_description'] ) );
+	}
+	if ( array_key_exists( 'regular_price', $input ) ) {
+		$product->set_regular_price( aafm_wc_sanitize_price( $input['regular_price'] ) );
+	}
+	if ( array_key_exists( 'sale_price', $input ) ) {
+		$product->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
+	}
+	if ( array_key_exists( 'stock_status', $input ) ) {
+		$product->set_stock_status( sanitize_key( (string) $input['stock_status'] ) );
+	}
+	if ( array_key_exists( 'stock_quantity', $input ) ) {
+		$product->set_stock_quantity( (int) $input['stock_quantity'] );
+	}
+	if ( array_key_exists( 'manage_stock', $input ) ) {
+		$product->set_manage_stock( (bool) $input['manage_stock'] );
+	}
+	if ( array_key_exists( 'featured', $input ) ) {
+		$product->set_featured( (bool) $input['featured'] );
+	}
+	if ( array_key_exists( 'categories', $input ) ) {
+		$product->set_category_ids( array_map( 'absint', (array) $input['categories'] ) );
+	}
+	if ( array_key_exists( 'tags', $input ) ) {
+		$product->set_tag_ids( array_map( 'absint', (array) $input['tags'] ) );
+	}
+	if ( array_key_exists( 'image_id', $input ) ) {
+		$product->set_image_id( absint( $input['image_id'] ) );
+	}
+	if ( array_key_exists( 'images', $input ) ) {
+		$product->set_gallery_image_ids( array_map( 'absint', (array) $input['images'] ) );
+	}
+	if ( array_key_exists( 'attributes', $input ) ) {
+		$product->set_attributes( aafm_wc_sanitize_attributes( (array) $input['attributes'] ) );
+	}
+}
+
+/**
+ * Sanitize a price-like string to a bare decimal (digits, one dot, optional leading minus stripped).
+ *
+ * @param mixed $value Raw price.
+ * @return string
+ */
+function aafm_wc_sanitize_price( $value ): string {
+	$clean = preg_replace( '/[^0-9.]/', '', (string) $value );
+	return is_string( $clean ) ? $clean : '';
+}
+
+/**
+ * Sanitize a list of attribute input items to {name, options[]} maps, dropping anything else.
+ *
+ * @param array<int,mixed> $attributes Raw attribute items.
+ * @return array<int,array<string,mixed>>
+ */
+function aafm_wc_sanitize_attributes( array $attributes ): array {
+	$clean = array();
+	foreach ( $attributes as $attribute ) {
+		if ( ! is_array( $attribute ) ) {
+			continue;
+		}
+		$options = array();
+		foreach ( (array) ( $attribute['options'] ?? array() ) as $option ) {
+			$options[] = sanitize_text_field( (string) $option );
+		}
+		$clean[] = array(
+			'name'    => sanitize_text_field( (string) ( $attribute['name'] ?? '' ) ),
+			'options' => $options,
+		);
+	}
+	return $clean;
+}
+
+/**
+ * Args for aafm/wc-create-product.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wc_create_product(): array {
+	$properties         = aafm_wc_product_write_properties();
+	$properties['name'] = array(
+		'type'      => 'string',
+		'minLength' => 1,
+	);
+
+	return array(
+		'label'               => __( 'Create WooCommerce product', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Creates a WooCommerce product (name required; type, status, description, prices, SKU, stock, categories, tags, images, attributes optional). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => $properties,
+			'required'             => array( 'name' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'   => array( 'type' => 'integer' ),
+				'name' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wc_create_product',
+		'permission_callback' => 'aafm_wc_perm',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wc-create-product.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wc_create_product( array $input ) {
+	if ( ! class_exists( 'WC_Product' ) ) {
+		return aafm_generic_error();
+	}
+	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	if ( '' === $name ) {
+		return aafm_generic_error();
+	}
+
+	$product = new \WC_Product();
+	// The product type is fixed by the WC_Product subclass at construction in real WooCommerce, so the
+	// generic create here applies the remaining fields onto a simple product and ignores `type`.
+	unset( $input['type'] );
+	aafm_wc_apply_product_input( $product, $input );
+	$id = (int) $product->save();
+
+	$saved = aafm_wc_get_product( $id );
+	if ( null === $saved ) {
+		return aafm_generic_error();
+	}
+	return aafm_rich_wc_product( $saved );
+}
+
+/**
+ * Args for aafm/wc-update-product.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wc_update_product(): array {
+	$properties               = aafm_wc_product_write_properties();
+	$properties['product_id'] = array(
+		'type'    => 'integer',
+		'minimum' => 1,
+	);
+	$properties['name']       = array(
+		'type'      => 'string',
+		'minLength' => 1,
+	);
+
+	return array(
+		'label'               => __( 'Update WooCommerce product', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => $properties,
+			'required'             => array( 'product_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'   => array( 'type' => 'integer' ),
+				'name' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wc_update_product',
+		'permission_callback' => 'aafm_wc_perm',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wc-update-product.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wc_update_product( array $input ) {
+	$product = aafm_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
+	if ( null === $product ) {
+		return aafm_generic_error();
+	}
+	unset( $input['product_id'], $input['type'] );
+	aafm_wc_apply_product_input( $product, $input );
+	$id = (int) $product->save();
+
+	$saved = aafm_wc_get_product( $id );
+	if ( null === $saved ) {
+		return aafm_generic_error();
+	}
+	return aafm_rich_wc_product( $saved );
+}

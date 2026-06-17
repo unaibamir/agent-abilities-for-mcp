@@ -72,6 +72,8 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/acf-get-user-fields',
 		'aafm/wc-list-products',
 		'aafm/wc-get-product',
+		'aafm/wc-list-product-variations',
+		'aafm/wc-get-product-variation',
 	);
 
 	public function set_up(): void {
@@ -135,9 +137,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 47 reads — no more, no fewer.'
+			'The read group must be exactly the 49 reads — no more, no fewer.'
 		);
-		$this->assertCount( 47, $reads, 'The read catalog ships exactly 47 read abilities.' );
+		$this->assertCount( 49, $reads, 'The read catalog ships exactly 49 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

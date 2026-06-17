@@ -373,6 +373,55 @@ final class WooProductsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'A clean nested attribute must be accepted.' );
 	}
 
+	public function test_create_then_get_round_trips_a_populated_attribute(): void {
+		// A populated attributes map (not just the empty {} case) must round-trip: create with a
+		// Size attribute, then get-product and find Size / S,M,L back in the re-keyed object.
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'       => 'Sized Product',
+				'attributes' => array(
+					array(
+						'name'    => 'Size',
+						'options' => array( 'S', 'M', 'L' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$this->assertNotInstanceOf( WP_Error::class, $read );
+
+		// aafm_rich_wc_product re-keys attributes by index into an object, each entry {name, options}.
+		$attributes = (array) $read['attributes'];
+		$this->assertNotEmpty( $attributes, 'A populated attribute must survive the create→get round-trip.' );
+
+		$names = array_column( $attributes, 'name' );
+		$this->assertContains( 'Size', $names, 'The Size attribute name round-trips.' );
+
+		$first = array_values( $attributes )[0];
+		$this->assertSame( array( 'S', 'M', 'L' ), $first['options'], 'The attribute options round-trip in order.' );
+	}
+
+	public function test_create_then_get_round_trips_the_regular_price(): void {
+		// regular_price runs through aafm_wc_sanitize_price; assert the clean decimal reads back, and
+		// that the stub mirrors it into price (regular only — sale price is left alone).
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Priced Product',
+				'regular_price' => '9.50',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+		$this->assertSame( '9.50', $created['regular_price'], 'The sanitized regular price reads back.' );
+		$this->assertSame( '9.50', $created['price'], 'price tracks the regular price in the stub.' );
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$this->assertSame( '9.50', $read['regular_price'], 'The price round-trips on a following read.' );
+	}
+
 	public function test_create_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(

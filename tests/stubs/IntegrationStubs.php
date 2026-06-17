@@ -250,7 +250,7 @@ class WC_Product {
 	public function set_sku( $v ) { $this->data['sku'] = (string) $v; }
 	public function set_description( $v ) { $this->data['description'] = (string) $v; }
 	public function set_short_description( $v ) { $this->data['short_description'] = (string) $v; }
-	public function set_regular_price( $v ) { $this->data['regular_price'] = (string) $v; $this->data['price'] = (string) $v; }
+	public function set_regular_price( $v ) { $this->data['regular_price'] = (string) $v; $this->data['price'] = (string) $v; } // price tracks regular only (sale price never mirrors here).
 	public function set_sale_price( $v ) { $this->data['sale_price'] = (string) $v; }
 	public function set_price( $v ) { $this->data['price'] = (string) $v; }
 	public function set_stock_status( $v ) { $this->data['stock_status'] = (string) $v; }

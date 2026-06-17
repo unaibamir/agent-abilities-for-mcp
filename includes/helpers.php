@@ -232,6 +232,94 @@ function aafm_sanitize_meta_value( string $key, $value ) {
 }
 
 /**
+ * Default-deny term-meta allowlist. Empty by default — opt-in via the
+ * aafm_allowed_term_meta_keys filter (Wave-4 SEO integrations populate it). Hard-blocked
+ * keys are stripped AFTER the filter, so a rogue filter can never expose a protected key.
+ * Mirrors aafm_allowed_meta_keys() but is term-scoped and filter-only (no option).
+ *
+ * @return list<string>
+ */
+function aafm_allowed_term_meta_keys(): array {
+	/**
+	 * Filters the term-meta keys exposed to AI agents. Re-floored against the hard-block
+	 * after this filter, so adding a blocked key is a no-op.
+	 *
+	 * @param list<string> $keys Allowlisted term-meta keys (empty by default).
+	 */
+	$filtered = (array) apply_filters( 'aafm_allowed_term_meta_keys', array() );
+
+	return array_values(
+		array_unique(
+			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
+		)
+	);
+}
+
+/**
+ * Validate a term-meta key: must be allowlisted AND not hard-blocked. Reuses the
+ * post-agnostic hard-block floor (aafm_hard_blocked_meta_key). One generic error for both
+ * failure modes so a caller cannot distinguish "blocked" from "not allowlisted".
+ *
+ * @param string $key Requested term-meta key.
+ * @return string|WP_Error
+ */
+function aafm_validate_term_meta_key( string $key ) {
+	$key = trim( (string) $key );
+	if ( '' === $key || aafm_hard_blocked_meta_key( $key ) || ! in_array( $key, aafm_allowed_term_meta_keys(), true ) ) {
+		return new WP_Error( 'aafm_term_meta_key_not_allowed', __( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+	}
+	return $key;
+}
+
+/**
+ * Coerce + sanitize a term-meta value for writing. Scalar-only: arrays/objects are refused
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized,
+ * then run through sanitize_meta() with the 'term' object type so any registered
+ * sanitize_term_meta_{$key} callback fires; the result is re-asserted as scalar.
+ *
+ * @param string $key   Term-meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value Raw value from input.
+ * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
+ */
+function aafm_sanitize_term_meta_value( string $key, $value ) {
+	if ( ! is_scalar( $value ) ) {
+		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( is_string( $value ) ) {
+		$value = sanitize_text_field( $value );
+	}
+	$value = sanitize_meta( $key, $value, 'term', 'term' );
+	if ( ! is_scalar( $value ) ) {
+		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
+	}
+	return $value;
+}
+
+/**
+ * Shared term-meta gate: the term must be readable (exists in a public-allowlisted
+ * taxonomy) AND the key must clear the hard-block + allowlist. Write/delete callbacks add
+ * the per-object edit_term check on top of this (see the ability permission callbacks).
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return string|WP_Error The validated taxonomy on success (callers also need it), or error.
+ */
+function aafm_validate_term_meta_request( array $input ) {
+	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	$term_id = isset( $input['term_id'] ) ? absint( $input['term_id'] ) : 0;
+	if ( $term_id < 1 || ! get_term( $term_id, $taxonomy ) instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+	$key = aafm_validate_term_meta_key( isset( $input['meta_key'] ) ? (string) $input['meta_key'] : '' );
+	if ( is_wp_error( $key ) ) {
+		return $key;
+	}
+	return $taxonomy;
+}
+
+/**
  * Resolve a post type's cap object and whether it uses core's meta-cap mapping.
  *
  * The Tier-1 cap keys (edit_post, delete_post, publish_posts, read_private_posts) are

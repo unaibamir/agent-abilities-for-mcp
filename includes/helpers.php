@@ -337,6 +337,47 @@ function aafm_validate_taxonomy( string $taxonomy ) {
 }
 
 /**
+ * Validate a list of term IDs for a single taxonomy, returning the sanitized IDs.
+ *
+ * Enforces, in order: the taxonomy clears the public allow-list (aafm_validate_taxonomy);
+ * the current (agent) user holds that taxonomy's assign_terms cap; every ID is a positive
+ * integer; every ID is an EXISTING term that belongs to THIS taxonomy (rejects nonexistent
+ * and cross-taxonomy IDs). Pure — performs no writes — so the caller can validate the whole
+ * enrichment payload before mutating anything.
+ *
+ * @param string           $taxonomy Requested taxonomy slug.
+ * @param array<int,mixed> $term_ids Candidate term IDs.
+ * @return list<int>|WP_Error Sanitized, validated IDs, or a generic error on any failure.
+ */
+function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids ) {
+	$tax = aafm_validate_taxonomy( $taxonomy );
+	if ( is_wp_error( $tax ) ) {
+		return $tax;
+	}
+
+	$tax_object = get_taxonomy( $tax );
+	if ( ! $tax_object instanceof WP_Taxonomy
+		|| ! current_user_can( (string) $tax_object->cap->assign_terms ) ) {
+		return aafm_generic_error();
+	}
+
+	$clean = array();
+	foreach ( $term_ids as $raw ) {
+		$id = absint( $raw );
+		if ( $id < 1 ) {
+			return aafm_generic_error();
+		}
+		$term = get_term( $id, $tax );
+		if ( ! $term instanceof WP_Term ) {
+			return aafm_generic_error();
+		}
+		$clean[] = $id;
+	}
+
+	return $clean;
+}
+
+/**
  * Validate a post status against a strict allow-list.
  *
  * Blocks 'any' and prevents a non-privileged caller from widening visibility to

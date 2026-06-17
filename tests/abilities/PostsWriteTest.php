@@ -272,4 +272,40 @@ final class PostsWriteTest extends TestCase {
 		// Schema stays closed — the first anti-escalation layer.
 		$this->assertFalse( aafm_write_content_schema( true )['additionalProperties'] );
 	}
+
+	public function test_term_validator_accepts_real_terms_in_allowed_taxonomy(): void {
+		$this->acting_as( 'editor' );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+
+		$ids = aafm_validate_term_ids_for_taxonomy( 'category', array( $term ) );
+		$this->assertSame( array( $term ), $ids );
+	}
+
+	public function test_term_validator_rejects_nonexistent_term_id(): void {
+		$this->acting_as( 'editor' );
+		$err = aafm_validate_term_ids_for_taxonomy( 'category', array( 99999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_term_validator_rejects_cross_taxonomy_id(): void {
+		$this->acting_as( 'editor' );
+		// A tag term id must be rejected when offered as a category id.
+		$tag = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
+		$err = aafm_validate_term_ids_for_taxonomy( 'category', array( $tag ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_term_validator_rejects_non_public_or_unknown_taxonomy(): void {
+		$this->acting_as( 'editor' );
+		$err = aafm_validate_term_ids_for_taxonomy( 'totally_made_up_tax', array( 1 ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_term_validator_denies_without_assign_terms_cap(): void {
+		// A subscriber has no assign_terms capability on the category taxonomy.
+		$this->acting_as( 'subscriber' );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$err  = aafm_validate_term_ids_for_taxonomy( 'category', array( $term ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
 }

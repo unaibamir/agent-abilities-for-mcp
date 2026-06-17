@@ -182,4 +182,21 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertIsArray( $res );
 		$this->assertSame( 1, (int) get_option( 'posts_per_page' ), 'a negative posts_per_page must floor to 1, not flip to 5.' );
 	}
+
+	/**
+	 * Discovery: both abilities gate on manage_options object-independently, so they fall
+	 * through to their permission_callback at list time. An admin must see both; an editor
+	 * (no manage_options) must see neither.
+	 */
+	public function test_site_settings_are_discoverable_by_an_admin_and_hidden_from_an_editor(): void {
+		$this->register_all();
+
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-site-settings' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-site-settings' ) );
+
+		$this->acting_as( 'editor' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-site-settings' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-site-settings' ) );
+	}
 }

@@ -44,6 +44,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-taxonomies'       => __( 'Lists the public taxonomies registered on the site.', 'agent-abilities-for-mcp' ),
 		'aafm/get-post-types'       => __( 'Lists the public post types registered on the site.', 'agent-abilities-for-mcp' ),
 		'aafm/get-site-info'        => __( 'Reads the site name, tagline, URL, and language.', 'agent-abilities-for-mcp' ),
+		'aafm/get-site-settings'    => __( 'Reads a small allowlist of site settings (name, tagline, timezone, date and time formats, posts per page). Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
 		'aafm/list-revisions'       => __( "Lists a post's revisions by id, author, and date. No body content.", 'agent-abilities-for-mcp' ),
 		'aafm/get-revision'         => __( "Reads one revision's id, author, date, and body content (rendered by default, raw on request), plus an optional diff against the current post. Gated by edit access to the parent post.", 'agent-abilities-for-mcp' ),
 		'aafm/search-content'       => __( 'Searches the content types you have exposed in a single query, returning the same curated fields.', 'agent-abilities-for-mcp' ),
@@ -85,5 +86,6 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-user'          => __( 'Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-user'          => __( 'Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-user-meta'     => __( 'Removes an allowlisted user meta key from a user the agent can edit. This cannot be undone. Auth and capability keys can never be touched.', 'agent-abilities-for-mcp' ),
+		'aafm/update-site-settings' => __( 'Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page). It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
 	);
 }

@@ -113,6 +113,12 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// here — it falls through to its real permission_callback with empty input,
 		// which is the correct answer (same as the get-users list sibling).
 
+		// aafm/get-site-settings and aafm/update-site-settings both gate on manage_options
+		// (object-independent, no per-object branch), so neither needs a case — each falls
+		// through to its real permission_callback with empty input, which is the correct
+		// answer. Discovery is proven in SiteSettingsTest (an admin sees them, an editor
+		// does not). Documented here so a future maintainer doesn't add a redundant case.
+
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input — so the per-object permission_callback would
 		// hide the tool from every capable admin at discovery. Use the object-independent

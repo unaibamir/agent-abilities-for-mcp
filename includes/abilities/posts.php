@@ -26,6 +26,14 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
+	$registry['aafm/count-posts']     = array(
+		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Count posts of an allowlisted post type, total and broken down by status (publish, draft, pending, private, future, trash).', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_count_posts',
+	);
 	$registry['aafm/get-post']        = array(
 		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
@@ -218,6 +226,72 @@ function aafm_exec_get_posts( array $input ) {
 	return array(
 		'posts' => $posts,
 		'total' => (int) $query->found_posts,
+	);
+}
+
+/**
+ * Args for aafm/count-posts — total plus per-status breakdown, optional post_type.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_count_posts(): array {
+	return array(
+		'label'               => __( 'Count posts', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Count posts of an allowlisted post type, total and by status.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_type' => array( 'type' => 'string' ),
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'total'     => array( 'type' => 'integer' ),
+				'by_status' => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_count_posts',
+		'permission_callback' => 'aafm_perm_read',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/count-posts. The post type defaults to 'post' and MUST clear the
+ * eligibility floor + allowlist (aafm_validate_post_type); a non-allowlisted type is
+ * refused. wp_count_posts() returns an object keyed by status; expose it as a status map
+ * plus a summed total.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_count_posts( array $input ) {
+	$type = aafm_validate_post_type( isset( $input['post_type'] ) ? (string) $input['post_type'] : 'post' );
+	if ( is_wp_error( $type ) ) {
+		return $type;
+	}
+
+	$counts    = (array) wp_count_posts( $type );
+	$by_status = array();
+	$total     = 0;
+	foreach ( $counts as $status => $n ) {
+		$n                             = (int) $n;
+		$by_status[ (string) $status ] = $n;
+		$total                        += $n;
+	}
+
+	return array(
+		'total'     => $total,
+		// Cast so an empty breakdown JSON-encodes to "{}" (object) per the schema.
+		'by_status' => (object) $by_status,
 	);
 }
 

@@ -341,6 +341,31 @@ function aafm_write_content_schema( bool $require_title ): array {
 }
 
 /**
+ * Closed content input schema for the generic CPT writes.
+ *
+ * Starts from the shared post/page schema (so CPT items inherit the exact C2 enrichment
+ * surface: title/content/excerpt/status/slug/featured_media/terms/meta) and adds a
+ * REQUIRED post_type string. The schema stays closed (additionalProperties:false) so the
+ * agent still cannot smuggle post_author, meta_input, or any other privileged field — the
+ * only privileged field exposed is post_type, which the execute path re-validates against
+ * the read allowlist + eligibility floor.
+ *
+ * @param bool $require_title Whether title is required (true for create, false for update).
+ * @return array<string,mixed>
+ */
+function aafm_write_cpt_content_schema( bool $require_title ): array {
+	$schema                            = aafm_write_content_schema( $require_title );
+	$schema['properties']['post_type'] = array(
+		'type'      => 'string',
+		'minLength' => 1,
+	);
+	$required           = $schema['required'] ?? array();
+	$required[]         = 'post_type';
+	$schema['required'] = array_values( array_unique( $required ) );
+	return $schema;
+}
+
+/**
  * Args for aafm/create-draft.
  *
  * @return array<string,mixed>

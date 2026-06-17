@@ -95,4 +95,14 @@ final class AddPostTermsTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_discovery_floor_is_edit_posts(): void {
+		$this->acting_as( 'editor' );
+		$predicate = aafm_ability_list_permission( 'aafm/add-post-terms' );
+		$this->assertIsCallable( $predicate );
+		$this->assertTrue( $predicate() );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( $predicate() );
+	}
 }

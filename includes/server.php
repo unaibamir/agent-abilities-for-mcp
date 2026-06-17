@@ -170,6 +170,20 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-media':
 			return static fn(): bool => current_user_can( 'upload_files' ) || current_user_can( 'edit_posts' );
 
+		// add-post-terms gates per-object on edit_post on the target post; the post id is
+		// unknown at discovery (empty input), so use the object-independent authoring floor.
+		case 'aafm/add-post-terms':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// Term-meta read/write/delete gate per-object on the term (edit_term — the read
+		// included, since term meta can hold private data) — the term id is unknown at
+		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.
+		// Mirrors the post-meta family (get/update/delete-post-meta).
+		case 'aafm/get-term-meta':
+		case 'aafm/update-term-meta':
+		case 'aafm/delete-term-meta':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
 		default:
 			return null;
 	}

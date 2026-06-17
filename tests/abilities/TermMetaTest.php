@@ -187,4 +187,18 @@ final class TermMetaTest extends TestCase {
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 		unregister_taxonomy( 'aafm_locked2' );
 	}
+
+	public function test_term_meta_writes_discoverable_to_term_editors(): void {
+		$this->acting_as( 'editor' );
+		foreach ( array( 'aafm/get-term-meta', 'aafm/update-term-meta', 'aafm/delete-term-meta' ) as $name ) {
+			$predicate = aafm_ability_list_permission( $name );
+			$this->assertIsCallable( $predicate, $name . ' needs a discovery override (object-dependent gate)' );
+			$this->assertTrue( $predicate(), $name . ' should be discoverable to an editor' );
+		}
+		$this->acting_as( 'subscriber' );
+		foreach ( array( 'aafm/update-term-meta', 'aafm/delete-term-meta' ) as $name ) {
+			$predicate = aafm_ability_list_permission( $name );
+			$this->assertFalse( $predicate(), $name . ' must be hidden from a low-cap user' );
+		}
+	}
 }

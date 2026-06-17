@@ -398,6 +398,36 @@ function aafm_validate_featured_attachment_id( $attachment_id ) {
 }
 
 /**
+ * Validate + pre-sanitize a meta write payload.
+ *
+ * Each key passes aafm_validate_meta_key() (allow-list AND hard-block floor); each value
+ * passes aafm_sanitize_meta_value() (scalar-only). Returns a key => sanitized-value map
+ * ready for update_post_meta(), or a generic error on the first bad key/value so the caller
+ * can reject the whole write before mutating. Both the key failure and the value failure
+ * collapse to the same non-distinguishing generic error (mirrors aafm_exec_update_post_meta
+ * and the helpers.php meta-key doctrine: a caller cannot tell "blocked" from "not allowlisted"
+ * from "non-scalar value").
+ *
+ * @param array<string,mixed> $meta Raw meta object from input.
+ * @return array<string,mixed>|WP_Error Sanitized key=>value map, or error.
+ */
+function aafm_validate_meta_payload( array $meta ) {
+	$clean = array();
+	foreach ( $meta as $raw_key => $raw_value ) {
+		$key = aafm_validate_meta_key( (string) $raw_key );
+		if ( is_wp_error( $key ) ) {
+			return aafm_generic_error();
+		}
+		$value = aafm_sanitize_meta_value( $key, $raw_value );
+		if ( is_wp_error( $value ) ) {
+			return aafm_generic_error();
+		}
+		$clean[ $key ] = $value;
+	}
+	return $clean;
+}
+
+/**
  * Validate a post status against a strict allow-list.
  *
  * Blocks 'any' and prevents a non-privileged caller from widening visibility to

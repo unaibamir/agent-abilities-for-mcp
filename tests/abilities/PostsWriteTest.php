@@ -333,4 +333,37 @@ final class PostsWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 0 ) );
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 88888888 ) );
 	}
+
+	public function test_meta_validator_accepts_allowlisted_scalar(): void {
+		$this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = aafm_validate_meta_payload( array( 'subtitle' => 'Hello' ) );
+		$this->assertSame( array( 'subtitle' => 'Hello' ), $out );
+	}
+
+	public function test_meta_validator_rejects_non_allowlisted_key(): void {
+		$this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$err = aafm_validate_meta_payload( array( 'not_allowed' => 'x' ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_meta_validator_rejects_hard_blocked_key(): void {
+		$this->acting_as( 'editor' );
+		// Even if an operator mistakenly allowlists a capabilities key, the hard floor wins.
+		update_option( 'aafm_allowed_meta_keys', array( 'wp_capabilities' ) );
+
+		$err = aafm_validate_meta_payload( array( 'wp_capabilities' => 'administrator' ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_meta_validator_rejects_non_scalar_value(): void {
+		$this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$err = aafm_validate_meta_payload( array( 'subtitle' => array( 'nested' => 1 ) ) );
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
 }

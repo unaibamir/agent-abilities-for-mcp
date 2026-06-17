@@ -981,6 +981,8 @@ function aafm_args_wc_list_product_variations(): array {
 function aafm_exec_wc_list_product_variations( array $input ) {
 	$parent = aafm_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
 	if ( null === $parent ) {
+		// Deliberately unlike wc-list-products: a missing parent is a genuine error here because
+		// variations require a parent to scope to, whereas a bare product list can legitimately be empty.
 		return aafm_generic_error();
 	}
 

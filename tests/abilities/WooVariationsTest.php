@@ -183,6 +183,46 @@ final class WooVariationsTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A valid id that is NOT a variation — the variable parent itself (500) or a simple product —
+	 * must be rejected by get/update/delete. aafm_wc_get_variation() returns null for a non-variation
+	 * product, so each surface returns a WP_Error. (Fix Code MED-2.)
+	 */
+	public function test_get_variation_rejects_a_non_variation_product(): void {
+		$this->acting_as( 'administrator' );
+		// 500 is the variable parent (type=variable), a valid product but not a variation.
+		$res = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 500 ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'The variable parent is not a variation; get must reject it.' );
+	}
+
+	public function test_update_variation_rejects_a_non_variation_product(): void {
+		$this->acting_as( 'administrator' );
+		// Seed a simple product; updating it as a variation must fail.
+		WcStubStore::seed(
+			800,
+			array(
+				'id'   => 800,
+				'name' => 'Simple Product',
+				'type' => 'simple',
+			)
+		);
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 800,
+				'sku'          => 'NOT-A-VARIATION',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A simple product is not a variation; update must reject it.' );
+	}
+
+	public function test_delete_variation_rejects_a_non_variation_product(): void {
+		$this->acting_as( 'administrator' );
+		// The variable parent (500) is a valid product but not a variation; delete must refuse it.
+		$res = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 500 ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'The variable parent is not a variation; delete must reject it.' );
+		$this->assertTrue( WcStubStore::exists( 500 ), 'The parent must survive a rejected delete.' );
+	}
+
 	public function test_get_variation_empty_attributes_encodes_as_object_not_array(): void {
 		// A variation with no chosen attributes: the map must JSON-encode to "{}" (object), never "[]".
 		WcStubStore::seed(
@@ -404,6 +444,54 @@ final class WooVariationsTest extends TestCase {
 
 		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
 		$this->assertSame( 'VAR-601-RENAMED', $read['sku'], 'The update must round-trip.' );
+	}
+
+	public function test_list_variations_total_is_grand_count_not_page_count(): void {
+		// Fix API LOW-1 / Code LOW-2: a parent with 3 children, paged at per_page:1 — one row on the
+		// page, but total is the grand child count (3), not the page length.
+		$this->reset_integration_stubs();
+		$this->force_integration( 'woocommerce' );
+		$this->seed_variable_parent_with_variations( 3 );
+		aafm_registry_cache_should_flush( true );
+		$this->register_wc_variations();
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-product-variations' )->execute(
+			array(
+				'product_id' => 500,
+				'per_page'   => 1,
+			)
+		);
+		$this->assertCount( 1, $res['variations'], 'per_page:1 returns exactly one row.' );
+		$this->assertSame( 3, $res['total'], 'total is the grand child count, not the page length.' );
+	}
+
+	public function test_update_variation_empty_patch_is_a_noop(): void {
+		// Fix API LOW-2: an update carrying only variation_id (no other fields) is a valid no-op — it
+		// returns the rich shape (not a WP_Error) and a seeded field survives untouched.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty PATCH is a no-op, not an error.' );
+		$this->assertSame( 'VAR-601', $res['sku'], 'The seeded sku survives an empty PATCH.' );
+	}
+
+	public function test_update_variation_leaves_other_fields_untouched(): void {
+		// Fix API LOW-3: updating sku ONLY must leave regular_price, description, and the attributes
+		// map untouched.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'sku'          => 'VAR-601-ISOLATED',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame( 'VAR-601-ISOLATED', $read['sku'], 'sku changed.' );
+		$this->assertSame( '5.01', $read['regular_price'], 'regular_price is untouched.' );
+		$this->assertSame( 'Variation 1', $read['description'], 'description is untouched.' );
+		$this->assertSame( 'red', ( (array) $read['attributes'] )['pa_color'] ?? null, 'the attributes map is untouched.' );
 	}
 
 	public function test_update_variation_requires_variation_id(): void {

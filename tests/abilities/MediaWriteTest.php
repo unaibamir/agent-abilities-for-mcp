@@ -504,6 +504,38 @@ final class MediaWriteTest extends TestCase {
 		);
 	}
 
+	public function test_media_writes_never_leak_path_and_sanitize_html(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'adv.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_post_meta( $att, '_wp_attached_file', '2026/06/adv.jpg' );
+
+		$out  = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'description'   => 'safe <script>alert(1)</script> text',
+			)
+		);
+		$json = (string) wp_json_encode( $out );
+
+		// Description is wp_kses_post-sanitized: the script tag is stripped.
+		$this->assertStringNotContainsString( '<script>', $json );
+
+		// No server path / PII leaks in the rich write payload.
+		$uploads = wp_get_upload_dir();
+		$this->assertStringNotContainsString( $uploads['basedir'], $json );
+		$this->assertStringNotContainsString( ABSPATH, $json );
+		$this->assertStringNotContainsString( '_wp_attached_file', $json );
+		$this->assertArrayNotHasKey( 'author_email', $out['media'] );
+		$this->assertArrayNotHasKey( 'path', $out['media'] );
+	}
+
 	/**
 	 * Count files currently under the uploads dir so a rejected upload can be
 	 * proven to write nothing.

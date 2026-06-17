@@ -98,6 +98,14 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_cpt_item',
 	);
+	$registry['aafm/delete-post']     = array(
+		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_delete_post',
+	);
 	return $registry;
 }
 
@@ -1100,4 +1108,87 @@ function aafm_exec_trash_post( array $input ) {
 		return aafm_generic_error();
 	}
 	return array( 'trashed' => true );
+}
+
+/**
+ * Args for aafm/delete-post.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_post(): array {
+	return array(
+		'label'               => __( 'Delete post', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'post_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array( 'deleted' => array( 'type' => 'boolean' ) ),
+		),
+		'execute_callback'    => 'aafm_exec_delete_post',
+		'permission_callback' => 'aafm_perm_delete_post',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-post: per-object delete_post (mirrors aafm_perm_trash_post).
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_delete_post( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	return $post instanceof WP_Post && aafm_can_delete_post_object( $post );
+}
+
+/**
+ * The single sanctioned force-delete executor: the only wp_delete_post(...,true) call site
+ * in the abilities layer. delete-page delegates here with the page type pinned, so pages.php
+ * never force-deletes directly — proven by SecurityRegressionTest::test_no_force_delete_in_source,
+ * which sanctions only this file. Callers must have already capability-checked the id.
+ *
+ * @param int    $id            Post id (already capability-checked by the caller).
+ * @param string $expected_type Post type to pin (e.g. 'page'), or '' to accept any.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_force_delete_post( int $id, string $expected_type = '' ) {
+	$post = $id ? get_post( $id ) : null;
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	if ( '' !== $expected_type && $expected_type !== $post->post_type ) {
+		return aafm_generic_error();
+	}
+	$result = wp_delete_post( $id, true );
+	if ( ! ( $result instanceof WP_Post ) && false === $result ) {
+		return aafm_generic_error();
+	}
+	return array( 'deleted' => true );
+}
+
+/**
+ * Execute aafm/delete-post — force-deletes through the single shared executor.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_post( array $input ) {
+	return aafm_force_delete_post( absint( $input['post_id'] ?? 0 ) );
 }

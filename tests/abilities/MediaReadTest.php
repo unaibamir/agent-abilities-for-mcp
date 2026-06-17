@@ -285,9 +285,11 @@ final class MediaReadTest extends TestCase {
 
 		$out = wp_get_ability( 'aafm/count-media' )->execute( array() );
 		$this->assertGreaterThanOrEqual( 2, $out['total'] );
-		$this->assertIsArray( $out['by_mime'] );
-		$this->assertArrayHasKey( 'image/jpeg', $out['by_mime'] );
-		$this->assertGreaterThanOrEqual( 1, $out['by_mime']['image/jpeg'] );
+		// by_mime is an object (schema fidelity); inspect as an array.
+		$this->assertIsObject( $out['by_mime'] );
+		$by_mime = (array) $out['by_mime'];
+		$this->assertArrayHasKey( 'image/jpeg', $by_mime );
+		$this->assertGreaterThanOrEqual( 1, $by_mime['image/jpeg'] );
 	}
 
 	public function test_count_media_filters_by_mime_type(): void {
@@ -303,7 +305,20 @@ final class MediaReadTest extends TestCase {
 
 		$out = wp_get_ability( 'aafm/count-media' )->execute( array( 'mime_type' => 'image/png' ) );
 		$this->assertGreaterThanOrEqual( 1, $out['total'] );
-		$this->assertSame( array( 'image/png' ), array_keys( $out['by_mime'] ) );
+		$this->assertSame( array( 'image/png' ), array_keys( (array) $out['by_mime'] ) );
+	}
+
+	public function test_count_media_by_mime_is_object_when_empty(): void {
+		$this->acting_as( 'author' );
+
+		// A mime filter that matches zero attachments yields an empty breakdown.
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array( 'mime_type' => 'application/x-nonexistent' ) );
+
+		$this->assertSame( 0, $out['total'] );
+		// The schema declares by_mime as an object; an empty PHP array would JSON-encode
+		// to "[]" (a JSON array), so the value must be cast to an object to encode as "{}".
+		$this->assertIsObject( $out['by_mime'] );
+		$this->assertStringContainsString( '"by_mime":{}', (string) wp_json_encode( $out ) );
 	}
 
 	public function test_media_discovery_floors(): void {

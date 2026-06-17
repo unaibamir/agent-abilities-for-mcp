@@ -286,7 +286,9 @@ function aafm_exec_count_media( array $input ): array {
 
 	return array(
 		'total'   => $total,
-		'by_mime' => $by_mime,
+		// Cast so an empty breakdown JSON-encodes to "{}" (object) per the schema,
+		// instead of "[]" (a JSON array). A populated assoc array is unaffected.
+		'by_mime' => (object) $by_mime,
 	);
 }
 

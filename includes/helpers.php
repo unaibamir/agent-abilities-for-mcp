@@ -1287,3 +1287,58 @@ function aafm_trash_disabled_error(): WP_Error {
 		__( 'Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it.', 'agent-abilities-for-mcp' )
 	);
 }
+
+/**
+ * Resolve a wp_block post by id, or null when the id is not a reusable block.
+ *
+ * The wp_block post type is behind Reusable Blocks / synced patterns. It is NOT in the
+ * content post-type allowlist, so resolving it here (rather than through the shared
+ * content helpers, which fail closed for non-allowlisted types) keeps the block abilities
+ * self-contained while staying fail-closed: anything that is not genuinely a wp_block
+ * returns null.
+ *
+ * @param int $id Candidate block id.
+ * @return WP_Post|null
+ */
+function aafm_get_block_object( int $id ): ?WP_Post {
+	$post = get_post( $id );
+	return ( $post instanceof WP_Post && 'wp_block' === $post->post_type ) ? $post : null;
+}
+
+/**
+ * Lean reusable-block shape for LIST endpoints — no markup (payload guard).
+ *
+ * @param WP_Post|null $block Block post.
+ * @return array<string,mixed>
+ */
+function aafm_redact_block( $block ): array {
+	if ( ! $block instanceof WP_Post ) {
+		return array();
+	}
+	return array(
+		'id'       => (int) $block->ID,
+		'title'    => $block->post_title,
+		'slug'     => $block->post_name,
+		'status'   => $block->post_status,
+		'modified' => $block->post_modified_gmt,
+	);
+}
+
+/**
+ * Rich single-block shape: the lean redactor PLUS the raw block markup and creation date.
+ *
+ * Intentionally NOT folded into aafm_redact_block(): the list stays lean. The content is the
+ * stored block markup (Gutenberg delimiters preserved) — the point of a reusable block.
+ *
+ * @param WP_Post|null $block Block post.
+ * @return array<string,mixed>
+ */
+function aafm_rich_block( $block ): array {
+	if ( ! $block instanceof WP_Post ) {
+		return array();
+	}
+	$base            = aafm_redact_block( $block );
+	$base['content'] = $block->post_content;
+	$base['date']    = $block->post_date_gmt;
+	return $base;
+}

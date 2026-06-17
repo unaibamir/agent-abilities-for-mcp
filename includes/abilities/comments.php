@@ -1,6 +1,7 @@
 <?php
 /**
- * Comment abilities (reads). The moderation write is appended in Phase 4.
+ * Comment abilities: reads, moderation, and the full CRUD set
+ * (get / create / update / delete, plus the moderation queue and actions).
  *
  * @package AgentAbilitiesForMCP
  */
@@ -310,8 +311,9 @@ function aafm_perm_get_comment( array $input ): bool {
 
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) {
-		// Default-deny on a missing comment so the ability can't probe for ids.
-		return current_user_can( 'read' );
+		// Default-deny on a missing comment so the ability can't probe for ids —
+		// the same posture as aafm_perm_get_comments() for a missing target post.
+		return false;
 	}
 
 	$post_id     = (int) $comment->comment_post_ID;

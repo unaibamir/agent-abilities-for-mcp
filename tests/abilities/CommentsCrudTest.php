@@ -85,6 +85,15 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
+	public function test_get_comment_missing_id_is_denied_at_the_permission_layer(): void {
+		// A comment id that resolves to nothing must default-deny at check_permissions(),
+		// not merely error inside execute — so the ability can't probe for valid ids.
+		$this->acting_as( 'editor' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/get-comment' )->check_permissions( array( 'comment_id' => 999999 ) )
+		);
+	}
+
 	public function test_create_comment_requires_moderate_comments_and_audits_denial(): void {
 		$post = self::factory()->post->create();
 

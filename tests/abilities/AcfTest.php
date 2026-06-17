@@ -117,4 +117,139 @@ final class AcfTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/acf-list-field-groups', aafm_get_abilities_registry() );
 		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
+
+	// --- A2: post fields ---------------------------------------------------------------------
+
+	public function test_get_post_fields_returns_hydrated_values_per_object_gated(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( $post_id, $res['post_id'] );
+		$this->assertArrayHasKey( 'fields', $res );
+		$this->assertSame( 'Hello', $res['fields']['field_1'] );
+	}
+
+	public function test_get_post_fields_denies_a_subscriber(): void {
+		$post_id = (int) self::factory()->post->create();
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-get-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+	}
+
+	public function test_update_post_fields_writes_and_round_trips(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Updated headline' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Updated headline', $res['fields']['field_1'] );
+
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertSame( 'Updated headline', $read['fields']['field_1'], 'The ACF post write must round-trip.' );
+	}
+
+	public function test_update_post_fields_sanitizes_each_value(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => "<script>alert(1)</script>clean" ),
+			)
+		);
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$json = (string) wp_json_encode( $read['fields'] );
+		$this->assertStringNotContainsString( '<script>', $json, 'A text-field write must be sanitized.' );
+	}
+
+	public function test_update_post_fields_sanitizes_array_values_recursively(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// A repeater-style nested array: every leaf must be sanitized at depth.
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_1' => array(
+						array( 'inner' => '<script>alert(2)</script>row' ),
+					),
+				),
+			)
+		);
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$json = (string) wp_json_encode( $read['fields'] );
+		$this->assertStringNotContainsString( '<script>', $json, 'Nested array leaves must be sanitized.' );
+		$this->assertStringNotContainsString( 'alert(2)', $json, 'Deeply nested script content must be stripped.' );
+	}
+
+	public function test_update_post_fields_rejects_a_smuggled_top_level_field(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		$res     = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'ok' ),
+				'role'    => 'administrator',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled top-level field.' );
+	}
+
+	public function test_update_post_fields_denies_a_subscriber(): void {
+		$post_id = (int) self::factory()->post->create();
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+	}
+
+	public function test_update_post_fields_denies_an_author_on_anothers_post(): void {
+		// Per-object gate: an author clears edit_posts yet is denied on another author's post.
+		$author_a = $this->acting_as( 'author' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
+		$this->acting_as( 'author' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) ),
+			'An author must be denied an ACF write on another author\'s post.'
+		);
+	}
+
+	public function test_update_post_fields_write_is_audited(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Audited' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/acf-update-post-fields', $abilities );
+	}
+
+	public function test_update_post_fields_denied_is_audited(): void {
+		$post_id = (int) self::factory()->post->create();
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/acf-update-post-fields', $abilities );
+	}
 }

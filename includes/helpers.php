@@ -378,6 +378,26 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
 }
 
 /**
+ * Validate a featured-media id: it must resolve to a real attachment post.
+ *
+ * Edit access to the PARENT post is already enforced by the calling ability's
+ * permission gate (create holds edit_posts/publish_posts; update runs
+ * aafm_can_edit_post_object), and set_post_thumbnail writes _thumbnail_id on that
+ * parent — so the only new check here is that the id is genuinely an attachment.
+ *
+ * @param mixed $attachment_id Candidate attachment id.
+ * @return int|WP_Error The sanitized attachment id, or a generic error.
+ */
+function aafm_validate_featured_attachment_id( $attachment_id ) {
+	$id  = absint( $attachment_id );
+	$att = $id ? get_post( $id ) : null;
+	if ( ! $att instanceof WP_Post || 'attachment' !== $att->post_type ) {
+		return aafm_generic_error();
+	}
+	return $id;
+}
+
+/**
  * Validate a post status against a strict allow-list.
  *
  * Blocks 'any' and prevents a non-privileged caller from widening visibility to

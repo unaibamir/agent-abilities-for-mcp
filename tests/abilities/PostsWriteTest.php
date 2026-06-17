@@ -308,4 +308,29 @@ final class PostsWriteTest extends TestCase {
 		$err  = aafm_validate_term_ids_for_taxonomy( 'category', array( $term ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
+
+	public function test_featured_validator_accepts_real_attachment(): void {
+		$this->acting_as( 'editor' );
+		$att = self::factory()->attachment->create_object(
+			'feature.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		$this->assertSame( $att, aafm_validate_featured_attachment_id( $att ) );
+	}
+
+	public function test_featured_validator_rejects_plain_post_id(): void {
+		$this->acting_as( 'editor' );
+		$plain = self::factory()->post->create();
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( $plain ) );
+	}
+
+	public function test_featured_validator_rejects_zero_and_missing(): void {
+		$this->acting_as( 'editor' );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 0 ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 88888888 ) );
+	}
 }

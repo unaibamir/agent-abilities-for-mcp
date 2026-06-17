@@ -208,8 +208,11 @@ trait IntegrationStubs {
 			eval( $this->aafm_wc_variation_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
 		if ( ! function_exists( 'wc_get_product' ) ) {
+			// Fix Code MED-1: return a WC_Product_Variation when the stored row is a variation
+			// (type=variation), else a base WC_Product — mirroring real WooCommerce, so
+			// aafm_wc_get_variation()'s instanceof WC_Product_Variation branch is the exercised path.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_product( $id = false ) { $id = (int) $id; return \AAFM\Tests\WcStubStore::exists( $id ) ? new \WC_Product( $id ) : false; }' );
+			eval( 'function wc_get_product( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcStubStore::exists( $id ) ) { return false; } $row = \AAFM\Tests\WcStubStore::get( $id ); return ( "variation" === ( $row["type"] ?? "" ) ) ? new \WC_Product_Variation( $id ) : new \WC_Product( $id ); }' );
 		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.

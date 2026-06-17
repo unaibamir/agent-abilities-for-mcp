@@ -42,6 +42,14 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term',
 	);
+	$registry['aafm/get-term'] = array(
+		'label'        => __( 'Get term', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_get_term',
+	);
 	return $registry;
 }
 
@@ -131,6 +139,71 @@ function aafm_exec_get_terms( array $input ) {
 	);
 
 	return array( 'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ) );
+}
+
+/**
+ * Args for aafm/get-term.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_term(): array {
+	return array(
+		'label'               => __( 'Get term', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'term_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array( 'term' => array( 'type' => 'object' ) ),
+		),
+		'execute_callback'    => 'aafm_exec_get_term',
+		'permission_callback' => 'aafm_perm_read',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/get-term.
+ *
+ * Confines the read to the public-allowlisted taxonomy AND to a term that actually
+ * belongs to it: get_term( $id, $taxonomy ) returns null for a nonexistent id or one
+ * in a different taxonomy, so a tag id claimed as a category is rejected. Returns the
+ * same redacted shape as get-terms; nothing beyond aafm_redact_term() is exposed.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_term( array $input ) {
+	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+
+	$term = get_term( absint( $input['term_id'] ), $taxonomy );
+	if ( ! $term instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+
+	return array( 'term' => aafm_redact_term( $term ) );
 }
 
 /**

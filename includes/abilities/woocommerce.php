@@ -159,6 +159,29 @@ function aafm_register_woocommerce_definitions( array $registry ): array {
 		'args_builder' => 'aafm_args_wc_delete_product_attribute',
 	);
 
+	// Orders (sub-slice W4-WC2) — list is lean (no PII), get returns full billing/shipping PII
+	// under the Integrations security disclaimer. Both gate on the flat, object-independent
+	// manage_woocommerce capability and fall through to that callback at discovery (no server.php
+	// case). PII exposure in wc-get-order is intentional: the revised WC PII stance in spec 48-
+	// mandates full billing/shipping on the single-order read, gated by manage_woocommerce and
+	// audited, not stripped.
+	$registry['aafm/wc-list-orders'] = array(
+		'label'        => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'woocommerce',
+		'args_builder' => 'aafm_args_wc_list_orders',
+	);
+	$registry['aafm/wc-get-order']   = array(
+		'label'        => __( 'Get WooCommerce order', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address (including email and phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'woocommerce',
+		'args_builder' => 'aafm_args_wc_get_order',
+	);
+
 	return $registry;
 }
 
@@ -1835,4 +1858,387 @@ function aafm_exec_wc_delete_product_attribute( array $input ) {
 		'id'      => $id,
 		'deleted' => true,
 	);
+}
+
+// =============================================================================
+// Orders (sub-slice W4-WC2) — reads only (WC2.1)
+// =============================================================================
+
+/**
+ * Normalise a WooCommerce date value (WC_DateTime object, ISO string, or null) to a plain string.
+ *
+ * WooCommerce date getters (get_date_created, get_date_paid, …) return a WC_DateTime instance at
+ * runtime, but their PHPStan signature is typed as string|object|null because WC_DateTime is not
+ * present in the static-analysis stubs. This helper accepts all three variants and always returns
+ * a string or null — avoiding unsafe casts on raw object|null values.
+ *
+ * @param string|object|null $date Raw date value from a WC_Order getter.
+ * @return string|null
+ */
+function aafm_wc_date_string( $date ): ?string {
+	if ( null === $date ) {
+		return null;
+	}
+	if ( is_object( $date ) && method_exists( $date, '__toString' ) ) {
+		return (string) $date;
+	}
+	return is_string( $date ) ? $date : null;
+}
+
+/**
+ * Resolve an order id to a WC_Order, or null when WooCommerce is unavailable or the id is unknown.
+ *
+ * @param int $id Order id.
+ * @return \WC_Order|null
+ */
+function aafm_wc_get_order_object( int $id ): ?\WC_Order {
+	if ( $id < 1 || ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	$order = wc_get_order( $id );
+	return $order instanceof \WC_Order ? $order : null;
+}
+
+/**
+ * The lean list shape for an order: id, number, status, total, currency, date_created,
+ * customer_id. No billing/shipping/PII in list rows — lean for payload economy.
+ *
+ * @param \WC_Order $order Order.
+ * @return array<string,mixed>
+ */
+function aafm_redact_wc_order( \WC_Order $order ): array {
+	return array(
+		'id'           => (int) $order->get_id(),
+		'number'       => (string) $order->get_order_number(),
+		'status'       => (string) $order->get_status(),
+		'total'        => (string) $order->get_total(),
+		'currency'     => (string) $order->get_currency(),
+		'date_created' => aafm_wc_date_string( $order->get_date_created() ),
+		'customer_id'  => (int) $order->get_customer_id(),
+	);
+}
+
+/**
+ * The full single-order shape including customer billing/shipping PII.
+ *
+ * PII (billing email, phone, full address) is returned as-is — this is intentional per the
+ * revised WC PII stance in spec 48-: full PII on order reads, under the Integrations security
+ * disclaimer, gated by manage_woocommerce and audited. Do NOT strip or opt-in-gate it.
+ *
+ * Billing and shipping maps are cast with (object) so an empty address block encodes as {}
+ * not [] in JSON (the same pattern as aafm_rich_wc_product's attributes map).
+ *
+ * @param \WC_Order $order Order.
+ * @return array<string,mixed>
+ */
+function aafm_rich_wc_order( \WC_Order $order ): array {
+	// Line items: each raw item from get_items() is mapped to a clean scalar shape.
+	$line_items = array();
+	foreach ( (array) $order->get_items() as $item ) {
+		if ( is_array( $item ) ) {
+			// Stub path: items are plain arrays seeded in WcOrderStubStore.
+			$line_items[] = array(
+				'name'       => (string) ( $item['name'] ?? '' ),
+				'product_id' => (int) ( $item['product_id'] ?? 0 ),
+				'quantity'   => (int) ( $item['quantity'] ?? 1 ),
+				'subtotal'   => (string) ( $item['subtotal'] ?? '0.00' ),
+				'total'      => (string) ( $item['total'] ?? '0.00' ),
+			);
+		} elseif ( is_object( $item ) && method_exists( $item, 'get_name' ) ) {
+			// Real WC_Order_Item_Product path.
+			$line_items[] = array(
+				'name'       => (string) $item->get_name(),
+				'product_id' => method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0,
+				'quantity'   => method_exists( $item, 'get_quantity' ) ? (int) $item->get_quantity() : 1,
+				'subtotal'   => method_exists( $item, 'get_subtotal' ) ? (string) $item->get_subtotal() : '0.00',
+				'total'      => method_exists( $item, 'get_total' ) ? (string) $item->get_total() : '0.00',
+			);
+		}
+	}
+
+	// Billing address — full PII under the disclaimer; cast to (object) so empty map encodes as {}.
+	$billing_raw = array(
+		'first_name' => (string) $order->get_billing_first_name(),
+		'last_name'  => (string) $order->get_billing_last_name(),
+		'company'    => (string) $order->get_billing_company(),
+		'address_1'  => (string) $order->get_billing_address_1(),
+		'address_2'  => (string) $order->get_billing_address_2(),
+		'city'       => (string) $order->get_billing_city(),
+		'state'      => (string) $order->get_billing_state(),
+		'postcode'   => (string) $order->get_billing_postcode(),
+		'country'    => (string) $order->get_billing_country(),
+		'email'      => (string) $order->get_billing_email(),
+		'phone'      => (string) $order->get_billing_phone(),
+	);
+	$billing     = array_filter( $billing_raw, static fn( string $v ): bool => '' !== $v );
+	// Cast: non-empty maps stay as arrays (PHP arrays encode as JSON objects when keys are strings);
+	// empty maps are cast to (object) so they encode as {} rather than [].
+	$billing_out = empty( $billing ) ? (object) array() : $billing;
+
+	// Shipping address — no email/phone (those are billing-only).
+	$shipping_raw = array(
+		'first_name' => (string) $order->get_shipping_first_name(),
+		'last_name'  => (string) $order->get_shipping_last_name(),
+		'company'    => (string) $order->get_shipping_company(),
+		'address_1'  => (string) $order->get_shipping_address_1(),
+		'address_2'  => (string) $order->get_shipping_address_2(),
+		'city'       => (string) $order->get_shipping_city(),
+		'state'      => (string) $order->get_shipping_state(),
+		'postcode'   => (string) $order->get_shipping_postcode(),
+		'country'    => (string) $order->get_shipping_country(),
+	);
+	$shipping     = array_filter( $shipping_raw, static fn( string $v ): bool => '' !== $v );
+	$shipping_out = empty( $shipping ) ? (object) array() : $shipping;
+
+	return array(
+		'id'            => (int) $order->get_id(),
+		'number'        => (string) $order->get_order_number(),
+		'status'        => (string) $order->get_status(),
+		'currency'      => (string) $order->get_currency(),
+		'date_created'  => aafm_wc_date_string( $order->get_date_created() ),
+		'date_paid'     => aafm_wc_date_string( $order->get_date_paid() ),
+		'customer_id'   => (int) $order->get_customer_id(),
+		'customer_note' => (string) $order->get_customer_note(),
+		'line_items'    => $line_items,
+		'totals'        => array(
+			'total'    => (string) $order->get_total(),
+			'subtotal' => (string) $order->get_subtotal(),
+			'tax'      => (string) $order->get_total_tax(),
+			'shipping' => (string) $order->get_shipping_total(),
+		),
+		'billing'       => $billing_out,
+		'shipping'      => $shipping_out,
+	);
+}
+
+/**
+ * Args for aafm/wc-list-orders.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wc_list_orders(): array {
+	return array(
+		'label'               => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Lists WooCommerce orders (id, number, status, total, currency, date, customer id) plus a total count. List rows carry no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'page'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'per_page' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 100,
+				),
+				'status'   => array(
+					'type'        => 'string',
+					'description' => "Status filter; 'any' returns all states.",
+				),
+			),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'orders' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'                 => 'object',
+						'properties'           => array(
+							'id'           => array( 'type' => 'integer' ),
+							'number'       => array( 'type' => 'string' ),
+							'status'       => array( 'type' => 'string' ),
+							'total'        => array( 'type' => 'string' ),
+							'currency'     => array( 'type' => 'string' ),
+							'date_created' => array( 'type' => array( 'string', 'null' ) ),
+							'customer_id'  => array( 'type' => 'integer' ),
+						),
+						'additionalProperties' => false,
+					),
+				),
+				'total'  => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wc_list_orders',
+		'permission_callback' => 'aafm_wc_perm',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wc-list-orders.
+ *
+ * Queries orders via wc_get_orders() with paginate=>true to get the grand total separate from
+ * the page slice. Each order in the result is mapped through aafm_redact_wc_order() which
+ * returns only the lean fields — no billing/shipping/PII in list rows.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>
+ */
+function aafm_exec_wc_list_orders( array $input ): array {
+	$out = array(
+		'orders' => array(),
+		'total'  => 0,
+	);
+
+	if ( ! function_exists( 'wc_get_orders' ) ) {
+		return $out;
+	}
+
+	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
+	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
+
+	$query = wc_get_orders(
+		array(
+			'limit'    => $per_page,
+			'paged'    => $page,
+			'status'   => $status,
+			'paginate' => true,
+		)
+	);
+
+	// With paginate => true WooCommerce returns an object carrying ->orders (the page) and ->total
+	// (the full matching count); total is the grand total, not the page row count.
+	if ( is_object( $query ) && property_exists( $query, 'orders' ) ) {
+		$orders = (array) $query->orders; // @phpstan-ignore-line property.dynamicName
+		$total  = property_exists( $query, 'total' ) ? (int) $query->total : count( $orders ); // @phpstan-ignore-line property.dynamicName
+	} else {
+		$orders = (array) $query;
+		$total  = count( $orders );
+	}
+
+	foreach ( $orders as $order ) {
+		if ( $order instanceof \WC_Order ) {
+			$out['orders'][] = aafm_redact_wc_order( $order );
+		}
+	}
+	$out['total'] = $total;
+
+	return $out;
+}
+
+/**
+ * Args for aafm/wc-get-order.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wc_get_order(): array {
+	return array(
+		'label'               => __( 'Get WooCommerce order', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Reads one WooCommerce order by id: line items, totals (total, subtotal, tax, shipping), status, dates, customer note, and the full customer billing address — including email and phone — plus the shipping address. Customer billing PII (email, phone, full address) is returned in full under the Integrations security disclaimer and is always gated by the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'order_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'order_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'            => array( 'type' => 'integer' ),
+				'number'        => array( 'type' => 'string' ),
+				'status'        => array( 'type' => 'string' ),
+				'currency'      => array( 'type' => 'string' ),
+				'date_created'  => array( 'type' => array( 'string', 'null' ) ),
+				'date_paid'     => array( 'type' => array( 'string', 'null' ) ),
+				'customer_id'   => array( 'type' => 'integer' ),
+				'customer_note' => array( 'type' => 'string' ),
+				'line_items'    => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'                 => 'object',
+						'properties'           => array(
+							'name'       => array( 'type' => 'string' ),
+							'product_id' => array( 'type' => 'integer' ),
+							'quantity'   => array( 'type' => 'integer' ),
+							'subtotal'   => array( 'type' => 'string' ),
+							'total'      => array( 'type' => 'string' ),
+						),
+						'additionalProperties' => false,
+					),
+				),
+				'totals'        => array(
+					'type'                 => 'object',
+					'properties'           => array(
+						'total'    => array( 'type' => 'string' ),
+						'subtotal' => array( 'type' => 'string' ),
+						'tax'      => array( 'type' => 'string' ),
+						'shipping' => array( 'type' => 'string' ),
+					),
+					'additionalProperties' => false,
+				),
+				'billing'       => array(
+					'type'       => 'object',
+					'properties' => array(
+						'first_name' => array( 'type' => 'string' ),
+						'last_name'  => array( 'type' => 'string' ),
+						'company'    => array( 'type' => 'string' ),
+						'address_1'  => array( 'type' => 'string' ),
+						'address_2'  => array( 'type' => 'string' ),
+						'city'       => array( 'type' => 'string' ),
+						'state'      => array( 'type' => 'string' ),
+						'postcode'   => array( 'type' => 'string' ),
+						'country'    => array( 'type' => 'string' ),
+						'email'      => array( 'type' => 'string' ),
+						'phone'      => array( 'type' => 'string' ),
+					),
+				),
+				'shipping'      => array(
+					'type'       => 'object',
+					'properties' => array(
+						'first_name' => array( 'type' => 'string' ),
+						'last_name'  => array( 'type' => 'string' ),
+						'company'    => array( 'type' => 'string' ),
+						'address_1'  => array( 'type' => 'string' ),
+						'address_2'  => array( 'type' => 'string' ),
+						'city'       => array( 'type' => 'string' ),
+						'state'      => array( 'type' => 'string' ),
+						'postcode'   => array( 'type' => 'string' ),
+						'country'    => array( 'type' => 'string' ),
+					),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wc_get_order',
+		'permission_callback' => 'aafm_wc_perm',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wc-get-order.
+ *
+ * Resolves the order id through wc_get_order() — not the product wc_get_product(). An unknown
+ * id or a non-WC_Order return falls through to aafm_generic_error(). The full shape including
+ * customer billing/shipping PII is assembled by aafm_rich_wc_order().
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|\WP_Error
+ */
+function aafm_exec_wc_get_order( array $input ) {
+	$order = aafm_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
+	if ( null === $order ) {
+		return aafm_generic_error();
+	}
+	return aafm_rich_wc_order( $order );
 }

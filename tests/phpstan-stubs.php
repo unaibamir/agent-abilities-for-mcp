@@ -296,4 +296,101 @@ if ( ! function_exists( 'wc_delete_attribute' ) ) {
 		return false;
 	}
 }
+
+if ( ! class_exists( 'WC_Order' ) ) {
+	/**
+	 * Stub WC_Order for PHPStan — mirrors the getters the order abilities call.
+	 */
+	class WC_Order {
+		/** @return int */
+		public function get_id() { return 0; }
+		/** @return string */
+		public function get_order_number() { return ''; }
+		/** @return string */
+		public function get_status() { return ''; }
+		/** @return string */
+		public function get_total() { return '0.00'; }
+		/** @return string */
+		public function get_currency() { return 'USD'; }
+		/** @return string|object|null */
+		public function get_date_created() { return null; }
+		/** @return string|object|null */
+		public function get_date_paid() { return null; }
+		/** @return int */
+		public function get_customer_id() { return 0; }
+		/** @return string */
+		public function get_customer_note() { return ''; }
+		/**
+		 * @param string $types
+		 * @return array<mixed>
+		 */
+		public function get_items( $types = 'line_item' ) { return array(); }
+		/** @return string */
+		public function get_total_tax() { return '0.00'; }
+		/** @return string */
+		public function get_subtotal() { return '0.00'; }
+		/** @return string */
+		public function get_shipping_total() { return '0.00'; }
+		/** @return string */
+		public function get_billing_first_name() { return ''; }
+		/** @return string */
+		public function get_billing_last_name() { return ''; }
+		/** @return string */
+		public function get_billing_company() { return ''; }
+		/** @return string */
+		public function get_billing_address_1() { return ''; }
+		/** @return string */
+		public function get_billing_address_2() { return ''; }
+		/** @return string */
+		public function get_billing_city() { return ''; }
+		/** @return string */
+		public function get_billing_state() { return ''; }
+		/** @return string */
+		public function get_billing_postcode() { return ''; }
+		/** @return string */
+		public function get_billing_country() { return ''; }
+		/** @return string */
+		public function get_billing_email() { return ''; }
+		/** @return string */
+		public function get_billing_phone() { return ''; }
+		/** @return string */
+		public function get_shipping_first_name() { return ''; }
+		/** @return string */
+		public function get_shipping_last_name() { return ''; }
+		/** @return string */
+		public function get_shipping_company() { return ''; }
+		/** @return string */
+		public function get_shipping_address_1() { return ''; }
+		/** @return string */
+		public function get_shipping_address_2() { return ''; }
+		/** @return string */
+		public function get_shipping_city() { return ''; }
+		/** @return string */
+		public function get_shipping_state() { return ''; }
+		/** @return string */
+		public function get_shipping_postcode() { return ''; }
+		/** @return string */
+		public function get_shipping_country() { return ''; }
+	}
+}
+
+if ( ! function_exists( 'wc_get_orders' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<int,\WC_Order>|object
+	 */
+	function wc_get_orders( $args = array() ) {
+		return array();
+	}
+}
+
+if ( ! function_exists( 'wc_get_order' ) ) {
+	/**
+	 * @param int|false $id
+	 * @return \WC_Order|false
+	 */
+	function wc_get_order( $id = false ) {
+		return false;
+	}
+}
 // phpcs:enable

@@ -27,4 +27,5 @@ require $_tests_dir . '/includes/bootstrap.php';
 require_once __DIR__ . '/stubs/AcfStubStore.php';
 require_once __DIR__ . '/stubs/WcStubStore.php';
 require_once __DIR__ . '/stubs/WcAttributeStubStore.php';
+require_once __DIR__ . '/stubs/WcOrderStubStore.php';
 require_once __DIR__ . '/stubs/IntegrationStubs.php';

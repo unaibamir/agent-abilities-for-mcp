@@ -278,6 +278,148 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_sanitize_taxonomy_name( $name ) { return sanitize_title( $name ); }' );
 		}
+
+		// Order stubs (W4-WC2). wc_get_orders() and wc_get_order() (the order variant, different from
+		// the product variant of the same function name) delegate to WcOrderStubStore. The WC_Order
+		// class is defined via eval so the class_exists guard prevents double-define across tests.
+		if ( ! class_exists( 'WC_Order' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_order_class_source() );
+		}
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_orders( $args = array() ) { return \AAFM\Tests\WcOrderStubStore::query( $args ); }' );
+		}
+		// NOTE: wc_get_order() is also defined above for products (returns WC_Product). WooCommerce
+		// uses the same function name for both — in real WC, wc_get_order() returns a WC_Order when
+		// the post type is shop_order. Since the stubs are process-wide, if wc_get_product() has
+		// already defined wc_get_order for products (it hasn't — wc_get_order is NOT the same as
+		// wc_get_product), we define wc_get_order separately here. The product stubs use
+		// wc_get_product(); orders use wc_get_order().
+		if ( ! function_exists( 'wc_get_order' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
+		}
+	}
+
+	/**
+	 * Seed the WcOrderStubStore with default order fixtures for WC2 tests.
+	 *
+	 * Seeds order id 5001 with a billing email + phone so PII-exposure tests can assert presence.
+	 * Call after stub_woocommerce() (which resets the product store but not the order store), and
+	 * before registering order abilities.
+	 *
+	 * @return void
+	 */
+	protected function seed_wc_orders(): void {
+		WcOrderStubStore::reset();
+		WcOrderStubStore::seed(
+			5001,
+			array(
+				'number'         => '5001',
+				'status'         => 'processing',
+				'total'          => '49.99',
+				'currency'       => 'USD',
+				'date_created'   => '2024-06-01T10:00:00',
+				'date_paid'      => '2024-06-01T10:01:00',
+				'customer_id'    => 42,
+				'customer_note'  => 'Please deliver before noon.',
+				'items'          => array(
+					array(
+						'name'       => 'Test Widget',
+						'product_id' => 101,
+						'quantity'   => 2,
+						'subtotal'   => '39.98',
+						'total'      => '39.98',
+					),
+				),
+				'billing'        => array(
+					'first_name' => 'Jane',
+					'last_name'  => 'Doe',
+					'company'    => 'Acme Corp',
+					'address_1'  => '123 Main St',
+					'address_2'  => '',
+					'city'       => 'Springfield',
+					'state'      => 'IL',
+					'postcode'   => '62701',
+					'country'    => 'US',
+					'email'      => 'billing@example.com',
+					'phone'      => '+1-555-0100',
+				),
+				'shipping'       => array(
+					'first_name' => 'Jane',
+					'last_name'  => 'Doe',
+					'company'    => '',
+					'address_1'  => '123 Main St',
+					'address_2'  => '',
+					'city'       => 'Springfield',
+					'state'      => 'IL',
+					'postcode'   => '62701',
+					'country'    => 'US',
+				),
+				'total_tax'      => '4.00',
+				'subtotal'       => '39.98',
+				'shipping_total' => '5.99',
+			)
+		);
+	}
+
+	/**
+	 * The source of the stub WC_Order class. Kept as a string so the eval definition is guarded
+	 * by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * The WC_Order stub reads from WcOrderStubStore keyed by id. Its getters mirror the real
+	 * WooCommerce WC_Order API the order abilities call: get_id, get_order_number, get_status,
+	 * get_total, get_currency, get_date_created, get_date_paid, get_customer_id, get_items,
+	 * get_billing_*, get_shipping_*, get_customer_note, get_total_tax, get_subtotal,
+	 * get_shipping_total. WC_DateTime is not needed; date fields are stored as strings.
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_order_class_source(): string {
+		return <<<'PHP'
+class WC_Order {
+	private $data = array();
+	public function __construct( $id = 0 ) {
+		$id = (int) $id;
+		$stored = \AAFM\Tests\WcOrderStubStore::get( $id );
+		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
+	}
+	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
+	public function get_order_number() { return (string) ( $this->data['number'] ?? (string) $this->get_id() ); }
+	public function get_status() { return (string) ( $this->data['status'] ?? 'processing' ); }
+	public function get_total() { return (string) ( $this->data['total'] ?? '0.00' ); }
+	public function get_currency() { return (string) ( $this->data['currency'] ?? 'USD' ); }
+	public function get_date_created() { return $this->data['date_created'] ?? null; }
+	public function get_date_paid() { return $this->data['date_paid'] ?? null; }
+	public function get_customer_id() { return (int) ( $this->data['customer_id'] ?? 0 ); }
+	public function get_customer_note() { return (string) ( $this->data['customer_note'] ?? '' ); }
+	public function get_items( $types = 'line_item' ) { return (array) ( $this->data['items'] ?? array() ); }
+	public function get_total_tax() { return (string) ( $this->data['total_tax'] ?? '0.00' ); }
+	public function get_subtotal() { return (string) ( $this->data['subtotal'] ?? '0.00' ); }
+	public function get_shipping_total() { return (string) ( $this->data['shipping_total'] ?? '0.00' ); }
+	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
+	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
+	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }
+	public function get_billing_address_1() { return (string) ( $this->data['billing']['address_1'] ?? '' ); }
+	public function get_billing_address_2() { return (string) ( $this->data['billing']['address_2'] ?? '' ); }
+	public function get_billing_city() { return (string) ( $this->data['billing']['city'] ?? '' ); }
+	public function get_billing_state() { return (string) ( $this->data['billing']['state'] ?? '' ); }
+	public function get_billing_postcode() { return (string) ( $this->data['billing']['postcode'] ?? '' ); }
+	public function get_billing_country() { return (string) ( $this->data['billing']['country'] ?? '' ); }
+	public function get_billing_email() { return (string) ( $this->data['billing']['email'] ?? '' ); }
+	public function get_billing_phone() { return (string) ( $this->data['billing']['phone'] ?? '' ); }
+	public function get_shipping_first_name() { return (string) ( $this->data['shipping']['first_name'] ?? '' ); }
+	public function get_shipping_last_name() { return (string) ( $this->data['shipping']['last_name'] ?? '' ); }
+	public function get_shipping_company() { return (string) ( $this->data['shipping']['company'] ?? '' ); }
+	public function get_shipping_address_1() { return (string) ( $this->data['shipping']['address_1'] ?? '' ); }
+	public function get_shipping_address_2() { return (string) ( $this->data['shipping']['address_2'] ?? '' ); }
+	public function get_shipping_city() { return (string) ( $this->data['shipping']['city'] ?? '' ); }
+	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
+	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
+	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
+}
+PHP;
 	}
 
 	/**
@@ -401,5 +543,6 @@ PHP;
 		AcfStubStore::reset();
 		WcStubStore::reset();
 		WcAttributeStubStore::reset();
+		WcOrderStubStore::reset();
 	}
 }

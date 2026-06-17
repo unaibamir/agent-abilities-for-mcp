@@ -77,4 +77,21 @@ final class GetAllPostMetaTest extends TestCase {
 	public function test_perm_callback_returns_false_on_empty_input(): void {
 		$this->assertFalse( aafm_perm_get_all_post_meta( array() ) );
 	}
+
+	public function test_empty_meta_is_a_json_object_not_array(): void {
+		// Lock the contract: when no allowlisted keys resolve, 'meta' must JSON-encode
+		// to "{}" (object) per the output_schema, never "[]". A dropped (object) cast
+		// would silently regress this, exactly as count-media's by_mime once did.
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle', 'rating' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		// Post carries none of the allowlisted keys, so the map comes back empty.
+
+		$out = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+
+		$this->assertIsObject( $out['meta'] );
+		$this->assertSame( '{}', wp_json_encode( $out['meta'] ) );
+		$this->assertEmpty( (array) $out['meta'] );
+	}
 }

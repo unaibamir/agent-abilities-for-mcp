@@ -71,6 +71,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-get-product'              => __( 'Reads one WooCommerce product by id: description, prices, stock, images, attributes, variation ids, and categories. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-list-product-variations'  => __( "Lists a variable product's variations by parent product id: each variation's id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.", 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-product-variation'    => __( 'Reads one product variation by id: parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-list-product-attributes'  => __( 'Lists all global WooCommerce product attribute taxonomies: id, name, slug, type, sort order, and whether it has public archives. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-get-product-attribute'    => __( 'Reads one global product attribute taxonomy by id. Returns the same fields as the list ability. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 
 		// Writes.
 		'aafm/create-draft'                => __( 'Creates a new draft post. The agent drafts, a human publishes. It never goes live on its own.', 'agent-abilities-for-mcp' ),
@@ -111,6 +113,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-update-product'           => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-create-product-variation' => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-update-product-variation' => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-create-product-attribute' => __( 'Creates a global WooCommerce product attribute taxonomy from a name, plus optional slug, type, sort order, and public-archives flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-update-product-attribute' => __( 'Updates a global product attribute taxonomy by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 
 		// Destructive (still recoverable).
 		'aafm/trash-post'                  => __( 'Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),
@@ -133,5 +137,6 @@ function aafm_ability_disclosures(): array {
 		'aafm/delete-menu-item'            => __( 'Permanently removes one item from a navigation menu. This cannot be undone. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-delete-product'           => __( 'Permanently deletes a WooCommerce product, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-delete-product-variation' => __( 'Permanently deletes a product variation, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-delete-product-attribute' => __( 'Permanently removes a global product attribute taxonomy by id. This cannot be undone — all terms in the taxonomy are lost. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 	);
 }

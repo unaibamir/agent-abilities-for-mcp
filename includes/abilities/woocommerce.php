@@ -1681,8 +1681,8 @@ function aafm_exec_wc_create_product_attribute( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_wc_update_product_attribute(): array {
-	$write_props = aafm_wc_attribute_write_properties();
-	$all_props   = array_merge(
+	$write_props  = aafm_wc_attribute_write_properties();
+	$all_props    = array_merge(
 		array(
 			'attribute_id' => array(
 				'type'    => 'integer',
@@ -1812,9 +1812,8 @@ function aafm_args_wc_delete_product_attribute(): array {
  * Execute aafm/wc-delete-product-attribute.
  *
  * Resolve-before-mutate: unknown id returns a generic error. Deletion goes through
- * wc_delete_attribute() — WooCommerce's own taxonomy-removal function — NOT a
- * wp_delete_post(...,true) primitive, so the source-scan that bans that call remains
- * clean (verified by grep on this file).
+ * wc_delete_attribute() — WooCommerce's own taxonomy-removal function — never the
+ * force-delete post primitive, so the source-scan remains clean.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error

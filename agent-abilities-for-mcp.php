@@ -150,6 +150,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/media.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/users.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/meta.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/user-meta.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/revisions.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/search.php';
 

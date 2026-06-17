@@ -559,6 +559,13 @@ function aafm_exec_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Validate enrichment BEFORE wp_update_post so a bad term/attachment/meta aborts
+	// with the post left exactly as it was (no half-applied update).
+	$enrichment = aafm_validate_write_enrichment( $input );
+	if ( is_wp_error( $enrichment ) ) {
+		return $enrichment;
+	}
+
 	$postarr = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
 		$title = sanitize_text_field( (string) $input['title'] );
@@ -572,6 +579,9 @@ function aafm_exec_update_post( array $input ) {
 	}
 	if ( isset( $input['excerpt'] ) ) {
 		$postarr['post_excerpt'] = sanitize_text_field( (string) $input['excerpt'] );
+	}
+	if ( isset( $input['slug'] ) && '' !== sanitize_title( (string) $input['slug'] ) ) {
+		$postarr['post_name'] = sanitize_title( (string) $input['slug'] );
 	}
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_validate_post_status( (string) $input['status'], current_user_can( 'edit_others_posts' ) );
@@ -593,6 +603,9 @@ function aafm_exec_update_post( array $input ) {
 	if ( is_wp_error( $result ) ) {
 		return aafm_generic_error();
 	}
+
+	// Apply the pre-validated enrichment after the core fields land.
+	aafm_apply_write_enrichment( (int) $result, $enrichment );
 
 	// Re-fetch by the id wp_update_post() returned. A destructive save_post/post_updated
 	// hook (or a TOCTOU race) can delete the post during the update, so this can be null;

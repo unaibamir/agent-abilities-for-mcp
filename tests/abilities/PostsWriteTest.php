@@ -472,4 +472,52 @@ final class PostsWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 		$this->assertSame( $before, (int) wp_count_posts( 'post' )->publish );
 	}
+
+	public function test_update_applies_slug_terms_featured_and_meta(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$att  = self::factory()->attachment->create_object(
+			'e.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id'        => $post,
+				'slug'           => 'Renamed Slug',
+				'terms'          => array( 'category' => array( $term ) ),
+				'featured_media' => $att,
+				'meta'           => array( 'subtitle' => 'Updated' ),
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'renamed-slug', get_post_field( 'post_name', $post ) );
+		$this->assertContains( $term, wp_get_post_terms( $post, 'category', array( 'fields' => 'ids' ) ) );
+		$this->assertSame( $att, get_post_thumbnail_id( $post ) );
+		$this->assertSame( 'Updated', get_post_meta( $post, 'subtitle', true ) );
+	}
+
+	public function test_update_rejects_bad_enrichment_and_leaves_post_unchanged(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create( array( 'post_title' => 'Original' ) );
+
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
+			array(
+				'post_id' => $post,
+				'title'   => 'Changed Title',
+				'meta'    => array( 'never_allowed_key' => 'x' ), // non-allowlisted
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		// Validation happens before wp_update_post, so the title must NOT have changed.
+		$this->assertSame( 'Original', get_post_field( 'post_title', $post ) );
+	}
 }

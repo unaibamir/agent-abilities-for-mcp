@@ -310,4 +310,103 @@ final class CptWritesTest extends TestCase {
 		$this->assertSame( 'writes', $registry['aafm/create-cpt-item']['group'] );
 		$this->assertSame( 'writes', $registry['aafm/update-cpt-item']['group'] );
 	}
+
+	public function test_create_cpt_item_rejects_ineligible_type_even_if_allowlisted(): void {
+		// attachment is the lone public-but-internal type; the floor must reject it even if a
+		// rogue option lists it. Add it to the option and confirm create is denied + not written.
+		update_option( 'aafm_allowed_post_types', array( self::CPT, 'attachment' ) );
+
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
+				array(
+					'post_type' => 'attachment',
+					'title'     => 'x',
+				)
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/create-cpt-item' )->execute(
+			array(
+				'post_type' => 'attachment',
+				'title'     => 'x',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_create_cpt_item_does_not_spoof_author(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'publish_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		// post_author is not in the closed schema, but prove that even a stray value is ignored:
+		// aafm_insert_post never threads it, so the author is the agent user.
+		$out = wp_get_ability( 'aafm/create-cpt-item' )->execute(
+			array(
+				'post_type' => self::CPT,
+				'title'     => 'Author check',
+			)
+		);
+		$this->assertSame( $user_id, (int) get_post_field( 'post_author', $out['post']['id'] ) );
+	}
+
+	public function test_update_cpt_item_force_draft_coerces_publish_request(): void {
+		update_option( 'aafm_force_draft', true );
+
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'edit_others_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		$user->add_cap( 'publish_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT,
+				'post_status' => 'draft',
+			)
+		);
+
+		wp_get_ability( 'aafm/update-cpt-item' )->execute(
+			array(
+				'post_id' => $post_id,
+				'status'  => 'publish',
+			)
+		);
+
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+		delete_option( 'aafm_force_draft' );
+	}
+
+	public function test_update_cpt_item_content_is_sanitized(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'edit_others_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		$user->add_cap( 'unfiltered_html' );
+		wp_set_current_user( $user_id );
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => self::CPT,
+				'post_status' => 'draft',
+			)
+		);
+
+		wp_get_ability( 'aafm/update-cpt-item' )->execute(
+			array(
+				'post_id' => $post_id,
+				'content' => '<script>alert(1)</script><p>ok</p>',
+			)
+		);
+
+		$this->assertStringNotContainsString( '<script>', get_post_field( 'post_content', $post_id ) );
+	}
 }

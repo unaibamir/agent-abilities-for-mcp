@@ -56,6 +56,9 @@ final class CatalogTest extends TestCase {
 		'aafm/get-activity-log',
 		'aafm/list-blocks',
 		'aafm/get-block',
+		'aafm/list-menus',
+		'aafm/get-menu',
+		'aafm/list-menu-items',
 	);
 
 	/**
@@ -171,7 +174,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 68) and register categories + abilities.
+	 * Enable the entire catalog (all 71) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -182,9 +185,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			68,
+			71,
 			$registry,
-			'The catalog must contain exactly 68 abilities — 30 reads + 38 writes.'
+			'The catalog must contain exactly 71 abilities — 33 reads + 38 writes.'
 		);
 	}
 
@@ -199,8 +202,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 30 reads — no drift.' );
-		$this->assertCount( 30, $reads, 'Exactly 30 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 33 reads — no drift.' );
+		$this->assertCount( 33, $reads, 'Exactly 33 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -224,7 +227,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 68 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 71 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -238,9 +241,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			68,
+			71,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(30) + writes(38) must equal the full catalog (68).'
+			'reads(33) + writes(38) must equal the full catalog (71).'
 		);
 	}
 

@@ -55,6 +55,9 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/get-activity-log',
 		'aafm/list-blocks',
 		'aafm/get-block',
+		'aafm/list-menus',
+		'aafm/get-menu',
+		'aafm/list-menu-items',
 	);
 
 	public function set_up(): void {
@@ -110,9 +113,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 30 reads — no more, no fewer.'
+			'The read group must be exactly the 33 reads — no more, no fewer.'
 		);
-		$this->assertCount( 30, $reads, 'The read catalog ships exactly 30 read abilities.' );
+		$this->assertCount( 33, $reads, 'The read catalog ships exactly 33 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

@@ -123,6 +123,11 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// branch), so it needs no case — it falls through to its real permission_callback
 		// with empty input, the correct answer. Proven in ActivityLogTest.
 
+		// The menu family (list-menus, get-menu, list-menu-items — and the C2 writes) all
+		// gate on the object-independent edit_theme_options capability (WP has no per-menu
+		// cap), so none needs a case — each falls through to its real permission_callback
+		// with empty input, the correct answer. Proven in MenusTest.
+
 		// Reusable-block reads/writes: get-block, update-block, and delete-block gate
 		// per-object on edit_post/delete_post on the wp_block id, which is false with empty
 		// input at discovery — so use the object-independent edit_posts/delete_posts floor;

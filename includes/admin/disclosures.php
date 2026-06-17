@@ -52,6 +52,9 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-activity-log'     => __( "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp), most recent first. Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'aafm/list-blocks'          => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and last-modified time. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-block'            => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
+		'aafm/list-menus'           => __( 'Lists navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/get-menu'             => __( 'Reads one navigation menu by id: name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/list-menu-items'      => __( "Lists a navigation menu's items: title, URL, type, linked object, parent, and order. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 
 		// Writes.
 		'aafm/create-draft'         => __( 'Creates a new draft post. The agent drafts, a human publishes. It never goes live on its own.', 'agent-abilities-for-mcp' ),

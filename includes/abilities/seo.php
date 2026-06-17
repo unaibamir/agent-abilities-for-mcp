@@ -29,13 +29,21 @@ function aafm_register_seo_definitions( array $registry ): array {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	$registry['aafm/seo-get-post'] = array(
+	$registry['aafm/seo-get-post']    = array(
 		'label'        => __( 'Get post SEO', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Reads a post's SEO fields (title, description, focus keyword, canonical, robots, and social) from the active SEO plugin. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'seo',
 		'args_builder' => 'aafm_args_seo_get_post',
+	);
+	$registry['aafm/seo-update-post'] = array(
+		'label'        => __( 'Update post SEO', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Writes a post's SEO fields (title, description, focus keyword, canonical, robots, and social) to the active SEO plugin's meta keys. URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'seo',
+		'args_builder' => 'aafm_args_seo_update_post',
 	);
 
 	return $registry;
@@ -161,5 +169,94 @@ function aafm_exec_seo_get_post( array $input ) {
 	if ( ! get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
+	return aafm_seo_read_fields( $id );
+}
+
+/**
+ * The unified SEO fields that hold a URL and so must be sanitized with esc_url_raw rather than
+ * sanitize_text_field (which would let a javascript: scheme through).
+ *
+ * @return string[]
+ */
+function aafm_seo_url_fields(): array {
+	return array( 'canonical', 'og_image', 'twitter_image' );
+}
+
+/**
+ * Args for aafm/seo-update-post.
+ *
+ * The closed schema enumerates EVERY writable unified field explicitly (MEDIUM-3):
+ * additionalProperties:false means a field not listed here could never be written, silently
+ * breaking parity, so the property list is kept in lockstep with aafm_seo_fields() and the read.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_seo_update_post(): array {
+	$properties = array(
+		'post_id' => array(
+			'type'    => 'integer',
+			'minimum' => 1,
+		),
+	);
+	foreach ( aafm_seo_fields() as $field ) {
+		$properties[ $field ] = array( 'type' => 'string' );
+	}
+
+	return array(
+		'label'               => __( 'Update post SEO', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's SEO fields to the active SEO plugin. URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => $properties,
+			'required'             => array( 'post_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => aafm_seo_post_output_properties(),
+		),
+		'execute_callback'    => 'aafm_exec_seo_update_post',
+		'permission_callback' => 'aafm_perm_seo_post',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/seo-update-post.
+ *
+ * For each unified field present in the input that the active plugin maps to a meta key, sanitize
+ * per type (esc_url_raw for the URL fields, sanitize_text_field otherwise) and write it. Returns
+ * the refreshed read shape so the agent sees ground truth after the write.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_seo_update_post( array $input ) {
+	$id = absint( $input['post_id'] ?? 0 );
+	if ( ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$map        = aafm_seo_meta_keys( aafm_seo_active_plugin() );
+	$url_fields = aafm_seo_url_fields();
+	foreach ( aafm_seo_fields() as $field ) {
+		if ( ! array_key_exists( $field, $input ) ) {
+			continue;
+		}
+		$meta_key = $map[ $field ] ?? '';
+		if ( '' === $meta_key ) {
+			continue; // The active plugin does not map this field.
+		}
+		$raw   = (string) $input[ $field ];
+		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		update_post_meta( $id, $meta_key, $clean );
+	}
+
 	return aafm_seo_read_fields( $id );
 }

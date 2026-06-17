@@ -114,6 +114,72 @@ final class SeoTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled field.' );
 	}
 
+	public function test_seo_update_post_round_trips_every_unified_field(): void {
+		// MEDIUM-3: every field the read exposes must also be writable. A field missing from the
+		// write schema would be rejected by additionalProperties:false and never round-trip.
+		$editor_id = $this->acting_as( 'administrator' );
+		$post_id   = (int) self::factory()->post->create( array( 'post_author' => $editor_id ) );
+
+		$payload = array(
+			'post_id'             => $post_id,
+			'title'               => 'My Title',
+			'description'         => 'My description.',
+			'focus_keyword'       => 'widgets',
+			'canonical'           => 'https://example.com/canonical',
+			'robots'              => 'noindex,nofollow',
+			'og_title'            => 'OG Title',
+			'og_description'      => 'OG description.',
+			'og_image'            => 'https://example.com/og.jpg',
+			'twitter_title'       => 'TW Title',
+			'twitter_description' => 'TW description.',
+			'twitter_image'       => 'https://example.com/tw.jpg',
+		);
+		$res = wp_get_ability( 'aafm/seo-update-post' )->execute( $payload );
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A full unified write must succeed.' );
+
+		// Read it back through seo-get-post: every field round-trips.
+		$read = wp_get_ability( 'aafm/seo-get-post' )->execute( array( 'post_id' => $post_id ) );
+		foreach ( aafm_seo_fields() as $field ) {
+			$this->assertSame( $payload[ $field ], $read[ $field ], $field . ' did not round-trip.' );
+		}
+	}
+
+	public function test_seo_update_post_url_fields_are_url_sanitized(): void {
+		$editor_id = $this->acting_as( 'administrator' );
+		$post_id   = (int) self::factory()->post->create( array( 'post_author' => $editor_id ) );
+
+		// A javascript: scheme on a URL field is stripped to empty by esc_url_raw.
+		wp_get_ability( 'aafm/seo-update-post' )->execute(
+			array(
+				'post_id'   => $post_id,
+				'canonical' => 'javascript:alert(1)',
+				'og_image'  => 'javascript:alert(2)',
+			)
+		);
+		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_canonical', true ) );
+		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_opengraph-image', true ) );
+	}
+
+	public function test_seo_update_post_denies_a_subscriber(): void {
+		$post_id = (int) self::factory()->post->create();
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/seo-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+	}
+
+	public function test_seo_update_post_rejects_a_smuggled_field(): void {
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+		$res     = wp_get_ability( 'aafm/seo-update-post' )->execute(
+			array(
+				'post_id'   => $post_id,
+				'post_type' => 'attachment',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled field.' );
+	}
+
 	public function test_seo_abilities_absent_when_host_inactive(): void {
 		// HIGH-2: assert at the REGISTRY level, not via aafm_user_can_discover_ability().
 		// The discovery helper falls through to aafm_user_can_call_ability → the process-wide

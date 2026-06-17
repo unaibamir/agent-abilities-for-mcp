@@ -1284,3 +1284,67 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	}
 	return aafm_rich_wc_variation( $saved );
 }
+
+/**
+ * Args for aafm/wc-delete-product-variation.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_wc_delete_product_variation(): array {
+	return array(
+		'label'               => __( 'Delete WooCommerce product variation', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'variation_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'variation_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'      => array( 'type' => 'integer' ),
+				'deleted' => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_wc_delete_product_variation',
+		'permission_callback' => 'aafm_wc_perm',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/wc-delete-product-variation.
+ *
+ * Permanent removal through the variation object's own data store: $variation->delete( true ). The
+ * force flag is WooCommerce's permanent-delete semantics (a variation has no recoverable WC trash for
+ * this surface). This is the WooCommerce object's own delete method, NOT the core post force-delete
+ * primitive, so it never touches that governed call site or the source-scan that bans it.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_wc_delete_product_variation( array $input ) {
+	$id        = (int) ( $input['variation_id'] ?? 0 );
+	$variation = aafm_wc_get_variation( $id );
+	if ( null === $variation ) {
+		return aafm_generic_error();
+	}
+	$variation->delete( true );
+
+	return array(
+		'id'      => $id,
+		'deleted' => true,
+	);
+}

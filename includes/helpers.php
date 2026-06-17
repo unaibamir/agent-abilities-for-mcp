@@ -378,6 +378,33 @@ function aafm_allowed_user_meta_keys(): array {
 }
 
 /**
+ * The fixed v1 allowlist of site settings agents may read and write.
+ *
+ * It deliberately EXCLUDES every takeover/lockout-class key — siteurl, home, admin_email,
+ * default_role, users_can_register — because changing any of them could take over or lock
+ * out the whole site. A filter may NARROW this set (remove keys), but the excluded keys are
+ * re-stripped with array_diff() AFTER the filter runs, so a rogue filter can never widen the
+ * list back to a dangerous key.
+ *
+ * @return list<string>
+ */
+function aafm_allowed_site_settings(): array {
+	$base  = array( 'blogname', 'blogdescription', 'timezone_string', 'date_format', 'time_format', 'start_of_week', 'posts_per_page' );
+	$never = array( 'siteurl', 'home', 'admin_email', 'default_role', 'users_can_register' );
+
+	/**
+	 * Filters the site settings exposed to AI agents. The set can only be NARROWED — the
+	 * takeover-class keys in $never are re-stripped after this filter, so a rogue filter
+	 * that tries to add one is a no-op.
+	 *
+	 * @param list<string> $base The fixed v1 allowlist.
+	 */
+	$filtered = (array) apply_filters( 'aafm_allowed_site_settings', $base );
+
+	return array_values( array_diff( array_map( 'strval', $filtered ), $never ) );
+}
+
+/**
  * Validate a user-meta key: must be allowlisted AND not hard-blocked. One generic error code
  * for both failure modes so a caller cannot distinguish "blocked" from "not allowlisted".
  *

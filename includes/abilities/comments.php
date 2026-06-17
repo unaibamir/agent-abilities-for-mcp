@@ -343,6 +343,166 @@ function aafm_exec_get_comment( array $input ) {
 }
 
 /**
+ * Args for aafm/create-comment.
+ *
+ * Security posture (this is the main abuse surface):
+ *  - Floor cap is moderate_comments: an autonomous agent posting comments is a
+ *    privileged moderation action, not an anonymous public comment. This blocks a
+ *    low-cap caller from mass-creating spam.
+ *  - The author is ALWAYS the current (agent) user. No comment_author,
+ *    comment_author_email, author_url, or comment_author_IP is accepted from input,
+ *    so identity can never be spoofed or used as an injection vector.
+ *  - Content is run through wp_kses_post() and wp_filter_comment() before insert, so
+ *    raw script is never stored.
+ *  - The comment is created PENDING (comment_approved '0'); a human or
+ *    aafm/moderate-comment approves it. An agent never auto-publishes.
+ *  - comment_post_ID must resolve to a real post. Optional parent must be a real
+ *    comment ON THE SAME POST. comments_open() is deliberately not required —
+ *    moderators add to closed threads in the dashboard and the cap floor gates abuse.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_create_comment(): array {
+	return array(
+		'label'               => __( 'Create comment', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Add a pending comment to a post as the agent user (requires moderate_comments).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'content' => array(
+					'type'      => 'string',
+					'minLength' => 1,
+					'maxLength' => 65525,
+				),
+				'parent'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'post_id', 'content' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'comment' => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_create_comment',
+		'permission_callback' => 'aafm_perm_create_comment',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/create-comment: moderate_comments.
+ *
+ * An agent creating comments is treated as a moderation-class action. The single
+ * site-wide cap is the gate; there is no per-object refinement because the author is
+ * pinned to the current user, not a target the caller might not own. Every denial is
+ * audited by the registration wrapper.
+ *
+ * @return bool
+ */
+function aafm_perm_create_comment(): bool {
+	return current_user_can( 'moderate_comments' );
+}
+
+/**
+ * Execute aafm/create-comment.
+ *
+ * Builds the insert array from the current user (never from input), sanitizes the
+ * content, forces pending status, validates the target post and optional parent, runs
+ * the array through wp_filter_comment(), and inserts. Returns the redacted comment.
+ *
+ * Two deliberate choices worth calling out:
+ *  - The post-insert wp_set_comment_status( $id, 'hold' ) pin is intentional. Even if a
+ *    filter on insert flips the status, the comment must land in the moderation queue;
+ *    an agent should never auto-publish its own comment.
+ *  - wp_insert_comment() bypasses wp_allow_comment()'s duplicate / flood / disallowed-key
+ *    checks. That is acceptable here precisely because the caller already holds
+ *    moderate_comments — this is a moderation action, not an anonymous public submission.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_create_comment( array $input ) {
+	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$parent  = isset( $input['parent'] ) ? absint( $input['parent'] ) : 0;
+	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
+
+	if ( '' === trim( $content ) ) {
+		return aafm_generic_error();
+	}
+
+	$post = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	// An optional parent must be a real comment on the SAME post — no cross-post threading.
+	if ( $parent > 0 ) {
+		$parent_comment = get_comment( $parent );
+		if ( ! $parent_comment instanceof WP_Comment || (int) $parent_comment->comment_post_ID !== $post_id ) {
+			return aafm_generic_error();
+		}
+	}
+
+	$user = wp_get_current_user();
+	if ( ! $user instanceof WP_User || 0 === (int) $user->ID ) {
+		return aafm_generic_error();
+	}
+
+	// Author identity is the agent user — never free-form input. Status is pending.
+	// wp_slash() the strings: wp_insert_comment() expects slashed data and unslashes
+	// internally, matching the post-writer convention elsewhere in the plugin.
+	$commentdata = array(
+		'comment_post_ID'      => $post_id,
+		'comment_parent'       => $parent,
+		'comment_content'      => wp_slash( $content ),
+		'comment_author'       => wp_slash( (string) $user->display_name ),
+		'comment_author_email' => wp_slash( (string) $user->user_email ),
+		'comment_author_url'   => '',
+		'user_id'              => (int) $user->ID,
+		'comment_approved'     => '0',
+		'comment_type'         => 'comment',
+		// Present but empty: wp_filter_comment() reads these keys, and we never record
+		// the agent's IP/user-agent for an agent-authored comment. Neither is ever
+		// returned — the response is built by aafm_redact_comment().
+		'comment_author_IP'    => '',
+		'comment_agent'        => '',
+	);
+
+	// Apply WordPress's own comment filters (pre_comment_content / kses) as a second pass.
+	$commentdata = wp_filter_comment( $commentdata );
+
+	$comment_id = wp_insert_comment( $commentdata );
+	if ( ! $comment_id ) {
+		return aafm_generic_error();
+	}
+
+	// Pin status to pending in case a filter flipped it on insert.
+	wp_set_comment_status( $comment_id, 'hold' );
+
+	$created = get_comment( $comment_id );
+	if ( ! $created instanceof WP_Comment ) {
+		return aafm_generic_error();
+	}
+
+	return array( 'comment' => aafm_redact_comment( $created ) );
+}
+
+/**
  * Args for aafm/get-pending-comments.
  *
  * @return array<string,mixed>

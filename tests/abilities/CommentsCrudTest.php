@@ -84,4 +84,101 @@ final class CommentsCrudTest extends TestCase {
 		$out = wp_get_ability( 'aafm/get-comment' )->execute( array( 'comment_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
+
+	public function test_create_comment_requires_moderate_comments_and_audits_denial(): void {
+		$post = self::factory()->post->create();
+
+		$this->acting_as( 'author' ); // no moderate_comments
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-comment' )->check_permissions(
+				array(
+					'post_id' => $post,
+					'content' => 'Nice post',
+				)
+			)
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/create-comment', $abilities );
+	}
+
+	public function test_create_comment_ties_author_to_the_agent_user_not_input(): void {
+		$editor_id = $this->acting_as( 'editor' );
+		$editor    = get_user_by( 'id', $editor_id );
+		$post      = self::factory()->post->create();
+
+		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => $post,
+				'content' => 'Authored by the agent user',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$comment = get_comment( $out['comment']['id'] );
+		$this->assertInstanceOf( WP_Comment::class, $comment );
+		// Author identity comes from the current user, never from input.
+		$this->assertSame( $editor_id, (int) $comment->user_id );
+		$this->assertSame( $editor->display_name, $comment->comment_author );
+		$this->assertSame( $editor->user_email, $comment->comment_author_email );
+	}
+
+	public function test_create_comment_defaults_to_pending_not_published(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+
+		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => $post,
+				'content' => 'Hold me for moderation',
+			)
+		);
+
+		$this->assertSame( 'unapproved', $out['comment']['status'] );
+		$this->assertSame( 'unapproved', wp_get_comment_status( $out['comment']['id'] ) );
+	}
+
+	public function test_create_comment_sanitizes_script_content(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+
+		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => $post,
+				'content' => 'Hello <script>alert(1)</script> world',
+			)
+		);
+
+		$stored = get_comment( $out['comment']['id'] )->comment_content;
+		$this->assertStringNotContainsString( '<script>', $stored );
+		$this->assertStringContainsString( 'Hello', $stored );
+	}
+
+	public function test_create_comment_rejects_missing_post(): void {
+		$this->acting_as( 'editor' );
+		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => 999999,
+				'content' => 'No such post',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_create_comment_rejects_parent_on_a_different_post(): void {
+		$this->acting_as( 'editor' );
+		$post_a   = self::factory()->post->create();
+		$post_b   = self::factory()->post->create();
+		$parent_b = self::factory()->comment->create( array( 'comment_post_ID' => $post_b ) );
+
+		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+			array(
+				'post_id' => $post_a,
+				'content' => 'mismatched parent',
+				'parent'  => $parent_b,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
 }

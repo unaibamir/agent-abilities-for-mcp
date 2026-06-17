@@ -113,6 +113,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// here — it falls through to its real permission_callback with empty input,
 		// which is the correct answer (same as the get-users list sibling).
 
+		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
+		// which is false with empty input — so the per-object permission_callback would
+		// hide the tool from every capable admin at discovery. Use the object-independent
+		// floor (edit_users / delete_users) so a capable admin can SEE the tool; the
+		// per-object permission_callback still re-checks the specific user at execute time.
+		// create-user gates on create_users (object-independent), so it needs no case and
+		// correctly falls through to its real permission_callback with empty input.
+		case 'aafm/update-user':
+			return static fn(): bool => current_user_can( 'edit_users' );
+		case 'aafm/delete-user':
+			return static fn(): bool => current_user_can( 'delete_users' );
+
 		// Post writes: the floor cap that the per-object edit_post()/delete_post() refine.
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':

@@ -235,4 +235,16 @@ final class UsersWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'deleting the sole remaining admin must be refused even by another actor.' );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim_admin ), 'the last admin must survive.' );
 	}
+
+	public function test_user_writes_discoverable_by_capable_admin_only(): void {
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-user' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-user' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-user' ) );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-user' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-user' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-user' ) );
+	}
 }

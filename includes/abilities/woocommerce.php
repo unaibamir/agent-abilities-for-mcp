@@ -252,8 +252,9 @@ function aafm_args_wc_list_products(): array {
 					'maximum' => 100,
 				),
 				'status'   => array(
-					'type' => 'string',
-					'enum' => array( 'any', 'publish', 'draft', 'pending', 'private' ),
+					'type'        => 'string',
+					'description' => "Status filter; 'any' returns all states.",
+					'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -406,8 +407,9 @@ function aafm_wc_product_write_properties(): array {
 			'enum' => array( 'simple', 'grouped', 'external', 'variable' ),
 		),
 		'status'            => array(
-			'type' => 'string',
-			'enum' => array( 'publish', 'draft', 'pending', 'private' ),
+			'type'        => 'string',
+			'description' => "The product's publish state.",
+			'enum'        => array( 'publish', 'draft', 'pending', 'private' ),
 		),
 		'description'       => array( 'type' => 'string' ),
 		'short_description' => array( 'type' => 'string' ),
@@ -526,7 +528,8 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void
 }
 
 /**
- * Sanitize a price-like string to a bare decimal (digits, one dot, optional leading minus stripped).
+ * Sanitize a price-like string to a bare decimal: strips every character except digits and the
+ * decimal point (currency symbols, spaces, thousands separators, and any minus sign all go).
  *
  * @param mixed $value Raw price.
  * @return string

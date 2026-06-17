@@ -400,4 +400,99 @@ final class RevisionsTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/delete-revision', $reg );
 		$this->assertNotNull( aafm_ability_list_permission( 'aafm/delete-revision' ) );
 	}
+
+	public function test_delete_revision_denied_for_non_parent_editor(): void {
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $owner );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $owner,
+				'post_content' => 'p1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'p2',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = array_shift( $revs );
+
+		// A different author cannot edit the parent, so cannot delete its revisions.
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $other );
+		$this->assertFalse(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $rev->ID,
+				)
+			)
+		);
+	}
+
+	public function test_delete_revision_rejects_cross_parent_revision_id(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$a = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'a1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $a,
+				'post_content' => 'a2',
+			)
+		);
+		$revs  = wp_get_post_revisions( $a );
+		$rev_a = array_shift( $revs );
+		$b     = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// $b is editable, but $rev_a is a revision of $a, not $b — must be rejected by perm AND exec.
+		$this->assertFalse(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $b,
+					'revision_id' => (int) $rev_a->ID,
+				)
+			)
+		);
+		$out = aafm_exec_delete_revision(
+			array(
+				'post_id'     => $b,
+				'revision_id' => (int) $rev_a->ID,
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		// The revision of $a was NOT deleted by the cross-parent attempt.
+		$this->assertNotEmpty( wp_get_post_revisions( $a ) );
+	}
+
+	public function test_list_revisions_stays_metadata_only(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'L1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'L2 body content',
+			)
+		);
+		$out = aafm_exec_list_revisions( array( 'post_id' => $pid ) );
+		$this->assertNotEmpty( $out['revisions'] );
+		foreach ( $out['revisions'] as $row ) {
+			$this->assertArrayHasKey( 'id', $row );
+			$this->assertArrayNotHasKey( 'content', $row );
+			$this->assertArrayNotHasKey( 'excerpt', $row );
+			$this->assertArrayNotHasKey( 'diff', $row );
+		}
+	}
 }

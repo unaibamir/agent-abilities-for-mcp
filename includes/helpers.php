@@ -868,6 +868,26 @@ function aafm_redact_user( $user, ?int $post_count = null ): array {
 }
 
 /**
+ * Rich single-user payload: the lean redacted shape PLUS registration date and bio.
+ *
+ * Intentionally NOT folded into aafm_redact_user(): that stays lean for the get-users
+ * LIST. Login and password hash are never exposed (the lean redactor already omits them).
+ *
+ * @param WP_User|false $user       User object.
+ * @param int|null      $post_count Pre-resolved post count, or null to compute.
+ * @return array<string,mixed>
+ */
+function aafm_rich_user( $user, ?int $post_count = null ): array {
+	if ( ! $user instanceof WP_User ) {
+		return array();
+	}
+	$base               = aafm_redact_user( $user, $post_count );
+	$base['registered'] = $user->user_registered;
+	$base['bio']        = (string) get_user_meta( $user->ID, 'description', true );
+	return $base;
+}
+
+/**
  * Reduce a comment to a safe shape — no email, no IP.
  *
  * @param WP_Comment|null $comment Comment object.

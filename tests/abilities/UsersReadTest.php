@@ -222,4 +222,26 @@ final class UsersReadTest extends TestCase {
 		$this->assertArrayNotHasKey( 'user_login', $out );
 		$this->assertArrayNotHasKey( 'user_pass', $out );
 	}
+
+	/**
+	 * The rich single-user assembler layers registration date + bio over the lean
+	 * redacted shape (which it calls), so the list stays lean. Login/pass stay out.
+	 */
+	public function test_rich_user_adds_registered_and_bio_over_the_lean_shape(): void {
+		$uid = self::factory()->user->create(
+			array(
+				'role'        => 'author',
+				'user_email'  => 'rich@example.com',
+				'description' => 'Bio text here',
+			)
+		);
+		$out = aafm_rich_user( get_userdata( $uid ), 0 );
+
+		$this->assertSame( 'rich@example.com', $out['email'] );      // From the lean redactor.
+		$this->assertArrayHasKey( 'registered', $out );              // Rich-only.
+		$this->assertSame( 'Bio text here', $out['bio'] ?? null );   // Rich-only.
+		// Still no login/pass.
+		$this->assertArrayNotHasKey( 'user_login', $out );
+		$this->assertStringNotContainsString( 'user_pass', (string) wp_json_encode( $out ) );
+	}
 }

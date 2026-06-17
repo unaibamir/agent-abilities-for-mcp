@@ -311,6 +311,13 @@ final class SecurityRegressionTest extends TestCase {
 				'aafm/update-site-settings',
 			)
 		);
+		// list-plugins is the sanctioned exception to the 'plugin' needle. It is a READ-ONLY
+		// inventory (name, version, active state, relative basename) gated on activate_plugins —
+		// the capability WordPress puts on the Plugins screen — default-OFF, audited, and
+		// closed-schema. There is deliberately NO activate/deactivate ability in the catalog, so
+		// the 'plugin' needle still bans a generic plugin-management surface (e.g.
+		// aafm/activate-plugin, aafm/manage-plugins). list-plugins never changes a plugin.
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/list-plugins' ) );
 		foreach ( array_keys( $registry ) as $name ) {
 			if ( in_array( $name, $sanctioned, true ) ) {
 				continue;

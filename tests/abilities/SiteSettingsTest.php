@@ -78,4 +78,108 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertArrayHasKey( 'blogname', $res['settings'] );
 		$this->assertArrayNotHasKey( 'admin_email', $res['settings'], 'must never return admin_email.' );
 	}
+
+	public function test_update_site_settings_writes_only_allowlisted_keys(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'New Name',
+					'posts_per_page' => 7,
+				),
+			)
+		);
+		$this->assertIsArray( $res );
+		$this->assertSame( 'New Name', get_option( 'blogname' ) );
+		$this->assertSame( 7, (int) get_option( 'posts_per_page' ) );
+	}
+
+	public function test_update_site_settings_rejects_a_non_allowlisted_key(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$before = get_option( 'admin_email' );
+		$res    = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'admin_email' => 'attacker@evil.test' ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'a non-allowlisted key must be rejected.' );
+		$this->assertSame( $before, get_option( 'admin_email' ), 'admin_email must be untouched.' );
+	}
+
+	/**
+	 * Headline containment proof: a takeover-class key smuggled alongside a legitimate one
+	 * must reject the WHOLE call (fail-closed), and the site's real takeover settings —
+	 * siteurl, home, admin_email, default_role, users_can_register — must be unchanged.
+	 * A leak here is a site takeover or lockout.
+	 */
+	public function test_update_site_settings_contains_every_takeover_key(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+
+		$before = array();
+		foreach ( array( 'siteurl', 'home', 'admin_email', 'default_role', 'users_can_register' ) as $key ) {
+			$before[ $key ] = get_option( $key );
+		}
+
+		// Smuggle every takeover key, paired with a legitimate one to prove the legitimate
+		// write does NOT sneak the rest in past a partial apply.
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'           => 'Owned',
+					'siteurl'            => 'https://attacker.test',
+					'home'               => 'https://attacker.test',
+					'admin_email'        => 'attacker@evil.test',
+					'default_role'       => 'administrator',
+					'users_can_register' => 1,
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a smuggled takeover key must reject the whole call.' );
+		foreach ( $before as $key => $value ) {
+			$this->assertSame( $value, get_option( $key ), "$key must be unchanged after a smuggled write." );
+		}
+		// The legitimate key in the same call must NOT have been applied (fail-closed, not partial).
+		$this->assertNotSame( 'Owned', get_option( 'blogname' ), 'a rejected call must not partial-apply blogname.' );
+	}
+
+	public function test_update_site_settings_requires_manage_options_and_is_destructive(): void {
+		$this->register_all();
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue( wp_get_ability( 'aafm/update-site-settings' )->check_permissions( array() ) );
+		$ann = wp_get_ability( 'aafm/update-site-settings' )->get_meta_item( 'annotations' );
+		$this->assertTrue( $ann['destructive'] );
+	}
+
+	public function test_update_site_settings_clamps_integer_ranges(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'posts_per_page' => 0,
+					'start_of_week'  => 99,
+				),
+			)
+		);
+		$this->assertIsArray( $res );
+		$this->assertSame( 1, (int) get_option( 'posts_per_page' ), 'posts_per_page=0 must floor to 1.' );
+		$this->assertSame( 6, (int) get_option( 'start_of_week' ), 'start_of_week=99 must clamp to 6.' );
+	}
+
+	public function test_update_site_settings_clamps_a_negative_posts_per_page_to_one(): void {
+		// absint would turn -5 into 5; the floor/cap form must clamp it to 1.
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'posts_per_page' => -5 ),
+			)
+		);
+		$this->assertIsArray( $res );
+		$this->assertSame( 1, (int) get_option( 'posts_per_page' ), 'a negative posts_per_page must floor to 1, not flip to 5.' );
+	}
 }

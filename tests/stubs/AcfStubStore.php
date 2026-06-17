@@ -40,6 +40,10 @@ class AcfStubStore {
 	/**
 	 * The seeded current-object values: field key => value.
 	 *
+	 * NOTE: seed values are GLOBAL, not per-object — every object selector reads the same seed (only
+	 * recorded WRITES are bucketed per selector). Reads are therefore not object-isolated in this
+	 * stub; tests that need to prove a write landed under a specific selector assert on value().
+	 *
 	 * @var array<string,mixed>
 	 */
 	public static array $seed_values = array();

@@ -154,6 +154,14 @@ final class AcfTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'Updated headline', ( (array) $res['fields'] )['field_1'] );
 
+		// LOW-1: pin the selector like the term/user tests so a broken post selector can't pass via
+		// the stub's global seed merge — the write must land under the post-id bucket specifically.
+		$this->assertSame(
+			'Updated headline',
+			\AAFM\Tests\AcfStubStore::value( 'field_1', $post_id ),
+			'The post write must use the post-id selector.'
+		);
+
 		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'Updated headline', ( (array) $read['fields'] )['field_1'], 'The ACF post write must round-trip.' );
 	}
@@ -696,5 +704,141 @@ final class AcfTest extends TestCase {
 		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_wys', $post_id );
 		$this->assertStringNotContainsString( '<script>', $stored, 'wp_kses_post must drop a <script>.' );
 		$this->assertStringContainsString( '<strong>', $stored, 'wp_kses_post must keep a benign <strong>.' );
+	}
+
+	/**
+	 * MEDIUM-1: a nonexistent id on each READ returns a graceful WP_Error (not a fatal). The
+	 * per-object permission callback already rejects a nonexistent id, so this drives ->execute()
+	 * directly to exercise the execute-level existence guard (the second line of defence).
+	 */
+	public function test_get_post_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => 999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_get_term_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-get-term-fields' )->execute( array( 'term_id' => 999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_get_user_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => 999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
+	 * MEDIUM-1: a nonexistent id on each WRITE returns a graceful WP_Error (not a fatal), driven
+	 * through ->execute() to exercise the execute-level existence guard.
+	 */
+	public function test_update_post_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => 999999,
+				'fields'  => array( 'field_1' => 'x' ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_update_term_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
+			array(
+				'term_id' => 999999,
+				'fields'  => array( 'field_1' => 'x' ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_update_user_fields_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => 999999,
+				'fields'  => array( 'field_1' => 'x' ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
+	 * MEDIUM-3: an empty-fields write succeeds, leaves prior values intact, and round-trips.
+	 */
+	public function test_update_post_fields_empty_write_preserves_prior_values(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// Seed a value via a first write, then an empty write must not disturb it.
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Seeded' ),
+			)
+		);
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Seeded', ( (array) $res['fields'] )['field_1'], 'An empty write must leave prior values intact.' );
+
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertSame( 'Seeded', ( (array) $read['fields'] )['field_1'], 'The prior value must round-trip.' );
+	}
+
+	/**
+	 * MEDIUM-3: an unknown field key (no ACF definition — acf_get_field returns false) is sanitized
+	 * as plain text and round-trips without a fatal.
+	 */
+	public function test_update_post_fields_unknown_field_key_sanitizes_as_text(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_unknown' => '<script>alert(1)</script>plain' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_unknown', $post_id );
+		$this->assertStringNotContainsString( '<script>', $stored, 'An unknown field key sanitizes as text.' );
+		$this->assertStringContainsString( 'plain', $stored, 'The benign remainder round-trips.' );
+	}
+
+	/**
+	 * MEDIUM-2: the user-field abilities route to the edit_users discovery floor in server.php (the
+	 * only ACF floor differing from edit_posts). An editor (edit_posts, NOT edit_users) discovers
+	 * the post-field ability but NOT the user-field one; an admin discovers both. Discovery-helper
+	 * use is correct here — this is the positive floor proof, distinct from the registry-level
+	 * host-inactive test.
+	 */
+	public function test_user_fields_discovery_respects_the_edit_users_floor(): void {
+		$this->acting_as( 'editor' );
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/acf-get-post-fields' ),
+			'An editor (edit_posts) must discover the post-field ability.'
+		);
+		$this->assertFalse(
+			aafm_user_can_discover_ability( 'aafm/acf-get-user-fields' ),
+			'An editor lacking edit_users must NOT discover the user-field ability.'
+		);
+
+		$this->acting_as( 'administrator' );
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/acf-get-post-fields' ),
+			'An admin must discover the post-field ability.'
+		);
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/acf-get-user-fields' ),
+			'An admin (edit_users) must discover the user-field ability.'
+		);
 	}
 }

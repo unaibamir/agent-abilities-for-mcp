@@ -143,8 +143,13 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->delete_posts );
 			};
 
-		// Comment moderation: the site-wide floor cap the per-object edit_comment() refines.
+		// Comment writes: the site-wide moderate_comments floor the per-object
+		// edit_comment() refines at execute time. The comment id is unknown at
+		// discovery (empty input), so discovery uses the object-independent floor.
 		case 'aafm/moderate-comment':
+		case 'aafm/create-comment':
+		case 'aafm/update-comment':
+		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
 		// Revisions: list/get/restore all gate per-object on edit_post on the parent — reads

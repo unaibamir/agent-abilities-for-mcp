@@ -283,4 +283,18 @@ final class CommentsCrudTest extends TestCase {
 		$out = wp_get_ability( 'aafm/delete-comment' )->execute( array( 'comment_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
+
+	public function test_writes_are_discoverable_by_a_moderator_and_hidden_from_a_low_cap_caller(): void {
+		$this->acting_as( 'editor' ); // has moderate_comments + edit_comment
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-comment' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
+		// get-comment falls through to its own object-independent read gate.
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-comment' ) );
+
+		$this->acting_as( 'author' ); // no moderate_comments
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-comment' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
+	}
 }

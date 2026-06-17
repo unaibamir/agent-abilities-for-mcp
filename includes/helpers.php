@@ -1385,6 +1385,22 @@ function aafm_redact_menu( $menu ): array {
 }
 
 /**
+ * JSON-schema property fragment for one menu in the list-menus output.
+ * Mirrors what aafm_redact_menu() returns — every key, with its type — so the list-menus
+ * output_schema can describe its array element shape instead of leaving it open.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_menu_output_properties(): array {
+	return array(
+		'id'    => array( 'type' => 'integer' ),
+		'name'  => array( 'type' => 'string' ),
+		'slug'  => array( 'type' => 'string' ),
+		'count' => array( 'type' => 'integer' ),
+	);
+}
+
+/**
  * Safe shape for a single nav menu item (the decorated post object the nav-menu API returns).
  *
  * Exposes only what an agent needs to understand a menu link: its id, title, URL, and the
@@ -1409,5 +1425,25 @@ function aafm_redact_menu_item( $item ): array {
 		'object_id' => isset( $item->object_id ) ? (int) $item->object_id : 0,
 		'parent'    => isset( $item->menu_item_parent ) ? (int) $item->menu_item_parent : 0,
 		'order'     => isset( $item->menu_order ) ? (int) $item->menu_order : 0,
+	);
+}
+
+/**
+ * JSON-schema property fragment for one menu item in the list-menu-items output.
+ * Mirrors what aafm_redact_menu_item() returns — every key, with its type — so the
+ * list-menu-items output_schema can describe its array element shape instead of leaving it open.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_menu_item_output_properties(): array {
+	return array(
+		'id'        => array( 'type' => 'integer' ),
+		'title'     => array( 'type' => 'string' ),
+		'url'       => array( 'type' => 'string' ),
+		'type'      => array( 'type' => 'string' ),
+		'object'    => array( 'type' => 'string' ),
+		'object_id' => array( 'type' => 'integer' ),
+		'parent'    => array( 'type' => 'integer' ),
+		'order'     => array( 'type' => 'integer' ),
 	);
 }

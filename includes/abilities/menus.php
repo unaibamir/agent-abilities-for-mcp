@@ -87,7 +87,13 @@ function aafm_args_list_menus(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'menus' => array( 'type' => 'array' ),
+				'menus' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_menu_output_properties(),
+					),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_list_menus',
@@ -192,7 +198,13 @@ function aafm_args_list_menu_items(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'items' => array( 'type' => 'array' ),
+				'items' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_menu_item_output_properties(),
+					),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_list_menu_items',

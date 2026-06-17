@@ -305,4 +305,25 @@ final class MediaReadTest extends TestCase {
 		$this->assertGreaterThanOrEqual( 1, $out['total'] );
 		$this->assertSame( array( 'image/png' ), array_keys( $out['by_mime'] ) );
 	}
+
+	public function test_media_discovery_floors(): void {
+		// Reads: same floor as get-media (upload_files OR edit_posts). The reads have NO
+		// discovery override — like get-media itself, they fall through to their real,
+		// object-independent permission_callback, which already answers correctly here.
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/count-media' ) );
+
+		$this->acting_as( 'author' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-media' ) );
+		// Writes: object-independent authoring floor — author can upload/edit, so discoverable.
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-media' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
+
+		// A subscriber cannot discover the writes either.
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-media' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
+	}
 }

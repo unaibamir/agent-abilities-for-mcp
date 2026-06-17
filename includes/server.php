@@ -156,6 +156,15 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-revision':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
+		// Media writes: the attachment id is unknown at discovery (empty input), so use an
+		// object-independent authoring floor. The reads (get-media-item/count-media) need NO
+		// case — like get-media they fall through to their object-independent permission_callback.
+		// The execute-time permission_callback still enforces per-object edit_post/delete_post
+		// on the specific attachment.
+		case 'aafm/update-media':
+		case 'aafm/delete-media':
+			return static fn(): bool => current_user_can( 'upload_files' ) || current_user_can( 'edit_posts' );
+
 		default:
 			return null;
 	}

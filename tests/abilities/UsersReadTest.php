@@ -244,4 +244,44 @@ final class UsersReadTest extends TestCase {
 		$this->assertArrayNotHasKey( 'user_login', $out );
 		$this->assertStringNotContainsString( 'user_pass', (string) wp_json_encode( $out ) );
 	}
+
+	/**
+	 * Enable + register the whole catalog so by-id reads like get-user resolve.
+	 */
+	private function register_users(): void {
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	public function test_get_user_returns_rich_shape_and_requires_list_users(): void {
+		$this->register_users();
+		$target = self::factory()->user->create(
+			array(
+				'role'       => 'author',
+				'user_email' => 'one@example.com',
+			)
+		);
+
+		// Subscriber denied (no list_users).
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/get-user' )->check_permissions( array( 'user_id' => $target ) ),
+			'get-user must deny a subscriber.'
+		);
+
+		// Admin allowed; gets the rich shape incl. email.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => $target ) );
+		$this->assertIsArray( $res );
+		$this->assertSame( 'one@example.com', $res['user']['email'] ?? null );
+		$this->assertArrayHasKey( 'registered', $res['user'] );
+	}
+
+	public function test_get_user_unknown_id_is_a_clean_error(): void {
+		$this->register_users();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => 999999 ) );
+		$this->assertInstanceOf( \WP_Error::class, $res );
+	}
 }

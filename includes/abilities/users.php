@@ -23,11 +23,19 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
 function aafm_register_users_definitions( array $registry ): array {
 	$registry['aafm/get-users'] = array(
 		'label'        => __( 'Get users', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List users (id, display name, roles, post count only — no email or login).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List users: id, display name, email, roles, and post count. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_get_users',
+	);
+	$registry['aafm/get-user']  = array(
+		'label'        => __( 'Get user', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read one user by id: id, display name, email, roles, post count, registration date, and bio. Never login or password.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'users',
+		'args_builder' => 'aafm_args_get_user',
 	);
 	return $registry;
 }
@@ -81,6 +89,63 @@ function aafm_args_get_users(): array {
 			),
 		),
 	);
+}
+
+/**
+ * Args for aafm/get-user.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_user(): array {
+	return array(
+		'label'               => __( 'Get user', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read one user by id: id, display name, email, roles, post count, registration date, and bio. Never login or password.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'user_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'user_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'user' => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_user',
+		'permission_callback' => 'aafm_perm_list_users',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/get-user.
+ *
+ * Returns the rich single-user shape (the redacted whitelist plus registration date
+ * and bio) for one user by id. Email is exposed by the locked decision; login and the
+ * password hash never are. An unknown id degrades to a generic error.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_user( array $input ) {
+	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
+	$user = $id ? get_userdata( $id ) : false;
+	if ( ! $user instanceof WP_User ) {
+		return aafm_generic_error();
+	}
+	return array( 'user' => aafm_rich_user( $user ) );
 }
 
 /**

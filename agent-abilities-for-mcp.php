@@ -160,6 +160,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/blocks.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/menus.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/themes.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/seo.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );

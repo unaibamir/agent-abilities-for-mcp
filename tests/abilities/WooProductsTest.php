@@ -123,6 +123,40 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( '{}', $json, 'Empty product attributes must encode as {}.' );
 	}
 
+	public function test_get_product_output_schema_declares_every_emitted_field(): void {
+		// The output_schema must match the full rich shape the executor returns, not a subset. Every
+		// key in the emitted result must be a declared property (get/create/update share one builder).
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$schema   = aafm_args_wc_get_product()['output_schema'];
+		$declared = array_keys( $schema['properties'] );
+
+		foreach ( array_keys( $res ) as $emitted_key ) {
+			$this->assertContains(
+				$emitted_key,
+				$declared,
+				sprintf( 'Emitted field "%s" must be declared in the get-product output_schema.', $emitted_key )
+			);
+		}
+
+		// Spot-check the rich fields the old schema omitted are now present.
+		foreach ( array( 'sku', 'price', 'status', 'regular_price', 'sale_price', 'stock_quantity', 'tags', 'image_id', 'type', 'description' ) as $rich_field ) {
+			$this->assertContains( $rich_field, $declared, sprintf( 'The schema lists the rich field "%s".', $rich_field ) );
+		}
+	}
+
+	public function test_create_and_update_share_the_get_output_schema(): void {
+		// All three product-returning abilities expose the same rich output shape.
+		$get    = aafm_args_wc_get_product()['output_schema']['properties'];
+		$create = aafm_args_wc_create_product()['output_schema']['properties'];
+		$update = aafm_args_wc_update_product()['output_schema']['properties'];
+
+		$this->assertSame( $get, $create, 'create-product shares the rich get output schema.' );
+		$this->assertSame( $get, $update, 'update-product shares the rich get output schema.' );
+	}
+
 	public function test_wc_abilities_absent_when_host_inactive(): void {
 		// HIGH-2: assert at the REGISTRY level (not via aafm_user_can_discover_ability, which leaks
 		// through the process-wide raw-permission $store once any test registered the set). The

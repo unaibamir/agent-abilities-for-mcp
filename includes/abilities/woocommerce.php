@@ -185,6 +185,51 @@ function aafm_wc_attribute_shape( $attribute ): array {
 }
 
 /**
+ * The shared output_schema properties for the full single-product shape — the exact field set
+ * aafm_rich_wc_product() emits. Reused by the get/create/update output_schemas so all three stay in
+ * lockstep with the rich assembler. `attributes` is an object (an empty map encodes as {}); the
+ * list-shaped fields are arrays of integers.
+ *
+ * @return array<string,array<string,mixed>>
+ */
+function aafm_wc_product_output_properties(): array {
+	return array(
+		'id'                => array( 'type' => 'integer' ),
+		'name'              => array( 'type' => 'string' ),
+		'sku'               => array( 'type' => 'string' ),
+		'price'             => array( 'type' => 'string' ),
+		'stock_status'      => array( 'type' => 'string' ),
+		'status'            => array( 'type' => 'string' ),
+		'categories'        => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'integer' ),
+		),
+		'featured'          => array( 'type' => 'boolean' ),
+		'type'              => array( 'type' => 'string' ),
+		'description'       => array( 'type' => 'string' ),
+		'short_description' => array( 'type' => 'string' ),
+		'regular_price'     => array( 'type' => 'string' ),
+		'sale_price'        => array( 'type' => 'string' ),
+		'manage_stock'      => array( 'type' => 'boolean' ),
+		'stock_quantity'    => array( 'type' => array( 'integer', 'null' ) ),
+		'tags'              => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'integer' ),
+		),
+		'image_id'          => array( 'type' => 'integer' ),
+		'images'            => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'integer' ),
+		),
+		'attributes'        => array( 'type' => 'object' ),
+		'variation_ids'     => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'integer' ),
+		),
+	);
+}
+
+/**
  * Args for aafm/wc-list-products.
  *
  * @return array<string,mixed>
@@ -311,19 +356,7 @@ function aafm_args_wc_get_product(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'            => array( 'type' => 'integer' ),
-				'name'          => array( 'type' => 'string' ),
-				'attributes'    => array( 'type' => 'object' ),
-				'images'        => array(
-					'type'  => 'array',
-					'items' => array( 'type' => 'integer' ),
-				),
-				'variation_ids' => array(
-					'type'  => 'array',
-					'items' => array( 'type' => 'integer' ),
-				),
-			),
+			'properties' => aafm_wc_product_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_product',
 		'permission_callback' => 'aafm_wc_perm',
@@ -545,10 +578,7 @@ function aafm_args_wc_create_product(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'   => array( 'type' => 'integer' ),
-				'name' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_wc_product_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_create_product',
 		'permission_callback' => 'aafm_wc_perm',
@@ -618,10 +648,7 @@ function aafm_args_wc_update_product(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'   => array( 'type' => 'integer' ),
-				'name' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_wc_product_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_update_product',
 		'permission_callback' => 'aafm_wc_perm',

@@ -231,6 +231,9 @@ function aafm_exec_get_all_post_meta( array $input ) {
 	$meta = array();
 	foreach ( aafm_allowed_meta_keys() as $key ) {
 		$value = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- allowlisted key, bounded loop.
+		// Deliberately SKIPS empty/missing keys (a bulk map omits absent keys),
+		// unlike the single get-post-meta reader which returns an empty value as-is.
+		// The opposite-looking phrasing is intentional; both keep a stored '0'.
 		if ( '' === $value || ! is_scalar( $value ) ) {
 			continue; // skip empty/missing and never dump arrays/serialized blobs.
 		}

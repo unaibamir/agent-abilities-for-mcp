@@ -110,7 +110,12 @@ final class SeoTest extends TestCase {
 	public function test_seo_get_post_rejects_a_smuggled_field(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/seo-get-post' )->execute( array( 'post_id' => $post_id, 'plugin' => 'rankmath' ) );
+		$res     = wp_get_ability( 'aafm/seo-get-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'plugin'  => 'rankmath',
+			)
+		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled field.' );
 	}
 
@@ -134,7 +139,7 @@ final class SeoTest extends TestCase {
 			'twitter_description' => 'TW description.',
 			'twitter_image'       => 'https://example.com/tw.jpg',
 		);
-		$res = wp_get_ability( 'aafm/seo-update-post' )->execute( $payload );
+		$res     = wp_get_ability( 'aafm/seo-update-post' )->execute( $payload );
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'A full unified write must succeed.' );
 
 		// Read it back through seo-get-post: every field round-trips.
@@ -202,7 +207,7 @@ final class SeoTest extends TestCase {
 				'name'  => 'Nested Thing',
 			),
 		);
-		$res = wp_get_ability( 'aafm/seo-update-schema' )->execute(
+		$res    = wp_get_ability( 'aafm/seo-update-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'schema'  => $schema,

@@ -62,11 +62,14 @@ final class AbilitiesDisclosureTest extends TestCase {
 		// A read-only ability row must carry the read-only badge class.
 		$this->assertStringContainsString( 'aafm-readonly-badge', $html );
 
-		// The read-only badge count must equal the number of read-risk abilities, proving
-		// it lands on reads and never leaks onto write/destructive rows.
-		$read_only = 0;
+		// The read-only badge count must equal the number of read-risk abilities the Abilities
+		// tab actually renders, proving it lands on reads and never leaks onto write/destructive
+		// rows. Integration abilities (subject 'seo', etc.) live on the Integrations tab, not
+		// here, so only abilities whose subject is an Abilities-tab subject are counted.
+		$tab_subjects = array_keys( aafm_abilities_subjects() );
+		$read_only    = 0;
 		foreach ( aafm_get_abilities_registry() as $meta ) {
-			if ( 'read' === ( $meta['risk'] ?? '' ) ) {
+			if ( 'read' === ( $meta['risk'] ?? '' ) && in_array( (string) ( $meta['subject'] ?? '' ), $tab_subjects, true ) ) {
 				++$read_only;
 			}
 		}

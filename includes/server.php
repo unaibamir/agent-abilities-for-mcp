@@ -143,6 +143,18 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// the per-object permission_callback refines at execute. list-blocks and create-block
 		// gate on the object-independent edit_posts floor directly, so they need no case here
 		// (they fall through to aafm_perm_blocks_floor, the correct answer).
+		//
+		// SEO integration: seo-get-post / seo-update-post / seo-get-schema / seo-update-schema
+		// gate per-object on edit_post($id) (SEO meta is post content), false with empty input —
+		// so discovery uses the object-independent edit_posts floor, refined per-object at
+		// execute. seo-get-head's own permission_callback is already the object-independent
+		// edit_posts floor, so it needs no case here: it falls through to that callback with empty
+		// input (the per-object edit_post refinement runs inside its execute).
+		case 'aafm/seo-get-post':
+		case 'aafm/seo-update-post':
+		case 'aafm/seo-get-schema':
+		case 'aafm/seo-update-schema':
+			return static fn(): bool => current_user_can( 'edit_posts' );
 		case 'aafm/get-block':
 		case 'aafm/update-block':
 			return static fn(): bool => current_user_can( 'edit_posts' );

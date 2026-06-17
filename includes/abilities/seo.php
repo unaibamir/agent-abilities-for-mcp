@@ -29,7 +29,7 @@ function aafm_register_seo_definitions( array $registry ): array {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	$registry['aafm/seo-get-post']    = array(
+	$registry['aafm/seo-get-post']      = array(
 		'label'        => __( 'Get post SEO', 'agent-abilities-for-mcp' ),
 		'description'  => __( "Reads a post's SEO fields (title, description, focus keyword, canonical, robots, and social) from the active SEO plugin. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -63,7 +63,7 @@ function aafm_register_seo_definitions( array $registry ): array {
 	);
 	$registry['aafm/seo-get-head']      = array(
 		'label'        => __( 'Get post SEO head', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads the rendered SEO <head> markup for a post from the active SEO plugin, best-effort (empty when the plugin offers no head API). Requires the edit-posts capability and edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reads the rendered SEO head markup for a post from the active SEO plugin, best-effort (empty when the plugin offers no head API). Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'seo',
@@ -476,7 +476,7 @@ function aafm_perm_seo_get_head(): bool {
 function aafm_args_seo_get_head(): array {
 	return array(
 		'label'               => __( 'Get post SEO head', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads the rendered SEO <head> markup for a post, best-effort. Requires the edit-posts capability and edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Reads the rendered SEO <head> markup for a post, best-effort. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

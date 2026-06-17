@@ -65,7 +65,9 @@ final class AbilitiesSaveTest extends TestCase {
 	public function test_every_registry_entry_declares_a_subject(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertNotEmpty( $registry );
-		$known = array_keys( aafm_abilities_subjects() );
+		// Abilities-tab subjects plus the integration subjects, which render on the Integrations
+		// tab rather than the Abilities tab but are still real, non-empty subjects.
+		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'seo', 'acf', 'woocommerce' ) );
 		foreach ( $registry as $name => $meta ) {
 			$this->assertArrayHasKey( 'subject', $meta, "{$name} is missing a subject." );
 			$this->assertNotSame( '', (string) $meta['subject'], "{$name} has an empty subject." );
@@ -84,11 +86,17 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
-		// Every subject that has at least one ability must get a sub-tab.
+		// Every Abilities-tab subject that has at least one ability must get a sub-tab.
+		// Integration subjects (seo, acf, woocommerce) render on the Integrations tab, not here,
+		// so they are excluded from the Abilities-tab sub-tab assertion.
+		$tab_subjects  = array_keys( aafm_abilities_subjects() );
 		$registry      = aafm_get_abilities_registry();
 		$used_subjects = array();
 		foreach ( $registry as $meta ) {
-			$used_subjects[ (string) $meta['subject'] ] = true;
+			$subject = (string) $meta['subject'];
+			if ( in_array( $subject, $tab_subjects, true ) ) {
+				$used_subjects[ $subject ] = true;
+			}
 		}
 		foreach ( array_keys( $used_subjects ) as $slug ) {
 			$this->assertStringContainsString(

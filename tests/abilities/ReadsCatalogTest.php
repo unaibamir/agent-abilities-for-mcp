@@ -63,6 +63,9 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/list-templates',
 		'aafm/get-template',
 		'aafm/get-global-styles',
+		'aafm/seo-get-post',
+		'aafm/seo-get-schema',
+		'aafm/seo-get-head',
 	);
 
 	public function set_up(): void {
@@ -74,8 +77,7 @@ final class ReadsCatalogTest extends TestCase {
 
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the
-		// registry is cached) so later slices' integration reads are counted here. No
-		// integration ability exists yet, so the reads count stays 38.
+		// registry is cached) so the SEO integration reads are counted here.
 		add_filter( 'aafm_integration_active_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
@@ -127,9 +129,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 38 reads — no more, no fewer.'
+			'The read group must be exactly the 41 reads — no more, no fewer.'
 		);
-		$this->assertCount( 38, $reads, 'The read catalog ships exactly 38 read abilities.' );
+		$this->assertCount( 41, $reads, 'The read catalog ships exactly 41 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

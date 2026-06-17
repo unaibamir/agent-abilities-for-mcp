@@ -236,6 +236,83 @@ final class UsersWriteTest extends TestCase {
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim_admin ), 'the last admin must survive.' );
 	}
 
+	/**
+	 * Every sibling write slice proves a denied call writes a 'denied' audit row — the
+	 * wrapper's denial logging is the accountability contract. Pin it for the three user
+	 * writes: a subscriber (no create_users/edit_user/delete_user) is refused at the
+	 * permission layer and each refusal lands in the activity log as 'denied'.
+	 */
+	public function test_user_writes_denial_is_audited(): void {
+		$target = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as( 'subscriber' );
+		aafm_clear_activity_log();
+
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-user' )->check_permissions(
+				array(
+					'username' => 'denied_user',
+					'email'    => 'denied_user@example.com',
+				)
+			)
+		);
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-user' )->check_permissions(
+				array(
+					'user_id'      => $target,
+					'display_name' => 'Nope',
+				)
+			)
+		);
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-user' )->check_permissions(
+				array(
+					'user_id'     => $target,
+					'reassign_to' => 1,
+				)
+			)
+		);
+
+		$denied    = aafm_query_activity(
+			array(
+				'status'   => 'denied',
+				'per_page' => 200,
+			)
+		);
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/create-user', $abilities, 'a denied create-user must write a denied audit row.' );
+		$this->assertContains( 'aafm/update-user', $abilities, 'a denied update-user must write a denied audit row.' );
+		$this->assertContains( 'aafm/delete-user', $abilities, 'a denied delete-user must write a denied audit row.' );
+	}
+
+	/**
+	 * The headline guarantee: create-user can never mint a privileged account. Even when a
+	 * full administrator smuggles a role => 'administrator' field, the closed schema strips
+	 * the unknown key (or rejects it) and the new user is forced to the site default role.
+	 * The created account must NEVER come back an administrator.
+	 */
+	public function test_create_user_cannot_mint_an_administrator_via_smuggled_role(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
+			array(
+				'username' => 'smuggle_attempt',
+				'email'    => 'smuggle_attempt@example.com',
+				'role'     => 'administrator',
+			)
+		);
+
+		// Either the closed schema rejected the smuggled field, or it was stripped and the
+		// user was created at the forced default. Either way: never an administrator.
+		if ( $res instanceof WP_Error ) {
+			$this->assertFalse( get_user_by( 'login', 'smuggle_attempt' ), 'a rejected create must not leave a user behind.' );
+			return;
+		}
+
+		$new = get_user_by( 'login', 'smuggle_attempt' );
+		$this->assertInstanceOf( \WP_User::class, $new );
+		$this->assertNotContains( 'administrator', (array) $new->roles, 'a smuggled role must never mint an administrator.' );
+		$this->assertContains( 'subscriber', (array) $new->roles, 'the forced default role must win.' );
+	}
+
 	public function test_user_writes_discoverable_by_capable_admin_only(): void {
 		$this->acting_as( 'administrator' );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-user' ) );

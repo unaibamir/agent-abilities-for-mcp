@@ -465,7 +465,7 @@ final class PostsWriteTest extends TestCase {
 		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title' => 'Should not persist',
-				'terms' => array( 'category' => array( 99999999 ) ), // nonexistent term
+				'terms' => array( 'category' => array( 99999999 ) ), // Nonexistent term.
 			)
 		);
 
@@ -512,7 +512,7 @@ final class PostsWriteTest extends TestCase {
 			array(
 				'post_id' => $post,
 				'title'   => 'Changed Title',
-				'meta'    => array( 'never_allowed_key' => 'x' ), // non-allowlisted
+				'meta'    => array( 'never_allowed_key' => 'x' ), // Non-allowlisted.
 			)
 		);
 
@@ -527,5 +527,66 @@ final class PostsWriteTest extends TestCase {
 		$this->assertStringContainsString( 'featured_media', $desc );
 		$this->assertStringContainsString( 'slug', $desc );
 		$this->assertStringContainsString( 'meta', $desc );
+	}
+
+	public function test_create_denies_term_assign_without_assign_terms_cap(): void {
+		// The per-taxonomy assign_terms gate must deny at the ability level for a creating
+		// user who lacks that exact cap. Core maps category->cap->assign_terms to a cap
+		// every editor/contributor holds, so a custom public taxonomy whose assign_terms is
+		// a primitive cap no standard role owns isolates the gate cleanly.
+		register_taxonomy(
+			'aafm_gated_tax',
+			'post',
+			array(
+				'public'       => true,
+				'hierarchical' => true,
+				'capabilities' => array(
+					'assign_terms' => 'aafm_assign_gated_terms',
+				),
+			)
+		);
+
+		$this->acting_as( 'editor' );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'aafm_gated_tax' ) );
+
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title' => 'Draft with terms',
+				'terms' => array( 'aafm_gated_tax' => array( $term ) ),
+			)
+		);
+
+		unregister_taxonomy( 'aafm_gated_tax' );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_create_rejects_non_allowlisted_meta_at_ability_level(): void {
+		$this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title' => 'Bad meta',
+				'meta'  => array( 'arbitrary_unlisted' => 'x' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_enrichment_does_not_weaken_author_forcing(): void {
+		// Anti-escalation: even with enrichment present, post_author is the agent, never spoofed.
+		$me = $this->acting_as( 'editor' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title' => 'Authored',
+				'meta'  => array( 'subtitle' => 'x' ),
+			)
+		);
+
+		$this->assertSame( $me, (int) get_post_field( 'post_author', $out['post']['id'] ) );
 	}
 }

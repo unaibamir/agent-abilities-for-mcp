@@ -668,14 +668,18 @@ function aafm_exec_update_media( array $input ) {
 	}
 
 	if ( count( $postarr ) > 1 ) {
-		$result = wp_update_post( $postarr, true );
+		// wp_update_post() unslashes its input, so slash here to keep literal
+		// backslashes in title/caption/description from being stripped on save.
+		$result = wp_update_post( wp_slash( $postarr ), true );
 		if ( is_wp_error( $result ) ) {
 			return aafm_generic_error();
 		}
 	}
 
 	if ( $has_alt ) {
-		update_post_meta( $att_id, '_wp_attachment_image_alt', sanitize_text_field( (string) $input['alt'] ) );
+		// update_post_meta() unslashes its value, so slash here too (matches
+		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
+		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
 	}
 
 	$fresh = get_post( $att_id );

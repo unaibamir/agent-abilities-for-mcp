@@ -414,6 +414,35 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( 'New Title', $out['media']['title'] );
 	}
 
+	public function test_update_media_preserves_backslashes(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'slashes.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$value = 'A\\B path C:\\Users';
+
+		$out = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'title'         => $value,
+				'description'   => $value,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		// wp_update_post() unslashes its input, so without wp_slash() the literal
+		// backslashes would be stripped on save. Assert they survive the round-trip.
+		$fresh = get_post( $att );
+		$this->assertSame( $value, $fresh->post_title );
+		$this->assertSame( $value, $fresh->post_content );
+	}
+
 	public function test_update_media_requires_at_least_one_field(): void {
 		$this->acting_as( 'administrator' );
 		$att = self::factory()->attachment->create_object(

@@ -48,7 +48,9 @@
 			this.#bindClientPicker();
 			this.#bindSubjectTabs();
 			this.#bindSectionToggles();
+			this.#bindIntegrationToggles();
 			this.#bindSaveAbilities();
+			this.#bindSaveIntegrations();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
 			this.#bindSaveSettings();
@@ -269,6 +271,94 @@
 						b.checked = enabling;
 					} );
 				} );
+			} );
+		}
+
+		/**
+		 * Per-integration "Enable all / Disable all" buttons on the Integrations tab.
+		 * Toggles every ability checkbox inside the button's integration card. When the
+		 * action would enable a card that holds a PII/destructive ability, confirm first.
+		 */
+		#bindIntegrationToggles() {
+			const buttons = document.querySelectorAll(
+				'.aafm-integration-toggle-all'
+			);
+			buttons.forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const subject = btn.dataset.subject;
+					const card = document.querySelector(
+						`.aafm-integration-${ subject }`
+					);
+					if ( ! card ) {
+						return;
+					}
+					const boxes = card.querySelectorAll(
+						'input[type="checkbox"][name="aafm_abilities[]"]'
+					);
+					const enabling = Array.from( boxes ).some(
+						( b ) => ! b.checked
+					);
+					if ( enabling && btn.dataset.hasSensitive === '1' ) {
+						const msg = this.#t(
+							'integrationToggleConfirm',
+							'These abilities can read and change personal data such as customer details and orders. Turn all of them on?'
+						);
+						if ( ! window.confirm( msg ) ) {
+							return;
+						}
+					}
+					boxes.forEach( ( b ) => {
+						b.checked = enabling;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * Save the Integrations tab's per-ability toggles. Reuses the same
+		 * aafm_save_abilities action and flat aafm_abilities[] contract as the
+		 * Abilities tab; the stored option is one shared enabled-ability list.
+		 */
+		#bindSaveIntegrations() {
+			const form = document.querySelector( '#aafm-integrations-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				const status = form.querySelector( '.aafm-save-status' );
+				const enabled = [
+					...form.querySelectorAll(
+						'input[name="aafm_abilities[]"]:checked'
+					),
+				].map( ( i ) => i.value );
+
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_abilities' );
+				body.append( 'nonce', this.#nonce );
+				enabled.forEach( ( v ) =>
+					body.append( 'aafm_abilities[]', v )
+				);
+
+				if ( status ) {
+					status.textContent = this.#t( 'saving', 'Saving…' );
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
+				}
 			} );
 		}
 

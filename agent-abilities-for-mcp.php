@@ -180,6 +180,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	if ( is_admin() ) {
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
 		add_action( 'admin_enqueue_scripts', 'aafm_enqueue_admin_assets' );

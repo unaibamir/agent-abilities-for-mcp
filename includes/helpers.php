@@ -1362,3 +1362,52 @@ function aafm_rich_block_output_properties(): array {
 		'date'     => array( 'type' => 'string' ),
 	);
 }
+
+/**
+ * Safe shape for a nav menu (a wp_term in the nav_menu taxonomy).
+ *
+ * Returns only id, name, slug, and the item count — the same metadata the admin Menus
+ * screen shows in its dropdown. No taxonomy internals (term_taxonomy_id, parent, …) leak.
+ *
+ * @param mixed $menu A WP_Term in the nav_menu taxonomy (as returned by the nav-menu API).
+ * @return array<string,mixed>
+ */
+function aafm_redact_menu( $menu ): array {
+	if ( ! $menu instanceof WP_Term ) {
+		return array();
+	}
+	return array(
+		'id'    => (int) $menu->term_id,
+		'name'  => $menu->name,
+		'slug'  => $menu->slug,
+		'count' => (int) $menu->count,
+	);
+}
+
+/**
+ * Safe shape for a single nav menu item (the decorated post object the nav-menu API returns).
+ *
+ * Exposes only what an agent needs to understand a menu link: its id, title, URL, and the
+ * object it points at (type/object/object_id), plus the hierarchy fields (parent, order).
+ * The URL runs through esc_url_raw() so only a clean, allowed-scheme URL is ever handed back.
+ * No author, no raw post fields — the decorated object carries the whole underlying post, so
+ * the redactor whitelists the menu-relevant keys rather than passing it through.
+ *
+ * @param mixed $item A decorated nav menu item object (from wp_get_nav_menu_items()).
+ * @return array<string,mixed>
+ */
+function aafm_redact_menu_item( $item ): array {
+	if ( ! is_object( $item ) ) {
+		return array();
+	}
+	return array(
+		'id'        => isset( $item->ID ) ? (int) $item->ID : 0,
+		'title'     => isset( $item->title ) ? (string) $item->title : '',
+		'url'       => isset( $item->url ) ? esc_url_raw( (string) $item->url ) : '',
+		'type'      => isset( $item->type ) ? (string) $item->type : '',
+		'object'    => isset( $item->object ) ? (string) $item->object : '',
+		'object_id' => isset( $item->object_id ) ? (int) $item->object_id : 0,
+		'parent'    => isset( $item->menu_item_parent ) ? (int) $item->menu_item_parent : 0,
+		'order'     => isset( $item->menu_order ) ? (int) $item->menu_order : 0,
+	);
+}

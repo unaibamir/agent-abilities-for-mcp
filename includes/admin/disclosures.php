@@ -45,6 +45,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-post'          => __( "Updates an existing post's fields by id. Publishing is gated separately.", 'agent-abilities-for-mcp' ),
 		'aafm/create-page'          => __( 'Creates and publishes a page. Requires the publish_pages capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-page'          => __( 'Updates an existing page by id. Publishing is gated separately.', 'agent-abilities-for-mcp' ),
+		'aafm/create-cpt-item'      => __( 'Creates an item of a custom content type you have allowlisted. It stays a draft unless the agent holds that type\'s publish capability, and force-draft still applies.', 'agent-abilities-for-mcp' ),
+		'aafm/update-cpt-item'      => __( 'Updates an item of an allowlisted custom content type by id. Publishing needs that type\'s own publish capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-post-meta'     => __( 'Writes one allowlisted scalar meta value to a post the agent can edit. Only allowlisted keys.', 'agent-abilities-for-mcp' ),
 		'aafm/set-featured-image'   => __( "Sets a post's featured image to an existing attachment id. It does not upload anything.", 'agent-abilities-for-mcp' ),
 		'aafm/upload-media'         => __( 'Uploads an image from base64 data (jpg, png, gif, webp; SVG is rejected) and adds it to the media library.', 'agent-abilities-for-mcp' ),

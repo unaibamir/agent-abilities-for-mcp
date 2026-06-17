@@ -18,7 +18,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_posts_definitions( array $registry ): array {
-	$registry['aafm/get-posts']    = array(
+	$registry['aafm/get-posts']       = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -26,7 +26,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
-	$registry['aafm/get-post']     = array(
+	$registry['aafm/get-post']        = array(
 		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -34,7 +34,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post',
 	);
-	$registry['aafm/create-draft'] = array(
+	$registry['aafm/create-draft']    = array(
 		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -42,7 +42,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_draft',
 	);
-	$registry['aafm/create-post']  = array(
+	$registry['aafm/create-post']     = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -50,7 +50,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_post',
 	);
-	$registry['aafm/update-post']  = array(
+	$registry['aafm/update-post']     = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -58,7 +58,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post',
 	);
-	$registry['aafm/trash-post']   = array(
+	$registry['aafm/trash-post']      = array(
 		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -375,9 +375,9 @@ function aafm_write_cpt_content_schema( bool $require_title ): array {
 		'type'      => 'string',
 		'minLength' => 1,
 	);
-	$required           = $schema['required'] ?? array();
-	$required[]         = 'post_type';
-	$schema['required'] = array_values( array_unique( $required ) );
+	$required                          = $schema['required'] ?? array();
+	$required[]                        = 'post_type';
+	$schema['required']                = array_values( array_unique( $required ) );
 	return $schema;
 }
 
@@ -608,7 +608,7 @@ function aafm_exec_create_cpt_item( array $input ) {
 	}
 
 	// Default to draft; only escalate to publish when the request asked for it AND the agent
-	// holds the type's publish cap. (force-draft inside aafm_insert_post may still coerce back.)
+	// holds the type's publish cap. Force-draft inside aafm_insert_post may still coerce back.
 	$status = 'draft';
 	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
 		$caps = aafm_type_caps( $validated );

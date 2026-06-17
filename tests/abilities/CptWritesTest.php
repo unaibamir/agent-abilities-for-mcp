@@ -299,8 +299,8 @@ final class CptWritesTest extends TestCase {
 		// The Abilities admin tab buckets the registry by `subject`, then splits each panel
 		// into reads/writes by `group`. Proving both keys here proves the two new abilities
 		// surface under the content tab's writes section with no admin-render change.
-		// (Default-OFF is guaranteed structurally by CatalogTest::test_nothing_is_enabled_by_default;
-		//  this set_up() enables them for the harness, so it is NOT the place to assert opt-in.)
+		// Default-OFF is guaranteed structurally by CatalogTest::test_nothing_is_enabled_by_default;
+		// this set_up() enables them for the harness, so it is NOT the place to assert opt-in.
 		$registry = aafm_get_abilities_registry();
 
 		$this->assertArrayHasKey( 'aafm/create-cpt-item', $registry );

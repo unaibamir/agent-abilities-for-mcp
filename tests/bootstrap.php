@@ -19,3 +19,7 @@ tests_add_filter(
 );
 
 require $_tests_dir . '/includes/bootstrap.php';
+
+// Shared host-API stub helpers for the Wave 4 integration tests. Loaded after the WP
+// test bootstrap so add_filter() and the plugin functions the stubs reference exist.
+require_once __DIR__ . '/stubs/IntegrationStubs.php';

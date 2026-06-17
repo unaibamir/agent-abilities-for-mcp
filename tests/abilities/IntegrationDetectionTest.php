@@ -37,4 +37,10 @@ final class IntegrationDetectionTest extends TestCase {
 	public function test_seo_sub_detection_reports_no_active_plugin_when_none_present(): void {
 		$this->assertSame( '', aafm_seo_active_plugin(), 'no SEO plugin installed → empty string.' );
 	}
+
+	public function test_stub_helpers_are_available(): void {
+		// The shared trait is what every later slice's fixture uses to force an integration
+		// active and define the host-API stubs without the host plugin installed.
+		$this->assertTrue( trait_exists( 'AAFM\\Tests\\IntegrationStubs' ) );
+	}
 }

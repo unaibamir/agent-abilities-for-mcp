@@ -358,4 +358,165 @@ final class AcfTest extends TestCase {
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( 'aafm/acf-update-term-fields', $abilities );
 	}
+
+	// --- A4: user fields (PII under the disclaimer) ------------------------------------------
+
+	/**
+	 * Re-seed the ACF stub with a user_email-type field carrying a real address, then re-register.
+	 *
+	 * @param string $email The seeded email value.
+	 * @return void
+	 */
+	private function stub_acf_with_user_email( string $email ): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_user',
+						'title'  => 'Profile',
+						'fields' => array(
+							array(
+								'key'   => 'field_email',
+								'label' => 'Contact email',
+								'type'  => 'user', // ACF user_email-style field: stores an address.
+							),
+						),
+					),
+				),
+				'values' => array( 'field_email' => $email ),
+			)
+		);
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+	}
+
+	public function test_get_user_fields_returns_hydrated_values_per_object_gated(): void {
+		$this->acting_as( 'administrator' );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$res = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( $user_id, $res['user_id'] );
+		$this->assertArrayHasKey( 'fields', $res );
+		$this->assertSame( 'Hello', $res['fields']['field_1'] );
+	}
+
+	public function test_get_user_fields_exposes_the_user_email_field_value_not_stripped(): void {
+		// LOCKED decision: a user_email-type ACF field is returned IN FULL under the disclaimer.
+		// The edit_user gate + default-OFF + audit are the governance, not a redactor.
+		$this->stub_acf_with_user_email( 'acf-pii@example.com' );
+
+		$this->acting_as( 'administrator' );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$res  = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$json = (string) wp_json_encode( $res['fields'] );
+		$this->assertStringContainsString(
+			'acf-pii@example.com',
+			$json,
+			'A user_email-type ACF field VALUE must be exposed under the disclaimer, not stripped.'
+		);
+	}
+
+	public function test_get_user_fields_denies_a_subscriber(): void {
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-get-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+		);
+	}
+
+	public function test_get_user_fields_denies_an_author_without_edit_user(): void {
+		// Per-object gate: an author cannot edit_user on another account.
+		$target = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->acting_as( 'author' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-get-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
+			'An author without edit_user must be denied the user ACF read.'
+		);
+	}
+
+	public function test_update_user_fields_writes_through_the_user_selector_and_round_trips(): void {
+		$this->acting_as( 'administrator' );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $user_id,
+				'fields'  => array( 'field_1' => 'User value' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'User value', $res['fields']['field_1'] );
+
+		$this->assertSame(
+			'User value',
+			\AAFM\Tests\AcfStubStore::value( 'field_1', 'user_' . $user_id ),
+			'The user write must use the user_{id} selector.'
+		);
+
+		$read = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$this->assertSame( 'User value', $read['fields']['field_1'] );
+	}
+
+	public function test_update_user_fields_rejects_a_smuggled_top_level_field(): void {
+		$this->acting_as( 'administrator' );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$res     = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $user_id,
+				'fields'  => array( 'field_1' => 'ok' ),
+				'role'    => 'administrator',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled top-level field (e.g. role).' );
+	}
+
+	public function test_update_user_fields_denies_a_subscriber(): void {
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+		);
+	}
+
+	public function test_update_user_fields_denies_an_author_on_another_user(): void {
+		$target = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$this->acting_as( 'author' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
+			'An author without edit_user must be denied the user ACF write.'
+		);
+	}
+
+	public function test_update_user_fields_write_is_audited(): void {
+		$this->acting_as( 'administrator' );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $user_id,
+				'fields'  => array( 'field_1' => 'Audited' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/acf-update-user-fields', $abilities );
+	}
+
+	public function test_update_user_fields_denied_is_audited(): void {
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/acf-update-user-fields', $abilities );
+	}
 }

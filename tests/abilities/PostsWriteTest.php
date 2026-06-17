@@ -366,4 +366,64 @@ final class PostsWriteTest extends TestCase {
 		$err = aafm_validate_meta_payload( array( 'subtitle' => array( 'nested' => 1 ) ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
+
+	public function test_validate_enrichment_returns_normalized_bundle(): void {
+		$this->acting_as( 'editor' );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$att  = self::factory()->attachment->create_object(
+			'b.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$bundle = aafm_validate_write_enrichment(
+			array(
+				'terms'          => array( 'category' => array( $term ) ),
+				'featured_media' => $att,
+				'meta'           => array( 'subtitle' => 'Hi' ),
+			)
+		);
+
+		$this->assertSame( array( 'category' => array( $term ) ), $bundle['terms'] );
+		$this->assertSame( $att, $bundle['featured_media'] );
+		$this->assertSame( array( 'subtitle' => 'Hi' ), $bundle['meta'] );
+	}
+
+	public function test_validate_enrichment_rejects_bad_taxonomy_before_apply(): void {
+		$this->acting_as( 'editor' );
+		$err = aafm_validate_write_enrichment(
+			array( 'terms' => array( 'bogus_tax' => array( 1 ) ) )
+		);
+		$this->assertInstanceOf( WP_Error::class, $err );
+	}
+
+	public function test_apply_enrichment_sets_terms_featured_and_meta(): void {
+		$this->acting_as( 'editor' );
+		$post = self::factory()->post->create();
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$att  = self::factory()->attachment->create_object(
+			'c.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$bundle = array(
+			'terms'          => array( 'category' => array( $term ) ),
+			'featured_media' => $att,
+			'meta'           => array( 'subtitle' => 'Applied' ),
+		);
+		$this->assertNull( aafm_apply_write_enrichment( $post, $bundle ) );
+
+		$this->assertContains( $term, wp_get_post_terms( $post, 'category', array( 'fields' => 'ids' ) ) );
+		$this->assertSame( $att, get_post_thumbnail_id( $post ) );
+		$this->assertSame( 'Applied', get_post_meta( $post, 'subtitle', true ) );
+	}
 }

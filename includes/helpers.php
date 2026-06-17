@@ -428,6 +428,95 @@ function aafm_validate_meta_payload( array $meta ) {
 }
 
 /**
+ * Validate the optional write-enrichment fields (terms, featured_media, meta) up front.
+ *
+ * Returns a normalized bundle of ALREADY-VALIDATED data ready for
+ * aafm_apply_write_enrichment(), or the first WP_Error. Absent fields are normalized to
+ * empty so the apply step is a no-op for them. Validating everything here — before any row
+ * is mutated — is what makes the write reject bad input cleanly: a bad taxonomy/term/
+ * attachment/meta key aborts the whole call rather than half-applying. ('slug' is NOT handled
+ * here; it is folded into the postarr by the create/update path so it lands in the same atomic
+ * row write.)
+ *
+ * @param array<string,mixed> $input Raw ability input.
+ * @return array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>}|WP_Error
+ */
+function aafm_validate_write_enrichment( array $input ) {
+	$bundle = array(
+		'terms'          => array(),
+		'featured_media' => 0,
+		'meta'           => array(),
+	);
+
+	if ( isset( $input['terms'] ) && is_array( $input['terms'] ) ) {
+		foreach ( $input['terms'] as $taxonomy => $term_ids ) {
+			$ids = aafm_validate_term_ids_for_taxonomy( (string) $taxonomy, is_array( $term_ids ) ? $term_ids : array() );
+			if ( is_wp_error( $ids ) ) {
+				return $ids;
+			}
+			$bundle['terms'][ sanitize_key( (string) $taxonomy ) ] = $ids;
+		}
+	}
+
+	if ( isset( $input['featured_media'] ) ) {
+		$att = aafm_validate_featured_attachment_id( $input['featured_media'] );
+		if ( is_wp_error( $att ) ) {
+			return $att;
+		}
+		$bundle['featured_media'] = $att;
+	}
+
+	if ( isset( $input['meta'] ) && is_array( $input['meta'] ) ) {
+		$meta = aafm_validate_meta_payload( $input['meta'] );
+		if ( is_wp_error( $meta ) ) {
+			return $meta;
+		}
+		$bundle['meta'] = $meta;
+	}
+
+	return $bundle;
+}
+
+/**
+ * Apply a PRE-VALIDATED enrichment bundle to an existing post.
+ *
+ * This step is NOT transactional and does NOT roll back the post row. Because every value in
+ * the bundle was already checked by aafm_validate_write_enrichment(), the apply cannot fail
+ * ON BAD INPUT — there is no malformed taxonomy/term/attachment/meta left to reject. It can
+ * still encounter a late, environmental failure (a save_post hook, or a TOCTOU race that
+ * deletes a just-validated term), and when it does the post row stays written: the create/
+ * update has already committed the core fields before this runs.
+ *
+ * DELIBERATE CHOICE — term-assignment WP_Errors are accepted, not surfaced. wp_set_post_terms()
+ * can return a WP_Error (e.g. a concurrent term-insert race). The lean-write contract treats
+ * the post as already saved and the enrichment as recoverable by simply re-calling the write,
+ * so this function ignores that return value rather than failing the whole call after the row
+ * is committed. set_post_thumbnail()/update_post_meta() likewise are not re-checked here.
+ *
+ * @param int                                                                              $post_id Target post id.
+ * @param array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>} $bundle  Validated bundle.
+ * @return null Always null — enrichment outcomes are not surfaced (see DELIBERATE CHOICE above).
+ */
+function aafm_apply_write_enrichment( int $post_id, array $bundle ) {
+	foreach ( $bundle['terms'] as $taxonomy => $ids ) {
+		// Replace, not append ($append=false): the documented contract is that `terms`
+		// REPLACES existing terms for that taxonomy. A WP_Error return (term-insert race)
+		// is intentionally not surfaced — see the DELIBERATE CHOICE note above.
+		wp_set_post_terms( $post_id, $ids, $taxonomy );
+	}
+
+	if ( $bundle['featured_media'] > 0 ) {
+		set_post_thumbnail( $post_id, $bundle['featured_media'] );
+	}
+
+	foreach ( $bundle['meta'] as $key => $value ) {
+		update_post_meta( $post_id, $key, wp_slash( $value ) );
+	}
+
+	return null;
+}
+
+/**
  * Validate a post status against a strict allow-list.
  *
  * Blocks 'any' and prevents a non-privileged caller from widening visibility to

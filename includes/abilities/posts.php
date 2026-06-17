@@ -372,8 +372,9 @@ function aafm_write_content_schema( bool $require_title ): array {
 function aafm_write_cpt_content_schema( bool $require_title ): array {
 	$schema                            = aafm_write_content_schema( $require_title );
 	$schema['properties']['post_type'] = array(
-		'type'      => 'string',
-		'minLength' => 1,
+		'type'        => 'string',
+		'minLength'   => 1,
+		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
 	);
 	$required                          = $schema['required'] ?? array();
 	$required[]                        = 'post_type';

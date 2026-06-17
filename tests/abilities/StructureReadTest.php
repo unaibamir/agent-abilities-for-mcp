@@ -68,6 +68,30 @@ final class StructureReadTest extends TestCase {
 		$this->assertNotContains( 'revision', $slugs );
 	}
 
+	public function test_get_post_types_flags_writable_per_allowlist(): void {
+		// A public type the operator has NOT exposed to agents. Public so it surfaces in the
+		// list, but absent from the allowlist so its writable flag must be false.
+		register_post_type(
+			'aafm_unlisted',
+			array(
+				'public'       => true,
+				'map_meta_cap' => true,
+			)
+		);
+		// Expose only 'post' (post/page are always-on); aafm_unlisted is deliberately left out.
+		update_option( 'aafm_allowed_post_types', array() );
+
+		$out = wp_get_ability( 'aafm/get-post-types' )->execute( array() );
+		$by  = array_column( $out['post_types'], null, 'slug' );
+
+		// An allowlisted (always-on) type is writable; a public-but-not-allowlisted type is not.
+		$this->assertTrue( $by['post']['writable'] );
+		$this->assertFalse( $by['aafm_unlisted']['writable'] );
+
+		unregister_post_type( 'aafm_unlisted' );
+		delete_option( 'aafm_allowed_post_types' );
+	}
+
 	public function test_get_site_info_is_redacted(): void {
 		update_option( 'admin_email', 'admin@example.com' );
 		$out  = wp_get_ability( 'aafm/get-site-info' )->execute( array() );

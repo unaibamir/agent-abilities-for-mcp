@@ -175,4 +175,13 @@ final class ThemesTest extends TestCase {
 			wp_get_ability( 'aafm/update-template' )->check_permissions( array( 'template_id' => get_stylesheet() . '//single' ) )
 		);
 	}
+
+	public function test_get_global_styles_returns_settings_and_styles(): void {
+		$this->register_themes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-global-styles' )->execute( array() );
+		$this->assertArrayHasKey( 'settings', $res );
+		$this->assertArrayHasKey( 'styles', $res );
+		$this->assertStringNotContainsString( ABSPATH, (string) wp_json_encode( $res ) );
+	}
 }

@@ -455,3 +455,51 @@ function aafm_exec_update_template( array $input ) {
 	$out['content'] = (string) $refreshed->content;
 	return $out;
 }
+
+/**
+ * Args for aafm/get-global-styles.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_global_styles(): array {
+	return array(
+		'label'               => __( 'Get global styles', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'settings' => array( 'type' => 'object' ),
+				'styles'   => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_global_styles',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/get-global-styles.
+ *
+ * Returns the active theme's resolved theme.json settings and styles arrays. Both are theme.json
+ * data structures (no filesystem path), read-only.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_exec_get_global_styles(): array {
+	return array(
+		'settings' => wp_get_global_settings(),
+		'styles'   => wp_get_global_styles(),
+	);
+}

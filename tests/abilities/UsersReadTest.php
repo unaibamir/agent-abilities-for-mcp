@@ -78,17 +78,18 @@ final class UsersReadTest extends TestCase {
 	}
 
 	/**
-	 * Security red line: the redacted output must never contain email, login, or a
-	 * password hash. Builds a user with a known email/login and asserts both strings
-	 * are absent from the serialized output, and that the per-row shape carries only
-	 * the safe whitelist (id, display_name, roles, post_count).
+	 * LOCKED reversal (47- line 144): user email IS exposed in the redacted shape
+	 * now, gated upstream by list_users + audited. Login and the password hash stay
+	 * stripped — those are NEVER returned. Builds a user with a known email/login and
+	 * asserts the email is present while login/hash are absent, and that the per-row
+	 * shape carries the safe whitelist (id, display_name, email, roles, post_count).
 	 */
-	public function test_output_has_no_email_login_or_password(): void {
+	public function test_output_exposes_email_but_never_login_or_password(): void {
 		$this->acting_as( 'administrator' );
 		$uid  = self::factory()->user->create(
 			array(
 				'role'         => 'author',
-				'user_email'   => 'leak@example.com',
+				'user_email'   => 'show@example.com',
 				'user_login'   => 'leaklogin',
 				'user_pass'    => 'SuperSecretPlainPass',
 				'display_name' => 'Visible Display Name',
@@ -99,18 +100,17 @@ final class UsersReadTest extends TestCase {
 		$out  = wp_get_ability( 'aafm/get-users' )->execute( array() );
 		$json = (string) wp_json_encode( $out );
 
-		// No email, login, or password hash anywhere in the serialized output.
-		$this->assertStringNotContainsString( 'leak@example.com', $json );
+		// Email IS exposed (locked reversal); login and the password hash never are.
+		$this->assertStringContainsString( 'show@example.com', $json );
 		$this->assertStringNotContainsString( 'leaklogin', $json );
 		$this->assertStringNotContainsString( $hash, $json );
 
-		// Per-row shape: only the safe whitelist, with PII keys structurally absent.
+		// Per-row shape: the safe whitelist incl. email; login/pass structurally absent.
 		foreach ( $out['users'] as $u ) {
 			$this->assertSame(
-				array( 'id', 'display_name', 'roles', 'post_count' ),
+				array( 'id', 'display_name', 'email', 'roles', 'post_count' ),
 				array_keys( $u )
 			);
-			$this->assertArrayNotHasKey( 'user_email', $u );
 			$this->assertArrayNotHasKey( 'user_login', $u );
 			$this->assertArrayNotHasKey( 'user_pass', $u );
 			$this->assertArrayHasKey( 'display_name', $u );
@@ -194,5 +194,32 @@ final class UsersReadTest extends TestCase {
 			$large_cost,
 			'get-users query count scaled with the number of users — the N+1 count is back.'
 		);
+	}
+
+	/**
+	 * LOCKED reversal at the redactor layer: aafm_redact_user() exposes email but
+	 * never the login or the password hash. This pins the shape both the list and
+	 * the single-user assembler build on.
+	 */
+	public function test_redact_user_exposes_email_but_never_login_or_pass(): void {
+		$uid  = self::factory()->user->create(
+			array(
+				'role'         => 'author',
+				'user_email'   => 'show@example.com',
+				'user_login'   => 'secretlogin',
+				'display_name' => 'Public Author',
+			)
+		);
+		$user = get_userdata( $uid );
+		$out  = aafm_redact_user( $user, 0 );
+
+		// LOCKED reversal: email IS now part of the user read shape.
+		$this->assertSame( 'show@example.com', $out['email'] ?? null );
+		// Login and password hash are NEVER exposed.
+		$json = (string) wp_json_encode( $out );
+		$this->assertStringNotContainsString( 'secretlogin', $json, 'user_login leaked.' );
+		$this->assertStringNotContainsString( $user->user_pass, $json, 'password hash leaked.' );
+		$this->assertArrayNotHasKey( 'user_login', $out );
+		$this->assertArrayNotHasKey( 'user_pass', $out );
 	}
 }

@@ -840,10 +840,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 }
 
 /**
- * Reduce a user to id, display name, roles, and post count — never PII.
+ * Reduce a user to id, display name, email, roles, and post count.
  *
- * Pass $post_count to use a pre-computed count (e.g. batched via
- * count_many_users_posts() over the whole listing) and avoid a per-user COUNT(*).
+ * Email IS part of the shape by a locked decision (47- line 144): user reads expose
+ * email by default, gated upstream by list_users + audited. Login and the password
+ * hash are NEVER returned. Pass $post_count to use a pre-computed count (e.g. batched
+ * via count_many_users_posts() over the whole listing) and avoid a per-user COUNT(*).
  * When null, the count is resolved individually — fine for single-user shapes.
  *
  * @param WP_User|false $user       User object.
@@ -857,6 +859,9 @@ function aafm_redact_user( $user, ?int $post_count = null ): array {
 	return array(
 		'id'           => (int) $user->ID,
 		'display_name' => $user->display_name,
+		// LOCKED 2026-06-17: email is exposed by default in user reads, gated upstream
+		// by list_users + audited (47- line 144). Login and password hash are NEVER returned.
+		'email'        => $user->user_email,
 		'roles'        => array_values( $user->roles ),
 		'post_count'   => null !== $post_count ? $post_count : (int) count_user_posts( $user->ID ),
 	);

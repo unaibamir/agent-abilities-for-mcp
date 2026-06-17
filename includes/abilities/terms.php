@@ -50,6 +50,14 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_term',
 	);
+	$registry['aafm/add-post-terms'] = array(
+		'label'        => __( 'Add post terms', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_add_post_terms',
+	);
 	return $registry;
 }
 
@@ -204,6 +212,123 @@ function aafm_exec_get_term( array $input ) {
 	}
 
 	return array( 'term' => aafm_redact_term( $term ) );
+}
+
+/**
+ * Args for aafm/add-post-terms.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_add_post_terms(): array {
+	return array(
+		'label'               => __( 'Add post terms', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_ids' => array(
+					'type'     => 'array',
+					'items'    => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
+					'minItems' => 1,
+				),
+			),
+			'required'             => array( 'post_id', 'taxonomy', 'term_ids' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id' => array( 'type' => 'integer' ),
+				'terms'   => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'object' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_add_post_terms',
+		'permission_callback' => 'aafm_perm_add_post_terms',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/add-post-terms: per-object edit_post on the target post.
+ *
+ * The taxonomy's assign_terms cap + term-existence are enforced at execute time by the
+ * reused aafm_validate_term_ids_for_taxonomy() (C2). This callback is the post-edit gate:
+ * a caller who cannot edit the post is denied before any term is touched, so an APPEND
+ * can never attach terms to a post the agent is not authorized to edit.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_add_post_terms( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+}
+
+/**
+ * Execute aafm/add-post-terms.
+ *
+ * APPEND semantics (distinct from the REPLACE-on-update path in the post writes): the
+ * fourth arg to wp_set_post_terms() is true, so existing terms are preserved. Term ids are
+ * validated through the SAME reusable validator the enrichment path uses — taxonomy public
+ * allow-list + assign_terms cap + term-exists-in-this-taxonomy — so a cross-taxonomy or
+ * nonexistent id, or a missing assign_terms cap, is rejected before the write.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_add_post_terms( array $input ) {
+	$post_id = absint( $input['post_id'] );
+	$post    = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+
+	$term_ids = aafm_validate_term_ids_for_taxonomy(
+		$taxonomy,
+		isset( $input['term_ids'] ) && is_array( $input['term_ids'] ) ? $input['term_ids'] : array()
+	);
+	if ( is_wp_error( $term_ids ) ) {
+		return $term_ids;
+	}
+
+	$result = wp_set_post_terms( $post_id, $term_ids, $taxonomy, true );
+	if ( is_wp_error( $result ) || false === $result ) {
+		return aafm_generic_error();
+	}
+
+	$current = get_the_terms( $post_id, $taxonomy );
+	$objects = is_array( $current ) ? array_filter( $current, static fn( $t ): bool => $t instanceof WP_Term ) : array();
+
+	return array(
+		'post_id' => $post_id,
+		'terms'   => array_values( array_map( 'aafm_redact_term', $objects ) ),
+	);
 }
 
 /**

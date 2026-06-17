@@ -296,6 +296,130 @@ function aafm_sanitize_term_meta_value( string $key, $value ) {
 }
 
 /**
+ * Hard-block a user-meta key. Refuses, for EVERYONE in v1 (no allowlist can re-admit any of
+ * these): empty keys; protected ('user' subtype) keys; the auth-key denylist adopted from
+ * easy-mcp-ai (session tokens, application passwords, password-reset, and 2FA/passkey keys);
+ * and the capability/user-level keys, including the multisite per-blog forms
+ * ({$prefix}_capabilities / {$prefix}2_user_level). The aafm_hard_blocked_user_meta_keys
+ * filter may ADD blocks, never remove them (built-ins are re-merged after). This is the
+ * CVE-class control — a leak of any of these keys is an account-takeover primitive.
+ *
+ * Mirrors aafm_hard_blocked_meta_key() but is user-scoped (the 'user' protected subtype and
+ * the user-specific auth/2FA denylist differ from the post-meta floor).
+ *
+ * @param string $key Meta key.
+ * @return bool
+ */
+function aafm_hard_blocked_user_meta_key( string $key ): bool {
+	global $wpdb;
+	$key = (string) $key;
+	if ( '' === trim( $key ) ) {
+		return true;
+	}
+	if ( is_protected_meta( $key, 'user' ) ) {
+		return true;
+	}
+	$builtin = array(
+		'session_tokens',
+		'_application_passwords',
+		'wp_capabilities',
+		'wp_user_level',
+		'default_password_nonce',
+		'_password_reset_key',
+		'_password_reset_time',
+		'two_factor_enabled',
+		'_two_factor_provider',
+		'_two_factor_totp_key',
+		'two_factor_secret',
+		'_two_factor_backup_codes',
+		'webauthn_credentials',
+		$wpdb->prefix . 'capabilities',
+		$wpdb->prefix . 'user_level',
+	);
+	/**
+	 * Filters EXTRA user-meta keys to hard-block. Built-ins are re-merged after, so this
+	 * can only add blocks, never remove them.
+	 *
+	 * @param list<string> $extra Extra keys to block.
+	 */
+	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
+	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
+	if ( in_array( $key, $blocked, true ) ) {
+		return true;
+	}
+	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities).
+	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/', $key );
+}
+
+/**
+ * Default-deny user-meta allowlist (filter-only in v1; no admin option/UI). Empty by default
+ * — opt-in via the aafm_allowed_user_meta_keys filter. Hard-blocked keys are stripped AFTER
+ * the filter, so a rogue filter can never re-admit a protected/auth key.
+ *
+ * Mirrors aafm_allowed_term_meta_keys() but is user-scoped, re-floored against the
+ * user-specific hard-block.
+ *
+ * @return list<string>
+ */
+function aafm_allowed_user_meta_keys(): array {
+	/**
+	 * Filters the user-meta keys exposed to AI agents. Re-floored against the hard-block
+	 * after this filter, so adding a blocked key is a no-op.
+	 *
+	 * @param list<string> $keys Allowlisted user-meta keys (empty by default).
+	 */
+	$filtered = (array) apply_filters( 'aafm_allowed_user_meta_keys', array() );
+
+	return array_values(
+		array_unique(
+			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && ! aafm_hard_blocked_user_meta_key( $k ) )
+		)
+	);
+}
+
+/**
+ * Validate a user-meta key: must be allowlisted AND not hard-blocked. One generic error code
+ * for both failure modes so a caller cannot distinguish "blocked" from "not allowlisted".
+ *
+ * @param string $key Requested user-meta key.
+ * @return string|WP_Error
+ */
+function aafm_validate_user_meta_key( string $key ) {
+	$key = trim( (string) $key );
+	if ( '' === $key || aafm_hard_blocked_user_meta_key( $key ) || ! in_array( $key, aafm_allowed_user_meta_keys(), true ) ) {
+		return new WP_Error( 'aafm_user_meta_key_not_allowed', __( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+	}
+	return $key;
+}
+
+/**
+ * Coerce + sanitize a user-meta value for writing. Scalar-only: arrays/objects are refused
+ * so the agent can never store a serialized structure. Strings are plain-text sanitized,
+ * then run through sanitize_meta() with the 'user' object type so any registered
+ * sanitize_user_meta_{$key} callback fires; the result is re-asserted as scalar.
+ *
+ * Mirrors aafm_sanitize_term_meta_value() but is user-scoped — the live
+ * aafm_sanitize_meta_value() hardwires the 'post' subtype and CANNOT be reused here.
+ *
+ * @param string $key   User-meta key (already validated/allowlisted by the caller).
+ * @param mixed  $value Raw value from input.
+ * @return mixed|WP_Error Sanitized scalar, or error if non-scalar.
+ */
+function aafm_sanitize_user_meta_value( string $key, $value ) {
+	if ( ! is_scalar( $value ) ) {
+		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( is_string( $value ) ) {
+		$value = sanitize_text_field( $value );
+	}
+	$value = sanitize_meta( $key, $value, 'user', 'user' );
+	if ( ! is_scalar( $value ) ) {
+		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
+	}
+	return $value;
+}
+
+/**
  * Shared term-meta gate: the term must be readable (exists in a public-allowlisted
  * taxonomy) AND the key must clear the hard-block + allowlist. Write/delete callbacks add
  * the per-object edit_term check on top of this (see the ability permission callbacks).

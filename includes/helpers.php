@@ -530,7 +530,10 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
 }
 
 /**
- * Whether the current user may TRASH a single object through the content abilities.
+ * Whether the current user may remove a single object through the content abilities —
+ * covers both trashing and permanent deletion. The delete_post meta-cap gate is the same
+ * for either path, so the trash/page abilities and the permanent delete-post/delete-page
+ * abilities share this check.
  *
  * Same floor + allowlist + map_meta_cap gate as edit; uses the type's own delete cap.
  *

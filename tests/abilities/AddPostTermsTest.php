@@ -18,9 +18,24 @@ final class AddPostTermsTest extends TestCase {
 
 	public function test_append_adds_without_replacing(): void {
 		$editor = $this->acting_as( 'editor' );
-		$keep   = self::factory()->term->create( array( 'taxonomy' => 'category', 'name' => 'Keep' ) );
-		$add    = self::factory()->term->create( array( 'taxonomy' => 'category', 'name' => 'Add' ) );
-		$post   = self::factory()->post->create( array( 'post_author' => $editor, 'post_type' => 'post' ) );
+		$keep   = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Keep',
+			)
+		);
+		$add    = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Add',
+			)
+		);
+		$post   = self::factory()->post->create(
+			array(
+				'post_author' => $editor,
+				'post_type'   => 'post',
+			)
+		);
 		wp_set_post_terms( $post, array( $keep ), 'category', false );
 
 		$result = aafm_exec_add_post_terms(
@@ -41,7 +56,12 @@ final class AddPostTermsTest extends TestCase {
 
 	public function test_denied_for_non_post_editor(): void {
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
-		$post  = self::factory()->post->create( array( 'post_author' => $owner, 'post_type' => 'post' ) );
+		$post  = self::factory()->post->create(
+			array(
+				'post_author' => $owner,
+				'post_type'   => 'post',
+			)
+		);
 		$this->acting_as( 'author' ); // a DIFFERENT author cannot edit owner's post.
 		$this->assertFalse(
 			aafm_perm_add_post_terms(
@@ -66,7 +86,12 @@ final class AddPostTermsTest extends TestCase {
 		);
 		$editor = $this->acting_as( 'editor' ); // editor lacks manage_options.
 		$term   = self::factory()->term->create( array( 'taxonomy' => 'aafm_proj' ) );
-		$post   = self::factory()->post->create( array( 'post_author' => $editor, 'post_type' => 'post' ) );
+		$post   = self::factory()->post->create(
+			array(
+				'post_author' => $editor,
+				'post_type'   => 'post',
+			)
+		);
 
 		$result = aafm_exec_add_post_terms(
 			array(
@@ -82,7 +107,12 @@ final class AddPostTermsTest extends TestCase {
 	public function test_cross_taxonomy_term_is_rejected(): void {
 		$editor = $this->acting_as( 'editor' );
 		$tag    = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
-		$post   = self::factory()->post->create( array( 'post_author' => $editor, 'post_type' => 'post' ) );
+		$post   = self::factory()->post->create(
+			array(
+				'post_author' => $editor,
+				'post_type'   => 'post',
+			)
+		);
 		// A post_tag id passed as a category term must be rejected by the C2 validator.
 		$this->assertInstanceOf(
 			WP_Error::class,
@@ -104,5 +134,25 @@ final class AddPostTermsTest extends TestCase {
 
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse( $predicate() );
+	}
+
+	public function test_append_rejects_nonexistent_term_id(): void {
+		$editor = $this->acting_as( 'editor' );
+		$post   = self::factory()->post->create(
+			array(
+				'post_author' => $editor,
+				'post_type'   => 'post',
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			aafm_exec_add_post_terms(
+				array(
+					'post_id'  => $post,
+					'taxonomy' => 'category',
+					'term_ids' => array( 987654 ),
+				)
+			)
+		);
 	}
 }

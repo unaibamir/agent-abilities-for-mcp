@@ -45,23 +45,35 @@ final class TermMetaTest extends TestCase {
 
 		$this->assertTrue(
 			aafm_perm_get_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		$this->assertSame(
 			array(
 				'term_id'  => (int) $term_id,
-				'meta_key' => 'seo_title',
+				'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
 				'value'    => 'Hello',
 			),
 			aafm_exec_get_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		// Non-allowlisted key is denied at the gate.
 		$this->assertFalse(
 			aafm_perm_get_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'unlisted' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'unlisted', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
@@ -83,7 +95,11 @@ final class TermMetaTest extends TestCase {
 		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_readlock' ) );
 		$this->assertFalse(
 			aafm_perm_get_term_meta(
-				array( 'taxonomy' => 'aafm_readlock', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+				array(
+					'taxonomy' => 'aafm_readlock',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
@@ -98,7 +114,11 @@ final class TermMetaTest extends TestCase {
 		$this->assertInstanceOf(
 			WP_Error::class,
 			aafm_exec_get_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'blob' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'blob', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
@@ -110,7 +130,12 @@ final class TermMetaTest extends TestCase {
 		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
 		$result = aafm_exec_update_term_meta(
-			array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title', 'value' => 'New title' )
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $term_id,
+				'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'New title',
+			)
 		);
 		$this->assertSame( 'New title', $result['value'] );
 		$this->assertSame( 'New title', get_term_meta( $term_id, 'seo_title', true ) );
@@ -124,7 +149,12 @@ final class TermMetaTest extends TestCase {
 		$this->assertInstanceOf(
 			WP_Error::class,
 			aafm_exec_update_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'anything', 'value' => 'x' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'anything', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'x',
+				)
 			)
 		);
 	}
@@ -144,7 +174,12 @@ final class TermMetaTest extends TestCase {
 		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_locked' ) );
 		$this->assertFalse(
 			aafm_perm_update_term_meta(
-				array( 'taxonomy' => 'aafm_locked', 'term_id' => $term_id, 'meta_key' => 'seo_title', 'value' => 'x' )
+				array(
+					'taxonomy' => 'aafm_locked',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'x',
+				)
 			)
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
@@ -160,7 +195,11 @@ final class TermMetaTest extends TestCase {
 		$this->assertSame(
 			array( 'deleted' => true ),
 			aafm_exec_delete_term_meta(
-				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		$this->assertSame( '', get_term_meta( $term_id, 'seo_title', true ) );
@@ -181,7 +220,11 @@ final class TermMetaTest extends TestCase {
 		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_locked2' ) );
 		$this->assertFalse(
 			aafm_perm_delete_term_meta(
-				array( 'taxonomy' => 'aafm_locked2', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+				array(
+					'taxonomy' => 'aafm_locked2',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
 			)
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
@@ -200,5 +243,41 @@ final class TermMetaTest extends TestCase {
 			$predicate = aafm_ability_list_permission( $name );
 			$this->assertFalse( $predicate(), $name . ' must be hidden from a low-cap user' );
 		}
+	}
+
+	public function test_hard_blocked_key_rejected_even_if_allowlisted(): void {
+		// A filter cannot un-block a protected key: it is stripped after the filter.
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( '_edit_lock' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$this->assertFalse(
+			aafm_perm_update_term_meta(
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => '_edit_lock', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'x',
+				)
+			)
+		);
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+	}
+
+	public function test_update_term_meta_refuses_non_scalar_value(): void {
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$this->assertInstanceOf(
+			WP_Error::class,
+			aafm_exec_update_term_meta(
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => $term_id,
+					'meta_key' => 'seo_title', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => array( 'x' => 1 ),
+				)
+			)
+		);
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 	}
 }

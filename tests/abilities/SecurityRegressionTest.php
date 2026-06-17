@@ -246,11 +246,19 @@ final class SecurityRegressionTest extends TestCase {
 			'fetch-url',
 			'import-url',
 		);
-		// The three governed post-meta abilities are the sanctioned exception to the generic
-		// 'meta' ban: each is gated by per-object edit_post + a permanent hard-block denylist +
-		// a default-deny allowlist (see includes/abilities/meta.php). A *generic* option/meta
+		// The governed post-meta and term-meta abilities are the sanctioned exception to the
+		// generic 'meta' ban: each is gated by per-object edit_post / edit_term + a permanent
+		// hard-block denylist + a default-deny allowlist (see includes/abilities/meta.php and
+		// the term-meta abilities in includes/abilities/terms.php). A *generic* option/meta
 		// surface remains banned.
-		$sanctioned = array( 'aafm/get-post-meta', 'aafm/update-post-meta', 'aafm/delete-post-meta' );
+		$sanctioned = array(
+			'aafm/get-post-meta',
+			'aafm/update-post-meta',
+			'aafm/delete-post-meta',
+			'aafm/get-term-meta',
+			'aafm/update-term-meta',
+			'aafm/delete-term-meta',
+		);
 		foreach ( array_keys( $registry ) as $name ) {
 			if ( in_array( $name, $sanctioned, true ) ) {
 				continue;

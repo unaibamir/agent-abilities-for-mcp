@@ -18,7 +18,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_terms_definitions( array $registry ): array {
-	$registry['aafm/get-terms']   = array(
+	$registry['aafm/get-terms']        = array(
 		'label'        => __( 'Get terms', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List terms (with counts) for a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -26,7 +26,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_terms',
 	);
-	$registry['aafm/create-term'] = array(
+	$registry['aafm/create-term']      = array(
 		'label'        => __( 'Create term', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -34,7 +34,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_create_term',
 	);
-	$registry['aafm/update-term'] = array(
+	$registry['aafm/update-term']      = array(
 		'label'        => __( 'Update term', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -42,7 +42,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term',
 	);
-	$registry['aafm/get-term'] = array(
+	$registry['aafm/get-term']         = array(
 		'label'        => __( 'Get term', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -50,7 +50,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_term',
 	);
-	$registry['aafm/add-post-terms'] = array(
+	$registry['aafm/add-post-terms']   = array(
 		'label'        => __( 'Add post terms', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -58,7 +58,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_add_post_terms',
 	);
-	$registry['aafm/get-term-meta'] = array(
+	$registry['aafm/get-term-meta']    = array(
 		'label'        => __( 'Get term meta', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',

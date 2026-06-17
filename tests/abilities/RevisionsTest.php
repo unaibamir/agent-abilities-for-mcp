@@ -342,4 +342,56 @@ final class RevisionsTest extends TestCase {
 		$this->assertIsString( $with['revision']['diff'] );
 		$this->assertStringContainsString( '<table', $with['revision']['diff'] );
 	}
+
+	public function test_delete_revision_removes_one_revision(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'd1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'd2',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'd3',
+			)
+		);
+		$revs   = wp_get_post_revisions( $pid );
+		$before = count( $revs );
+		$target = array_shift( $revs ); // newest revision.
+
+		$this->assertTrue(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $target->ID,
+				)
+			)
+		);
+		$out = aafm_exec_delete_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $target->ID,
+			)
+		);
+		$this->assertSame(
+			array(
+				'deleted'     => true,
+				'post_id'     => $pid,
+				'revision_id' => (int) $target->ID,
+			),
+			$out
+		);
+		// One fewer revision, and the live post is untouched.
+		$this->assertCount( $before - 1, wp_get_post_revisions( $pid ) );
+		$this->assertSame( 'd3', get_post( $pid )->post_content );
+	}
 }

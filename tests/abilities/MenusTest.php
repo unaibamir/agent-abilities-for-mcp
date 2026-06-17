@@ -163,4 +163,15 @@ final class MenusTest extends TestCase {
 		// call is sufficient and no force-delete primitive (or invariant extension) is needed.
 		$this->assertNull( get_post( $item_id ), 'menu item removed.' );
 	}
+
+	public function test_menu_write_is_discoverable_by_an_admin_and_hidden_from_an_editor(): void {
+		// Exercises the server.php fall-through for a menu WRITE (not just by comment): an admin
+		// holds edit_theme_options so create-menu is discoverable; an editor lacks it, so it is
+		// hidden. This proves the object-independent edit_theme_options gate scopes writes too.
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-menu' ) );
+
+		$this->acting_as( 'editor' ); // Editor lacks edit_theme_options.
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-menu' ) );
+	}
 }

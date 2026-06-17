@@ -81,6 +81,10 @@ function aafm_ability_disclosures(): array {
 		'aafm/update-user'          => __( 'Edits a user\'s display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
 		'aafm/create-block'         => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-block'         => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
+		'aafm/create-menu'          => __( 'Creates a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/update-menu'          => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/create-menu-item'     => __( 'Adds an item (link) to a navigation menu. The URL is sanitized. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/update-menu-item'     => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 
 		// Destructive (still recoverable).
 		'aafm/trash-post'           => __( 'Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),
@@ -99,5 +103,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/delete-post'          => __( 'Permanently deletes a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead. Requires delete access to that post. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-page'          => __( 'Permanently deletes a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/update-site-settings' => __( 'Writes a small allowlist of site settings only (name, tagline, timezone, formats, posts per page). It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-menu'          => __( 'Permanently deletes a navigation menu and all of its items. This cannot be undone — menus have no Trash. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-menu-item'     => __( 'Permanently removes one item from a navigation menu. This cannot be undone. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 	);
 }

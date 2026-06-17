@@ -31,6 +31,8 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/get-pages',
 		'aafm/get-page',
 		'aafm/get-terms',
+		'aafm/get-term',
+		'aafm/get-term-meta',
 		'aafm/get-taxonomies',
 		'aafm/get-post-types',
 		'aafm/get-site-info',
@@ -99,9 +101,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 19 reads — no more, no fewer.'
+			'The read group must be exactly the 21 reads — no more, no fewer.'
 		);
-		$this->assertCount( 19, $reads, 'The read catalog ships exactly 19 read abilities.' );
+		$this->assertCount( 21, $reads, 'The read catalog ships exactly 21 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

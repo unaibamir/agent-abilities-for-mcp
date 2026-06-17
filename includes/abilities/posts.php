@@ -425,8 +425,11 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 	);
 
 	// Optional slug → sanitize_title → post_name, folded into the same atomic row write.
-	if ( isset( $input['slug'] ) && '' !== sanitize_title( (string) $input['slug'] ) ) {
-		$postarr['post_name'] = sanitize_title( (string) $input['slug'] );
+	if ( isset( $input['slug'] ) ) {
+		$slug = sanitize_title( (string) $input['slug'] );
+		if ( '' !== $slug ) {
+			$postarr['post_name'] = $slug;
+		}
 	}
 
 	$id = wp_insert_post( wp_slash( $postarr ), true );
@@ -580,8 +583,11 @@ function aafm_exec_update_post( array $input ) {
 	if ( isset( $input['excerpt'] ) ) {
 		$postarr['post_excerpt'] = sanitize_text_field( (string) $input['excerpt'] );
 	}
-	if ( isset( $input['slug'] ) && '' !== sanitize_title( (string) $input['slug'] ) ) {
-		$postarr['post_name'] = sanitize_title( (string) $input['slug'] );
+	if ( isset( $input['slug'] ) ) {
+		$slug = sanitize_title( (string) $input['slug'] );
+		if ( '' !== $slug ) {
+			$postarr['post_name'] = $slug;
+		}
 	}
 	if ( isset( $input['status'] ) ) {
 		$status = aafm_validate_post_status( (string) $input['status'], current_user_can( 'edit_others_posts' ) );

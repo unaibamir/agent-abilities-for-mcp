@@ -77,6 +77,8 @@ final class CatalogTest extends TestCase {
 		'aafm/wc-get-product-variation',
 		'aafm/wc-list-product-attributes',
 		'aafm/wc-get-product-attribute',
+		'aafm/wc-list-orders',
+		'aafm/wc-get-order',
 	);
 
 	/**
@@ -212,7 +214,7 @@ final class CatalogTest extends TestCase {
 		// all three active so later slices' integration abilities are counted here. The
 		// registry is memoized (includes/registry.php static $cache), so the flush is
 		// MANDATORY — a force filter added without it is a no-op against the cached
-		// host-inactive registry. With the WooCommerce attributes slice landed, the count is 110.
+		// host-inactive registry. With the WooCommerce orders read slice landed, the count is 112.
 		add_filter( 'aafm_integration_active_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
@@ -239,7 +241,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 105) and register categories + abilities.
+	 * Enable the entire catalog (all 112) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -259,9 +261,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			110,
+			112,
 			$registry,
-			'The catalog must contain exactly 110 abilities — 51 reads + 59 writes.'
+			'The catalog must contain exactly 112 abilities — 53 reads + 59 writes.'
 		);
 	}
 
@@ -276,8 +278,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 51 reads — no drift.' );
-		$this->assertCount( 51, $reads, 'Exactly 51 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 53 reads — no drift.' );
+		$this->assertCount( 53, $reads, 'Exactly 53 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -301,7 +303,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 110 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 112 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -315,9 +317,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			110,
+			112,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(51) + writes(59) must equal the full catalog (110).'
+			'reads(53) + writes(59) must equal the full catalog (112).'
 		);
 	}
 

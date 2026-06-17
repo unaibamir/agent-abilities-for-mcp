@@ -73,6 +73,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-get-product-variation'    => __( 'Reads one product variation by id: parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-list-product-attributes'  => __( 'Lists all global WooCommerce product attribute taxonomies: id, name, slug, type, sort order, and whether it has public archives. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-get-product-attribute'    => __( 'Reads one global product attribute taxonomy by id. Returns the same fields as the list ability. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-list-orders'              => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows carry no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-get-order'                => __( 'Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address — including email and phone — and the shipping address. Customer PII (email, phone, full address) is returned under the Integrations security disclaimer and is always gated by the manage-WooCommerce capability. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 
 		// Writes.
 		'aafm/create-draft'                => __( 'Creates a new draft post. The agent drafts, a human publishes. It never goes live on its own.', 'agent-abilities-for-mcp' ),

@@ -237,4 +237,213 @@ final class WooVariationsTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/wc-list-product-variations' ) );
 	}
+
+	/**
+	 * WC1b writes: create + update.
+	 */
+	public function test_create_variation_attaches_to_the_parent_and_returns_rich(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'sku'           => 'VAR-NEW',
+				'regular_price' => '7.50',
+				'stock_status'  => 'instock',
+				'description'   => 'A fresh variation.',
+				'attributes'    => array( 'pa_size' => 'large' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 500, $res['parent_id'], 'The new variation reports its parent.' );
+		$this->assertSame( 'VAR-NEW', $res['sku'] );
+		$this->assertSame( '7.50', $res['regular_price'] );
+		$this->assertArrayHasKey( 'id', $res );
+		$this->assertGreaterThan( 0, $res['id'] );
+		$this->assertSame( 'large', ( (array) $res['attributes'] )['pa_size'] ?? null );
+
+		// The variation is now readable through the store and listed under its parent.
+		$this->assertTrue( WcStubStore::exists( (int) $res['id'] ) );
+		$list = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$this->assertContains( (int) $res['id'], wp_list_pluck( $list['variations'], 'id' ) );
+	}
+
+	public function test_create_variation_requires_parent_product_id(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'sku' => 'NO-PARENT' ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'product_id (the parent) is required on create.' );
+	}
+
+	public function test_create_variation_unknown_parent_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'product_id' => 999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'A variation cannot attach to a nonexistent parent.' );
+	}
+
+	public function test_create_variation_sanitizes_description(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'  => 500,
+				'description' => '<script>alert(1)</script><strong>bold</strong>',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertStringNotContainsString( '<script>', $res['description'], 'The description drops scripts.' );
+		$this->assertStringContainsString( '<strong>', $res['description'], 'The description keeps benign markup.' );
+	}
+
+	public function test_create_variation_rejects_a_smuggled_top_level_field(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'  => 500,
+				'post_author' => 999999,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A closed schema rejects a smuggled top-level field.' );
+	}
+
+	public function test_create_variation_rejects_a_smuggled_nested_attribute_value(): void {
+		// MEDIUM-4: the attributes map is closed to scalar string values. A smuggled NESTED structure
+		// (an object/array value inside the flat name=>value map) must be rejected before execute, not
+		// just a smuggled top-level field.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array(
+					'pa_color' => array( 'smuggled' => 'object-value' ),
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A non-string (nested) attribute value must be rejected by the closed attributes schema.'
+		);
+	}
+
+	public function test_create_variation_accepts_a_clean_attribute_map(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array(
+					'pa_color' => 'blue',
+					'pa_size'  => 'small',
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A clean attribute map must be accepted.' );
+		$attributes = (array) $res['attributes'];
+		$this->assertSame( 'blue', $attributes['pa_color'] ?? null );
+		$this->assertSame( 'small', $attributes['pa_size'] ?? null );
+	}
+
+	public function test_create_variation_denies_an_editor(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-create-product-variation' )->check_permissions( array( 'product_id' => 500 ) )
+		);
+	}
+
+	public function test_create_variation_write_is_audited(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute( array( 'product_id' => 500 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-create-product-variation', $abilities );
+	}
+
+	public function test_create_variation_denied_is_audited(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-create-product-variation' )->check_permissions( array( 'product_id' => 500 ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-create-product-variation', $abilities );
+	}
+
+	public function test_update_variation_patches_by_id(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'sku'          => 'VAR-601-RENAMED',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'VAR-601-RENAMED', $res['sku'] );
+		// Untouched fields survive the PATCH.
+		$this->assertSame( 500, $res['parent_id'], 'A PATCH leaves the parent intact.' );
+
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame( 'VAR-601-RENAMED', $read['sku'], 'The update must round-trip.' );
+	}
+
+	public function test_update_variation_requires_variation_id(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute( array( 'sku' => 'No id' ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'variation_id is required on update.' );
+	}
+
+	public function test_update_variation_nonexistent_id_is_graceful_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 999999,
+				'sku'          => 'Ghost',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	public function test_update_variation_rejects_a_smuggled_nested_attribute_value(): void {
+		// MEDIUM-4 on the update schema too.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array(
+					'pa_color' => array( 'smuggled' => 'object-value' ),
+				),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A non-string attribute value must be rejected on update too.' );
+	}
+
+	public function test_update_variation_denies_an_editor(): void {
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-update-product-variation' )->check_permissions( array( 'variation_id' => 601 ) )
+		);
+	}
+
+	public function test_update_variation_write_is_audited(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'sku'          => 'VAR-601-AUDITED',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-update-product-variation', $abilities );
+	}
+
+	public function test_create_and_update_variation_share_the_get_output_schema(): void {
+		$get    = aafm_args_wc_get_product_variation()['output_schema']['properties'];
+		$create = aafm_args_wc_create_product_variation()['output_schema']['properties'];
+		$update = aafm_args_wc_update_product_variation()['output_schema']['properties'];
+
+		$this->assertSame( $get, $create, 'create-variation shares the rich get output schema.' );
+		$this->assertSame( $get, $update, 'update-variation shares the rich get output schema.' );
+	}
 }

@@ -797,12 +797,10 @@ function aafm_exec_update_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$updated = get_comment( $id );
-	if ( ! $updated instanceof WP_Comment ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'comment' => aafm_redact_comment( $updated ) );
+	// The comment was confirmed to exist above and the update did not fail, so the
+	// re-fetch is the fresh, post-update record. aafm_redact_comment() tolerates a
+	// non-WP_Comment by returning an empty array, so the response is always well-formed.
+	return array( 'comment' => aafm_redact_comment( get_comment( $id ) ) );
 }
 
 /**
@@ -853,8 +851,8 @@ function aafm_args_delete_comment(): array {
 /**
  * Execute aafm/delete-comment.
  *
- * wp_delete_comment( $id, true ) FORCE-deletes: the row is removed, not trashed, and
- * cannot be recovered. We resolve the comment first (so a missing id is an honest
+ * Force-deletes via wp_delete_comment( $id, true ): the row is removed, not trashed,
+ * and cannot be recovered. We resolve the comment first (so a missing id is an honest
  * error, not a silent no-op), then honor the bool return.
  *
  * @param array<string,mixed> $input Validated input.

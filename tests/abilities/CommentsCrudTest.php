@@ -212,6 +212,40 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertSame( 'new body', get_comment( $comment )->comment_content );
 	}
 
+	public function test_update_comment_changes_only_the_content(): void {
+		// The schema already closes out post id, author, and email. Assert it
+		// behaviorally too, so a future edit to the executor can't silently widen
+		// the write surface past the comment body.
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'      => $post,
+				'comment_author'       => 'Original Author',
+				'comment_author_email' => 'original@example.com',
+				'comment_content'      => 'before',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'content'    => 'after',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'after', $out['comment']['content'] );
+
+		$stored = get_comment( $comment );
+		$this->assertInstanceOf( WP_Comment::class, $stored );
+		// Content changed; the post, author, and email are untouched.
+		$this->assertSame( 'after', $stored->comment_content );
+		$this->assertSame( $post, (int) $stored->comment_post_ID );
+		$this->assertSame( 'Original Author', $stored->comment_author );
+		$this->assertSame( 'original@example.com', $stored->comment_author_email );
+	}
+
 	public function test_update_comment_sanitizes_script_content(): void {
 		$this->acting_as( 'editor' );
 		$post    = self::factory()->post->create();

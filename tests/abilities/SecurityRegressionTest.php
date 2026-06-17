@@ -398,22 +398,32 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: PERMANENT DELETE.
 	 *
-	 * Post writes never force-delete: wp_delete_post(...,true) must not appear anywhere —
-	 * posts and pages are only ever trashed (recoverable).
+	 * Force-delete (the trash-bypass flag) is a CVE-class primitive: each one is
+	 * permitted ONLY in the single ability file that discloses the matching destructive
+	 * ability, and banned everywhere else.
 	 *
 	 * Three primitives are governed here:
-	 *   - wp_delete_post(...,true)       → absolute ban (posts/pages are only ever trashed).
+	 *   - wp_delete_post(...,true)       → allowed ONLY in includes/abilities/posts.php.
 	 *   - wp_delete_comment(...,true)    → allowed ONLY in includes/abilities/comments.php.
 	 *   - wp_delete_attachment(...,true) → allowed ONLY in includes/abilities/media.php.
 	 *
-	 * Comments are one sanctioned exception. aafm/delete-comment is an explicit,
+	 * Posts/pages are the newest sanctioned exception. aafm/delete-post is an explicit,
+	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
+	 * filed under "Destructive (permanent)") that force-deletes through the single
+	 * aafm_force_delete_post() executor in posts.php. aafm/delete-page does NOT call
+	 * the primitive itself — it delegates to that same executor with the page type
+	 * pinned — so pages.php never force-deletes directly and there is exactly one
+	 * wp_delete_post(...,true) call site in the whole abilities layer. The recoverable
+	 * trash-post/trash-page abilities remain for the undoable path.
+	 *
+	 * Comments are another sanctioned exception. aafm/delete-comment is an explicit,
 	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
 	 * filed under "Destructive (permanent)") that uses wp_delete_comment(...,true) by
 	 * design — moderators routinely purge spam permanently, and aafm/moderate-comment
 	 * still offers the recoverable 'trash' path. That single call is allowed only in
 	 * includes/abilities/comments.php.
 	 *
-	 * Media is the other. aafm/delete-media is the disclosed destructive media ability
+	 * Media is the last. aafm/delete-media is the disclosed destructive media ability
 	 * (risk=destructive) that uses wp_delete_attachment(...,true) by design — an
 	 * attachment has no Trash path, so removing a media file is inherently permanent.
 	 * That single call is allowed only in includes/abilities/media.php.
@@ -424,6 +434,9 @@ final class SecurityRegressionTest extends TestCase {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
 		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir ) );
 
+		// The one file permitted to force-delete a post/page (the disclosed delete-post ability;
+		// delete-page delegates to the same posts.php executor, so there is no second call site).
+		$post_force_delete_allowed = 'includes/abilities/posts.php';
 		// The one file permitted to force-delete a comment (the disclosed destructive ability).
 		$comment_force_delete_allowed = 'includes/abilities/comments.php';
 		// The one file permitted to force-delete an attachment (the disclosed delete-media ability).
@@ -438,13 +451,15 @@ final class SecurityRegressionTest extends TestCase {
 			$src  = (string) file_get_contents( $file->getPathname() );
 			$path = str_replace( '\\', '/', $file->getPathname() );
 
-			// A force-delete of a post/page with the trash-bypass flag must never appear.
+			// Permanent post/page delete is allowed ONLY in the sanctioned posts file.
 			// The /s flag makes a multiline call match too, so it can't slip past the sweep.
-			$this->assertDoesNotMatchRegularExpression(
-				'/wp_delete_post\s*\([^)]*,\s*true\s*\)/s',
-				$src,
-				'Permanent wp_delete_post(...,true) in ' . $file->getFilename()
-			);
+			if ( ! str_ends_with( $path, $post_force_delete_allowed ) ) {
+				$this->assertDoesNotMatchRegularExpression(
+					'/wp_delete_post\s*\([^)]*,\s*true\s*\)/s',
+					$src,
+					'Permanent wp_delete_post(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-post ability may force-delete)'
+				);
+			}
 
 			// Permanent comment delete is allowed ONLY in the sanctioned comments file.
 			if ( ! str_ends_with( $path, $comment_force_delete_allowed ) ) {

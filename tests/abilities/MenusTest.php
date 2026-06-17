@@ -164,6 +164,63 @@ final class MenusTest extends TestCase {
 		$this->assertNull( get_post( $item_id ), 'menu item removed.' );
 	}
 
+	public function test_delete_menu_item_rejects_arbitrary_post_id(): void {
+		// Regression pin: delete-menu-item resolves the post first and rejects any id whose
+		// post_type is not nav_menu_item. Without that guard, an edit_theme_options user could
+		// steer this destructive write into an arbitrary-post-delete primitive. Pass a normal
+		// page id and prove (a) the call errors and (b) the page is untouched.
+		$this->register_menus();
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_title'  => 'Untouchable',
+			)
+		);
+		$this->acting_as( 'administrator' ); // Holds edit_theme_options.
+
+		$res = wp_get_ability( 'aafm/delete-menu-item' )->execute( array( 'item_id' => $page_id ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'arbitrary post id is rejected.' );
+
+		$still = get_post( $page_id );
+		$this->assertNotNull( $still, 'the arbitrary page was not deleted.' );
+		$this->assertSame( 'publish', $still->post_status, 'the page status is unchanged.' );
+	}
+
+	public function test_create_menu_item_neutralizes_dangerous_url_scheme(): void {
+		// Regression pin: create-menu-item routes the url through esc_url_raw, which strips
+		// unsafe schemes. On this WP 7.0, esc_url_raw() returns an empty string for both
+		// javascript: and data: (verified in-container), so the stored url is empty rather than
+		// a javascript:/data: link. Either way it must not begin with the dangerous scheme.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Danger' );
+
+		$item    = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'XSS',
+				'url'     => 'javascript:alert(1)',
+			)
+		);
+		$item_id = (int) $item['id'];
+
+		$stored = get_post_meta( $item_id, '_menu_item_url', true );
+		$this->assertSame( '', $stored, 'esc_url_raw neutralizes the javascript: scheme to an empty url.' );
+		$this->assertStringStartsNotWith( 'javascript:', (string) $stored, 'no javascript: scheme is stored.' );
+
+		// data: is likewise neutralized to empty by esc_url_raw on this WP.
+		$item2   = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'XSS2',
+				'url'     => 'data:text/html,<script>alert(1)</script>',
+			)
+		);
+		$stored2 = get_post_meta( (int) $item2['id'], '_menu_item_url', true );
+		$this->assertSame( '', $stored2, 'esc_url_raw neutralizes the data: scheme to an empty url.' );
+	}
+
 	public function test_menu_write_is_discoverable_by_an_admin_and_hidden_from_an_editor(): void {
 		// Exercises the server.php fall-through for a menu WRITE (not just by comment): an admin
 		// holds edit_theme_options so create-menu is discoverable; an editor lacks it, so it is

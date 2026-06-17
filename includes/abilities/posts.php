@@ -578,6 +578,11 @@ function aafm_perm_create_cpt_item( array $input ): bool {
 	if ( ! $caps['object'] instanceof WP_Post_Type ) {
 		return false;
 	}
+	// Deliberately NO $caps['mapped']/map_meta_cap gate here, unlike the update/read paths.
+	// Create is pre-insert: there is no per-object edit_post to degrade-open against, the author
+	// is forced to the current user (no spoof), and edit_posts/publish_posts are real assigned
+	// primitives that hold regardless of map_meta_cap. The mapped check is unnecessary here and
+	// must NOT be copied to the per-object edit/delete paths where degraded caps can fail open.
 	// Base authoring cap for the type (edit_posts-equivalent).
 	if ( ! current_user_can( (string) $caps['object']->cap->edit_posts ) ) {
 		return false;
@@ -825,6 +830,8 @@ function aafm_exec_update_cpt_item( array $input ) {
 	if ( ! $post instanceof WP_Post || is_wp_error( aafm_validate_post_type( $post->post_type ) ) ) {
 		return aafm_generic_error();
 	}
+	// The per-type publish gate is enforced in aafm_perm_update_cpt_item(), which the Abilities API
+	// always runs before execute, so this executor intentionally does not re-check the publish cap.
 	return aafm_exec_update_post( $input );
 }
 

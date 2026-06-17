@@ -384,6 +384,93 @@ final class CptWritesTest extends TestCase {
 		delete_option( 'aafm_force_draft' );
 	}
 
+	public function test_create_cpt_item_denied_for_editor_lacking_the_types_own_cap(): void {
+		// A CPT with its OWN granular caps, so stock roles never hold edit_aafm_journal even
+		// though an editor holds the generic edit_posts/publish_posts. This proves the create
+		// gate keys on the type's own cap, not a literal edit_posts gate.
+		register_post_type(
+			'aafm_journal',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => true,
+				'capability_type' => array( 'aafm_journal', 'aafm_journals' ),
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( self::CPT, 'aafm_journal' ) );
+
+		// An editor: holds edit_posts + publish_posts, but NOT the type's own edit cap.
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $user_id );
+		$this->assertTrue( current_user_can( 'edit_posts' ) );
+		$this->assertTrue( current_user_can( 'publish_posts' ) );
+
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
+				array(
+					'post_type' => 'aafm_journal',
+					'title'     => 'x',
+				)
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/create-cpt-item' )->execute(
+			array(
+				'post_type' => 'aafm_journal',
+				'title'     => 'x',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+
+		unregister_post_type( 'aafm_journal' );
+	}
+
+	public function test_create_vs_update_asymmetry_on_a_non_mapped_cpt(): void {
+		// A map_meta_cap=false CPT that is eligible + allowlisted. Locks the deliberate asymmetry:
+		// create gates on the type's edit_posts primitive (no per-object object to degrade), while
+		// update is refused because aafm_can_edit_post_object() requires map_meta_cap===true.
+		register_post_type(
+			'aafm_ledger',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => false,
+				'capability_type' => array( 'aafm_ledger', 'aafm_ledgers' ),
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( self::CPT, 'aafm_ledger' ) );
+
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		// Grant the non-mapped type's plural primitives so create's gate is satisfied.
+		$user->add_cap( 'edit_aafm_ledgers' );
+		$user->add_cap( 'publish_aafm_ledgers' );
+		$user->add_cap( 'edit_published_aafm_ledgers' );
+		wp_set_current_user( $user_id );
+
+		// CREATE: behaves per its cap gate — the agent holds the primitive, so it is allowed.
+		$this->assertTrue(
+			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
+				array(
+					'post_type' => 'aafm_ledger',
+					'title'     => 'x',
+				)
+			)
+		);
+
+		// UPDATE: denied on the same type — aafm_can_edit_post_object() refuses non-mapped types
+		// because a degraded per-object edit_post check can fail open.
+		$post_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'aafm_ledger',
+				'post_status' => 'draft',
+			)
+		);
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-cpt-item' )->check_permissions( array( 'post_id' => $post_id ) )
+		);
+
+		unregister_post_type( 'aafm_ledger' );
+	}
+
 	public function test_update_cpt_item_content_is_sanitized(): void {
 		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
 		$user    = new \WP_User( $user_id );

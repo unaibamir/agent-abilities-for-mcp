@@ -94,13 +94,15 @@ final class CatalogTest extends TestCase {
 		'aafm/update-user-meta',
 		'aafm/delete-user-meta',
 		'aafm/update-site-settings',
+		'aafm/delete-post',
+		'aafm/delete-page',
 	);
 
 	/**
 	 * The writes whose action is destruction — recoverable (trash / spam) or permanent
-	 * (force-delete of media/revisions/meta, comment purge, user-meta removal, and user
-	 * removal/creation). These MUST be annotated destructive:true. Every other write is
-	 * destructive:false.
+	 * (force-delete of posts/pages/media/revisions/meta, comment purge, user-meta removal,
+	 * and user removal/creation). These MUST be annotated destructive:true. Every other write
+	 * is destructive:false.
 	 *
 	 * The user CRUD writes create-user and delete-user are destructive: both make a permanent,
 	 * security-sensitive change to the user table (a new account, or a removal with content
@@ -108,6 +110,9 @@ final class CatalogTest extends TestCase {
 	 *
 	 * update-site-settings is destructive: a settings change is permanent and site-wide, with
 	 * no per-setting undo, so the agent is told it is a permanent change.
+	 *
+	 * delete-post and delete-page are permanent: they force-delete past the Trash through the
+	 * single posts.php executor, so the agent is told the removal cannot be undone.
 	 *
 	 * @var string[]
 	 */
@@ -124,6 +129,8 @@ final class CatalogTest extends TestCase {
 		'aafm/delete-user',
 		'aafm/delete-user-meta',
 		'aafm/update-site-settings',
+		'aafm/delete-post',
+		'aafm/delete-page',
 	);
 
 	public function set_up(): void {
@@ -154,7 +161,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 60) and register categories + abilities.
+	 * Enable the entire catalog (all 62) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -165,9 +172,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			60,
+			62,
 			$registry,
-			'The catalog must contain exactly 60 abilities — 27 reads + 33 writes.'
+			'The catalog must contain exactly 62 abilities — 27 reads + 35 writes.'
 		);
 	}
 
@@ -197,8 +204,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 33 writes — no drift.' );
-		$this->assertCount( 33, $writes, 'Exactly 33 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 35 writes — no drift.' );
+		$this->assertCount( 35, $writes, 'Exactly 35 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -207,7 +214,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 60 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 62 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -221,9 +228,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			60,
+			62,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(27) + writes(33) must equal the full catalog (60).'
+			'reads(27) + writes(35) must equal the full catalog (62).'
 		);
 	}
 

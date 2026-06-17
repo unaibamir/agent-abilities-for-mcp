@@ -60,8 +60,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/list-templates'       => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-template'         => __( 'Reads one block template by id, including its markup. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-global-styles'    => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
-		'aafm/seo-get-post'         => __( "Reads a post's SEO fields (title, description, focus keyword, canonical URL, robots, and social tags) from whichever SEO plugin is active. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
-		'aafm/seo-get-schema'       => __( "Reads a post's structured-data schema (JSON-LD) from Rank Math. Other SEO plugins return nothing. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/seo-get-post'         => __( "Reads a post's SEO fields (title, description, focus keyword, canonical URL, robots, and social tags) from whichever SEO plugin is active. Full field coverage is Yoast and Rank Math; on All in One SEO only the title and description are read. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/seo-get-schema'       => __( "Reads a post's structured-data schema (JSON-LD) from Rank Math. On a site running Yoast or another SEO plugin it returns an error rather than guessing at that plugin's schema storage. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'aafm/seo-get-head'         => __( 'Reads the rendered SEO head markup for a post when the active plugin offers one, and an empty string when it does not. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 
 		// Writes.
@@ -94,8 +94,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-menu-item'     => __( 'Adds an item (link) to a navigation menu. The URL is sanitized. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-menu-item'     => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'aafm/update-template'      => __( 'Updates a database block template by id. Its markup is sanitized, and theme-file templates cannot be edited. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
-		'aafm/seo-update-post'      => __( "Writes a post's SEO fields to the active plugin's meta keys. URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
-		'aafm/seo-update-schema'    => __( "Writes a post's structured-data schema (JSON-LD) to Rank Math. The whole object is sanitized, top to bottom. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/seo-update-post'      => __( "Writes a post's SEO fields to the active plugin's meta keys. URL fields are sanitized as URLs. Full field coverage is Yoast and Rank Math; on All in One SEO only the title and description are written. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'aafm/seo-update-schema'    => __( "Writes a post's structured-data schema (JSON-LD) to Rank Math. The whole object is sanitized, top to bottom. On a site running Yoast or another SEO plugin it returns an error. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 
 		// Destructive (still recoverable).
 		'aafm/trash-post'           => __( 'Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),

@@ -47,7 +47,7 @@ function aafm_register_seo_definitions( array $registry ): array {
 	);
 	$registry['aafm/seo-get-schema']    = array(
 		'label'        => __( 'Get post schema', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads a post's structured-data (JSON-LD) schema from Rank Math. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads a post's structured-data (JSON-LD) schema from Rank Math. On a site running Yoast or another SEO plugin it returns an error rather than guessing at that plugin's schema storage. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'seo',
@@ -55,7 +55,7 @@ function aafm_register_seo_definitions( array $registry ): array {
 	);
 	$registry['aafm/seo-update-schema'] = array(
 		'label'        => __( 'Update post schema', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Writes a post's structured-data (JSON-LD) schema to Rank Math. The object is recursively sanitized. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Writes a post's structured-data (JSON-LD) schema to Rank Math, recursively sanitized. On a site running Yoast or another SEO plugin it returns an error. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'seo',
@@ -223,6 +223,15 @@ function aafm_args_seo_update_post(): array {
 		),
 	);
 	foreach ( aafm_seo_fields() as $field ) {
+		// robots is otherwise unconstrained free text; document the accepted directive tokens so an
+		// agent does not have to guess. Still type:string (no behaviour change) — just self-describing.
+		if ( 'robots' === $field ) {
+			$properties[ $field ] = array(
+				'type'        => 'string',
+				'description' => __( 'Robots meta directives as a comma-separated list, for example noindex, nofollow, noarchive, nosnippet. Yoast and Rank Math store this differently, so the value is passed through to whichever plugin is active.', 'agent-abilities-for-mcp' ),
+			);
+			continue;
+		}
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
 
@@ -332,7 +341,7 @@ function aafm_sanitize_schema_array( array $schema ): array {
 function aafm_args_seo_get_schema(): array {
 	return array(
 		'label'               => __( 'Get post schema', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads a post's structured-data (JSON-LD) schema from Rank Math. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Reads a post's structured-data (JSON-LD) schema from Rank Math. On a site running Yoast or another SEO plugin it returns an error rather than guessing at that plugin's schema storage. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -395,7 +404,7 @@ function aafm_exec_seo_get_schema( array $input ) {
 function aafm_args_seo_update_schema(): array {
 	return array(
 		'label'               => __( 'Update post schema', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Writes a post's structured-data (JSON-LD) schema to Rank Math. The object is recursively sanitized. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's structured-data (JSON-LD) schema to Rank Math, recursively sanitized. On a site running Yoast or another SEO plugin it returns an error. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

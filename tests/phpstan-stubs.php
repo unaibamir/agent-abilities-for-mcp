@@ -290,7 +290,7 @@ if ( ! function_exists( 'wc_update_attribute' ) ) {
 if ( ! function_exists( 'wc_delete_attribute' ) ) {
 	/**
 	 * @param int $id
-	 * @return bool
+	 * @return bool|\WP_Error
 	 */
 	function wc_delete_attribute( $id ) {
 		return false;

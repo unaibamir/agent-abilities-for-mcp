@@ -1755,7 +1755,7 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 
 	if ( ! empty( $args ) ) {
 		$result = wc_update_attribute( $id, $args );
-		if ( is_wp_error( $result ) ) {
+		if ( is_wp_error( $result ) || ! $result ) {
 			return aafm_generic_error();
 		}
 	}
@@ -1826,7 +1826,10 @@ function aafm_exec_wc_delete_product_attribute( array $input ) {
 	if ( null === $attr ) {
 		return aafm_generic_error();
 	}
-	wc_delete_attribute( $id );
+	$result = wc_delete_attribute( $id );
+	if ( is_wp_error( $result ) || false === $result ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'      => $id,

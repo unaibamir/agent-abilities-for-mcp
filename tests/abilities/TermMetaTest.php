@@ -150,4 +150,41 @@ final class TermMetaTest extends TestCase {
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 		unregister_taxonomy( 'aafm_locked' );
 	}
+
+	public function test_delete_term_meta_removes_allowlisted_key(): void {
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		update_term_meta( $term_id, 'seo_title', 'Bye' );
+
+		$this->assertSame(
+			array( 'deleted' => true ),
+			aafm_exec_delete_term_meta(
+				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+			)
+		);
+		$this->assertSame( '', get_term_meta( $term_id, 'seo_title', true ) );
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+	}
+
+	public function test_delete_term_meta_denied_for_low_cap_user(): void {
+		register_taxonomy(
+			'aafm_locked2',
+			'post',
+			array(
+				'public'       => true,
+				'capabilities' => array( 'edit_terms' => 'manage_options' ),
+			)
+		);
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_locked2' ) );
+		$this->assertFalse(
+			aafm_perm_delete_term_meta(
+				array( 'taxonomy' => 'aafm_locked2', 'term_id' => $term_id, 'meta_key' => 'seo_title' )
+			)
+		);
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+		unregister_taxonomy( 'aafm_locked2' );
+	}
 }

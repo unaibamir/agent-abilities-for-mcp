@@ -74,6 +74,14 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term_meta',
 	);
+	$registry['aafm/delete-term-meta'] = array(
+		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_delete_term_meta',
+	);
 	return $registry;
 }
 
@@ -550,6 +558,81 @@ function aafm_exec_update_term_meta( array $input ) {
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
 		'value'    => get_term_meta( $term_id, $key, true ),
 	);
+}
+
+/**
+ * Args for aafm/delete-term-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_term_meta(): array {
+	return array(
+		'label'               => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+			),
+			'required'             => array( 'term_id', 'meta_key' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted' => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_term_meta',
+		'permission_callback' => 'aafm_perm_delete_term_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-term-meta: per-object edit_term + key allowlist.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_delete_term_meta( array $input ): bool {
+	return aafm_perm_can_edit_term_meta( $input );
+}
+
+/**
+ * Execute aafm/delete-term-meta.
+ *
+ * Re-validates taxonomy/term/key (defence in depth), then removes every value of that key.
+ * delete_term_meta() with no value arg deletes all values of the key — the intended
+ * destructive behaviour.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_term_meta( array $input ) {
+	$taxonomy = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	delete_term_meta( absint( $input['term_id'] ), (string) $input['meta_key'] );
+	return array( 'deleted' => true );
 }
 
 /**

@@ -66,6 +66,14 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_term_meta',
 	);
+	$registry['aafm/update-term-meta'] = array(
+		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_update_term_meta',
+	);
 	return $registry;
 }
 
@@ -443,6 +451,104 @@ function aafm_exec_get_term_meta( array $input ) {
 		'term_id'  => $term_id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
 		'value'    => $value,
+	);
+}
+
+/**
+ * Args for aafm/update-term-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_term_meta(): array {
+	return array(
+		'label'               => __( 'Update term meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+			'required'             => array( 'term_id', 'meta_key', 'value' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'term_id'  => array( 'type' => 'integer' ),
+				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_update_term_meta',
+		'permission_callback' => 'aafm_perm_update_term_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/update-term-meta: per-object edit_term + key allowlist.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_update_term_meta( array $input ): bool {
+	return aafm_perm_can_edit_term_meta( $input );
+}
+
+/**
+ * Execute aafm/update-term-meta.
+ *
+ * Re-validates taxonomy/term/key, refuses non-scalar values, then writes a single value.
+ * wp_slash() guards update_term_meta()'s internal unslash (matches the post-meta convention).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_term_meta( array $input ) {
+	$taxonomy = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	$term_id = absint( $input['term_id'] );
+	$key     = (string) $input['meta_key'];
+	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '' );
+	if ( is_wp_error( $value ) ) {
+		return $value;
+	}
+	if ( false === update_term_meta( $term_id, $key, wp_slash( $value ) ) ) {
+		// update_term_meta returns false on a same-value no-op too. Meta round-trips through a
+		// longtext column, so the stored value reads back as a string; compare stringified forms
+		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
+		if ( (string) get_term_meta( $term_id, $key, true ) !== (string) $value ) {
+			return aafm_generic_error();
+		}
+	}
+	return array(
+		'term_id'  => $term_id,
+		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
+		'value'    => get_term_meta( $term_id, $key, true ),
 	);
 }
 

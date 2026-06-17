@@ -103,4 +103,51 @@ final class TermMetaTest extends TestCase {
 		);
 		remove_all_filters( 'aafm_allowed_term_meta_keys' );
 	}
+
+	public function test_update_term_meta_writes_allowlisted_scalar(): void {
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+
+		$result = aafm_exec_update_term_meta(
+			array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'seo_title', 'value' => 'New title' )
+		);
+		$this->assertSame( 'New title', $result['value'] );
+		$this->assertSame( 'New title', get_term_meta( $term_id, 'seo_title', true ) );
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+	}
+
+	public function test_update_term_meta_rejects_non_allowlisted_key(): void {
+		$this->acting_as( 'editor' );
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		// Empty allowlist (default-deny): every key is rejected.
+		$this->assertInstanceOf(
+			WP_Error::class,
+			aafm_exec_update_term_meta(
+				array( 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'anything', 'value' => 'x' )
+			)
+		);
+	}
+
+	public function test_update_term_meta_denied_for_low_cap_user(): void {
+		// Decouple edit_terms from the editor's caps with a custom taxonomy.
+		register_taxonomy(
+			'aafm_locked',
+			'post',
+			array(
+				'public'       => true,
+				'capabilities' => array( 'edit_terms' => 'manage_options' ),
+			)
+		);
+		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'seo_title' ) );
+		$this->acting_as( 'editor' ); // lacks manage_options.
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_locked' ) );
+		$this->assertFalse(
+			aafm_perm_update_term_meta(
+				array( 'taxonomy' => 'aafm_locked', 'term_id' => $term_id, 'meta_key' => 'seo_title', 'value' => 'x' )
+			)
+		);
+		remove_all_filters( 'aafm_allowed_term_meta_keys' );
+		unregister_taxonomy( 'aafm_locked' );
+	}
 }

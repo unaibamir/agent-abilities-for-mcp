@@ -29,6 +29,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-post-meta'        => __( 'Reads one allowlisted scalar meta value from a post the agent can already edit. Protected and underscore keys are off limits.', 'agent-abilities-for-mcp' ),
 		'aafm/get-comments'         => __( 'Lists approved comments on a post. Author email and IP are never returned.', 'agent-abilities-for-mcp' ),
 		'aafm/get-pending-comments' => __( 'Lists the comment moderation queue. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
+		'aafm/get-comment'          => __( 'Reads one comment by id: author name, content, status, and date. Author email and IP are never returned.', 'agent-abilities-for-mcp' ),
 		'aafm/get-media'            => __( 'Lists media library items: URL, alt text, mime type, and dimensions.', 'agent-abilities-for-mcp' ),
 		'aafm/get-media-item'       => __( 'Reads one media item by id: caption, description, date, byte size, parent post, and every image size URL. Never the server file path.', 'agent-abilities-for-mcp' ),
 		'aafm/count-media'          => __( 'Counts media library items, total and by mime type. An optional mime filter narrows the breakdown.', 'agent-abilities-for-mcp' ),
@@ -54,6 +55,8 @@ function aafm_ability_disclosures(): array {
 		'aafm/upload-media'         => __( 'Uploads an image from base64 data (jpg, png, gif, webp; SVG is rejected) and adds it to the media library.', 'agent-abilities-for-mcp' ),
 		'aafm/update-media'         => __( "Updates an attachment's title, alt text, caption, or description. Requires edit access to that attachment.", 'agent-abilities-for-mcp' ),
 		'aafm/moderate-comment'     => __( 'Approves, unapproves, spams, or trashes a comment. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
+		'aafm/create-comment'       => __( 'Adds a comment to a post as the agent user. It is held for moderation, never auto-published, and the author is always the agent, not free-form input. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
+		'aafm/update-comment'       => __( "Edits a comment's text only. It cannot change the post, author, email, or IP. Requires edit access to that comment.", 'agent-abilities-for-mcp' ),
 		'aafm/create-term'          => __( 'Creates a term in a public taxonomy. Requires the manage_categories capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-term'          => __( 'Updates a term. Reparenting is guarded against hierarchy loops.', 'agent-abilities-for-mcp' ),
 		'aafm/restore-revision'     => __( 'Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible.', 'agent-abilities-for-mcp' ),
@@ -66,5 +69,6 @@ function aafm_ability_disclosures(): array {
 		// Destructive (permanent).
 		'aafm/delete-revision'      => __( "Permanently removes one revision from a post's history. The live post is unchanged, but the deleted revision cannot be recovered. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
 		'aafm/delete-media'         => __( 'Permanently deletes an attachment: the file and its library entry are removed and cannot be recovered. Requires delete access to that attachment.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-comment'       => __( 'Permanently deletes a comment. This bypasses the Trash and cannot be undone — use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment.', 'agent-abilities-for-mcp' ),
 	);
 }

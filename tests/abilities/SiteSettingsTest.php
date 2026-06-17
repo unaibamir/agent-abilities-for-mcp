@@ -66,4 +66,16 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertNotContains( 'admin_email', $allow, 'A rogue filter widened the allowlist to admin_email.' );
 		$this->assertNotContains( 'siteurl', $allow, 'A rogue filter widened the allowlist to siteurl.' );
 	}
+
+	public function test_get_site_settings_returns_allowlisted_values_for_admin_only(): void {
+		$this->register_all();
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue( wp_get_ability( 'aafm/get-site-settings' )->check_permissions( array() ) );
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-site-settings' )->execute( array() );
+		$this->assertArrayHasKey( 'settings', $res );
+		$this->assertArrayHasKey( 'blogname', $res['settings'] );
+		$this->assertArrayNotHasKey( 'admin_email', $res['settings'], 'must never return admin_email.' );
+	}
 }

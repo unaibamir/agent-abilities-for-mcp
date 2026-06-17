@@ -78,6 +78,41 @@ final class BlocksTest extends TestCase {
 		$this->assertArrayNotHasKey( 'content', $res['blocks'][0], 'list rows must be lean (no markup).' );
 	}
 
+	/**
+	 * Enumeration scope: a contributor who owns block A but not block B (another author's)
+	 * must see A and NOT B in list-blocks — the list is scoped to blocks the caller can edit.
+	 * A contributor holds edit_posts (clears the floor) but lacks edit_others_posts, so
+	 * map_meta_cap denies edit_post on a block they do not own — the same refinement the M-1
+	 * gate relies on, applied here as a row filter so enumeration matches per-object access.
+	 */
+	public function test_list_blocks_scopes_to_blocks_the_caller_can_edit(): void {
+		$this->register_blocks();
+		$contributor = self::factory()->user->create( array( 'role' => 'contributor' ) );
+		$mine        = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_block',
+				'post_status'  => 'draft',
+				'post_title'   => 'Mine',
+				'post_author'  => $contributor,
+			)
+		);
+		$theirs = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_block',
+				'post_status'  => 'draft',
+				'post_title'   => 'Theirs',
+				'post_author'  => self::factory()->user->create( array( 'role' => 'editor' ) ),
+			)
+		);
+		wp_set_current_user( $contributor );
+
+		$res = wp_get_ability( 'aafm/list-blocks' )->execute( array() );
+		$ids = wp_list_pluck( $res['blocks'], 'id' );
+		$this->assertContains( $mine, $ids, 'the contributor must see a block they own and can edit.' );
+		$this->assertNotContains( $theirs, $ids, "the contributor must NOT enumerate another author's draft block they cannot edit." );
+		$this->assertSame( count( $res['blocks'] ), $res['total'], 'total must match the visible (filtered) rows.' );
+	}
+
 	public function test_get_block_returns_markup_and_rejects_a_non_block(): void {
 		$this->register_blocks();
 		$id = $this->make_block( 'Beta', '<!-- wp:heading --><h2>Hi</h2><!-- /wp:heading -->' );

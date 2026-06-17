@@ -160,13 +160,17 @@ function aafm_exec_list_blocks( array $input ): array {
 	);
 	$blocks   = array();
 	foreach ( $query->posts as $block ) {
-		if ( $block instanceof WP_Post ) {
+		// Scope to blocks the caller can actually edit: the discovery floor (edit_posts) lets a
+		// contributor reach this list, but they must not enumerate id/title/slug of OTHER
+		// authors' blocks they lack edit_post on. Filtering here keeps the lean rows aligned
+		// with the per-object get/update gates. total reflects the filtered (visible) rows.
+		if ( $block instanceof WP_Post && current_user_can( 'edit_post', $block->ID ) ) {
 			$blocks[] = aafm_redact_block( $block );
 		}
 	}
 	return array(
 		'blocks' => $blocks,
-		'total'  => (int) $query->found_posts,
+		'total'  => count( $blocks ),
 	);
 }
 

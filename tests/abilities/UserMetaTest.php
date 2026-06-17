@@ -231,4 +231,18 @@ final class UserMetaTest extends TestCase {
 		);
 		$this->assertInstanceOf( \WP_Error::class, $res );
 	}
+
+	public function test_user_meta_discoverable_by_capable_admin_only(): void {
+		$this->register_all();
+
+		$this->acting_as( 'administrator' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-user-meta' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-user-meta' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-user-meta' ) );
+
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-user-meta' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-user-meta' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-user-meta' ) );
+	}
 }

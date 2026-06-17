@@ -149,6 +149,15 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-post-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
+		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) —
+		// reads included, since user meta can hold private data. The user id is unknown at
+		// discovery (empty input), so use the object-independent edit_users floor, refined
+		// per-object at execute time. Mirrors the post-meta family.
+		case 'aafm/get-user-meta':
+		case 'aafm/update-user-meta':
+		case 'aafm/delete-user-meta':
+			return static fn(): bool => current_user_can( 'edit_users' );
+
 		// Page writes: derive edit_pages/delete_pages from the page post-type object.
 		case 'aafm/update-page':
 			return static function (): bool {

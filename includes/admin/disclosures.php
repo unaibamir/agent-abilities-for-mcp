@@ -37,6 +37,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/count-posts'          => __( 'Counts posts of an allowlisted type, total and by status (publish, draft, pending, and so on). No post content is returned.', 'agent-abilities-for-mcp' ),
 		'aafm/get-users'            => __( 'Lists users with their id, display name, email, roles, and post count. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
 		'aafm/get-user'             => __( 'Reads one user by id: display name, email, roles, post count, registration date, and bio. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
+		'aafm/get-user-meta'        => __( 'Reads one allowlisted user meta value from a user the agent can edit. Session tokens, passwords, capabilities, and 2FA keys are never readable.', 'agent-abilities-for-mcp' ),
 		'aafm/get-terms'            => __( 'Lists terms and their post counts in a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'aafm/get-term'             => __( 'Reads a single term (name, slug, description, post count) from a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'aafm/get-term-meta'        => __( 'Reads one allowlisted scalar meta value from a term. Protected and underscore keys are off limits, and nothing is exposed unless an allowlist is configured.', 'agent-abilities-for-mcp' ),
@@ -57,6 +58,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-cpt-item'      => __( 'Creates an item of a custom content type you have allowlisted. It stays a draft unless the agent holds that type\'s publish capability, and force-draft still applies.', 'agent-abilities-for-mcp' ),
 		'aafm/update-cpt-item'      => __( 'Updates an item of an allowlisted custom content type by id. Publishing needs that type\'s own publish capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-post-meta'     => __( 'Writes one allowlisted scalar meta value to a post the agent can edit. Only allowlisted keys.', 'agent-abilities-for-mcp' ),
+		'aafm/update-user-meta'     => __( 'Writes one allowlisted scalar user meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'agent-abilities-for-mcp' ),
 		'aafm/set-featured-image'   => __( "Sets a post's featured image to an existing attachment id. It does not upload anything.", 'agent-abilities-for-mcp' ),
 		'aafm/upload-media'         => __( 'Uploads an image from base64 data (jpg, png, gif, webp; SVG is rejected) and adds it to the media library.', 'agent-abilities-for-mcp' ),
 		'aafm/update-media'         => __( "Updates an attachment's title, alt text, caption, or description. Requires edit access to that attachment.", 'agent-abilities-for-mcp' ),
@@ -82,5 +84,6 @@ function aafm_ability_disclosures(): array {
 		'aafm/delete-comment'       => __( 'Permanently deletes a comment. This bypasses the Trash and cannot be undone — use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment.', 'agent-abilities-for-mcp' ),
 		'aafm/create-user'          => __( 'Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-user'          => __( 'Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-user-meta'     => __( 'Removes an allowlisted user meta key from a user the agent can edit. This cannot be undone. Auth and capability keys can never be touched.', 'agent-abilities-for-mcp' ),
 	);
 }

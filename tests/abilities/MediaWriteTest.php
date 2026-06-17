@@ -454,6 +454,56 @@ final class MediaWriteTest extends TestCase {
 		);
 	}
 
+	public function test_delete_media_is_in_registry_as_destructive_write(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/delete-media', $registry );
+		$this->assertSame( 'writes', $registry['aafm/delete-media']['group'] );
+		$this->assertSame( 'destructive', $registry['aafm/delete-media']['risk'] );
+	}
+
+	public function test_delete_media_permanently_removes_attachment(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'gone.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/delete-media' )->execute( array( 'attachment_id' => $att ) );
+
+		$this->assertTrue( $out['deleted'] );
+		$this->assertSame( $att, $out['attachment_id'] );
+		$this->assertNull( get_post( $att ) );
+	}
+
+	public function test_delete_media_denied_for_non_owner(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$att   = self::factory()->attachment->create_object(
+			'protected.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_author'    => $admin,
+			)
+		);
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $att ) )
+		);
+	}
+
+	public function test_delete_media_rejects_non_attachment_id(): void {
+		$this->acting_as( 'administrator' );
+		$post = self::factory()->post->create();
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $post ) )
+		);
+	}
+
 	/**
 	 * Count files currently under the uploads dir so a rejected upload can be
 	 * proven to write nothing.

@@ -248,4 +248,61 @@ final class MediaReadTest extends TestCase {
 			array_keys( $out['media'][0] )
 		);
 	}
+
+	public function test_count_media_is_in_registry_as_read(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/count-media', $registry );
+		$this->assertSame( 'reads', $registry['aafm/count-media']['group'] );
+		$this->assertSame( 'read', $registry['aafm/count-media']['risk'] );
+	}
+
+	public function test_count_media_requires_upload_or_edit_cap(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( wp_get_ability( 'aafm/count-media' )->check_permissions( array() ) );
+
+		$this->acting_as( 'author' );
+		$this->assertTrue( wp_get_ability( 'aafm/count-media' )->check_permissions( array() ) );
+	}
+
+	public function test_count_media_totals_and_breaks_down_by_mime(): void {
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'a.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		self::factory()->attachment->create_object(
+			'b.png',
+			0,
+			array(
+				'post_mime_type' => 'image/png',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array() );
+		$this->assertGreaterThanOrEqual( 2, $out['total'] );
+		$this->assertIsArray( $out['by_mime'] );
+		$this->assertArrayHasKey( 'image/jpeg', $out['by_mime'] );
+		$this->assertGreaterThanOrEqual( 1, $out['by_mime']['image/jpeg'] );
+	}
+
+	public function test_count_media_filters_by_mime_type(): void {
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'only.png',
+			0,
+			array(
+				'post_mime_type' => 'image/png',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array( 'mime_type' => 'image/png' ) );
+		$this->assertGreaterThanOrEqual( 1, $out['total'] );
+		$this->assertSame( array( 'image/png' ), array_keys( $out['by_mime'] ) );
+	}
 }

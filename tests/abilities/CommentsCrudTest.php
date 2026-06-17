@@ -243,4 +243,44 @@ final class CommentsCrudTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
+
+	public function test_delete_comment_permanently_removes_the_comment(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
+
+		$out = wp_get_ability( 'aafm/delete-comment' )->execute( array( 'comment_id' => $comment ) );
+
+		$this->assertSame(
+			array(
+				'deleted'    => true,
+				'comment_id' => $comment,
+			),
+			$out
+		);
+		// Force delete bypasses trash — the row is gone, not recoverable.
+		$this->assertNull( get_comment( $comment ) );
+	}
+
+	public function test_delete_comment_denied_for_non_editor(): void {
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
+
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-comment' )->check_permissions( array( 'comment_id' => $comment ) )
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/delete-comment', $abilities );
+		// And the comment still exists — the denied call never touched it.
+		$this->assertInstanceOf( WP_Comment::class, get_comment( $comment ) );
+	}
+
+	public function test_delete_comment_missing_id_returns_error(): void {
+		$this->acting_as( 'editor' );
+		$out = wp_get_ability( 'aafm/delete-comment' )->execute( array( 'comment_id' => 999999 ) );
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
 }

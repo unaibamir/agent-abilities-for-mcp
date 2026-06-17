@@ -804,3 +804,76 @@ function aafm_exec_update_comment( array $input ) {
 
 	return array( 'comment' => aafm_redact_comment( $updated ) );
 }
+
+/**
+ * Args for aafm/delete-comment.
+ *
+ * PERMANENT delete (wp_delete_comment with force=true) — this bypasses the Trash and
+ * cannot be undone. It is deliberately distinct from aafm/moderate-comment's 'trash'
+ * action, which is recoverable. risk=destructive, destructive:true, and the disclosure
+ * states the permanence plainly. The moderate_comments floor plus per-object
+ * edit_comment is the gate.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_comment(): array {
+	return array(
+		'label'               => __( 'Delete comment', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently delete a comment (not recoverable; use moderate-comment to trash recoverably).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'comment_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'comment_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted'    => array( 'type' => 'boolean' ),
+				'comment_id' => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_comment',
+		'permission_callback' => 'aafm_perm_edit_comment_obj',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/delete-comment.
+ *
+ * wp_delete_comment( $id, true ) FORCE-deletes: the row is removed, not trashed, and
+ * cannot be recovered. We resolve the comment first (so a missing id is an honest
+ * error, not a silent no-op), then honor the bool return.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_comment( array $input ) {
+	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
+
+	if ( ! get_comment( $id ) instanceof WP_Comment ) {
+		return aafm_generic_error();
+	}
+
+	$deleted = wp_delete_comment( $id, true );
+	if ( ! $deleted ) {
+		return aafm_generic_error();
+	}
+
+	return array(
+		'deleted'    => true,
+		'comment_id' => $id,
+	);
+}

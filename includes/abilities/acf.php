@@ -124,22 +124,26 @@ function aafm_args_acf_list_field_groups(): array {
 				'field_groups' => array(
 					'type'  => 'array',
 					'items' => array(
-						'type'       => 'object',
-						'properties' => array(
+						'type'                 => 'object',
+						'properties'           => array(
 							'key'    => array( 'type' => 'string' ),
 							'title'  => array( 'type' => 'string' ),
 							'fields' => array(
 								'type'  => 'array',
 								'items' => array(
-									'type'       => 'object',
-									'properties' => array(
+									'type'                 => 'object',
+									'properties'           => array(
 										'key'   => array( 'type' => 'string' ),
 										'label' => array( 'type' => 'string' ),
 										'type'  => array( 'type' => 'string' ),
 									),
+									'required'             => array( 'key', 'label', 'type' ),
+									'additionalProperties' => false,
 								),
 							),
 						),
+						'required'             => array( 'key', 'title', 'fields' ),
+						'additionalProperties' => false,
 					),
 				),
 			),
@@ -371,7 +375,10 @@ function aafm_args_acf_get_post_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'post_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_get_post_fields',
@@ -438,7 +445,10 @@ function aafm_args_acf_update_post_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'post_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_update_post_fields',
@@ -524,7 +534,10 @@ function aafm_args_acf_get_term_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'term_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_get_term_fields',
@@ -585,7 +598,10 @@ function aafm_args_acf_update_term_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'term_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_update_term_fields',
@@ -671,7 +687,10 @@ function aafm_args_acf_get_user_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'user_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_get_user_fields',
@@ -736,7 +755,10 @@ function aafm_args_acf_update_user_fields(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'user_id' => array( 'type' => 'integer' ),
-				'fields'  => array( 'type' => 'object' ),
+				'fields'  => array(
+					'type'        => 'object',
+					'description' => 'A map of field key to its hydrated value, each following that field\'s ACF Return Format.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_acf_update_user_fields',

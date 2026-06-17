@@ -28,7 +28,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_blocks_definitions( array $registry ): array {
-	$registry['aafm/list-blocks'] = array(
+	$registry['aafm/list-blocks']  = array(
 		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -36,7 +36,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_blocks',
 	);
-	$registry['aafm/get-block']   = array(
+	$registry['aafm/get-block']    = array(
 		'label'        => __( 'Get block', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -44,8 +44,23 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_block',
 	);
-	// create-block, update-block, and delete-block are registered in their own tasks
-	// (B3/B4) so each lands with its execute callback and tests in lockstep.
+	$registry['aafm/create-block'] = array(
+		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'site',
+		'args_builder' => 'aafm_args_create_block',
+	);
+	$registry['aafm/update-block'] = array(
+		'label'        => __( 'Update block', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'site',
+		'args_builder' => 'aafm_args_update_block',
+	);
+	// delete-block is registered in B4 so it lands with its execute callback and tests.
 	return $registry;
 }
 
@@ -182,4 +197,142 @@ function aafm_exec_get_block( array $input ) {
 		return aafm_generic_error();
 	}
 	return aafm_rich_block( $block );
+}
+
+/**
+ * Args for create-block.
+ *
+ * The schema is closed (additionalProperties:false) and declares only title + content, so a
+ * smuggled post_type/post_author/post_status is rejected before execute ever runs.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_create_block(): array {
+	return array(
+		'label'               => __( 'Create block', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Creates a reusable block. Markup is sanitized; the author is always the agent. Requires edit-posts.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'title'   => array( 'type' => 'string' ),
+				'content' => array( 'type' => 'string' ),
+			),
+			'required'             => array( 'title' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'      => array( 'type' => 'integer' ),
+				'content' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_create_block',
+		'permission_callback' => 'aafm_perm_blocks_floor',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute create-block: kses-harden the markup, force the type, let the author default.
+ *
+ * The type is forced to wp_block from our own args; post_author is omitted so wp_insert_post
+ * defaults it to the current (agent) user — neither can be spoofed through input. The markup
+ * is sanitized with wp_kses_post() (which preserves Gutenberg block delimiters), then the
+ * whole array is wp_slash()'d once because the insert functions expect slashed data.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_create_block( array $input ) {
+	$title   = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
+	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
+	$id      = wp_insert_post(
+		wp_slash(
+			array(
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_title'   => $title,
+				'post_content' => $content,
+			)
+		),
+		true
+	);
+	if ( is_wp_error( $id ) || 0 === (int) $id ) {
+		return aafm_generic_error();
+	}
+	return aafm_rich_block( get_post( (int) $id ) );
+}
+
+/**
+ * Args for update-block.
+ *
+ * Closed schema: block_id (required) plus optional title/content. No post_type/post_author/
+ * post_status field exists, so none can be smuggled in.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_block(): array {
+	return array(
+		'label'               => __( 'Update block', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Updates a reusable block's title or markup by id. Markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'block_id' => array( 'type' => 'integer' ),
+				'title'    => array( 'type' => 'string' ),
+				'content'  => array( 'type' => 'string' ),
+			),
+			'required'             => array( 'block_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'      => array( 'type' => 'integer' ),
+				'content' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_update_block',
+		'permission_callback' => 'aafm_perm_block_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute update-block: resolve per-object, then apply a kses-hardened markup edit.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_block( array $input ) {
+	$id    = absint( $input['block_id'] ?? 0 );
+	$block = aafm_get_block_object( $id );
+	if ( null === $block ) {
+		return aafm_generic_error();
+	}
+	$update = array( 'ID' => $id );
+	if ( isset( $input['title'] ) ) {
+		$update['post_title'] = sanitize_text_field( (string) $input['title'] );
+	}
+	if ( isset( $input['content'] ) ) {
+		$update['post_content'] = wp_kses_post( (string) $input['content'] );
+	}
+	$result = wp_update_post( wp_slash( $update ), true );
+	if ( is_wp_error( $result ) || 0 === (int) $result ) {
+		return aafm_generic_error();
+	}
+	return aafm_rich_block( get_post( (int) $result ) );
 }

@@ -88,4 +88,72 @@ final class BlocksTest extends TestCase {
 		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );
 		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'aafm/get-block' )->execute( array( 'block_id' => $post_id ) ) );
 	}
+
+	public function test_create_block_stores_kses_hardened_markup_and_forces_type(): void {
+		$this->register_blocks();
+		$this->acting_as( 'editor' );
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
+			array(
+				'title'   => 'Hero',
+				'content' => '<!-- wp:paragraph --><p>Hi<script>alert(1)</script></p><!-- /wp:paragraph -->',
+			)
+		);
+		$this->assertArrayHasKey( 'id', $res );
+		$saved = get_post( $res['id'] );
+		$this->assertSame( 'wp_block', $saved->post_type, 'type is forced to wp_block.' );
+		$this->assertSame( (string) get_current_user_id(), (string) $saved->post_author, 'author is forced to the agent.' );
+		$this->assertStringContainsString( 'wp:paragraph', $saved->post_content, 'block delimiters survive kses.' );
+		$this->assertStringNotContainsString( '<script', $saved->post_content, 'script stripped by wp_kses_post.' );
+	}
+
+	public function test_create_block_rejects_smuggled_post_type(): void {
+		$this->register_blocks();
+		$this->acting_as( 'editor' );
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
+			array(
+				'title'     => 'x',
+				'content'   => 'y',
+				'post_type' => 'page',
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $res, 'closed schema rejects a smuggled post_type.' );
+	}
+
+	public function test_update_block_edits_markup_with_per_object_gate(): void {
+		$this->register_blocks();
+		$id = $this->make_block( 'Old' );
+		$this->acting_as( 'editor' );
+		$res = wp_get_ability( 'aafm/update-block' )->execute(
+			array(
+				'block_id' => $id,
+				'content'  => '<!-- wp:list --><ul><li>a</li></ul><!-- /wp:list -->',
+			)
+		);
+		$this->assertStringContainsString( 'wp:list', get_post( $id )->post_content );
+
+		// A subscriber cannot update (per-object edit_post denies).
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue( wp_get_ability( 'aafm/update-block' )->check_permissions( array( 'block_id' => $id ) ) );
+	}
+
+	/**
+	 * M-1: prove the per-object gate REFINES the coarse floor — a user who clears the
+	 * edit_posts discovery floor but lacks edit_block on a SPECIFIC block is denied at execute.
+	 * (The subscriber case above only exercises the floor; this exercises the per-object
+	 * refinement.) A contributor holds edit_posts but, lacking edit_others_posts, cannot edit
+	 * a block they do not own — so map_meta_cap denies edit_block on this id.
+	 */
+	public function test_update_block_per_object_gate_denies_without_edit_block_on_the_id(): void {
+		$this->register_blocks();
+		$id = $this->make_block( 'Locked' );
+		$this->acting_as( 'contributor' );
+		$this->assertTrue(
+			current_user_can( 'edit_posts' ),
+			'a contributor must clear the object-independent edit_posts floor.'
+		);
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/update-block' )->check_permissions( array( 'block_id' => $id ) ),
+			'a user who clears the edit_posts floor but lacks edit_block on this id must be denied at execute.'
+		);
+	}
 }

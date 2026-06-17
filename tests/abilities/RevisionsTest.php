@@ -394,4 +394,10 @@ final class RevisionsTest extends TestCase {
 		$this->assertCount( $before - 1, wp_get_post_revisions( $pid ) );
 		$this->assertSame( 'd3', get_post( $pid )->post_content );
 	}
+
+	public function test_delete_revision_registered_and_discoverable(): void {
+		$reg = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/delete-revision', $reg );
+		$this->assertNotNull( aafm_ability_list_permission( 'aafm/delete-revision' ) );
+	}
 }

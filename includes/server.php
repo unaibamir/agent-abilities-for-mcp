@@ -153,6 +153,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/list-revisions':
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':
+		case 'aafm/delete-revision':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		default:

@@ -100,4 +100,79 @@ final class CptWritesTest extends TestCase {
 		$this->assertArrayHasKey( 'meta', $schema['properties'] );
 		$this->assertArrayHasKey( 'slug', $schema['properties'] );
 	}
+
+	public function test_create_cpt_item_creates_an_allowlisted_cpt_item(): void {
+		// A user holding the CPT's own create + publish caps.
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'publish_aafm_books' );
+		$user->add_cap( 'edit_published_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$out = wp_get_ability( 'aafm/create-cpt-item' )->execute(
+			array(
+				'post_type' => self::CPT,
+				'title'     => 'Agent CPT item',
+				'content'   => 'Body',
+				'status'    => 'publish',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertArrayHasKey( 'post', $out );
+		$this->assertSame( self::CPT, get_post_type( $out['post']['id'] ) );
+		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
+		// Author is forced to the current agent user — never spoofed.
+		$this->assertSame( $user_id, (int) get_post_field( 'post_author', $out['post']['id'] ) );
+	}
+
+	public function test_create_cpt_item_denied_for_non_allowlisted_type(): void {
+		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $user_id );
+
+		// CPT_DENIED is eligible but NOT in the allowlist — permission must be false.
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
+				array(
+					'post_type' => self::CPT_DENIED,
+					'title'     => 'x',
+				)
+			)
+		);
+	}
+
+	public function test_create_cpt_item_denied_without_the_types_create_cap(): void {
+		// A subscriber holds no authoring caps for the CPT.
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
+				array(
+					'post_type' => self::CPT,
+					'title'     => 'x',
+				)
+			)
+		);
+	}
+
+	public function test_create_cpt_item_inherits_force_draft(): void {
+		update_option( 'aafm_force_draft', true );
+
+		$user_id = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$user    = new \WP_User( $user_id );
+		$user->add_cap( 'edit_aafm_books' );
+		$user->add_cap( 'publish_aafm_books' );
+		wp_set_current_user( $user_id );
+
+		$out = wp_get_ability( 'aafm/create-cpt-item' )->execute(
+			array(
+				'post_type' => self::CPT,
+				'title'     => 'Should be coerced',
+				'status'    => 'publish',
+			)
+		);
+
+		$this->assertSame( 'draft', get_post_status( $out['post']['id'] ) );
+		delete_option( 'aafm_force_draft' );
+	}
 }

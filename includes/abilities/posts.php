@@ -66,6 +66,14 @@ function aafm_register_posts_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_post',
 	);
+	$registry['aafm/create-cpt-item'] = array(
+		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_create_cpt_item',
+	);
 	return $registry;
 }
 
@@ -516,6 +524,93 @@ function aafm_args_create_post(): array {
  */
 function aafm_exec_create_post( array $input ) {
 	return aafm_insert_post( $input, 'publish', 'post' );
+}
+
+/**
+ * Args for aafm/create-cpt-item.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_create_cpt_item(): array {
+	return array(
+		'label'               => __( 'Create content item', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Create an item of an allowlisted custom content type (post_type). Publishing requires that type\'s publish capability; otherwise the item is created as a draft. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => aafm_write_cpt_content_schema( true ),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array( 'post' => array( 'type' => 'object' ) ),
+		),
+		'execute_callback'    => 'aafm_exec_create_cpt_item',
+		'permission_callback' => 'aafm_perm_create_cpt_item',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/create-cpt-item: the type must be allowlisted+eligible AND the agent
+ * must hold that type's own create cap. When the request asks to publish, the type's publish
+ * cap is also required. Never bypasses the type's WP capability model.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_create_cpt_item( array $input ): bool {
+	$type = isset( $input['post_type'] ) ? sanitize_key( (string) $input['post_type'] ) : '';
+	if ( is_wp_error( aafm_validate_post_type( $type ) ) ) {
+		return false;
+	}
+	$caps = aafm_type_caps( $type );
+	if ( ! $caps['object'] instanceof WP_Post_Type ) {
+		return false;
+	}
+	// Base authoring cap for the type (edit_posts-equivalent).
+	if ( ! current_user_can( (string) $caps['object']->cap->edit_posts ) ) {
+		return false;
+	}
+	// Publish requested → require the type's publish cap too.
+	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+		return current_user_can( (string) $caps['object']->cap->publish_posts );
+	}
+	return true;
+}
+
+/**
+ * Execute aafm/create-cpt-item.
+ *
+ * Re-validates post_type against the allowlist+floor at execute time (defense in depth: the
+ * type could have been de-allowlisted between the permission check and execute), then resolves
+ * the forced status from the publish request + the type's publish cap and delegates to the
+ * shared aafm_insert_post(), so the CPT item inherits force-draft, author-forcing, content
+ * sanitization, the status floor, and the C2 enrichment exactly as post/page creates do.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_create_cpt_item( array $input ) {
+	$type      = isset( $input['post_type'] ) ? sanitize_key( (string) $input['post_type'] ) : '';
+	$validated = aafm_validate_post_type( $type );
+	if ( is_wp_error( $validated ) ) {
+		return aafm_generic_error();
+	}
+
+	// Default to draft; only escalate to publish when the request asked for it AND the agent
+	// holds the type's publish cap. (force-draft inside aafm_insert_post may still coerce back.)
+	$status = 'draft';
+	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+		$caps = aafm_type_caps( $validated );
+		if ( $caps['object'] instanceof WP_Post_Type
+			&& current_user_can( (string) $caps['object']->cap->publish_posts ) ) {
+			$status = 'publish';
+		}
+	}
+
+	return aafm_insert_post( $input, $status, $validated );
 }
 
 /**

@@ -117,4 +117,62 @@ final class ThemesTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, wp_get_ability( 'aafm/get-template' )->execute( array( 'template_id' => 'nope//missing' ) ) );
 	}
+
+	public function test_update_template_hardens_markup(): void {
+		$this->register_themes();
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_template',
+				'post_status'  => 'publish',
+				'post_name'    => 'aafm-test',
+				'post_content' => 'old',
+			)
+		);
+		// A database template override is tied to the active theme by the wp_theme taxonomy term;
+		// without it get_block_template() will not resolve the post by its theme//slug id.
+		wp_set_object_terms( $post_id, get_stylesheet(), 'wp_theme' );
+		$id  = get_stylesheet() . '//aafm-test';
+		$res = wp_get_ability( 'aafm/update-template' )->execute(
+			array(
+				'template_id' => $id,
+				'content'     => '<!-- wp:paragraph --><p>hi<script>x</script></p><!-- /wp:paragraph -->',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$saved = get_post( $post_id )->post_content;
+		$this->assertStringContainsString( 'wp:paragraph', $saved );
+		$this->assertStringNotContainsString( '<script', $saved );
+	}
+
+	public function test_update_template_refuses_a_theme_file_template(): void {
+		$this->register_themes();
+		$this->acting_as( 'administrator' );
+
+		// A theme-FILE template has no backing wp_template post (wp_id is unset, not 0). The B-1
+		// guard must refuse it, and it must NOT insert a stray wp_template post as a side effect.
+		$before = wp_count_posts( 'wp_template' );
+		$res    = wp_get_ability( 'aafm/update-template' )->execute(
+			array(
+				'template_id' => get_stylesheet() . '//single',
+				'content'     => '<!-- wp:paragraph --><p>nope</p><!-- /wp:paragraph -->',
+			)
+		);
+		$after  = wp_count_posts( 'wp_template' );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A theme-file template must be refused.' );
+		$this->assertSame(
+			array_sum( (array) $before ),
+			array_sum( (array) $after ),
+			'Refusing a theme-file template must not create a wp_template post.'
+		);
+	}
+
+	public function test_update_template_denies_an_editor(): void {
+		$this->register_themes();
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/update-template' )->check_permissions( array( 'template_id' => get_stylesheet() . '//single' ) )
+		);
+	}
 }

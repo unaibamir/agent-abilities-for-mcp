@@ -359,3 +359,99 @@ function aafm_exec_get_template( array $input ) {
 	$out['content'] = (string) $template->content;
 	return $out;
 }
+
+/**
+ * Args for aafm/update-template.
+ *
+ * Closed schema: the template id plus the new markup (both required), with an optional type. No
+ * other field is writable, so nothing extra can be smuggled into the backing post.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_template(): array {
+	return array(
+		'label'               => __( 'Update template', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Updates a database block template by id. Its markup is sanitized, and theme-file templates cannot be edited. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'template_id' => array( 'type' => 'string' ),
+				'content'     => array( 'type' => 'string' ),
+				'type'        => array(
+					'type' => 'string',
+					'enum' => array( 'wp_template', 'wp_template_part' ),
+				),
+			),
+			'required'             => array( 'template_id', 'content' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => aafm_rich_template_output_properties(),
+		),
+		'execute_callback'    => 'aafm_exec_update_template',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/update-template.
+ *
+ * Resolves the template by id (unknown id → generic error), then refuses any template that lives
+ * only as a THEME FILE — those have no backing wp_template post, so editing them is not allowed
+ * (we never write theme files).
+ *
+ * B-1 (load-bearing): a theme-file template's wp_id is UNSET (effectively null), not 0, and
+ * 0 === null is false in PHP — so a naive `0 === $wp_id` guard would let a file template fall
+ * through to wp_update_post(['ID'=>null,...]), which inserts a stray post. The cast-then-compare
+ * below ((int)($wp_id ?? 0) <= 0) catches both the unset/null and the literal 0 case.
+ *
+ * For a real database template the markup is kses-hardened (block delimiters survive, scripts are
+ * stripped), the whole array is wp_slash()'d once for the insert layer, and the refreshed
+ * get-template shape is returned.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_template( array $input ) {
+	$id       = sanitize_text_field( (string) ( $input['template_id'] ?? '' ) );
+	$type     = aafm_template_type( $input );
+	$template = get_block_template( $id, $type );
+	if ( ! $template instanceof WP_Block_Template ) {
+		return aafm_generic_error();
+	}
+
+	$wp_id = (int) ( $template->wp_id ?? 0 );
+	if ( $wp_id <= 0 ) {
+		return aafm_generic_error();
+	}
+
+	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
+	$result  = wp_update_post(
+		wp_slash(
+			array(
+				'ID'           => $wp_id,
+				'post_content' => $content,
+			)
+		),
+		true
+	);
+	if ( is_wp_error( $result ) || 0 === (int) $result ) {
+		return aafm_generic_error();
+	}
+
+	$refreshed = get_block_template( $id, $type );
+	if ( ! $refreshed instanceof WP_Block_Template ) {
+		return aafm_generic_error();
+	}
+	$out            = aafm_redact_template( $refreshed );
+	$out['content'] = (string) $refreshed->content;
+	return $out;
+}

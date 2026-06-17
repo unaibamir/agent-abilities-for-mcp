@@ -156,4 +156,32 @@ final class BlocksTest extends TestCase {
 			'a user who clears the edit_posts floor but lacks edit_block on this id must be denied at execute.'
 		);
 	}
+
+	public function test_delete_block_trashes_recoverably(): void {
+		$this->register_blocks();
+		$id = $this->make_block( 'Trashme' );
+		$this->acting_as( 'editor' );
+		$res = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $id ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'trash', get_post( $id )->post_status, 'block goes to trash, not permanent delete.' );
+		$this->assertNotFalse( wp_untrash_post( $id ), 'trashed block is recoverable.' );
+	}
+
+	public function test_delete_block_refuses_a_non_block(): void {
+		$this->register_blocks();
+		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );
+		$this->acting_as( 'editor' );
+		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $post_id ) ) );
+	}
+
+	public function test_delete_block_refuses_when_trash_is_disabled(): void {
+		$this->register_blocks();
+		$id = $this->make_block();
+		add_filter( 'aafm_trash_is_enabled', '__return_false' );
+		$this->acting_as( 'editor' );
+		$res = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $id ) );
+		remove_filter( 'aafm_trash_is_enabled', '__return_false' );
+		$this->assertInstanceOf( \WP_Error::class, $res, 'must refuse to "trash" when trash is disabled (it would force-delete).' );
+		$this->assertNotSame( 'trash', get_post( $id )->post_status );
+	}
 }

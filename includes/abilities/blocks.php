@@ -60,7 +60,14 @@ function aafm_register_blocks_definitions( array $registry ): array {
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_block',
 	);
-	// delete-block is registered in B4 so it lands with its execute callback and tests.
+	$registry['aafm/delete-block'] = array(
+		'label'        => __( 'Delete block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'site',
+		'args_builder' => 'aafm_args_delete_block',
+	);
 	return $registry;
 }
 
@@ -83,6 +90,18 @@ function aafm_perm_block_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
 	$block = aafm_get_block_object( $id );
 	return null !== $block && current_user_can( 'edit_post', $id );
+}
+
+/**
+ * Per-object permission: the caller may delete THIS wp_block (delete_block meta cap).
+ *
+ * @param array<string,mixed> $input Input carrying block_id.
+ * @return bool
+ */
+function aafm_perm_block_delete_object( array $input ): bool {
+	$id    = absint( $input['block_id'] ?? 0 );
+	$block = aafm_get_block_object( $id );
+	return null !== $block && current_user_can( 'delete_post', $id );
 }
 
 /**
@@ -335,4 +354,67 @@ function aafm_exec_update_block( array $input ) {
 		return aafm_generic_error();
 	}
 	return aafm_rich_block( get_post( (int) $result ) );
+}
+
+/**
+ * Args for delete-block.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_block(): array {
+	return array(
+		'label'               => __( 'Delete block', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Moves a reusable block to the Trash (recoverable). Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array( 'block_id' => array( 'type' => 'integer' ) ),
+			'required'             => array( 'block_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'id'     => array( 'type' => 'integer' ),
+				'status' => array( 'type' => 'string' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_block',
+		'permission_callback' => 'aafm_perm_block_delete_object',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Execute delete-block: move the block to the Trash (recoverable), never a force-delete.
+ *
+ * Core's wp_trash_post() short-circuits to a permanent delete when the Trash is disabled
+ * (EMPTY_TRASH_DAYS falsy), so refuse there rather than silently destroy the block. No
+ * force-delete primitive (the trash-bypassing permanent delete) is added anywhere in this file.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_block( array $input ) {
+	$id    = absint( $input['block_id'] ?? 0 );
+	$block = aafm_get_block_object( $id );
+	if ( null === $block ) {
+		return aafm_generic_error();
+	}
+	if ( ! aafm_trash_is_enabled() ) {
+		return aafm_generic_error();
+	}
+	$result = wp_trash_post( $id );
+	if ( ! $result instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	return array(
+		'id'     => $id,
+		'status' => 'trash',
+	);
 }

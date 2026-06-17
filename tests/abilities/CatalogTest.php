@@ -47,6 +47,7 @@ final class CatalogTest extends TestCase {
 		'aafm/count-media',
 		'aafm/get-users',
 		'aafm/get-user',
+		'aafm/get-user-meta',
 		'aafm/list-revisions',
 		'aafm/get-revision',
 		'aafm/search-content',
@@ -88,12 +89,15 @@ final class CatalogTest extends TestCase {
 		'aafm/create-user',
 		'aafm/update-user',
 		'aafm/delete-user',
+		'aafm/update-user-meta',
+		'aafm/delete-user-meta',
 	);
 
 	/**
 	 * The writes whose action is destruction — recoverable (trash / spam) or permanent
-	 * (force-delete of media/revisions/meta, comment purge, and user removal/creation).
-	 * These MUST be annotated destructive:true. Every other write is destructive:false.
+	 * (force-delete of media/revisions/meta, comment purge, user-meta removal, and user
+	 * removal/creation). These MUST be annotated destructive:true. Every other write is
+	 * destructive:false.
 	 *
 	 * The user CRUD writes create-user and delete-user are destructive: both make a permanent,
 	 * security-sensitive change to the user table (a new account, or a removal with content
@@ -112,6 +116,7 @@ final class CatalogTest extends TestCase {
 		'aafm/delete-term-meta',
 		'aafm/create-user',
 		'aafm/delete-user',
+		'aafm/delete-user-meta',
 	);
 
 	public function set_up(): void {
@@ -142,7 +147,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 54) and register categories + abilities.
+	 * Enable the entire catalog (all 57) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -153,9 +158,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			54,
+			57,
 			$registry,
-			'The catalog must contain exactly 54 abilities — 24 reads + 30 writes.'
+			'The catalog must contain exactly 57 abilities — 25 reads + 32 writes.'
 		);
 	}
 
@@ -170,8 +175,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 24 reads — no drift.' );
-		$this->assertCount( 24, $reads, 'Exactly 24 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 25 reads — no drift.' );
+		$this->assertCount( 25, $reads, 'Exactly 25 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -185,8 +190,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 30 writes — no drift.' );
-		$this->assertCount( 30, $writes, 'Exactly 30 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 32 writes — no drift.' );
+		$this->assertCount( 32, $writes, 'Exactly 32 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -195,7 +200,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 54 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 57 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -209,9 +214,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			54,
+			57,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(24) + writes(30) must equal the full catalog (54).'
+			'reads(25) + writes(32) must equal the full catalog (57).'
 		);
 	}
 

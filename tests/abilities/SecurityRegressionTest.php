@@ -278,6 +278,23 @@ final class SecurityRegressionTest extends TestCase {
 				'aafm/delete-user',
 			)
 		);
+		// The governed user-meta abilities are sanctioned on a COMBINED basis: each trips BOTH
+		// the generic 'meta' needle AND a user-write needle (update-user-meta contains
+		// 'update-user', delete-user-meta contains 'delete-user'). They are allowed because
+		// each is capability-gated on per-object edit_user($id) (reads gated like writes, since
+		// user meta can hold private data), scalar-only through a default-deny allowlist, and
+		// floored by an auth/capability/2FA hard-block denylist (session tokens, application
+		// passwords, wp_capabilities/wp_user_level incl. multisite per-blog forms, password
+		// reset, passkey/2FA keys) that NO filter can re-admit. A generic user-meta or
+		// capability surface stays banned.
+		$sanctioned = array_merge(
+			$sanctioned,
+			array(
+				'aafm/get-user-meta',
+				'aafm/update-user-meta',
+				'aafm/delete-user-meta',
+			)
+		);
 		foreach ( array_keys( $registry ) as $name ) {
 			if ( in_array( $name, $sanctioned, true ) ) {
 				continue;

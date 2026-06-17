@@ -192,10 +192,7 @@ function aafm_args_get_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'content' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_rich_block_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_get_block',
 		'permission_callback' => 'aafm_perm_block_object',
@@ -246,10 +243,7 @@ function aafm_args_create_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'content' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_rich_block_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_create_block',
 		'permission_callback' => 'aafm_perm_blocks_floor',
@@ -318,10 +312,7 @@ function aafm_args_update_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'content' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_rich_block_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_update_block',
 		'permission_callback' => 'aafm_perm_block_object',

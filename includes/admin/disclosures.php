@@ -50,7 +50,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/search-content'       => __( 'Searches the content types you have exposed in a single query, returning the same curated fields.', 'agent-abilities-for-mcp' ),
 		'aafm/list-plugins'         => __( 'Lists installed plugins with their name, version, and active state. Read-only — it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-activity-log'     => __( "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp), most recent first. Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
-		'aafm/list-blocks'          => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and date. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'aafm/list-blocks'          => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and last-modified time. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-block'            => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
 
 		// Writes.

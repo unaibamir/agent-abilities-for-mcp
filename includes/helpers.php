@@ -1342,3 +1342,23 @@ function aafm_rich_block( $block ): array {
 	$base['date']    = $block->post_date_gmt;
 	return $base;
 }
+
+/**
+ * JSON-schema property fragment describing the rich single-block output shape.
+ * Mirrors what aafm_rich_block() actually returns — every key, with its type — so the
+ * create/get/update-block output_schema declares the full shape in one place rather than
+ * under-describing it as just id + content.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_rich_block_output_properties(): array {
+	return array(
+		'id'       => array( 'type' => 'integer' ),
+		'title'    => array( 'type' => 'string' ),
+		'slug'     => array( 'type' => 'string' ),
+		'status'   => array( 'type' => 'string' ),
+		'modified' => array( 'type' => 'string' ),
+		'content'  => array( 'type' => 'string' ),
+		'date'     => array( 'type' => 'string' ),
+	);
+}

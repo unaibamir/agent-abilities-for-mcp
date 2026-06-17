@@ -90,18 +90,18 @@ final class BlocksTest extends TestCase {
 		$contributor = self::factory()->user->create( array( 'role' => 'contributor' ) );
 		$mine        = (int) self::factory()->post->create(
 			array(
-				'post_type'    => 'wp_block',
-				'post_status'  => 'draft',
-				'post_title'   => 'Mine',
-				'post_author'  => $contributor,
+				'post_type'   => 'wp_block',
+				'post_status' => 'draft',
+				'post_title'  => 'Mine',
+				'post_author' => $contributor,
 			)
 		);
-		$theirs = (int) self::factory()->post->create(
+		$theirs      = (int) self::factory()->post->create(
 			array(
-				'post_type'    => 'wp_block',
-				'post_status'  => 'draft',
-				'post_title'   => 'Theirs',
-				'post_author'  => self::factory()->user->create( array( 'role' => 'editor' ) ),
+				'post_type'   => 'wp_block',
+				'post_status' => 'draft',
+				'post_title'  => 'Theirs',
+				'post_author' => self::factory()->user->create( array( 'role' => 'editor' ) ),
 			)
 		);
 		wp_set_current_user( $contributor );

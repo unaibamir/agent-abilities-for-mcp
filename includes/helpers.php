@@ -670,6 +670,11 @@ function aafm_rich_post_output_properties(): array {
  * rendered `content`, and no body-derived excerpt (Tasks 2-3). The single-post
  * read gate does not inspect post_password, so this is the chokepoint.
  *
+ * Note: rendered output is best-effort — an MCP request has no full post context
+ * (no setup_postdata / loop), so a third-party the_content filter that reads
+ * get_the_ID()/$GLOBALS['post'] may behave oddly; content_format=raw returns the
+ * deterministic stored markup.
+ *
  * @param WP_Post             $post    Post object.
  * @param array<string,mixed> $options {
  *     Optional. Assembly options.
@@ -853,6 +858,11 @@ function aafm_redact_revision( WP_Post $revision ): array {
  * must never carry body content. The caller (aafm_perm_get_revision) has already proven
  * the parent is editable, so exposing the revision body here is safe — password
  * protection is a front-end visitor gate, not an editor gate, and does not apply.
+ *
+ * Note: rendered output is best-effort — an MCP request has no full post context
+ * (no setup_postdata / loop), so a third-party the_content filter that reads
+ * get_the_ID()/$GLOBALS['post'] may behave oddly; content_format=raw returns the
+ * deterministic stored markup.
  *
  * @param WP_Post             $revision The validated revision (belongs to its parent).
  * @param array<string,mixed> $input    Validated input: content_format, with_diff.

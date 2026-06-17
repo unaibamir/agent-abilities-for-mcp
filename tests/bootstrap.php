@@ -26,4 +26,5 @@ require $_tests_dir . '/includes/bootstrap.php';
 // before the trait that uses them.
 require_once __DIR__ . '/stubs/AcfStubStore.php';
 require_once __DIR__ . '/stubs/WcStubStore.php';
+require_once __DIR__ . '/stubs/WcAttributeStubStore.php';
 require_once __DIR__ . '/stubs/IntegrationStubs.php';

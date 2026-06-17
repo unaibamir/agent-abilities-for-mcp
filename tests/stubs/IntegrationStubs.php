@@ -144,6 +144,36 @@ trait IntegrationStubs {
 	}
 
 	/**
+	 * Seed the WcAttributeStubStore with the two default global attributes used across WC1c tests.
+	 *
+	 * Call this after stub_woocommerce() (which resets the attribute store via reset_integration_stubs)
+	 * to ensure the attributes are seeded for each test that needs them.
+	 *
+	 * Seeded: id 1 = Color (pa_color, select), id 2 = Size (pa_size, select).
+	 *
+	 * @return void
+	 */
+	protected function seed_wc_attributes(): void {
+		$color                    = new \stdClass();
+		$color->attribute_id      = 1;
+		$color->attribute_label   = 'Color';
+		$color->attribute_name    = 'color';
+		$color->attribute_type    = 'select';
+		$color->attribute_orderby = 'menu_order';
+		$color->attribute_public  = false;
+		WcAttributeStubStore::seed( 1, $color );
+
+		$size                    = new \stdClass();
+		$size->attribute_id      = 2;
+		$size->attribute_label   = 'Size';
+		$size->attribute_name    = 'size';
+		$size->attribute_type    = 'select';
+		$size->attribute_orderby = 'menu_order';
+		$size->attribute_public  = false;
+		WcAttributeStubStore::seed( 2, $size );
+	}
+
+	/**
 	 * Define the minimal WooCommerce host surface so detection reports WooCommerce active and the
 	 * product abilities can list/read/create/update/delete through the WC CRUD layer.
 	 *
@@ -164,6 +194,7 @@ trait IntegrationStubs {
 	 */
 	protected function stub_woocommerce( array $products = array() ): void {
 		WcStubStore::reset();
+		WcAttributeStubStore::reset();
 
 		// WooCommerce grants administrators (and shop managers) the manage_woocommerce capability on
 		// activation; the stock WP administrator role does not carry it. Mirror that here so an admin
@@ -217,6 +248,34 @@ trait IntegrationStubs {
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_products( $args = array() ) { return \AAFM\Tests\WcStubStore::query( $args ); }' );
+		}
+
+		// Global product attribute (taxonomy) stubs (W4-WC1c). Each mirrors the real WC function's
+		// signature and delegates to WcAttributeStubStore, which holds a stdClass row per attribute
+		// using the real WC field names (attribute_id / attribute_name / attribute_label / etc.).
+		if ( ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_attribute_taxonomies() { return \AAFM\Tests\WcAttributeStubStore::all(); }' );
+		}
+		if ( ! function_exists( 'wc_create_attribute' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_create_attribute( $args ) { $id = \AAFM\Tests\WcAttributeStubStore::create( (array) $args ); return ( $id > 0 ) ? $id : new \WP_Error( "wc_attribute_create_failed", "Create failed." ); }' );
+		}
+		if ( ! function_exists( 'wc_update_attribute' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_update_attribute( $id, $args ) { $ok = \AAFM\Tests\WcAttributeStubStore::update( (int) $id, (array) $args ); return $ok ? (int) $id : new \WP_Error( "wc_attribute_update_failed", "Update failed." ); }' );
+		}
+		if ( ! function_exists( 'wc_delete_attribute' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_delete_attribute( $id ) { return \AAFM\Tests\WcAttributeStubStore::delete( (int) $id ); }' );
+		}
+		if ( ! function_exists( 'wc_attribute_taxonomy_name' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_attribute_taxonomy_name( $name ) { return "pa_" . $name; }' );
+		}
+		if ( ! function_exists( 'wc_sanitize_taxonomy_name' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_sanitize_taxonomy_name( $name ) { return sanitize_title( $name ); }' );
 		}
 	}
 
@@ -340,5 +399,6 @@ PHP;
 		$this->aafm_forced_integrations = array();
 		AcfStubStore::reset();
 		WcStubStore::reset();
+		WcAttributeStubStore::reset();
 	}
 }

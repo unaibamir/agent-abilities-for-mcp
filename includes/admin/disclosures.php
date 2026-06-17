@@ -68,6 +68,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/add-post-terms'       => __( 'Adds terms to a post without removing its existing terms. Requires edit access to the post and the taxonomy\'s assign capability; only existing terms in that taxonomy can be added.', 'agent-abilities-for-mcp' ),
 		'aafm/update-term-meta'     => __( 'Writes one allowlisted scalar meta value to a term you can edit. Only allowlisted keys; protected keys are blocked.', 'agent-abilities-for-mcp' ),
 		'aafm/restore-revision'     => __( 'Restores a post to one of its revisions. The current state is saved as a fresh revision first, so the change is reversible.', 'agent-abilities-for-mcp' ),
+		'aafm/update-user'          => __( 'Edits a user\'s display name, name, or email. Changing a role needs the promote-users capability and never demotes the last administrator. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
 
 		// Destructive (still recoverable).
 		'aafm/trash-post'           => __( 'Moves a post the agent can edit to the Trash, where you can restore it. Never a permanent delete.', 'agent-abilities-for-mcp' ),
@@ -79,5 +80,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/delete-media'         => __( 'Permanently deletes an attachment: the file and its library entry are removed and cannot be recovered. Requires delete access to that attachment.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-term-meta'     => __( 'Removes an allowlisted meta key and all its values from a term you can edit. This cannot be undone. Only allowlisted keys.', 'agent-abilities-for-mcp' ),
 		'aafm/delete-comment'       => __( 'Permanently deletes a comment. This bypasses the Trash and cannot be undone — use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment.', 'agent-abilities-for-mcp' ),
+		'aafm/create-user'          => __( 'Creates a new user with the site default role only (never an admin or a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/delete-user'          => __( 'Permanently deletes a user and reassigns their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
 	);
 }

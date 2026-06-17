@@ -210,10 +210,12 @@ function aafm_exec_list_themes(): array {
  * Resolve the template type from input, constrained to the two valid block-template types.
  *
  * The schema enum already rejects anything else, but coercing here keeps the core API calls
- * fed a known value (wp_template by default) rather than trusting raw input.
+ * fed a known value (wp_template by default) rather than trusting raw input. The narrowed
+ * phpstan-return lets the core get_block_template(s) calls see the exact literal union they expect.
  *
  * @param array<string,mixed> $input Validated input.
  * @return string Either 'wp_template' or 'wp_template_part'.
+ * @phpstan-return 'wp_template'|'wp_template_part'
  */
 function aafm_template_type( array $input ): string {
 	$type = isset( $input['type'] ) ? sanitize_key( (string) $input['type'] ) : 'wp_template';

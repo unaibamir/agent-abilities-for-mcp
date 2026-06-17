@@ -199,4 +199,38 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-site-settings' ) );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-site-settings' ) );
 	}
+
+	/**
+	 * A non-scalar value is refused outright before any write — the agent can never store a
+	 * structure, and the execute degrades on its OWN generic error, not the API safety net.
+	 */
+	public function test_update_site_settings_rejects_a_non_scalar_value(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		$before = get_option( 'blogname' );
+		$res    = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'blogname' => array( 'x', 'y' ) ),
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'a non-scalar value must be rejected.' );
+		$this->assertSame( 'aafm_error', $res->get_error_code(), 'must degrade on our generic error, not the API exception net.' );
+		$this->assertSame( $before, get_option( 'blogname' ), 'blogname must be untouched after a rejected non-scalar.' );
+	}
+
+	/**
+	 * A malformed timezone_string is normalized by WordPress's own sanitize_option (which
+	 * update_option fires) — it must not be stored as the bogus value. Documents that
+	 * containment leans on core sanitize_option for the keys core validates.
+	 */
+	public function test_update_site_settings_normalizes_a_malformed_timezone(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+		wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'timezone_string' => 'Not/AZone' ),
+			)
+		);
+		$this->assertNotSame( 'Not/AZone', get_option( 'timezone_string' ), 'a bogus timezone must not persist verbatim.' );
+	}
 }

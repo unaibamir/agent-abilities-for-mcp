@@ -177,6 +177,14 @@ function aafm_exec_update_site_settings( array $input ) {
 		}
 	}
 
+	// Scalar-only: a non-scalar value (array/object) is refused outright, before any write,
+	// so the agent can never store a structure and the execute never hits an Array-to-string.
+	foreach ( $settings as $value ) {
+		if ( ! is_scalar( $value ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	$updated = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;

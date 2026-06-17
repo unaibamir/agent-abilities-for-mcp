@@ -59,6 +59,22 @@ function aafm_register_media_definitions( array $registry ): array {
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_upload_media',
 	);
+	$registry['aafm/update-media']       = array(
+		'label'        => __( 'Update media', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Update an attachment's title, alt text, caption, or description.", 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'media',
+		'args_builder' => 'aafm_args_update_media',
+	);
+	$registry['aafm/delete-media']       = array(
+		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete an attachment — the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'media',
+		'args_builder' => 'aafm_args_delete_media',
+	);
 	return $registry;
 }
 
@@ -546,5 +562,213 @@ function aafm_exec_upload_media( array $input ) {
 	return array(
 		'attachment_id' => (int) $attachment_id,
 		'media'         => aafm_redact_media( $attachment ),
+	);
+}
+
+/**
+ * Args for aafm/update-media.
+ *
+ * Closed schema. title/alt/caption/description are all optional; the executor
+ * requires at least one. Per-object edit_post is the execute-time gate.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_media(): array {
+	return array(
+		'label'               => __( 'Update media', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Update an attachment's title, alt text, caption, or description.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'attachment_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'title'         => array( 'type' => 'string' ),
+				'alt'           => array( 'type' => 'string' ),
+				'caption'       => array( 'type' => 'string' ),
+				'description'   => array( 'type' => 'string' ),
+			),
+			'required'             => array( 'attachment_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'media' => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_update_media',
+		'permission_callback' => 'aafm_perm_update_media',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/update-media: DIRECT per-object edit_post on the attachment.
+ *
+ * Attachments are a _builtin post type, so they are NOT eligible for the CPT
+ * chokepoint (aafm_can_edit_post_object / aafm_validate_post_type require
+ * public && !_builtin and fail-closed for ALL attachments). map_meta_cap resolves
+ * edit_post correctly for attachments, so we check it directly — after confirming
+ * the id is a real attachment. The denial is audited by the registration wrapper.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_update_media( array $input ): bool {
+	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+		return false;
+	}
+	return current_user_can( 'edit_post', $att_id );
+}
+
+/**
+ * Execute aafm/update-media — title/alt/caption/description, at least one required.
+ *
+ * Re-confirms the target is a real attachment the caller can edit (defense in depth),
+ * sanitizes each field, and returns the rich media shape.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_media( array $input ) {
+	$att_id     = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	$attachment = $att_id ? get_post( $att_id ) : null;
+	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type
+		|| ! current_user_can( 'edit_post', $att_id ) ) {
+		return aafm_generic_error();
+	}
+
+	$has_title       = array_key_exists( 'title', $input );
+	$has_alt         = array_key_exists( 'alt', $input );
+	$has_caption     = array_key_exists( 'caption', $input );
+	$has_description = array_key_exists( 'description', $input );
+
+	if ( ! $has_title && ! $has_alt && ! $has_caption && ! $has_description ) {
+		return new WP_Error( 'aafm_nothing_to_update', __( 'Provide at least one field to update.', 'agent-abilities-for-mcp' ) );
+	}
+
+	$postarr = array( 'ID' => $att_id );
+	if ( $has_title ) {
+		$postarr['post_title'] = sanitize_text_field( (string) $input['title'] );
+	}
+	if ( $has_caption ) {
+		$postarr['post_excerpt'] = sanitize_textarea_field( (string) $input['caption'] );
+	}
+	if ( $has_description ) {
+		$postarr['post_content'] = wp_kses_post( (string) $input['description'] );
+	}
+
+	if ( count( $postarr ) > 1 ) {
+		$result = wp_update_post( $postarr, true );
+		if ( is_wp_error( $result ) ) {
+			return aafm_generic_error();
+		}
+	}
+
+	if ( $has_alt ) {
+		update_post_meta( $att_id, '_wp_attachment_image_alt', sanitize_text_field( (string) $input['alt'] ) );
+	}
+
+	$fresh = get_post( $att_id );
+	if ( ! $fresh instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	return array( 'media' => aafm_media_item_payload( $fresh ) );
+}
+
+/**
+ * Args for aafm/delete-media.
+ *
+ * Destructive: wp_delete_attachment( $id, true ) permanently removes the file and
+ * the DB record; not recoverable. Closed schema; per-object delete_post is the gate.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_media(): array {
+	return array(
+		'label'               => __( 'Delete media', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently delete an attachment — the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'attachment_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'attachment_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted'       => array( 'type' => 'boolean' ),
+				'attachment_id' => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_media',
+		'permission_callback' => 'aafm_perm_delete_media',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-media: DIRECT per-object delete_post on the attachment.
+ *
+ * Same _builtin rationale as update-media: the CPT chokepoint fails-closed for all
+ * attachments, so we check the per-object delete cap directly after confirming the
+ * id is a real attachment. The denial is audited by the registration wrapper.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_delete_media( array $input ): bool {
+	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) ) {
+		return false;
+	}
+	return current_user_can( 'delete_post', $att_id );
+}
+
+/**
+ * Execute aafm/delete-media — permanent delete via wp_delete_attachment( $id, true ).
+ *
+ * Re-confirms the target is a real attachment the caller can delete (defense in
+ * depth). wp_delete_attachment returns WP_Post on success, or false|null on failure;
+ * anything other than a WP_Post is treated as failure.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_media( array $input ) {
+	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! current_user_can( 'delete_post', $att_id ) ) {
+		return aafm_generic_error();
+	}
+
+	$result = wp_delete_attachment( $att_id, true );
+	if ( ! $result instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	return array(
+		'deleted'       => true,
+		'attachment_id' => $att_id,
 	);
 }

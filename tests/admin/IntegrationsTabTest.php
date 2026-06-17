@@ -60,7 +60,15 @@ final class IntegrationsTabTest extends TestCase {
 		// reference dependency) but does not load it, so the ACF class is absent and the
 		// integration is not active. The file-present probe yields installed_inactive,
 		// which is exactly the middle state the tab must surface.
+		//
+		// The AcfTest fixture defines a get_field stub process-wide (a defined function cannot be
+		// undefined), so once that suite has run, real ACF detection reports active and the status
+		// helper would say 'active'. Pin the aafm_acf_active seam off — the same seam production
+		// detection passes through — so the status falls through to the file-present probe, keeping
+		// this status deterministic regardless of test order.
+		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertSame( 'installed_inactive', aafm_integration_status( 'acf' ) );
+		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
 
 	public function test_status_helper_reports_active_when_forced_on(): void {

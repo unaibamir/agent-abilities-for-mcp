@@ -22,7 +22,13 @@ final class IntegrationDetectionTest extends TestCase {
 	public function test_host_absent_means_inactive_by_default(): void {
 		// None of the host plugins is installed on the test site, so all three are inactive.
 		$this->assertFalse( aafm_integration_active( 'seo' ) );
+		// ACF detection keys on function_exists('get_field'); the AcfTest fixture defines a get_field
+		// stub process-wide (and a defined function cannot be undefined), so once that suite has run,
+		// real ACF detection legitimately reports active here. Pin the aafm_acf_active seam off — the
+		// same seam production detection passes through — to assert the host-absent default.
+		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'acf' ) );
+		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
 	}
 
@@ -30,7 +36,11 @@ final class IntegrationDetectionTest extends TestCase {
 		// The filter is how the suite enables an integration WITHOUT installing the host plugin.
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		$this->assertTrue( aafm_integration_active( 'woocommerce' ) );
+		// ACF must NOT be active off the back of the woocommerce filter (the per-slug filter is not
+		// global). Pin the ACF seam off so the AcfTest get_field stub does not mask the per-slug point.
+		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'acf' ), 'the filter is per-slug, not global.' );
+		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 	}
 

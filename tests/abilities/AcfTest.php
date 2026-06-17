@@ -118,8 +118,9 @@ final class AcfTest extends TestCase {
 		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
 
-	// --- A2: post fields ---------------------------------------------------------------------
-
+	/**
+	 * A2: post fields.
+	 */
 	public function test_get_post_fields_returns_hydrated_values_per_object_gated(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
@@ -163,7 +164,7 @@ final class AcfTest extends TestCase {
 		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
-				'fields'  => array( 'field_1' => "<script>alert(1)</script>clean" ),
+				'fields'  => array( 'field_1' => '<script>alert(1)</script>clean' ),
 			)
 		);
 		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
@@ -253,8 +254,9 @@ final class AcfTest extends TestCase {
 		$this->assertContains( 'aafm/acf-update-post-fields', $abilities );
 	}
 
-	// --- A3: term fields ---------------------------------------------------------------------
-
+	/**
+	 * A3: term fields.
+	 */
 	public function test_get_term_fields_returns_hydrated_values_per_object_gated(): void {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
@@ -359,9 +361,9 @@ final class AcfTest extends TestCase {
 		$this->assertContains( 'aafm/acf-update-term-fields', $abilities );
 	}
 
-	// --- A4: user fields (PII under the disclaimer) ------------------------------------------
-
 	/**
+	 * A4: user fields (PII under the disclaimer).
+	 *
 	 * Re-seed the ACF stub with a user_email-type field carrying a real address, then re-register.
 	 *
 	 * @param string $email The seeded email value.

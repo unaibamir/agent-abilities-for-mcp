@@ -22,4 +22,6 @@ require $_tests_dir . '/includes/bootstrap.php';
 
 // Shared host-API stub helpers for the Wave 4 integration tests. Loaded after the WP
 // test bootstrap so add_filter() and the plugin functions the stubs reference exist.
+// AcfStubStore is the ACF stubs' backing store and must load before the trait that uses it.
+require_once __DIR__ . '/stubs/AcfStubStore.php';
 require_once __DIR__ . '/stubs/IntegrationStubs.php';

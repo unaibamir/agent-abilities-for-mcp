@@ -51,7 +51,7 @@ function aafm_register_acf_definitions( array $registry ): array {
 	);
 	$registry['aafm/acf-update-post-fields'] = array(
 		'label'        => __( 'Update post ACF fields', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Writes ACF field values on a post by field key, each value sanitized for its field type. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Writes ACF field values on a post by field key, each value sanitized for its field type. Requires edit access to that post.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'acf',
@@ -67,7 +67,7 @@ function aafm_register_acf_definitions( array $registry ): array {
 	);
 	$registry['aafm/acf-update-term-fields'] = array(
 		'label'        => __( 'Update term ACF fields', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Writes ACF field values on a term by field key, each value sanitized for its field type. Requires edit access to that term.", 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Writes ACF field values on a term by field key, each value sanitized for its field type. Requires edit access to that term.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'acf',
@@ -83,7 +83,7 @@ function aafm_register_acf_definitions( array $registry ): array {
 	);
 	$registry['aafm/acf-update-user-fields'] = array(
 		'label'        => __( 'Update user ACF fields', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'acf',

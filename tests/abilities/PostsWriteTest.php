@@ -426,4 +426,50 @@ final class PostsWriteTest extends TestCase {
 		$this->assertSame( $att, get_post_thumbnail_id( $post ) );
 		$this->assertSame( 'Applied', get_post_meta( $post, 'subtitle', true ) );
 	}
+
+	public function test_create_applies_slug_terms_featured_and_meta(): void {
+		$this->acting_as( 'editor' );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$att  = self::factory()->attachment->create_object(
+			'd.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'          => 'Enriched',
+				'content'        => 'Body',
+				'slug'           => 'My Custom Slug',
+				'terms'          => array( 'category' => array( $term ) ),
+				'featured_media' => $att,
+				'meta'           => array( 'subtitle' => 'Sub' ),
+			)
+		);
+
+		$id = $out['post']['id'];
+		$this->assertSame( 'my-custom-slug', get_post_field( 'post_name', $id ) );
+		$this->assertContains( $term, wp_get_post_terms( $id, 'category', array( 'fields' => 'ids' ) ) );
+		$this->assertSame( $att, get_post_thumbnail_id( $id ) );
+		$this->assertSame( 'Sub', get_post_meta( $id, 'subtitle', true ) );
+	}
+
+	public function test_create_rejects_bad_enrichment_and_writes_no_post(): void {
+		$this->acting_as( 'editor' );
+		$before = (int) wp_count_posts( 'post' )->publish;
+
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title' => 'Should not persist',
+				'terms' => array( 'category' => array( 99999999 ) ), // nonexistent term
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $before, (int) wp_count_posts( 'post' )->publish );
+	}
 }

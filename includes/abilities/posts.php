@@ -410,6 +410,12 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
 	}
 
+	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
+	$enrichment = aafm_validate_write_enrichment( $input );
+	if ( is_wp_error( $enrichment ) ) {
+		return $enrichment;
+	}
+
 	$postarr = array(
 		'post_type'    => $type,
 		'post_status'  => $status,
@@ -417,6 +423,11 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 		'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
 		'post_excerpt' => isset( $input['excerpt'] ) ? sanitize_text_field( (string) $input['excerpt'] ) : '',
 	);
+
+	// Optional slug → sanitize_title → post_name, folded into the same atomic row write.
+	if ( isset( $input['slug'] ) && '' !== sanitize_title( (string) $input['slug'] ) ) {
+		$postarr['post_name'] = sanitize_title( (string) $input['slug'] );
+	}
 
 	$id = wp_insert_post( wp_slash( $postarr ), true );
 	if ( is_wp_error( $id ) ) {
@@ -426,6 +437,10 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 	if ( ! $created instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
+
+	// Apply the pre-validated enrichment now that the id exists.
+	aafm_apply_write_enrichment( (int) $id, $enrichment );
+
 	return array( 'post' => aafm_redact_post( $created ) );
 }
 

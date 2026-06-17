@@ -596,4 +596,105 @@ final class AcfTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( '{}', (string) wp_json_encode( $res['fields'] ), 'An empty write must refresh to {}.' );
 	}
+
+	/**
+	 * Re-seed the ACF stub with one typed field, then re-register.
+	 *
+	 * @param string              $key  Field key.
+	 * @param string              $type ACF field type (e.g. 'url', 'link', 'wysiwyg').
+	 * @param array<string,mixed> $vals Seed values (field key => value), defaults to empty.
+	 * @return void
+	 */
+	private function stub_acf_typed_field( string $key, string $type, array $vals = array() ): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_typed',
+						'title'  => 'Typed',
+						'fields' => array(
+							array(
+								'key'   => $key,
+								'label' => ucfirst( $type ),
+								'type'  => $type,
+							),
+						),
+					),
+				),
+				'values' => $vals,
+			)
+		);
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+	}
+
+	/**
+	 * MEDIUM: a link-typed field carries a structured array {title,url,target}. The recursive
+	 * sanitizer must NOT esc_url_raw the plain-text members — the title must survive intact and the
+	 * url must be preserved as a URL.
+	 */
+	public function test_update_post_fields_link_type_preserves_title_and_url(): void {
+		$this->stub_acf_typed_field( 'field_link', 'link' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_link' => array(
+						'title'  => 'Read more',
+						'url'    => 'https://x.test',
+						'target' => '_blank',
+					),
+				),
+			)
+		);
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_link', $post_id );
+		$this->assertIsArray( $stored );
+		$this->assertSame( 'Read more', $stored['title'], 'A link title is plain text and must survive intact.' );
+		$this->assertSame( 'https://x.test', $stored['url'], 'A link url must be preserved as a URL.' );
+		$this->assertSame( '_blank', $stored['target'], 'A link target is plain text and must survive intact.' );
+	}
+
+	/**
+	 * SecOps Low: a url-typed SCALAR field with a javascript: scheme has the scheme stripped by
+	 * esc_url_raw before it reaches update_field.
+	 */
+	public function test_update_post_fields_url_scalar_strips_javascript_scheme(): void {
+		$this->stub_acf_typed_field( 'field_url', 'url' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_url' => 'javascript:alert(1)' ),
+			)
+		);
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_url', $post_id );
+		$this->assertStringNotContainsString( 'javascript:', $stored, 'esc_url_raw must strip a javascript: scheme.' );
+	}
+
+	/**
+	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post — a <script> is dropped while a
+	 * benign <strong> is kept (the policy stated in the build log).
+	 */
+	public function test_update_post_fields_wysiwyg_strips_script_keeps_strong(): void {
+		$this->stub_acf_typed_field( 'field_wys', 'wysiwyg' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_wys' => '<script>alert(1)</script><strong>bold</strong>' ),
+			)
+		);
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_wys', $post_id );
+		$this->assertStringNotContainsString( '<script>', $stored, 'wp_kses_post must drop a <script>.' );
+		$this->assertStringContainsString( '<strong>', $stored, 'wp_kses_post must keep a benign <strong>.' );
+	}
 }

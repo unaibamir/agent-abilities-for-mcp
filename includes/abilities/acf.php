@@ -238,6 +238,17 @@ function aafm_acf_wysiwyg_field_types(): array {
 }
 
 /**
+ * The keys inside a structured URL-typed field value (link/image/file array return formats) whose
+ * leaf is itself a URL and so must keep esc_url_raw. Every OTHER key in that array (title, target,
+ * alt, caption, filename, …) is plain text and is sanitized as text, NOT run through esc_url_raw.
+ *
+ * @return string[]
+ */
+function aafm_acf_url_leaf_keys(): array {
+	return array( 'url', 'src' );
+}
+
+/**
  * Recursively sanitize one ACF field value for writing.
  *
  * Scalars are sanitized by the field's resolved type: a URL-type value through esc_url_raw, a
@@ -246,9 +257,10 @@ function aafm_acf_wysiwyg_field_types(): array {
  * cannot survive at any depth. Values that are neither scalar nor array (objects/resources) are
  * dropped. Caller input is NEVER passed to update_field() unsanitized.
  *
- * The field type is resolved once for the top-level field key; nested leaves reuse that type, which
- * is the conservative choice (a repeater's sub-fields are sanitized as text/url unless the parent is
- * a url type). This favours stripping over trusting.
+ * The field type is resolved once for the top-level field key. A URL-typed field whose value is an
+ * ARRAY (link/image/file return formats: title/url/target, alt/caption/filename, …) is NOT blanket
+ * esc_url_raw'd: that would mangle the plain-text members. Instead only the url/src-keyed leaves get
+ * esc_url_raw and every other leaf is sanitized as text. A scalar URL-typed value keeps esc_url_raw.
  *
  * @param mixed  $value     Raw caller value.
  * @param string $field_key The top-level field key (to resolve its type).
@@ -260,22 +272,26 @@ function aafm_acf_sanitize_value( $value, string $field_key ) {
 		$def  = acf_get_field( $field_key );
 		$type = is_array( $def ) ? (string) ( $def['type'] ?? '' ) : '';
 	}
-	return aafm_acf_sanitize_leaf( $value, $type );
+	$is_url = in_array( $type, aafm_acf_url_field_types(), true );
+	return aafm_acf_sanitize_leaf( $value, $type, $is_url );
 }
 
 /**
- * The depth-recursing core of the ACF write sanitizer (the resolved field type is carried down).
+ * The depth-recursing core of the ACF write sanitizer.
  *
- * @param mixed  $value Raw value at this depth.
- * @param string $type  Resolved ACF field type for the top-level field.
+ * @param mixed  $value     Raw value at this depth.
+ * @param string $type      Resolved ACF field type for the top-level field.
+ * @param bool   $url_typed Whether the top-level field is a URL-style type, so url/src leaves of a
+ *                          structured value (link/image/file array) get esc_url_raw, the rest text.
+ * @param string $key       The array key this leaf sits under (for url/src-aware url sanitizing).
  * @return mixed Sanitized value.
  */
-function aafm_acf_sanitize_leaf( $value, string $type ) {
+function aafm_acf_sanitize_leaf( $value, string $type, bool $url_typed = false, string $key = '' ) {
 	if ( is_array( $value ) ) {
 		$clean = array();
-		foreach ( $value as $key => $sub ) {
-			$safe_key           = is_string( $key ) ? sanitize_text_field( $key ) : $key;
-			$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $type );
+		foreach ( $value as $sub_key => $sub ) {
+			$safe_key           = is_string( $sub_key ) ? sanitize_text_field( $sub_key ) : $sub_key;
+			$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $type, $url_typed, (string) $sub_key );
 		}
 		return $clean;
 	}
@@ -286,8 +302,14 @@ function aafm_acf_sanitize_leaf( $value, string $type ) {
 		return ''; // Drop objects / resources / null to an empty string.
 	}
 	$as_string = (string) $value;
-	if ( in_array( $type, aafm_acf_url_field_types(), true ) ) {
-		return esc_url_raw( $as_string );
+	if ( $url_typed ) {
+		// A URL-typed field. A scalar value (no enclosing key) is the URL itself → esc_url_raw.
+		// Inside a structured array only the url/src-keyed leaf is a URL; the rest (title, target,
+		// alt, caption, filename, …) is plain text and must NOT be esc_url_raw'd.
+		if ( '' === $key || in_array( $key, aafm_acf_url_leaf_keys(), true ) ) {
+			return esc_url_raw( $as_string );
+		}
+		return sanitize_text_field( $as_string );
 	}
 	if ( in_array( $type, aafm_acf_wysiwyg_field_types(), true ) ) {
 		return wp_kses_post( $as_string );

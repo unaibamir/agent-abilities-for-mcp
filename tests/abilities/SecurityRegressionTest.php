@@ -485,10 +485,12 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * PII: the user and comment redactors strip email/login/IP from read output.
+	 * PII: user reads expose email (the locked reversal) but never login or the
+	 * password hash; comment reads still strip email and IP.
 	 */
-	public function test_redactors_strip_pii_from_user_and_comment_reads(): void {
-		// User redactor exposes no email/login/pass.
+	public function test_user_read_exposes_email_but_strips_login_and_comment_reads_strip_pii(): void {
+		// LOCKED reversal (47- line 144): user email IS exposed in the redacted shape now,
+		// gated upstream by list_users + audited. Login and password hash stay stripped.
 		$user_id   = self::factory()->user->create(
 			array(
 				'role'         => 'author',
@@ -497,9 +499,11 @@ final class SecurityRegressionTest extends TestCase {
 				'display_name' => 'Public Author',
 			)
 		);
-		$user_json = (string) wp_json_encode( aafm_redact_user( get_userdata( $user_id ) ) );
-		$this->assertStringNotContainsString( 'leak@example.com', $user_json, 'User email leaked.' );
-		$this->assertStringNotContainsString( 'leaklogin', $user_json, 'User login leaked.' );
+		$user      = get_userdata( $user_id );
+		$user_json = (string) wp_json_encode( aafm_redact_user( $user ) );
+		$this->assertStringContainsString( 'leak@example.com', $user_json, 'User email must be exposed (locked reversal).' );
+		$this->assertStringNotContainsString( 'leaklogin', $user_json, 'User login must stay stripped.' );
+		$this->assertStringNotContainsString( $user->user_pass, $user_json, 'Password hash must stay stripped.' );
 
 		// Comment redactor exposes no email/IP/agent.
 		$comment_id   = self::factory()->comment->create(

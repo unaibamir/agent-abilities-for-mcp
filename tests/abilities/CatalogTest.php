@@ -65,6 +65,7 @@ final class CatalogTest extends TestCase {
 		'aafm/update-post-meta',
 		'aafm/delete-post-meta',
 		'aafm/restore-revision',
+		'aafm/delete-revision',
 		'aafm/create-cpt-item',
 		'aafm/update-cpt-item',
 	);
@@ -80,6 +81,7 @@ final class CatalogTest extends TestCase {
 		'aafm/trash-page',
 		'aafm/moderate-comment',
 		'aafm/delete-post-meta',
+		'aafm/delete-revision',
 	);
 
 	public function set_up(): void {
@@ -121,9 +123,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			33,
+			34,
 			$registry,
-			'The catalog must contain exactly 33 abilities — 16 reads + 17 writes.'
+			'The catalog must contain exactly 34 abilities — 16 reads + 18 writes.'
 		);
 	}
 
@@ -153,8 +155,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 17 writes — no drift.' );
-		$this->assertCount( 17, $writes, 'Exactly 17 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 18 writes — no drift.' );
+		$this->assertCount( 18, $writes, 'Exactly 18 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -163,7 +165,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 33 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 34 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -177,9 +179,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			33,
+			34,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(16) + writes(17) must equal the full catalog (33).'
+			'reads(16) + writes(18) must equal the full catalog (34).'
 		);
 	}
 

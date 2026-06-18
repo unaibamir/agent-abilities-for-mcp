@@ -534,18 +534,41 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute( array( 'note_id' => 20 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 20,
+			)
+		);
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 20, $res['id'] );
 		$this->assertTrue( $res['deleted'] );
 	}
 
+	public function test_delete_order_note_unknown_order_returns_error(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
+			array(
+				'order_id' => 99998,
+				'note_id'  => 20,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'Unknown order_id must return WP_Error.' );
+	}
+
 	public function test_delete_order_note_unknown_note_returns_error(): void {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute( array( 'note_id' => 99999 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 99999,
+			)
+		);
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -570,7 +593,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		);
 		WcOrderStubStore::$delete_note_should_fail = true;
 
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute( array( 'note_id' => 21 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 21,
+			)
+		);
 
 		WcOrderStubStore::$delete_note_should_fail = false;
 
@@ -581,7 +609,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions( array( 'note_id' => 20 ) )
+			wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions(
+				array(
+					'order_id' => 5001,
+					'note_id'  => 20,
+				)
+			)
 		);
 	}
 
@@ -601,7 +634,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 				),
 			)
 		);
-		wp_get_ability( 'aafm/wc-delete-order-note' )->execute( array( 'note_id' => 30 ) );
+		wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 30,
+			)
+		);
 
 		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
@@ -611,7 +649,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	public function test_delete_order_note_denied_is_audited(): void {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions( array( 'note_id' => 20 ) );
+		wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 20,
+			)
+		);
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
@@ -629,6 +672,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
 			array(
+				'order_id'   => 5001,
 				'note_id'    => 1,
 				'evil_field' => 'x',
 			)

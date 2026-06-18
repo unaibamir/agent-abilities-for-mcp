@@ -1144,4 +1144,180 @@ final class WooOrderNotesRefundsTest extends TestCase {
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
+
+	// =========================================================================
+	// Additional coverage — empty lists, round-trips, id-fidelity
+	// =========================================================================
+
+	// -------------------------------------------------------------------------
+	// Empty-list invariant
+	// -------------------------------------------------------------------------
+
+	/**
+	 * An order with no notes returns an empty array, not an empty object.
+	 */
+	public function test_list_order_notes_empty_order_returns_empty_array(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_notes( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayHasKey( 'notes', $res );
+		$this->assertIsArray( $res['notes'] );
+		$this->assertCount( 0, $res['notes'] );
+	}
+
+	/**
+	 * An order with no refunds returns an empty array, not an empty object.
+	 */
+	public function test_list_order_refunds_empty_order_returns_empty_array(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayHasKey( 'refunds', $res );
+		$this->assertIsArray( $res['refunds'] );
+		$this->assertCount( 0, $res['refunds'] );
+	}
+
+	// -------------------------------------------------------------------------
+	// Round-trip: create then retrieve
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A note created via wc-create-order-note is retrievable by id with the same content.
+	 */
+	public function test_create_order_note_round_trip(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_notes( 5001, array() );
+
+		$created = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note'     => 'Round-trip note text.',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+		$this->assertArrayHasKey( 'id', $created );
+
+		$fetched = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => $created['id'],
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $fetched );
+		$this->assertSame( $created['id'], $fetched['id'] );
+		$this->assertSame( 'Round-trip note text.', $fetched['note'] );
+	}
+
+	/**
+	 * A refund created via wc-create-order-refund shows up in wc-list-order-refunds.
+	 */
+	public function test_create_order_refund_round_trip(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$created = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id' => 5001,
+				'amount'   => '7.50',
+				'reason'   => 'Round-trip refund.',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+		$this->assertGreaterThan( 0, $created['id'] );
+
+		$list = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $list );
+		$ids = array_column( $list['refunds'], 'id' );
+		$this->assertContains( $created['id'], $ids );
+	}
+
+	// -------------------------------------------------------------------------
+	// Id-fidelity: second of two items is correctly distinguishable
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Fetching the second of two notes by id returns that note's text, not the first's.
+	 */
+	public function test_get_order_note_id_fidelity(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed_notes(
+			5001,
+			array(
+				array(
+					'id'            => 701,
+					'note'          => 'First note alpha.',
+					'added_by_user' => false,
+					'date_created'  => '2024-07-01T08:00:00',
+					'customer_note' => false,
+				),
+				array(
+					'id'            => 702,
+					'note'          => 'Second note beta.',
+					'added_by_user' => true,
+					'date_created'  => '2024-07-01T09:00:00',
+					'customer_note' => true,
+				),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note_id'  => 702,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 702, $res['id'] );
+		$this->assertSame( 'Second note beta.', $res['note'] );
+	}
+
+	/**
+	 * Fetching the second of two refunds by id returns that refund's amount and reason.
+	 */
+	public function test_get_order_refund_id_fidelity(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed_refunds(
+			5001,
+			array(
+				array(
+					'id'           => 801,
+					'amount'       => '3.00',
+					'reason'       => 'First refund gamma.',
+					'date_created' => '2024-07-02T10:00:00',
+				),
+				array(
+					'id'           => 802,
+					'amount'       => '6.50',
+					'reason'       => 'Second refund delta.',
+					'date_created' => '2024-07-02T11:00:00',
+				),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-get-order-refund' )->execute( array( 'refund_id' => 802 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 802, $res['id'] );
+		$this->assertSame( '6.50', $res['amount'] );
+		$this->assertSame( 'Second refund delta.', $res['reason'] );
+	}
 }

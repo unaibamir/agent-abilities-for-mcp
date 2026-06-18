@@ -422,8 +422,8 @@ class WC_Order {
 	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
 	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
 	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
-	public function set_status( $v ) { $this->data['status'] = (string) $v; }
-	public function update_status( $v ) { $this->data['status'] = 'wc-' === substr( $v, 0, 3 ) ? $v : 'wc-' . $v; $this->data['status'] = (string) $v; return true; }
+	public function set_status( $v ) { $s = (string) $v; $this->data['status'] = 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; }
+	public function update_status( $v ) { $s = (string) $v; $this->data['status'] = 'wc-' === substr( $s, 0, 3 ) ? substr( $s, 3 ) : $s; return true; }
 	public function set_customer_id( $v ) { $this->data['customer_id'] = (int) $v; }
 	public function set_customer_note( $v ) { $this->data['customer_note'] = (string) $v; }
 	public function set_billing_first_name( $v ) { $this->data['billing']['first_name'] = (string) $v; }

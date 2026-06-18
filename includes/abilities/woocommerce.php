@@ -2387,7 +2387,12 @@ function aafm_wc_order_status_valid( string $status ): bool {
  */
 function aafm_wc_apply_order_input( \WC_Order $order, array $input ): void {
 	if ( array_key_exists( 'status', $input ) ) {
-		$order->set_status( sanitize_key( (string) $input['status'] ) );
+		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
+		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
+		// the real WC_Order convention where get_status() always returns the short form).
+		$raw_status   = sanitize_text_field( (string) $input['status'] );
+		$short_status = str_starts_with( $raw_status, 'wc-' ) ? substr( $raw_status, 3 ) : $raw_status;
+		$order->set_status( $short_status );
 	}
 	if ( array_key_exists( 'customer_id', $input ) ) {
 		$order->set_customer_id( absint( $input['customer_id'] ) );
@@ -2769,6 +2774,8 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	$short = str_starts_with( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
 
 	$order->update_status( $short );
+	// save() is technically redundant on real WC (update_status() persists internally), but
+	// is required here so the stub's save() flushes the in-memory data back to WcOrderStubStore.
 	$order->save();
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );

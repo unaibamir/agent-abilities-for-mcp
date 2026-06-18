@@ -519,4 +519,158 @@ if ( ! function_exists( 'wc_create_refund' ) ) {
 		return new \WP_Error();
 	}
 }
+if ( ! class_exists( 'WC_Customer' ) ) {
+	/**
+	 * PHPStan stub for WC_Customer (W4-WC3). Never loaded in production; test-only.
+	 */
+	class WC_Customer {
+		/** @param int $id */
+		public function __construct( $id = 0 ) {}
+		/** @return int */
+		public function get_id() { return 0; }
+		/** @return string */
+		public function get_email() { return ''; }
+		/** @return string */
+		public function get_first_name() { return ''; }
+		/** @return string */
+		public function get_last_name() { return ''; }
+		/** @return string */
+		public function get_username() { return ''; }
+		/** @return int */
+		public function get_order_count() { return 0; }
+		/** @return string */
+		public function get_total_spent() { return '0.00'; }
+		/** @return string|null */
+		public function get_date_created() { return null; }
+		/** @return string */
+		public function get_billing_first_name() { return ''; }
+		/** @return string */
+		public function get_billing_last_name() { return ''; }
+		/** @return string */
+		public function get_billing_company() { return ''; }
+		/** @return string */
+		public function get_billing_address_1() { return ''; }
+		/** @return string */
+		public function get_billing_address_2() { return ''; }
+		/** @return string */
+		public function get_billing_city() { return ''; }
+		/** @return string */
+		public function get_billing_state() { return ''; }
+		/** @return string */
+		public function get_billing_postcode() { return ''; }
+		/** @return string */
+		public function get_billing_country() { return ''; }
+		/** @return string */
+		public function get_billing_email() { return ''; }
+		/** @return string */
+		public function get_billing_phone() { return ''; }
+		/** @return string */
+		public function get_shipping_first_name() { return ''; }
+		/** @return string */
+		public function get_shipping_last_name() { return ''; }
+		/** @return string */
+		public function get_shipping_company() { return ''; }
+		/** @return string */
+		public function get_shipping_address_1() { return ''; }
+		/** @return string */
+		public function get_shipping_address_2() { return ''; }
+		/** @return string */
+		public function get_shipping_city() { return ''; }
+		/** @return string */
+		public function get_shipping_state() { return ''; }
+		/** @return string */
+		public function get_shipping_postcode() { return ''; }
+		/** @return string */
+		public function get_shipping_country() { return ''; }
+		/** @param string $v @return void */
+		public function set_email( $v ) {}
+		/** @param string $v @return void */
+		public function set_first_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_last_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_username( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_first_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_last_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_company( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_address_1( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_address_2( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_city( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_state( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_postcode( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_country( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_email( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_phone( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_first_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_last_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_company( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_address_1( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_address_2( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_city( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_state( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_postcode( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_country( $v ) {}
+		/** @param bool|null $is_new @return int */
+		public function save( $is_new = null ) { return 0; }
+	}
+}
+if ( ! function_exists( 'wc_get_customer' ) ) {
+	/**
+	 * @param int $id
+	 * @return \WC_Customer|false
+	 */
+	function wc_get_customer( $id ) {
+		return false;
+	}
+}
+if ( ! function_exists( 'wc_get_customers' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<int,\WC_Customer>
+	 */
+	function wc_get_customers( $args = array() ) {
+		return array();
+	}
+}
+if ( ! function_exists( 'wc_create_customer' ) ) {
+	/**
+	 * @param string $email
+	 * @param string $username
+	 * @param string $password
+	 * @return \WC_Customer|\WP_Error
+	 */
+	function wc_create_customer( $email, $username, $password ) {
+		return new \WP_Error();
+	}
+}
+if ( ! function_exists( 'wc_update_customer' ) ) {
+	/**
+	 * @param int                 $id
+	 * @param array<string,mixed> $args
+	 * @return \WC_Customer|\WP_Error
+	 */
+	function wc_update_customer( $id, $args = array() ) {
+		return new \WP_Error();
+	}
+}
 // phpcs:enable

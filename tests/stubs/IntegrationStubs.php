@@ -326,6 +326,33 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_create_refund( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
 		}
+
+		// Customer stubs (W4-WC3). WC_Customer is defined via eval so class_exists prevents
+		// double-define across tests. wc_get_customer() / wc_create_customer() / wc_update_customer()
+		// delegate to WcCustomerStubStore. The delete path is intentionally NOT stubbed here: the
+		// wc-delete-customer executor calls wp_delete_user() on a real WP user (same as the
+		// delete-user ability), so delete tests create real WP users via the factory.
+		if ( ! class_exists( 'WC_Customer' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_customer_class_source() );
+		}
+		if ( ! function_exists( 'wc_get_customer' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_customer( $id ) { $id = (int) $id; if ( ! \AAFM\Tests\WcCustomerStubStore::exists( $id ) ) { return false; } return new \WC_Customer( $id ); }' );
+		}
+		if ( ! function_exists( 'wc_create_customer' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return new \WC_Customer( $id ); }' );
+		}
+		if ( ! function_exists( 'wc_update_customer' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_update_customer( $id, $args = array() ) { $id = (int) $id; if ( ! \AAFM\Tests\WcCustomerStubStore::exists( $id ) ) { return new \WP_Error( "wc_update_customer_failed", "Customer not found." ); } $c = new \WC_Customer( $id ); if ( isset( $args["email"] ) ) { $c->set_email( $args["email"] ); } if ( isset( $args["first_name"] ) ) { $c->set_first_name( $args["first_name"] ); } if ( isset( $args["last_name"] ) ) { $c->set_last_name( $args["last_name"] ); } $c->save( false ); return new \WC_Customer( $id ); }' );
+		}
+		if ( ! function_exists( 'wc_get_customers' ) ) {
+			// Returns WC_Customer objects from the stub store, honoring limit/paged args.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_customers( $args = array() ) { return \AAFM\Tests\WcCustomerStubStore::query( $args ); }' );
+		}
 	}
 
 	/**
@@ -618,6 +645,145 @@ PHP;
 	}
 
 	/**
+	 * Seed the WcCustomerStubStore with default customer fixtures for WC3 tests.
+	 *
+	 * Seeds customer id 7001 with email + billing phone so PII-exposure tests can assert presence.
+	 * Call after stub_woocommerce() (which does not reset the customer store), and before
+	 * registering customer abilities.
+	 *
+	 * @return void
+	 */
+	protected function seed_wc_customers(): void {
+		WcCustomerStubStore::reset();
+		WcCustomerStubStore::seed(
+			7001,
+			array(
+				'email'        => 'jane@example.com',
+				'first_name'   => 'Jane',
+				'last_name'    => 'Doe',
+				'username'     => 'janedoe',
+				'orders_count' => 3,
+				'total_spent'  => '149.97',
+				'date_created' => '2024-05-01T09:00:00',
+				'billing'      => array(
+					'first_name' => 'Jane',
+					'last_name'  => 'Doe',
+					'company'    => 'Acme Corp',
+					'address_1'  => '123 Main St',
+					'address_2'  => '',
+					'city'       => 'Springfield',
+					'state'      => 'IL',
+					'postcode'   => '62701',
+					'country'    => 'US',
+					'email'      => 'jane@example.com',
+					'phone'      => '+1-555-0200',
+				),
+				'shipping'     => array(
+					'first_name' => 'Jane',
+					'last_name'  => 'Doe',
+					'company'    => '',
+					'address_1'  => '123 Main St',
+					'address_2'  => '',
+					'city'       => 'Springfield',
+					'state'      => 'IL',
+					'postcode'   => '62701',
+					'country'    => 'US',
+				),
+			)
+		);
+	}
+
+	/**
+	 * The source of the stub WC_Customer class. Kept as a string so the eval definition is guarded
+	 * by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * The WC_Customer stub reads from WcCustomerStubStore keyed by id. Its getters mirror the real
+	 * WooCommerce WC_Customer API the customer abilities call. save() delegates to the store and
+	 * accepts an $is_new flag so the create vs update fail-flags can be exercised independently.
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_customer_class_source(): string {
+		return <<<'PHP'
+class WC_Customer {
+	private $data = array();
+	private $is_new = true;
+	public function __construct( $id = 0 ) {
+		$id = (int) $id;
+		if ( $id > 0 ) {
+			$stored = \AAFM\Tests\WcCustomerStubStore::get( $id );
+			$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
+			$this->is_new = false;
+		} else {
+			$this->data = array( 'id' => 0 );
+		}
+	}
+	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
+	public function get_email() { return (string) ( $this->data['email'] ?? '' ); }
+	public function get_first_name() { return (string) ( $this->data['first_name'] ?? '' ); }
+	public function get_last_name() { return (string) ( $this->data['last_name'] ?? '' ); }
+	public function get_username() { return (string) ( $this->data['username'] ?? '' ); }
+	public function get_order_count() { return (int) ( $this->data['orders_count'] ?? 0 ); }
+	public function get_total_spent() { return (string) ( $this->data['total_spent'] ?? '0.00' ); }
+	public function get_date_created() { return $this->data['date_created'] ?? null; }
+	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
+	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
+	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }
+	public function get_billing_address_1() { return (string) ( $this->data['billing']['address_1'] ?? '' ); }
+	public function get_billing_address_2() { return (string) ( $this->data['billing']['address_2'] ?? '' ); }
+	public function get_billing_city() { return (string) ( $this->data['billing']['city'] ?? '' ); }
+	public function get_billing_state() { return (string) ( $this->data['billing']['state'] ?? '' ); }
+	public function get_billing_postcode() { return (string) ( $this->data['billing']['postcode'] ?? '' ); }
+	public function get_billing_country() { return (string) ( $this->data['billing']['country'] ?? '' ); }
+	public function get_billing_email() { return (string) ( $this->data['billing']['email'] ?? '' ); }
+	public function get_billing_phone() { return (string) ( $this->data['billing']['phone'] ?? '' ); }
+	public function get_shipping_first_name() { return (string) ( $this->data['shipping']['first_name'] ?? '' ); }
+	public function get_shipping_last_name() { return (string) ( $this->data['shipping']['last_name'] ?? '' ); }
+	public function get_shipping_company() { return (string) ( $this->data['shipping']['company'] ?? '' ); }
+	public function get_shipping_address_1() { return (string) ( $this->data['shipping']['address_1'] ?? '' ); }
+	public function get_shipping_address_2() { return (string) ( $this->data['shipping']['address_2'] ?? '' ); }
+	public function get_shipping_city() { return (string) ( $this->data['shipping']['city'] ?? '' ); }
+	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
+	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
+	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
+	public function set_email( $v ) { $this->data['email'] = (string) $v; }
+	public function set_first_name( $v ) { $this->data['first_name'] = (string) $v; }
+	public function set_last_name( $v ) { $this->data['last_name'] = (string) $v; }
+	public function set_username( $v ) { $this->data['username'] = (string) $v; }
+	public function set_billing_first_name( $v ) { $this->data['billing']['first_name'] = (string) $v; }
+	public function set_billing_last_name( $v ) { $this->data['billing']['last_name'] = (string) $v; }
+	public function set_billing_company( $v ) { $this->data['billing']['company'] = (string) $v; }
+	public function set_billing_address_1( $v ) { $this->data['billing']['address_1'] = (string) $v; }
+	public function set_billing_address_2( $v ) { $this->data['billing']['address_2'] = (string) $v; }
+	public function set_billing_city( $v ) { $this->data['billing']['city'] = (string) $v; }
+	public function set_billing_state( $v ) { $this->data['billing']['state'] = (string) $v; }
+	public function set_billing_postcode( $v ) { $this->data['billing']['postcode'] = (string) $v; }
+	public function set_billing_country( $v ) { $this->data['billing']['country'] = (string) $v; }
+	public function set_billing_email( $v ) { $this->data['billing']['email'] = (string) $v; }
+	public function set_billing_phone( $v ) { $this->data['billing']['phone'] = (string) $v; }
+	public function set_shipping_first_name( $v ) { $this->data['shipping']['first_name'] = (string) $v; }
+	public function set_shipping_last_name( $v ) { $this->data['shipping']['last_name'] = (string) $v; }
+	public function set_shipping_company( $v ) { $this->data['shipping']['company'] = (string) $v; }
+	public function set_shipping_address_1( $v ) { $this->data['shipping']['address_1'] = (string) $v; }
+	public function set_shipping_address_2( $v ) { $this->data['shipping']['address_2'] = (string) $v; }
+	public function set_shipping_city( $v ) { $this->data['shipping']['city'] = (string) $v; }
+	public function set_shipping_state( $v ) { $this->data['shipping']['state'] = (string) $v; }
+	public function set_shipping_postcode( $v ) { $this->data['shipping']['postcode'] = (string) $v; }
+	public function set_shipping_country( $v ) { $this->data['shipping']['country'] = (string) $v; }
+	public function save( $is_new = null ) {
+		$new = ( null === $is_new ) ? $this->is_new : (bool) $is_new;
+		$id = \AAFM\Tests\WcCustomerStubStore::save( $this->data, $new );
+		if ( $id > 0 ) {
+			$this->data['id'] = $id;
+			$this->is_new = false;
+		}
+		return $id;
+	}
+}
+PHP;
+	}
+
+	/**
 	 * Remove every filter this trait added. Call from the slice's tear_down().
 	 *
 	 * @return void
@@ -631,5 +797,6 @@ PHP;
 		WcStubStore::reset();
 		WcAttributeStubStore::reset();
 		WcOrderStubStore::reset();
+		WcCustomerStubStore::reset();
 	}
 }

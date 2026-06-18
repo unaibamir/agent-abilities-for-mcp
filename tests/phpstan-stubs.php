@@ -673,4 +673,92 @@ if ( ! function_exists( 'wc_update_customer' ) ) {
 		return new \WP_Error();
 	}
 }
+if ( ! class_exists( 'WC_Coupon' ) ) {
+	class WC_Coupon {
+		/** @param int|string $code_or_id */
+		public function __construct( $code_or_id = 0 ) {}
+		/** @return int */
+		public function get_id() { return 0; }
+		/** @return string */
+		public function get_code() { return ''; }
+		/** @return string */
+		public function get_amount() { return '0.00'; }
+		/** @return string */
+		public function get_discount_type() { return 'fixed_cart'; }
+		/** @return string */
+		public function get_description() { return ''; }
+		/** @return string|null */
+		public function get_date_expires() { return null; }
+		/** @return int */
+		public function get_usage_count() { return 0; }
+		/** @return int|null */
+		public function get_usage_limit() { return null; }
+		/** @return int|null */
+		public function get_usage_limit_per_user() { return null; }
+		/** @return string */
+		public function get_minimum_amount() { return ''; }
+		/** @return string */
+		public function get_maximum_amount() { return ''; }
+		/** @return bool */
+		public function get_individual_use() { return false; }
+		/** @return bool */
+		public function get_exclude_sale_items() { return false; }
+		/** @return array<int,int> */
+		public function get_product_ids() { return array(); }
+		/** @return array<int,int> */
+		public function get_excluded_product_ids() { return array(); }
+		/** @return array<int,string> */
+		public function get_email_restrictions() { return array(); }
+		/** @param string $v @return void */
+		public function set_code( $v ) {}
+		/** @param string $v @return void */
+		public function set_amount( $v ) {}
+		/** @param string $v @return void */
+		public function set_discount_type( $v ) {}
+		/** @param string $v @return void */
+		public function set_description( $v ) {}
+		/** @param string|null $v @return void */
+		public function set_date_expires( $v ) {}
+		/** @param int|null $v @return void */
+		public function set_usage_limit( $v ) {}
+		/** @param int|null $v @return void */
+		public function set_usage_limit_per_user( $v ) {}
+		/** @param string $v @return void */
+		public function set_minimum_amount( $v ) {}
+		/** @param string $v @return void */
+		public function set_maximum_amount( $v ) {}
+		/** @param bool $v @return void */
+		public function set_individual_use( $v ) {}
+		/** @param bool $v @return void */
+		public function set_exclude_sale_items( $v ) {}
+		/** @param array<int,int> $v @return void */
+		public function set_product_ids( $v ) {}
+		/** @param array<int,int> $v @return void */
+		public function set_excluded_product_ids( $v ) {}
+		/** @param array<int,string> $v @return void */
+		public function set_email_restrictions( $v ) {}
+		/** @return int */
+		public function save() { return 0; }
+		/** @param bool $force @return bool */
+		public function delete( $force = false ) { return false; }
+	}
+}
+if ( ! function_exists( 'wc_get_coupons' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<int,\WC_Coupon>|object
+	 */
+	function wc_get_coupons( $args = array() ) {
+		return array();
+	}
+}
+if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
+	/**
+	 * @param string $code
+	 * @return int
+	 */
+	function wc_get_coupon_id_by_code( $code ) {
+		return 0;
+	}
+}
 // phpcs:enable

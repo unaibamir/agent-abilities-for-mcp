@@ -784,6 +784,137 @@ PHP;
 	}
 
 	/**
+	 * Seed the WcCouponStubStore with default coupon fixtures for WC4 tests.
+	 *
+	 * Seeds coupon ids 5001 and 5002 so shape and pagination tests have two rows to work with.
+	 * Call after stub_woocommerce() (which does not reset the coupon store), and before
+	 * registering coupon abilities.
+	 *
+	 * @return void
+	 */
+	protected function seed_wc_coupons(): void {
+		WcCouponStubStore::reset();
+		WcCouponStubStore::seed(
+			5001,
+			array(
+				'code'           => 'SAVE10',
+				'amount'         => '10.00',
+				'discount_type'  => 'fixed_cart',
+				'description'    => 'Save $10 on your order.',
+				'date_expires'   => '2025-12-31T23:59:59',
+				'usage_count'    => 5,
+				'usage_limit'    => 100,
+				'individual_use' => true,
+			)
+		);
+		WcCouponStubStore::seed(
+			5002,
+			array(
+				'code'               => 'PERCENT20',
+				'amount'             => '20.00',
+				'discount_type'      => 'percent',
+				'description'        => '20% off sitewide.',
+				'date_expires'       => null,
+				'usage_count'        => 12,
+				'usage_limit'        => null,
+				'individual_use'     => false,
+				'email_restrictions' => array( 'vip@example.com' ),
+			)
+		);
+	}
+
+	/**
+	 * Define the minimal WooCommerce coupon surface so the coupon abilities can list/read/create/
+	 * update/delete through the WC CRUD layer.
+	 *
+	 * The WC_Coupon class and wc_get_coupons() / wc_get_coupon_id_by_code() are global and defined
+	 * once per process, so the actual coupon state lives in WcCouponStubStore. This helper must be
+	 * called AFTER stub_woocommerce() (which defines the WooCommerce marker class and grants the
+	 * manage_woocommerce capability), because it piggy-backs on that infrastructure.
+	 *
+	 * @return void
+	 */
+	protected function stub_wc_coupons(): void {
+		if ( ! class_exists( 'WC_Coupon' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_coupon_class_source() );
+		}
+		if ( ! function_exists( 'wc_get_coupons' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_coupons( $args = array() ) { return \AAFM\Tests\WcCouponStubStore::query( $args ); }' );
+		}
+		if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_coupon_id_by_code( $code ) { return \AAFM\Tests\WcCouponStubStore::get_id_by_code( (string) $code ); }' );
+		}
+	}
+
+	/**
+	 * The source of the stub WC_Coupon class. Kept as a string so the eval definition is guarded
+	 * by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * The WC_Coupon stub reads from WcCouponStubStore keyed by id. Its constructor also accepts a
+	 * coupon code string (mirroring real WC), resolving it to an id via get_id_by_code(). Getters
+	 * mirror the real WooCommerce WC_Coupon API the coupon abilities call. Setters stage changes on
+	 * the instance; save() persists to the store; delete() removes. A test-only stub, never shipped.
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_coupon_class_source(): string {
+		return <<<'PHP'
+class WC_Coupon {
+	private $data = array();
+	public function __construct( $code_or_id = 0 ) {
+		$id = 0;
+		if ( is_int( $code_or_id ) || ( is_string( $code_or_id ) && ctype_digit( (string) $code_or_id ) ) ) {
+			$id = (int) $code_or_id;
+		} elseif ( is_string( $code_or_id ) && '' !== $code_or_id ) {
+			$id = \AAFM\Tests\WcCouponStubStore::get_id_by_code( $code_or_id );
+		}
+		if ( $id > 0 ) {
+			$stored = \AAFM\Tests\WcCouponStubStore::get( $id );
+			$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
+		} else {
+			$this->data = array( 'id' => 0 );
+		}
+	}
+	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
+	public function get_code() { return (string) ( $this->data['code'] ?? '' ); }
+	public function get_amount() { return (string) ( $this->data['amount'] ?? '0.00' ); }
+	public function get_discount_type() { return (string) ( $this->data['discount_type'] ?? 'fixed_cart' ); }
+	public function get_description() { return (string) ( $this->data['description'] ?? '' ); }
+	public function get_date_expires() { return $this->data['date_expires'] ?? null; }
+	public function get_usage_count() { return (int) ( $this->data['usage_count'] ?? 0 ); }
+	public function get_usage_limit() { $v = $this->data['usage_limit'] ?? null; return ( null === $v ) ? null : (int) $v; }
+	public function get_usage_limit_per_user() { $v = $this->data['usage_limit_per_user'] ?? null; return ( null === $v ) ? null : (int) $v; }
+	public function get_minimum_amount() { return (string) ( $this->data['minimum_amount'] ?? '' ); }
+	public function get_maximum_amount() { return (string) ( $this->data['maximum_amount'] ?? '' ); }
+	public function get_individual_use() { return (bool) ( $this->data['individual_use'] ?? false ); }
+	public function get_exclude_sale_items() { return (bool) ( $this->data['exclude_sale_items'] ?? false ); }
+	public function get_product_ids() { return (array) ( $this->data['product_ids'] ?? array() ); }
+	public function get_excluded_product_ids() { return (array) ( $this->data['excluded_product_ids'] ?? array() ); }
+	public function get_email_restrictions() { return (array) ( $this->data['email_restrictions'] ?? array() ); }
+	public function set_code( $v ) { $this->data['code'] = strtolower( (string) $v ); }
+	public function set_amount( $v ) { $this->data['amount'] = (string) $v; }
+	public function set_discount_type( $v ) { $this->data['discount_type'] = (string) $v; }
+	public function set_description( $v ) { $this->data['description'] = (string) $v; }
+	public function set_date_expires( $v ) { $this->data['date_expires'] = ( null === $v ) ? null : (string) $v; }
+	public function set_usage_limit( $v ) { $this->data['usage_limit'] = ( null === $v ) ? null : (int) $v; }
+	public function set_usage_limit_per_user( $v ) { $this->data['usage_limit_per_user'] = ( null === $v ) ? null : (int) $v; }
+	public function set_minimum_amount( $v ) { $this->data['minimum_amount'] = (string) $v; }
+	public function set_maximum_amount( $v ) { $this->data['maximum_amount'] = (string) $v; }
+	public function set_individual_use( $v ) { $this->data['individual_use'] = (bool) $v; }
+	public function set_exclude_sale_items( $v ) { $this->data['exclude_sale_items'] = (bool) $v; }
+	public function set_product_ids( $v ) { $this->data['product_ids'] = array_map( 'intval', (array) $v ); }
+	public function set_excluded_product_ids( $v ) { $this->data['excluded_product_ids'] = array_map( 'intval', (array) $v ); }
+	public function set_email_restrictions( $v ) { $this->data['email_restrictions'] = array_map( 'strval', (array) $v ); }
+	public function save() { $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcCouponStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+}
+PHP;
+	}
+
+	/**
 	 * Remove every filter this trait added. Call from the slice's tear_down().
 	 *
 	 * @return void
@@ -798,5 +929,6 @@ PHP;
 		WcAttributeStubStore::reset();
 		WcOrderStubStore::reset();
 		WcCustomerStubStore::reset();
+		WcCouponStubStore::reset();
 	}
 }

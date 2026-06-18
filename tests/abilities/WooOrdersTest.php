@@ -668,6 +668,82 @@ final class WooOrdersTest extends TestCase {
 		$this->assertSame( 'DE', $res['shipping']['country'] ?? null, 'Updating billing must not touch shipping.' );
 	}
 
+	public function test_update_order_field_isolation_shipping_does_not_touch_billing(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		// Seed with a known billing city.
+		WcOrderStubStore::seed(
+			5051,
+			array(
+				'number'   => '5051',
+				'status'   => 'processing',
+				'billing'  => array( 'city' => 'Berlin' ),
+				'shipping' => array( 'country' => 'DE' ),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id' => 5051,
+				'shipping' => array( 'country' => 'FR' ),
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		// shipping updated.
+		$this->assertSame( 'FR', $res['shipping']['country'] ?? null );
+		// billing city MUST be unchanged.
+		$this->assertSame( 'Berlin', $res['billing']['city'] ?? null, 'Updating shipping must not touch billing.' );
+	}
+
+	public function test_update_order_line_items_nested_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'   => 5001,
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+						'meta_data'  => 'injected', // Smuggled key inside line_items item.
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'line_items[].meta_data smuggle must be rejected on update too -- the item sub-schema is closed.'
+		);
+	}
+
+	public function test_update_order_empty_billing_shipping_encode_as_objects(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		// Seed an order with empty billing/shipping, then patch a non-address field.
+		WcOrderStubStore::seed(
+			5052,
+			array(
+				'number' => '5052',
+				'status' => 'processing',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'    => 5052,
+				'customer_id' => 7,
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$encoded = wp_json_encode( $res );
+		$this->assertIsString( $encoded );
+		$this->assertStringNotContainsString( '"billing":[]', $encoded, 'Empty billing must encode as {} on the update return path.' );
+		$this->assertStringNotContainsString( '"shipping":[]', $encoded, 'Empty shipping must encode as {} on the update return path.' );
+	}
+
 	public function test_update_order_empty_patch_is_noop_success(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );

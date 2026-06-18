@@ -223,8 +223,10 @@ function aafm_integration_status_note( string $slug, string $status ): string {
  * control that confirms before bulk-enabling a PII/destructive group.
  *
  * The toggle markup mirrors the Abilities tab exactly so the shared save handler binds to the
- * same name="aafm_abilities[]" inputs. The bulk control is a <div> + type="button" (never a
- * nested form), per the Wave-0 nested-form lesson.
+ * same name="aafm_abilities[]" inputs. The bulk control is a type="button" (never a nested
+ * form), per the Wave-0 nested-form lesson. The ability list is wrapped in a <details> element
+ * so it can be collapsed without hiding the checkboxes from the form (collapse is CSS-only;
+ * inputs inside a closed <details> still submit normally).
  *
  * @param string                         $slug        Integration slug.
  * @param array<int,array<string,mixed>> $rows        This integration's ability rows.
@@ -238,7 +240,7 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		return;
 	}
 
-	// Enabled-over-total count for the group head.
+	// Enabled-over-total count for the collapsible summary.
 	$group_enabled = 0;
 	$has_sensitive = false;
 	foreach ( $rows as $row ) {
@@ -250,14 +252,16 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		}
 	}
 
+	// Collapsible abilities section: <details open> replaces the old static group-head div.
+	// The <summary> carries the "Abilities X/Y" label; the body holds the toggle + ability list.
 	printf(
-		'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
+		'<details class="aafm-abilities-details" open><summary>%1$s <span class="aafm-count-badge">%2$s / %3$s</span></summary>',
 		esc_html__( 'Abilities', 'agent-abilities-for-mcp' ),
 		esc_html( (string) $group_enabled ),
 		esc_html( (string) count( $rows ) )
 	);
 
-	// Group enable/disable-all control (a <div>, not a nested form; a type="button"). The
+	// Group enable/disable-all control (a type="button", never a nested form). The
 	// data-has-sensitive flag tells the JS to window.confirm() before bulk-enabling a group
 	// that can read or change personal data.
 	printf(
@@ -267,32 +271,81 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
 	);
 
-	echo '<div class="aafm-card aafm-ability-list">';
-	foreach ( $rows as $ability ) {
-		$name = (string) $ability['name'];
-		$risk = (string) ( $ability['risk'] ?? 'read' );
-		$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
-
-		echo '<div class="aafm-ability-row">';
-		printf(
-			'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
-			esc_attr( $name ),
-			checked( in_array( $name, $enabled, true ), true, false )
+	// SEO gets three named sub-sections; every other integration renders a flat list.
+	if ( 'seo' === $slug ) {
+		$seo_sections = array(
+			__( 'Post metadata', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-post', 'aafm/seo-update-post' ),
+			__( 'Structured data', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-schema', 'aafm/seo-update-schema' ),
+			__( 'Head markup', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-head' ),
 		);
 
-		echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
-		printf(
-			'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
-			esc_html( (string) ( $ability['label'] ?? $name ) ),
-			esc_attr( $risk )
-		);
-		if ( 'read' === $risk ) {
-			echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+		$first = true;
+		foreach ( $seo_sections as $section_label => $section_names ) {
+			$section_rows = array_filter(
+				$rows,
+				static fn( array $r ) => in_array( (string) $r['name'], $section_names, true )
+			);
+			if ( empty( $section_rows ) ) {
+				continue;
+			}
+
+			printf(
+				'<h4 class="aafm-subsection-head%1$s">%2$s</h4>',
+				$first ? '' : ' aafm-subsection-head--sep',
+				esc_html( $section_label )
+			);
+			$first = false;
+
+			echo '<div class="aafm-card aafm-ability-list">';
+			foreach ( $section_rows as $ability ) {
+				aafm_render_integration_ability_row( $ability, $enabled, $disclosures );
+			}
+			echo '</div>';
 		}
-		printf(
-			'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
-			esc_html( $hint )
-		);
+	} else {
+		echo '<div class="aafm-card aafm-ability-list">';
+		foreach ( $rows as $ability ) {
+			aafm_render_integration_ability_row( $ability, $enabled, $disclosures );
+		}
+		echo '</div>';
 	}
-	echo '</div>';
+
+	echo '</details>';
+}
+
+/**
+ * Render a single ability row inside an integration card.
+ *
+ * Extracted so both the flat list and the SEO sub-section loops share identical markup.
+ *
+ * @param array<string,mixed>  $ability     Ability data row.
+ * @param array<int,string>    $enabled     Enabled ability names.
+ * @param array<string,string> $disclosures Disclosure map.
+ * @return void
+ */
+function aafm_render_integration_ability_row( array $ability, array $enabled, array $disclosures ): void {
+	$name = (string) $ability['name'];
+	$risk = (string) ( $ability['risk'] ?? 'read' );
+	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
+
+	echo '<div class="aafm-ability-row">';
+	printf(
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
+		esc_attr( $name ),
+		checked( in_array( $name, $enabled, true ), true, false )
+	);
+
+	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
+	printf(
+		'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
+		esc_html( (string) ( $ability['label'] ?? $name ) ),
+		esc_attr( $risk )
+	);
+	if ( 'read' === $risk ) {
+		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+	printf(
+		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
+		esc_html( $hint )
+	);
 }

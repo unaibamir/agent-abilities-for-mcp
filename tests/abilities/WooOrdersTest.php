@@ -455,4 +455,457 @@ final class WooOrdersTest extends TestCase {
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
+
+	// =========================================================================
+	// aafm/wc-create-order + aafm/wc-update-order
+	// =========================================================================
+
+	/**
+	 * Enable + register the full order ability set including writes.
+	 */
+	private function register_wc_order_writes(): void {
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option(
+			'aafm_enabled_abilities',
+			array(
+				'aafm/wc-list-orders',
+				'aafm/wc-get-order',
+				'aafm/wc-create-order',
+				'aafm/wc-update-order',
+			)
+		);
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	public function test_create_order_returns_rich_shape_and_persists(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'status'        => 'processing',
+				'customer_id'   => 7,
+				'customer_note' => 'Test note',
+				'billing'       => array(
+					'first_name' => 'Alice',
+					'last_name'  => 'Smith',
+					'email'      => 'alice@example.com',
+					'city'       => 'London',
+					'country'    => 'GB',
+				),
+				'shipping'      => array(
+					'first_name' => 'Alice',
+					'last_name'  => 'Smith',
+					'country'    => 'GB',
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		// Rich shape keys present.
+		$this->assertArrayHasKey( 'id', $res );
+		$this->assertArrayHasKey( 'status', $res );
+		$this->assertArrayHasKey( 'billing', $res );
+		$this->assertArrayHasKey( 'shipping', $res );
+		$this->assertArrayHasKey( 'totals', $res );
+		$this->assertArrayHasKey( 'line_items', $res );
+		$this->assertGreaterThan( 0, $res['id'], 'Created order must have a non-zero id.' );
+		// Persisted: retrievable via wc-get-order.
+		$get = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => $res['id'] ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $get );
+		$this->assertSame( $res['id'], $get['id'] );
+	}
+
+	public function test_create_order_denied_requires_manage_woocommerce(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-create-order' )->check_permissions( array( 'status' => 'processing' ) )
+		);
+	}
+
+	public function test_create_order_denied_is_audited(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'editor' );
+		wp_get_ability( 'aafm/wc-create-order' )->check_permissions( array() );
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-create-order', $abilities );
+	}
+
+	public function test_create_order_success_is_audited(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		wp_get_ability( 'aafm/wc-create-order' )->execute( array() );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-create-order', $abilities );
+	}
+
+	public function test_create_order_top_level_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array( 'evil_field' => 'x' )
+		);
+		$this->assertInstanceOf( \WP_Error::class, $res, 'Closed schema must reject unknown top-level field.' );
+	}
+
+	/**
+	 * MED-4 nested-smuggle: a key inside billing{} must be rejected.
+	 * billing.role is a canonical example of a data-smuggling attempt (trying to ride
+	 * a role/account field in via the address block). The billing sub-schema sets
+	 * additionalProperties:false, so this must return WP_Error, not succeed.
+	 */
+	public function test_create_order_billing_nested_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'billing' => array(
+					'first_name' => 'Alice',
+					'role'       => 'administrator', // Smuggled key inside billing.
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'billing.role smuggle must be rejected -- billing sub-schema is closed.'
+		);
+	}
+
+	/**
+	 * MED-4 nested-smuggle: a key inside line_items[].
+	 * line_items[] items also set additionalProperties:false; meta_data is a common
+	 * injection vector in WC -- it must be rejected before execute.
+	 */
+	public function test_create_order_line_items_nested_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 1,
+						'quantity'   => 1,
+						'meta_data'  => 'injected', // Smuggled key inside line_items item.
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'line_items[].meta_data smuggle must be rejected -- item sub-schema is closed.'
+		);
+	}
+
+	public function test_create_order_invalid_status_returns_error(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array( 'status' => 'totally-invalid-status' )
+		);
+		$this->assertInstanceOf( \WP_Error::class, $res, 'Invalid status must return WP_Error.' );
+	}
+
+	public function test_create_order_empty_billing_shipping_encode_as_objects(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute( array() );
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$encoded = wp_json_encode( $res );
+		$this->assertIsString( $encoded );
+		$this->assertStringNotContainsString( '"billing":[]', $encoded );
+		$this->assertStringNotContainsString( '"shipping":[]', $encoded );
+	}
+
+	public function test_update_order_patches_billing_city(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id' => 5001,
+				'billing'  => array(
+					'city' => 'Chicago',
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'Chicago', $res['billing']['city'] ?? null, 'billing.city must be patched.' );
+	}
+
+	public function test_update_order_field_isolation_billing_does_not_touch_shipping(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		// Seed with a known shipping country.
+		WcOrderStubStore::seed(
+			5050,
+			array(
+				'number'   => '5050',
+				'status'   => 'processing',
+				'billing'  => array( 'city' => 'Berlin' ),
+				'shipping' => array( 'country' => 'DE' ),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id' => 5050,
+				'billing'  => array( 'city' => 'Hamburg' ),
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		// billing updated.
+		$this->assertSame( 'Hamburg', $res['billing']['city'] ?? null );
+		// shipping country MUST be unchanged.
+		$this->assertSame( 'DE', $res['shipping']['country'] ?? null, 'Updating billing must not touch shipping.' );
+	}
+
+	public function test_update_order_empty_patch_is_noop_success(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $before );
+
+		// Empty PATCH -- no fields.
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $res, 'Empty PATCH must be a no-op success.' );
+		$this->assertSame( $before['status'], $res['status'], 'Status must be unchanged on empty PATCH.' );
+	}
+
+	public function test_update_order_unknown_id_returns_error(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 999999 ) );
+		$this->assertInstanceOf( \WP_Error::class, $res );
+	}
+
+	public function test_update_order_denied_requires_manage_woocommerce(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'editor' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-update-order' )->check_permissions( array( 'order_id' => 5001 ) )
+		);
+	}
+
+	public function test_update_order_denied_is_audited(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'editor' );
+		wp_get_ability( 'aafm/wc-update-order' )->check_permissions( array( 'order_id' => 5001 ) );
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-update-order', $abilities );
+	}
+
+	public function test_update_order_success_is_audited(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 5001 ) );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-update-order', $abilities );
+	}
+
+	public function test_update_order_top_level_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'   => 5001,
+				'evil_field' => 'x',
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $res, 'Closed schema must reject unknown top-level field.' );
+	}
+
+	/**
+	 * MED-4 nested-smuggle on update: billing.role must be rejected.
+	 */
+	public function test_update_order_billing_nested_smuggle_rejected(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id' => 5001,
+				'billing'  => array(
+					'city' => 'London',
+					'role' => 'administrator',
+				),
+			)
+		);
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'billing.role smuggle on update must be rejected -- billing sub-schema is closed.'
+		);
+	}
+
+	// =========================================================================
+	// aafm/wc-update-order-status
+	// =========================================================================
+
+	/**
+	 * Enable + register the full order ability set including wc-update-order-status.
+	 */
+	private function register_wc_order_status_write(): void {
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option(
+			'aafm_enabled_abilities',
+			array(
+				'aafm/wc-list-orders',
+				'aafm/wc-get-order',
+				'aafm/wc-create-order',
+				'aafm/wc-update-order',
+				'aafm/wc-update-order-status',
+			)
+		);
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	public function test_update_order_status_sets_the_status(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'completed', $res['status'], 'Status must be updated to completed.' );
+		$this->assertArrayHasKey( 'id', $res );
+		$this->assertSame( 5001, $res['id'] );
+	}
+
+	public function test_update_order_status_wc_prefixed_form_accepted(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'wc-completed',
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'completed', $res['status'], 'wc-prefixed status form must be accepted and normalised.' );
+	}
+
+	public function test_update_order_status_invalid_status_returns_error(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'not-a-real-status',
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'An unrecognised status slug must be rejected.'
+		);
+	}
+
+	public function test_update_order_status_unknown_order_returns_error(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 99999,
+				'status'   => 'completed',
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'A non-existent order_id must return an error.'
+		);
+	}
+
+	public function test_update_order_status_denied_requires_manage_woocommerce(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'editor' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'Editor must not be able to update order status -- manage_woocommerce required.'
+		);
+	}
+
+	public function test_update_order_status_denied_is_audited(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'editor' );
+
+		wp_get_ability( 'aafm/wc-update-order-status' )->check_permissions(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( 'aafm/wc-update-order-status', $abilities );
+	}
+
+	public function test_update_order_status_success_is_audited(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( 'aafm/wc-update-order-status', $abilities );
+	}
+
+	public function test_update_order_status_top_level_smuggle_rejected(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+				'role'     => 'administrator',
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'Top-level smuggle via extra key must be rejected -- schema is closed.'
+		);
+	}
 }

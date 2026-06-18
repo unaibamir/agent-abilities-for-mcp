@@ -371,6 +371,62 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		public function get_shipping_postcode() { return ''; }
 		/** @return string */
 		public function get_shipping_country() { return ''; }
+		/** @param string $v @return void */
+		public function set_status( $v ) {}
+		/** @param string $v @return bool */
+		public function update_status( $v ) { return true; }
+		/** @param int $v @return void */
+		public function set_customer_id( $v ) {}
+		/** @param string $v @return void */
+		public function set_customer_note( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_first_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_last_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_company( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_address_1( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_address_2( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_city( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_state( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_postcode( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_country( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_email( $v ) {}
+		/** @param string $v @return void */
+		public function set_billing_phone( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_first_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_last_name( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_company( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_address_1( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_address_2( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_city( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_state( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_postcode( $v ) {}
+		/** @param string $v @return void */
+		public function set_shipping_country( $v ) {}
+		/**
+		 * @param \WC_Product|false $product
+		 * @param int $qty
+		 * @return int
+		 */
+		public function add_product( $product, $qty = 1 ) { return 0; }
+		/** @return int */
+		public function save() { return 0; }
 	}
 }
 
@@ -391,6 +447,14 @@ if ( ! function_exists( 'wc_get_order' ) ) {
 	 */
 	function wc_get_order( $id = false ) {
 		return false;
+	}
+}
+if ( ! function_exists( 'wc_get_order_statuses' ) ) {
+	/**
+	 * @return array<string,string>
+	 */
+	function wc_get_order_statuses() {
+		return array();
 	}
 }
 // phpcs:enable

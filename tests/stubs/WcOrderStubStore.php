@@ -80,6 +80,25 @@ class WcOrderStubStore {
 	}
 
 	/**
+	 * Persist an order data array to the store, assigning a new id when none is provided.
+	 *
+	 * Used by the WC_Order stub's save() method so create/update abilities can round-trip
+	 * through the stub store without WooCommerce installed.
+	 *
+	 * @param array<string,mixed> $data Order data. An id of 0 or absent triggers auto-assign.
+	 * @return int The assigned or existing order id.
+	 */
+	public static function save( array $data ): int {
+		$id = isset( $data['id'] ) ? (int) $data['id'] : 0;
+		if ( $id < 1 ) {
+			$id         = self::$next_id++;
+			$data['id'] = $id;
+		}
+		self::$orders[ $id ] = self::with_defaults( $data );
+		return $id;
+	}
+
+	/**
 	 * Every stored order's data, in id order (the wc_get_orders() source).
 	 *
 	 * @return array<int,array<string,mixed>>

@@ -300,6 +300,10 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
+		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_order_statuses() { return array( "wc-pending" => "Pending", "wc-processing" => "Processing", "wc-on-hold" => "On hold", "wc-completed" => "Completed", "wc-cancelled" => "Cancelled", "wc-refunded" => "Refunded", "wc-failed" => "Failed" ); }' );
+		}
 	}
 
 	/**
@@ -418,6 +422,36 @@ class WC_Order {
 	public function get_shipping_state() { return (string) ( $this->data['shipping']['state'] ?? '' ); }
 	public function get_shipping_postcode() { return (string) ( $this->data['shipping']['postcode'] ?? '' ); }
 	public function get_shipping_country() { return (string) ( $this->data['shipping']['country'] ?? '' ); }
+	public function set_status( $v ) { $this->data['status'] = (string) $v; }
+	public function update_status( $v ) { $this->data['status'] = 'wc-' === substr( $v, 0, 3 ) ? $v : 'wc-' . $v; $this->data['status'] = (string) $v; return true; }
+	public function set_customer_id( $v ) { $this->data['customer_id'] = (int) $v; }
+	public function set_customer_note( $v ) { $this->data['customer_note'] = (string) $v; }
+	public function set_billing_first_name( $v ) { $this->data['billing']['first_name'] = (string) $v; }
+	public function set_billing_last_name( $v ) { $this->data['billing']['last_name'] = (string) $v; }
+	public function set_billing_company( $v ) { $this->data['billing']['company'] = (string) $v; }
+	public function set_billing_address_1( $v ) { $this->data['billing']['address_1'] = (string) $v; }
+	public function set_billing_address_2( $v ) { $this->data['billing']['address_2'] = (string) $v; }
+	public function set_billing_city( $v ) { $this->data['billing']['city'] = (string) $v; }
+	public function set_billing_state( $v ) { $this->data['billing']['state'] = (string) $v; }
+	public function set_billing_postcode( $v ) { $this->data['billing']['postcode'] = (string) $v; }
+	public function set_billing_country( $v ) { $this->data['billing']['country'] = (string) $v; }
+	public function set_billing_email( $v ) { $this->data['billing']['email'] = (string) $v; }
+	public function set_billing_phone( $v ) { $this->data['billing']['phone'] = (string) $v; }
+	public function set_shipping_first_name( $v ) { $this->data['shipping']['first_name'] = (string) $v; }
+	public function set_shipping_last_name( $v ) { $this->data['shipping']['last_name'] = (string) $v; }
+	public function set_shipping_company( $v ) { $this->data['shipping']['company'] = (string) $v; }
+	public function set_shipping_address_1( $v ) { $this->data['shipping']['address_1'] = (string) $v; }
+	public function set_shipping_address_2( $v ) { $this->data['shipping']['address_2'] = (string) $v; }
+	public function set_shipping_city( $v ) { $this->data['shipping']['city'] = (string) $v; }
+	public function set_shipping_state( $v ) { $this->data['shipping']['state'] = (string) $v; }
+	public function set_shipping_postcode( $v ) { $this->data['shipping']['postcode'] = (string) $v; }
+	public function set_shipping_country( $v ) { $this->data['shipping']['country'] = (string) $v; }
+	public function add_product( $product, $qty = 1 ) {
+		$pid = is_object( $product ) && method_exists( $product, 'get_id' ) ? (int) $product->get_id() : (int) $product;
+		$this->data['items'][] = array( 'name' => '', 'product_id' => $pid, 'quantity' => (int) $qty, 'subtotal' => '0.00', 'total' => '0.00' );
+		return count( $this->data['items'] ) - 1;
+	}
+	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }
 PHP;
 	}

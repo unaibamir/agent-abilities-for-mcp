@@ -1563,6 +1563,61 @@
 	.aafm-table-wrap {
 		overflow-x: auto;
 	}
+
+	/* ---------- Shared section component (aafm_render_section) ---------- */
+	/* Real spacing between stacked sections so new sections inherit the gap
+	   automatically (the Settings cramped Safety/OAuth/Danger fix). */
+	.aafm-section {
+		margin-block: 20px;
+
+		&:first-child { margin-block-start: 0; }
+		&:last-child { margin-block-end: 0; }
+	}
+
+	/* Collapsible variant reuses the abilities-details chevron affordance so the
+	   triangle matches the Help/abilities collapsibles exactly. */
+	.aafm-section--collapsible {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+
+		> summary {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding-block: 12px;
+			padding-inline: 18px;
+			cursor: pointer;
+			list-style: none;
+			font-size: 14px;
+			font-weight: 600;
+			user-select: none;
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
+
+			&::after {
+				content: "";
+				display: inline-block;
+				margin-inline-start: auto;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid var(--aafm-text-subtle);
+				transition: transform 0.18s ease;
+			}
+		}
+
+		&[open] > summary::after {
+			transform: rotate(180deg);
+		}
+
+		.aafm-section-body {
+			padding-block: 0 16px;
+			padding-inline: 18px;
+		}
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

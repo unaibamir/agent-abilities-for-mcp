@@ -206,7 +206,7 @@ class WcCouponStubStore {
 	 * @return array<string,mixed>
 	 */
 	private static function with_defaults( array $data ): array {
-		return array_merge(
+		$merged = array_merge(
 			array(
 				'id'                   => 0,
 				'code'                 => '',
@@ -227,5 +227,11 @@ class WcCouponStubStore {
 			),
 			$data
 		);
+		// Real WooCommerce lowercases coupon codes on save; mirror that so seeded codes behave
+		// consistently with codes written through set_code() + save().
+		if ( isset( $merged['code'] ) && '' !== $merged['code'] ) {
+			$merged['code'] = strtolower( (string) $merged['code'] );
+		}
+		return $merged;
 	}
 }

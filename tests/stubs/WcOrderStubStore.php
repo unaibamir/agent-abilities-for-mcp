@@ -95,6 +95,13 @@ class WcOrderStubStore {
 	public static bool $delete_refund_should_fail = false;
 
 	/**
+	 * When true, WC_Order::add_order_note() returns 0 so the "don't lie success" guard is exercised.
+	 *
+	 * @var bool
+	 */
+	public static bool $add_note_should_fail = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -110,6 +117,7 @@ class WcOrderStubStore {
 		self::$delete_should_fail        = false;
 		self::$delete_note_should_fail   = false;
 		self::$delete_refund_should_fail = false;
+		self::$add_note_should_fail      = false;
 	}
 
 	/**
@@ -313,6 +321,9 @@ class WcOrderStubStore {
 	 * @return int The new note id.
 	 */
 	public static function add_note( int $order_id, string $note, bool $customer_note = false ): int {
+		if ( self::$add_note_should_fail ) {
+			return 0;
+		}
 		$id = self::$next_note_id++;
 		if ( ! isset( self::$notes[ $order_id ] ) ) {
 			self::$notes[ $order_id ] = array();

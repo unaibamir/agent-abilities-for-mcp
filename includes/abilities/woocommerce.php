@@ -3201,6 +3201,9 @@ function aafm_exec_wc_create_order_note( array $input ) {
 	}
 
 	$note_id = $order->add_order_note( $note_text, $customer_note, true );
+	if ( ! $note_id ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'            => (int) $note_id,

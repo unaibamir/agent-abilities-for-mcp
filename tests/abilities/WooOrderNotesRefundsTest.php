@@ -493,6 +493,26 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
+	/**
+	 * Surfaced add-failure: when add_order_note() returns 0, the executor must not report success.
+	 */
+	public function test_create_order_note_surfaces_failed_add(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_notes( 5001, array() );
+
+		WcOrderStubStore::$add_note_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note'     => 'This note should fail to add.',
+			)
+		);
+		WcOrderStubStore::$add_note_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed add_order_note() must not return {id:0,...} as success.' );
+	}
+
 	// -------------------------------------------------------------------------
 	// aafm/wc-delete-order-note
 	// -------------------------------------------------------------------------

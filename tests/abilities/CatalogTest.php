@@ -83,6 +83,8 @@ final class CatalogTest extends TestCase {
 		'aafm/wc-get-order-note',
 		'aafm/wc-list-order-refunds',
 		'aafm/wc-get-order-refund',
+		'aafm/wc-list-customers',
+		'aafm/wc-get-customer',
 	);
 
 	/**
@@ -158,6 +160,9 @@ final class CatalogTest extends TestCase {
 		'aafm/wc-delete-order-note',
 		'aafm/wc-create-order-refund',
 		'aafm/wc-delete-order-refund',
+		'aafm/wc-create-customer',
+		'aafm/wc-update-customer',
+		'aafm/wc-delete-customer',
 	);
 
 	/**
@@ -215,6 +220,7 @@ final class CatalogTest extends TestCase {
 		'aafm/wc-delete-order',
 		'aafm/wc-delete-order-note',
 		'aafm/wc-delete-order-refund',
+		'aafm/wc-delete-customer',
 	);
 
 	public function set_up(): void {
@@ -229,7 +235,7 @@ final class CatalogTest extends TestCase {
 		// all three active so later slices' integration abilities are counted here. The
 		// registry is memoized (includes/registry.php static $cache), so the flush is
 		// MANDATORY — a force filter added without it is a no-op against the cached
-		// host-inactive registry. With the WooCommerce order notes/refunds slice (WC2.3) landed, the count is 124.
+		// host-inactive registry. With the WooCommerce customers slice (WC3) landed, the count is 129.
 		add_filter( 'aafm_integration_active_seo', '__return_true' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
@@ -256,7 +262,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 124) and register categories + abilities.
+	 * Enable the entire catalog (all 129) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -276,9 +282,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			124,
+			129,
 			$registry,
-			'The catalog must contain exactly 124 abilities — 57 reads + 67 writes.'
+			'The catalog must contain exactly 129 abilities — 59 reads + 70 writes.'
 		);
 	}
 
@@ -293,8 +299,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 57 reads — no drift.' );
-		$this->assertCount( 57, $reads, 'Exactly 57 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 59 reads — no drift.' );
+		$this->assertCount( 59, $reads, 'Exactly 59 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -308,8 +314,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 67 writes — no drift.' );
-		$this->assertCount( 67, $writes, 'Exactly 67 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 70 writes — no drift.' );
+		$this->assertCount( 70, $writes, 'Exactly 70 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -318,7 +324,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 124 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 129 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -332,9 +338,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			124,
+			129,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(57) + writes(67) must equal the full catalog (124).'
+			'reads(59) + writes(70) must equal the full catalog (129).'
 		);
 	}
 

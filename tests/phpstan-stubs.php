@@ -761,4 +761,76 @@ if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 		return 0;
 	}
 }
+if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
+	/**
+	 * PHPStan stub for WC_Shipping_Zone (W4-WC5). Never loaded in production; test-only.
+	 */
+	class WC_Shipping_Zone {
+		/** @param int $zone_id */
+		public function __construct( $zone_id = 0 ) {}
+		/** @return int */
+		public function get_id() { return 0; }
+		/** @return array<string,mixed> */
+		public function get_data() { return array(); }
+		/** @return string */
+		public function get_zone_name() { return ''; }
+		/** @return int */
+		public function get_zone_order() { return 0; }
+		/** @param string $v @return void */
+		public function set_zone_name( $v ) {}
+		/** @param int $v @return void */
+		public function set_zone_order( $v ) {}
+		/** @return int */
+		public function save() { return 0; }
+		/** @param bool $force @return bool */
+		public function delete( $force = false ) { return false; }
+		/**
+		 * @param bool $enabled_only
+		 * @return array<int,\WC_Shipping_Method>
+		 */
+		public function get_shipping_methods( $enabled_only = false ) { return array(); }
+		/** @param string $type @return int */
+		public function add_shipping_method( $type ) { return 0; }
+		/** @param int $instance_id @return bool */
+		public function delete_shipping_method( $instance_id ) { return false; }
+	}
+}
+if ( ! class_exists( 'WC_Shipping_Method' ) ) {
+	/**
+	 * PHPStan stub for WC_Shipping_Method (W4-WC5). Never loaded in production; test-only.
+	 */
+	class WC_Shipping_Method {
+		/** @var int */
+		public $instance_id = 0;
+		/** @var string */
+		public $id = '';
+		/** @var string */
+		public $method_title = '';
+		/** @var string */
+		public $enabled = 'yes';
+		/** @var array<string,mixed> */
+		public $settings = array();
+		/**
+		 * @param int $instance_id
+		 * @param int $zone_id
+		 */
+		public function __construct( $instance_id = 0, $zone_id = 0 ) {}
+		/** @return int */
+		public function get_instance_id() { return 0; }
+		/** @return int|false */
+		public function save() { return false; }
+	}
+}
+if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
+	/**
+	 * PHPStan stub for WC_Shipping_Zones (W4-WC5). Never loaded in production; test-only.
+	 */
+	class WC_Shipping_Zones {
+		/**
+		 * @param array<string,mixed> $args
+		 * @return array<int,array<string,mixed>>
+		 */
+		public static function get_zones( $args = array() ) { return array(); }
+	}
+}
 // phpcs:enable

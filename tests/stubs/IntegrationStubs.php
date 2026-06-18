@@ -915,6 +915,208 @@ PHP;
 	}
 
 	/**
+	 * Seed the WcShippingStubStore with default zone and method fixtures for WC5 tests.
+	 *
+	 * Seeds zone 1 (Europe) and zone 2 (USA) with two methods each. Zone 0 (Rest of World)
+	 * is always present via the store; seed it here so list tests see it. Call after
+	 * stub_wc_shipping() (which resets the store), and before registering shipping abilities.
+	 *
+	 * @return void
+	 */
+	protected function seed_wc_shipping(): void {
+		WcShippingStubStore::reset();
+		WcShippingStubStore::seed(
+			0,
+			array(
+				'zone_name'  => 'Rest of World',
+				'zone_order' => 0,
+			)
+		);
+		WcShippingStubStore::seed(
+			1,
+			array(
+				'zone_name'      => 'Europe',
+				'zone_order'     => 1,
+				'zone_locations' => array(
+					array(
+						'type' => 'continent',
+						'code' => 'EU',
+					),
+				),
+			)
+		);
+		WcShippingStubStore::seed(
+			2,
+			array(
+				'zone_name'      => 'USA',
+				'zone_order'     => 2,
+				'zone_locations' => array(
+					array(
+						'type' => 'country',
+						'code' => 'US',
+					),
+				),
+			)
+		);
+		WcShippingStubStore::seed_method(
+			1,
+			1,
+			array(
+				'id'           => 'flat_rate',
+				'method_title' => 'Flat Rate',
+				'enabled'      => 'yes',
+			)
+		);
+		WcShippingStubStore::seed_method(
+			1,
+			2,
+			array(
+				'id'           => 'free_shipping',
+				'method_title' => 'Free Shipping',
+				'enabled'      => 'yes',
+			)
+		);
+		WcShippingStubStore::seed_method(
+			2,
+			3,
+			array(
+				'id'           => 'flat_rate',
+				'method_title' => 'Flat Rate',
+				'enabled'      => 'yes',
+			)
+		);
+		WcShippingStubStore::seed_method(
+			2,
+			4,
+			array(
+				'id'           => 'local_pickup',
+				'method_title' => 'Local Pickup',
+				'enabled'      => 'no',
+			)
+		);
+		WcShippingStubStore::$next_instance_id = 5;
+	}
+
+	/**
+	 * Define the minimal WooCommerce shipping surface so the shipping zone and method abilities
+	 * can list/read/create/update/delete through the WC API layer.
+	 *
+	 * WooCommerce's WC_Shipping_Zone class, WC_Shipping_Method class, and WC_Shipping_Zones static
+	 * are global and defined once per process, so the actual zone/method state lives in
+	 * WcShippingStubStore. This helper must be called AFTER stub_woocommerce() (which defines the
+	 * WooCommerce marker class and grants the manage_woocommerce capability).
+	 *
+	 * @return void
+	 */
+	protected function stub_wc_shipping(): void {
+		if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_shipping_zone_class_source() );
+		}
+		if ( ! class_exists( 'WC_Shipping_Method' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_shipping_method_class_source() );
+		}
+		if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( 'class WC_Shipping_Zones { public static function get_zones( $args = array() ) { $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); $z = new \WC_Shipping_Zone( $zone_id ); $out[$zone_id] = array_merge( $row, array( "zone_object" => $z ) ); } return $out; } }' );
+		}
+	}
+
+	/**
+	 * The source of the stub WC_Shipping_Zone class. Kept as a string so the eval definition is
+	 * guarded by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_shipping_zone_class_source(): string {
+		return <<<'PHP'
+class WC_Shipping_Zone {
+	private $data = array();
+	public function __construct( $zone_id = 0 ) {
+		$zone_id = (int) $zone_id;
+		$stored = \AAFM\Tests\WcShippingStubStore::get( $zone_id );
+		$this->data = is_array( $stored ) ? $stored : array( 'zone_id' => $zone_id, 'zone_name' => '', 'zone_order' => 0, 'zone_locations' => array() );
+	}
+	public function get_id() { return (int) ( $this->data['zone_id'] ?? 0 ); }
+	public function get_data() {
+		return array(
+			'id'             => (int) ( $this->data['zone_id'] ?? 0 ),
+			'zone_name'      => (string) ( $this->data['zone_name'] ?? '' ),
+			'zone_order'     => (int) ( $this->data['zone_order'] ?? 0 ),
+			'zone_locations' => (array) ( $this->data['zone_locations'] ?? array() ),
+		);
+	}
+	public function get_zone_name() { return (string) ( $this->data['zone_name'] ?? '' ); }
+	public function get_zone_order() { return (int) ( $this->data['zone_order'] ?? 0 ); }
+	public function set_zone_name( $v ) { $this->data['zone_name'] = (string) $v; }
+	public function set_zone_order( $v ) { $this->data['zone_order'] = (int) $v; }
+	public function save() {
+		$id = \AAFM\Tests\WcShippingStubStore::save_zone( $this->data );
+		if ( $id > 0 ) { $this->data['zone_id'] = $id; }
+		return $id;
+	}
+	public function delete( $force = false ) {
+		$id = (int) ( $this->data['zone_id'] ?? 0 );
+		return \AAFM\Tests\WcShippingStubStore::delete_zone( $id );
+	}
+	public function get_shipping_methods( $enabled_only = false ) {
+		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
+		$methods_data = \AAFM\Tests\WcShippingStubStore::methods_for_zone( $zone_id );
+		$out = array();
+		foreach ( $methods_data as $m ) {
+			if ( $enabled_only && 'yes' !== ( $m['enabled'] ?? 'yes' ) ) { continue; }
+			$instance_id = (int) ( $m['instance_id'] ?? 0 );
+			$obj = new \WC_Shipping_Method( $instance_id, $zone_id );
+			$out[ $instance_id ] = $obj;
+		}
+		return $out;
+	}
+	public function add_shipping_method( $type ) {
+		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
+		return \AAFM\Tests\WcShippingStubStore::add_method( $zone_id, (string) $type );
+	}
+	public function delete_shipping_method( $instance_id ) {
+		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
+		return \AAFM\Tests\WcShippingStubStore::delete_method( $zone_id, (int) $instance_id );
+	}
+}
+PHP;
+	}
+
+	/**
+	 * The source of the stub WC_Shipping_Method class. Kept as a string so the eval definition is
+	 * guarded by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_shipping_method_class_source(): string {
+		return <<<'PHP'
+class WC_Shipping_Method {
+	public $instance_id = 0;
+	public $id = '';
+	public $method_title = '';
+	public $enabled = 'yes';
+	public $settings = array();
+	private $zone_id = 0;
+	public function __construct( $instance_id = 0, $zone_id = 0 ) {
+		$this->instance_id = (int) $instance_id;
+		$this->zone_id     = (int) $zone_id;
+		$stored = \AAFM\Tests\WcShippingStubStore::get_method( $this->zone_id, $this->instance_id );
+		if ( is_array( $stored ) ) {
+			$this->id           = (string) ( $stored['id'] ?? 'flat_rate' );
+			$this->method_title = (string) ( $stored['method_title'] ?? '' );
+			$this->enabled      = (string) ( $stored['enabled'] ?? 'yes' );
+			$this->settings     = (array) ( $stored['settings'] ?? array() );
+		}
+	}
+	public function get_instance_id() { return $this->instance_id; }
+	public function save() { $delta = array( 'method_title' => $this->method_title, 'enabled' => $this->enabled, 'settings' => $this->settings ); $ok = \AAFM\Tests\WcShippingStubStore::update_method( $this->zone_id, $this->instance_id, $delta ); return ( $ok > 0 ) ? $this->instance_id : false; }
+}
+PHP;
+	}
+
+	/**
 	 * Remove every filter this trait added. Call from the slice's tear_down().
 	 *
 	 * @return void
@@ -930,5 +1132,6 @@ PHP;
 		WcOrderStubStore::reset();
 		WcCustomerStubStore::reset();
 		WcCouponStubStore::reset();
+		WcShippingStubStore::reset();
 	}
 }

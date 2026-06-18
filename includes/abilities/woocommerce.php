@@ -2998,6 +2998,40 @@ function aafm_wc_redact_note( object $note ): array {
 	);
 }
 
+// ---------------------------------------------------------------------------
+// Shared output-property helpers — notes and refunds.
+// Used by both list and get schemas so they stay in lockstep.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared output properties for a single order note.
+ *
+ * @return array<string,array<string,string>>
+ */
+function aafm_wc_note_output_properties(): array {
+	return array(
+		'id'            => array( 'type' => 'integer' ),
+		'note'          => array( 'type' => 'string' ),
+		'added_by_user' => array( 'type' => 'boolean' ),
+		'date_created'  => array( 'type' => 'string' ),
+		'customer_note' => array( 'type' => 'boolean' ),
+	);
+}
+
+/**
+ * Shared output properties for a single order refund.
+ *
+ * @return array<string,array<string,string>>
+ */
+function aafm_wc_refund_output_properties(): array {
+	return array(
+		'id'           => array( 'type' => 'integer' ),
+		'amount'       => array( 'type' => 'string' ),
+		'reason'       => array( 'type' => 'string' ),
+		'date_created' => array( 'type' => 'string' ),
+	);
+}
+
 // aafm/wc-list-order-notes (R).
 
 /**
@@ -3026,7 +3060,10 @@ function aafm_args_wc_list_order_notes(): array {
 			'properties' => array(
 				'notes' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_wc_note_output_properties(),
+					),
 				),
 			),
 		),
@@ -3092,13 +3129,7 @@ function aafm_args_wc_get_order_note(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'            => array( 'type' => 'integer' ),
-				'note'          => array( 'type' => 'string' ),
-				'added_by_user' => array( 'type' => 'boolean' ),
-				'date_created'  => array( 'type' => 'string' ),
-				'customer_note' => array( 'type' => 'boolean' ),
-			),
+			'properties' => aafm_wc_note_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_order_note',
 		'permission_callback' => 'aafm_wc_perm',
@@ -3169,6 +3200,7 @@ function aafm_args_wc_create_order_note(): array {
 			'properties' => array(
 				'id'            => array( 'type' => 'integer' ),
 				'note'          => array( 'type' => 'string' ),
+				'added_by_user' => array( 'type' => 'boolean' ),
 				'customer_note' => array( 'type' => 'boolean' ),
 				'date_created'  => array( 'type' => 'string' ),
 			),
@@ -3208,6 +3240,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
 	return array(
 		'id'            => (int) $note_id,
 		'note'          => $note_text,
+		'added_by_user' => true,
 		'customer_note' => $customer_note,
 		'date_created'  => gmdate( 'Y-m-d\TH:i:s' ),
 	);
@@ -3223,17 +3256,21 @@ function aafm_exec_wc_create_order_note( array $input ) {
 function aafm_args_wc_delete_order_note(): array {
 	return array(
 		'label'               => __( 'Delete WooCommerce order note', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce order note by note id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Permanently deletes a note from a WooCommerce order. Requires both the order id and the note id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'note_id' => array(
+				'order_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'note_id'  => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
 			),
-			'required'             => array( 'note_id' ),
+			'required'             => array( 'order_id', 'note_id' ),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
@@ -3265,7 +3302,13 @@ function aafm_args_wc_delete_order_note(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_delete_order_note( array $input ) {
-	$note_id = (int) ( $input['note_id'] ?? 0 );
+	$order_id = (int) ( $input['order_id'] ?? 0 );
+	$note_id  = (int) ( $input['note_id'] ?? 0 );
+
+	$order = aafm_wc_get_order_object( $order_id );
+	if ( null === $order ) {
+		return aafm_generic_error();
+	}
 
 	$ok = wc_delete_order_note( $note_id );
 	if ( ! $ok ) {
@@ -3347,7 +3390,10 @@ function aafm_args_wc_list_order_refunds(): array {
 			'properties' => array(
 				'refunds' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => aafm_wc_refund_output_properties(),
+					),
 				),
 			),
 		),
@@ -3411,12 +3457,7 @@ function aafm_args_wc_get_order_refund(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array(
-				'id'           => array( 'type' => 'integer' ),
-				'amount'       => array( 'type' => 'string' ),
-				'reason'       => array( 'type' => 'string' ),
-				'date_created' => array( 'type' => 'string' ),
-			),
+			'properties' => aafm_wc_refund_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_order_refund',
 		'permission_callback' => 'aafm_wc_perm',

@@ -150,7 +150,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/wc-delete-product-variation' => __( 'Permanently deletes a product variation, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-delete-product-attribute' => __( 'Permanently removes a global product attribute taxonomy by id. This cannot be undone — all terms in the taxonomy are lost. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-delete-order'             => __( 'Permanently deletes a WooCommerce order, bypassing the Trash. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
-		'aafm/wc-delete-order-note'        => __( 'Permanently deletes a WooCommerce order note by note id. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'aafm/wc-delete-order-note'        => __( 'Permanently deletes a note from a WooCommerce order. Requires the order id and the note id. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 		'aafm/wc-delete-order-refund'      => __( 'Permanently deletes a WooCommerce order refund by refund id. This cannot be undone. Requires the manage-WooCommerce capability. Off by default.', 'agent-abilities-for-mcp' ),
 	);
 }

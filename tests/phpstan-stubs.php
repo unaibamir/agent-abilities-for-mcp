@@ -425,8 +425,40 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 * @return int
 		 */
 		public function add_product( $product, $qty = 1 ) { return 0; }
+		/**
+		 * @param string $note
+		 * @param bool   $customer_note
+		 * @param bool   $added_by_user
+		 * @return int
+		 */
+		public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { return 0; }
+		/** @return array<int,\WC_Order_Refund> */
+		public function get_refunds() { return array(); }
+		/**
+		 * @param bool $force
+		 * @return bool
+		 */
+		public function delete( $force = false ) { return false; }
 		/** @return int */
 		public function save() { return 0; }
+	}
+}
+
+if ( ! class_exists( 'WC_Order_Refund' ) ) {
+	class WC_Order_Refund {
+		/** @return int */
+		public function get_id() { return 0; }
+		/** @return string */
+		public function get_amount() { return '0.00'; }
+		/** @return string */
+		public function get_reason() { return ''; }
+		/** @return string|null */
+		public function get_date_created() { return null; }
+		/**
+		 * @param bool $force
+		 * @return bool
+		 */
+		public function delete( $force = false ) { return false; }
 	}
 }
 
@@ -455,6 +487,33 @@ if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 	 */
 	function wc_get_order_statuses() {
 		return array();
+	}
+}
+if ( ! function_exists( 'wc_get_order_notes' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return array<int,object>
+	 */
+	function wc_get_order_notes( $args = array() ) {
+		return array();
+	}
+}
+if ( ! function_exists( 'wc_delete_order_note' ) ) {
+	/**
+	 * @param int $note_id
+	 * @return bool
+	 */
+	function wc_delete_order_note( $note_id ) {
+		return false;
+	}
+}
+if ( ! function_exists( 'wc_create_refund' ) ) {
+	/**
+	 * @param array<string,mixed> $args
+	 * @return \WC_Order_Refund|\WP_Error
+	 */
+	function wc_create_refund( $args = array() ) {
+		return new \WP_Error();
 	}
 }
 // phpcs:enable

@@ -297,12 +297,34 @@ trait IntegrationStubs {
 		// wc_get_product), we define wc_get_order separately here. The product stubs use
 		// wc_get_product(); orders use wc_get_order().
 		if ( ! function_exists( 'wc_get_order' ) ) {
+			// Returns WC_Order_Refund when the id is in the refund map, WC_Order when it is a
+			// regular order, or false when the id is unknown. Mirrors real WooCommerce behaviour
+			// where shop_order_refund posts return WC_Order_Refund from wc_get_order().
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
+			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
 		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_order_statuses() { return array( "wc-pending" => "Pending", "wc-processing" => "Processing", "wc-on-hold" => "On hold", "wc-completed" => "Completed", "wc-cancelled" => "Cancelled", "wc-refunded" => "Refunded", "wc-failed" => "Failed" ); }' );
+		}
+
+		// Note and refund stubs (W4-WC2.3). These delegate entirely to WcOrderStubStore so tests
+		// can seed notes/refunds per test and assert round-trip reads/creates/deletes without WC.
+		if ( ! class_exists( 'WC_Order_Refund' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_order_refund_class_source() );
+		}
+		if ( ! function_exists( 'wc_get_order_notes' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_order_notes( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; return \AAFM\Tests\WcOrderStubStore::get_notes( $order_id ); }' );
+		}
+		if ( ! function_exists( 'wc_delete_order_note' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_delete_order_note( $note_id ) { return \AAFM\Tests\WcOrderStubStore::delete_note( (int) $note_id ); }' );
+		}
+		if ( ! function_exists( 'wc_create_refund' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_create_refund( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
 		}
 	}
 
@@ -451,6 +473,9 @@ class WC_Order {
 		$this->data['items'][] = array( 'name' => '', 'product_id' => $pid, 'quantity' => (int) $qty, 'subtotal' => '0.00', 'total' => '0.00' );
 		return count( $this->data['items'] ) - 1;
 	}
+	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
+	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
+	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
 	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }
 PHP;
@@ -560,6 +585,34 @@ class WC_Product_Variation {
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 	public function delete( $force = false ) { \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); return true; }
+}
+PHP;
+	}
+
+	/**
+	 * The source of the stub WC_Order_Refund class. Kept as a string so the eval definition is
+	 * guarded by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * WC_Order_Refund reads from WcOrderStubStore::get_refund_by_id(). Its getters mirror the
+	 * real WooCommerce WC_Order_Refund API the refund abilities call: get_id, get_amount,
+	 * get_reason, get_date_created. delete() delegates to WcOrderStubStore::delete_refund().
+	 *
+	 * @return string
+	 */
+	private function aafm_wc_order_refund_class_source(): string {
+		return <<<'PHP'
+class WC_Order_Refund {
+	private $data = array();
+	public function __construct( $id = 0 ) {
+		$id = (int) $id;
+		$stored = \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id );
+		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'amount' => '0.00', 'reason' => '', 'date_created' => '' );
+	}
+	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
+	public function get_amount() { return (string) ( $this->data['amount'] ?? '0.00' ); }
+	public function get_reason() { return (string) ( $this->data['reason'] ?? '' ); }
+	public function get_date_created() { return $this->data['date_created'] ?? null; }
+	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_refund( $id ); }
 }
 PHP;
 	}

@@ -139,22 +139,32 @@ class WcCustomerStubStore {
 	/**
 	 * Query customers with limit/paged filtering.
 	 *
-	 * Returns a plain array of WC_Customer objects, mirroring the shape the customer abilities use.
+	 * When args includes 'paginate' => true, returns an object with ->results (the page slice of
+	 * WC_Customer objects) and ->total (the grand count), mirroring the real WooCommerce paginate
+	 * shape used by the orders and products slices. Without paginate, returns a plain array.
 	 *
-	 * @param array<string,mixed> $args Query args (limit, paged).
-	 * @return array<int,\WC_Customer>
+	 * @param array<string,mixed> $args Query args (limit, paged, paginate).
+	 * @return array<int,\WC_Customer>|object
 	 */
-	public static function query( array $args = array() ): array {
-		$rows  = self::all();
-		$limit = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+	public static function query( array $args = array() ) {
+		$all_rows = self::all();
+		$grand    = count( $all_rows );
+		$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
+		$rows     = $all_rows;
 		if ( $limit > 0 ) {
 			$paged  = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
 			$offset = ( $paged - 1 ) * $limit;
-			$rows   = array_slice( $rows, $offset, $limit );
+			$rows   = array_slice( $all_rows, $offset, $limit );
 		}
 		$out = array();
 		foreach ( $rows as $row ) {
 			$out[] = new \WC_Customer( (int) $row['id'] );
+		}
+		if ( ! empty( $args['paginate'] ) ) {
+			return (object) array(
+				'results' => $out,
+				'total'   => $grand,
+			);
 		}
 		return $out;
 	}

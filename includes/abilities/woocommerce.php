@@ -3897,7 +3897,7 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
 		'username'     => $customer->get_username(),
 		'orders_count' => $customer->get_order_count(),
 		'total_spent'  => $customer->get_total_spent(),
-		'date_created' => is_string( $date_created ) ? $date_created : null,
+		'date_created' => aafm_wc_date_string( $customer->get_date_created() ),
 		'billing'      => $is_billing_empty ? (object) array() : $billing,
 		'shipping'     => $is_shipping_empty ? (object) array() : $shipping,
 	);
@@ -4051,13 +4051,14 @@ function aafm_exec_wc_list_customers( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 10;
 
 	$args = array(
-		'limit' => $per_page,
-		'paged' => $page,
+		'limit'    => $per_page,
+		'paged'    => $page,
+		'paginate' => true,
 	);
 
-	$objects = wc_get_customers( $args );
-	$all     = wc_get_customers( array( 'limit' => -1 ) );
-	$total   = count( $all );
+	$query   = wc_get_customers( $args );
+	$objects = is_object( $query ) && isset( $query->results ) ? $query->results : ( is_array( $query ) ? $query : array() );
+	$total   = is_object( $query ) && isset( $query->total ) ? (int) $query->total : count( $objects );
 
 	$customers = array();
 	foreach ( $objects as $customer ) {
@@ -4215,7 +4216,7 @@ function aafm_args_wc_update_customer(): array {
 
 	return array(
 		'label'               => __( 'Update WooCommerce customer', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body (with only customer_id) is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Updates a WooCommerce customer by id, changing only the fields you send (name, billing, and shipping). Account email and username are not updatable here — use customer management tools for account-level changes. An empty request body (with only customer_id) is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -4255,7 +4256,7 @@ function aafm_exec_wc_update_customer( array $input ) {
 	}
 
 	aafm_wc_apply_customer_input( $customer, $input );
-	$saved_id = (int) $customer->save( false );
+	$saved_id = (int) $customer->save();
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();
 	}

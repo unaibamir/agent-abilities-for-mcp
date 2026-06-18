@@ -630,8 +630,8 @@ if ( ! class_exists( 'WC_Customer' ) ) {
 		public function set_shipping_postcode( $v ) {}
 		/** @param string $v @return void */
 		public function set_shipping_country( $v ) {}
-		/** @param bool|null $is_new @return int */
-		public function save( $is_new = null ) { return 0; }
+		/** @return int */
+		public function save() { return 0; }
 	}
 }
 if ( ! function_exists( 'wc_get_customer' ) ) {
@@ -646,7 +646,7 @@ if ( ! function_exists( 'wc_get_customer' ) ) {
 if ( ! function_exists( 'wc_get_customers' ) ) {
 	/**
 	 * @param array<string,mixed> $args
-	 * @return array<int,\WC_Customer>
+	 * @return array<int,\WC_Customer>|object
 	 */
 	function wc_get_customers( $args = array() ) {
 		return array();

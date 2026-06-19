@@ -256,7 +256,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding-block: 0px;
+		padding-block: 14px;
 		padding-inline: 20px;
 		border-block-end: 1px solid var(--aafm-border);
 
@@ -570,7 +570,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		margin-block: 8px 16px;
+		margin-block: 16px 16px;
 
 		a,
 		button {
@@ -831,19 +831,22 @@
 			/* The count badge sits flush to the right edge, before the chevron. */
 			.abilities-count {
 				margin-inline-start: auto;
+
+				.aafm-integration-count {
+					margin: 0;
+				}
 			}
 
 			&.is-disabled {
-				/* Mute the status pill and the inert toggles, but keep every label, risk
-				   badge, and hint at full contrast so the section stays fully readable —
-				   the operator can see exactly what activating the plugin would unlock. */
+				/* Dim the whole content section behind a single 0.5-opacity overlay and block
+				   interaction, rather than muting each control. The header (summary) stays at
+				   full strength so the plugin name, status, and counts read clearly, while
+				   everything the plugin would unlock stays legible underneath. */
 				.aafm-pill { opacity: 0.7; }
 
-				.aafm-ability-row[aria-disabled="true"] {
-					.aafm-switch {
-						opacity: 0.5;
-						cursor: not-allowed;
-					}
+				.aafm-integration-body {
+					opacity: 0.5;
+					pointer-events: none;
 				}
 			}
 		}

@@ -256,7 +256,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding-block: 14px;
+		padding-block: 0px;
 		padding-inline: 20px;
 		border-block-end: 1px solid var(--aafm-border);
 
@@ -865,6 +865,7 @@
 			gap: 10px;
 			padding-block: 12px;
 			padding-inline: 20px;
+			align-items: stretch;
 
 			.aafm-integration-search {
 				flex: 1 1 220px;

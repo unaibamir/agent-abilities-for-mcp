@@ -533,6 +533,21 @@ final class WooProductsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $read, 'A deleted product can no longer be read.' );
 	}
 
+	/**
+	 * T2-3: when the WC data store reports the delete failed, the ability returns the generic
+	 * error rather than deleted:true. The product is still present afterwards.
+	 */
+	public function test_delete_product_store_failure_returns_error(): void {
+		$this->acting_as( 'administrator' );
+
+		\AAFM\Tests\WcStubStore::$delete_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		\AAFM\Tests\WcStubStore::$delete_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed delete must not report deleted:true.' );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ), 'The product must still exist after a failed delete.' );
+	}
+
 	public function test_delete_product_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product must be destructive.' );

@@ -1280,7 +1280,11 @@ function aafm_exec_wc_delete_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
-	$product->delete( true );
+	// WC_Data::delete( true ) returns false when the data store could not remove the row.
+	// Honor it rather than reporting deleted:true on a failed delete.
+	if ( false === $product->delete( true ) ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'      => $id,
@@ -1838,7 +1842,10 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	if ( null === $variation ) {
 		return aafm_generic_error();
 	}
-	$variation->delete( true );
+	// WC_Data::delete( true ) returns false when the data store could not remove the row.
+	if ( false === $variation->delete( true ) ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'      => $id,

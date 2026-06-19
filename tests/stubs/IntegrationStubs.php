@@ -640,7 +640,7 @@ class WC_Product {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); return true; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -690,7 +690,7 @@ class WC_Product_Variation {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); return true; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}

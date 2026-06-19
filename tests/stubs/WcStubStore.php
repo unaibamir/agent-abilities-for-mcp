@@ -39,13 +39,22 @@ class WcStubStore {
 	public static int $next_id = 1000;
 
 	/**
+	 * When true, delete() refuses to remove the row and reports failure — modelling a WC
+	 * data-store delete failure so the delete-failure path is exercisable.
+	 *
+	 * @var bool
+	 */
+	public static bool $delete_should_fail = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		self::$products = array();
-		self::$next_id  = 1000;
+		self::$products           = array();
+		self::$next_id            = 1000;
+		self::$delete_should_fail = false;
 	}
 
 	/**
@@ -110,14 +119,18 @@ class WcStubStore {
 	 * variation.
 	 *
 	 * @param int $id Product id.
-	 * @return void
+	 * @return bool True when removed, false when the configured failure flag is set.
 	 */
-	public static function delete( int $id ): void {
+	public static function delete( int $id ): bool {
+		if ( self::$delete_should_fail ) {
+			return false; // Model a WC data-store delete failure: nothing removed.
+		}
 		$parent_id = (int) ( self::$products[ $id ]['parent_id'] ?? 0 );
 		unset( self::$products[ $id ] );
 		if ( $parent_id > 0 ) {
 			self::unlink_child_from_parent( $id, $parent_id );
 		}
+		return true;
 	}
 
 	/**

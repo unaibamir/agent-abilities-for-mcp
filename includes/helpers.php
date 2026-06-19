@@ -181,23 +181,82 @@ function aafm_allowed_meta_keys(): array {
 	 */
 	$filtered = (array) apply_filters( 'aafm_allowed_meta_keys', $stored );
 
+	// '*' is a wildcard SENTINEL, never a literal key — strip it here so the literal
+	// enumeration never contains it. The star is surfaced separately via
+	// aafm_meta_allow_has_star(), which the validator reads.
 	return array_values(
 		array_unique(
-			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
+			array_filter( array_map( 'strval', $filtered ), static fn( $k ) => '' !== $k && '*' !== $k && ! aafm_hard_blocked_meta_key( $k ) )
 		)
 	);
 }
 
 /**
- * Validate a meta key: must be allowlisted AND not hard-blocked. One generic error code
- * for both failure modes so a caller cannot distinguish "blocked" from "not allowlisted".
+ * The list of explicitly DENIED post-meta keys. Deny always beats allow (including allow-`*`).
+ *
+ * Read from the aafm_denied_meta_keys option, string-coerced, with empties and the `*`
+ * sentinel dropped (the star is surfaced separately via aafm_meta_deny_has_star()). Unlike the
+ * allow getter this does NOT re-floor against the hard-block: denying an already-blocked key is
+ * a harmless no-op, and re-flooring would be pointless work.
+ *
+ * @return list<string>
+ */
+function aafm_denied_meta_keys(): array {
+	$stored = get_option( 'aafm_denied_meta_keys', array() );
+	$stored = is_array( $stored ) ? array_map( 'strval', $stored ) : array();
+
+	return array_values(
+		array_unique(
+			array_filter( $stored, static fn( $k ) => '' !== $k && '*' !== $k )
+		)
+	);
+}
+
+/**
+ * Whether the post-meta ALLOW option carries the `*` wildcard (allow-all-but-blocked-or-denied).
+ *
+ * Reads the RAW option, not the filtered getter (the getter strips the sentinel).
+ *
+ * @return bool
+ */
+function aafm_meta_allow_has_star(): bool {
+	$raw = get_option( 'aafm_allowed_meta_keys', array() );
+	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * Whether the post-meta DENY option carries the `*` wildcard (deny-all kill switch).
+ *
+ * Reads the RAW option, not the filtered getter (the getter strips the sentinel).
+ *
+ * @return bool
+ */
+function aafm_meta_deny_has_star(): bool {
+	$raw = get_option( 'aafm_denied_meta_keys', array() );
+	return is_array( $raw ) && in_array( '*', array_map( 'strval', $raw ), true );
+}
+
+/**
+ * Validate a meta key against the absolute precedence chain: hard-block -> deny -> allow/`*`.
+ *
+ * A key is exposed only when ALL hold (computed hard-block FIRST so every reject is the same
+ * generic error — no oracle distinguishing the reject reason):
+ *   - it is non-empty and NOT hard-blocked (floor 1, absolute — survives `*` and explicit allow);
+ *   - the deny-`*` kill switch is off AND the key is not in the explicit deny list (floor 2);
+ *   - the allow-`*` wildcard is set OR the key is in the explicit allow list (floor 3).
  *
  * @param string $key Requested meta key.
  * @return string|WP_Error
  */
 function aafm_validate_meta_key( string $key ) {
-	$key = trim( (string) $key );
-	if ( '' === $key || aafm_hard_blocked_meta_key( $key ) || ! in_array( $key, aafm_allowed_meta_keys(), true ) ) {
+	$key     = trim( (string) $key );
+	$exposed = '' !== $key
+		&& ! aafm_hard_blocked_meta_key( $key )                 // floor 1 (absolute).
+		&& ! aafm_meta_deny_has_star()                          // floor 2: deny-all kill switch.
+		&& ! in_array( $key, aafm_denied_meta_keys(), true )    // floor 2: explicit deny.
+		&& ( aafm_meta_allow_has_star() || in_array( $key, aafm_allowed_meta_keys(), true ) ); // floor 3.
+
+	if ( ! $exposed ) {
 		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
 	}
 	return $key;

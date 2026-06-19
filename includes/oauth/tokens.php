@@ -199,6 +199,15 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 		);
 	}
 
+	// Deactivated client: refuse rotation so disabling a compromised client stops it from
+	// rolling its tokens forward. is_active is otherwise only checked at authorize-time.
+	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
+		return new WP_Error(
+			'invalid_grant',
+			__( 'The client is no longer active.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	// Expired refresh token: reject without rotating. The PHP string compare is
 	// safe because 'Y-m-d H:i:s' is a fixed-width, zero-padded, lexicographically
 	// ordered datetime format.

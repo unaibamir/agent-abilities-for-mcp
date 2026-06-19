@@ -415,6 +415,32 @@ class HandshakeTest extends TestCase {
 	}
 
 	/**
+	 * T1-8: deactivating a client blocks redemption of a code minted before deactivation —
+	 * is_active is otherwise only checked at authorize-time.
+	 */
+	public function test_deactivated_client_cannot_redeem_code(): void {
+		$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$challenge = $this->challenge_for( self::VERIFIER );
+		$client_id = $this->register_client( array( self::REDIRECT ) );
+		$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $challenge );
+
+		// Disable the client AFTER the code was minted.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array( 'is_active' => 0 ),
+			array( 'client_id' => $client_id ),
+			array( '%d' ),
+			array( '%s' )
+		);
+
+		$response = $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER );
+		$this->assertSame( 400, $response->get_status(), 'a deactivated client must not redeem its code' );
+		$this->assertArrayNotHasKey( 'access_token', (array) $response->get_data(), 'no token may be issued to a deactivated client' );
+	}
+
+	/**
 	 * A code is single-use: a successful exchange burns it; replay fails with 400.
 	 */
 	public function test_replayed_code_is_rejected(): void {

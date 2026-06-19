@@ -230,6 +230,41 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * T1-8: deactivating a client invalidates its live access tokens — a bearer whose owning
+	 * client is disabled no longer resolves a user, even on the MCP route.
+	 */
+	public function test_bearer_does_not_resolve_for_deactivated_client(): void {
+		$client = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		$this->assertIsArray( $client );
+		$client_id = (string) $client['client_id'];
+
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => $client_id,
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// While the client is active the bearer resolves.
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+
+		// Deactivate the client; the live access token must stop resolving.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array( 'is_active' => 0 ),
+			array( 'client_id' => $client_id ),
+			array( '%d' ),
+			array( '%s' )
+		);
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'a deactivated client must invalidate its live access token' );
+	}
+
+	/**
 	 * The bearer is read from the FastCGI-only REDIRECT_HTTP_AUTHORIZATION key
 	 * when HTTP_AUTHORIZATION is absent — a valid token there resolves its user.
 	 */

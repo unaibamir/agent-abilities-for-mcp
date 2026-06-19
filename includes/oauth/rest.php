@@ -371,6 +371,12 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 		return $invalid_grant;
 	}
 
+	// A deactivated client cannot redeem a code minted before it was disabled — is_active is
+	// only checked at authorize-time otherwise, so re-check it here.
+	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
+		return $invalid_grant;
+	}
+
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
 	// enforced inside aafm_oauth_redeem_code().
 	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );

@@ -332,6 +332,53 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * T1-8: deactivating a client blocks its refresh rotation, even for a token issued while the
+	 * client was still active.
+	 */
+	public function test_rotate_refresh_rejected_for_deactivated_client(): void {
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		$this->assertIsArray( $client );
+		$client_id = (string) $client['client_id'];
+
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'client_id'  => $client_id,
+				'wp_user_id' => 42,
+				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			)
+		);
+		$this->assertIsArray( $tokens );
+
+		// While active, rotation works.
+		$ok = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
+		$this->assertIsArray( $ok, 'rotation should succeed while the client is active' );
+
+		// Deactivate the client, then a rotation of the fresh successor must be rejected.
+		$this->deactivate_client( $client_id );
+		$rejected = aafm_oauth_rotate_refresh( $ok['refresh_token'], $client_id );
+		$this->assertInstanceOf( WP_Error::class, $rejected, 'a deactivated client must not rotate its refresh token' );
+	}
+
+	/**
+	 * Mark a registered client inactive (is_active = 0) on its transaction-isolated row.
+	 *
+	 * @param string $client_id The client to deactivate.
+	 */
+	private function deactivate_client( string $client_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array( 'is_active' => 0 ),
+			array( 'client_id' => $client_id ),
+			array( '%d' ),
+			array( '%s' )
+		);
+	}
+
+	/**
 	 * Rotating the SAME refresh token twice: the second rotate is rejected.
 	 *
 	 * After a successful rotation the old row is consumed (inactive), so a second

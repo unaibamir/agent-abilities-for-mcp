@@ -99,6 +99,13 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
+	// 9. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
+	// already in a client's hands keeps working unless its owning client is re-checked here —
+	// so disabling a compromised client invalidates its live access tokens immediately.
+	if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
+		return $user_id;
+	}
+
 	return (int) $row['wp_user_id'];
 }
 

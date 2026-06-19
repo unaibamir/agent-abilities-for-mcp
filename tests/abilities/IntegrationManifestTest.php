@@ -92,4 +92,80 @@ final class IntegrationManifestTest extends TestCase {
 		$available = aafm_available_ability_count();
 		$this->assertSame( 168, $available );
 	}
+
+	public function test_descriptor_counts_drive_the_manifest(): void {
+		// The manifest is no longer a second hand-kept tally — its per-slug counts derive from the
+		// descriptor, so a descriptor row added or removed moves the count automatically.
+		$descriptor = aafm_integration_ability_manifest();
+		$manifest   = aafm_integration_manifest();
+
+		foreach ( $descriptor as $slug => $rows ) {
+			$this->assertArrayHasKey( $slug, $manifest, "{$slug} missing from the derived manifest." );
+
+			$read        = 0;
+			$write       = 0;
+			$destructive = 0;
+			foreach ( $rows as $row ) {
+				switch ( (string) $row['risk'] ) {
+					case 'read':
+						++$read;
+						break;
+					case 'destructive':
+						++$destructive;
+						break;
+					default:
+						++$write;
+				}
+			}
+
+			$this->assertSame( count( $rows ), $manifest[ $slug ]['total'], "{$slug} total drifts from the descriptor." );
+			$this->assertSame( $read, $manifest[ $slug ]['read'], "{$slug} read count drifts from the descriptor." );
+			$this->assertSame( $write, $manifest[ $slug ]['write'], "{$slug} write count drifts from the descriptor." );
+			$this->assertSame( $destructive, $manifest[ $slug ]['destructive'], "{$slug} destructive count drifts from the descriptor." );
+		}
+	}
+
+	public function test_descriptor_matches_the_live_registry_when_hosts_are_active(): void {
+		// With every host force-active the registry holds the full integration surface. The
+		// descriptor must describe exactly that set per slug — same ability names, same risks,
+		// same count — so the static descriptor can never silently drift from the real abilities.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+
+		$registry   = aafm_get_abilities_registry();
+		$descriptor = aafm_integration_ability_manifest();
+
+		// Live registry rows bucketed by integration subject: name => risk.
+		$live = array();
+		foreach ( $registry as $name => $meta ) {
+			$subject = (string) ( $meta['subject'] ?? '' );
+			if ( isset( $descriptor[ $subject ] ) ) {
+				$live[ $subject ][ (string) $name ] = (string) ( $meta['risk'] ?? '' );
+			}
+		}
+
+		foreach ( $descriptor as $slug => $rows ) {
+			$this->assertArrayHasKey( $slug, $live, "No live registry rows for {$slug} — descriptor describes a phantom set." );
+			$this->assertSame(
+				count( $live[ $slug ] ),
+				count( $rows ),
+				"{$slug} descriptor count differs from the live registry."
+			);
+			foreach ( $rows as $row ) {
+				$name = (string) $row['name'];
+				$this->assertArrayHasKey( $name, $live[ $slug ], "{$slug} descriptor lists {$name}, absent from the live registry." );
+				$this->assertSame(
+					$live[ $slug ][ $name ],
+					(string) $row['risk'],
+					"{$slug} descriptor risk for {$name} differs from the live registry."
+				);
+			}
+		}
+
+		aafm_registry_cache_should_flush( true );
+	}
 }

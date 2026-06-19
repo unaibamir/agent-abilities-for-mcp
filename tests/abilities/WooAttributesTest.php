@@ -217,17 +217,6 @@ final class WooAttributesTest extends TestCase {
 		$this->assertContains( 'aafm/wc-create-product-attribute', $abilities );
 	}
 
-	public function test_create_attribute_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-product-attribute' )->check_permissions( array( 'name' => 'Color' ) )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-product-attribute', $abilities );
-	}
-
 	public function test_create_and_update_share_the_get_output_schema(): void {
 		$get    = aafm_args_wc_get_product_attribute()['output_schema']['properties'];
 		$create = aafm_args_wc_create_product_attribute()['output_schema']['properties'];
@@ -372,16 +361,6 @@ final class WooAttributesTest extends TestCase {
 		$this->assertContains( 'aafm/wc-delete-product-attribute', $abilities );
 	}
 
-	public function test_delete_attribute_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-product-attribute' )->check_permissions( array( 'attribute_id' => 1 ) )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-product-attribute', $abilities );
-	}
 	public function test_wc_attribute_abilities_absent_when_host_inactive(): void {
 		// Mirror WooProductsTest / WooVariationsTest: pin detection OFF through the seam so the
 		// class WooCommerce marker (defined process-wide) does not falsely report WC active.
@@ -430,15 +409,35 @@ final class WooAttributesTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A failed wc_update_attribute must surface as WP_Error.' );
 	}
 
-	public function test_update_attribute_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-update-product-attribute' )->check_permissions( array( 'attribute_id' => 1 ) )
-		);
+	/**
+	 * Audit: a denied permission check is recorded, and the gate actually denies.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		$this->assertNotTrue( wp_get_ability( $ability )->check_permissions( $args ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-product-attribute', $abilities );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each attribute write and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'create-product-attribute' => array( 'aafm/wc-create-product-attribute', array( 'name' => 'Color' ), 'editor' ),
+			'update-product-attribute' => array( 'aafm/wc-update-product-attribute', array( 'attribute_id' => 1 ), 'editor' ),
+			'delete-product-attribute' => array( 'aafm/wc-delete-product-attribute', array( 'attribute_id' => 1 ), 'editor' ),
+		);
 	}
 
 	public function test_create_attribute_surfaces_error_when_wc_create_fails(): void {

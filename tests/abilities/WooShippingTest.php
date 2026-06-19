@@ -146,30 +146,6 @@ final class WooShippingTest extends TestCase {
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
-	/**
-	 * Audit: a successful list call is recorded.
-	 */
-	public function test_list_shipping_zones_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-list-shipping-zones' )->execute( array() );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-shipping-zones', $abilities );
-	}
-
-	/**
-	 * Audit: a denied check_permissions call is recorded.
-	 */
-	public function test_list_shipping_zones_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-shipping-zones' )->check_permissions( array() );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-shipping-zones', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-get-shipping-zone
 	// =========================================================================
@@ -250,34 +226,6 @@ final class WooShippingTest extends TestCase {
 		WcShippingStubStore::$force_save_failure = false;
 	}
 
-	/**
-	 * Audit: successful create is recorded.
-	 */
-	public function test_create_shipping_zone_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute(
-			array( 'zone_name' => 'AuditZone' )
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-shipping-zone', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_create_shipping_zone_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-shipping-zone' )->check_permissions(
-			array( 'zone_name' => 'Denied' )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-shipping-zone', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-update-shipping-zone
 	// =========================================================================
@@ -328,37 +276,6 @@ final class WooShippingTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Save failure on update must not lie success.' );
 		WcShippingStubStore::$force_save_failure = false;
-	}
-
-	/**
-	 * Audit: successful update is recorded.
-	 */
-	public function test_update_shipping_zone_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
-			array(
-				'zone_id'   => 1,
-				'zone_name' => 'Europe 2',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-shipping-zone', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_update_shipping_zone_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-shipping-zone' )->check_permissions(
-			array( 'zone_id' => 1 )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-shipping-zone', $abilities );
 	}
 
 	// =========================================================================
@@ -424,34 +341,6 @@ final class WooShippingTest extends TestCase {
 		);
 		WcShippingStubStore::$force_delete_failure = false;
 		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Audit: successful delete is recorded.
-	 */
-	public function test_delete_shipping_zone_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-shipping-zone' )->execute(
-			array( 'zone_id' => 2 )
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-shipping-zone', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_delete_shipping_zone_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-shipping-zone' )->check_permissions(
-			array( 'zone_id' => 1 )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-shipping-zone', $abilities );
 	}
 
 	// =========================================================================
@@ -578,40 +467,6 @@ final class WooShippingTest extends TestCase {
 		WcShippingStubStore::$force_save_failure = false;
 	}
 
-	/**
-	 * Audit: successful create is recorded.
-	 */
-	public function test_create_shipping_method_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
-			array(
-				'zone_id'     => 1,
-				'method_type' => 'local_pickup',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-shipping-method', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_create_shipping_method_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-shipping-method' )->check_permissions(
-			array(
-				'zone_id'     => 1,
-				'method_type' => 'flat_rate',
-			)
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-shipping-method', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-update-shipping-method
 	// =========================================================================
@@ -674,41 +529,6 @@ final class WooShippingTest extends TestCase {
 		WcShippingStubStore::$force_save_failure = false;
 	}
 
-	/**
-	 * Audit: successful update is recorded.
-	 */
-	public function test_update_shipping_method_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
-			array(
-				'zone_id'      => 1,
-				'instance_id'  => 1,
-				'method_title' => 'Standard Flat Rate',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-shipping-method', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_update_shipping_method_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-shipping-method' )->check_permissions(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 1,
-			)
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-shipping-method', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-delete-shipping-method
 	// =========================================================================
@@ -760,36 +580,117 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * Audit: successful delete is recorded.
+	 * Audit: a successful execute is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_success_audit_cases
+	 *
+	 * @param string               $ability Ability name.
+	 * @param array<string, mixed> $args    Execute args.
 	 */
-	public function test_delete_shipping_method_success_is_audited(): void {
+	public function test_success_is_audited( string $ability, array $args ): void {
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-shipping-method' )->execute(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 2,
-			)
-		);
+		wp_get_ability( $ability )->execute( $args );
 
 		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-shipping-method', $abilities );
+		$this->assertContains( $ability, $abilities );
 	}
 
 	/**
-	 * Audit: denied permission check is recorded.
+	 * Cases: each shipping ability and the args its original audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}>
 	 */
-	public function test_delete_shipping_method_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-shipping-method' )->check_permissions(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 1,
-			)
+	public function provide_success_audit_cases(): array {
+		return array(
+			'list-shipping-zones'    => array( 'aafm/wc-list-shipping-zones', array() ),
+			'create-shipping-zone'   => array( 'aafm/wc-create-shipping-zone', array( 'zone_name' => 'AuditZone' ) ),
+			'update-shipping-zone'   => array(
+				'aafm/wc-update-shipping-zone',
+				array(
+					'zone_id'   => 1,
+					'zone_name' => 'Europe 2',
+				),
+			),
+			'delete-shipping-zone'   => array( 'aafm/wc-delete-shipping-zone', array( 'zone_id' => 2 ) ),
+			'create-shipping-method' => array(
+				'aafm/wc-create-shipping-method',
+				array(
+					'zone_id'     => 1,
+					'method_type' => 'local_pickup',
+				),
+			),
+			'update-shipping-method' => array(
+				'aafm/wc-update-shipping-method',
+				array(
+					'zone_id'      => 1,
+					'instance_id'  => 1,
+					'method_title' => 'Standard Flat Rate',
+				),
+			),
+			'delete-shipping-method' => array(
+				'aafm/wc-delete-shipping-method',
+				array(
+					'zone_id'     => 1,
+					'instance_id' => 2,
+				),
+			),
 		);
+	}
+
+	/**
+	 * Audit: a denied permission check is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		wp_get_ability( $ability )->check_permissions( $args );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-shipping-method', $abilities );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each shipping ability and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'list-shipping-zones'    => array( 'aafm/wc-list-shipping-zones', array(), 'editor' ),
+			'create-shipping-zone'   => array( 'aafm/wc-create-shipping-zone', array( 'zone_name' => 'Denied' ), 'editor' ),
+			'update-shipping-zone'   => array( 'aafm/wc-update-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
+			'delete-shipping-zone'   => array( 'aafm/wc-delete-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
+			'create-shipping-method' => array(
+				'aafm/wc-create-shipping-method',
+				array(
+					'zone_id'     => 1,
+					'method_type' => 'flat_rate',
+				),
+				'editor',
+			),
+			'update-shipping-method' => array(
+				'aafm/wc-update-shipping-method',
+				array(
+					'zone_id'     => 1,
+					'instance_id' => 1,
+				),
+				'editor',
+			),
+			'delete-shipping-method' => array(
+				'aafm/wc-delete-shipping-method',
+				array(
+					'zone_id'     => 1,
+					'instance_id' => 1,
+				),
+				'editor',
+			),
+		);
 	}
 }

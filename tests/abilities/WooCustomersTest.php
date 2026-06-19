@@ -132,30 +132,6 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
-	 * Audit: a successful list call is recorded.
-	 */
-	public function test_list_customers_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-customers', $abilities );
-	}
-
-	/**
-	 * Audit: a denied check_permissions call is recorded.
-	 */
-	public function test_list_customers_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-customers' )->check_permissions( array() );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-customers', $abilities );
-	}
-
-	/**
 	 * Host-inactive: customer abilities must be absent from the registry when WooCommerce is off.
 	 */
 	public function test_list_customers_host_inactive_absent_from_registry(): void {
@@ -270,30 +246,6 @@ final class WooCustomersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
-	/**
-	 * Audit: successful get is recorded.
-	 */
-	public function test_get_customer_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-get-customer', $abilities );
-	}
-
-	/**
-	 * Audit: denied check_permissions call is recorded.
-	 */
-	public function test_get_customer_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => 7001 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-get-customer', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-create-customer
 	// =========================================================================
@@ -401,33 +353,6 @@ final class WooCustomersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
-	/**
-	 * Audit: successful create is recorded.
-	 */
-	public function test_create_customer_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-customer' )->execute(
-			array( 'email' => 'audit@example.com' )
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-customer', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_create_customer_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-customer' )->check_permissions(
-			array( 'email' => 'denied@example.com' )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-customer', $abilities );
-	}
 
 	/**
 	 * Store failure (create_should_fail) surfaces as WP_Error, not a false-success.
@@ -550,37 +475,6 @@ final class WooCustomersTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Audit: successful update is recorded.
-	 */
-	public function test_update_customer_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-update-customer' )->execute(
-			array(
-				'customer_id' => 7001,
-				'first_name'  => 'Audited',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-customer', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_update_customer_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-customer' )->check_permissions(
-			array( 'customer_id' => 7001 )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-customer', $abilities );
 	}
 
 	/**
@@ -1074,5 +968,77 @@ final class WooCustomersTest extends TestCase {
 		// Billing fields must survive untouched.
 		$this->assertSame( 'KeepBilling', $res['billing']['first_name'], 'billing.first_name must not be cleared by a shipping-only update.' );
 		$this->assertSame( 'BillCity', $res['billing']['city'], 'billing.city must not be cleared by a shipping-only update.' );
+	}
+
+	/**
+	 * Audit: a successful execute is recorded under the calling ability.
+	 *
+	 * The delete-customer ability is audited separately because its args need user
+	 * fixtures created at runtime, which a static data provider cannot build.
+	 *
+	 * @dataProvider provide_success_audit_cases
+	 *
+	 * @param string               $ability Ability name.
+	 * @param array<string, mixed> $args    Execute args.
+	 */
+	public function test_success_is_audited( string $ability, array $args ): void {
+		$this->acting_as( 'administrator' );
+		wp_get_ability( $ability )->execute( $args );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each customer ability and the args its original audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}>
+	 */
+	public function provide_success_audit_cases(): array {
+		return array(
+			'list-customers'  => array( 'aafm/wc-list-customers', array() ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ) ),
+			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'audit@example.com' ) ),
+			'update-customer' => array(
+				'aafm/wc-update-customer',
+				array(
+					'customer_id' => 7001,
+					'first_name'  => 'Audited',
+				),
+			),
+		);
+	}
+
+	/**
+	 * Audit: a denied permission check is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		wp_get_ability( $ability )->check_permissions( $args );
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each customer ability and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'list-customers'  => array( 'aafm/wc-list-customers', array(), 'editor' ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ), 'editor' ),
+			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'denied@example.com' ), 'editor' ),
+			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => 7001 ), 'editor' ),
+		);
 	}
 }

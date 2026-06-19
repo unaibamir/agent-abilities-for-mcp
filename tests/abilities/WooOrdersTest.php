@@ -213,24 +213,6 @@ final class WooOrdersTest extends TestCase {
 		$this->assertSame( 3, $res['total'] );
 	}
 
-	public function test_list_orders_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-list-orders' )->execute( array() );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-orders', $abilities );
-	}
-
-	public function test_list_orders_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-orders' )->check_permissions( array() );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-orders', $abilities );
-	}
-
 	public function test_list_orders_empty_store_returns_empty(): void {
 		// With no orders in the store the ability must return orders:[] and total:0.
 		// This pins both the plain-array fallback path and the paginate object path on an empty result.
@@ -376,24 +358,6 @@ final class WooOrdersTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
-	public function test_get_order_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-get-order', $abilities );
-	}
-
-	public function test_get_order_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-get-order' )->check_permissions( array( 'order_id' => 5001 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-get-order', $abilities );
-	}
-
 	public function test_get_order_closed_schema_rejects_unknown_field(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-get-order' )->execute(
@@ -512,25 +476,6 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
-	public function test_create_order_denied_is_audited(): void {
-		$this->register_wc_order_writes();
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-order' )->check_permissions( array() );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order', $abilities );
-	}
-
-	public function test_create_order_success_is_audited(): void {
-		$this->register_wc_order_writes();
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-order' )->execute( array() );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order', $abilities );
-	}
 
 	public function test_create_order_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
@@ -760,25 +705,6 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
-	public function test_update_order_denied_is_audited(): void {
-		$this->register_wc_order_writes();
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-order' )->check_permissions( array( 'order_id' => 5001 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-order', $abilities );
-	}
-
-	public function test_update_order_success_is_audited(): void {
-		$this->register_wc_order_writes();
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 5001 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-order', $abilities );
-	}
 
 	public function test_update_order_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
@@ -922,38 +848,6 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
-	public function test_update_order_status_denied_is_audited(): void {
-		$this->register_wc_order_status_write();
-		$this->acting_as( 'editor' );
-
-		wp_get_ability( 'aafm/wc-update-order-status' )->check_permissions(
-			array(
-				'order_id' => 5001,
-				'status'   => 'completed',
-			)
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-order-status', $abilities );
-	}
-
-	public function test_update_order_status_success_is_audited(): void {
-		$this->register_wc_order_status_write();
-		$this->acting_as( 'administrator' );
-
-		wp_get_ability( 'aafm/wc-update-order-status' )->execute(
-			array(
-				'order_id' => 5001,
-				'status'   => 'completed',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-order-status', $abilities );
-	}
-
 	public function test_update_order_status_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
@@ -970,6 +864,105 @@ final class WooOrdersTest extends TestCase {
 			\WP_Error::class,
 			$res,
 			'Top-level smuggle via extra key must be rejected -- schema is closed.'
+		);
+	}
+
+	/**
+	 * Register the write abilities a case needs before it runs.
+	 *
+	 * The order reads register in set_up(); the order writes register on demand
+	 * through their own helpers, so each audit case names the helper it needs.
+	 *
+	 * @param string $helper Helper method name, or '' when no extra registration is needed.
+	 */
+	private function register_for_audit( string $helper ): void {
+		if ( '' === $helper ) {
+			return;
+		}
+		$this->$helper();
+	}
+
+	/**
+	 * Audit: a successful execute is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_success_audit_cases
+	 *
+	 * @param string               $ability Ability name.
+	 * @param array<string, mixed> $args    Execute args.
+	 * @param string               $helper  Registration helper to run first, or ''.
+	 */
+	public function test_success_is_audited( string $ability, array $args, string $helper ): void {
+		$this->register_for_audit( $helper );
+		$this->acting_as( 'administrator' );
+		wp_get_ability( $ability )->execute( $args );
+
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$abilities = wp_list_pluck( $success, 'ability' );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each order ability and the args/registration its original audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_success_audit_cases(): array {
+		return array(
+			'list-orders'         => array( 'aafm/wc-list-orders', array(), '' ),
+			'get-order'           => array( 'aafm/wc-get-order', array( 'order_id' => 5001 ), '' ),
+			'create-order'        => array( 'aafm/wc-create-order', array(), 'register_wc_order_writes' ),
+			'update-order'        => array( 'aafm/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes' ),
+			'update-order-status' => array(
+				'aafm/wc-update-order-status',
+				array(
+					'order_id' => 5001,
+					'status'   => 'completed',
+				),
+				'register_wc_order_status_write',
+			),
+		);
+	}
+
+	/**
+	 * Audit: a denied permission check is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $helper   Registration helper to run first, or ''.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $helper, string $low_role ): void {
+		$this->register_for_audit( $helper );
+		$this->acting_as( $low_role );
+		wp_get_ability( $ability )->check_permissions( $args );
+
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $denied, 'ability' );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each order ability and the args/registration its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string, 3: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'list-orders'         => array( 'aafm/wc-list-orders', array(), '', 'editor' ),
+			'get-order'           => array( 'aafm/wc-get-order', array( 'order_id' => 5001 ), '', 'editor' ),
+			'create-order'        => array( 'aafm/wc-create-order', array(), 'register_wc_order_writes', 'editor' ),
+			'update-order'        => array( 'aafm/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes', 'editor' ),
+			'update-order-status' => array(
+				'aafm/wc-update-order-status',
+				array(
+					'order_id' => 5001,
+					'status'   => 'completed',
+				),
+				'register_wc_order_status_write',
+				'editor',
+			),
 		);
 	}
 }

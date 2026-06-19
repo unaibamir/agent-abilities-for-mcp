@@ -498,16 +498,6 @@ final class WooProductsTest extends TestCase {
 		$this->assertContains( 'aafm/wc-create-product', $abilities );
 	}
 
-	public function test_create_product_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-product' )->check_permissions( array( 'name' => 'X' ) )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-product', $abilities );
-	}
 
 	public function test_update_product_write_is_audited(): void {
 		$this->acting_as( 'administrator' );
@@ -524,16 +514,6 @@ final class WooProductsTest extends TestCase {
 		$this->assertContains( 'aafm/wc-update-product', $abilities );
 	}
 
-	public function test_update_product_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-update-product' )->check_permissions( array( 'product_id' => 101 ) )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-product', $abilities );
-	}
 
 	/**
 	 * WC1.3: delete (destructive, permanent via the WC data store).
@@ -588,14 +568,34 @@ final class WooProductsTest extends TestCase {
 		$this->assertContains( 'aafm/wc-delete-product', $abilities );
 	}
 
-	public function test_delete_product_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-product' )->check_permissions( array( 'product_id' => 101 ) )
-		);
+	/**
+	 * Audit: a denied permission check is recorded, and the gate actually denies.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		$this->assertNotTrue( wp_get_ability( $ability )->check_permissions( $args ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-product', $abilities );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each product write and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'create-product' => array( 'aafm/wc-create-product', array( 'name' => 'X' ), 'editor' ),
+			'update-product' => array( 'aafm/wc-update-product', array( 'product_id' => 101 ), 'editor' ),
+			'delete-product' => array( 'aafm/wc-delete-product', array( 'product_id' => 101 ), 'editor' ),
+		);
 	}
 }

@@ -141,30 +141,6 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * Audit: a successful list call is recorded.
-	 */
-	public function test_list_coupons_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-list-coupons' )->execute( array() );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-coupons', $abilities );
-	}
-
-	/**
-	 * Audit: a denied check_permissions call is recorded.
-	 */
-	public function test_list_coupons_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-coupons' )->check_permissions( array() );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-coupons', $abilities );
-	}
-
-	/**
 	 * Empty store returns an empty coupons array (not an object).
 	 */
 	public function test_list_coupons_empty_store_returns_empty_array(): void {
@@ -276,30 +252,6 @@ final class WooCouponsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
-	/**
-	 * Audit: successful get is recorded.
-	 */
-	public function test_get_coupon_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-get-coupon', $abilities );
-	}
-
-	/**
-	 * Audit: denied check_permissions call is recorded.
-	 */
-	public function test_get_coupon_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-get-coupon' )->check_permissions( array( 'coupon_id' => 5001 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-get-coupon', $abilities );
-	}
-
 	// =========================================================================
 	// aafm/wc-create-coupon
 	// =========================================================================
@@ -369,34 +321,6 @@ final class WooCouponsTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Audit: successful create is recorded.
-	 */
-	public function test_create_coupon_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-coupon' )->execute(
-			array( 'code' => 'AUDITME' )
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-coupon', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_create_coupon_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-coupon' )->check_permissions(
-			array( 'code' => 'DENIED' )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-coupon', $abilities );
 	}
 
 	/**
@@ -485,37 +409,6 @@ final class WooCouponsTest extends TestCase {
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Audit: successful update is recorded.
-	 */
-	public function test_update_coupon_success_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-update-coupon' )->execute(
-			array(
-				'coupon_id' => 5001,
-				'amount'    => '11.00',
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-coupon', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_update_coupon_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-coupon' )->check_permissions(
-			array( 'coupon_id' => 5001 )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-coupon', $abilities );
 	}
 
 	/**
@@ -641,30 +534,73 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
-	 * Audit: successful delete is recorded.
+	 * Audit: a successful execute is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_success_audit_cases
+	 *
+	 * @param string               $ability Ability name.
+	 * @param array<string, mixed> $args    Execute args.
 	 */
-	public function test_delete_coupon_success_is_audited(): void {
+	public function test_success_is_audited( string $ability, array $args ): void {
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-coupon' )->execute(
-			array( 'coupon_id' => 5001 )
-		);
+		wp_get_ability( $ability )->execute( $args );
 
 		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-coupon', $abilities );
+		$this->assertContains( $ability, $abilities );
 	}
 
 	/**
-	 * Audit: denied permission check is recorded.
+	 * Cases: each coupon ability and the args its original audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>}>
 	 */
-	public function test_delete_coupon_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-coupon' )->check_permissions(
-			array( 'coupon_id' => 5001 )
+	public function provide_success_audit_cases(): array {
+		return array(
+			'list-coupons'  => array( 'aafm/wc-list-coupons', array() ),
+			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
+			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'AUDITME' ) ),
+			'update-coupon' => array(
+				'aafm/wc-update-coupon',
+				array(
+					'coupon_id' => 5001,
+					'amount'    => '11.00',
+				),
+			),
+			'delete-coupon' => array( 'aafm/wc-delete-coupon', array( 'coupon_id' => 5001 ) ),
 		);
+	}
+
+	/**
+	 * Audit: a denied permission check is recorded under the calling ability.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		wp_get_ability( $ability )->check_permissions( $args );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-coupon', $abilities );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each coupon ability and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'list-coupons'  => array( 'aafm/wc-list-coupons', array(), 'editor' ),
+			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
+			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'DENIED' ), 'editor' ),
+			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
+			'delete-coupon' => array( 'aafm/wc-delete-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
+		);
 	}
 }

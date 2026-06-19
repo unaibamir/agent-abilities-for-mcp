@@ -418,16 +418,6 @@ final class WooVariationsTest extends TestCase {
 		$this->assertContains( 'aafm/wc-create-product-variation', $abilities );
 	}
 
-	public function test_create_variation_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-product-variation' )->check_permissions( array( 'product_id' => 500 ) )
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-product-variation', $abilities );
-	}
 
 	public function test_update_variation_patches_by_id(): void {
 		$this->acting_as( 'administrator' );
@@ -612,14 +602,33 @@ final class WooVariationsTest extends TestCase {
 		$this->assertContains( 'aafm/wc-delete-product-variation', $abilities );
 	}
 
-	public function test_delete_variation_denied_is_audited(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-product-variation' )->check_permissions( array( 'variation_id' => 601 ) )
-		);
+	/**
+	 * Audit: a denied permission check is recorded, and the gate actually denies.
+	 *
+	 * @dataProvider provide_denied_audit_cases
+	 *
+	 * @param string               $ability  Ability name.
+	 * @param array<string, mixed> $args     check_permissions args.
+	 * @param string               $low_role Role that must be denied.
+	 */
+	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
+		$this->acting_as( $low_role );
+		$this->assertNotTrue( wp_get_ability( $ability )->check_permissions( $args ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-product-variation', $abilities );
+		$this->assertContains( $ability, $abilities );
+	}
+
+	/**
+	 * Cases: each variation write and the args its original denied audit test used.
+	 *
+	 * @return array<string, array{0: string, 1: array<string, mixed>, 2: string}>
+	 */
+	public function provide_denied_audit_cases(): array {
+		return array(
+			'create-product-variation' => array( 'aafm/wc-create-product-variation', array( 'product_id' => 500 ), 'editor' ),
+			'delete-product-variation' => array( 'aafm/wc-delete-product-variation', array( 'variation_id' => 601 ), 'editor' ),
+		);
 	}
 }

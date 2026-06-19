@@ -194,6 +194,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_save_abilities', 'aafm_ajax_save_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );
 		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
+		add_action( 'wp_ajax_aafm_save_denied_meta_keys', 'aafm_ajax_save_denied_meta_keys' );
+		add_action( 'wp_ajax_aafm_save_user_meta_keys', 'aafm_ajax_save_user_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );
 		add_action( 'wp_ajax_aafm_clear_log', 'aafm_ajax_clear_log' );
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );

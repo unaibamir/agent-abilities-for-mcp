@@ -2,9 +2,9 @@
 /**
  * Uninstall cleanup for Agent Abilities for MCP — multisite-aware.
  *
- * Removes only this plugin's own data: the aafm_enabled_abilities option and the
- * per-site activity log table. On multisite it loops every blog so no table is left
- * behind. No other plugin's data is touched.
+ * Removes only this plugin's own data: every configuration option, the detected-meta-keys
+ * transient, the per-site activity log table, and the OAuth tables. On multisite it loops
+ * every blog so nothing is left behind. No other plugin's data is touched.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -16,6 +16,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 	exit;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'includes/admin/settings.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/audit/log.php';
 require_once plugin_dir_path( __FILE__ ) . 'includes/oauth/schema.php';
 

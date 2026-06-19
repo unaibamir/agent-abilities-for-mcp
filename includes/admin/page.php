@@ -198,6 +198,78 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
 }
 
 /**
+ * Parse the denied-post-meta textarea into a clean list.
+ *
+ * Mirrors aafm_sanitize_allowed_meta_keys_input() but for the DENY list: it KEEPS the `*`
+ * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys — denying an already
+ * hard-blocked key is a harmless no-op, and the deny list must be able to name anything an
+ * admin wants refused. Splits on newlines, trims, sanitize_text_field (never sanitize_key,
+ * which would strip `*`), drops empties, and de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_deny_meta_keys'] ) ? (string) $posted['aafm_deny_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
+ * Parse the exposed-user-meta textarea into a clean list.
+ *
+ * Mirrors the allow-list sanitizer but for user meta and KEEPS the `*` wildcard. Splits on
+ * newlines, trims, sanitize_text_field (never sanitize_key, which would strip `*`), drops
+ * empties and any hard-blocked user key (best-effort — aafm_allowed_user_meta_keys() re-floors
+ * anyway), and de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_exposed_user_meta_keys'] ) ? (string) $posted['aafm_exposed_user_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_user_meta_key( $key ) ) ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
+ * Parse the denied-user-meta textarea into a clean list.
+ *
+ * Like aafm_sanitize_denied_meta_keys_input() but user-scoped: KEEPS `*` (deny-all) and does
+ * NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops empties,
+ * de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_denied_user_meta_keys'] ) ? (string) $posted['aafm_denied_user_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
  * Sample up to 50 distinct, non-hard-blocked meta keys present on posts of the allowlisted
  * types — the "Detected on your exposed types" chip source for the selector.
  *
@@ -242,6 +314,44 @@ function aafm_ajax_save_meta_keys(): void {
 	update_option( 'aafm_allowed_meta_keys', $keys );
 	delete_transient( 'aafm_detected_meta_keys' );
 	wp_send_json_success( array( 'meta_keys' => $keys ) );
+}
+
+/**
+ * AJAX: save the denied-post-meta list.
+ *
+ * @return void
+ */
+function aafm_ajax_save_denied_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	update_option( 'aafm_denied_meta_keys', $keys );
+	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
+}
+
+/**
+ * AJAX: save BOTH the exposed and denied user-meta lists in one request.
+ *
+ * @return void
+ */
+function aafm_ajax_save_user_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
+	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
+	update_option( 'aafm_exposed_user_meta_keys', $exposed );
+	update_option( 'aafm_denied_user_meta_keys', $denied );
+	wp_send_json_success(
+		array(
+			'exposed_user_meta_keys' => $exposed,
+			'denied_user_meta_keys'  => $denied,
+		)
+	);
 }
 
 /**

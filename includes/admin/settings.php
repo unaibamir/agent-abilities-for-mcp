@@ -154,6 +154,9 @@ function aafm_config_option_names(): array {
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
 		'aafm_ip_allowlist',
+		'aafm_denied_meta_keys',
+		'aafm_exposed_user_meta_keys',
+		'aafm_denied_user_meta_keys',
 	);
 }
 

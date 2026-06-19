@@ -47,9 +47,15 @@
 			this.#bindOsTabs();
 			this.#bindClientPicker();
 			this.#bindSubjectTabs();
+			this.#bindSectionToggles();
+			this.#bindIntegrationToggles();
+			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
+			this.#bindSaveIntegrations();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
+			this.#bindSaveDeniedMetaKeys();
+			this.#bindSaveUserMetaKeys();
 			this.#bindSaveSettings();
 			this.#bindMetaChips();
 			this.#bindCreateUser();
@@ -235,6 +241,189 @@
 			} );
 		}
 
+		/**
+		 * Per-section "Enable all / Disable all" buttons on the Abilities tab.
+		 * Toggles every ability checkbox inside the button's subject panel. When the
+		 * action would enable a section that holds a destructive ability, confirm first.
+		 */
+		#bindSectionToggles() {
+			const buttons = document.querySelectorAll( '.aafm-section-toggle-all' );
+			buttons.forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const subject = btn.dataset.subject;
+					const panel = document.querySelector(
+						`.aafm-subject-panel[data-subject="${ subject }"]`
+					);
+					if ( ! panel ) {
+						return;
+					}
+					const boxes = panel.querySelectorAll(
+						'input[type="checkbox"][name="aafm_abilities[]"]'
+					);
+					const enabling = Array.from( boxes ).some( ( b ) => ! b.checked );
+					if ( enabling && btn.dataset.hasDestructive === '1' ) {
+						const msg = this.#t(
+							'sectionToggleConfirm',
+							'This section includes destructive abilities (trash/delete). Enable all of them?'
+						);
+						if ( ! window.confirm( msg ) ) {
+							return;
+						}
+					}
+					boxes.forEach( ( b ) => {
+						b.checked = enabling;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * Per-integration "Enable all / Disable all" buttons on the Integrations tab.
+		 * Toggles every ability checkbox inside the button's integration card. When the
+		 * action would enable a card that holds a PII/destructive ability, confirm first.
+		 */
+		#bindIntegrationToggles() {
+			const buttons = document.querySelectorAll(
+				'.aafm-integration-toggle-all'
+			);
+			buttons.forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const subject = btn.dataset.subject;
+					const card = document.querySelector(
+						`.aafm-integration-${ subject }`
+					);
+					if ( ! card ) {
+						return;
+					}
+					const boxes = card.querySelectorAll(
+						'input[type="checkbox"][name="aafm_abilities[]"]'
+					);
+					const enabling = Array.from( boxes ).some(
+						( b ) => ! b.checked
+					);
+					if ( enabling && btn.dataset.hasSensitive === '1' ) {
+						const msg = this.#t(
+							'integrationToggleConfirm',
+							'These abilities can read and change personal data such as customer details and orders. Turn all of them on?'
+						);
+						if ( ! window.confirm( msg ) ) {
+							return;
+						}
+					}
+					boxes.forEach( ( b ) => {
+						b.checked = enabling;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * Per-card "Search abilities" + All/Read Only/Write filter on the Integrations tab.
+		 * Scoped to each .aafm-integration-card: the search query and the chosen risk are
+		 * ANDed, and matching is done against each row's data-risk plus its textContent (label,
+		 * name, and hint are all server-rendered text, so reading textContent is safe). Hiding
+		 * is via the `hidden` attribute only — no markup is built from data, so there is no
+		 * HTML sink. The filter works the same on inactive cards (the rows are disabled but
+		 * still in the DOM). Filter controls never touch the form submit.
+		 */
+		#bindIntegrationFilters() {
+			const filters = document.querySelectorAll( '.aafm-integration-filter' );
+			filters.forEach( ( filter ) => {
+				const card = filter.closest( '.aafm-integration-card' );
+				if ( ! card ) {
+					return;
+				}
+				const search = filter.querySelector( '.aafm-integration-search' );
+				const riskButtons = filter.querySelectorAll( '.aafm-filter-btn' );
+				const rows = card.querySelectorAll( '.aafm-ability-row' );
+
+				let query = '';
+				let risk = 'all';
+
+				const apply = () => {
+					rows.forEach( ( row ) => {
+						const rowRisk = row.dataset.risk ?? 'read';
+						// "write" groups both write and destructive; "read" matches read only.
+						const riskOk =
+							'all' === risk ||
+							( 'read' === risk && 'read' === rowRisk ) ||
+							( 'write' === risk && 'read' !== rowRisk );
+						const textOk =
+							'' === query ||
+							row.textContent.toLowerCase().includes( query );
+						row.hidden = ! ( riskOk && textOk );
+					} );
+				};
+
+				if ( search ) {
+					search.addEventListener( 'input', () => {
+						query = search.value.trim().toLowerCase();
+						apply();
+					} );
+				}
+
+				riskButtons.forEach( ( btn ) => {
+					btn.addEventListener( 'click', () => {
+						risk = btn.dataset.filterRisk ?? 'all';
+						riskButtons.forEach( ( b ) => {
+							const on = b === btn;
+							b.classList.toggle( 'is-active', on );
+							b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+						} );
+						apply();
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * Save the Integrations tab's per-ability toggles. Reuses the same
+		 * aafm_save_abilities action and flat aafm_abilities[] contract as the
+		 * Abilities tab; the stored option is one shared enabled-ability list.
+		 */
+		#bindSaveIntegrations() {
+			const form = document.querySelector( '#aafm-integrations-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				const status = form.querySelector( '.aafm-save-status' );
+				const enabled = [
+					...form.querySelectorAll(
+						'input[name="aafm_abilities[]"]:checked'
+					),
+				].map( ( i ) => i.value );
+
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_abilities' );
+				body.append( 'nonce', this.#nonce );
+				enabled.forEach( ( v ) =>
+					body.append( 'aafm_abilities[]', v )
+				);
+
+				if ( status ) {
+					status.textContent = this.#t( 'saving', 'Saving…' );
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
+				}
+			} );
+		}
+
 		#bindSaveAbilities() {
 			const form = document.querySelector( '#aafm-abilities-form' );
 			if ( ! form ) {
@@ -325,6 +514,75 @@
 				body.append( 'action', 'aafm_save_meta_keys' );
 				body.append( 'nonce', this.#nonce );
 				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
+				if ( status ) {
+					status.textContent = this.#t( 'saving', 'Saving…' );
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
+				}
+			} );
+		}
+
+		#bindSaveDeniedMetaKeys() {
+			const btn = document.querySelector( '#aafm-meta-keys-save' );
+			const root = document.querySelector( '#aafm-meta-keys-form' );
+			if ( ! btn || ! root ) {
+				return;
+			}
+			// Exposed and Deny share one Save button. #bindSaveMetaKeys sends the Exposed list
+			// and owns the status text; this sends the Deny list (by its own name) on the same
+			// click. The chip helper writes only into the Exposed textarea, so its name selector
+			// stays Exposed-scoped.
+			btn.addEventListener( 'click', async () => {
+				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_denied_meta_keys' );
+				body.append( 'nonce', this.#nonce );
+				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
+				try {
+					await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+				} catch {
+					// The shared status text is owned by #bindSaveMetaKeys.
+				}
+			} );
+		}
+
+		#bindSaveUserMetaKeys() {
+			const btn = document.querySelector( '#aafm-user-meta-keys-save' );
+			const root = document.querySelector( '#aafm-user-meta-keys-form' );
+			if ( ! btn || ! root ) {
+				return;
+			}
+			btn.addEventListener( 'click', async () => {
+				const status = root.querySelector( '.aafm-user-meta-keys-status' );
+				const exposed = root.querySelector(
+					'textarea[name="aafm_exposed_user_meta_keys"]'
+				);
+				const deny = root.querySelector(
+					'textarea[name="aafm_denied_user_meta_keys"]'
+				);
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_user_meta_keys' );
+				body.append( 'nonce', this.#nonce );
+				body.append( 'aafm_exposed_user_meta_keys', exposed?.value ?? '' );
+				body.append( 'aafm_denied_user_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}

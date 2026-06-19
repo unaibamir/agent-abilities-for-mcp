@@ -53,6 +53,18 @@ final class SecurityRegressionTest extends TestCase {
 		parent::set_up();
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+
+		// Wave 4: force all three integrations active (+ the mandatory registry-memo flush)
+		// so test_no_arbitrary_option_or_meta_ability_exists scans a registry that INCLUDES
+		// the integration names once the SEO/ACF/WC slices land. Without this, those names
+		// never appear and their needle/sanction checks would be dead code (HIGH-3). No
+		// integration ability exists yet, so nothing new is scanned in this slice.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
@@ -246,11 +258,96 @@ final class SecurityRegressionTest extends TestCase {
 			'fetch-url',
 			'import-url',
 		);
-		// The three governed post-meta abilities are the sanctioned exception to the generic
-		// 'meta' ban: each is gated by per-object edit_post + a permanent hard-block denylist +
-		// a default-deny allowlist (see includes/abilities/meta.php). A *generic* option/meta
-		// surface remains banned.
-		$sanctioned = array( 'aafm/get-post-meta', 'aafm/update-post-meta', 'aafm/delete-post-meta' );
+		// The governed post-meta and term-meta abilities are the sanctioned exception to the
+		// generic 'meta' ban: each is gated by per-object edit_post / edit_term + a permanent
+		// hard-block denylist + a default-deny allowlist (see includes/abilities/meta.php and
+		// the term-meta abilities in includes/abilities/terms.php). The bulk reader
+		// get-all-post-meta carries the identical gate (per-object edit_post + the same
+		// hard-block + default-deny allowlist) and is sanctioned on the same basis. A *generic*
+		// option/meta surface remains banned.
+		$sanctioned = array(
+			'aafm/get-post-meta',
+			'aafm/get-all-post-meta',
+			'aafm/update-post-meta',
+			'aafm/delete-post-meta',
+			'aafm/get-term-meta',
+			'aafm/update-term-meta',
+			'aafm/delete-term-meta',
+		);
+		// User CRUD is the sanctioned exception to the create-user/update-user/delete-user
+		// needles: each is capability-gated (create_users/edit_users/delete_users), default-OFF,
+		// audited, and closed-schema. create-user forces the site default role (never admin);
+		// update-user gates any role change behind promote_users and refuses to demote the last
+		// admin; delete-user requires a reassign target and refuses self / the last admin. A
+		// *generic* role/capability surface stays banned. get-user trips no needle, but listing
+		// it here self-documents the whole user surface in one place.
+		$sanctioned = array_merge(
+			$sanctioned,
+			array(
+				'aafm/get-user',
+				'aafm/create-user',
+				'aafm/update-user',
+				'aafm/delete-user',
+			)
+		);
+		// The governed user-meta abilities are sanctioned on a COMBINED basis: each trips BOTH
+		// the generic 'meta' needle AND a user-write needle (update-user-meta contains
+		// 'update-user', delete-user-meta contains 'delete-user'). They are allowed because
+		// each is capability-gated on per-object edit_user($id) (reads gated like writes, since
+		// user meta can hold private data), scalar-only through a default-deny allowlist, and
+		// floored by an auth/capability/2FA hard-block denylist (session tokens, application
+		// passwords, wp_capabilities/wp_user_level incl. multisite per-blog forms, password
+		// reset, passkey/2FA keys) that NO filter can re-admit. A generic user-meta or
+		// capability surface stays banned.
+		$sanctioned = array_merge(
+			$sanctioned,
+			array(
+				'aafm/get-user-meta',
+				'aafm/update-user-meta',
+				'aafm/delete-user-meta',
+			)
+		);
+		// The site-settings abilities are the sanctioned exception to the generic 'setting'
+		// needle. Both gate on manage_options (the Settings-screen capability) and are
+		// default-OFF, audited, and closed-schema. They never touch an ARBITRARY option:
+		// update-site-settings writes ONLY a fixed allowlist (name, tagline, timezone, the
+		// date/time formats, week start, posts per page), fail-closed on any other key, and
+		// the takeover-class keys (siteurl, home, admin_email, default_role,
+		// users_can_register) are excluded and re-stripped even from a rogue filter. A
+		// *generic* option/setting write (e.g. aafm/update-option, aafm/set-option) stays
+		// banned by the needle.
+		$sanctioned = array_merge(
+			$sanctioned,
+			array(
+				'aafm/get-site-settings',
+				'aafm/update-site-settings',
+			)
+		);
+		// list-plugins is the sanctioned exception to the 'plugin' needle. It is a READ-ONLY
+		// inventory (name, version, active state, relative basename) gated on activate_plugins —
+		// the capability WordPress puts on the Plugins screen — default-OFF, audited, and
+		// closed-schema. There is deliberately NO activate/deactivate ability in the catalog, so
+		// the 'plugin' needle still bans a generic plugin-management surface (e.g.
+		// aafm/activate-plugin, aafm/manage-plugins). list-plugins never changes a plugin.
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/list-plugins' ) );
+		// get-active-theme and list-themes are the sanctioned exception to the 'theme' needle.
+		// Both are READS gated on edit_theme_options (the Appearance-screen capability),
+		// default-OFF, audited, and closed-schema, and neither returns a filesystem path. There is
+		// deliberately NO theme switch/install/delete ability in the catalog, so the 'theme' needle
+		// still bans a generic theme-management surface (e.g. aafm/switch-theme, aafm/delete-theme).
+		// The other FSE abilities (list-templates, get-template, update-template, get-global-styles)
+		// trip no needle, so they need no sanction.
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/get-active-theme', 'aafm/list-themes' ) );
+		// acf-update-user-fields trips the update-user needle but is an ACF custom-field write
+		// gated per-object on edit_user($id), default-OFF, audited, closed-schema — it never
+		// touches the role/account surface the needle bans. The closed top-level schema accepts
+		// only user_id + a fields object, so a smuggled role/login/capabilities key is rejected
+		// before execute, and the field map values are type-sanitized. A generic user-write surface
+		// (aafm/update-user, aafm/create-user, aafm/delete-user) stays banned. The other ACF names
+		// trip no needle: acf-list-field-groups / acf-get-*-fields / acf-update-post-fields /
+		// acf-update-term-fields contain none of meta/option/role/setting/plugin/theme/create-user/
+		// update-user/delete-user.
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/acf-update-user-fields' ) );
 		foreach ( array_keys( $registry ) as $name ) {
 			if ( in_array( $name, $sanctioned, true ) ) {
 				continue;
@@ -331,12 +428,49 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: PERMANENT DELETE.
 	 *
-	 * Destructive writes use trash/recoverable semantics — never force-delete. Asserted
-	 * in the source: no wp_delete_post(...,true) / wp_delete_comment(...,true).
+	 * Force-delete (the trash-bypass flag) is a CVE-class primitive: each one is
+	 * permitted ONLY in the single ability file that discloses the matching destructive
+	 * ability, and banned everywhere else.
+	 *
+	 * Three primitives are governed here:
+	 *   - wp_delete_post(...,true)       → allowed ONLY in includes/abilities/posts.php.
+	 *   - wp_delete_comment(...,true)    → allowed ONLY in includes/abilities/comments.php.
+	 *   - wp_delete_attachment(...,true) → allowed ONLY in includes/abilities/media.php.
+	 *
+	 * Posts/pages are the newest sanctioned exception. aafm/delete-post is an explicit,
+	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
+	 * filed under "Destructive (permanent)") that force-deletes through the single
+	 * aafm_force_delete_post() executor in posts.php. aafm/delete-page does NOT call
+	 * the primitive itself — it delegates to that same executor with the page type
+	 * pinned — so pages.php never force-deletes directly and there is exactly one
+	 * wp_delete_post(...,true) call site in the whole abilities layer. The recoverable
+	 * trash-post/trash-page abilities remain for the undoable path.
+	 *
+	 * Comments are another sanctioned exception. aafm/delete-comment is an explicit,
+	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
+	 * filed under "Destructive (permanent)") that uses wp_delete_comment(...,true) by
+	 * design — moderators routinely purge spam permanently, and aafm/moderate-comment
+	 * still offers the recoverable 'trash' path. That single call is allowed only in
+	 * includes/abilities/comments.php.
+	 *
+	 * Media is the last. aafm/delete-media is the disclosed destructive media ability
+	 * (risk=destructive) that uses wp_delete_attachment(...,true) by design — an
+	 * attachment has no Trash path, so removing a media file is inherently permanent.
+	 * That single call is allowed only in includes/abilities/media.php.
+	 *
+	 * A force-delete of any of these primitives in any other file is still a CVE.
 	 */
 	public function test_no_force_delete_in_source(): void {
 		$dir   = dirname( __DIR__, 2 ) . '/includes';
 		$files = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $dir ) );
+
+		// The one file permitted to force-delete a post/page (the disclosed delete-post ability;
+		// delete-page delegates to the same posts.php executor, so there is no second call site).
+		$post_force_delete_allowed = 'includes/abilities/posts.php';
+		// The one file permitted to force-delete a comment (the disclosed destructive ability).
+		$comment_force_delete_allowed = 'includes/abilities/comments.php';
+		// The one file permitted to force-delete an attachment (the disclosed delete-media ability).
+		$media_force_delete_allowed = 'includes/abilities/media.php';
 
 		foreach ( $files as $file ) {
 			if ( 'php' !== $file->getExtension() ) {
@@ -344,19 +478,36 @@ final class SecurityRegressionTest extends TestCase {
 			}
 			// Reading our own bundled source for a static scan — not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-			$src = (string) file_get_contents( $file->getPathname() );
+			$src  = (string) file_get_contents( $file->getPathname() );
+			$path = str_replace( '\\', '/', $file->getPathname() );
 
-			// A force-delete call with the trash-bypass flag must never appear in our writes.
-			$this->assertDoesNotMatchRegularExpression(
-				'/wp_delete_post\s*\([^)]*,\s*true\s*\)/',
-				$src,
-				'Permanent wp_delete_post(...,true) in ' . $file->getFilename()
-			);
-			$this->assertDoesNotMatchRegularExpression(
-				'/wp_delete_comment\s*\([^)]*,\s*true\s*\)/',
-				$src,
-				'Permanent wp_delete_comment(...,true) in ' . $file->getFilename()
-			);
+			// Permanent post/page delete is allowed ONLY in the sanctioned posts file.
+			// The /s flag makes a multiline call match too, so it can't slip past the sweep.
+			if ( ! str_ends_with( $path, $post_force_delete_allowed ) ) {
+				$this->assertDoesNotMatchRegularExpression(
+					'/wp_delete_post\s*\([^)]*,\s*true\s*\)/s',
+					$src,
+					'Permanent wp_delete_post(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-post ability may force-delete)'
+				);
+			}
+
+			// Permanent comment delete is allowed ONLY in the sanctioned comments file.
+			if ( ! str_ends_with( $path, $comment_force_delete_allowed ) ) {
+				$this->assertDoesNotMatchRegularExpression(
+					'/wp_delete_comment\s*\([^)]*,\s*true\s*\)/s',
+					$src,
+					'Permanent wp_delete_comment(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-comment ability may force-delete)'
+				);
+			}
+
+			// Permanent attachment delete is allowed ONLY in the sanctioned media file.
+			if ( ! str_ends_with( $path, $media_force_delete_allowed ) ) {
+				$this->assertDoesNotMatchRegularExpression(
+					'/wp_delete_attachment\s*\([^)]*,\s*true\s*\)/s',
+					$src,
+					'Permanent wp_delete_attachment(...,true) in ' . $file->getFilename() . ' (only the disclosed delete-media ability may force-delete)'
+				);
+			}
 		}
 	}
 
@@ -372,6 +523,7 @@ final class SecurityRegressionTest extends TestCase {
 			$includes . '/abilities/posts.php',
 			$includes . '/abilities/pages.php',
 			$includes . '/abilities/comments.php',
+			$includes . '/abilities/blocks.php',
 		);
 
 		foreach ( $sources as $path ) {
@@ -435,10 +587,12 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * PII: the user and comment redactors strip email/login/IP from read output.
+	 * PII: user reads expose email (the locked reversal) but never login or the
+	 * password hash; comment reads still strip email and IP.
 	 */
-	public function test_redactors_strip_pii_from_user_and_comment_reads(): void {
-		// User redactor exposes no email/login/pass.
+	public function test_user_read_exposes_email_but_strips_login_and_comment_reads_strip_pii(): void {
+		// LOCKED reversal (47- line 144): user email IS exposed in the redacted shape now,
+		// gated upstream by list_users + audited. Login and password hash stay stripped.
 		$user_id   = self::factory()->user->create(
 			array(
 				'role'         => 'author',
@@ -447,9 +601,11 @@ final class SecurityRegressionTest extends TestCase {
 				'display_name' => 'Public Author',
 			)
 		);
-		$user_json = (string) wp_json_encode( aafm_redact_user( get_userdata( $user_id ) ) );
-		$this->assertStringNotContainsString( 'leak@example.com', $user_json, 'User email leaked.' );
-		$this->assertStringNotContainsString( 'leaklogin', $user_json, 'User login leaked.' );
+		$user      = get_userdata( $user_id );
+		$user_json = (string) wp_json_encode( aafm_redact_user( $user ) );
+		$this->assertStringContainsString( 'leak@example.com', $user_json, 'User email must be exposed (locked reversal).' );
+		$this->assertStringNotContainsString( 'leaklogin', $user_json, 'User login must stay stripped.' );
+		$this->assertStringNotContainsString( $user->user_pass, $user_json, 'Password hash must stay stripped.' );
 
 		// Comment redactor exposes no email/IP/agent.
 		$comment_id   = self::factory()->comment->create(

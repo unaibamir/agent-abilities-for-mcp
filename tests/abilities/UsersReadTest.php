@@ -1,10 +1,11 @@
 <?php
 /**
- * User read ability: list_users gating + strict redaction (no email/login/pass).
+ * User read abilities: list_users gating + redaction.
  *
  * This is the most PII-sensitive read in the catalog — competitors leaked user
- * data here. The tests prove a low-privilege caller is denied (and audited) and
- * that the redacted output never carries email, login, or a password hash.
+ * data here. The tests prove a low-privilege caller is denied (and audited). Email
+ * is exposed by a locked decision (gated upstream by list_users + audited), but the
+ * output never carries the login or the password hash.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -78,17 +79,18 @@ final class UsersReadTest extends TestCase {
 	}
 
 	/**
-	 * Security red line: the redacted output must never contain email, login, or a
-	 * password hash. Builds a user with a known email/login and asserts both strings
-	 * are absent from the serialized output, and that the per-row shape carries only
-	 * the safe whitelist (id, display_name, roles, post_count).
+	 * LOCKED reversal (47- line 144): user email IS exposed in the redacted shape
+	 * now, gated upstream by list_users + audited. Login and the password hash stay
+	 * stripped — those are NEVER returned. Builds a user with a known email/login and
+	 * asserts the email is present while login/hash are absent, and that the per-row
+	 * shape carries the safe whitelist (id, display_name, email, roles, post_count).
 	 */
-	public function test_output_has_no_email_login_or_password(): void {
+	public function test_output_exposes_email_but_never_login_or_password(): void {
 		$this->acting_as( 'administrator' );
 		$uid  = self::factory()->user->create(
 			array(
 				'role'         => 'author',
-				'user_email'   => 'leak@example.com',
+				'user_email'   => 'show@example.com',
 				'user_login'   => 'leaklogin',
 				'user_pass'    => 'SuperSecretPlainPass',
 				'display_name' => 'Visible Display Name',
@@ -99,18 +101,17 @@ final class UsersReadTest extends TestCase {
 		$out  = wp_get_ability( 'aafm/get-users' )->execute( array() );
 		$json = (string) wp_json_encode( $out );
 
-		// No email, login, or password hash anywhere in the serialized output.
-		$this->assertStringNotContainsString( 'leak@example.com', $json );
+		// Email IS exposed (locked reversal); login and the password hash never are.
+		$this->assertStringContainsString( 'show@example.com', $json );
 		$this->assertStringNotContainsString( 'leaklogin', $json );
 		$this->assertStringNotContainsString( $hash, $json );
 
-		// Per-row shape: only the safe whitelist, with PII keys structurally absent.
+		// Per-row shape: the safe whitelist incl. email; login/pass structurally absent.
 		foreach ( $out['users'] as $u ) {
 			$this->assertSame(
-				array( 'id', 'display_name', 'roles', 'post_count' ),
+				array( 'id', 'display_name', 'email', 'roles', 'post_count' ),
 				array_keys( $u )
 			);
-			$this->assertArrayNotHasKey( 'user_email', $u );
 			$this->assertArrayNotHasKey( 'user_login', $u );
 			$this->assertArrayNotHasKey( 'user_pass', $u );
 			$this->assertArrayHasKey( 'display_name', $u );
@@ -194,5 +195,94 @@ final class UsersReadTest extends TestCase {
 			$large_cost,
 			'get-users query count scaled with the number of users — the N+1 count is back.'
 		);
+	}
+
+	/**
+	 * LOCKED reversal at the redactor layer: aafm_redact_user() exposes email but
+	 * never the login or the password hash. This pins the shape both the list and
+	 * the single-user assembler build on.
+	 */
+	public function test_redact_user_exposes_email_but_never_login_or_pass(): void {
+		$uid  = self::factory()->user->create(
+			array(
+				'role'         => 'author',
+				'user_email'   => 'show@example.com',
+				'user_login'   => 'secretlogin',
+				'display_name' => 'Public Author',
+			)
+		);
+		$user = get_userdata( $uid );
+		$out  = aafm_redact_user( $user, 0 );
+
+		// LOCKED reversal: email IS now part of the user read shape.
+		$this->assertSame( 'show@example.com', $out['email'] ?? null );
+		// Login and password hash are NEVER exposed.
+		$json = (string) wp_json_encode( $out );
+		$this->assertStringNotContainsString( 'secretlogin', $json, 'user_login leaked.' );
+		$this->assertStringNotContainsString( $user->user_pass, $json, 'password hash leaked.' );
+		$this->assertArrayNotHasKey( 'user_login', $out );
+		$this->assertArrayNotHasKey( 'user_pass', $out );
+	}
+
+	/**
+	 * The rich single-user assembler layers registration date + bio over the lean
+	 * redacted shape (which it calls), so the list stays lean. Login/pass stay out.
+	 */
+	public function test_rich_user_adds_registered_and_bio_over_the_lean_shape(): void {
+		$uid = self::factory()->user->create(
+			array(
+				'role'        => 'author',
+				'user_email'  => 'rich@example.com',
+				'description' => 'Bio text here',
+			)
+		);
+		$out = aafm_rich_user( get_userdata( $uid ), 0 );
+
+		$this->assertSame( 'rich@example.com', $out['email'] );      // From the lean redactor.
+		$this->assertArrayHasKey( 'registered', $out );              // Rich-only.
+		$this->assertSame( 'Bio text here', $out['bio'] ?? null );   // Rich-only.
+		// Still no login/pass.
+		$this->assertArrayNotHasKey( 'user_login', $out );
+		$this->assertStringNotContainsString( 'user_pass', (string) wp_json_encode( $out ) );
+	}
+
+	/**
+	 * Enable + register the whole catalog so by-id reads like get-user resolve.
+	 */
+	private function register_users(): void {
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	public function test_get_user_returns_rich_shape_and_requires_list_users(): void {
+		$this->register_users();
+		$target = self::factory()->user->create(
+			array(
+				'role'       => 'author',
+				'user_email' => 'one@example.com',
+			)
+		);
+
+		// Subscriber denied (no list_users).
+		$this->acting_as( 'subscriber' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/get-user' )->check_permissions( array( 'user_id' => $target ) ),
+			'get-user must deny a subscriber.'
+		);
+
+		// Admin allowed; gets the rich shape incl. email.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => $target ) );
+		$this->assertIsArray( $res );
+		$this->assertSame( 'one@example.com', $res['user']['email'] ?? null );
+		$this->assertArrayHasKey( 'registered', $res['user'] );
+	}
+
+	public function test_get_user_unknown_id_is_a_clean_error(): void {
+		$this->register_users();
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => 999999 ) );
+		$this->assertInstanceOf( \WP_Error::class, $res );
 	}
 }

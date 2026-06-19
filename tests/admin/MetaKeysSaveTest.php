@@ -51,4 +51,118 @@ final class MetaKeysSaveTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-notice-ic', $html );
 		$this->assertStringContainsString( '<svg class="aafm-icon"', $html );
 	}
+
+	/**
+	 * The Content meta selector renders BOTH the Exposed textarea (existing) and the new Deny
+	 * textarea, with Exposed above Deny and the `*` hint on each. The detected-keys chips
+	 * attach to Exposed only, and the selector never opens a nested form.
+	 */
+	public function test_content_selector_renders_exposed_and_deny_textareas(): void {
+		ob_start();
+		aafm_render_meta_keys_selector();
+		$html = ob_get_clean();
+
+		$exposed_pos = strpos( $html, 'name="aafm_meta_keys"' );
+		$deny_pos    = strpos( $html, 'name="aafm_deny_meta_keys"' );
+
+		$this->assertNotFalse( $exposed_pos, 'Exposed textarea must render.' );
+		$this->assertNotFalse( $deny_pos, 'Deny textarea must render.' );
+		$this->assertLessThan( $deny_pos, $exposed_pos, 'Exposed must render above Deny.' );
+
+		// The `*` wildcard is documented on both controls.
+		$this->assertGreaterThanOrEqual( 2, substr_count( $html, '*' ) );
+
+		// The Save button keeps the primary style; the selector is not a nested form.
+		$this->assertStringContainsString( 'aafm-btn aafm-btn-primary', $html );
+		$this->assertSame( 0, substr_count( $html, '<form' ) );
+	}
+
+	/**
+	 * The Users sub-tab renders its own exposed + denied user-meta textareas, mirroring the
+	 * Content pair, and never opens a nested form.
+	 */
+	public function test_users_selector_renders_exposed_and_deny_textareas(): void {
+		ob_start();
+		aafm_render_user_meta_keys_selector();
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( 'name="aafm_exposed_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="aafm_denied_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'aafm-btn', $html );
+		$this->assertSame( 0, substr_count( $html, '<form' ) );
+	}
+
+	/**
+	 * Assert a textarea has non-empty aria-labelledby + aria-describedby, and that each
+	 * referenced id is actually present as an id="" in the markup (so the accessible name and
+	 * description resolve). WCAG 1.3.1 / 3.3.2 / 4.1.2.
+	 *
+	 * @param string $html      Rendered markup.
+	 * @param string $name      The textarea name attribute to locate.
+	 * @return void
+	 */
+	private function assert_textarea_is_labelled( string $html, string $name ): void {
+		$this->assertMatchesRegularExpression(
+			'/<textarea[^>]*\bname="' . preg_quote( $name, '/' ) . '"[^>]*>/',
+			$html,
+			"Textarea {$name} must render."
+		);
+
+		// Pull the single opening <textarea ... name="$name" ...> tag.
+		$this->assertSame(
+			1,
+			preg_match( '/<textarea[^>]*\bname="' . preg_quote( $name, '/' ) . '"[^>]*>/', $html, $tag ),
+			"Textarea {$name} tag must be matchable."
+		);
+		$open = $tag[0];
+
+		$this->assertSame( 1, preg_match( '/\baria-labelledby="([^"]+)"/', $open, $lbl ), "Textarea {$name} needs aria-labelledby." );
+		$this->assertSame( 1, preg_match( '/\baria-describedby="([^"]+)"/', $open, $desc ), "Textarea {$name} needs aria-describedby." );
+		$this->assertNotSame( '', $lbl[1], "aria-labelledby on {$name} must be non-empty." );
+		$this->assertNotSame( '', $desc[1], "aria-describedby on {$name} must be non-empty." );
+
+		$this->assertStringContainsString( 'id="' . $lbl[1] . '"', $html, "Referenced label id {$lbl[1]} must exist." );
+		$this->assertStringContainsString( 'id="' . $desc[1] . '"', $html, "Referenced hint id {$desc[1]} must exist." );
+	}
+
+	/**
+	 * Both content meta-key textareas expose a programmatic label + description, resolving to
+	 * ids that exist in the markup (assistive tech reads the visible h3 and hint).
+	 */
+	public function test_content_selector_textareas_are_labelled_for_assistive_tech(): void {
+		ob_start();
+		aafm_render_meta_keys_selector();
+		$html = ob_get_clean();
+
+		$this->assert_textarea_is_labelled( $html, 'aafm_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'aafm_deny_meta_keys' );
+	}
+
+	/**
+	 * Both user meta-key textareas expose a programmatic label + description, resolving to ids
+	 * that exist in the markup.
+	 */
+	public function test_users_selector_textareas_are_labelled_for_assistive_tech(): void {
+		ob_start();
+		aafm_render_user_meta_keys_selector();
+		$html = ob_get_clean();
+
+		$this->assert_textarea_is_labelled( $html, 'aafm_exposed_user_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'aafm_denied_user_meta_keys' );
+	}
+
+	/**
+	 * The full abilities tab wires the Users selector into the users panel, still inside the
+	 * single outer form (no second form opened by either meta selector).
+	 */
+	public function test_abilities_tab_wires_users_selector_in_single_form(): void {
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $html, '<form' ) );
+		$this->assertStringContainsString( 'name="aafm_exposed_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="aafm_denied_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="aafm_deny_meta_keys"', $html );
+	}
 }

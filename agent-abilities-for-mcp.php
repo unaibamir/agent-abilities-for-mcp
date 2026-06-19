@@ -140,6 +140,8 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/integration-manifest.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bootstrap.php';
 
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/posts.php';
@@ -150,8 +152,20 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/media.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/users.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/meta.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/user-meta.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/revisions.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/search.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/settings.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/plugins.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/activity-log.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/blocks.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/menus.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/themes.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/yoast.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/rankmath.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/aioseo.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/acf.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -167,17 +181,21 @@ function aafm_bootstrap() {
 
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/icons.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	if ( is_admin() ) {
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
 		add_action( 'admin_enqueue_scripts', 'aafm_enqueue_admin_assets' );
 		add_action( 'wp_ajax_aafm_save_abilities', 'aafm_ajax_save_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );
 		add_action( 'wp_ajax_aafm_save_meta_keys', 'aafm_ajax_save_meta_keys' );
+		add_action( 'wp_ajax_aafm_save_denied_meta_keys', 'aafm_ajax_save_denied_meta_keys' );
+		add_action( 'wp_ajax_aafm_save_user_meta_keys', 'aafm_ajax_save_user_meta_keys' );
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );
 		add_action( 'wp_ajax_aafm_clear_log', 'aafm_ajax_clear_log' );
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );

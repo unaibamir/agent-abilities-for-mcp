@@ -176,4 +176,24 @@ final class ConnectionTest extends TestCase {
 		// VS Code's distinct "servers" key proves per-client shaping reaches the markup.
 		$this->assertStringContainsString( 'servers', $html );
 	}
+
+	public function test_connection_tab_shows_the_endpoint_once_with_oauth_on(): void {
+		// OAuth on (the default) used to render the endpoint twice: once in the OAuth card
+		// and once in the standalone endpoint card. The endpoint label is now shown exactly
+		// once — in the canonical endpoint card.
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		$this->assertSame( 1, substr_count( $html, 'aafm-endpoint-card' ) );
+		$this->assertSame( 1, substr_count( $html, '>MCP endpoint<' ) );
+		// And the endpoint URL itself appears once in a copyable endpoint field.
+		$this->assertSame( 1, substr_count( $html, 'aafm-field-mono' ) );
+	}
+
+	public function test_connection_tab_steps_share_an_alignment_class(): void {
+		$html = $this->render_connection_tab();
+		// The three numbered steps each carry the shared padding/alignment class so their
+		// left and right edges line up top to bottom.
+		$this->assertSame( 3, substr_count( $html, 'aafm-conn-step' ) );
+	}
 }

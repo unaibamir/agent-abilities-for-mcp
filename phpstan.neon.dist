@@ -11,6 +11,7 @@ parameters:
 	bootstrapFiles:
 		- vendor/autoload.php
 		- tests/phpstan-bootstrap.php
+		- tests/phpstan-stubs.php
 	scanDirectories:
 		- vendor/wordpress/mcp-adapter
 	excludePaths:

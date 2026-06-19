@@ -18,7 +18,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_terms_definitions( array $registry ): array {
-	$registry['aafm/get-terms']   = array(
+	$registry['aafm/get-terms']        = array(
 		'label'        => __( 'Get terms', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'List terms (with counts) for a public taxonomy.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -26,7 +26,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_terms',
 	);
-	$registry['aafm/create-term'] = array(
+	$registry['aafm/create-term']      = array(
 		'label'        => __( 'Create term', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -34,13 +34,53 @@ function aafm_register_terms_definitions( array $registry ): array {
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_create_term',
 	);
-	$registry['aafm/update-term'] = array(
+	$registry['aafm/update-term']      = array(
 		'label'        => __( 'Update term', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term',
+	);
+	$registry['aafm/get-term']         = array(
+		'label'        => __( 'Get term', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_get_term',
+	);
+	$registry['aafm/add-post-terms']   = array(
+		'label'        => __( 'Add post terms', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_add_post_terms',
+	);
+	$registry['aafm/get-term-meta']    = array(
+		'label'        => __( 'Get term meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_get_term_meta',
+	);
+	$registry['aafm/update-term-meta'] = array(
+		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'write',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_update_term_meta',
+	);
+	$registry['aafm/delete-term-meta'] = array(
+		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'taxonomies',
+		'args_builder' => 'aafm_args_delete_term_meta',
 	);
 	return $registry;
 }
@@ -131,6 +171,468 @@ function aafm_exec_get_terms( array $input ) {
 	);
 
 	return array( 'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ) );
+}
+
+/**
+ * Args for aafm/get-term.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_term(): array {
+	return array(
+		'label'               => __( 'Get term', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'term_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array( 'term' => array( 'type' => 'object' ) ),
+		),
+		'execute_callback'    => 'aafm_exec_get_term',
+		'permission_callback' => 'aafm_perm_read',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Execute aafm/get-term.
+ *
+ * Confines the read to the public-allowlisted taxonomy AND to a term that actually
+ * belongs to it: get_term( $id, $taxonomy ) returns null for a nonexistent id or one
+ * in a different taxonomy, so a tag id claimed as a category is rejected. Returns the
+ * same redacted shape as get-terms; nothing beyond aafm_redact_term() is exposed.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_term( array $input ) {
+	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+
+	$term = get_term( absint( $input['term_id'] ), $taxonomy );
+	if ( ! $term instanceof WP_Term ) {
+		return aafm_generic_error();
+	}
+
+	return array( 'term' => aafm_redact_term( $term ) );
+}
+
+/**
+ * Args for aafm/add-post-terms.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_add_post_terms(): array {
+	return array(
+		'label'               => __( 'Add post terms', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_ids' => array(
+					'type'     => 'array',
+					'items'    => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
+					'minItems' => 1,
+				),
+			),
+			'required'             => array( 'post_id', 'taxonomy', 'term_ids' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'post_id' => array( 'type' => 'integer' ),
+				'terms'   => array(
+					'type'  => 'array',
+					'items' => array( 'type' => 'object' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_add_post_terms',
+		'permission_callback' => 'aafm_perm_add_post_terms',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/add-post-terms: per-object edit_post on the target post.
+ *
+ * The taxonomy's assign_terms cap + term-existence are enforced at execute time by the
+ * reused aafm_validate_term_ids_for_taxonomy() (C2). This callback is the post-edit gate:
+ * a caller who cannot edit the post is denied before any term is touched, so an APPEND
+ * can never attach terms to a post the agent is not authorized to edit.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_add_post_terms( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+}
+
+/**
+ * Execute aafm/add-post-terms.
+ *
+ * APPEND semantics (distinct from the REPLACE-on-update path in the post writes): the
+ * fourth arg to wp_set_post_terms() is true, so existing terms are preserved. Term ids are
+ * validated through the SAME reusable validator the enrichment path uses — taxonomy public
+ * allow-list + assign_terms cap + term-exists-in-this-taxonomy — so a cross-taxonomy or
+ * nonexistent id, or a missing assign_terms cap, is rejected before the write.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_add_post_terms( array $input ) {
+	$post_id = absint( $input['post_id'] );
+	$post    = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+
+	$term_ids = aafm_validate_term_ids_for_taxonomy(
+		$taxonomy,
+		isset( $input['term_ids'] ) && is_array( $input['term_ids'] ) ? $input['term_ids'] : array()
+	);
+	if ( is_wp_error( $term_ids ) ) {
+		return $term_ids;
+	}
+
+	$result = wp_set_post_terms( $post_id, $term_ids, $taxonomy, true );
+	if ( is_wp_error( $result ) || false === $result ) {
+		return aafm_generic_error();
+	}
+
+	$current = get_the_terms( $post_id, $taxonomy );
+	$objects = is_array( $current ) ? array_filter( $current, static fn( $t ): bool => $t instanceof WP_Term ) : array();
+
+	return array(
+		'post_id' => $post_id,
+		'terms'   => array_values( array_map( 'aafm_redact_term', $objects ) ),
+	);
+}
+
+/**
+ * Per-object term-edit gate shared by get/update/delete term-meta: the term must be readable
+ * + key-allowlisted (aafm_validate_term_meta_request) AND the current user must hold
+ * edit_term on that specific term. Term meta can hold private data, so even the read gates on
+ * edit_term here — mirroring how the post-meta family gates get/update/delete on edit_post.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_can_edit_term_meta( array $input ): bool {
+	if ( is_wp_error( aafm_validate_term_meta_request( $input ) ) ) {
+		return false;
+	}
+	$term_id = absint( $input['term_id'] );
+	return current_user_can( 'edit_term', $term_id );
+}
+
+/**
+ * Args for aafm/get-term-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_term_meta(): array {
+	return array(
+		'label'               => __( 'Get term meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+			),
+			'required'             => array( 'term_id', 'meta_key' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'term_id'  => array( 'type' => 'integer' ),
+				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'null' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_term_meta',
+		'permission_callback' => 'aafm_perm_get_term_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/get-term-meta: per-object edit_term + key allowlist (EDIT 2).
+ *
+ * Term meta can hold private data, so reads require edit_term on the term, mirroring
+ * get-post-meta's edit_post gate. Reuses the shared per-object gate.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_get_term_meta( array $input ): bool {
+	return aafm_perm_can_edit_term_meta( $input );
+}
+
+/**
+ * Execute aafm/get-term-meta.
+ *
+ * Re-validates taxonomy/term/key (defence in depth), then reads a single value. Non-scalar
+ * values are refused so a serialized array/object can never be dumped to the agent.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_term_meta( array $input ) {
+	$taxonomy = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	$term_id = absint( $input['term_id'] );
+	$key     = (string) $input['meta_key'];
+	$value   = get_term_meta( $term_id, $key, true );
+	if ( '' !== $value && ! is_scalar( $value ) ) {
+		return aafm_generic_error();
+	}
+	return array(
+		'term_id'  => $term_id,
+		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
+		'value'    => $value,
+	);
+}
+
+/**
+ * Args for aafm/update-term-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_update_term_meta(): array {
+	return array(
+		'label'               => __( 'Update term meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+			'required'             => array( 'term_id', 'meta_key', 'value' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'term_id'  => array( 'type' => 'integer' ),
+				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+				'value'    => array(
+					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+				),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_update_term_meta',
+		'permission_callback' => 'aafm_perm_update_term_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/update-term-meta: per-object edit_term + key allowlist.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_update_term_meta( array $input ): bool {
+	return aafm_perm_can_edit_term_meta( $input );
+}
+
+/**
+ * Execute aafm/update-term-meta.
+ *
+ * Re-validates taxonomy/term/key, refuses non-scalar values, then writes a single value.
+ * wp_slash() guards update_term_meta()'s internal unslash (matches the post-meta convention).
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_update_term_meta( array $input ) {
+	$taxonomy = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	$term_id = absint( $input['term_id'] );
+	$key     = (string) $input['meta_key'];
+	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '' );
+	if ( is_wp_error( $value ) ) {
+		return $value;
+	}
+	if ( false === update_term_meta( $term_id, $key, wp_slash( $value ) ) ) {
+		// update_term_meta returns false on a same-value no-op too. Meta round-trips through a
+		// longtext column, so the stored value reads back as a string; compare stringified forms
+		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
+		if ( (string) get_term_meta( $term_id, $key, true ) !== (string) $value ) {
+			return aafm_generic_error();
+		}
+	}
+	return array(
+		'term_id'  => $term_id,
+		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
+		'value'    => get_term_meta( $term_id, $key, true ),
+	);
+}
+
+/**
+ * Args for aafm/delete-term-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_term_meta(): array {
+	return array(
+		'label'               => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'taxonomy' => array(
+					'type'    => 'string',
+					'default' => 'category',
+				),
+				'term_id'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
+					'type'      => 'string',
+					'minLength' => 1,
+				),
+			),
+			'required'             => array( 'term_id', 'meta_key' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted' => array( 'type' => 'boolean' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_term_meta',
+		'permission_callback' => 'aafm_perm_delete_term_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-term-meta: per-object edit_term + key allowlist.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_delete_term_meta( array $input ): bool {
+	return aafm_perm_can_edit_term_meta( $input );
+}
+
+/**
+ * Execute aafm/delete-term-meta.
+ *
+ * Re-validates taxonomy/term/key (defence in depth), then removes every value of that key.
+ * delete_term_meta() with no value arg deletes all values of the key — the intended
+ * destructive behaviour.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_term_meta( array $input ) {
+	$taxonomy = aafm_validate_term_meta_request( $input );
+	if ( is_wp_error( $taxonomy ) ) {
+		return $taxonomy;
+	}
+	delete_term_meta( absint( $input['term_id'] ), (string) $input['meta_key'] );
+	return array( 'deleted' => true );
 }
 
 /**

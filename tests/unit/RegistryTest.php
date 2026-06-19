@@ -111,4 +111,32 @@ final class RegistryTest extends TestCase {
 
 		remove_filter( 'aafm_abilities_registry', $cb );
 	}
+
+	public function test_removed_unified_seo_abilities_are_gone_and_a_stale_enabled_key_is_harmless(): void {
+		// Wave 5 removed the unified seo-* abilities in favour of the per-plugin sets. Even with every
+		// SEO host force-active, the old names must be absent from the registry, and a stale enabled
+		// option entry for one of them must resolve cleanly (intersected away) rather than fatal —
+		// the migration-safety guarantee, no migration code needed.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+
+		$registry = aafm_get_abilities_registry();
+		foreach ( array( 'aafm/seo-get-post', 'aafm/seo-update-post', 'aafm/seo-get-schema', 'aafm/seo-update-schema', 'aafm/seo-get-head' ) as $dead ) {
+			$this->assertArrayNotHasKey( $dead, $registry, $dead . ' must be gone from the registry.' );
+		}
+
+		update_option( 'aafm_enabled_abilities', array( 'aafm/seo-get-post', 'aafm/yoast-get-post' ) );
+		$this->assertSame(
+			array( 'aafm/yoast-get-post' ),
+			aafm_get_enabled_abilities(),
+			'A stale seo-* enabled key must be dropped, leaving the live per-plugin key.'
+		);
+
+		remove_filter( 'aafm_integration_active_yoast', '__return_true' );
+		remove_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		remove_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+	}
 }

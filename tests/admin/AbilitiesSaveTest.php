@@ -36,7 +36,7 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_register_admin_menu();
 		global $submenu;
 		$slugs = array();
-		foreach ( (array) ( $submenu['options-general.php'] ?? array() ) as $item ) {
+		foreach ( (array) ( $submenu['agent-abilities-for-mcp'] ?? array() ) as $item ) {
 			$slugs[] = $item[2];
 		}
 		$this->assertContains( 'agent-abilities-for-mcp', $slugs );
@@ -62,10 +62,65 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-switch', $html );
 	}
 
+	public function test_abilities_tab_renders_a_stats_box_before_the_form(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// A stat grid renders before the abilities form, showing the total and enabled counts.
+		$stat_pos = strpos( $html, 'aafm-stat-grid' );
+		$form_pos = strpos( $html, 'id="aafm-abilities-form"' );
+		$this->assertNotFalse( $stat_pos, 'The stats box should render.' );
+		$this->assertNotFalse( $form_pos, 'The abilities form should render.' );
+		$this->assertLessThan( $form_pos, $stat_pos, 'The stats box must come before the form.' );
+
+		// Both the total and enabled counts appear in .aafm-stat blocks. Total reads the single
+		// source of truth (core + every integration manifest total), shared with the Dashboard.
+		$this->assertStringContainsString( 'aafm-stat', $html );
+		$this->assertStringContainsString( (string) aafm_available_ability_count(), $html );
+		$this->assertStringContainsString( (string) aafm_enabled_ability_count(), $html );
+		$this->assertStringContainsString( 'Total abilities', $html );
+		$this->assertStringContainsString( 'Enabled', $html );
+	}
+
+	public function test_abilities_subject_tabs_carry_a_per_subject_count(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// Each subject sub-tab button carries a <span class="count"> with its total ability count.
+		$this->assertStringContainsString( '<span class="count">', $html );
+		// There is one count span per rendered subject tab button. Match the button class with the
+		// trailing quote/space so the .aafm-subject-tabs wrapper class is not double-counted.
+		$this->assertSame(
+			substr_count( $html, 'class="aafm-subject-tab"' ) + substr_count( $html, 'class="aafm-subject-tab is-active"' ),
+			substr_count( $html, '<span class="count">' )
+		);
+	}
+
+	public function test_meta_keys_save_uses_the_plugin_button_class(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_meta_keys_selector();
+		$html = (string) ob_get_clean();
+
+		// The meta-keys Save button uses the plugin button family, not the WP default.
+		$this->assertStringContainsString( 'class="aafm-btn aafm-btn-primary"', $html );
+		$this->assertStringNotContainsString( 'class="button button-primary"', $html );
+	}
+
 	public function test_every_registry_entry_declares_a_subject(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertNotEmpty( $registry );
-		$known = array_keys( aafm_abilities_subjects() );
+		// Abilities-tab subjects plus the integration subjects, which render on the Integrations
+		// tab rather than the Abilities tab but are still real, non-empty subjects.
+		$known = array_merge( array_keys( aafm_abilities_subjects() ), array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce' ) );
 		foreach ( $registry as $name => $meta ) {
 			$this->assertArrayHasKey( 'subject', $meta, "{$name} is missing a subject." );
 			$this->assertNotSame( '', (string) $meta['subject'], "{$name} has an empty subject." );
@@ -84,19 +139,30 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
-		// Every subject that has at least one ability must get a sub-tab.
+		// Every Abilities-tab subject that has at least one ability must get a sub-tab — except the
+		// 'site' subject, which is no longer one chip: it is split into the six display tabs from
+		// aafm_site_subgroups() (see test_site_groups_render_as_six_sub_tab_chips). Integration
+		// subjects render on the Integrations tab, so they are excluded here too.
+		$tab_subjects  = array_keys( aafm_abilities_subjects() );
 		$registry      = aafm_get_abilities_registry();
 		$used_subjects = array();
 		foreach ( $registry as $meta ) {
-			$used_subjects[ (string) $meta['subject'] ] = true;
+			$subject = (string) $meta['subject'];
+			if ( 'site' === $subject ) {
+				continue; // Rendered as the six site display tabs, not a single 'site' chip.
+			}
+			if ( in_array( $subject, $tab_subjects, true ) ) {
+				$used_subjects[ $subject ] = true;
+			}
 		}
+		$this->assertStringContainsString( 'aafm-subject-tab', $html, 'The subject sub-tab bar should render.' );
 		foreach ( array_keys( $used_subjects ) as $slug ) {
-			$this->assertStringContainsString(
-				'aafm-subject-tab',
-				$html,
-				'The subject sub-tab bar should render.'
-			);
 			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $html, "Missing sub-tab for {$slug}." );
+		}
+
+		// The six site display tabs each render as a chip.
+		foreach ( array_keys( aafm_site_subgroups() ) as $slug ) {
+			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $html, "Missing site display tab for {$slug}." );
 		}
 	}
 
@@ -133,6 +199,117 @@ final class AbilitiesSaveTest extends TestCase {
 
 		// A media ability must NOT bleed into the content panel.
 		$this->assertStringNotContainsString( 'value="aafm/get-media"', $content_panel );
+	}
+
+	public function test_site_groups_render_as_six_sub_tab_chips(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// The single "Site & structure" chip is gone — its six groups are top-level chips now.
+		$this->assertStringNotContainsString( 'Site &amp; structure', $html );
+		$this->assertStringNotContainsString( 'Site & structure', $html );
+		// And there is no longer a single site panel: each group is its own display tab.
+		$this->assertStringNotContainsString( 'data-subject="site"', $html );
+
+		// Slice the chip bar so the labels are checked on the chips, not on panel content.
+		$bar_open  = strpos( $html, 'aafm-subject-tabs' );
+		$bar_close = strpos( $html, '</div>', $bar_open );
+		$bar       = substr( $html, $bar_open, $bar_close - $bar_open );
+
+		// Each of the six site groups renders as its own chip, with a count badge, in order.
+		$expected = array(
+			'site_settings' => 'Site settings',
+			'plugins'       => 'Plugins',
+			'themes'        => 'Themes &amp; styles',
+			'blocks'        => 'Blocks',
+			'menus'         => 'Menus',
+			'search'        => 'Search',
+		);
+		foreach ( $expected as $slug => $label ) {
+			$this->assertStringContainsString( 'data-subject="' . $slug . '"', $bar, "Missing chip for {$slug}." );
+			$this->assertStringContainsString( $label, $bar, "Missing chip label: {$label}." );
+		}
+		// Every chip carries a count badge (same markup as the other subject chips).
+		$this->assertStringContainsString( '<span class="count">', $bar );
+
+		// The old in-tab sub-group headings are gone — these are tabs now.
+		$this->assertStringNotContainsString( 'aafm-subsection-head', $html );
+	}
+
+	public function test_search_content_renders_under_the_search_tab_only(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// search-content (registry subject 'content') renders under the Search display tab.
+		$search_open = strpos( $html, 'class="aafm-subject-panel" data-subject="search"' );
+		$this->assertNotFalse( $search_open, 'Search panel should render.' );
+		$next_panel   = strpos( $html, 'class="aafm-subject-panel" data-subject=', $search_open + 1 );
+		$search_close = ( false === $next_panel ) ? strpos( $html, 'aafm-save-status', $search_open ) : $next_panel;
+		$search_panel = substr( $html, $search_open, ( false === $search_close ? null : $search_close - $search_open ) );
+		$this->assertStringContainsString( 'value="aafm/search-content"', $search_panel );
+
+		// It is suppressed from the Content flat view to avoid duplication.
+		$content_open  = strpos( $html, 'class="aafm-subject-panel" data-subject="content"' );
+		$next_after    = strpos( $html, 'class="aafm-subject-panel" data-subject=', $content_open + 1 );
+		$content_close = ( false === $next_after ) ? strpos( $html, 'aafm-save-status', $content_open ) : $next_after;
+		$content_panel = substr( $html, $content_open, ( false === $content_close ? null : $content_close - $content_open ) );
+		$this->assertStringNotContainsString( 'value="aafm/search-content"', $content_panel );
+	}
+
+	public function test_no_site_ability_is_dropped_across_the_six_display_tabs(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// The union of the six site display tabs must cover every site-subject ability, so a future
+		// addition is never silently dropped (the "Other" fallback lands it in a group).
+		$registry = aafm_get_abilities_registry();
+		foreach ( $registry as $name => $meta ) {
+			if ( 'site' === (string) ( $meta['subject'] ?? '' ) ) {
+				$this->assertStringContainsString(
+					'value="' . $name . '"',
+					$html,
+					"site-subject ability {$name} was dropped from the rendered tabs."
+				);
+			}
+		}
+	}
+
+	public function test_site_subgroup_split_is_presentation_only(): void {
+		// The registry subject of a themes ability is unchanged — the 6-way split is purely a
+		// rendering grouping, not a re-subjecting of the catalog.
+		$registry = aafm_get_abilities_registry();
+		$this->assertSame( 'site', (string) $registry['aafm/get-active-theme']['subject'] );
+		$this->assertSame( 'site', (string) $registry['aafm/list-plugins']['subject'] );
+		// search-content keeps its content subject even though it is shown under the Search tab.
+		$this->assertSame( 'content', (string) $registry['aafm/search-content']['subject'] );
+	}
+
+	public function test_site_subgroups_map_covers_every_site_ability(): void {
+		// aafm_site_subgroups() does NOT have to list every site ability: anything it omits
+		// falls into the rendered "Other" group, and test_site_panel_splits_into_named_subgroups
+		// already proves no site ability vanishes from the panel. So the real contract here is
+		// narrower — the known structure abilities each have an explicit home in the map.
+		$mapped = array();
+		foreach ( aafm_site_subgroups() as $group ) {
+			foreach ( $group['abilities'] as $ability_name ) {
+				$mapped[ $ability_name ] = true;
+			}
+		}
+		$this->assertArrayHasKey( 'aafm/get-site-settings', $mapped );
+		$this->assertArrayHasKey( 'aafm/list-plugins', $mapped );
+		$this->assertArrayHasKey( 'aafm/get-active-theme', $mapped );
+		$this->assertArrayHasKey( 'aafm/list-blocks', $mapped );
+		$this->assertArrayHasKey( 'aafm/create-menu', $mapped );
+		$this->assertArrayHasKey( 'aafm/search-content', $mapped );
 	}
 
 	public function test_saving_ability_from_a_non_default_subject_persists(): void {

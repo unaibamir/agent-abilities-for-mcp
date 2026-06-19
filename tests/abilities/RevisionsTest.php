@@ -245,4 +245,260 @@ final class RevisionsTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_get_revision_returns_content_rendered_and_raw(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'first body',
+				'post_excerpt' => 'first excerpt',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'second body **bold**',
+				'post_excerpt' => 'second excerpt',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid ); // newest first.
+		$rev  = array_shift( $revs );
+
+		// Default format is rendered: the_content wraps paragraphs.
+		$out = aafm_exec_get_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $rev->ID,
+			)
+		);
+		$this->assertArrayHasKey( 'content', $out['revision'] );
+		$this->assertArrayHasKey( 'excerpt', $out['revision'] );
+		$this->assertStringContainsString( 'second body', $out['revision']['content'] );
+		$this->assertSame( 'second excerpt', $out['revision']['excerpt'] );
+		// Rendered output is wrapped in a paragraph tag by the_content.
+		$this->assertStringContainsString( '<p>', $out['revision']['content'] );
+
+		// Raw format returns the stored markup, unwrapped.
+		$raw = aafm_exec_get_revision(
+			array(
+				'post_id'        => $pid,
+				'revision_id'    => (int) $rev->ID,
+				'content_format' => 'raw',
+			)
+		);
+		$this->assertSame( 'second body **bold**', $raw['revision']['content'] );
+
+		// Diff is null when not requested.
+		$this->assertNull( $out['revision']['diff'] );
+	}
+
+	public function test_get_revision_diff_against_current_content(): void {
+		require_once ABSPATH . 'wp-admin/includes/revision.php'; // wp_text_diff lives here.
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'alpha line',
+			)
+		);
+		// WordPress snapshots the NEW content on each update, so the oldest revision holds
+		// the content from the first update. Two more updates leave the oldest revision
+		// ('beta line') genuinely different from the post's current content ('gamma line').
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'beta line',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'gamma line', // current content differs from the oldest revision.
+			)
+		);
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = end( $revs ); // oldest snapshot holds 'beta line'.
+
+		// Without with_diff: diff is null.
+		$out = aafm_exec_get_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $rev->ID,
+			)
+		);
+		$this->assertNull( $out['revision']['diff'] );
+
+		// With with_diff: a non-empty HTML diff table is returned.
+		$with = aafm_exec_get_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $rev->ID,
+				'with_diff'   => true,
+			)
+		);
+		$this->assertIsString( $with['revision']['diff'] );
+		$this->assertStringContainsString( '<table', $with['revision']['diff'] );
+		// wp_text_diff( $raw_revision, $current_content ) renders the revision as the
+		// removed (left) side and the current content as the added (right) side. Assert
+		// both tokens land in the diff so an argument swap or wrong-direction regression
+		// would fail here, not slip past the bare '<table' check.
+		$this->assertStringContainsString( 'beta', $with['revision']['diff'], 'Removed token (old revision content) should appear in the diff.' );
+		$this->assertStringContainsString( 'gamma', $with['revision']['diff'], 'Added token (current content) should appear in the diff.' );
+	}
+
+	public function test_delete_revision_removes_one_revision(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'd1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'd2',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'd3',
+			)
+		);
+		$revs   = wp_get_post_revisions( $pid );
+		$before = count( $revs );
+		$target = array_shift( $revs ); // newest revision.
+
+		$this->assertTrue(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $target->ID,
+				)
+			)
+		);
+		$out = aafm_exec_delete_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $target->ID,
+			)
+		);
+		$this->assertSame(
+			array(
+				'deleted'     => true,
+				'post_id'     => $pid,
+				'revision_id' => (int) $target->ID,
+			),
+			$out
+		);
+		// One fewer revision, and the live post is untouched.
+		$this->assertCount( $before - 1, wp_get_post_revisions( $pid ) );
+		$this->assertSame( 'd3', get_post( $pid )->post_content );
+	}
+
+	public function test_delete_revision_registered_and_discoverable(): void {
+		$reg = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/delete-revision', $reg );
+		$this->assertNotNull( aafm_ability_list_permission( 'aafm/delete-revision' ) );
+	}
+
+	public function test_delete_revision_denied_for_non_parent_editor(): void {
+		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $owner );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $owner,
+				'post_content' => 'p1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'p2',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid );
+		$rev  = array_shift( $revs );
+
+		// A different author cannot edit the parent, so cannot delete its revisions.
+		$other = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $other );
+		$this->assertFalse(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $pid,
+					'revision_id' => (int) $rev->ID,
+				)
+			)
+		);
+	}
+
+	public function test_delete_revision_rejects_cross_parent_revision_id(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$a = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'a1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $a,
+				'post_content' => 'a2',
+			)
+		);
+		$revs  = wp_get_post_revisions( $a );
+		$rev_a = array_shift( $revs );
+		$b     = self::factory()->post->create( array( 'post_author' => $author ) );
+
+		// $b is editable, but $rev_a is a revision of $a, not $b — must be rejected by perm AND exec.
+		$this->assertFalse(
+			aafm_perm_delete_revision(
+				array(
+					'post_id'     => $b,
+					'revision_id' => (int) $rev_a->ID,
+				)
+			)
+		);
+		$out = aafm_exec_delete_revision(
+			array(
+				'post_id'     => $b,
+				'revision_id' => (int) $rev_a->ID,
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		// The revision of $a was NOT deleted by the cross-parent attempt.
+		$this->assertNotEmpty( wp_get_post_revisions( $a ) );
+	}
+
+	public function test_list_revisions_stays_metadata_only(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'L1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'L2 body content',
+			)
+		);
+		$out = aafm_exec_list_revisions( array( 'post_id' => $pid ) );
+		$this->assertNotEmpty( $out['revisions'] );
+		foreach ( $out['revisions'] as $row ) {
+			$this->assertArrayHasKey( 'id', $row );
+			$this->assertArrayNotHasKey( 'content', $row );
+			$this->assertArrayNotHasKey( 'excerpt', $row );
+			$this->assertArrayNotHasKey( 'diff', $row );
+		}
+	}
 }

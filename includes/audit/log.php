@@ -248,16 +248,29 @@ function aafm_clear_activity_log(): void {
 }
 
 /**
- * Remove all plugin data for the current blog: the enabled-abilities option and the
- * activity log table. Called once per site by uninstall.php (multisite-aware there).
+ * Remove all plugin data for the current blog: every configuration option, the
+ * detected-meta-keys transient, and the activity log table. Called once per site by
+ * uninstall.php (multisite-aware there).
  *
- * Only this plugin's own option and table are touched — never another plugin's data.
+ * Loops aafm_config_option_names() (the canonical config list) rather than a single
+ * hardcoded option, so a newly added option is cleaned up automatically and none leaks on
+ * uninstall. uninstall.php requires includes/admin/settings.php so that list is defined here.
+ * Only this plugin's own options, transient, and table are touched — never another plugin's data.
  *
  * @return void
  */
 function aafm_uninstall_site(): void {
 	global $wpdb;
-	delete_option( 'aafm_enabled_abilities' );
+	if ( function_exists( 'aafm_config_option_names' ) ) {
+		foreach ( aafm_config_option_names() as $option ) {
+			delete_option( $option );
+		}
+	} else {
+		// Defensive fallback if settings.php was not loaded — never leave the core option behind.
+		delete_option( 'aafm_enabled_abilities' );
+	}
+	// Cosmetic detected-keys cache (option-list sibling of the same data class).
+	delete_transient( 'aafm_detected_meta_keys' );
 	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
 	$table = esc_sql( aafm_activity_log_table() );
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared

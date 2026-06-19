@@ -13,6 +13,21 @@ use AAFM\Tests\TestCase;
 
 final class AbilitiesDisclosureTest extends TestCase {
 
+	public function set_up(): void {
+		parent::set_up();
+
+		// Wave 4: the no-orphan check would fail if a disclosed integration ability were
+		// absent from the registry (host inactive). Force all three integrations active
+		// (+ the mandatory registry-memo flush) so disclosure ↔ registry stays 1:1 once the
+		// SEO/ACF/WC slices add both ends. No integration ability exists yet in this slice.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+	}
+
 	public function test_every_ability_has_a_disclosure(): void {
 		$disclosures = aafm_ability_disclosures();
 		foreach ( array_keys( aafm_get_abilities_registry() ) as $name ) {
@@ -49,11 +64,14 @@ final class AbilitiesDisclosureTest extends TestCase {
 		// A read-only ability row must carry the read-only badge class.
 		$this->assertStringContainsString( 'aafm-readonly-badge', $html );
 
-		// The read-only badge count must equal the number of read-risk abilities, proving
-		// it lands on reads and never leaks onto write/destructive rows.
-		$read_only = 0;
+		// The read-only badge count must equal the number of read-risk abilities the Abilities
+		// tab actually renders, proving it lands on reads and never leaks onto write/destructive
+		// rows. Integration abilities (subject 'seo', etc.) live on the Integrations tab, not
+		// here, so only abilities whose subject is an Abilities-tab subject are counted.
+		$tab_subjects = array_keys( aafm_abilities_subjects() );
+		$read_only    = 0;
 		foreach ( aafm_get_abilities_registry() as $meta ) {
-			if ( 'read' === ( $meta['risk'] ?? '' ) ) {
+			if ( 'read' === ( $meta['risk'] ?? '' ) && in_array( (string) ( $meta['subject'] ?? '' ), $tab_subjects, true ) ) {
 				++$read_only;
 			}
 		}
@@ -72,9 +90,22 @@ final class AbilitiesDisclosureTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
+		// The Content tab's badge counts what it actually renders: content-subject abilities minus
+		// any relocated into a site display tab by name (search-content shows under the Search tab,
+		// not Content). So the total is content-subject count less those relocated abilities.
+		$relocated = array();
+		$registry  = aafm_get_abilities_registry();
+		foreach ( aafm_site_subgroups() as $group ) {
+			foreach ( $group['abilities'] as $ability_name ) {
+				if ( isset( $registry[ $ability_name ] ) && 'content' === (string) ( $registry[ $ability_name ]['subject'] ?? '' ) ) {
+					$relocated[ $ability_name ] = true;
+				}
+			}
+		}
+
 		$content_total = 0;
-		foreach ( aafm_get_abilities_registry() as $meta ) {
-			if ( 'content' === ( $meta['subject'] ?? '' ) ) {
+		foreach ( $registry as $name => $meta ) {
+			if ( 'content' === ( $meta['subject'] ?? '' ) && ! isset( $relocated[ (string) $name ] ) ) {
 				++$content_total;
 			}
 		}

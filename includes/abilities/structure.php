@@ -28,7 +28,7 @@ function aafm_register_structure_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-post-types'] = array(
 		'label'        => __( 'Get post types', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List public post types registered on the site.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -126,12 +126,24 @@ function aafm_exec_get_taxonomies(): array {
  * @return array<string,mixed>
  */
 function aafm_args_get_post_types(): array {
-	return aafm_args_structure_read(
+	$args = aafm_args_structure_read(
 		__( 'Get post types', 'agent-abilities-for-mcp' ),
-		__( 'List public post types registered on the site.', 'agent-abilities-for-mcp' ),
+		__( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type — only types the operator has exposed are writable, so use it to choose a valid post_type for the CPT write abilities.', 'agent-abilities-for-mcp' ),
 		'aafm_exec_get_post_types',
 		'post_types'
 	);
+	// Declare the per-type item shape so the writable boolean is part of the published schema.
+	$args['output_schema']['properties']['post_types']['items'] = array(
+		'type'       => 'object',
+		'properties' => array(
+			'slug'         => array( 'type' => 'string' ),
+			'label'        => array( 'type' => 'string' ),
+			'hierarchical' => array( 'type' => 'boolean' ),
+			'public'       => array( 'type' => 'boolean' ),
+			'writable'     => array( 'type' => 'boolean' ),
+		),
+	);
+	return $args;
 }
 
 /**
@@ -143,13 +155,19 @@ function aafm_args_get_post_types(): array {
  * @return array<string,mixed>
  */
 function aafm_exec_get_post_types(): array {
-	$out = array();
+	$writable = aafm_allowed_post_types();
+	$out      = array();
 	foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
 		$out[] = array(
 			'slug'         => $type->name,
 			'label'        => $type->label,
 			'hierarchical' => (bool) $type->hierarchical,
 			'public'       => (bool) $type->public,
+			// Agent-actionable: true only when the operator has exposed this type to the CPT
+			// write abilities. A public-but-not-writable type would pass schema validation on a
+			// create/update CPT call and then be rejected at execute, so the agent needs this
+			// flag to pick a valid post_type up front.
+			'writable'     => in_array( $type->name, $writable, true ),
 		);
 	}
 	return array( 'post_types' => $out );

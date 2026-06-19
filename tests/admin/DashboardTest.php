@@ -145,6 +145,53 @@ final class DashboardTest extends TestCase {
 		$this->assertStringNotContainsString( 'All set', $html );
 	}
 
+	public function test_dashboard_setup_collapses_when_every_step_is_complete(): void {
+		// Drive all three steps done: an agent user with an app password, at least one
+		// enabled ability, and one logged call. The transaction fixture rolls it all back.
+		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
+		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-complete' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-post' ) );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		// Steps are always rendered now, inside a collapsible <details class="aafm-setup">.
+		$this->assertStringContainsString( '<details class="aafm-setup"', $html );
+		$this->assertStringContainsString( 'aafm-step', $html );
+		// Complete → collapsed: the <details> carries no open attribute.
+		$this->assertStringNotContainsString( 'class="aafm-setup" open', $html );
+		// The summary reads the complete copy, not "Finish setting up".
+		$this->assertStringContainsString( 'Setup complete', $html );
+		$this->assertStringNotContainsString( 'Finish setting up', $html );
+		// The standalone success notice is gone (no notice + gap under it).
+		$this->assertStringNotContainsString( 'All set', $html );
+		$this->assertStringNotContainsString( 'aafm-notice-success', $html );
+	}
+
+	public function test_dashboard_setup_stays_open_when_incomplete(): void {
+		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
+		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-open' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		update_option( 'aafm_enabled_abilities', array() );
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		// Incomplete → expanded: the open attribute is present and the prompt copy + count show.
+		$this->assertStringContainsString( 'class="aafm-setup" open', $html );
+		$this->assertStringContainsString( 'Finish setting up', $html );
+		$this->assertStringContainsString( 'aafm-setup-count', $html );
+	}
+
 	public function test_setup_steps_reflect_real_state(): void {
 		update_option( 'aafm_enabled_abilities', array() );
 		$steps = aafm_setup_steps();

@@ -257,4 +257,32 @@ final class PagesWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'publish', get_post_status( $post ) );
 	}
+
+	public function test_create_page_inherits_enrichment(): void {
+		$this->acting_as( 'editor' );
+		$att = self::factory()->attachment->create_object(
+			'p.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+
+		$out = wp_get_ability( 'aafm/create-page' )->execute(
+			array(
+				'title'          => 'Enriched Page',
+				'slug'           => 'Enriched Page Slug',
+				'featured_media' => $att,
+				'meta'           => array( 'subtitle' => 'PageSub' ),
+			)
+		);
+
+		$id = $out['post']['id'];
+		$this->assertSame( 'page', get_post_type( $id ) );
+		$this->assertSame( 'enriched-page-slug', get_post_field( 'post_name', $id ) );
+		$this->assertSame( $att, get_post_thumbnail_id( $id ) );
+		$this->assertSame( 'PageSub', get_post_meta( $id, 'subtitle', true ) );
+	}
 }

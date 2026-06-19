@@ -138,7 +138,7 @@ function aafm_setup_steps(): array {
 				'page' => 'agent-abilities-for-mcp',
 				'tab'  => $tab,
 			),
-			admin_url( 'options-general.php' )
+			admin_url( 'admin.php' )
 		);
 	};
 
@@ -178,9 +178,12 @@ function aafm_setup_steps(): array {
  * @return void
  */
 function aafm_render_dashboard_tab(): void {
-	$endpoint      = aafm_endpoint_url();
-	$enabled       = aafm_enabled_ability_count();
-	$total         = aafm_total_ability_count();
+	$endpoint = aafm_endpoint_url();
+	$enabled  = aafm_enabled_ability_count();
+	// Single source of truth for "available / total" — counts the full catalog (core + every
+	// integration's manifest total) so an inactive integration still contributes its count and
+	// the Dashboard never disagrees with the Abilities tab.
+	$total         = aafm_available_ability_count();
 	$adapter       = aafm_loaded_adapter_version();
 	$candidates    = aafm_agent_user_candidates();
 	$recent        = aafm_recent_agent_count();
@@ -195,15 +198,22 @@ function aafm_render_dashboard_tab(): void {
 
 	echo '<div class="aafm-dashboard">';
 
-	// Setup checklist — or, once every step is done, a single "all set" notice.
-	if ( $done_count === $step_total ) {
-		aafm_render_notice(
-			'success',
-			__( 'All set — your agent is connected and working.', 'agent-abilities-for-mcp' )
-		);
+	// Setup steps are always rendered inside a collapsible <details class="aafm-setup">. While any
+	// step is pending the panel is open (the open attribute) with a "Finish setting up" summary, a
+	// progress bar, and the X-of-Y count. Once every step is done the panel collapses (no open
+	// attribute) into a "Setup complete" recap — the steps stay available behind the summary, and
+	// the old standalone success notice is dropped so there is no notice-plus-gap to clean up.
+	$is_complete = $done_count === $step_total;
+	$open_attr   = $is_complete ? '' : ' open';
+
+	printf( '<details class="aafm-setup"%s>', esc_attr( $open_attr ) );
+	echo '<summary class="aafm-setup-top">';
+	if ( $is_complete ) {
+		echo '<span class="aafm-setup-ic" aria-hidden="true">';
+		echo aafm_icon( 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		echo '</span>';
+		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'agent-abilities-for-mcp' ) . '</h2>';
 	} else {
-		echo '<section class="aafm-card aafm-setup">';
-		echo '<div class="aafm-setup-top">';
 		echo '<h2>' . esc_html__( 'Finish setting up', 'agent-abilities-for-mcp' ) . '</h2>';
 		printf(
 			'<span class="aafm-setup-count">%s</span>',
@@ -222,62 +232,64 @@ function aafm_render_dashboard_tab(): void {
 			'<div class="aafm-progress" aria-hidden="true"><span style="width:%s%%"></span></div>',
 			esc_attr( (string) $progress_pct )
 		);
-		echo '</div>';
-
-		// The first not-done step is the "active" one (blue marker, number shown); the rest
-		// of the not-done steps are plain "to do" (grey marker, number shown). Done steps get
-		// the green check marker.
-		$active_marked = false;
-		$step_num      = 0;
-		foreach ( $steps as $step ) {
-			++$step_num;
-			$is_done = ! empty( $step['done'] );
-
-			if ( $is_done ) {
-				$state_cls  = 'aafm-step-done';
-				$pill_class = 'aafm-pill aafm-pill-success';
-				$pill_text  = __( 'Done', 'agent-abilities-for-mcp' );
-			} elseif ( ! $active_marked ) {
-				$state_cls     = 'aafm-step-active';
-				$pill_class    = 'aafm-pill aafm-pill-warn';
-				$pill_text     = __( 'To do', 'agent-abilities-for-mcp' );
-				$active_marked = true;
-			} else {
-				$state_cls  = 'aafm-step-todo';
-				$pill_class = 'aafm-pill aafm-pill-neutral';
-				$pill_text  = __( 'To do', 'agent-abilities-for-mcp' );
-			}
-
-			printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
-			if ( $is_done ) {
-				echo '<span class="aafm-sidx">';
-				echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-				echo '</span>';
-			} else {
-				printf( '<span class="aafm-sidx">%s</span>', esc_html( (string) $step_num ) );
-			}
-			echo '<div class="aafm-step-body">';
-			printf( '<h3>%s</h3>', esc_html( (string) $step['title'] ) );
-			printf( '<p>%s</p>', esc_html( (string) $step['desc'] ) );
-			// The active step gets a primary CTA with a trailing arrow; other to-do steps don't.
-			if ( 'aafm-step-active' === $state_cls ) {
-				printf(
-					'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
-					esc_url( (string) $step['href'] ),
-					esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
-					aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-				);
-			}
-			echo '</div>';
-			printf(
-				'<span class="aafm-step-state %1$s">%2$s</span>',
-				esc_attr( $pill_class ),
-				esc_html( $pill_text )
-			);
-			echo '</div>';
-		}
-		echo '</section>';
 	}
+	echo '</summary>';
+
+	echo '<div class="aafm-setup-steps">';
+	// The first not-done step is the "active" one (blue marker, number shown); the rest
+	// of the not-done steps are plain "to do" (grey marker, number shown). Done steps get
+	// the green check marker. When complete there is no active step at all.
+	$active_marked = false;
+	$step_num      = 0;
+	foreach ( $steps as $step ) {
+		++$step_num;
+		$is_done = ! empty( $step['done'] );
+
+		if ( $is_done ) {
+			$state_cls  = 'aafm-step-done';
+			$pill_class = 'aafm-pill aafm-pill-success';
+			$pill_text  = __( 'Done', 'agent-abilities-for-mcp' );
+		} elseif ( ! $active_marked ) {
+			$state_cls     = 'aafm-step-active';
+			$pill_class    = 'aafm-pill aafm-pill-warn';
+			$pill_text     = __( 'To do', 'agent-abilities-for-mcp' );
+			$active_marked = true;
+		} else {
+			$state_cls  = 'aafm-step-todo';
+			$pill_class = 'aafm-pill aafm-pill-neutral';
+			$pill_text  = __( 'To do', 'agent-abilities-for-mcp' );
+		}
+
+		printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
+		if ( $is_done ) {
+			echo '<span class="aafm-sidx">';
+			echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			echo '</span>';
+		} else {
+			printf( '<span class="aafm-sidx">%s</span>', esc_html( (string) $step_num ) );
+		}
+		echo '<div class="aafm-step-body">';
+		printf( '<h3>%s</h3>', esc_html( (string) $step['title'] ) );
+		printf( '<p>%s</p>', esc_html( (string) $step['desc'] ) );
+		// The active step gets a primary CTA with a trailing arrow; other to-do steps don't.
+		if ( 'aafm-step-active' === $state_cls ) {
+			printf(
+				'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
+				esc_url( (string) $step['href'] ),
+				esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
+				aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			);
+		}
+		echo '</div>';
+		printf(
+			'<span class="aafm-step-state %1$s">%2$s</span>',
+			esc_attr( $pill_class ),
+			esc_html( $pill_text )
+		);
+		echo '</div>';
+	}
+	echo '</div>'; // .aafm-setup-steps
+	echo '</details>';
 
 	// Stat grid — four cards reusing the counts computed above. The compact mockup
 	// treatment: a value line plus a .stat-sub and/or a small pill, no embedded notices.

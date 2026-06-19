@@ -109,20 +109,144 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/get-page':
 			return static fn(): bool => current_user_can( 'read' );
 
+		// aafm/get-user gates on list_users (object-independent), so it needs no case
+		// here — it falls through to its real permission_callback with empty input,
+		// which is the correct answer (same as the get-users list sibling).
+
+		// aafm/get-site-settings and aafm/update-site-settings both gate on manage_options
+		// (object-independent, no per-object branch), so neither needs a case — each falls
+		// through to its real permission_callback with empty input, which is the correct
+		// answer. Discovery is proven in SiteSettingsTest (an admin sees them, an editor
+		// does not). Documented here so a future maintainer doesn't add a redundant case.
+
+		// aafm/get-activity-log gates on manage_options (object-independent, no per-object
+		// branch), so it needs no case — it falls through to its real permission_callback
+		// with empty input, the correct answer. Proven in ActivityLogTest.
+
+		// All menu abilities (reads AND writes) gate on the object-independent
+		// edit_theme_options capability, so none needs a server.php case; proven in MenusTest.
+		// WordPress has no per-menu capability, so there is nothing to scope per id — each menu
+		// ability falls through to its real permission_callback with empty input, which is the
+		// correct discovery answer for reads and writes alike.
+
+		// The FSE family (get-active-theme, list-themes, list-templates, get-template,
+		// get-global-styles, and update-template) gates on the same object-independent
+		// edit_theme_options capability, so none needs a server.php case either. WordPress has no
+		// per-theme or per-template capability, so there is nothing to scope per id; each falls
+		// through to its real permission_callback with empty input, the correct discovery answer
+		// for the reads and the single write alike. Proven in ThemesTest (an admin discovers
+		// update-template, an editor does not).
+
+		// Reusable-block reads/writes: get-block, update-block, and delete-block gate
+		// per-object on edit_post/delete_post on the wp_block id, which is false with empty
+		// input at discovery — so use the object-independent edit_posts/delete_posts floor;
+		// the per-object permission_callback refines at execute. list-blocks and create-block
+		// gate on the object-independent edit_posts floor directly, so they need no case here
+		// (they fall through to aafm_perm_blocks_floor, the correct answer).
+		//
+		// Per-plugin SEO integrations (Yoast / Rank Math / AIOSEO): every *-get-post / *-update-post
+		// / *-get-schema / *-update-schema gates per-object on edit_post($id) (SEO data is post
+		// content), false with empty input — so discovery uses the object-independent edit_posts
+		// floor, refined per-object at execute. The *-get-head abilities have their own
+		// edit_posts-floor permission_callback, so they need no case here: each falls through to that
+		// callback with empty input (the per-object edit_post refinement runs inside its execute).
+		case 'aafm/yoast-get-post':
+		case 'aafm/yoast-update-post':
+		case 'aafm/rankmath-get-post':
+		case 'aafm/rankmath-update-post':
+		case 'aafm/rankmath-get-schema':
+		case 'aafm/rankmath-update-schema':
+		case 'aafm/aioseo-get-post':
+		case 'aafm/aioseo-update-post':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// ACF integration: the post/term field abilities gate per-object on edit_post($id) /
+		// edit_term($term_id), false with empty input, so discovery uses the edit_posts authoring
+		// floor, refined per-object at execute (term meta is gated like post meta in this catalog).
+		// The user field abilities gate per-object on edit_user($id), so discovery uses the
+		// edit_users floor. acf-list-field-groups gates on the object-independent edit_posts floor
+		// directly, so it needs no case here: it falls through to aafm_perm_acf_list_field_groups
+		// with empty input, the correct discovery answer.
+		case 'aafm/acf-get-post-fields':
+		case 'aafm/acf-update-post-fields':
+		case 'aafm/acf-get-term-fields':
+		case 'aafm/acf-update-term-fields':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+		case 'aafm/acf-get-user-fields':
+		case 'aafm/acf-update-user-fields':
+			return static fn(): bool => current_user_can( 'edit_users' );
+		// WooCommerce integration: every product, product-variation, global product-attribute,
+		// order, order-note, order-refund, and customer ability (wc-list-products, wc-get-product,
+		// wc-create-product, wc-update-product, wc-delete-product, wc-list-product-variations,
+		// wc-get-product-variation, wc-create-product-variation, wc-update-product-variation,
+		// wc-delete-product-variation, wc-list-product-attributes, wc-get-product-attribute,
+		// wc-create-product-attribute, wc-update-product-attribute, wc-delete-product-attribute,
+		// wc-list-orders, wc-get-order, wc-create-order, wc-update-order, wc-update-order-status,
+		// wc-delete-order, wc-list-order-notes, wc-get-order-note, wc-create-order-note,
+		// wc-delete-order-note, wc-list-order-refunds, wc-get-order-refund, wc-create-order-refund,
+		// wc-delete-order-refund, wc-list-customers, wc-get-customer, wc-create-customer,
+		// wc-update-customer, wc-delete-customer, wc-list-coupons, wc-get-coupon,
+		// wc-create-coupon, wc-update-coupon, wc-delete-coupon, wc-list-shipping-zones,
+		// wc-get-shipping-zone, wc-create-shipping-zone, wc-update-shipping-zone,
+		// wc-delete-shipping-zone, wc-list-shipping-methods, wc-get-shipping-method,
+		// wc-create-shipping-method, wc-update-shipping-method, wc-delete-shipping-method)
+		// gates on the object-independent manage_woocommerce capability, so NONE needs a
+		// server.php case — each falls through to its real permission_callback with empty
+		// input, the correct discovery answer. Proven in WooProductsTest / WooVariationsTest /
+		// WooAttributesTest / WooOrdersTest / WooOrderNotesRefundsTest / WooCustomersTest /
+		// WooCouponsTest / WooShippingTest (admin discovers, editor does not).
+
+		case 'aafm/get-block':
+		case 'aafm/update-block':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+		case 'aafm/delete-block':
+			return static fn(): bool => current_user_can( 'delete_posts' );
+
+		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
+		// which is false with empty input — so the per-object permission_callback would
+		// hide the tool from every capable admin at discovery. Use the object-independent
+		// floor (edit_users / delete_users) so a capable admin can SEE the tool; the
+		// per-object permission_callback still re-checks the specific user at execute time.
+		// create-user gates on create_users (object-independent), so it needs no case and
+		// correctly falls through to its real permission_callback with empty input.
+		case 'aafm/update-user':
+			return static fn(): bool => current_user_can( 'edit_users' );
+		case 'aafm/delete-user':
+			return static fn(): bool => current_user_can( 'delete_users' );
+
 		// Post writes: the floor cap that the per-object edit_post()/delete_post() refine.
 		case 'aafm/update-post':
+		case 'aafm/replace-in-post':
 		case 'aafm/set-featured-image':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 		case 'aafm/trash-post':
+		case 'aafm/delete-post':
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
-		// Governed post-meta (get/update/delete): all gate on per-object edit_post (reads
-		// included — meta can hold private data), so discovery uses the same edit_posts floor
-		// as update-post, refined per-object at execute time.
+		// CPT writes: the type isn't known at discovery time (empty input), so use the
+		// object-independent authoring floor. The execute-time permission_callback still
+		// enforces the exact type's caps + allowlist + per-object edit.
+		case 'aafm/create-cpt-item':
+		case 'aafm/update-cpt-item':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// Governed post-meta (get/update/delete + bulk read): all gate on per-object
+		// edit_post (reads included — meta can hold private data), so discovery uses the
+		// same edit_posts floor as update-post, refined per-object at execute time.
 		case 'aafm/get-post-meta':
+		case 'aafm/get-all-post-meta':
 		case 'aafm/update-post-meta':
 		case 'aafm/delete-post-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) —
+		// reads included, since user meta can hold private data. The user id is unknown at
+		// discovery (empty input), so use the object-independent edit_users floor, refined
+		// per-object at execute time. Mirrors the post-meta family.
+		case 'aafm/get-user-meta':
+		case 'aafm/update-user-meta':
+		case 'aafm/delete-user-meta':
+			return static fn(): bool => current_user_can( 'edit_users' );
 
 		// Page writes: derive edit_pages/delete_pages from the page post-type object.
 		case 'aafm/update-page':
@@ -131,13 +255,19 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->edit_posts );
 			};
 		case 'aafm/trash-page':
+		case 'aafm/delete-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->delete_posts );
 			};
 
-		// Comment moderation: the site-wide floor cap the per-object edit_comment() refines.
+		// Comment writes: the site-wide moderate_comments floor the per-object
+		// edit_comment() refines at execute time. The comment id is unknown at
+		// discovery (empty input), so discovery uses the object-independent floor.
 		case 'aafm/moderate-comment':
+		case 'aafm/create-comment':
+		case 'aafm/update-comment':
+		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
 		// Revisions: list/get/restore all gate per-object on edit_post on the parent — reads
@@ -146,6 +276,30 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/list-revisions':
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':
+		case 'aafm/delete-revision':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// Media writes: the attachment id is unknown at discovery (empty input), so use an
+		// object-independent authoring floor. The reads (get-media-item/count-media) need NO
+		// case — like get-media they fall through to their object-independent permission_callback.
+		// The execute-time permission_callback still enforces per-object edit_post/delete_post
+		// on the specific attachment.
+		case 'aafm/update-media':
+		case 'aafm/delete-media':
+			return static fn(): bool => current_user_can( 'upload_files' ) || current_user_can( 'edit_posts' );
+
+		// add-post-terms gates per-object on edit_post on the target post; the post id is
+		// unknown at discovery (empty input), so use the object-independent authoring floor.
+		case 'aafm/add-post-terms':
+			return static fn(): bool => current_user_can( 'edit_posts' );
+
+		// Term-meta read/write/delete gate per-object on the term (edit_term — the read
+		// included, since term meta can hold private data) — the term id is unknown at
+		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.
+		// Mirrors the post-meta family (get/update/delete-post-meta).
+		case 'aafm/get-term-meta':
+		case 'aafm/update-term-meta':
+		case 'aafm/delete-term-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		default:

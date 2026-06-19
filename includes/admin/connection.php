@@ -348,43 +348,34 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-connection">';
 
 	// ---- OAuth card (additive, gated; rendered first) ----
+	// When OAuth is on this card explains the paste-your-URL flow, but it no longer repeats the
+	// endpoint field — the canonical endpoint card below is the single place the URL is shown
+	// (the same field the Help tab and Dashboard reference), so it is never rendered twice.
 	if ( aafm_oauth_enabled() ) {
 		echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';
 		echo '<h2>' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
-		echo '<p class="sub">' . esc_html__( 'Paste your site URL into your agent — it negotiates access through a browser approval, no secret to copy.', 'agent-abilities-for-mcp' ) . '</p>';
-		echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
-		echo '<div class="aafm-field-mono">';
-		printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
-		printf(
-			// aria-label disambiguates this from the other "Copy" buttons on the tab for
-			// screen-reader users. Only the label is added — data-copy, classes, and the
-			// .aafm-copy-label span (which the JS swaps on click) keep their contract.
-			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s" aria-label="%4$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
-			esc_attr( $url ),
-			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
-			esc_attr__( 'Copy the MCP endpoint URL', 'agent-abilities-for-mcp' )
-		);
-		echo '</div>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site URL into your agent (the MCP endpoint is shown below). Your agent gets access through a browser approval, so there is no secret to copy.', 'agent-abilities-for-mcp' ) . '</p>';
 		echo '</section>';
 	}
 
-	// ---- Endpoint card ----
+	// ---- Endpoint card (the single canonical endpoint display) ----
 	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
 	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	printf(
-		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+		// aria-label disambiguates this from the snippet copy buttons for screen-reader users.
+		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s" aria-label="%4$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $url ),
 		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
+		esc_attr__( 'Copy the MCP endpoint URL', 'agent-abilities-for-mcp' )
 	);
 	echo '</div>';
 	echo '</section>';
 
 	// ---- Step 1: create a dedicated agent user ----
-	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">1</span><div>';
 	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -396,7 +387,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 
 	// ---- Step 2: connect your client ----
-	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">2</span><div>';
 	echo '<h2>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'agent-abilities-for-mcp' ) . '</p>';
@@ -514,7 +505,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>'; // .aafm-step 2
 
 	// ---- Step 3: check the endpoint is reachable ----
-	echo '<div class="aafm-step">';
+	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
 	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';

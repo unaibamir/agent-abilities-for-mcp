@@ -43,7 +43,7 @@ final class MediaWriteTest extends TestCase {
 		// core's own ability test trait uses. do_action() on the core hook trips the
 		// WPCS non-prefixed-hookname sniff (Phase 1 carried issue).
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array( 'aafm/set-featured-image', 'aafm/upload-media' ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/set-featured-image', 'aafm/upload-media', 'aafm/update-media', 'aafm/delete-media' ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
@@ -375,6 +375,194 @@ final class MediaWriteTest extends TestCase {
 		$this->assertStringContainsString( 'evil', basename( $file ) );
 		$instance = get_post( $attachment_id );
 		$this->assertInstanceOf( WP_Post::class, $instance );
+	}
+
+	public function test_update_media_is_in_registry_as_write(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/update-media', $registry );
+		$this->assertSame( 'writes', $registry['aafm/update-media']['group'] );
+		$this->assertSame( 'write', $registry['aafm/update-media']['risk'] );
+	}
+
+	public function test_update_media_writes_fields(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'edit-me.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'title'         => 'New Title',
+				'alt'           => 'New Alt',
+				'caption'       => 'New Caption',
+				'description'   => 'New Description',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Post::class, get_post( $att ) );
+		$this->assertSame( 'New Title', get_the_title( $att ) );
+		$this->assertSame( 'New Alt', get_post_meta( $att, '_wp_attachment_image_alt', true ) );
+		$this->assertSame( 'New Caption', get_post( $att )->post_excerpt );
+		$this->assertSame( 'New Description', get_post( $att )->post_content );
+		$this->assertSame( $att, $out['media']['id'] );
+		$this->assertSame( 'New Title', $out['media']['title'] );
+	}
+
+	public function test_update_media_preserves_backslashes(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'slashes.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$value = 'A\\B path C:\\Users';
+
+		$out = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'title'         => $value,
+				'description'   => $value,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		// wp_update_post() unslashes its input, so without wp_slash() the literal
+		// backslashes would be stripped on save. Assert they survive the round-trip.
+		$fresh = get_post( $att );
+		$this->assertSame( $value, $fresh->post_title );
+		$this->assertSame( $value, $fresh->post_content );
+	}
+
+	public function test_update_media_requires_at_least_one_field(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'noop.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		$out = wp_get_ability( 'aafm/update-media' )->execute( array( 'attachment_id' => $att ) );
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_update_media_denied_for_non_editor(): void {
+		// Author cannot edit_post() an attachment owned by someone else.
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$att   = self::factory()->attachment->create_object(
+			'owned.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_author'    => $admin,
+			)
+		);
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-media' )->check_permissions( array( 'attachment_id' => $att ) )
+		);
+	}
+
+	public function test_update_media_rejects_non_attachment_id(): void {
+		$this->acting_as( 'administrator' );
+		$post = self::factory()->post->create();
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-media' )->check_permissions( array( 'attachment_id' => $post ) )
+		);
+	}
+
+	public function test_delete_media_is_in_registry_as_destructive_write(): void {
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/delete-media', $registry );
+		$this->assertSame( 'writes', $registry['aafm/delete-media']['group'] );
+		$this->assertSame( 'destructive', $registry['aafm/delete-media']['risk'] );
+	}
+
+	public function test_delete_media_permanently_removes_attachment(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'gone.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/delete-media' )->execute( array( 'attachment_id' => $att ) );
+
+		$this->assertTrue( $out['deleted'] );
+		$this->assertSame( $att, $out['attachment_id'] );
+		$this->assertNull( get_post( $att ) );
+	}
+
+	public function test_delete_media_denied_for_non_owner(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		$att   = self::factory()->attachment->create_object(
+			'protected.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_author'    => $admin,
+			)
+		);
+		$this->acting_as( 'author' );
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $att ) )
+		);
+	}
+
+	public function test_delete_media_rejects_non_attachment_id(): void {
+		$this->acting_as( 'administrator' );
+		$post = self::factory()->post->create();
+		$this->assertFalse(
+			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $post ) )
+		);
+	}
+
+	public function test_media_writes_never_leak_path_and_sanitize_html(): void {
+		$this->acting_as( 'administrator' );
+		$att = self::factory()->attachment->create_object(
+			'adv.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		update_post_meta( $att, '_wp_attached_file', '2026/06/adv.jpg' );
+
+		$out  = wp_get_ability( 'aafm/update-media' )->execute(
+			array(
+				'attachment_id' => $att,
+				'description'   => 'safe <script>alert(1)</script> text',
+			)
+		);
+		$json = (string) wp_json_encode( $out );
+
+		// Description is wp_kses_post-sanitized: the script tag is stripped.
+		$this->assertStringNotContainsString( '<script>', $json );
+
+		// No server path / PII leaks in the rich write payload.
+		$uploads = wp_get_upload_dir();
+		$this->assertStringNotContainsString( $uploads['basedir'], $json );
+		$this->assertStringNotContainsString( ABSPATH, $json );
+		$this->assertStringNotContainsString( '_wp_attached_file', $json );
+		$this->assertArrayNotHasKey( 'author_email', $out['media'] );
+		$this->assertArrayNotHasKey( 'path', $out['media'] );
 	}
 
 	/**

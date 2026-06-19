@@ -66,7 +66,7 @@ final class RedactionProofsTest extends TestCase {
 		);
 	}
 
-	public function test_redact_user_omits_email_login_and_pass(): void {
+	public function test_redact_user_exposes_email_but_omits_login_and_pass(): void {
 		$user_id = self::factory()->user->create(
 			array(
 				'role'          => 'author',
@@ -83,14 +83,19 @@ final class RedactionProofsTest extends TestCase {
 		$user    = new WP_User( $user_id );
 		$shape   = aafm_redact_user( $user );
 
-		foreach ( array( 'user_email', 'user_login', 'email', 'login', 'user_pass', 'pass', 'user_registered', 'user_url', 'allcaps' ) as $forbidden ) {
+		// LOCKED reversal (47- line 144): email IS exposed in the user read shape,
+		// gated upstream by list_users + audited.
+		$this->assertSame( 'leak@example.com', $shape['email'] ?? null );
+
+		// Login, password, registration date, URL, and capabilities stay out of the lean shape.
+		foreach ( array( 'user_email', 'user_login', 'login', 'user_pass', 'pass', 'user_registered', 'user_url', 'allcaps' ) as $forbidden ) {
 			$this->assertArrayNotHasKey( $forbidden, $shape );
 		}
 		$this->assertNoneLeak(
-			array( 'leak@example.com', 'secretlogin', 'hunter2hunter2' ),
+			array( 'secretlogin', 'hunter2hunter2' ),
 			$shape
 		);
-		$this->assertSame( array( 'id', 'display_name', 'roles', 'post_count' ), array_keys( $shape ) );
+		$this->assertSame( array( 'id', 'display_name', 'email', 'roles', 'post_count' ), array_keys( $shape ) );
 	}
 
 	public function test_redact_user_on_non_user_returns_empty(): void {

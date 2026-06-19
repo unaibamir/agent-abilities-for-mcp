@@ -266,7 +266,7 @@ final class HelpersTest extends TestCase {
 		$this->assertSame( 'private', aafm_validate_post_status( 'private', true ) );
 	}
 
-	public function test_redact_user_exposes_no_pii(): void {
+	public function test_redact_user_exposes_email_but_not_login_or_url(): void {
 		$user_id = self::factory()->user->create(
 			array(
 				'role'         => 'author',
@@ -281,9 +281,12 @@ final class HelpersTest extends TestCase {
 		$this->assertSame( 'Public Name', $out['display_name'] );
 		$this->assertSame( $user_id, $out['id'] );
 		$this->assertArrayHasKey( 'roles', $out );
+		// LOCKED reversal (47- line 144): email IS exposed, gated upstream by list_users.
+		$this->assertSame( 'secret@example.com', $out['email'] ?? null );
 		$json = wp_json_encode( $out );
-		$this->assertStringNotContainsString( 'secret@example.com', $json );
+		// Login and URL stay out of the lean shape; the raw user_email key is not used.
 		$this->assertStringNotContainsString( 'secretlogin', $json );
+		$this->assertStringNotContainsString( 'https://example.com', $json );
 		$this->assertArrayNotHasKey( 'user_email', $out );
 		$this->assertArrayNotHasKey( 'user_login', $out );
 	}

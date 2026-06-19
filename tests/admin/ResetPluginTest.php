@@ -29,10 +29,34 @@ final class ResetPluginTest extends TestCase {
 				'aafm_max_title_len',
 				'aafm_force_draft',
 				'aafm_ip_allowlist',
+				'aafm_denied_meta_keys',
+				'aafm_exposed_user_meta_keys',
+				'aafm_denied_user_meta_keys',
 			) as $expected
 		) {
 			$this->assertContains( $expected, $names );
 		}
+	}
+
+	/**
+	 * Reset clears the three Slice C meta-governance options. They are covered automatically
+	 * by the config-list loop in aafm_reset_plugin(); this pins each of the new ones explicitly
+	 * so a future edit that drops one from aafm_config_option_names() is caught.
+	 */
+	public function test_reset_clears_meta_governance_options(): void {
+		// Reset truncates the activity-log + OAuth tables; install them so it runs without
+		// emitting "table doesn't exist" output (which marks the test risky).
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		update_option( 'aafm_denied_meta_keys', array( 'secret_key' ) );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'profile_color' ) );
+		update_option( 'aafm_denied_user_meta_keys', array( 'private_note' ) );
+
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_option( 'aafm_denied_meta_keys', false ) );
+		$this->assertFalse( get_option( 'aafm_exposed_user_meta_keys', false ) );
+		$this->assertFalse( get_option( 'aafm_denied_user_meta_keys', false ) );
 	}
 
 	/**

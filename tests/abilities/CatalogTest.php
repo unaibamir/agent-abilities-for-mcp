@@ -27,21 +27,86 @@ final class CatalogTest extends TestCase {
 	 */
 	private const READS = array(
 		'aafm/get-posts',
+		'aafm/count-posts',
 		'aafm/get-post',
 		'aafm/get-post-meta',
+		'aafm/get-all-post-meta',
 		'aafm/get-pages',
 		'aafm/get-page',
 		'aafm/get-terms',
+		'aafm/get-term',
+		'aafm/get-term-meta',
 		'aafm/get-taxonomies',
 		'aafm/get-post-types',
 		'aafm/get-site-info',
 		'aafm/get-comments',
 		'aafm/get-pending-comments',
+		'aafm/get-comment',
 		'aafm/get-media',
+		'aafm/get-media-item',
+		'aafm/count-media',
 		'aafm/get-users',
+		'aafm/get-user',
+		'aafm/get-user-meta',
 		'aafm/list-revisions',
 		'aafm/get-revision',
 		'aafm/search-content',
+		'aafm/get-site-settings',
+		'aafm/list-plugins',
+		'aafm/get-activity-log',
+		'aafm/list-blocks',
+		'aafm/get-block',
+		'aafm/list-menus',
+		'aafm/get-menu',
+		'aafm/list-menu-items',
+		'aafm/get-active-theme',
+		'aafm/list-themes',
+		'aafm/list-templates',
+		'aafm/get-template',
+		'aafm/get-global-styles',
+		'aafm/yoast-get-post',
+		'aafm/yoast-get-head',
+		'aafm/rankmath-get-post',
+		'aafm/rankmath-get-schema',
+		'aafm/rankmath-get-head',
+		'aafm/aioseo-get-post',
+		'aafm/aioseo-get-head',
+		'aafm/acf-list-field-groups',
+		'aafm/acf-get-post-fields',
+		'aafm/acf-get-term-fields',
+		'aafm/acf-get-user-fields',
+		'aafm/wc-list-products',
+		'aafm/wc-get-product',
+		'aafm/wc-list-product-variations',
+		'aafm/wc-get-product-variation',
+		'aafm/wc-list-product-attributes',
+		'aafm/wc-get-product-attribute',
+		'aafm/wc-list-orders',
+		'aafm/wc-get-order',
+		'aafm/wc-list-order-notes',
+		'aafm/wc-get-order-note',
+		'aafm/wc-list-order-refunds',
+		'aafm/wc-get-order-refund',
+		'aafm/wc-list-customers',
+		'aafm/wc-get-customer',
+		'aafm/wc-list-coupons',
+		'aafm/wc-get-coupon',
+		'aafm/wc-list-shipping-zones',
+		'aafm/wc-get-shipping-zone',
+		'aafm/wc-list-shipping-methods',
+		'aafm/wc-get-shipping-method',
+		'aafm/wc-list-tax-rates',
+		'aafm/wc-get-tax-rate',
+		'aafm/wc-list-tax-classes',
+		'aafm/wc-get-tax-class',
+		'aafm/wc-get-sales-report',
+		'aafm/wc-get-top-sellers-report',
+		'aafm/wc-count-orders',
+		'aafm/wc-count-products',
+		'aafm/wc-count-customers',
+		'aafm/wc-list-payment-gateways',
+		'aafm/wc-get-payment-gateway',
+		'aafm/wc-count-coupons',
 	);
 
 	/**
@@ -53,23 +118,120 @@ final class CatalogTest extends TestCase {
 		'aafm/create-draft',
 		'aafm/create-post',
 		'aafm/update-post',
+		'aafm/replace-in-post',
 		'aafm/trash-post',
 		'aafm/create-page',
 		'aafm/update-page',
 		'aafm/trash-page',
 		'aafm/create-term',
 		'aafm/update-term',
+		'aafm/add-post-terms',
+		'aafm/update-term-meta',
+		'aafm/delete-term-meta',
 		'aafm/moderate-comment',
+		'aafm/create-comment',
+		'aafm/update-comment',
+		'aafm/delete-comment',
 		'aafm/set-featured-image',
 		'aafm/upload-media',
+		'aafm/update-media',
+		'aafm/delete-media',
 		'aafm/update-post-meta',
 		'aafm/delete-post-meta',
 		'aafm/restore-revision',
+		'aafm/delete-revision',
+		'aafm/create-cpt-item',
+		'aafm/update-cpt-item',
+		'aafm/create-user',
+		'aafm/update-user',
+		'aafm/delete-user',
+		'aafm/update-user-meta',
+		'aafm/delete-user-meta',
+		'aafm/update-site-settings',
+		'aafm/delete-post',
+		'aafm/delete-page',
+		'aafm/create-block',
+		'aafm/update-block',
+		'aafm/delete-block',
+		'aafm/create-menu',
+		'aafm/update-menu',
+		'aafm/delete-menu',
+		'aafm/create-menu-item',
+		'aafm/update-menu-item',
+		'aafm/delete-menu-item',
+		'aafm/update-template',
+		'aafm/yoast-update-post',
+		'aafm/rankmath-update-post',
+		'aafm/rankmath-update-schema',
+		'aafm/aioseo-update-post',
+		'aafm/acf-update-post-fields',
+		'aafm/acf-update-term-fields',
+		'aafm/acf-update-user-fields',
+		'aafm/wc-create-product',
+		'aafm/wc-update-product',
+		'aafm/wc-delete-product',
+		'aafm/wc-create-product-variation',
+		'aafm/wc-update-product-variation',
+		'aafm/wc-delete-product-variation',
+		'aafm/wc-create-product-attribute',
+		'aafm/wc-update-product-attribute',
+		'aafm/wc-delete-product-attribute',
+		'aafm/wc-create-order',
+		'aafm/wc-update-order',
+		'aafm/wc-update-order-status',
+		'aafm/wc-delete-order',
+		'aafm/wc-create-order-note',
+		'aafm/wc-delete-order-note',
+		'aafm/wc-create-order-refund',
+		'aafm/wc-delete-order-refund',
+		'aafm/wc-create-customer',
+		'aafm/wc-update-customer',
+		'aafm/wc-delete-customer',
+		'aafm/wc-create-coupon',
+		'aafm/wc-update-coupon',
+		'aafm/wc-delete-coupon',
+		'aafm/wc-create-shipping-zone',
+		'aafm/wc-update-shipping-zone',
+		'aafm/wc-delete-shipping-zone',
+		'aafm/wc-create-shipping-method',
+		'aafm/wc-update-shipping-method',
+		'aafm/wc-delete-shipping-method',
+		'aafm/wc-create-tax-rate',
+		'aafm/wc-update-tax-rate',
+		'aafm/wc-delete-tax-rate',
+		'aafm/wc-create-tax-class',
+		'aafm/wc-delete-tax-class',
+		'aafm/wc-update-payment-gateway',
 	);
 
 	/**
-	 * The writes whose action is recoverable destruction (trash / spam / trash-comment).
-	 * These MUST be annotated destructive:true. Every other write is destructive:false.
+	 * The writes whose action is destruction — recoverable (trash / spam) or permanent
+	 * (force-delete of posts/pages/media/revisions/meta, comment purge, user-meta removal,
+	 * and user removal/creation). These MUST be annotated destructive:true. Every other write
+	 * is destructive:false.
+	 *
+	 * The user CRUD writes create-user and delete-user are destructive: both make a permanent,
+	 * security-sensitive change to the user table (a new account, or a removal with content
+	 * reassignment). update-user is a recoverable profile edit, so it is NOT destructive.
+	 *
+	 * update-site-settings is destructive: a settings change is permanent and site-wide, with
+	 * no per-setting undo, so the agent is told it is a permanent change.
+	 *
+	 * delete-post and delete-page are permanent: they force-delete past the Trash through the
+	 * single posts.php executor, so the agent is told the removal cannot be undone.
+	 *
+	 * delete-block is recoverable (it moves a reusable block to the Trash) but is still a
+	 * removal the agent is told about, so it is annotated destructive:true.
+	 *
+	 * delete-menu and delete-menu-item are permanent: navigation menus and their items have no
+	 * Trash, so removing a menu (and every item inside it) or a single item cannot be undone, and
+	 * the agent is told so.
+	 *
+	 * wc-delete-product is permanent: it removes a WooCommerce product through the WC data store
+	 * (bypassing the Trash), so the agent is told the removal cannot be undone. wc-delete-product-
+	 * variation is permanent on the same basis — it removes a single product variation through the WC
+	 * data store with no recoverable Trash. wc-delete-product-attribute is permanent on the same
+	 * basis — it removes a global product attribute taxonomy, which also cannot be undone.
 	 *
 	 * @var string[]
 	 */
@@ -77,7 +239,32 @@ final class CatalogTest extends TestCase {
 		'aafm/trash-post',
 		'aafm/trash-page',
 		'aafm/moderate-comment',
+		'aafm/delete-comment',
 		'aafm/delete-post-meta',
+		'aafm/delete-revision',
+		'aafm/delete-media',
+		'aafm/delete-term-meta',
+		'aafm/create-user',
+		'aafm/delete-user',
+		'aafm/delete-user-meta',
+		'aafm/update-site-settings',
+		'aafm/delete-post',
+		'aafm/delete-page',
+		'aafm/delete-block',
+		'aafm/delete-menu',
+		'aafm/delete-menu-item',
+		'aafm/wc-delete-product',
+		'aafm/wc-delete-product-variation',
+		'aafm/wc-delete-product-attribute',
+		'aafm/wc-delete-order',
+		'aafm/wc-delete-order-note',
+		'aafm/wc-delete-order-refund',
+		'aafm/wc-delete-customer',
+		'aafm/wc-delete-coupon',
+		'aafm/wc-delete-shipping-zone',
+		'aafm/wc-delete-shipping-method',
+		'aafm/wc-delete-tax-rate',
+		'aafm/wc-delete-tax-class',
 	);
 
 	public function set_up(): void {
@@ -86,6 +273,19 @@ final class CatalogTest extends TestCase {
 		// the custom table, so it must exist before any ability is registered/invoked.
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+
+		// Wave 4: integration abilities only contribute to the registry when their host
+		// plugin is active, and the host plugins are not installed on the test site. Force
+		// all three active so later slices' integration abilities are counted here. The
+		// registry is memoized (includes/registry.php static $cache), so the flush is
+		// MANDATORY — a force filter added without it is a no-op against the cached
+		// host-inactive registry. With the per-plugin SEO sets (Wave 5 Slice B) landed, the count is 168.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
@@ -108,7 +308,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	/**
-	 * Enable the entire catalog (all 27) and register categories + abilities.
+	 * Enable the entire catalog (all 153) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -116,12 +316,23 @@ final class CatalogTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
+	public function test_integrations_are_forced_active_in_this_suite(): void {
+		// Documents the W4-0.3 convention: the catalog-lock suite forces all three
+		// integrations active (+ flushes the registry memo) so later slices' integration
+		// abilities are counted here instead of vanishing when the host plugin is absent.
+		$this->assertTrue( aafm_integration_active( 'yoast' ) );
+		$this->assertTrue( aafm_integration_active( 'rankmath' ) );
+		$this->assertTrue( aafm_integration_active( 'aioseo' ) );
+		$this->assertTrue( aafm_integration_active( 'acf' ) );
+		$this->assertTrue( aafm_integration_active( 'woocommerce' ) );
+	}
+
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			31,
+			168,
 			$registry,
-			'The catalog must contain exactly 31 abilities — 16 reads + 15 writes.'
+			'The catalog must contain exactly 168 abilities — 81 reads + 87 writes.'
 		);
 	}
 
@@ -136,8 +347,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 16 reads — no drift.' );
-		$this->assertCount( 16, $reads, 'Exactly 16 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 81 reads — no drift.' );
+		$this->assertCount( 81, $reads, 'Exactly 81 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -151,8 +362,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 15 writes — no drift.' );
-		$this->assertCount( 15, $writes, 'Exactly 15 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 87 writes — no drift.' );
+		$this->assertCount( 87, $writes, 'Exactly 87 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -161,7 +372,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 31 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 168 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -175,9 +386,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			31,
+			168,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(16) + writes(15) must equal the full catalog (31).'
+			'reads(81) + writes(87) must equal the full catalog (168).'
 		);
 	}
 

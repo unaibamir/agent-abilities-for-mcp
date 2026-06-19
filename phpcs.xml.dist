@@ -26,11 +26,14 @@
 
 	<!-- The cross-type private-read containment test registers an aafm_book CPT with its own
 	     capability set; read_private_books is the meta cap WordPress maps for it. Teach the
-	     capability sniff about it so the deliberate assertion isn't flagged as a typo. -->
+	     capability sniff about it so the deliberate assertion isn't flagged as a typo.
+	     manage_woocommerce is the capability WooCommerce registers on activation and the gate the
+	     WooCommerce product abilities use; declare it here so the sniff knows it is a real cap. -->
 	<rule ref="WordPress.WP.Capabilities">
 		<properties>
 			<property name="custom_capabilities" type="array">
 				<element value="read_private_books"/>
+				<element value="manage_woocommerce"/>
 			</property>
 		</properties>
 	</rule>

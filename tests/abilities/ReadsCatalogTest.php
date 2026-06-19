@@ -26,21 +26,86 @@ final class ReadsCatalogTest extends TestCase {
 	 */
 	private const READS = array(
 		'aafm/get-posts',
+		'aafm/count-posts',
 		'aafm/get-post',
 		'aafm/get-post-meta',
+		'aafm/get-all-post-meta',
 		'aafm/get-pages',
 		'aafm/get-page',
 		'aafm/get-terms',
+		'aafm/get-term',
+		'aafm/get-term-meta',
 		'aafm/get-taxonomies',
 		'aafm/get-post-types',
 		'aafm/get-site-info',
 		'aafm/get-comments',
 		'aafm/get-pending-comments',
+		'aafm/get-comment',
 		'aafm/get-media',
+		'aafm/get-media-item',
+		'aafm/count-media',
 		'aafm/get-users',
+		'aafm/get-user',
+		'aafm/get-user-meta',
 		'aafm/list-revisions',
 		'aafm/get-revision',
 		'aafm/search-content',
+		'aafm/get-site-settings',
+		'aafm/list-plugins',
+		'aafm/get-activity-log',
+		'aafm/list-blocks',
+		'aafm/get-block',
+		'aafm/list-menus',
+		'aafm/get-menu',
+		'aafm/list-menu-items',
+		'aafm/get-active-theme',
+		'aafm/list-themes',
+		'aafm/list-templates',
+		'aafm/get-template',
+		'aafm/get-global-styles',
+		'aafm/yoast-get-post',
+		'aafm/yoast-get-head',
+		'aafm/rankmath-get-post',
+		'aafm/rankmath-get-schema',
+		'aafm/rankmath-get-head',
+		'aafm/aioseo-get-post',
+		'aafm/aioseo-get-head',
+		'aafm/acf-list-field-groups',
+		'aafm/acf-get-post-fields',
+		'aafm/acf-get-term-fields',
+		'aafm/acf-get-user-fields',
+		'aafm/wc-list-products',
+		'aafm/wc-get-product',
+		'aafm/wc-list-product-variations',
+		'aafm/wc-get-product-variation',
+		'aafm/wc-list-product-attributes',
+		'aafm/wc-get-product-attribute',
+		'aafm/wc-list-orders',
+		'aafm/wc-get-order',
+		'aafm/wc-list-order-notes',
+		'aafm/wc-get-order-note',
+		'aafm/wc-list-order-refunds',
+		'aafm/wc-get-order-refund',
+		'aafm/wc-list-customers',
+		'aafm/wc-get-customer',
+		'aafm/wc-list-coupons',
+		'aafm/wc-get-coupon',
+		'aafm/wc-list-shipping-zones',
+		'aafm/wc-get-shipping-zone',
+		'aafm/wc-list-shipping-methods',
+		'aafm/wc-get-shipping-method',
+		'aafm/wc-list-tax-rates',
+		'aafm/wc-get-tax-rate',
+		'aafm/wc-list-tax-classes',
+		'aafm/wc-get-tax-class',
+		'aafm/wc-count-coupons',
+		'aafm/wc-count-customers',
+		'aafm/wc-count-orders',
+		'aafm/wc-count-products',
+		'aafm/wc-get-payment-gateway',
+		'aafm/wc-get-sales-report',
+		'aafm/wc-get-top-sellers-report',
+		'aafm/wc-list-payment-gateways',
 	);
 
 	public function set_up(): void {
@@ -49,6 +114,16 @@ final class ReadsCatalogTest extends TestCase {
 		// custom table, so it must exist before any ability is registered/invoked.
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+
+		// Wave 4: integration abilities only contribute to the registry when their host
+		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the
+		// registry is cached) so the SEO integration reads are counted here.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
@@ -96,9 +171,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 16 reads — no more, no fewer.'
+			'The read group must be exactly the 81 reads — no more, no fewer.'
 		);
-		$this->assertCount( 16, $reads, 'The read catalog ships exactly 16 read abilities.' );
+		$this->assertCount( 81, $reads, 'The read catalog ships exactly 81 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

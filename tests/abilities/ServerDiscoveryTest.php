@@ -233,4 +233,25 @@ final class ServerDiscoveryTest extends TestCase {
 		$denied = aafm_query_activity( array( 'status' => 'denied' ) );
 		$this->assertCount( 0, (array) $denied, 'tools/list discovery must not audit denials' );
 	}
+
+	public function test_replace_in_post_discoverable_at_edit_posts_floor(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/replace-in-post' ) );
+
+		$this->acting_as( 'author' ); // has edit_posts.
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/replace-in-post' ) );
+	}
+
+	public function test_get_all_post_meta_discoverable_at_edit_posts_floor(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-all-post-meta' ) );
+
+		$this->acting_as( 'author' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-all-post-meta' ) );
+	}
+
+	public function test_count_posts_discoverable_at_read_floor(): void {
+		$this->acting_as( 'subscriber' ); // subscriber has 'read'.
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-posts' ) );
+	}
 }

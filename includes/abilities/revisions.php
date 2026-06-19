@@ -31,7 +31,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-revision']     = array(
 		'label'        => __( 'Get revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Get a single revision of a post the agent can edit (metadata only — no body content).', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Get a single revision of a post the agent can edit, including its body content (rendered or raw) and an optional diff against the post's current content.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -44,6 +44,14 @@ function aafm_register_revisions_definitions( array $registry ): array {
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_restore_revision',
+	);
+	$registry['aafm/delete-revision']  = array(
+		'label'        => __( 'Delete revision', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Permanently delete a single revision from a post's history. The live post is not changed. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
+		'group'        => 'writes',
+		'risk'         => 'destructive',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_delete_revision',
 	);
 	return $registry;
 }
@@ -159,18 +167,27 @@ function aafm_exec_list_revisions( array $input ) {
 function aafm_args_get_revision(): array {
 	return array(
 		'label'               => __( 'Get revision', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Get a single revision of a post the agent can edit (metadata only — no body content).', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Get a single revision of a post the agent can edit. Returns the revision's id, parent post_id, author, dates, and title, plus its body content (rendered HTML by default, or raw markup via content_format), its excerpt, and an optional unified diff against the post's current content (request with with_diff). Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'post_id'     => array(
+				'post_id'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'revision_id' => array(
+				'revision_id'    => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+				),
+				'content_format' => array(
+					'type'    => 'string',
+					'enum'    => array( 'rendered', 'raw' ),
+					'default' => 'rendered',
+				),
+				'with_diff'      => array(
+					'type'    => 'boolean',
+					'default' => false,
 				),
 			),
 			'required'             => array( 'post_id', 'revision_id' ),
@@ -212,9 +229,9 @@ function aafm_perm_get_revision( array $input ): bool {
 /**
  * Execute aafm/get-revision.
  *
- * Returns the single revision reduced to the metadata-only shape by
- * aafm_redact_revision(). The validator guarantees the revision belongs to the
- * named parent before anything is returned.
+ * Returns the single revision's metadata plus its body content, excerpt, and an optional
+ * diff, assembled by aafm_get_revision_payload(). The validator guarantees the revision
+ * belongs to the named parent before anything is returned.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -224,7 +241,7 @@ function aafm_exec_get_revision( array $input ) {
 	if ( is_wp_error( $revision ) ) {
 		return aafm_generic_error();
 	}
-	return array( 'revision' => aafm_redact_revision( $revision ) );
+	return array( 'revision' => aafm_get_revision_payload( $revision, $input ) );
 }
 
 /**
@@ -315,6 +332,100 @@ function aafm_exec_restore_revision( array $input ) {
 	}
 	return array(
 		'restored'    => true,
+		'post_id'     => $post_id,
+		'revision_id' => $revision_id,
+	);
+}
+
+/**
+ * Args for aafm/delete-revision.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_delete_revision(): array {
+	return array(
+		'label'               => __( 'Delete revision', 'agent-abilities-for-mcp' ),
+		'description'         => __( "Permanently delete a single revision from a post's history. The live post is not changed, and the deleted revision cannot be recovered. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+				'revision_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'post_id', 'revision_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'deleted'     => array( 'type' => 'boolean' ),
+				'post_id'     => array( 'type' => 'integer' ),
+				'revision_id' => array( 'type' => 'integer' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_delete_revision',
+		'permission_callback' => 'aafm_perm_delete_revision',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => false,
+				'destructive' => true,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/delete-revision: the SAME gate as restore — parent editable AND
+ * the revision genuinely belongs to that parent. An agent that cannot edit the parent
+ * cannot delete its revisions, and a revision_id that is not a child of the named
+ * post_id is rejected.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_delete_revision( array $input ): bool {
+	if ( ! aafm_revision_parent_editable( $input ) ) {
+		return false;
+	}
+	$revision_id = isset( $input['revision_id'] ) ? absint( $input['revision_id'] ) : 0;
+	$post_id     = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	return ! is_wp_error( aafm_validate_revision( $revision_id, $post_id ) );
+}
+
+/**
+ * Execute aafm/delete-revision.
+ *
+ * Permanently removes one revision via wp_delete_post_revision(). The validator
+ * guarantees the revision belongs to the named parent before any delete. The live post
+ * is never touched — this prunes change history only.
+ *
+ * wp_delete_post_revision() returns WP_Post|false|null|0|WP_Error: false/null/0 when
+ * nothing was deleted, the deleted WP_Post on success, and a WP_Error bubbled up from
+ * wp_delete_post(). A WP_Error is a truthy object, so — mirroring aafm_exec_restore_revision
+ * — we reject WP_Error and any falsy return and surface the generic error instead.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_delete_revision( array $input ) {
+	$post_id     = absint( $input['post_id'] ?? 0 );
+	$revision_id = absint( $input['revision_id'] ?? 0 );
+	if ( is_wp_error( aafm_validate_revision( $revision_id, $post_id ) ) ) {
+		return aafm_generic_error();
+	}
+	$deleted = wp_delete_post_revision( $revision_id );
+	if ( is_wp_error( $deleted ) || ! $deleted ) {
+		return aafm_generic_error();
+	}
+	return array(
+		'deleted'     => true,
 		'post_id'     => $post_id,
 		'revision_id' => $revision_id,
 	);

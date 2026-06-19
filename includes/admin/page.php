@@ -10,28 +10,51 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Register the settings submenu under Settings.
+ * Register the admin pages as a dedicated top-level menu, one submenu per tab.
  *
  * @return void
  */
 function aafm_register_admin_menu(): void {
-	add_options_page(
+	// Inline-SVG menu icon (no Dashicons); grey matches the default inactive menu glyph.
+	$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a7aaad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M9 2h6"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>';
+	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding a static literal SVG into a data: URI for the menu icon, not obfuscating code.
+	$icon = 'data:image/svg+xml;base64,' . base64_encode( $svg );
+
+	add_menu_page(
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
 		__( 'Agent Abilities', 'agent-abilities-for-mcp' ),
 		'manage_options',
 		'agent-abilities-for-mcp',
-		'aafm_render_admin_page'
+		'aafm_render_admin_page',
+		$icon,
+		80
 	);
+
+	// One submenu per tab; the Dashboard submenu reuses the parent slug, the rest carry
+	// their tab in the slug so the link is admin.php?page=…&tab=… and the parent page renders.
+	foreach ( aafm_admin_tabs() as $slug => $label ) {
+		$menu_slug = ( 'dashboard' === $slug )
+			? 'agent-abilities-for-mcp'
+			: 'agent-abilities-for-mcp&tab=' . $slug;
+		add_submenu_page(
+			'agent-abilities-for-mcp',
+			$label,
+			$label,
+			'manage_options',
+			$menu_slug,
+			'aafm_render_admin_page'
+		);
+	}
 }
 
 /**
- * Enqueue admin assets only on our settings page.
+ * Enqueue admin assets only on our top-level admin page.
  *
  * @param string $hook Current admin page hook suffix.
  * @return void
  */
 function aafm_enqueue_admin_assets( string $hook ): void {
-	if ( 'settings_page_agent-abilities-for-mcp' !== $hook ) {
+	if ( 'toplevel_page_agent-abilities-for-mcp' !== $hook ) {
 		return;
 	}
 	wp_enqueue_style( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.css', array(), AAFM_VERSION );
@@ -43,35 +66,37 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
 			'i18n'    => array(
-				'quickstartsShow'   => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
-				'quickstartsHide'   => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
-				'saving'            => __( 'Saving…', 'agent-abilities-for-mcp' ),
-				'saved'             => __( 'Saved', 'agent-abilities-for-mcp' ),
-				'errorSaving'       => __( 'Error saving', 'agent-abilities-for-mcp' ),
-				'creating'          => __( 'Creating…', 'agent-abilities-for-mcp' ),
-				'checking'          => __( 'Checking…', 'agent-abilities-for-mcp' ),
-				'cleared'           => __( 'Cleared', 'agent-abilities-for-mcp' ),
-				'error'             => __( 'Error', 'agent-abilities-for-mcp' ),
-				'requestFailed'     => __( 'Request failed.', 'agent-abilities-for-mcp' ),
-				'settingsNotSaved'  => __( 'Could not save — your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
-				'allowlistEmptied'  => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
+				'quickstartsShow'          => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
+				'quickstartsHide'          => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
+				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
+				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
+				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
+				'creating'                 => __( 'Creating…', 'agent-abilities-for-mcp' ),
+				'checking'                 => __( 'Checking…', 'agent-abilities-for-mcp' ),
+				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
+				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
+				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
+				'settingsNotSaved'         => __( 'Could not save — your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
+				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
-				'allowlistDropped'  => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'agent-abilities-for-mcp' ),
+				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: the new agent user's numeric ID. */
-				'userCreated'       => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
+				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
-				'connectionOk'      => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
+				'connectionOk'             => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
-				'connectionNoTools' => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
+				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
-				'errorWithMessage'  => __( 'Error: %s', 'agent-abilities-for-mcp' ),
-				'errorUnknown'      => __( 'unknown', 'agent-abilities-for-mcp' ),
-				'copyCopied'        => __( 'Copied', 'agent-abilities-for-mcp' ),
-				'copyFallback'      => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
-				'resetConfirm'      => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
-				'resetWorking'      => __( 'Resetting…', 'agent-abilities-for-mcp' ),
-				'resetDone'         => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
-				'resetFailed'       => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
+				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
+				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),
+				'copyCopied'               => __( 'Copied', 'agent-abilities-for-mcp' ),
+				'copyFallback'             => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
+				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				'resetWorking'             => __( 'Resetting…', 'agent-abilities-for-mcp' ),
+				'resetDone'                => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
+				'resetFailed'              => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
+				'sectionToggleConfirm'     => __( 'This section includes destructive abilities (trash/delete). Enable all of them?', 'agent-abilities-for-mcp' ),
+				'integrationToggleConfirm' => __( 'These abilities can read and change personal data such as customer details and orders. Turn all of them on?', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -173,6 +198,78 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
 }
 
 /**
+ * Parse the denied-post-meta textarea into a clean list.
+ *
+ * Mirrors aafm_sanitize_allowed_meta_keys_input() but for the DENY list: it KEEPS the `*`
+ * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys — denying an already
+ * hard-blocked key is a harmless no-op, and the deny list must be able to name anything an
+ * admin wants refused. Splits on newlines, trims, sanitize_text_field (never sanitize_key,
+ * which would strip `*`), drops empties, and de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_deny_meta_keys'] ) ? (string) $posted['aafm_deny_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
+ * Parse the exposed-user-meta textarea into a clean list.
+ *
+ * Mirrors the allow-list sanitizer but for user meta and KEEPS the `*` wildcard. Splits on
+ * newlines, trims, sanitize_text_field (never sanitize_key, which would strip `*`), drops
+ * empties and any hard-blocked user key (best-effort — aafm_allowed_user_meta_keys() re-floors
+ * anyway), and de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_exposed_user_meta_keys'] ) ? (string) $posted['aafm_exposed_user_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_user_meta_key( $key ) ) ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
+ * Parse the denied-user-meta textarea into a clean list.
+ *
+ * Like aafm_sanitize_denied_meta_keys_input() but user-scoped: KEEPS `*` (deny-all) and does
+ * NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops empties,
+ * de-duplicates.
+ *
+ * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
+ * @return list<string>
+ */
+function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
+	$raw  = isset( $posted['aafm_denied_user_meta_keys'] ) ? (string) $posted['aafm_denied_user_meta_keys'] : '';
+	$keys = array();
+	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
+		$key = sanitize_text_field( trim( (string) $line ) );
+		if ( '' === $key ) {
+			continue;
+		}
+		$keys[] = $key;
+	}
+	return array_values( array_unique( $keys ) );
+}
+
+/**
  * Sample up to 50 distinct, non-hard-blocked meta keys present on posts of the allowlisted
  * types — the "Detected on your exposed types" chip source for the selector.
  *
@@ -220,6 +317,44 @@ function aafm_ajax_save_meta_keys(): void {
 }
 
 /**
+ * AJAX: save the denied-post-meta list.
+ *
+ * @return void
+ */
+function aafm_ajax_save_denied_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	update_option( 'aafm_denied_meta_keys', $keys );
+	wp_send_json_success( array( 'deny_meta_keys' => $keys ) );
+}
+
+/**
+ * AJAX: save BOTH the exposed and denied user-meta lists in one request.
+ *
+ * @return void
+ */
+function aafm_ajax_save_user_meta_keys(): void {
+	check_ajax_referer( 'aafm_admin', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
+	$denied  = aafm_sanitize_denied_user_meta_keys_input( $posted );
+	update_option( 'aafm_exposed_user_meta_keys', $exposed );
+	update_option( 'aafm_denied_user_meta_keys', $denied );
+	wp_send_json_success(
+		array(
+			'exposed_user_meta_keys' => $exposed,
+			'denied_user_meta_keys'  => $denied,
+		)
+	);
+}
+
+/**
  * Contribute suggested privacy-policy text describing what an exposed content type leaks.
  *
  * @return void
@@ -249,6 +384,23 @@ function aafm_ajax_clear_log(): void {
 }
 
 /**
+ * The admin tab slugs → labels, shared by menu registration and the page renderer.
+ *
+ * @return array<string,string>
+ */
+function aafm_admin_tabs(): array {
+	return array(
+		'dashboard'    => __( 'Dashboard', 'agent-abilities-for-mcp' ),
+		'connection'   => __( 'Connection', 'agent-abilities-for-mcp' ),
+		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
+		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
+		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
+		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
+		'help'         => __( 'Help', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Render the page shell + the active tab.
  *
  * @return void
@@ -257,14 +409,7 @@ function aafm_render_admin_page(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return;
 	}
-	$tabs = array(
-		'dashboard'  => __( 'Dashboard', 'agent-abilities-for-mcp' ),
-		'connection' => __( 'Connection', 'agent-abilities-for-mcp' ),
-		'abilities'  => __( 'Abilities', 'agent-abilities-for-mcp' ),
-		'settings'   => __( 'Settings', 'agent-abilities-for-mcp' ),
-		'activity'   => __( 'Activity Log', 'agent-abilities-for-mcp' ),
-		'help'       => __( 'Help', 'agent-abilities-for-mcp' ),
-	);
+	$tabs = aafm_admin_tabs();
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab routing, no state change.
 	$active = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';
@@ -309,7 +454,7 @@ function aafm_render_admin_page(): void {
 						'page' => 'agent-abilities-for-mcp',
 						'tab'  => $slug,
 					),
-					admin_url( 'options-general.php' )
+					admin_url( 'admin.php' )
 				)
 			),
 			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
@@ -325,6 +470,9 @@ function aafm_render_admin_page(): void {
 			break;
 		case 'abilities':
 			aafm_render_abilities_tab();
+			break;
+		case 'integrations':
+			aafm_render_integrations_tab();
 			break;
 		case 'settings':
 			aafm_render_settings_tab();
@@ -363,6 +511,82 @@ function aafm_abilities_subjects(): array {
 }
 
 /**
+ * Presentation-only sub-grouping for the single 'site' subject panel.
+ *
+ * The catalog keeps one 'site' subject (re-subjecting ~28 entries across six files would churn
+ * a load-bearing contract the registry, MCP buckets, and tests all assert on). This map is
+ * consulted ONLY when rendering the site panel, to split it into readable sub-groups. It never
+ * changes any ability's registry subject. Search is mapped here by NAME even though its registry
+ * subject is 'content', so the operator finds it where they expect it. Any site-subject ability
+ * not listed here falls into a rendered "Other" group, so a future addition is never silently
+ * dropped (the AbilitiesSaveTest guard enforces that).
+ *
+ * @return array<string,array{label:string,abilities:list<string>}> Group slug => label + ability names.
+ */
+function aafm_site_subgroups(): array {
+	return array(
+		'site_settings' => array(
+			'label'     => __( 'Site settings', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/get-site-settings',
+				'aafm/update-site-settings',
+				'aafm/get-post-types',
+				'aafm/get-taxonomies',
+				'aafm/get-site-info',
+				'aafm/get-activity-log',
+			),
+		),
+		'plugins'       => array(
+			'label'     => __( 'Plugins', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-plugins',
+			),
+		),
+		'themes'        => array(
+			'label'     => __( 'Themes & styles', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/get-active-theme',
+				'aafm/list-themes',
+				'aafm/list-templates',
+				'aafm/get-template',
+				'aafm/update-template',
+				'aafm/get-global-styles',
+			),
+		),
+		'blocks'        => array(
+			'label'     => __( 'Blocks', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-blocks',
+				'aafm/get-block',
+				'aafm/create-block',
+				'aafm/update-block',
+				'aafm/delete-block',
+			),
+		),
+		'menus'         => array(
+			'label'     => __( 'Menus', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-menus',
+				'aafm/get-menu',
+				'aafm/list-menu-items',
+				'aafm/create-menu',
+				'aafm/update-menu',
+				'aafm/delete-menu',
+				'aafm/create-menu-item',
+				'aafm/update-menu-item',
+				'aafm/delete-menu-item',
+			),
+		),
+		'search'        => array(
+			'label'     => __( 'Search', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/search-content',
+			),
+		),
+	);
+}
+
+/**
  * Render the Abilities tab: subject sub-tabs, each split Reads then Writes, all OFF by default.
  *
  * This is presentation only. Every checkbox across every sub-tab lives inside the one
@@ -390,24 +614,45 @@ function aafm_render_abilities_tab(): void {
 		}
 	}
 
+	// Stats box — sits between the page nav and the sub-tabs, reusing the dashboard .aafm-stat
+	// markup. Total reads the single source of truth (core + every integration manifest total),
+	// the same function the Dashboard uses, so the two tabs can never disagree. Enabled counts
+	// what the operator has turned on, labelled "of N".
+	$ability_total   = aafm_available_ability_count();
+	$ability_enabled = aafm_enabled_ability_count();
+	echo '<div class="aafm-stat-grid aafm-abilities-stats">';
+	echo '<div class="aafm-stat aafm-stat-abilities">';
+	echo '<div class="stat-top">';
+	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'abilities' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
+	echo '</div>';
+	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $ability_total ) ) );
+	echo '</div>';
+	echo '<div class="aafm-stat aafm-stat-enabled">';
+	echo '<div class="stat-top">';
+	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-ic">';
+	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo '</span>';
+	echo '</div>';
+	printf(
+		'<div class="stat-value">%1$s <small>%2$s</small></div>',
+		esc_html( number_format_i18n( $ability_enabled ) ),
+		esc_html(
+			sprintf(
+				/* translators: %d: total number of abilities in the catalog. */
+				__( 'of %d', 'agent-abilities-for-mcp' ),
+				$ability_total
+			)
+		)
+	);
+	echo '</div>';
+	echo '</div>'; // .aafm-abilities-stats
+
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
-
-	// Sub-tab bar — pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
-	// toggle binds to and data-subject is preserved so panel switching keeps working.
-	$first = array_key_first( $subjects );
-	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist">';
-	foreach ( $subjects as $slug => $label ) {
-		$is_active = ( $slug === $first );
-		printf(
-			'<button type="button" class="aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s</button>',
-			$is_active ? ' is-active' : '',
-			$is_active ? 'true' : 'false',
-			esc_attr( $slug ),
-			esc_html( $label )
-		);
-	}
-	echo '</div>';
 
 	$groups = array(
 		'reads'  => __( 'Reads', 'agent-abilities-for-mcp' ),
@@ -416,18 +661,44 @@ function aafm_render_abilities_tab(): void {
 
 	$disclosures = aafm_ability_disclosures();
 
-	foreach ( $subjects as $slug => $label ) {
+	// Expand the subject list into the display tabs that actually render. Every subject maps to one
+	// display tab using its own slug, except 'site', which is split into the six site groups from
+	// aafm_site_subgroups() — each becomes its own top-level chip + panel, taking the place the
+	// single "Site & structure" chip used to hold (after 'media'). This is presentation only: no
+	// ability's registry subject changes (the catalog-lock tests pin those). Each display tab is
+	// { slug, label, rows } where rows are the ability entries to render under it.
+	$display_tabs = aafm_abilities_display_tabs( $subjects, $by_subject, $registry );
+
+	// Sub-tab bar — pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
+	// toggle binds to and data-subject is the display-tab slug so panel switching keeps working.
+	$first = array_key_first( $display_tabs );
+	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist">';
+	foreach ( $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
+		printf(
+			'<button type="button" class="aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s <span class="count">%5$s</span></button>',
+			$is_active ? ' is-active' : '',
+			$is_active ? 'true' : 'false',
+			esc_attr( $slug ),
+			esc_html( $tab['label'] ),
+			esc_html( (string) count( $tab['rows'] ) )
+		);
+	}
+	echo '</div>';
+
+	foreach ( $display_tabs as $slug => $tab ) {
+		$is_active = ( $slug === $first );
+		$tab_rows  = $tab['rows'];
 		printf(
 			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel"%2$s>',
 			esc_attr( $slug ),
 			$is_active ? '' : ' hidden'
 		);
 
-		// Per-subject count badge: how many of this subject's abilities are enabled.
-		$subject_total   = count( $by_subject[ $slug ] );
+		// Per-tab count badge: how many of this tab's abilities are enabled.
+		$subject_total   = count( $tab_rows );
 		$subject_enabled = 0;
-		foreach ( $by_subject[ $slug ] as $ability ) {
+		foreach ( $tab_rows as $ability ) {
 			if ( in_array( (string) $ability['name'], $enabled, true ) ) {
 				++$subject_enabled;
 			}
@@ -439,13 +710,33 @@ function aafm_render_abilities_tab(): void {
 			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
 		);
 
+		// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
+		// and toggles every checkbox in this panel; data-has-destructive tells it to confirm before
+		// bulk-enabling a section that contains a destructive ability.
+		$has_destructive = false;
+		foreach ( $tab_rows as $ability ) {
+			if ( 'destructive' === (string) ( $ability['risk'] ?? '' ) ) {
+				$has_destructive = true;
+				break;
+			}
+		}
+		printf(
+			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button></p>',
+			esc_attr( $slug ),
+			$has_destructive ? ' data-has-destructive="1"' : '',
+			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
+		);
+
 		if ( 'content' === $slug ) {
 			aafm_render_post_types_selector();
 		}
 
+		// Each display tab renders its abilities split Reads then Writes where both exist; a tab
+		// with a single risk class renders a flat list (the empty group is skipped). The bare
+		// >Reads< / >Writes< text the panel-structure test keys off lives in the group <h3>.
 		foreach ( $groups as $group => $heading ) {
 			$rows = array();
-			foreach ( $by_subject[ $slug ] as $ability ) {
+			foreach ( $tab_rows as $ability ) {
 				if ( ( $ability['group'] ?? '' ) === $group ) {
 					$rows[] = $ability;
 				}
@@ -454,7 +745,6 @@ function aafm_render_abilities_tab(): void {
 				continue;
 			}
 
-			// Per-group enabled count for the group head.
 			$group_enabled = 0;
 			foreach ( $rows as $ability ) {
 				if ( in_array( (string) $ability['name'], $enabled, true ) ) {
@@ -462,8 +752,6 @@ function aafm_render_abilities_tab(): void {
 				}
 			}
 
-			// Group head: the Reads/Writes heading plus an enabled-over-total count. The bare
-			// >Reads< / >Writes< text the panel-structure test keys off lives in this <h3>.
 			printf(
 				'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
 				esc_html( $heading ),
@@ -473,39 +761,7 @@ function aafm_render_abilities_tab(): void {
 
 			echo '<div class="aafm-card aafm-ability-list">';
 			foreach ( $rows as $ability ) {
-				$name = (string) $ability['name'];
-				$risk = (string) ( $ability['risk'] ?? 'read' );
-				$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
-
-				// Toggle switch wraps the checkbox. The <input> keeps its exact name/value/checked()
-				// contract — the save handler and its tests bind to that, not to this markup.
-				echo '<div class="aafm-ability-row">';
-				printf(
-					'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
-					esc_attr( $name ),
-					checked( in_array( $name, $enabled, true ), true, false )
-				);
-
-				echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
-				printf(
-					'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
-					esc_html( (string) ( $ability['label'] ?? $name ) ),
-					esc_attr( $risk )
-				);
-
-				// Read-only badge only on read-risk rows; never on write/destructive. The read-only
-				// state is derived from risk === 'read' because the registry entries this UI walks do
-				// not carry an annotations.readonly field — that flag lives only in each ability's MCP
-				// arg-builder definition, not in the catalog. So at render time, risk === 'read' is the
-				// authoritative read-only signal.
-				if ( 'read' === $risk ) {
-					echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
-				}
-
-				printf(
-					'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
-					esc_html( $hint )
-				);
+				aafm_render_ability_row( $ability, $enabled, $disclosures );
 			}
 			echo '</div>';
 		}
@@ -517,6 +773,10 @@ function aafm_render_abilities_tab(): void {
 			aafm_render_meta_keys_selector();
 		}
 
+		if ( 'users' === $slug ) {
+			aafm_render_user_meta_keys_selector();
+		}
+
 		echo '</div>';
 	}
 
@@ -525,6 +785,137 @@ function aafm_render_abilities_tab(): void {
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
 	// feature — it would filter $enabled per principal here rather than at render time.
+}
+
+/**
+ * Render one ability checkbox row.
+ *
+ * Shared by the flat Reads/Writes view and the site sub-group view so both produce identical
+ * markup. The <input> keeps its exact name/value/checked() contract — the save handler and its
+ * tests bind to that, not to this markup.
+ *
+ * @param array<string,mixed>  $ability     The registry entry, with its 'name' key set.
+ * @param array<int,string>    $enabled     The enabled ability names.
+ * @param array<string,string> $disclosures Disclosure text keyed by ability name.
+ * @return void
+ */
+function aafm_render_ability_row( array $ability, array $enabled, array $disclosures ): void {
+	$name = (string) ( $ability['name'] ?? '' );
+	$risk = (string) ( $ability['risk'] ?? 'read' );
+	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
+
+	echo '<div class="aafm-ability-row">';
+	printf(
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
+		esc_attr( $name ),
+		checked( in_array( $name, $enabled, true ), true, false )
+	);
+
+	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
+	printf(
+		'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
+		esc_html( (string) ( $ability['label'] ?? $name ) ),
+		esc_attr( $risk )
+	);
+
+	// Read-only badge only on read-risk rows; never on write/destructive. risk === 'read' is the
+	// authoritative read-only signal at render time (the catalog carries no annotations.readonly).
+	if ( 'read' === $risk ) {
+		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
+	printf(
+		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
+		esc_html( $hint )
+	);
+}
+
+/**
+ * Expand the subject list into the ordered display tabs the Abilities tab renders.
+ *
+ * Each Abilities-tab subject maps to one display tab keyed by its own slug, EXCEPT 'site', which is
+ * split into the six groups from aafm_site_subgroups() — each becomes its own display tab (chip +
+ * panel), inserted where the single "Site & structure" chip used to sit. This is presentation only:
+ * no ability's registry subject changes. A group's rows are pulled from the full registry by name,
+ * so an ability mapped in by name from another subject (Search's search-content, registry subject
+ * 'content') still lands under its site group. Any site-subject ability no group claims is folded
+ * into the Site settings tab, so a future addition is never silently dropped (the AbilitiesSaveTest
+ * union guard enforces that).
+ *
+ * @param array<string,string>                    $subjects   Used Abilities-tab subjects, slug => label, in order.
+ * @param array<string,list<array<string,mixed>>> $by_subject Registry rows bucketed by subject (with 'name').
+ * @param array<string,array<string,mixed>>       $registry   The full registry, for by-name lookups.
+ * @return array<string,array{label:string,rows:list<array<string,mixed>>}> Display tabs, slug => { label, rows }.
+ */
+function aafm_abilities_display_tabs( array $subjects, array $by_subject, array $registry ): array {
+	$site_groups = aafm_site_subgroups();
+
+	// Which site-subject abilities a group has claimed, so the rest fall into Site settings.
+	$claimed = array();
+	foreach ( $site_groups as $group ) {
+		foreach ( $group['abilities'] as $ability_name ) {
+			$claimed[ $ability_name ] = true;
+		}
+	}
+
+	// search-content and any other ability mapped into a site group by name carries a foreign
+	// registry subject; it renders under its site group only, never in the flat view of its subject.
+	$relocated = array();
+	foreach ( $site_groups as $group ) {
+		foreach ( $group['abilities'] as $ability_name ) {
+			if ( isset( $registry[ $ability_name ] ) && 'site' !== (string) ( $registry[ $ability_name ]['subject'] ?? '' ) ) {
+				$relocated[ $ability_name ] = true;
+			}
+		}
+	}
+
+	$tabs = array();
+	foreach ( $subjects as $slug => $label ) {
+		if ( 'site' !== $slug ) {
+			// A plain subject tab: its own rows, minus any relocated into a site group by name.
+			$rows = array();
+			foreach ( $by_subject[ $slug ] as $ability ) {
+				if ( isset( $relocated[ (string) $ability['name'] ] ) ) {
+					continue;
+				}
+				$rows[] = $ability;
+			}
+			$tabs[ $slug ] = array(
+				'label' => $label,
+				'rows'  => $rows,
+			);
+			continue;
+		}
+
+		// The 'site' slot expands into one display tab per site group, in map order.
+		foreach ( $site_groups as $group_slug => $group ) {
+			$rows = array();
+			foreach ( $group['abilities'] as $ability_name ) {
+				if ( ! isset( $registry[ $ability_name ] ) ) {
+					continue;
+				}
+				$rows[] = array( 'name' => $ability_name ) + $registry[ $ability_name ];
+			}
+
+			// Fold any unclaimed site-subject ability into Site settings, so nothing is dropped.
+			if ( 'site_settings' === $group_slug ) {
+				foreach ( $by_subject['site'] ?? array() as $ability ) {
+					$name = (string) ( $ability['name'] ?? '' );
+					if ( '' !== $name && ! isset( $claimed[ $name ] ) ) {
+						$rows[]           = $ability;
+						$claimed[ $name ] = true; // Render once, even if listed twice.
+					}
+				}
+			}
+
+			$tabs[ $group_slug ] = array(
+				'label' => (string) $group['label'],
+				'rows'  => $rows,
+			);
+		}
+	}
+
+	return $tabs;
 }
 
 /**
@@ -604,19 +995,24 @@ function aafm_render_post_types_selector(): void {
  */
 function aafm_render_meta_keys_selector(): void {
 	$allowed  = aafm_allowed_meta_keys();
+	$denied   = aafm_denied_meta_keys();
 	$detected = aafm_detected_meta_keys();
 
 	// Mirrors the post-types selector: a plain <div> (never a nested <form>) with a
 	// type="button" save, so the one outer abilities <form> is never closed early.
 	echo '<div id="aafm-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3>' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-meta-keys-label' ) . '">' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
 	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
 
 	printf(
-		'<textarea name="aafm_meta_keys" rows="6" class="large-text code">%s</textarea>',
+		'<textarea name="aafm_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-meta-keys' ),
+		esc_attr( 'aafm-meta-keys-label' ),
+		esc_attr( 'aafm-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $allowed ) )
 	);
+	echo '<p class="description" id="' . esc_attr( 'aafm-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'agent-abilities-for-mcp' ) . '</p>';
 	if ( empty( $detected ) ) {
@@ -633,7 +1029,61 @@ function aafm_render_meta_keys_selector(): void {
 		echo '</div>';
 	}
 
-	echo '<p><button type="button" id="aafm-meta-keys-save" class="button button-primary">' . esc_html__( 'Save meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
+	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
+	// when it uses *. The chip source above writes only into the Exposed textarea.
+	echo '<h3 id="' . esc_attr( 'aafm-deny-meta-keys-label' ) . '">' . esc_html__( 'Denied meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	printf(
+		'<textarea name="aafm_deny_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-deny-meta-keys' ),
+		esc_attr( 'aafm-deny-meta-keys-label' ),
+		esc_attr( 'aafm-deny-meta-keys-hint' ),
+		esc_textarea( implode( "\n", $denied ) )
+	);
+	echo '<p class="description" id="' . esc_attr( 'aafm-deny-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	echo '<p><button type="button" id="aafm-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
+	echo '</div>';
+}
+
+/**
+ * Render the exposed/denied user-meta selector for the Users sub-tab.
+ *
+ * Mirrors aafm_render_meta_keys_selector() but for user meta: a plain <div> (never a nested
+ * <form>) with two textareas (exposed above denied) and a type="button" save, so the one outer
+ * abilities <form> is never closed early. The deny list always wins over the exposed list,
+ * even when the exposed list uses *.
+ *
+ * @return void
+ */
+function aafm_render_user_meta_keys_selector(): void {
+	$exposed = aafm_allowed_user_meta_keys();
+	$denied  = aafm_denied_user_meta_keys();
+
+	echo '<div id="aafm-user-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
+	echo '<h3 id="' . esc_attr( 'aafm-exposed-user-meta-keys-label' ) . '">' . esc_html__( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
+
+	printf(
+		'<textarea name="aafm_exposed_user_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-exposed-user-meta-keys' ),
+		esc_attr( 'aafm-exposed-user-meta-keys-label' ),
+		esc_attr( 'aafm-exposed-user-meta-keys-hint' ),
+		esc_textarea( implode( "\n", $exposed ) )
+	);
+	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-user-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	echo '<h3 id="' . esc_attr( 'aafm-denied-user-meta-keys-label' ) . '">' . esc_html__( 'Denied user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	printf(
+		'<textarea name="aafm_denied_user_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-denied-user-meta-keys' ),
+		esc_attr( 'aafm-denied-user-meta-keys-label' ),
+		esc_attr( 'aafm-denied-user-meta-keys-hint' ),
+		esc_textarea( implode( "\n", $denied ) )
+	);
+	echo '<p class="description" id="' . esc_attr( 'aafm-denied-user-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	echo '<p><button type="button" id="aafm-user-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save user meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 

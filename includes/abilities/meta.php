@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
  * @return array<string,array<string,mixed>>
  */
 function aafm_register_meta_definitions( array $registry ): array {
-	$registry['aafm/get-post-meta']    = array(
+	$registry['aafm/get-post-meta']     = array(
 		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -28,7 +28,15 @@ function aafm_register_meta_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post_meta',
 	);
-	$registry['aafm/update-post-meta'] = array(
+	$registry['aafm/get-all-post-meta'] = array(
+		'label'        => __( 'Get all post meta', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded.', 'agent-abilities-for-mcp' ),
+		'group'        => 'reads',
+		'risk'         => 'read',
+		'subject'      => 'content',
+		'args_builder' => 'aafm_args_get_all_post_meta',
+	);
+	$registry['aafm/update-post-meta']  = array(
 		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -36,7 +44,7 @@ function aafm_register_meta_definitions( array $registry ): array {
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post_meta',
 	);
-	$registry['aafm/delete-post-meta'] = array(
+	$registry['aafm/delete-post-meta']  = array(
 		'label'        => __( 'Delete post meta', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
@@ -144,6 +152,97 @@ function aafm_exec_get_post_meta( array $input ) {
 		'post_id'  => $id,
 		'meta_key' => $key, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- response array key, not a meta query.
 		'value'    => $value,
+	);
+}
+
+/**
+ * Args for aafm/get-all-post-meta.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_args_get_all_post_meta(): array {
+	return array(
+		'label'               => __( 'Get all post meta', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Read every allowlisted scalar meta value from a post the agent can edit (key/value map).', 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-reads',
+		'input_schema'        => array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'post_id' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+				),
+			),
+			'required'             => array( 'post_id' ),
+			'additionalProperties' => false,
+		),
+		'output_schema'       => array(
+			'type'       => 'object',
+			'properties' => array(
+				'meta' => array( 'type' => 'object' ),
+			),
+		),
+		'execute_callback'    => 'aafm_exec_get_all_post_meta',
+		'permission_callback' => 'aafm_perm_get_all_post_meta',
+		'meta'                => array(
+			'annotations' => array(
+				'readonly'    => true,
+				'destructive' => false,
+			),
+		),
+	);
+}
+
+/**
+ * Permission for aafm/get-all-post-meta: per-object edit_post only.
+ *
+ * Unlike the single get-post-meta gate, there is no meta_key to validate here — the bulk
+ * read iterates the allowlist itself. So this checks the post is editable by the agent
+ * (the same Unit 1 per-object resolver), and the execute body enforces the key allowlist
+ * and scalar-only floor for each value.
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_get_all_post_meta( array $input ): bool {
+	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
+	$post = $id ? get_post( $id ) : null;
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+}
+
+/**
+ * Execute aafm/get-all-post-meta.
+ *
+ * Iterates the post-meta allowlist (aafm_allowed_meta_keys, already hard-block-floored).
+ * For each present key, returns its single scalar value; keys with no value, or whose
+ * stored value is non-scalar (a serialized array/object), are skipped so nothing
+ * unsanitized or structured is ever dumped to the agent. Default-deny by construction:
+ * with no allowlist configured the map is empty.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_exec_get_all_post_meta( array $input ) {
+	$id = absint( $input['post_id'] );
+	if ( ! get_post( $id ) instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+
+	$meta = array();
+	foreach ( aafm_allowed_meta_keys() as $key ) {
+		$value = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- allowlisted key, bounded loop.
+		// Deliberately SKIPS empty/missing keys (a bulk map omits absent keys),
+		// unlike the single get-post-meta reader which returns an empty value as-is.
+		// The opposite-looking phrasing is intentional; both keep a stored '0'.
+		if ( '' === $value || ! is_scalar( $value ) ) {
+			continue; // skip empty/missing and never dump arrays/serialized blobs.
+		}
+		$meta[ $key ] = $value;
+	}
+
+	return array(
+		// Cast so an empty map JSON-encodes to "{}" (object) per the schema.
+		'meta' => (object) $meta,
 	);
 }
 

@@ -154,6 +154,9 @@ function aafm_config_option_names(): array {
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
 		'aafm_ip_allowlist',
+		'aafm_denied_meta_keys',
+		'aafm_exposed_user_meta_keys',
+		'aafm_denied_user_meta_keys',
 	);
 }
 
@@ -219,81 +222,86 @@ function aafm_render_settings_tab(): void {
 	);
 
 	echo '<form id="aafm-settings-form">';
-	echo '<section class="aafm-card">';
-	echo '<div class="aafm-card-head">';
-	echo '<span class="icon">';
-	echo aafm_icon( 'shield' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-	echo '</span>';
-	echo '<h2>' . esc_html__( 'Safety controls', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '</div>';
+
+	// Safety controls section. Each labelled control is a pre-built row passed to the shared
+	// aafm_render_section() component; the <input> name/value/checked() contracts are unchanged,
+	// only the surrounding wrapper moved onto the shared .aafm-section component.
+	ob_start();
 
 	// Rate limit.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label"><label for="aafm-rate-limit">' . esc_html__( 'Rate limit', 'agent-abilities-for-mcp' ) . '</label><span class="opt">' . esc_html__( 'Per minute', 'agent-abilities-for-mcp' ) . '</span></div>';
-	echo '<div class="aafm-set-control">';
-	printf(
-		'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
-		esc_attr( (string) aafm_rate_limit_per_min() )
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Rate limit', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Per minute', 'agent-abilities-for-mcp' ),
+			'control' => sprintf(
+				'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
+				esc_attr( (string) aafm_rate_limit_per_min() )
+			),
+			'help'    => __( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+		)
 	);
-	echo '<p class="help">' . esc_html__( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
 
-	// IP allowlist.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label"><label for="aafm-ip-allowlist">' . esc_html__( 'IP allowlist', 'agent-abilities-for-mcp' ) . '</label><span class="opt">' . esc_html__( 'One per line', 'agent-abilities-for-mcp' ) . '</span></div>';
-	echo '<div class="aafm-set-control">';
-	printf(
-		'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code">%s</textarea>',
-		esc_textarea( implode( "\n", aafm_ip_allowlist() ) )
-	);
-	echo '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>';
+	// IP allowlist — the control bundles the textarea plus the lockout warning notice.
+	ob_start();
 	aafm_render_notice(
 		'warning',
 		__( 'Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops.', 'agent-abilities-for-mcp' )
 	);
-	echo '</div></div>';
+	$ip_notice = (string) ob_get_clean();
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'IP allowlist', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'One per line', 'agent-abilities-for-mcp' ),
+			'control' => sprintf(
+				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code">%s</textarea>',
+				esc_textarea( implode( "\n", aafm_ip_allowlist() ) )
+			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
+		)
+	);
 
-	// Force draft.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label">' . esc_html__( 'Force draft on create', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-set-control">';
-	// Toggle switch wraps the checkbox. The <input> keeps its exact name/value/checked()
-	// contract — the save handler and its tests bind to that, not to this markup.
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
+	// Force draft. The toggle switch wraps the checkbox; the <input> keeps its exact
+	// name/value/checked() contract — the save handler and its tests bind to that, not this markup.
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
+			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
+				. '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
+			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ),
+		)
+	);
 
 	// Max title length.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label"><label for="aafm-max-title">' . esc_html__( 'Maximum title length', 'agent-abilities-for-mcp' ) . '</label><span class="opt">' . esc_html__( 'Characters', 'agent-abilities-for-mcp' ) . '</span></div>';
-	echo '<div class="aafm-set-control">';
-	printf(
-		'<input type="number" id="aafm-max-title" name="aafm_max_title_len" class="small-text" min="0" step="1" value="%s">',
-		esc_attr( (string) aafm_max_title_len() )
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Maximum title length', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Characters', 'agent-abilities-for-mcp' ),
+			'control' => sprintf(
+				'<input type="number" id="aafm-max-title" name="aafm_max_title_len" class="small-text" min="0" step="1" value="%s">',
+				esc_attr( (string) aafm_max_title_len() )
+			),
+			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+		)
 	);
-	echo '<p class="help">' . esc_html__( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
 
-	echo '</section>';
+	$safety_body = (string) ob_get_clean();
+	aafm_render_section(
+		array(
+			'icon'  => 'shield',
+			'title' => __( 'Safety controls', 'agent-abilities-for-mcp' ),
+			'body'  => $safety_body,
+		)
+	);
 
 	// OAuth: two additive switch rows. Same .aafm-switch / .aafm-set-row markup as the
 	// force-draft row above; the <input> name/value/checked() contract is what the save
 	// handler binds to, not this markup. Both readers default on (discovery.php).
-	echo '<section class="aafm-card">';
-	echo '<div class="aafm-card-head">';
-	echo '<span class="icon">';
-	echo aafm_icon( 'connection' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-	echo '</span>';
-	echo '<h2>' . esc_html__( 'OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '</div>';
+	ob_start();
 
-	// Enable OAuth.
-	// The row title and the sentence label each carry an id, and the checkbox points at both
-	// with aria-labelledby, so the toggle's accessible name is the title plus the descriptive
-	// sentence ("Enable OAuth Let agents connect by pasting your site URL."). The sentence
-	// <label for> stays put — it is the existing single association, not a second one, so the
-	// redundant-`for` defect cannot recur.
+	// Enable OAuth. The row title and the sentence label each carry an id, and the checkbox
+	// points at both with aria-labelledby, so the toggle's accessible name is the title plus the
+	// descriptive sentence. The sentence <label for> stays put — it is the existing single
+	// association, not a second one, so the redundant-`for` defect cannot recur. The set-row
+	// label carries the title id here so the existing aria-labelledby reference resolves.
 	echo '<div class="aafm-set-row">';
 	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-set-control">';
@@ -302,10 +310,7 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	// Enable dynamic client registration.
-	// Same tie-up as the row above: title id + sentence-label id both referenced by
-	// aria-labelledby, so the accessible name is the title plus the sentence; the existing
-	// sentence <label for> is kept as the description.
+	// Enable dynamic client registration. Same tie-up as the row above.
 	echo '<div class="aafm-set-row">';
 	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-set-control">';
@@ -314,7 +319,14 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
-	echo '</section>';
+	$oauth_body = (string) ob_get_clean();
+	aafm_render_section(
+		array(
+			'icon'  => 'connection',
+			'title' => __( 'OAuth', 'agent-abilities-for-mcp' ),
+			'body'  => $oauth_body,
+		)
+	);
 
 	aafm_render_notice(
 		'warning',
@@ -325,20 +337,26 @@ function aafm_render_settings_tab(): void {
 	echo '</form>';
 
 	// Danger zone — a destructive, irreversible reset. Sits outside the settings <form> so the
-	// button (type=button, wired in admin.js with a confirm step) never submits the form.
-	echo '<section class="aafm-card aafm-danger">';
+	// button (type=button, wired in admin.js with a confirm step) never submits the form. It uses
+	// the shared .aafm-section .aafm-card classes for spacing parity, plus the .aafm-danger
+	// red-accent modifier the component does not emit, so the markup is hand-rolled rather than
+	// run through aafm_render_section(). Same .aafm-card-head/.aafm-card-pad structure the
+	// component produces, so the spacing matches the other two sections.
+	echo '<section class="aafm-section aafm-card aafm-danger">';
 	echo '<div class="aafm-card-head">';
-	echo '<span class="icon">';
+	echo '<span class="aafm-card-head-ic">';
 	echo aafm_icon( 'warning' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
-	echo '<h2>' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h3></div>';
 	echo '</div>';
+	echo '<div class="aafm-card-pad aafm-section-body">';
 	echo '<div class="aafm-set-row">';
 	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
 	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
 	echo '<p class="help">' . esc_html__( 'Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
+	echo '</div>';
 	echo '</section>';
 
 	echo '</div>';

@@ -244,6 +244,7 @@
 		border: 1px solid var(--aafm-border);
 		border-radius: var(--aafm-radius);
 		box-shadow: var(--aafm-shadow);
+		margin-bottom: 15px;
 	}
 
 	.aafm-card-pad {
@@ -259,13 +260,30 @@
 		padding-inline: 20px;
 		border-block-end: 1px solid var(--aafm-border);
 
-		h2 {
+		h2,
+		.aafm-card-head-title {
 			margin: 0;
 			font-size: 14px;
 			font-weight: 600;
 		}
 
-		.icon {
+		/* aafm_render_section() wraps the title (and optional description) in a
+		   text column so a pill can sit at the row end; the head still lays the
+		   icon + text out in a row. */
+		.aafm-card-head-text {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+		}
+
+		.aafm-card-head-desc {
+			margin: 0;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		.icon,
+		.aafm-card-head-ic {
 			display: flex;
 			color: var(--aafm-text-subtle);
 
@@ -284,6 +302,13 @@
 		gap: 16px;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		margin-block-start: 20px;
+	}
+
+	/* The Abilities tab reuses the stat cards but only shows two (Total / Enabled),
+	   so it caps the grid at two columns rather than stretching two cards across four. */
+	.aafm-abilities-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin-block-start: 0;
 	}
 
 	.aafm-stat {
@@ -545,7 +570,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
-		margin-block: 8px 16px;
+		margin-block: 16px 16px;
 
 		a,
 		button {
@@ -748,6 +773,170 @@
 		max-inline-size: 80ch;
 	}
 
+	/* ---------- Integration cards (Integrations tab) ---------- */
+	.aafm-integrations {
+		.aafm-integrations-disclaimer {
+			margin-block-end: 24px;
+		}
+
+		.aafm-integrations-cards {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.aafm-integration-note {
+			font-size: 13px;
+			color: var(--aafm-text-subtle);
+			margin-block: 0;
+			padding-block: 12px 0;
+			padding-inline: 20px;
+		}
+
+		.aafm-section-toggle {
+			padding-inline: 20px;
+			margin-block: 12px 0;
+		}
+
+		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
+		   it (or Enter/Space) toggles the section. Reuse the abilities/help chevron affordance
+		   so it matches the rest of the admin. */
+		details.aafm-integration-card {
+			> summary.aafm-card-head {
+				cursor: pointer;
+				list-style: none;
+				user-select: none;
+
+				&::marker,
+				&::-webkit-details-marker { display: none; }
+
+				/* Right-aligned chevron that rotates open, after the count. */
+				&::after {
+					content: "";
+					flex: 0 0 auto;
+					margin-inline-start: 4px;
+					inline-size: 0;
+					block-size: 0;
+					border-inline-start: 5px solid transparent;
+					border-inline-end: 5px solid transparent;
+					border-block-start: 6px solid var(--aafm-text-subtle);
+					transition: transform 0.18s ease;
+				}
+			}
+
+			&[open] > summary.aafm-card-head::after {
+				transform: rotate(180deg);
+			}
+
+			/* The count badge sits flush to the right edge, before the chevron. */
+			.abilities-count {
+				margin-inline-start: auto;
+
+				.aafm-integration-count {
+					margin: 0;
+				}
+			}
+
+			&.is-disabled {
+				/* Dim the whole content section behind a single 0.5-opacity overlay and block
+				   interaction, rather than muting each control. The header (summary) stays at
+				   full strength so the plugin name, status, and counts read clearly, while
+				   everything the plugin would unlock stays legible underneath. */
+				.aafm-pill { opacity: 0.7; }
+
+				.aafm-integration-body {
+					opacity: 0.5;
+					pointer-events: none;
+				}
+			}
+		}
+
+		/* The accordion body holds the note, the per-card filter, and the ability list. */
+		.aafm-integration-body {
+			.aafm-card.aafm-ability-list {
+				border: none;
+				box-shadow: none;
+				border-radius: 0;
+			}
+		}
+
+		/* Per-card search + read/write filter. */
+		.aafm-integration-filter {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 10px;
+			padding-block: 12px;
+			padding-inline: 20px;
+			align-items: stretch;
+
+			.aafm-integration-search {
+				flex: 1 1 220px;
+				min-inline-size: 160px;
+			}
+
+			.aafm-filter-risk {
+				display: inline-flex;
+				gap: 4px;
+			}
+
+			.aafm-filter-btn {
+				cursor: pointer;
+				font-size: 12px;
+				font-weight: 600;
+				padding-block: 5px;
+				padding-inline: 12px;
+				border: 1px solid var(--aafm-border);
+				border-radius: var(--aafm-radius-sm);
+				background: var(--aafm-surface);
+				color: var(--aafm-text-subtle);
+
+				&.is-active {
+					background: var(--aafm-accent);
+					border-color: var(--aafm-accent);
+					color: #fff;
+				}
+			}
+		}
+	}
+
+	/* ---------- Collapsible abilities details/summary ---------- */
+	details.aafm-abilities-details {
+		border-block-start: 1px solid var(--aafm-border);
+
+		> summary {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding-block: 12px;
+			padding-inline: 20px;
+			cursor: pointer;
+			list-style: none;
+			font-size: 14px;
+			font-weight: 600;
+			user-select: none;
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
+
+			&::after {
+				content: "";
+				display: inline-block;
+				margin-inline-start: auto;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid var(--aafm-text-subtle);
+				transition: transform 0.18s ease;
+			}
+		}
+
+		&[open] > summary::after {
+			transform: rotate(180deg);
+		}
+	}
+
 	/* ---------- Save bar (sticky-feel action bar under the abilities form) ---------- */
 	.aafm-savebar {
 		display: flex;
@@ -813,9 +1002,11 @@
 		.aafm-card-head {
 			border-block-end-color: color-mix( in srgb, var(--aafm-red) 25%, var(--aafm-border) );
 
-			.icon { color: var(--aafm-red); }
+			.icon,
+			.aafm-card-head-ic { color: var(--aafm-red); }
 
-			h2 { color: var(--aafm-red-text); }
+			h2,
+			.aafm-card-head-title { color: var(--aafm-red-text); }
 		}
 
 		.aafm-reset-status {
@@ -831,7 +1022,16 @@
 	   class names under .aafm-connection (below). */
 	.aafm-setup {
 		overflow: hidden;
+		/* The checklist is now a <details>, so it carries its own card surface (it used
+		   to inherit it from a .aafm-card wrapper). */
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		box-shadow: var(--aafm-shadow);
 
+		/* The summary doubles as the checklist header. Reuse the Help/abilities chevron
+		   affordance so the collapse triangle matches the other collapsibles, and drop the
+		   header border when the panel is closed (no steps showing beneath it). */
 		.aafm-setup-top {
 			display: flex;
 			align-items: center;
@@ -839,6 +1039,12 @@
 			padding-block: 16px;
 			padding-inline: 20px;
 			border-block-end: 1px solid var(--aafm-border);
+			cursor: pointer;
+			list-style: none;
+			user-select: none;
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
 
 			h2 {
 				margin: 0;
@@ -846,7 +1052,32 @@
 				font-weight: 600;
 				flex: 1;
 			}
+
+			.aafm-setup-ic {
+				display: flex;
+				color: var(--aafm-green-text, var(--aafm-text-subtle));
+
+				.aafm-icon {
+					inline-size: 18px;
+					block-size: 18px;
+				}
+			}
+
+			&::after {
+				content: "";
+				display: inline-block;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid var(--aafm-text-subtle);
+				transition: transform 0.18s ease;
+			}
 		}
+
+		&[open] .aafm-setup-top::after { transform: rotate(180deg); }
+
+		&:not([open]) .aafm-setup-top { border-block-end: 0; }
 
 		.aafm-setup-count {
 			color: var(--aafm-text-subtle);
@@ -953,6 +1184,13 @@
 		/* Flex children must allow shrinking so a wide code block scrolls
 		   inside the rail (overflow-x:auto) instead of stretching the card. */
 		> * { min-inline-size: 0; }
+	}
+
+	/* Shared alignment class on each of the three numbered steps. It pins one inline
+	   padding so the step heads and rails line up edge-to-edge top to bottom, regardless
+	   of which content (form, code block, diagnostics) a given step holds. */
+	.aafm-connection .aafm-conn-step {
+		padding-inline: 0px;
 	}
 
 	.aafm-connection .aafm-step-rail { min-inline-size: 0; }
@@ -1467,6 +1705,61 @@
 
 	.aafm-table-wrap {
 		overflow-x: auto;
+	}
+
+	/* ---------- Shared section component (aafm_render_section) ---------- */
+	/* Real spacing between stacked sections so new sections inherit the gap
+	   automatically (the Settings cramped Safety/OAuth/Danger fix). */
+	.aafm-section {
+		margin-block: 20px;
+
+		&:first-child { margin-block-start: 0; }
+		&:last-child { margin-block-end: 0; }
+	}
+
+	/* Collapsible variant reuses the abilities-details chevron affordance so the
+	   triangle matches the Help/abilities collapsibles exactly. */
+	.aafm-section--collapsible {
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+
+		> summary {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			padding-block: 12px;
+			padding-inline: 18px;
+			cursor: pointer;
+			list-style: none;
+			font-size: 14px;
+			font-weight: 600;
+			user-select: none;
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
+
+			&::after {
+				content: "";
+				display: inline-block;
+				margin-inline-start: auto;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid var(--aafm-text-subtle);
+				transition: transform 0.18s ease;
+			}
+		}
+
+		&[open] > summary::after {
+			transform: rotate(180deg);
+		}
+
+		.aafm-section-body {
+			padding-block: 0 16px;
+			padding-inline: 18px;
+		}
 	}
 }
 

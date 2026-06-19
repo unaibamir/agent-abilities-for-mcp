@@ -776,7 +776,7 @@ function aafm_render_site_subgroups( array $site_rows, array $registry, array $e
 		}
 
 		printf(
-			'<h4 class="aafm-subsection-head aafm-subsection-head--sep">%1$s <span class="aafm-count-badge">%2$s / %3$s</span></h4>',
+			'<h3 class="aafm-subsection-head aafm-subsection-head--sep">%1$s <span class="aafm-count-badge">%2$s / %3$s</span></h3>',
 			esc_html( (string) $group['label'] ),
 			esc_html( (string) $enabled_count ),
 			esc_html( (string) count( $rows ) )
@@ -798,7 +798,7 @@ function aafm_render_site_subgroups( array $site_rows, array $registry, array $e
 		}
 	}
 	if ( ! empty( $other ) ) {
-		echo '<h4 class="aafm-subsection-head aafm-subsection-head--sep">' . esc_html__( 'Other', 'agent-abilities-for-mcp' ) . '</h4>';
+		echo '<h3 class="aafm-subsection-head aafm-subsection-head--sep">' . esc_html__( 'Other', 'agent-abilities-for-mcp' ) . '</h3>';
 		echo '<div class="aafm-card aafm-ability-list">';
 		foreach ( $other as $ability ) {
 			aafm_render_ability_row( $ability, $enabled, $disclosures );

@@ -225,6 +225,22 @@ final class AbilitiesSaveTest extends TestCase {
 		}
 		$this->assertStringContainsString( 'aafm-subsection-head', $site_panel );
 
+		// Sub-group heads are h3, not h4. They sit one level below the panel heading and one
+		// level above the per-ability h4 titles they contain, so the heading order reads
+		// h3 (group) then h4 (ability) — no level is skipped (WCAG 1.3.1).
+		$this->assertStringContainsString( '<h3 class="aafm-subsection-head', $site_panel );
+		$this->assertStringNotContainsString( '<h4 class="aafm-subsection-head', $site_panel );
+
+		$first_head    = strpos( $site_panel, '<h3 class="aafm-subsection-head' );
+		$first_ability = strpos( $site_panel, '<h4>', $first_head );
+		$this->assertNotFalse( $first_head, 'A sub-group h3 heading should render.' );
+		$this->assertNotFalse( $first_ability, 'A per-ability h4 should render inside a group.' );
+		$this->assertLessThan(
+			$first_ability,
+			$first_head,
+			'The group h3 must precede the ability h4 it contains.'
+		);
+
 		// Search is mapped into the Site panel by name even though its registry subject is content.
 		$this->assertStringContainsString( 'value="aafm/search-content"', $site_panel );
 

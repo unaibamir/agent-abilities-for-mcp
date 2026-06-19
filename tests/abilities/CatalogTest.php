@@ -274,7 +274,12 @@ final class CatalogTest extends TestCase {
 		// registry is memoized (includes/registry.php static $cache), so the flush is
 		// MANDATORY — a force filter added without it is a no-op against the cached
 		// host-inactive registry. With the WooCommerce reports/gateways slice (WC7) landed, the count is 162.
-		add_filter( 'aafm_integration_active_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it to
+		// rankmath so all five unified seo-* abilities (including the schema pair) register here.
+		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );
@@ -312,7 +317,9 @@ final class CatalogTest extends TestCase {
 		// Documents the W4-0.3 convention: the catalog-lock suite forces all three
 		// integrations active (+ flushes the registry memo) so later slices' integration
 		// abilities are counted here instead of vanishing when the host plugin is absent.
-		$this->assertTrue( aafm_integration_active( 'seo' ) );
+		$this->assertTrue( aafm_integration_active( 'yoast' ) );
+		$this->assertTrue( aafm_integration_active( 'rankmath' ) );
+		$this->assertTrue( aafm_integration_active( 'aioseo' ) );
 		$this->assertTrue( aafm_integration_active( 'acf' ) );
 		$this->assertTrue( aafm_integration_active( 'woocommerce' ) );
 	}

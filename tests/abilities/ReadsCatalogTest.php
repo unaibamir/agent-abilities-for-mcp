@@ -114,7 +114,12 @@ final class ReadsCatalogTest extends TestCase {
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the
 		// registry is cached) so the SEO integration reads are counted here.
-		add_filter( 'aafm_integration_active_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
+		// the unified seo-* reads register here until they are replaced by the per-plugin sets.
+		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );

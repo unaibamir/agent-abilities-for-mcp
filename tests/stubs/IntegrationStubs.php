@@ -77,6 +77,115 @@ trait IntegrationStubs {
 	}
 
 	/**
+	 * Define the minimal Yoast host surface: the WPSEO_VERSION constant so detection reports Yoast
+	 * active, plus a rendered-head filter so the yoast-get-head ability returns a non-empty string.
+	 *
+	 * @return void
+	 */
+	protected function stub_yoast(): void {
+		if ( ! defined( 'WPSEO_VERSION' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- mimicking Yoast's own constant so detection sees it; a test stub, never shipped.
+			define( 'WPSEO_VERSION', 'stub-test' );
+		}
+		add_filter(
+			'aafm_seo_rendered_head',
+			static fn( string $head, int $id, string $plugin ): string => 'yoast' === $plugin ? '<title>Yoast head ' . $id . '</title>' : $head,
+			10,
+			3
+		);
+	}
+
+	/**
+	 * Define the minimal Rank Math host surface: the RankMath marker class so detection reports Rank
+	 * Math active, plus a rendered-head filter so the rankmath-get-head ability returns a non-empty
+	 * string. The rank_math_* post meta (incl. the serialized robots array and the dynamic schema
+	 * keys) is read/written with core get_post_meta/update_post_meta, so no extra store is needed.
+	 *
+	 * @return void
+	 */
+	protected function stub_rankmath(): void {
+		if ( ! class_exists( 'RankMath' ) ) {
+			eval( 'class RankMath {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
+		}
+		add_filter(
+			'aafm_seo_rendered_head',
+			static fn( string $head, int $id, string $plugin ): string => 'rankmath' === $plugin ? '<title>Rank Math head ' . $id . '</title>' : $head,
+			10,
+			3
+		);
+	}
+
+	/**
+	 * Define the minimal AIOSEO host surface: the aioseo() marker function so detection reports AIOSEO
+	 * active, a stateful AIOSEO\Plugin\Common\Models\Post model backed by AioseoStubStore (so a write
+	 * through getPost->set->save round-trips on a following getPost — the real-model code path), and a
+	 * rendered-head filter so the aioseo-get-head ability returns a non-empty string.
+	 *
+	 * @return void
+	 */
+	protected function stub_aioseo(): void {
+		AioseoStubStore::reset();
+		if ( ! function_exists( 'aioseo' ) ) {
+			eval( 'function aioseo() { return new \stdClass(); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a function-only marker stub for tests; never shipped.
+		}
+		if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_aioseo_post_model_source() );
+		}
+		add_filter(
+			'aafm_seo_rendered_head',
+			static fn( string $head, int $id, string $plugin ): string => 'aioseo' === $plugin ? '<title>AIOSEO head ' . $id . '</title>' : $head,
+			10,
+			3
+		);
+	}
+
+	/**
+	 * Source of the stub AIOSEO\Plugin\Common\Models\Post model. Kept as a string so the eval is
+	 * guarded by class_exists and the trait file holds exactly one object structure (the trait).
+	 *
+	 * getPost($id) returns a model populated from AioseoStubStore (a blank-defaults instance when no
+	 * row exists, mirroring real AIOSEO). Public props mirror the wp_aioseo_posts columns the ability
+	 * touches. ->save() writes the props back to the store. A test-only stub, never shipped.
+	 *
+	 * @return string
+	 */
+	private function aafm_aioseo_post_model_source(): string {
+		return <<<'PHP'
+namespace AIOSEO\Plugin\Common\Models;
+class Post {
+	public $post_id = 0;
+	public $title = '';
+	public $description = '';
+	public $canonical_url = '';
+	public $og_title = '';
+	public $og_description = '';
+	public $og_image_custom_url = '';
+	public $twitter_title = '';
+	public $twitter_description = '';
+	public $twitter_image_custom_url = '';
+	public $robots_noindex = false;
+	public $robots_nofollow = false;
+	public static function getPost( $post_id ) {
+		$row = \AAFM\Tests\AioseoStubStore::get( (int) $post_id );
+		$model = new self();
+		foreach ( $row as $k => $v ) {
+			if ( property_exists( $model, $k ) ) {
+				$model->$k = $v;
+			}
+		}
+		$model->post_id = (int) $post_id;
+		return $model;
+	}
+	public function save() {
+		\AAFM\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
+		return true;
+	}
+}
+PHP;
+	}
+
+	/**
 	 * Define the minimal ACF host surface so detection reports ACF active and the ACF abilities
 	 * can read field-group structure + hydrated values and record writes.
 	 *
@@ -1127,6 +1236,7 @@ PHP;
 		}
 		$this->aafm_forced_integrations = array();
 		AcfStubStore::reset();
+		AioseoStubStore::reset();
 		WcStubStore::reset();
 		WcAttributeStubStore::reset();
 		WcOrderStubStore::reset();

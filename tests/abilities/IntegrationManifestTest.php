@@ -52,7 +52,12 @@ final class IntegrationManifestTest extends TestCase {
 	public function test_manifest_plus_core_equals_the_catalog_lock(): void {
 		// With every host force-active the registry holds the full catalog. The non-integration
 		// (core) abilities plus the manifest's per-slug integration totals must equal the lock.
-		add_filter( 'aafm_integration_active_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
+		// the unified seo-* abilities register and the manifest's 'seo' total reconciles to the lock.
+		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );

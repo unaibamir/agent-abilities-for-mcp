@@ -5,10 +5,12 @@
  * Every integration ability registers and is discoverable ONLY when its host plugin is
  * active. Detection is centralised here and is FILTERABLE per slug
  * (aafm_integration_active_<slug>) so the PHPUnit suite can force an integration on
- * WITHOUT installing the host plugin, then stub the host API in the fixture. SEO is a
- * unified set routed across Yoast / Rank Math / AIOSEO: aafm_seo_active_plugin() reports
- * which is active, and the aafm_seo_meta_keys filter maps the unified fields to that
- * plugin's meta keys.
+ * WITHOUT installing the host plugin, then stub the host API in the fixture. SEO is
+ * detected per plugin: yoast (defined WPSEO_VERSION), rankmath (class RankMath),
+ * aioseo (function aioseo). Each per-plugin set registers on its own predicate, so a
+ * site running two SEO plugins genuinely contributes both surfaces (no first-match-wins
+ * exclusivity). The shared SEO permission gates and the recursive JSON-LD sanitizer also
+ * live here so the per-plugin ability files can reuse them.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -21,13 +23,19 @@ defined( 'ABSPATH' ) || exit;
  * Whether a given integration's host plugin is active (so its abilities should
  * register / discover).
  *
- * @param string $slug One of 'seo' | 'acf' | 'woocommerce'.
+ * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce'.
  * @return bool
  */
 function aafm_integration_active( string $slug ): bool {
 	switch ( $slug ) {
-		case 'seo':
-			$active = '' !== aafm_seo_active_plugin();
+		case 'yoast':
+			$active = aafm_yoast_active();
+			break;
+		case 'rankmath':
+			$active = aafm_rankmath_active();
+			break;
+		case 'aioseo':
+			$active = aafm_aioseo_active();
 			break;
 		case 'acf':
 			$active = aafm_acf_active();
@@ -50,7 +58,127 @@ function aafm_integration_active( string $slug ): bool {
 }
 
 /**
+ * Whether Yoast SEO is active, behind a filterable seam.
+ *
+ * Real detection is defined('WPSEO_VERSION'). Wrapped in its own filter so the PHPUnit suite can
+ * pin it deterministically: the suite stubs Yoast by defining WPSEO_VERSION process-wide, and a
+ * defined constant can never be undefined, so the host-inactive registry test cannot flip detection
+ * back off by removing the aafm_integration_active_yoast force filter alone. Driving this seam to
+ * false through aafm_yoast_active lets that test force detection OFF deterministically. Production
+ * passes the real detection through unchanged.
+ *
+ * @return bool
+ */
+function aafm_yoast_active(): bool {
+	$active = defined( 'WPSEO_VERSION' );
+
+	/**
+	 * Filters whether Yoast SEO is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_yoast_active', $active );
+}
+
+/**
+ * Whether Rank Math is active, behind a filterable seam (see aafm_yoast_active for the rationale;
+ * Rank Math is stubbed with a process-wide RankMath marker class).
+ *
+ * @return bool
+ */
+function aafm_rankmath_active(): bool {
+	$active = class_exists( 'RankMath' );
+
+	/**
+	 * Filters whether Rank Math is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_rankmath_active', $active );
+}
+
+/**
+ * Whether All in One SEO is active, behind a filterable seam (see aafm_yoast_active for the
+ * rationale; AIOSEO is stubbed with a process-wide aioseo() marker function).
+ *
+ * @return bool
+ */
+function aafm_aioseo_active(): bool {
+	$active = function_exists( 'aioseo' );
+
+	/**
+	 * Filters whether AIOSEO is reported active.
+	 *
+	 * @param bool $active Detected active state.
+	 */
+	return (bool) apply_filters( 'aafm_aioseo_active', $active );
+}
+
+/**
+ * Per-object permission shared by every per-plugin SEO read/write: the caller may edit THIS post
+ * (SEO meta is post content). Relocated here from the deleted unified seo.php so the yoast / rankmath
+ * / aioseo ability files reuse one gate.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_perm_seo_post_object( array $input ): bool {
+	$id = absint( $input['post_id'] ?? 0 );
+	return $id > 0 && get_post( $id ) instanceof WP_Post && current_user_can( 'edit_post', $id );
+}
+
+/**
+ * Object-independent floor for the per-plugin *-get-head abilities: the caller can author posts at
+ * all. The per-object edit_post($id) refinement runs inside execute. This floor lets discovery
+ * (empty input) advertise the tool to a capable user, mirroring the documented FSE/floor pattern.
+ *
+ * @return bool
+ */
+function aafm_perm_seo_get_head_floor(): bool {
+	return current_user_can( 'edit_posts' );
+}
+
+/**
+ * Recursively sanitize a JSON-LD schema array. Relocated here from the deleted unified seo.php so the
+ * Rank Math schema writer can reuse it; integrations.php loads before the ability files, so the
+ * function exists at registration time.
+ *
+ * At every depth: arrays recurse; a value under a url-ish key (url / image / logo / sameAs / @id,
+ * case-insensitive) is run through esc_url_raw so a javascript: scheme is dropped; every other scalar
+ * leaf is run through sanitize_text_field, which strips <script> tags and control noise; anything that
+ * is neither scalar nor array (objects, resources) is dropped. So script payloads cannot survive at
+ * any level.
+ *
+ * @param array<int|string,mixed> $schema Schema array.
+ * @return array<int|string,mixed>
+ */
+function aafm_sanitize_schema_array( array $schema ): array {
+	$url_keys = array( 'url', 'image', 'logo', 'sameas', '@id', 'contenturl', 'thumbnailurl' );
+	$clean    = array();
+	foreach ( $schema as $key => $value ) {
+		$safe_key = is_string( $key ) ? sanitize_text_field( $key ) : $key;
+		if ( is_array( $value ) ) {
+			$clean[ $safe_key ] = aafm_sanitize_schema_array( $value );
+			continue;
+		}
+		if ( ! is_scalar( $value ) ) {
+			continue; // Drop objects / resources / null.
+		}
+		$as_string = is_bool( $value ) ? $value : (string) $value;
+		if ( is_string( $safe_key ) && in_array( strtolower( $safe_key ), $url_keys, true ) ) {
+			$clean[ $safe_key ] = esc_url_raw( (string) $as_string );
+		} else {
+			$clean[ $safe_key ] = is_bool( $as_string ) ? $as_string : sanitize_text_field( (string) $as_string );
+		}
+	}
+	return $clean;
+}
+
+/**
  * Which SEO plugin is active, '' if none. Sub-detection per the spec table.
+ *
+ * @deprecated Wave 5: superseded by the per-plugin predicates (aafm_yoast_active /
+ * aafm_rankmath_active / aafm_aioseo_active). Retained only until the unified seo.php is removed.
  *
  * @return string '' | 'rankmath' | 'yoast' | 'aioseo'.
  */

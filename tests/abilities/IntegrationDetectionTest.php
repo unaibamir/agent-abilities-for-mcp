@@ -1,8 +1,9 @@
 <?php
 /**
- * Wave 4 detection layer: the aafm_integration_active() predicate is filterable
- * per slug so the suite can force an integration on without the host plugin, and
- * SEO sub-detection reports which of the three plugins is active (none here).
+ * Detection layer: the aafm_integration_active() predicate is filterable per slug so
+ * the suite can force an integration on without the host plugin. Wave 5 splits the
+ * single 'seo' slug into three per-plugin predicates (yoast / rankmath / aioseo), each
+ * independently force-able.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -20,8 +21,20 @@ final class IntegrationDetectionTest extends TestCase {
 	}
 
 	public function test_host_absent_means_inactive_by_default(): void {
-		// None of the host plugins is installed on the test site, so all three are inactive.
-		$this->assertFalse( aafm_integration_active( 'seo' ) );
+		// None of the host plugins is installed on the test site, so all three SEO plugins are
+		// inactive. Yoast keys on a constant, Rank Math on a class, AIOSEO on a function — none of
+		// which the bare test site defines (a prior SEO suite may define the markers process-wide,
+		// so pin each seam off, the same seam production detection passes through, to assert the
+		// host-absent default deterministically).
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'yoast' ) );
+		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'rankmath' ) );
+		remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'aioseo' ) );
+		remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
 		// ACF detection keys on function_exists('get_field'); the AcfTest fixture defines a get_field
 		// stub process-wide (and a defined function cannot be undefined), so once that suite has run,
 		// real ACF detection legitimately reports active here. Pin the aafm_acf_active seam off — the
@@ -51,8 +64,20 @@ final class IntegrationDetectionTest extends TestCase {
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 	}
 
-	public function test_seo_sub_detection_reports_no_active_plugin_when_none_present(): void {
-		$this->assertSame( '', aafm_seo_active_plugin(), 'no SEO plugin installed → empty string.' );
+	public function test_each_seo_plugin_forces_active_independently(): void {
+		// Wave 5 splits the unified 'seo' slug into three per-plugin predicates. Each is
+		// independently force-able through its own per-slug filter, and forcing one must NOT
+		// activate the others (the per-slug filter is not global). Pin the two NOT-forced seams
+		// off so a process-wide marker from a prior SEO suite cannot mask the independence point.
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		$this->assertTrue( aafm_integration_active( 'yoast' ) );
+		$this->assertFalse( aafm_integration_active( 'rankmath' ), 'forcing yoast must not activate rankmath.' );
+		$this->assertFalse( aafm_integration_active( 'aioseo' ), 'forcing yoast must not activate aioseo.' );
+		remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		remove_filter( 'aafm_integration_active_yoast', '__return_true' );
 	}
 
 	public function test_stub_helpers_are_available(): void {

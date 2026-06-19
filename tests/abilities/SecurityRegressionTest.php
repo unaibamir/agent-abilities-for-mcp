@@ -59,7 +59,12 @@ final class SecurityRegressionTest extends TestCase {
 		// the integration names once the SEO/ACF/WC slices land. Without this, those names
 		// never appear and their needle/sanction checks would be dead code (HIGH-3). No
 		// integration ability exists yet, so nothing new is scanned in this slice.
-		add_filter( 'aafm_integration_active_seo', '__return_true' );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
+		// the unified seo-* names are scanned here until the per-plugin sets replace them.
+		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );

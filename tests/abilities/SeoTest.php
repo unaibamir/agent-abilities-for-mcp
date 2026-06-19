@@ -585,8 +585,8 @@ final class SeoTest extends TestCase {
 		// so real detection still reports yoast active here — drive the predicate to inactive
 		// through its own filter (the same seam production detection passes through).
 		$this->reset_integration_stubs();
-		add_filter( 'aafm_integration_active_seo', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'seo' ) );
+		add_filter( 'aafm_seo_active_plugin', '__return_empty_string', 99 );
+		$this->assertSame( '', aafm_seo_active_plugin() );
 		aafm_registry_cache_should_flush( true ); // Rebuild the memo with SEO now inactive.
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey(

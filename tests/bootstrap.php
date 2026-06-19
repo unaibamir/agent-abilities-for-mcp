@@ -25,6 +25,7 @@ require $_tests_dir . '/includes/bootstrap.php';
 // AcfStubStore / WcStubStore are the ACF and WooCommerce stubs' backing stores and must load
 // before the trait that uses them.
 require_once __DIR__ . '/stubs/AcfStubStore.php';
+require_once __DIR__ . '/stubs/AioseoStubStore.php';
 require_once __DIR__ . '/stubs/WcStubStore.php';
 require_once __DIR__ . '/stubs/WcAttributeStubStore.php';
 require_once __DIR__ . '/stubs/WcOrderStubStore.php';

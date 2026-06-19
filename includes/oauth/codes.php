@@ -37,9 +37,10 @@ if ( ! defined( 'AAFM_OAUTH_CODE_TTL' ) ) {
  *     @type string $code_challenge The PKCE S256 challenge.
  *     @type string $resource       The resource indicator the code is scoped to.
  * }
- * @return string The raw authorization code (64 hex characters).
+ * @return string|\WP_Error The raw authorization code (64 hex characters), or a WP_Error when the
+ *                          row could not be persisted (so callers never hand out a phantom code).
  */
-function aafm_oauth_mint_code( array $ctx ): string {
+function aafm_oauth_mint_code( array $ctx ) {
 	$raw  = bin2hex( random_bytes( 32 ) );
 	$hash = hash( 'sha256', $raw );
 
@@ -48,7 +49,7 @@ function aafm_oauth_mint_code( array $ctx ): string {
 
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->insert(
+	$inserted = $wpdb->insert(
 		$wpdb->prefix . 'aafm_oauth_codes',
 		array(
 			'code_hash'      => $hash,
@@ -61,6 +62,12 @@ function aafm_oauth_mint_code( array $ctx ): string {
 		),
 		array( '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
 	);
+
+	// A failed insert means there is no persisted grant — never return a code for it, or the
+	// client redirects with a code that can never be redeemed.
+	if ( false === $inserted ) {
+		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'agent-abilities-for-mcp' ) );
+	}
 
 	return $raw;
 }

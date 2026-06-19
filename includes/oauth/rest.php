@@ -391,6 +391,15 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 		)
 	);
 
+	// A mint failure (the row never persisted) is a server_error, not a fake token response.
+	if ( is_wp_error( $tokens ) ) {
+		return aafm_oauth_rest_error(
+			'server_error',
+			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			500
+		);
+	}
+
 	return aafm_oauth_rest_token_response( $tokens );
 }
 

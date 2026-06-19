@@ -330,7 +330,7 @@ function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
  *
  * @param int    $status  HTTP status code.
  * @param string $message Human-readable message (will be escaped).
- * @return void
+ * @return never
  */
 function aafm_oauth_render_local_error( int $status, string $message ): void {
 	aafm_oauth_send_consent_headers();
@@ -385,8 +385,9 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 		)
 	);
 
-	// An empty code means the mint/insert failed; do not redirect with a blank code.
-	if ( '' === $code ) {
+	// A WP_Error (or empty) code means the mint/insert failed; do not redirect with a code that
+	// was never persisted.
+	if ( is_wp_error( $code ) || '' === $code ) {
 		aafm_oauth_render_local_error(
 			500,
 			__( 'Could not issue an authorization code. Please try again.', 'agent-abilities-for-mcp' )

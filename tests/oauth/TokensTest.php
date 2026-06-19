@@ -99,6 +99,25 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens —
+	 * a client must never get a successful token response for a grant that was never stored.
+	 */
+	public function test_mint_returns_error_when_insert_fails(): void {
+		aafm_install_oauth_tables();
+
+		global $wpdb;
+		$suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_access_tokens" );
+
+		$result = aafm_oauth_mint_tokens( $this->ctx() );
+
+		$wpdb->suppress_errors( $suppress );
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'A failed insert must surface as an error, not phantom tokens.' );
+	}
+
+	/**
 	 * Minting returns a prefixed access token plus a refresh token and stores
 	 * only their SHA-256 hashes — never the raw values.
 	 */

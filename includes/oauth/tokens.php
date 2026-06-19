@@ -61,9 +61,10 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  *     @type string $resource          The resource indicator the token is scoped to.
  *     @type int    $refresh_parent_id The id of the refresh row this pair rotated from (0 for a fresh mint).
  * }
- * @return array{access_token:string,refresh_token:string,expires_in:int}
+ * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error The token pair,
+ *         or a WP_Error when the row could not be persisted (so callers never hand out phantom tokens).
  */
-function aafm_oauth_mint_tokens( array $ctx ): array {
+function aafm_oauth_mint_tokens( array $ctx ) {
 	// keep in sync with aafm_oauth_resolve_current_user()'s prefix (AAFM_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).
 	$access_raw  = 'aafm_oat_' . bin2hex( random_bytes( 32 ) );
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
@@ -75,7 +76,7 @@ function aafm_oauth_mint_tokens( array $ctx ): array {
 
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->insert(
+	$inserted = $wpdb->insert(
 		$wpdb->prefix . 'aafm_oauth_access_tokens',
 		array(
 			'token_hash'         => hash( 'sha256', $access_raw ),
@@ -90,6 +91,12 @@ function aafm_oauth_mint_tokens( array $ctx ): array {
 		),
 		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d' )
 	);
+
+	// A failed insert means there is no persisted token row — never return a token pair for it,
+	// or the client gets a successful token response it can never use.
+	if ( false === $inserted ) {
+		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
+	}
 
 	return array(
 		'access_token'  => $access_raw,
@@ -249,6 +256,14 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 			'refresh_parent_id' => (int) $row['id'],
 		)
 	);
+
+	// If the new pair did not persist, roll back the rotation so the old refresh row stays
+	// usable rather than committing a consumed parent with no child.
+	if ( is_wp_error( $new ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'ROLLBACK' );
+		return $new;
+	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( 'COMMIT' );

@@ -262,6 +262,34 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * Real WooCommerce wc_create_customer() returns an int user id (or WP_Error), not a
+	 * WC_Customer object. A successful create must return the rich shape exactly once and
+	 * leave a single customer behind — no false error on the success path, no duplicate.
+	 */
+	public function test_create_customer_int_return_is_success_no_duplicate(): void {
+		WcCustomerStubStore::reset();
+		$this->acting_as( 'administrator' );
+
+		$first = wp_get_ability( 'aafm/wc-create-customer' )->execute(
+			array(
+				'email'      => 'intreturn@example.com',
+				'first_name' => 'Int',
+				'last_name'  => 'Return',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $first, 'A positive int return must be treated as success, not an error.' );
+		$this->assertArrayHasKey( 'id', $first );
+		$this->assertGreaterThan( 0, $first['id'] );
+		$this->assertSame( 'Int', $first['first_name'] );
+
+		// Exactly one customer exists after a single create — no duplicate spawned on the
+		// success path (the inverted check used to create then return an error).
+		$after_one = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
+		$this->assertNotInstanceOf( WP_Error::class, $after_one );
+		$this->assertSame( 1, $after_one['total'], 'A single create must leave exactly one customer.' );
+	}
+
+	/**
 	 * Create with billing fields writes them through to the returned shape.
 	 */
 	public function test_create_customer_with_billing_fields(): void {

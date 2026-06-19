@@ -657,7 +657,7 @@ if ( ! function_exists( 'wc_create_customer' ) ) {
 	 * @param string $email
 	 * @param string $username
 	 * @param string $password
-	 * @return \WC_Customer|\WP_Error
+	 * @return int|\WP_Error
 	 */
 	function wc_create_customer( $email, $username, $password ) {
 		return new \WP_Error();

@@ -418,7 +418,7 @@ PHP;
 		}
 		if ( ! function_exists( 'wc_create_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return new \WC_Customer( $id ); }' );
+			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return (int) $id; }' );
 		}
 		if ( ! function_exists( 'wc_update_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.

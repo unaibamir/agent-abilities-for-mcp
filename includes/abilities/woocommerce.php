@@ -4455,17 +4455,26 @@ function aafm_exec_wc_create_customer( array $input ) {
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	$username = sanitize_user( (string) ( $input['username'] ?? $email ) );
 
-	$customer = wc_create_customer( $email, $username, wp_generate_password() );
-	if ( $customer instanceof \WP_Error ) {
+	// wc_create_customer() returns the new user id as an int, or a WP_Error — never a
+	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
+	// create error can't be misread as success (and a real success can't be misread as a
+	// failure after the account is already persisted).
+	$created = wc_create_customer( $email, $username, wp_generate_password() );
+	if ( $created instanceof \WP_Error ) {
 		return aafm_generic_error();
 	}
-	if ( ! ( $customer instanceof \WC_Customer ) ) {
+	$id = (int) $created;
+	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
 
+	// Hydrate the persisted customer, layer on the optional address fields, and save once.
+	$customer = aafm_wc_get_customer_object( $id );
+	if ( null === $customer ) {
+		return aafm_generic_error();
+	}
 	aafm_wc_apply_customer_input( $customer, $input );
-	$id = (int) $customer->save();
-	if ( $id < 1 ) {
+	if ( (int) $customer->save() < 1 ) {
 		return aafm_generic_error();
 	}
 

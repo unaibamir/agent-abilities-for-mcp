@@ -163,6 +163,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/themes.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/seo.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/yoast.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/rankmath.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/acf.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce.php';
 

@@ -97,6 +97,26 @@ final class AioseoTest extends TestCase {
 		$this->assertTrue( $read['robots_nofollow'] );
 	}
 
+	/**
+	 * T2-2: when the model's save() reports failure (nothing persisted in the custom table), the
+	 * write returns the generic error rather than a successful stale read.
+	 */
+	public function test_aioseo_update_save_failure_returns_error(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = true;
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Will not persist',
+			)
+		);
+		\AAFM\Tests\AioseoStubStore::$save_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A custom-table save failure must surface as an error, not a stale read.' );
+	}
+
 	public function test_aioseo_write_does_not_touch_the_shadow_meta(): void {
 		// The _aioseo_* post meta keys are WPML-compat shadow copies, not AIOSEO's source of truth.
 		// The write must go through the model store, NOT update the shadow meta.

@@ -145,6 +145,9 @@ class Post {
 		return $model;
 	}
 	public function save() {
+		if ( \AAFM\Tests\AioseoStubStore::$save_should_fail ) {
+			return false;
+		}
 		\AAFM\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
 		return true;
 	}

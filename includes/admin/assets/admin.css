@@ -782,15 +782,15 @@
 		.aafm-integrations-cards {
 			display: flex;
 			flex-direction: column;
-			gap: 0px;
+			gap: 12px;
 		}
 
 		.aafm-integration-note {
 			font-size: 13px;
 			color: var(--aafm-text-subtle);
-			margin-block: 8px 0;
+			margin-block: 0;
+			padding-block: 12px 0;
 			padding-inline: 20px;
-			margin-bottom: 15px;
 		}
 
 		.aafm-section-toggle {
@@ -798,7 +798,41 @@
 			margin-block: 12px 0;
 		}
 
-		.aafm-integration-card {
+		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
+		   it (or Enter/Space) toggles the section. Reuse the abilities/help chevron affordance
+		   so it matches the rest of the admin. */
+		details.aafm-integration-card {
+			> summary.aafm-card-head {
+				cursor: pointer;
+				list-style: none;
+				user-select: none;
+
+				&::marker,
+				&::-webkit-details-marker { display: none; }
+
+				/* Right-aligned chevron that rotates open, after the count. */
+				&::after {
+					content: "";
+					flex: 0 0 auto;
+					margin-inline-start: 4px;
+					inline-size: 0;
+					block-size: 0;
+					border-inline-start: 5px solid transparent;
+					border-inline-end: 5px solid transparent;
+					border-block-start: 6px solid var(--aafm-text-subtle);
+					transition: transform 0.18s ease;
+				}
+			}
+
+			&[open] > summary.aafm-card-head::after {
+				transform: rotate(180deg);
+			}
+
+			/* The count badge sits flush to the right edge, before the chevron. */
+			.abilities-count {
+				margin-inline-start: auto;
+			}
+
 			&.is-disabled {
 				/* Mute the status pill and the inert toggles, but keep every label, risk
 				   badge, and hint at full contrast so the section stays fully readable —
@@ -814,13 +848,50 @@
 			}
 		}
 
-		/* Ability lists nested inside an integration card lose their outer card
-		   border — they're already inside a card. */
-		.aafm-abilities-details {
+		/* The accordion body holds the note, the per-card filter, and the ability list. */
+		.aafm-integration-body {
 			.aafm-card.aafm-ability-list {
 				border: none;
 				box-shadow: none;
 				border-radius: 0;
+			}
+		}
+
+		/* Per-card search + read/write filter. */
+		.aafm-integration-filter {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 10px;
+			padding-block: 12px;
+			padding-inline: 20px;
+
+			.aafm-integration-search {
+				flex: 1 1 220px;
+				min-inline-size: 160px;
+			}
+
+			.aafm-filter-risk {
+				display: inline-flex;
+				gap: 4px;
+			}
+
+			.aafm-filter-btn {
+				cursor: pointer;
+				font-size: 12px;
+				font-weight: 600;
+				padding-block: 5px;
+				padding-inline: 12px;
+				border: 1px solid var(--aafm-border);
+				border-radius: var(--aafm-radius-sm);
+				background: var(--aafm-surface);
+				color: var(--aafm-text-subtle);
+
+				&.is-active {
+					background: var(--aafm-accent);
+					border-color: var(--aafm-accent);
+					color: #fff;
+				}
 			}
 		}
 	}

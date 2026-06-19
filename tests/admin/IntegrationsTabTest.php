@@ -142,6 +142,65 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 	}
 
+	public function test_each_card_is_a_collapsed_details_accordion(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+
+		// Each integration card is a native <details> accordion that keeps the card classes, and
+		// every accordion starts collapsed (no open attribute on the integration <details>).
+		$this->assertStringContainsString( '<details class="aafm-card aafm-integration-card', $html );
+		$this->assertStringNotContainsString( '<details class="aafm-card aafm-integration-card aafm-integration-woocommerce" open', $html );
+
+		// The summary doubles as the card head: title, status pill, and the count all live in it.
+		// Slice the WooCommerce card's <details> and check its own <summary>.
+		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
+		$this->assertNotFalse( $wc_open, 'The WooCommerce card should render.' );
+		$summary_open = strpos( $html, '<summary class="aafm-card-head', $wc_open );
+		$this->assertNotFalse( $summary_open, 'The card head must be a <summary>.' );
+		$summary_close = strpos( $html, '</summary>', $summary_open );
+		$summary       = substr( $html, $summary_open, $summary_close - $summary_open );
+		$this->assertStringContainsString( 'WooCommerce', $summary );
+		$this->assertStringContainsString( 'aafm-pill', $summary );
+		$this->assertStringContainsString( 'aafm-integration-count', $summary );
+
+		// The status note is re-enabled and renders in the accordion content.
+		$this->assertStringContainsString( 'aafm-integration-note', $html );
+
+		// The inner "Abilities X/Y" sub-collapsible is gone — the section accordion replaces it.
+		$this->assertStringNotContainsString( 'aafm-abilities-details', $html );
+	}
+
+	public function test_each_card_renders_a_search_and_risk_filter(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+
+		// Each card carries a per-card filter: a search input plus the All / Read Only / Write group.
+		// There are five integration cards, so each control appears at least five times.
+		$this->assertSame( 5, substr_count( $html, 'aafm-integration-filter' ) );
+		$this->assertStringContainsString( 'type="search"', $html );
+		$this->assertStringContainsString( 'data-filter-risk="all"', $html );
+		$this->assertStringContainsString( 'data-filter-risk="read"', $html );
+		$this->assertStringContainsString( 'data-filter-risk="write"', $html );
+		// Rows carry the data-risk hook the filter matches against.
+		$this->assertStringContainsString( 'data-risk=', $html );
+	}
+
 	public function test_tab_has_exactly_one_form_and_no_nested_form(): void {
 		// The Wave-0 lesson: never nest a <form>. The tab renders one outer form for the
 		// per-ability toggles; any secondary control is a <div> + type="button".

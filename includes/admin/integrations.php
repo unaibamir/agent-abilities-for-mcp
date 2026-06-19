@@ -160,16 +160,20 @@ function aafm_render_integrations_tab(): void {
 			? ( $descriptor[ $slug ] ?? array() )
 			: ( $by_subject[ $slug ] ?? ( $descriptor[ $slug ] ?? array() ) );
 
+		// Each card is a native <details> accordion (collapsed by default — no open attribute), so
+		// the whole section is the toggle. The card classes ride on the <details> so the existing
+		// .aafm-integration-{slug} hooks and .is-disabled muting still apply.
 		printf(
-			'<section class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
+			'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
 			esc_attr( $slug ),
 			$disabled ? ' is-disabled' : ''
 		);
 
 		$counts = aafm_integration_manifest()[ $slug ] ?? null;
 
-		// Card head: icon + label + a status pill.
-		echo '<div class="aafm-card-head">';
+		// The <summary> IS the card head: icon + label + status pill + count. A real <summary>
+		// toggles on click and on Enter/Space natively, so the accordion stays keyboard-accessible.
+		echo '<summary class="aafm-card-head">';
 		echo '<span class="icon">';
 		echo aafm_icon( $card['icon'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		echo '</span>';
@@ -193,14 +197,20 @@ function aafm_render_integrations_tab(): void {
 		}
 		echo '</span>';
 
-		echo '</div>';
+		echo '</summary>';
 
-		// Status note.
+		// Accordion content: the status note, the per-card filter, then the ability list directly.
+		echo '<div class="aafm-integration-body">';
+
 		echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
+
+		aafm_render_integration_filter( $slug );
 
 		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures, $disabled );
 
-		echo '</section>';
+		echo '</div>';
+
+		echo '</details>';
 	}
 
 	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
@@ -256,14 +266,62 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 }
 
 /**
- * Render the per-ability toggles for one active integration, with a group enable/disable-all
- * control that confirms before bulk-enabling a PII/destructive group.
+ * Render the per-card search + read/write filter for one integration card.
+ *
+ * A search box plus an All / Read Only / Write toggle group, modelled on the reference MCP
+ * client's tool filter. The controls are scoped to this card by data-card and drive admin.js's
+ * per-card filter, which toggles row visibility only — the buttons are type="button" and the
+ * search input is not an aafm_abilities[] field, so neither interferes with the form submit.
+ *
+ * @param string $slug Integration slug.
+ * @return void
+ */
+function aafm_render_integration_filter( string $slug ): void {
+	$input_id = 'aafm-int-search-' . $slug;
+
+	echo '<div class="aafm-integration-filter" data-card="' . esc_attr( $slug ) . '">';
+
+	// Visually-hidden label keeps the search input accessible without adding visible chrome.
+	printf(
+		'<label class="screen-reader-text" for="%1$s">%2$s</label>',
+		esc_attr( $input_id ),
+		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
+	);
+	printf(
+		'<input type="search" id="%1$s" class="aafm-integration-search" placeholder="%2$s" autocomplete="off">',
+		esc_attr( $input_id ),
+		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
+	);
+
+	// All / Read Only / Write toggle group. "All" starts selected. Each button is type="button".
+	echo '<div class="aafm-filter-risk" role="group" aria-label="' . esc_attr__( 'Filter by risk', 'agent-abilities-for-mcp' ) . '">';
+	$risks = array(
+		'all'   => __( 'All', 'agent-abilities-for-mcp' ),
+		'read'  => __( 'Read Only', 'agent-abilities-for-mcp' ),
+		'write' => __( 'Write', 'agent-abilities-for-mcp' ),
+	);
+	foreach ( $risks as $value => $label ) {
+		printf(
+			'<button type="button" class="aafm-filter-btn%1$s" data-filter-risk="%2$s" aria-pressed="%3$s">%4$s</button>',
+			'all' === $value ? ' is-active' : '',
+			esc_attr( $value ),
+			'all' === $value ? 'true' : 'false',
+			esc_html( $label )
+		);
+	}
+	echo '</div>';
+
+	echo '</div>';
+}
+
+/**
+ * Render the per-ability toggles for one integration, with a group enable/disable-all control
+ * that confirms before bulk-enabling a PII/destructive group.
  *
  * The toggle markup mirrors the Abilities tab exactly so the shared save handler binds to the
- * same name="aafm_abilities[]" inputs. The bulk control is a type="button" (never a nested
- * form), per the Wave-0 nested-form lesson. The ability list is wrapped in a <details> element
- * so it can be collapsed without hiding the checkboxes from the form (collapse is CSS-only;
- * inputs inside a closed <details> still submit normally).
+ * same name="aafm_abilities[]" inputs. The bulk control is a type="button" (never a nested form),
+ * per the Wave-0 nested-form lesson. The list renders directly inside the card's accordion body —
+ * the section <details> is the only collapsible now, so there is no inner sub-collapsible.
  *
  * @param string                         $slug        Integration slug.
  * @param array<int,array<string,mixed>> $rows        This integration's ability rows.
@@ -274,26 +332,13 @@ function aafm_integration_status_note( string $slug, string $status ): string {
  * @return void
  */
 function aafm_render_integration_abilities( string $slug, array $rows, array $enabled, array $disclosures, bool $disabled = false ): void {
-	// Enabled-over-total count for the collapsible summary.
-	$group_enabled = 0;
 	$has_sensitive = false;
 	foreach ( $rows as $row ) {
-		if ( in_array( (string) $row['name'], $enabled, true ) ) {
-			++$group_enabled;
-		}
 		if ( 'destructive' === (string) ( $row['risk'] ?? '' ) ) {
 			$has_sensitive = true;
+			break;
 		}
 	}
-
-	// Collapsible abilities section: <details open> replaces the old static group-head div.
-	// The <summary> carries the "Abilities X/Y" label; the body holds the toggle + ability list.
-	printf(
-		'<details class="aafm-abilities-details" open><summary>%1$s <span class="aafm-count-badge">%2$s / %3$s</span></summary>',
-		esc_html__( 'Abilities', 'agent-abilities-for-mcp' ),
-		esc_html( (string) $group_enabled ),
-		esc_html( (string) count( $rows ) )
-	);
 
 	// Group enable/disable-all control (a type="button", never a nested form). The
 	// data-has-sensitive flag tells the JS to window.confirm() before bulk-enabling a group
@@ -305,14 +350,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
 	);
 
-	// Each per-plugin card renders a flat ability list.
+	// Each per-plugin card renders a flat ability list directly in the accordion body.
 	echo '<div class="aafm-card aafm-ability-list">';
 	foreach ( $rows as $ability ) {
 		aafm_render_integration_ability_row( $ability, $enabled, $disclosures, $disabled );
 	}
 	echo '</div>';
-
-	echo '</details>';
 }
 
 /**

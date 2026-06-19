@@ -49,6 +49,7 @@
 			this.#bindSubjectTabs();
 			this.#bindSectionToggles();
 			this.#bindIntegrationToggles();
+			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
 			this.#bindSaveIntegrations();
 			this.#bindSavePostTypes();
@@ -311,6 +312,65 @@
 					}
 					boxes.forEach( ( b ) => {
 						b.checked = enabling;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * Per-card "Search abilities" + All/Read Only/Write filter on the Integrations tab.
+		 * Scoped to each .aafm-integration-card: the search query and the chosen risk are
+		 * ANDed, and matching is done against each row's data-risk plus its textContent (label,
+		 * name, and hint are all server-rendered text, so reading textContent is safe). Hiding
+		 * is via the `hidden` attribute only — no markup is built from data, so there is no
+		 * HTML sink. The filter works the same on inactive cards (the rows are disabled but
+		 * still in the DOM). Filter controls never touch the form submit.
+		 */
+		#bindIntegrationFilters() {
+			const filters = document.querySelectorAll( '.aafm-integration-filter' );
+			filters.forEach( ( filter ) => {
+				const card = filter.closest( '.aafm-integration-card' );
+				if ( ! card ) {
+					return;
+				}
+				const search = filter.querySelector( '.aafm-integration-search' );
+				const riskButtons = filter.querySelectorAll( '.aafm-filter-btn' );
+				const rows = card.querySelectorAll( '.aafm-ability-row' );
+
+				let query = '';
+				let risk = 'all';
+
+				const apply = () => {
+					rows.forEach( ( row ) => {
+						const rowRisk = row.dataset.risk ?? 'read';
+						// "write" groups both write and destructive; "read" matches read only.
+						const riskOk =
+							'all' === risk ||
+							( 'read' === risk && 'read' === rowRisk ) ||
+							( 'write' === risk && 'read' !== rowRisk );
+						const textOk =
+							'' === query ||
+							row.textContent.toLowerCase().includes( query );
+						row.hidden = ! ( riskOk && textOk );
+					} );
+				};
+
+				if ( search ) {
+					search.addEventListener( 'input', () => {
+						query = search.value.trim().toLowerCase();
+						apply();
+					} );
+				}
+
+				riskButtons.forEach( ( btn ) => {
+					btn.addEventListener( 'click', () => {
+						risk = btn.dataset.filterRisk ?? 'all';
+						riskButtons.forEach( ( b ) => {
+							const on = b === btn;
+							b.classList.toggle( 'is-active', on );
+							b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+						} );
+						apply();
 					} );
 				} );
 			} );

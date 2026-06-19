@@ -31,6 +31,13 @@ class ValidatorTest extends TestCase {
 	private array $original_auth = array();
 
 	/**
+	 * Saved REQUEST_URI / HTTPS / rest_route, restored in tear_down.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private array $original_request = array();
+
+	/**
 	 * The WP test suite rewrites plugin CREATE TABLE to its TEMPORARY form, so the
 	 * token table must be installed per test before any mint/validate runs.
 	 */
@@ -38,19 +45,31 @@ class ValidatorTest extends TestCase {
 		parent::set_up();
 
 		// phpcs:disable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
-		$this->original_auth = array(
+		$this->original_auth    = array(
 			'HTTP_AUTHORIZATION'          => $_SERVER['HTTP_AUTHORIZATION'] ?? null,
 			'REDIRECT_HTTP_AUTHORIZATION' => $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null,
 		);
+		$this->original_request = array(
+			'REQUEST_URI' => $_SERVER['REQUEST_URI'] ?? null,
+			'HTTPS'       => $_SERVER['HTTPS'] ?? null,
+			'rest_route'  => $_GET['rest_route'] ?? null,
+		);
 		// phpcs:enable WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 
-		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
+		unset( $_SERVER['HTTP_AUTHORIZATION'], $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $_GET['rest_route'] );
+
+		// Default the request to the MCP route over HTTPS so the route-scope and
+		// HTTPS-policy gates pass; individual tests override these to exercise the
+		// off-route and plain-HTTP branches. The harness reports a production
+		// environment, so HTTPS is genuinely required here.
+		$this->on_mcp_route();
+		$_SERVER['HTTPS'] = 'on';
 
 		aafm_install_oauth_tables();
 	}
 
 	/**
-	 * Restore the Authorization header keys to exactly their pre-test state.
+	 * Restore the Authorization / request keys to exactly their pre-test state.
 	 */
 	public function tear_down(): void {
 		foreach ( $this->original_auth as $key => $value ) {
@@ -60,7 +79,26 @@ class ValidatorTest extends TestCase {
 				$_SERVER[ $key ] = $value;
 			}
 		}
+		foreach ( array( 'REQUEST_URI', 'HTTPS' ) as $key ) {
+			if ( null === $this->original_request[ $key ] ) {
+				unset( $_SERVER[ $key ] );
+			} else {
+				$_SERVER[ $key ] = $this->original_request[ $key ];
+			}
+		}
+		if ( null === $this->original_request['rest_route'] ) {
+			unset( $_GET['rest_route'] );
+		} else {
+			$_GET['rest_route'] = $this->original_request['rest_route'];
+		}
 		parent::tear_down();
+	}
+
+	/**
+	 * Point the request at the MCP REST route (pretty-permalink form).
+	 */
+	private function on_mcp_route(): void {
+		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
 	}
 
 	/**
@@ -120,6 +158,75 @@ class ValidatorTest extends TestCase {
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
 
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * A valid aafm_oat_ token authenticates on the MCP route but NOT on an unrelated core
+	 * REST route — the MCP token must never become a site-wide WP bearer credential.
+	 */
+	public function test_token_does_not_resolve_off_mcp_route(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// On the MCP route it resolves.
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+
+		// On an unrelated core REST route the same token resolves no user.
+		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'An MCP token must not authenticate on a non-MCP REST route.' );
+	}
+
+	/**
+	 * The plain-permalink rest_route form (?rest_route=/agent-abilities-for-mcp/mcp) is also
+	 * recognised as the MCP route.
+	 */
+	public function test_token_resolves_on_plain_permalink_rest_route(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// Plain-permalink request: index.php with the rest_route query var, no pretty path.
+		$_SERVER['REQUEST_URI'] = '/index.php';
+		$_GET['rest_route']     = '/agent-abilities-for-mcp/mcp';
+
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * Where HTTPS is required (production) and the request is plain http, a valid token does
+	 * not resolve — the validator enforces the same HTTPS policy as the other OAuth paths.
+	 */
+	public function test_token_does_not_resolve_over_plain_http_when_https_required(): void {
+		if ( ! aafm_oauth_https_required() ) {
+			$this->markTestSkipped( 'HTTPS is not required in this environment; the plain-http gate cannot be exercised.' );
+		}
+
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// Drop TLS: is_ssl() now returns false while HTTPS is still required.
+		unset( $_SERVER['HTTPS'] );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'A bearer over plain http must not resolve when HTTPS is required.' );
 	}
 
 	/**

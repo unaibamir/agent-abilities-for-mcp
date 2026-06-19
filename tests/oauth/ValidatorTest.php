@@ -206,6 +206,63 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * TF-2: on a subdirectory install (site under a path prefix like /blog), the pretty-permalink
+	 * MCP path is /blog/wp-json/agent-abilities-for-mcp/mcp. The route guard must derive the
+	 * expected path from rest_url(), which carries that prefix, so a valid token still resolves —
+	 * a hardcoded /wp-json/... literal would never match.
+	 */
+	public function test_token_resolves_on_subdirectory_install(): void {
+		// Model a site installed under /blog with pretty permalinks: rest_url() returns the
+		// prefixed pretty endpoint (https://host/blog/wp-json/agent-abilities-for-mcp/mcp).
+		$rest_prefix = trim( rest_get_url_prefix(), '/' );
+		$pretty_url  = static function ( string $url ) use ( $rest_prefix ): string {
+			// Only rewrite the MCP endpoint URL; the route may sit in the path (pretty) or the
+			// rest_route query var (plain), so match against the whole URL. Leave everything else
+			// (and any already-prefixed call) alone so the audience and the route derivation agree.
+			if ( false === strpos( $url, 'agent-abilities-for-mcp/mcp' ) || false !== strpos( $url, '/blog/' ) ) {
+				return $url;
+			}
+			$host = (string) wp_parse_url( $url, PHP_URL_SCHEME ) . '://' . (string) wp_parse_url( $url, PHP_URL_HOST );
+			return $host . '/blog/' . $rest_prefix . '/agent-abilities-for-mcp/mcp';
+		};
+		add_filter( 'rest_url', $pretty_url );
+
+		try {
+			$uid    = self::factory()->user->create();
+			$tokens = aafm_oauth_mint_tokens(
+				array(
+					'wp_user_id' => $uid,
+					'client_id'  => 'c',
+					// Audience is the prefixed endpoint, exactly as a subdir install would mint it.
+					'resource'   => aafm_endpoint_url(),
+				)
+			);
+			$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+			// Pretty-permalink request carrying the /blog path prefix.
+			$mcp_path               = (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH );
+			$_SERVER['REQUEST_URI'] = $mcp_path;
+			unset( $_GET['rest_route'] );
+			$this->assertStringStartsWith( '/blog/', $mcp_path, 'The simulated request path must carry the /blog prefix.' );
+
+			$this->assertSame(
+				$uid,
+				aafm_oauth_resolve_current_user( false ),
+				'A valid MCP token must resolve on a subdirectory install whose path carries a prefix.'
+			);
+
+			// A non-MCP route under the same prefix must still be denied.
+			$_SERVER['REQUEST_URI'] = '/blog/' . $rest_prefix . '/wp/v2/posts';
+			$this->assertFalse(
+				aafm_oauth_resolve_current_user( false ),
+				'An MCP token must not authenticate on a non-MCP route even under the same path prefix.'
+			);
+		} finally {
+			remove_filter( 'rest_url', $pretty_url );
+		}
+	}
+
+	/**
 	 * Where HTTPS is required (production) and the request is plain http, a valid token does
 	 * not resolve — the validator enforces the same HTTPS policy as the other OAuth paths.
 	 */

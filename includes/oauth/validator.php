@@ -131,7 +131,10 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		}
 	}
 
-	// Pretty-permalink form: the REST prefix + the MCP route in the URI path.
+	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
+	// expected path from rest_url() so a site installed under a path prefix (e.g.
+	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison — a
+	// hardcoded /wp-json/... literal never matches there.
 	$request_uri = isset( $_SERVER['REQUEST_URI'] )
 		? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
 		: '';
@@ -140,9 +143,27 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		return false;
 	}
 
-	$mcp_rest_path = '/' . trim( rest_get_url_prefix(), '/' ) . $mcp_route;
+	$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
 
-	return rtrim( $path, '/' ) === $mcp_rest_path;
+	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
+	// component collapses to .../index.php and carries no route — that case is the rest_route branch
+	// above. Only treat the rest_url() path as the pretty target when it actually ends with the MCP
+	// route. Otherwise reconstruct the expected pretty path from the install's home-path prefix so a
+	// subdirectory install still matches even with plain permalinks pretty-routing through.
+	if ( substr( rtrim( $rest_url_path, '/' ), -strlen( $mcp_route ) ) === $mcp_route ) {
+		$mcp_rest_path = $rest_url_path;
+	} else {
+		$home_path     = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
+		$segments      = array_filter(
+			array( trim( $home_path, '/' ), trim( rest_get_url_prefix(), '/' ) ),
+			static function ( string $segment ): bool {
+				return '' !== $segment;
+			}
+		);
+		$mcp_rest_path = '/' . implode( '/', $segments ) . $mcp_route;
+	}
+
+	return rtrim( $path, '/' ) === rtrim( $mcp_rest_path, '/' );
 }
 
 /**

@@ -132,8 +132,16 @@ function aafm_rankmath_read_fields( int $id ): array {
 		$val           = get_post_meta( $id, $key, true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
-	$robots        = get_post_meta( $id, 'rank_math_robots', true );
-	$out['robots'] = is_array( $robots ) ? implode( ',', array_map( 'strval', $robots ) ) : '';
+	$robots = get_post_meta( $id, 'rank_math_robots', true );
+	// Current Rank Math stores robots as an array of tokens; a legacy/imported row may hold a raw CSV
+	// string. Implode the array, pass a string through as-is, and floor anything else to ''.
+	if ( is_array( $robots ) ) {
+		$out['robots'] = implode( ',', array_map( 'strval', $robots ) );
+	} elseif ( is_string( $robots ) ) {
+		$out['robots'] = $robots;
+	} else {
+		$out['robots'] = '';
+	}
 	return $out;
 }
 

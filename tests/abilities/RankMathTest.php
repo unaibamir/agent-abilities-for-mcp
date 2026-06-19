@@ -299,6 +299,17 @@ final class RankMathTest extends TestCase {
 		$this->assertStringContainsString( 'Rank Math head', $res['head'] );
 	}
 
+	public function test_rankmath_get_post_reads_a_legacy_string_robots_value(): void {
+		// Defensive: a legacy/imported row may hold rank_math_robots as a raw CSV string rather than
+		// the current serialized array. The read must pass that string through, not floor it to ''.
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, 'rank_math_robots', 'noindex,nofollow' );
+
+		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertSame( 'noindex,nofollow', $res['robots'], 'A legacy string robots value must read back as that string.' );
+	}
+
 	public function test_rankmath_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_rankmath' );

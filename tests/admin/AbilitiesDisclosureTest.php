@@ -90,9 +90,22 @@ final class AbilitiesDisclosureTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
+		// The Content tab's badge counts what it actually renders: content-subject abilities minus
+		// any relocated into a site display tab by name (search-content shows under the Search tab,
+		// not Content). So the total is content-subject count less those relocated abilities.
+		$relocated = array();
+		$registry  = aafm_get_abilities_registry();
+		foreach ( aafm_site_subgroups() as $group ) {
+			foreach ( $group['abilities'] as $ability_name ) {
+				if ( isset( $registry[ $ability_name ] ) && 'content' === (string) ( $registry[ $ability_name ]['subject'] ?? '' ) ) {
+					$relocated[ $ability_name ] = true;
+				}
+			}
+		}
+
 		$content_total = 0;
-		foreach ( aafm_get_abilities_registry() as $meta ) {
-			if ( 'content' === ( $meta['subject'] ?? '' ) ) {
+		foreach ( $registry as $name => $meta ) {
+			if ( 'content' === ( $meta['subject'] ?? '' ) && ! isset( $relocated[ (string) $name ] ) ) {
 				++$content_total;
 			}
 		}

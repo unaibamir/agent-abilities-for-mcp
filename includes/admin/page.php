@@ -151,6 +151,61 @@ function aafm_sanitize_enabled_input( array $posted ): array {
 }
 
 /**
+ * Resolve the final enabled-abilities list for a scoped save.
+ *
+ * A scoped form (the Integrations tab) only renders toggles for the subjects it owns, so it must
+ * NOT replace the whole enabled option. Instead of trusting client-side hidden inputs to carry the
+ * off-tab abilities forward, this merges server-side: every persisted ability whose subject is
+ * OUTSIDE the posted scope is preserved verbatim, and only the in-scope abilities are taken from
+ * the POST. A tampered or missing hidden input for an off-tab ability therefore cannot flip it.
+ *
+ * When no scope is posted (the Abilities tab), the posted list replaces the option in full — the
+ * unchanged legacy behavior.
+ *
+ * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
+ * @return array<int,string> The enabled-abilities list to persist.
+ */
+function aafm_resolve_scoped_enabled_input( array $posted ): array {
+	$posted_enabled = aafm_sanitize_enabled_input( $posted );
+
+	// No scope marker: full replace (Abilities tab).
+	if ( ! isset( $posted['aafm_scope'] ) || ! is_array( $posted['aafm_scope'] ) ) {
+		return $posted_enabled;
+	}
+
+	$scope = array_map(
+		static fn( $s ): string => sanitize_key( (string) $s ),
+		$posted['aafm_scope']
+	);
+
+	$registry = aafm_get_abilities_registry();
+	$known    = array_keys( $registry );
+
+	// Persisted abilities OUTSIDE the posted scope are kept from the server, not the POST.
+	$preserved = array();
+	foreach ( aafm_get_enabled_abilities() as $name ) {
+		if ( ! in_array( $name, $known, true ) ) {
+			continue; // Drop stale/removed abilities.
+		}
+		$subject = (string) ( $registry[ $name ]['subject'] ?? '' );
+		if ( ! in_array( $subject, $scope, true ) ) {
+			$preserved[] = $name;
+		}
+	}
+
+	// In-scope abilities come from the POST (only those whose subject is in the scope).
+	$in_scope = array();
+	foreach ( $posted_enabled as $name ) {
+		$subject = (string) ( $registry[ $name ]['subject'] ?? '' );
+		if ( in_array( $subject, $scope, true ) ) {
+			$in_scope[] = $name;
+		}
+	}
+
+	return array_values( array_unique( array_merge( $preserved, $in_scope ) ) );
+}
+
+/**
  * AJAX: save the enabled-abilities toggles.
  *
  * @return void
@@ -160,7 +215,7 @@ function aafm_ajax_save_abilities(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$enabled = aafm_sanitize_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$enabled = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	update_option( 'aafm_enabled_abilities', $enabled );
 	wp_send_json_success( array( 'enabled' => $enabled ) );
 }

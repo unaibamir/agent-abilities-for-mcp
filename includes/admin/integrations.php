@@ -129,20 +129,17 @@ function aafm_render_integrations_tab(): void {
 	echo '<form id="aafm-integrations-form" class="aafm-integrations-cards">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
-	// This form saves through the same aafm_save_abilities action as the Abilities tab,
-	// which REPLACES the whole enabled list with the names it receives. The Integrations
-	// form only renders integration toggles, so carry every already-enabled ability that
-	// is NOT one of these three integrations as a hidden input — otherwise saving here
-	// would silently disable all the core abilities enabled on the Abilities tab.
+	// This form saves through the same aafm_save_abilities action as the Abilities tab, but it
+	// only renders integration toggles. Rather than carrying off-tab abilities forward as
+	// client-side hidden inputs (which a stale tab or a tamper could drop or flip), it declares
+	// the subjects it OWNS via aafm_scope[]. The server preserves every persisted ability outside
+	// that scope from the stored option and only updates the in-scope ones — see
+	// aafm_resolve_scoped_enabled_input().
 	$integration_subjects = array_keys( aafm_integration_cards() );
-	foreach ( $enabled as $enabled_name ) {
-		$subject = (string) ( $registry[ $enabled_name ]['subject'] ?? '' );
-		if ( in_array( $subject, $integration_subjects, true ) ) {
-			continue; // Rendered as a real toggle below.
-		}
+	foreach ( $integration_subjects as $scope_subject ) {
 		printf(
-			'<input type="hidden" name="aafm_abilities[]" value="%s">',
-			esc_attr( $enabled_name )
+			'<input type="hidden" name="aafm_scope[]" value="%s">',
+			esc_attr( $scope_subject )
 		);
 	}
 

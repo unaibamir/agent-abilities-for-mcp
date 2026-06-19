@@ -1004,15 +1004,18 @@ function aafm_render_meta_keys_selector(): void {
 	// Mirrors the post-types selector: a plain <div> (never a nested <form>) with a
 	// type="button" save, so the one outer abilities <form> is never closed early.
 	echo '<div id="aafm-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3>' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-meta-keys-label' ) . '">' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
 	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
 
 	printf(
-		'<textarea name="aafm_meta_keys" rows="6" class="large-text code">%s</textarea>',
+		'<textarea name="aafm_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-meta-keys' ),
+		esc_attr( 'aafm-meta-keys-label' ),
+		esc_attr( 'aafm-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $allowed ) )
 	);
-	echo '<p class="description">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'agent-abilities-for-mcp' ) . '</p>';
 	if ( empty( $detected ) ) {
@@ -1031,12 +1034,15 @@ function aafm_render_meta_keys_selector(): void {
 
 	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
 	// when it uses *. The chip source above writes only into the Exposed textarea.
-	echo '<h3>' . esc_html__( 'Denied meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-deny-meta-keys-label' ) . '">' . esc_html__( 'Denied meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	printf(
-		'<textarea name="aafm_deny_meta_keys" rows="4" class="large-text code">%s</textarea>',
+		'<textarea name="aafm_deny_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-deny-meta-keys' ),
+		esc_attr( 'aafm-deny-meta-keys-label' ),
+		esc_attr( 'aafm-deny-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $denied ) )
 	);
-	echo '<p class="description">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-deny-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p><button type="button" id="aafm-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';
@@ -1057,22 +1063,28 @@ function aafm_render_user_meta_keys_selector(): void {
 	$denied  = aafm_denied_user_meta_keys();
 
 	echo '<div id="aafm-user-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3>' . esc_html__( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-exposed-user-meta-keys-label' ) . '">' . esc_html__( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	echo '<p class="description">' . esc_html__( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
 	aafm_render_notice( 'warning', __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
 
 	printf(
-		'<textarea name="aafm_exposed_user_meta_keys" rows="6" class="large-text code">%s</textarea>',
+		'<textarea name="aafm_exposed_user_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-exposed-user-meta-keys' ),
+		esc_attr( 'aafm-exposed-user-meta-keys-label' ),
+		esc_attr( 'aafm-exposed-user-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $exposed ) )
 	);
-	echo '<p class="description">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-user-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	echo '<h3>' . esc_html__( 'Denied user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-denied-user-meta-keys-label' ) . '">' . esc_html__( 'Denied user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
 	printf(
-		'<textarea name="aafm_denied_user_meta_keys" rows="4" class="large-text code">%s</textarea>',
+		'<textarea name="aafm_denied_user_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
+		esc_attr( 'aafm-denied-user-meta-keys' ),
+		esc_attr( 'aafm-denied-user-meta-keys-label' ),
+		esc_attr( 'aafm-denied-user-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $denied ) )
 	);
-	echo '<p class="description">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-denied-user-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<p><button type="button" id="aafm-user-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save user meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';

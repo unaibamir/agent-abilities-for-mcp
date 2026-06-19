@@ -190,6 +190,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/integrations.php';
 	if ( is_admin() ) {
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
+		add_filter( 'submenu_file', 'aafm_highlight_tab_submenu' );
 		add_action( 'admin_enqueue_scripts', 'aafm_enqueue_admin_assets' );
 		add_action( 'wp_ajax_aafm_save_abilities', 'aafm_ajax_save_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );

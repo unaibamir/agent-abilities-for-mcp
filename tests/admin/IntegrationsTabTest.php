@@ -121,10 +121,10 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	public function test_status_helper_reports_installed_inactive_when_file_present_but_class_absent(): void {
-		// The DDEV/test WP install carries the advanced-custom-fields plugin FILE (a
-		// reference dependency) but does not load it, so the ACF class is absent and the
-		// integration is not active. The file-present probe yields installed_inactive,
-		// which is exactly the middle state the tab must surface.
+		// installed_inactive is the middle state: a candidate host plugin FILE is present under
+		// WP_PLUGIN_DIR but the plugin is not active (its class/function is absent). Rather than
+		// lean on whatever happens to live in the test WP install, create the ACF host file as a
+		// throwaway fixture so this passes in a clean WordPress and cleans up after itself.
 		//
 		// The AcfTest fixture defines a get_field stub process-wide (a defined function cannot be
 		// undefined), so once that suite has run, real ACF detection reports active and the status
@@ -132,8 +132,33 @@ final class IntegrationsTabTest extends TestCase {
 		// detection passes through — so the status falls through to the file-present probe, keeping
 		// this status deterministic regardless of test order.
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
-		$this->assertSame( 'installed_inactive', aafm_integration_status( 'acf' ) );
-		remove_filter( 'aafm_acf_active', '__return_false', 99 );
+
+		// The first candidate host file for the ACF card, e.g. advanced-custom-fields/acf.php.
+		$plugin_file = aafm_integration_cards()['acf']['plugins'][0];
+		$fixture     = WP_PLUGIN_DIR . '/' . $plugin_file;
+		$dir         = dirname( $fixture );
+		$created_dir = ! is_dir( $dir );
+		if ( $created_dir ) {
+			wp_mkdir_p( $dir );
+		}
+		$pre_existing = file_exists( $fixture );
+		if ( ! $pre_existing ) {
+			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents -- writing a throwaway local fixture under WP_PLUGIN_DIR, not a remote resource; WP_Filesystem is unavailable in the test harness.
+			file_put_contents( $fixture, "<?php\n/* Plugin Name: ACF test fixture */\n" );
+		}
+
+		try {
+			$this->assertSame( 'installed_inactive', aafm_integration_status( 'acf' ) );
+		} finally {
+			// Remove only what this test created — never delete a file the install already shipped.
+			if ( ! $pre_existing && file_exists( $fixture ) ) {
+				wp_delete_file( $fixture );
+			}
+			if ( $created_dir && is_dir( $dir ) ) {
+				rmdir( $dir ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_rmdir -- removing the throwaway fixture directory this test created; WP_Filesystem is unavailable in the test harness.
+			}
+			remove_filter( 'aafm_acf_active', '__return_false', 99 );
+		}
 	}
 
 	public function test_status_helper_reports_active_when_forced_on(): void {

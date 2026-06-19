@@ -64,9 +64,13 @@ final class CatalogTest extends TestCase {
 		'aafm/list-templates',
 		'aafm/get-template',
 		'aafm/get-global-styles',
-		'aafm/seo-get-post',
-		'aafm/seo-get-schema',
-		'aafm/seo-get-head',
+		'aafm/yoast-get-post',
+		'aafm/yoast-get-head',
+		'aafm/rankmath-get-post',
+		'aafm/rankmath-get-schema',
+		'aafm/rankmath-get-head',
+		'aafm/aioseo-get-post',
+		'aafm/aioseo-get-head',
 		'aafm/acf-list-field-groups',
 		'aafm/acf-get-post-fields',
 		'aafm/acf-get-term-fields',
@@ -156,8 +160,10 @@ final class CatalogTest extends TestCase {
 		'aafm/update-menu-item',
 		'aafm/delete-menu-item',
 		'aafm/update-template',
-		'aafm/seo-update-post',
-		'aafm/seo-update-schema',
+		'aafm/yoast-update-post',
+		'aafm/rankmath-update-post',
+		'aafm/rankmath-update-schema',
+		'aafm/aioseo-update-post',
 		'aafm/acf-update-post-fields',
 		'aafm/acf-update-term-fields',
 		'aafm/acf-update-user-fields',
@@ -273,13 +279,10 @@ final class CatalogTest extends TestCase {
 		// all three active so later slices' integration abilities are counted here. The
 		// registry is memoized (includes/registry.php static $cache), so the flush is
 		// MANDATORY — a force filter added without it is a no-op against the cached
-		// host-inactive registry. With the WooCommerce reports/gateways slice (WC7) landed, the count is 162.
+		// host-inactive registry. With the per-plugin SEO sets (Wave 5 Slice B) landed, the count is 168.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it to
-		// rankmath so all five unified seo-* abilities (including the schema pair) register here.
-		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );
@@ -327,9 +330,9 @@ final class CatalogTest extends TestCase {
 	public function test_registry_has_the_exact_expected_count(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
-			162,
+			168,
 			$registry,
-			'The catalog must contain exactly 162 abilities — 77 reads + 85 writes.'
+			'The catalog must contain exactly 168 abilities — 81 reads + 87 writes.'
 		);
 	}
 
@@ -344,8 +347,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 77 reads — no drift.' );
-		$this->assertCount( 77, $reads, 'Exactly 77 read abilities.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 81 reads — no drift.' );
+		$this->assertCount( 81, $reads, 'Exactly 81 read abilities.' );
 	}
 
 	public function test_writes_are_exactly_the_expected_writes(): void {
@@ -359,8 +362,8 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 85 writes — no drift.' );
-		$this->assertCount( 85, $writes, 'Exactly 85 write abilities.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 87 writes — no drift.' );
+		$this->assertCount( 87, $writes, 'Exactly 87 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
@@ -369,7 +372,7 @@ final class CatalogTest extends TestCase {
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
-			$this->assertContains( $name, $known, $name . ' is not one of the 162 sanctioned abilities.' );
+			$this->assertContains( $name, $known, $name . ' is not one of the 168 sanctioned abilities.' );
 		}
 
 		// And every group is one of exactly two values.
@@ -383,9 +386,9 @@ final class CatalogTest extends TestCase {
 
 		// reads + writes accounts for the whole catalog.
 		$this->assertSame(
-			162,
+			168,
 			count( self::READS ) + count( self::WRITES ),
-			'reads(77) + writes(85) must equal the full catalog (162).'
+			'reads(81) + writes(87) must equal the full catalog (168).'
 		);
 	}
 

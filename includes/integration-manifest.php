@@ -47,13 +47,25 @@ function aafm_integration_manifest(): array {
 			'write'       => 3,
 			'destructive' => 0,
 		),
-		// SEO (the unified set, Wave 4): 5 abilities (3 read, 2 write, 0 destructive). Slice B
-		// replaces this single 'seo' slug with per-plugin yoast/rankmath/aioseo entries; the
-		// shape stays the same so the cards and the drift test keep working after that swap.
-		'seo'         => array(
+		// Yoast SEO: 3 abilities (2 read, 1 write, 0 destructive).
+		'yoast'       => array(
+			'total'       => 3,
+			'read'        => 2,
+			'write'       => 1,
+			'destructive' => 0,
+		),
+		// Rank Math: 5 abilities (3 read, 2 write, 0 destructive).
+		'rankmath'    => array(
 			'total'       => 5,
 			'read'        => 3,
 			'write'       => 2,
+			'destructive' => 0,
+		),
+		// All in One SEO: 3 abilities (2 read, 1 write, 0 destructive).
+		'aioseo'      => array(
+			'total'       => 3,
+			'read'        => 2,
+			'write'       => 1,
 			'destructive' => 0,
 		),
 	);

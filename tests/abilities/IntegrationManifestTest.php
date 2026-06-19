@@ -55,9 +55,6 @@ final class IntegrationManifestTest extends TestCase {
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
-		// the unified seo-* abilities register and the manifest's 'seo' total reconciles to the lock.
-		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );
@@ -84,7 +81,7 @@ final class IntegrationManifestTest extends TestCase {
 			$core + $manifest_total,
 			'Manifest integration totals plus the core count must equal the live catalog total — drift detected.'
 		);
-		$this->assertSame( 162, $core + $manifest_total );
+		$this->assertSame( 168, $core + $manifest_total );
 
 		aafm_registry_cache_should_flush( true );
 	}
@@ -93,6 +90,6 @@ final class IntegrationManifestTest extends TestCase {
 		// The Dashboard and Abilities "available/total" both read this one function, so they
 		// can never disagree. It equals core + every integration manifest total.
 		$available = aafm_available_ability_count();
-		$this->assertSame( 162, $available );
+		$this->assertSame( 168, $available );
 	}
 }

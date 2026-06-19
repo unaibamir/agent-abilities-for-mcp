@@ -63,9 +63,13 @@ final class ReadsCatalogTest extends TestCase {
 		'aafm/list-templates',
 		'aafm/get-template',
 		'aafm/get-global-styles',
-		'aafm/seo-get-post',
-		'aafm/seo-get-schema',
-		'aafm/seo-get-head',
+		'aafm/yoast-get-post',
+		'aafm/yoast-get-head',
+		'aafm/rankmath-get-post',
+		'aafm/rankmath-get-schema',
+		'aafm/rankmath-get-head',
+		'aafm/aioseo-get-post',
+		'aafm/aioseo-get-head',
 		'aafm/acf-list-field-groups',
 		'aafm/acf-get-post-fields',
 		'aafm/acf-get-term-fields',
@@ -117,9 +121,6 @@ final class ReadsCatalogTest extends TestCase {
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
-		// the unified seo-* reads register here until they are replaced by the per-plugin sets.
-		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );
@@ -170,9 +171,9 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 77 reads — no more, no fewer.'
+			'The read group must be exactly the 81 reads — no more, no fewer.'
 		);
-		$this->assertCount( 77, $reads, 'The read catalog ships exactly 77 read abilities.' );
+		$this->assertCount( 81, $reads, 'The read catalog ships exactly 81 read abilities.' );
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {

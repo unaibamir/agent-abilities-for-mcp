@@ -128,6 +128,9 @@ function aafm_aioseo_robots_fields(): array {
  * @return bool
  */
 function aafm_aioseo_model_available(): bool {
+	// The PHPStan stub guarantees these methods, but the real AIOSEO model documents its props and
+	// methods as "subject to change," so the runtime guard is intentional defensive code.
+	// @phpstan-ignore-next-line function.alreadyNarrowedType (the stub narrows, the real model may not).
 	return class_exists( AAFM_AIOSEO_MODEL ) && method_exists( AAFM_AIOSEO_MODEL, 'save' ) && method_exists( AAFM_AIOSEO_MODEL, 'getPost' );
 }
 

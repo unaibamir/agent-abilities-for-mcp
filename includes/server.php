@@ -144,16 +144,20 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// gate on the object-independent edit_posts floor directly, so they need no case here
 		// (they fall through to aafm_perm_blocks_floor, the correct answer).
 		//
-		// SEO integration: seo-get-post / seo-update-post / seo-get-schema / seo-update-schema
-		// gate per-object on edit_post($id) (SEO meta is post content), false with empty input —
-		// so discovery uses the object-independent edit_posts floor, refined per-object at
-		// execute. seo-get-head's own permission_callback is already the object-independent
-		// edit_posts floor, so it needs no case here: it falls through to that callback with empty
-		// input (the per-object edit_post refinement runs inside its execute).
-		case 'aafm/seo-get-post':
-		case 'aafm/seo-update-post':
-		case 'aafm/seo-get-schema':
-		case 'aafm/seo-update-schema':
+		// Per-plugin SEO integrations (Yoast / Rank Math / AIOSEO): every *-get-post / *-update-post
+		// / *-get-schema / *-update-schema gates per-object on edit_post($id) (SEO data is post
+		// content), false with empty input — so discovery uses the object-independent edit_posts
+		// floor, refined per-object at execute. The *-get-head abilities have their own
+		// edit_posts-floor permission_callback, so they need no case here: each falls through to that
+		// callback with empty input (the per-object edit_post refinement runs inside its execute).
+		case 'aafm/yoast-get-post':
+		case 'aafm/yoast-update-post':
+		case 'aafm/rankmath-get-post':
+		case 'aafm/rankmath-update-post':
+		case 'aafm/rankmath-get-schema':
+		case 'aafm/rankmath-update-schema':
+		case 'aafm/aioseo-get-post':
+		case 'aafm/aioseo-update-post':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// ACF integration: the post/term field abilities gate per-object on edit_post($id) /

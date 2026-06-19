@@ -1,6 +1,6 @@
 <?php
 /**
- * Integrations tab: SEO / ACF / WooCommerce cards with a detected status, the security
+ * Integrations tab: per-plugin SEO (Yoast / Rank Math / All in One SEO) / ACF / WooCommerce cards with a detected status, the security
  * disclaimer, and the per-ability toggles that register only when a host plugin is active.
  *
  * Reuses the shared admin design system (aafm-card / aafm-btn / inline-SVG aafm-icon) and
@@ -18,18 +18,28 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The integrations shown on the tab: slug => display label and the inline-SVG icon key.
  *
- * The SEO card auto-detects which of Yoast / Rank Math / AIOSEO is active (one unified
- * ability set), so there is a single SEO card rather than three.
+ * Each SEO plugin is its own card with its own ability set, since the per-plugin sets are
+ * independent (a site can run more than one). The plugins list backs the installed-but-inactive
+ * probe for that specific plugin.
  *
  * @return array<string,array{label:string,icon:string,plugins:array<int,string>}>
  */
 function aafm_integration_cards(): array {
 	return array(
-		'seo'         => array(
-			'label'   => __( 'SEO', 'agent-abilities-for-mcp' ),
+		'yoast'       => array(
+			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 			'icon'    => 'abilities',
-			// Candidate host plugin files for the installed-but-inactive check.
-			'plugins' => array( 'wordpress-seo/wp-seo.php', 'seo-by-rank-math/rank-math.php', 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
+			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
+		),
+		'rankmath'    => array(
+			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
+			'icon'    => 'abilities',
+			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
+		),
+		'aioseo'      => array(
+			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+			'icon'    => 'abilities',
+			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
 		'acf'         => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
@@ -289,44 +299,12 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
 	);
 
-	// SEO gets three named sub-sections; every other integration renders a flat list.
-	if ( 'seo' === $slug ) {
-		$seo_sections = array(
-			__( 'Post metadata', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-post', 'aafm/seo-update-post' ),
-			__( 'Structured data', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-schema', 'aafm/seo-update-schema' ),
-			__( 'Head markup', 'agent-abilities-for-mcp' ) => array( 'aafm/seo-get-head' ),
-		);
-
-		$first = true;
-		foreach ( $seo_sections as $section_label => $section_names ) {
-			$section_rows = array_filter(
-				$rows,
-				static fn( array $r ) => in_array( (string) $r['name'], $section_names, true )
-			);
-			if ( empty( $section_rows ) ) {
-				continue;
-			}
-
-			printf(
-				'<h4 class="aafm-subsection-head%1$s">%2$s</h4>',
-				$first ? '' : ' aafm-subsection-head--sep',
-				esc_html( $section_label )
-			);
-			$first = false;
-
-			echo '<div class="aafm-card aafm-ability-list">';
-			foreach ( $section_rows as $ability ) {
-				aafm_render_integration_ability_row( $ability, $enabled, $disclosures );
-			}
-			echo '</div>';
-		}
-	} else {
-		echo '<div class="aafm-card aafm-ability-list">';
-		foreach ( $rows as $ability ) {
-			aafm_render_integration_ability_row( $ability, $enabled, $disclosures );
-		}
-		echo '</div>';
+	// Each per-plugin card renders a flat ability list.
+	echo '<div class="aafm-card aafm-ability-list">';
+	foreach ( $rows as $ability ) {
+		aafm_render_integration_ability_row( $ability, $enabled, $disclosures );
 	}
+	echo '</div>';
 
 	echo '</details>';
 }

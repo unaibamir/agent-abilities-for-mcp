@@ -62,9 +62,6 @@ final class SecurityRegressionTest extends TestCase {
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		// The unified seo.php still gates on aafm_seo_active_plugin() until it is removed; pin it so
-		// the unified seo-* names are scanned here until the per-plugin sets replace them.
-		add_filter( 'aafm_seo_active_plugin', static fn() => 'rankmath' );
 		add_filter( 'aafm_integration_active_acf', '__return_true' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		aafm_registry_cache_should_flush( true );

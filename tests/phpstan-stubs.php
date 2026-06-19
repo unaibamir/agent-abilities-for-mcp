@@ -906,4 +906,49 @@ if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
 		public function payment_gateways() { return array(); }
 	}
 }
+if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
+	/**
+	 * PHPStan stub for the AIOSEO Post model (Wave 5 Slice B). Never loaded in production; the real
+	 * plugin (or the test stub) supplies it at runtime. Mirrors the static getPost() factory, the
+	 * save() persister, and the public props the aioseo ability touches.
+	 */
+	class Aafm_Phpstan_Aioseo_Post_Model {
+		/** @var int */
+		public $post_id = 0;
+		/** @var string */
+		public $title = '';
+		/** @var string */
+		public $description = '';
+		/** @var string */
+		public $canonical_url = '';
+		/** @var string */
+		public $og_title = '';
+		/** @var string */
+		public $og_description = '';
+		/** @var string */
+		public $og_image_custom_url = '';
+		/** @var string */
+		public $twitter_title = '';
+		/** @var string */
+		public $twitter_description = '';
+		/** @var string */
+		public $twitter_image_custom_url = '';
+		/** @var bool */
+		public $robots_noindex = false;
+		/** @var bool */
+		public $robots_nofollow = false;
+		/**
+		 * @param int $post_id
+		 * @return self
+		 */
+		public static function getPost( $post_id ) {
+			return new self();
+		}
+		/** @return bool */
+		public function save() {
+			return true;
+		}
+	}
+	class_alias( 'Aafm_Phpstan_Aioseo_Post_Model', 'AIOSEO\\Plugin\\Common\\Models\\Post' );
+}
 // phpcs:enable

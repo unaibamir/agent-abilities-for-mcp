@@ -175,35 +175,6 @@ function aafm_sanitize_schema_array( array $schema ): array {
 }
 
 /**
- * Which SEO plugin is active, '' if none. Sub-detection per the spec table.
- *
- * @deprecated Wave 5: superseded by the per-plugin predicates (aafm_yoast_active /
- * aafm_rankmath_active / aafm_aioseo_active). Retained only until the unified seo.php is removed.
- *
- * @return string '' | 'rankmath' | 'yoast' | 'aioseo'.
- */
-function aafm_seo_active_plugin(): string {
-	if ( class_exists( 'RankMath' ) ) {
-		$plugin = 'rankmath';
-	} elseif ( defined( 'WPSEO_VERSION' ) ) {
-		$plugin = 'yoast';
-	} elseif ( function_exists( 'aioseo' ) ) {
-		$plugin = 'aioseo';
-	} else {
-		$plugin = '';
-	}
-
-	/**
-	 * Filters which SEO plugin is reported active. Production passes the real detection through;
-	 * the test suite uses this to pin the active plugin deterministically (the marker stubs it
-	 * defines are process-permanent, so detection order alone is not enough to switch back).
-	 *
-	 * @param string $plugin Detected plugin slug ('' | 'rankmath' | 'yoast' | 'aioseo').
-	 */
-	return (string) apply_filters( 'aafm_seo_active_plugin', $plugin );
-}
-
-/**
  * Whether ACF (or its fork SCF) is active, behind a filterable seam.
  *
  * Real detection is class_exists('ACF') || function_exists('get_field'). This is wrapped in its
@@ -256,60 +227,4 @@ function aafm_woocommerce_active(): bool {
 	 * @param bool $active Detected active state.
 	 */
 	return (bool) apply_filters( 'aafm_woocommerce_active', $active );
-}
-
-/**
- * Map the unified SEO field names to the active plugin's post-meta keys.
- *
- * The returned array maps unified field => meta key for the active plugin. The
- * aafm_seo_meta_keys filter lets tests inject a map for a stubbed plugin (and lets a site
- * override a key). Only the keys present for the active plugin are returned; an unknown
- * plugin yields an empty map.
- *
- * @param string $plugin Active plugin slug from aafm_seo_active_plugin().
- * @return array<string,string> Unified field => meta key.
- */
-function aafm_seo_meta_keys( string $plugin ): array {
-	$maps = array(
-		'yoast'    => array(
-			'title'               => '_yoast_wpseo_title',
-			'description'         => '_yoast_wpseo_metadesc',
-			'focus_keyword'       => '_yoast_wpseo_focuskw',
-			'canonical'           => '_yoast_wpseo_canonical',
-			'robots'              => '_yoast_wpseo_meta-robots-adv',
-			'og_title'            => '_yoast_wpseo_opengraph-title',
-			'og_description'      => '_yoast_wpseo_opengraph-description',
-			'og_image'            => '_yoast_wpseo_opengraph-image',
-			'twitter_title'       => '_yoast_wpseo_twitter-title',
-			'twitter_description' => '_yoast_wpseo_twitter-description',
-			'twitter_image'       => '_yoast_wpseo_twitter-image',
-		),
-		'rankmath' => array(
-			'title'               => 'rank_math_title',
-			'description'         => 'rank_math_description',
-			'focus_keyword'       => 'rank_math_focus_keyword',
-			'canonical'           => 'rank_math_canonical_url',
-			'robots'              => 'rank_math_robots',
-			'og_title'            => 'rank_math_facebook_title',
-			'og_description'      => 'rank_math_facebook_description',
-			'og_image'            => 'rank_math_facebook_image',
-			'twitter_title'       => 'rank_math_twitter_title',
-			'twitter_description' => 'rank_math_twitter_description',
-			'twitter_image'       => 'rank_math_twitter_image',
-		),
-		'aioseo'   => array(
-			'title'       => '_aioseo_title',
-			'description' => '_aioseo_description',
-		),
-	);
-
-	$map = $maps[ $plugin ] ?? array();
-
-	/**
-	 * Filters the unified-field → meta-key map for the active SEO plugin.
-	 *
-	 * @param array<string,string> $map    Field => meta key.
-	 * @param string               $plugin Active plugin slug.
-	 */
-	return (array) apply_filters( 'aafm_seo_meta_keys', $map, $plugin );
 }

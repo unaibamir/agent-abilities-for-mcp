@@ -51,6 +51,61 @@ final class ConnectionTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $again );
 	}
 
+	/**
+	 * T3-1: the agent-user AJAX handler must gate on manage_options, not create_users. A
+	 * non-admin custom role holding only create_users (plus the nonce) must be denied.
+	 */
+	public function test_create_agent_user_ajax_requires_manage_options(): void {
+		add_role(
+			'aafm_creator_test',
+			'AAFM Creator Test',
+			array(
+				'read'         => true,
+				'create_users' => true,
+			)
+		);
+		$creator = $this->factory->user->create( array( 'role' => 'aafm_creator_test' ) );
+		wp_set_current_user( $creator );
+
+		$this->assertTrue( current_user_can( 'create_users' ), 'Fixture: the role must hold create_users.' );
+		$this->assertFalse( current_user_can( 'manage_options' ), 'Fixture: the role must NOT hold manage_options.' );
+
+		// Route wp_send_json through wp_die (not a bare die) and make that throw, so the JSON 403
+		// short-circuit is observable in-process instead of exiting. Swallow the echoed body.
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce; // check_ajax_referer() reads $_REQUEST.
+		$_POST['login']    = 'should-not-be-created';
+
+		$before = (int) count_users()['total_users'];
+		$thrown = false;
+		ob_start();
+		try {
+			aafm_ajax_create_agent_user();
+		} catch ( \WPDieException $e ) {
+			$thrown = true;
+		} finally {
+			ob_end_clean();
+		}
+		$after = (int) count_users()['total_users'];
+
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_POST['login'], $_REQUEST['nonce'] );
+		remove_role( 'aafm_creator_test' );
+
+		$this->assertTrue( $thrown, 'A create_users-only user must be denied (the handler must die).' );
+		$this->assertSame( $before, $after, 'No agent user may be created for a non-manage_options user.' );
+	}
+
 	public function test_client_snippet_points_at_endpoint_and_username(): void {
 		$snippet = aafm_client_snippet( 'claude', 'mcp-agent' );
 		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );

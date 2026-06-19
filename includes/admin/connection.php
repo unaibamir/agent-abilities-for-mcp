@@ -257,7 +257,7 @@ function aafm_quickstart_note( string $client ): string {
  */
 function aafm_ajax_create_agent_user(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'create_users' ) ) {
+	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to create users.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$login  = isset( $_POST['login'] ) ? sanitize_user( wp_unslash( (string) $_POST['login'] ), true ) : '';

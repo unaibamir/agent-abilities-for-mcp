@@ -401,6 +401,82 @@ function aafm_abilities_subjects(): array {
 }
 
 /**
+ * Presentation-only sub-grouping for the single 'site' subject panel.
+ *
+ * The catalog keeps one 'site' subject (re-subjecting ~28 entries across six files would churn
+ * a load-bearing contract the registry, MCP buckets, and tests all assert on). This map is
+ * consulted ONLY when rendering the site panel, to split it into readable sub-groups. It never
+ * changes any ability's registry subject. Search is mapped here by NAME even though its registry
+ * subject is 'content', so the operator finds it where they expect it. Any site-subject ability
+ * not listed here falls into a rendered "Other" group, so a future addition is never silently
+ * dropped (the AbilitiesSaveTest guard enforces that).
+ *
+ * @return array<string,array{label:string,abilities:list<string>}> Group slug => label + ability names.
+ */
+function aafm_site_subgroups(): array {
+	return array(
+		'site_settings' => array(
+			'label'     => __( 'Site settings', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/get-site-settings',
+				'aafm/update-site-settings',
+				'aafm/get-post-types',
+				'aafm/get-taxonomies',
+				'aafm/get-site-info',
+				'aafm/get-activity-log',
+			),
+		),
+		'plugins'       => array(
+			'label'     => __( 'Plugins', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-plugins',
+			),
+		),
+		'themes'        => array(
+			'label'     => __( 'Themes & styles', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/get-active-theme',
+				'aafm/list-themes',
+				'aafm/list-templates',
+				'aafm/get-template',
+				'aafm/update-template',
+				'aafm/get-global-styles',
+			),
+		),
+		'blocks'        => array(
+			'label'     => __( 'Blocks', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-blocks',
+				'aafm/get-block',
+				'aafm/create-block',
+				'aafm/update-block',
+				'aafm/delete-block',
+			),
+		),
+		'menus'         => array(
+			'label'     => __( 'Menus', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/list-menus',
+				'aafm/get-menu',
+				'aafm/list-menu-items',
+				'aafm/create-menu',
+				'aafm/update-menu',
+				'aafm/delete-menu',
+				'aafm/create-menu-item',
+				'aafm/update-menu-item',
+				'aafm/delete-menu-item',
+			),
+		),
+		'search'        => array(
+			'label'     => __( 'Search', 'agent-abilities-for-mcp' ),
+			'abilities' => array(
+				'aafm/search-content',
+			),
+		),
+	);
+}
+
+/**
  * Render the Abilities tab: subject sub-tabs, each split Reads then Writes, all OFF by default.
  *
  * This is presentation only. Every checkbox across every sub-tab lives inside the one
@@ -491,6 +567,18 @@ function aafm_render_abilities_tab(): void {
 
 	$disclosures = aafm_ability_disclosures();
 
+	// Abilities the Site panel adopts from another subject by name (presentation-only relocation,
+	// e.g. search-content, whose registry subject stays 'content'). They render only in the Site
+	// panel's sub-group, so the flat view of their real subject skips them to avoid duplicating.
+	$relocated_to_site = array();
+	foreach ( aafm_site_subgroups() as $group ) {
+		foreach ( $group['abilities'] as $ability_name ) {
+			if ( isset( $registry[ $ability_name ] ) && 'site' !== (string) ( $registry[ $ability_name ]['subject'] ?? '' ) ) {
+				$relocated_to_site[ $ability_name ] = true;
+			}
+		}
+	}
+
 	foreach ( $subjects as $slug => $label ) {
 		$is_active = ( $slug === $first );
 		printf(
@@ -535,71 +623,50 @@ function aafm_render_abilities_tab(): void {
 			aafm_render_post_types_selector();
 		}
 
-		foreach ( $groups as $group => $heading ) {
-			$rows = array();
-			foreach ( $by_subject[ $slug ] as $ability ) {
-				if ( ( $ability['group'] ?? '' ) === $group ) {
-					$rows[] = $ability;
+		if ( 'site' === $slug ) {
+			// The single 'site' subject is split into named sub-groups for readability — purely a
+			// rendering grouping (see aafm_site_subgroups()), never a re-subjecting of the catalog.
+			aafm_render_site_subgroups( $by_subject[ $slug ], $registry, $enabled, $disclosures );
+		} else {
+			foreach ( $groups as $group => $heading ) {
+				$rows = array();
+				foreach ( $by_subject[ $slug ] as $ability ) {
+					// Abilities relocated into the Site panel by name (e.g. search-content, whose
+					// registry subject is 'content') are rendered only there, never duplicated here.
+					if ( isset( $relocated_to_site[ (string) $ability['name'] ] ) ) {
+						continue;
+					}
+					if ( ( $ability['group'] ?? '' ) === $group ) {
+						$rows[] = $ability;
+					}
 				}
-			}
-			if ( empty( $rows ) ) {
-				continue;
-			}
-
-			// Per-group enabled count for the group head.
-			$group_enabled = 0;
-			foreach ( $rows as $ability ) {
-				if ( in_array( (string) $ability['name'], $enabled, true ) ) {
-					++$group_enabled;
-				}
-			}
-
-			// Group head: the Reads/Writes heading plus an enabled-over-total count. The bare
-			// >Reads< / >Writes< text the panel-structure test keys off lives in this <h3>.
-			printf(
-				'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
-				esc_html( $heading ),
-				esc_html( (string) $group_enabled ),
-				esc_html( (string) count( $rows ) )
-			);
-
-			echo '<div class="aafm-card aafm-ability-list">';
-			foreach ( $rows as $ability ) {
-				$name = (string) $ability['name'];
-				$risk = (string) ( $ability['risk'] ?? 'read' );
-				$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
-
-				// Toggle switch wraps the checkbox. The <input> keeps its exact name/value/checked()
-				// contract — the save handler and its tests bind to that, not to this markup.
-				echo '<div class="aafm-ability-row">';
-				printf(
-					'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
-					esc_attr( $name ),
-					checked( in_array( $name, $enabled, true ), true, false )
-				);
-
-				echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
-				printf(
-					'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
-					esc_html( (string) ( $ability['label'] ?? $name ) ),
-					esc_attr( $risk )
-				);
-
-				// Read-only badge only on read-risk rows; never on write/destructive. The read-only
-				// state is derived from risk === 'read' because the registry entries this UI walks do
-				// not carry an annotations.readonly field — that flag lives only in each ability's MCP
-				// arg-builder definition, not in the catalog. So at render time, risk === 'read' is the
-				// authoritative read-only signal.
-				if ( 'read' === $risk ) {
-					echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+				if ( empty( $rows ) ) {
+					continue;
 				}
 
+				// Per-group enabled count for the group head.
+				$group_enabled = 0;
+				foreach ( $rows as $ability ) {
+					if ( in_array( (string) $ability['name'], $enabled, true ) ) {
+						++$group_enabled;
+					}
+				}
+
+				// Group head: the Reads/Writes heading plus an enabled-over-total count. The bare
+				// >Reads< / >Writes< text the panel-structure test keys off lives in this <h3>.
 				printf(
-					'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
-					esc_html( $hint )
+					'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
+					esc_html( $heading ),
+					esc_html( (string) $group_enabled ),
+					esc_html( (string) count( $rows ) )
 				);
+
+				echo '<div class="aafm-card aafm-ability-list">';
+				foreach ( $rows as $ability ) {
+					aafm_render_ability_row( $ability, $enabled, $disclosures );
+				}
+				echo '</div>';
 			}
-			echo '</div>';
 		}
 
 		// Rendered after the ability tables as a layout choice — the meta selector belongs below
@@ -617,6 +684,126 @@ function aafm_render_abilities_tab(): void {
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
 	// feature — it would filter $enabled per principal here rather than at render time.
+}
+
+/**
+ * Render one ability checkbox row.
+ *
+ * Shared by the flat Reads/Writes view and the site sub-group view so both produce identical
+ * markup. The <input> keeps its exact name/value/checked() contract — the save handler and its
+ * tests bind to that, not to this markup.
+ *
+ * @param array<string,mixed>  $ability     The registry entry, with its 'name' key set.
+ * @param array<int,string>    $enabled     The enabled ability names.
+ * @param array<string,string> $disclosures Disclosure text keyed by ability name.
+ * @return void
+ */
+function aafm_render_ability_row( array $ability, array $enabled, array $disclosures ): void {
+	$name = (string) ( $ability['name'] ?? '' );
+	$risk = (string) ( $ability['risk'] ?? 'read' );
+	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
+
+	echo '<div class="aafm-ability-row">';
+	printf(
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
+		esc_attr( $name ),
+		checked( in_array( $name, $enabled, true ), true, false )
+	);
+
+	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
+	printf(
+		'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
+		esc_html( (string) ( $ability['label'] ?? $name ) ),
+		esc_attr( $risk )
+	);
+
+	// Read-only badge only on read-risk rows; never on write/destructive. risk === 'read' is the
+	// authoritative read-only signal at render time (the catalog carries no annotations.readonly).
+	if ( 'read' === $risk ) {
+		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
+	printf(
+		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
+		esc_html( $hint )
+	);
+}
+
+/**
+ * Render the site panel split into named sub-groups (presentation only).
+ *
+ * Walks aafm_site_subgroups() and renders each group as an .aafm-subsection-head heading plus its
+ * ability rows, pulling each ability's meta from the full registry by name (so Search, whose
+ * registry subject is 'content', still appears under the Site panel's Search group). Any
+ * site-subject ability not claimed by a group lands in a trailing "Other" group, so a future
+ * addition is never silently dropped.
+ *
+ * @param array<int,array<string,mixed>>    $site_rows   The site-subject ability entries (with 'name').
+ * @param array<string,array<string,mixed>> $registry  The full registry, for cross-subject lookups (Search).
+ * @param array<int,string>                 $enabled     The enabled ability names.
+ * @param array<string,string>              $disclosures Disclosure text keyed by ability name.
+ * @return void
+ */
+function aafm_render_site_subgroups( array $site_rows, array $registry, array $enabled, array $disclosures ): void {
+	$groups = aafm_site_subgroups();
+
+	// Track which site-subject abilities a group has claimed, so the rest fall into "Other".
+	$claimed = array();
+	foreach ( $groups as $group ) {
+		foreach ( $group['abilities'] as $ability_name ) {
+			$claimed[ $ability_name ] = true;
+		}
+	}
+
+	foreach ( $groups as $group ) {
+		$rows = array();
+		foreach ( $group['abilities'] as $ability_name ) {
+			if ( ! isset( $registry[ $ability_name ] ) ) {
+				continue;
+			}
+			$rows[] = array( 'name' => $ability_name ) + $registry[ $ability_name ];
+		}
+		if ( empty( $rows ) ) {
+			continue;
+		}
+
+		$enabled_count = 0;
+		foreach ( $rows as $row ) {
+			if ( in_array( (string) $row['name'], $enabled, true ) ) {
+				++$enabled_count;
+			}
+		}
+
+		printf(
+			'<h4 class="aafm-subsection-head aafm-subsection-head--sep">%1$s <span class="aafm-count-badge">%2$s / %3$s</span></h4>',
+			esc_html( (string) $group['label'] ),
+			esc_html( (string) $enabled_count ),
+			esc_html( (string) count( $rows ) )
+		);
+		echo '<div class="aafm-card aafm-ability-list">';
+		foreach ( $rows as $row ) {
+			aafm_render_ability_row( $row, $enabled, $disclosures );
+		}
+		echo '</div>';
+	}
+
+	// "Other": any site-subject ability no group claimed. Guards against a future addition
+	// vanishing from the UI — the AbilitiesSaveTest no-drop guard enforces this.
+	$other = array();
+	foreach ( $site_rows as $ability ) {
+		$name = (string) ( $ability['name'] ?? '' );
+		if ( '' !== $name && ! isset( $claimed[ $name ] ) ) {
+			$other[] = $ability;
+		}
+	}
+	if ( ! empty( $other ) ) {
+		echo '<h4 class="aafm-subsection-head aafm-subsection-head--sep">' . esc_html__( 'Other', 'agent-abilities-for-mcp' ) . '</h4>';
+		echo '<div class="aafm-card aafm-ability-list">';
+		foreach ( $other as $ability ) {
+			aafm_render_ability_row( $ability, $enabled, $disclosures );
+		}
+		echo '</div>';
+	}
 }
 
 /**

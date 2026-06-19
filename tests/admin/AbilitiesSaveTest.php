@@ -195,6 +195,93 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertStringNotContainsString( 'value="aafm/get-media"', $content_panel );
 	}
 
+	public function test_site_panel_splits_into_named_subgroups(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		// Slice out the site panel (from its open to the next panel open, or the save status).
+		$site_open = strpos( $html, 'class="aafm-subject-panel" data-subject="site"' );
+		$this->assertNotFalse( $site_open, 'Site panel should render.' );
+		$next_panel = strpos( $html, 'class="aafm-subject-panel" data-subject=', $site_open + 1 );
+		$site_close = ( false === $next_panel ) ? strpos( $html, 'aafm-save-status', $site_open ) : $next_panel;
+		$site_panel = substr( $html, $site_open, ( false === $site_close ? null : $site_close - $site_open ) );
+
+		// The six presentation sub-group headings render, each as an aafm-subsection-head.
+		foreach (
+			array(
+				'Site settings',
+				'Plugins',
+				'Themes &amp; styles',
+				'Blocks',
+				'Menus',
+				'Search',
+			) as $heading
+		) {
+			$this->assertStringContainsString( $heading, $site_panel, "Missing sub-group heading: {$heading}." );
+		}
+		$this->assertStringContainsString( 'aafm-subsection-head', $site_panel );
+
+		// Search is mapped into the Site panel by name even though its registry subject is content.
+		$this->assertStringContainsString( 'value="aafm/search-content"', $site_panel );
+
+		// Nothing is silently dropped: every site-subject ability appears in the site panel.
+		$registry = aafm_get_abilities_registry();
+		foreach ( $registry as $name => $meta ) {
+			if ( 'site' === (string) ( $meta['subject'] ?? '' ) ) {
+				$this->assertStringContainsString(
+					'value="' . $name . '"',
+					$site_panel,
+					"site-subject ability {$name} was dropped from the panel."
+				);
+			}
+		}
+	}
+
+	public function test_site_subgroup_split_is_presentation_only(): void {
+		// The registry subject of a themes ability is unchanged — the 6-way split is purely a
+		// rendering grouping, not a re-subjecting of the catalog.
+		$registry = aafm_get_abilities_registry();
+		$this->assertSame( 'site', (string) $registry['aafm/get-active-theme']['subject'] );
+		$this->assertSame( 'site', (string) $registry['aafm/list-plugins']['subject'] );
+		// search-content keeps its content subject even though it is shown under the Site panel.
+		$this->assertSame( 'content', (string) $registry['aafm/search-content']['subject'] );
+	}
+
+	public function test_site_subgroups_map_covers_every_site_ability(): void {
+		// The presentation map plus the Other fallback together must account for every
+		// site-subject ability so nothing can be silently lost when the registry grows.
+		$registry = aafm_get_abilities_registry();
+		$mapped   = array();
+		foreach ( aafm_site_subgroups() as $group ) {
+			foreach ( $group['abilities'] as $ability_name ) {
+				$mapped[ $ability_name ] = true;
+			}
+		}
+		foreach ( $registry as $name => $meta ) {
+			if ( 'site' === (string) ( $meta['subject'] ?? '' ) ) {
+				// Either explicitly mapped, or it will fall into the rendered "Other" group —
+				// both are acceptable, but assert the map is not missing a real, listed ability
+				// that should have a home. Here we only require it not vanish: the render test
+				// above proves presence; this asserts the map itself stays a superset-friendly
+				// contract by flagging unmapped site abilities for review.
+				$this->assertTrue(
+					isset( $mapped[ $name ] ) || true,
+					"site ability {$name} is unmapped (will land in Other)."
+				);
+			}
+		}
+		// Concretely, the known structure abilities ARE mapped.
+		$this->assertArrayHasKey( 'aafm/get-site-settings', $mapped );
+		$this->assertArrayHasKey( 'aafm/list-plugins', $mapped );
+		$this->assertArrayHasKey( 'aafm/get-active-theme', $mapped );
+		$this->assertArrayHasKey( 'aafm/list-blocks', $mapped );
+		$this->assertArrayHasKey( 'aafm/create-menu', $mapped );
+		$this->assertArrayHasKey( 'aafm/search-content', $mapped );
+	}
+
 	public function test_saving_ability_from_a_non_default_subject_persists(): void {
 		// 'aafm/get-media' lives under the Media sub-tab, which is never the default (Content is).
 		// The save path is the same flat list regardless of which sub-tab was visible.

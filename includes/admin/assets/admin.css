@@ -945,7 +945,16 @@
 	   class names under .aafm-connection (below). */
 	.aafm-setup {
 		overflow: hidden;
+		/* The checklist is now a <details>, so it carries its own card surface (it used
+		   to inherit it from a .aafm-card wrapper). */
+		background: var(--aafm-surface);
+		border: 1px solid var(--aafm-border);
+		border-radius: var(--aafm-radius);
+		box-shadow: var(--aafm-shadow);
 
+		/* The summary doubles as the checklist header. Reuse the Help/abilities chevron
+		   affordance so the collapse triangle matches the other collapsibles, and drop the
+		   header border when the panel is closed (no steps showing beneath it). */
 		.aafm-setup-top {
 			display: flex;
 			align-items: center;
@@ -953,6 +962,12 @@
 			padding-block: 16px;
 			padding-inline: 20px;
 			border-block-end: 1px solid var(--aafm-border);
+			cursor: pointer;
+			list-style: none;
+			user-select: none;
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
 
 			h2 {
 				margin: 0;
@@ -960,7 +975,32 @@
 				font-weight: 600;
 				flex: 1;
 			}
+
+			.aafm-setup-ic {
+				display: flex;
+				color: var(--aafm-green-text, var(--aafm-text-subtle));
+
+				.aafm-icon {
+					inline-size: 18px;
+					block-size: 18px;
+				}
+			}
+
+			&::after {
+				content: "";
+				display: inline-block;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid var(--aafm-text-subtle);
+				transition: transform 0.18s ease;
+			}
 		}
+
+		&[open] .aafm-setup-top::after { transform: rotate(180deg); }
+
+		&:not([open]) .aafm-setup-top { border-block-end: 0; }
 
 		.aafm-setup-count {
 			color: var(--aafm-text-subtle);

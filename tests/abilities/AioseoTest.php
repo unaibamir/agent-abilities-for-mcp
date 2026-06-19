@@ -190,6 +190,33 @@ final class AioseoTest extends TestCase {
 		);
 	}
 
+	public function test_aioseo_get_post_unknown_id_is_rejected(): void {
+		// An unknown post_id fails the per-object aafm_perm_seo_post_object gate (get_post() is not a
+		// WP_Post), so the Abilities API short-circuits with ability_invalid_permissions before the
+		// executor's defence-in-depth aafm_generic_error() can run. Either way the read is refused.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/aioseo-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'ability_invalid_permissions', $res->get_error_code() );
+	}
+
+	public function test_aioseo_empty_patch_leaves_seeded_fields_unchanged(): void {
+		// An update carrying only post_id must be a no-op: the array_key_exists skip per field must
+		// NOT blank every key in the model store.
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Seeded Title',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty PATCH must not error.' );
+		$this->assertSame( 'Seeded Title', $res['title'], 'An empty PATCH must leave the seeded title untouched.' );
+	}
+
 	public function test_aioseo_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_aioseo' );

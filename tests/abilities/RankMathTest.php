@@ -310,6 +310,60 @@ final class RankMathTest extends TestCase {
 		$this->assertSame( 'noindex,nofollow', $res['robots'], 'A legacy string robots value must read back as that string.' );
 	}
 
+	public function test_rankmath_get_post_unknown_id_is_rejected(): void {
+		// An unknown post_id fails the per-object aafm_perm_seo_post_object gate (get_post() is not a
+		// WP_Post), so the Abilities API short-circuits with ability_invalid_permissions before the
+		// executor's defence-in-depth aafm_generic_error() can run. Either way the read is refused.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'ability_invalid_permissions', $res->get_error_code() );
+	}
+
+	public function test_rankmath_get_schema_unknown_id_is_rejected(): void {
+		// Same per-object gate as get-post: an unknown post is refused before execute.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+			array(
+				'post_id' => PHP_INT_MAX,
+				'type'    => 'Article',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'ability_invalid_permissions', $res->get_error_code() );
+	}
+
+	public function test_rankmath_empty_patch_leaves_seeded_fields_unchanged(): void {
+		// An update carrying only post_id (no field keys) must be a no-op: the array_key_exists skip
+		// per field must NOT blank every key.
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		update_post_meta( $post_id, 'rank_math_title', 'Seeded Title' );
+
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty PATCH must not error.' );
+		$this->assertSame( 'Seeded Title', $res['title'], 'An empty PATCH must leave the seeded title untouched.' );
+	}
+
+	public function test_rankmath_get_schema_empty_store_encodes_as_object(): void {
+		// A never-set schema must JSON-encode to "{}" per the output_schema's type:object, never "[]"
+		// (mirrors the acf / get-all-post-meta empty-map regression pattern).
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+			array(
+				'post_id' => $post_id,
+				'type'    => 'Article',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertIsObject( $res['schema'], 'An empty schema must be an object, not an array.' );
+		$encoded = wp_json_encode( $res );
+		$this->assertIsString( $encoded );
+		$this->assertStringContainsString( '"schema":{}', $encoded, 'An empty schema must encode as {}, not [].' );
+	}
+
 	public function test_rankmath_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_rankmath' );

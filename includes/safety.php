@@ -15,12 +15,26 @@ defined( 'ABSPATH' ) || exit;
  * @return int Clamped to >= 0.
  */
 function aafm_rate_limit_per_min(): int {
+	$stored = max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) );
+
 	/**
 	 * Filters the requests-per-minute rate limit. 0 means no limit.
 	 *
 	 * @param int $limit Stored limit, clamped to >= 0.
 	 */
-	return (int) apply_filters( 'aafm_rate_limit_per_min', max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) ) );
+	$filtered = (int) apply_filters( 'aafm_rate_limit_per_min', $stored );
+
+	// Re-clamp the post-filter value so a buggy filter returning a negative number can't
+	// disable the limiter. A filter returning <= 0 when a positive limit is stored keeps the
+	// stored limit (it cannot silently switch off this fail-closed control); a filter may still
+	// set any other positive value.
+	if ( $filtered < 0 ) {
+		return $stored;
+	}
+	if ( 0 === $filtered && $stored > 0 ) {
+		return $stored;
+	}
+	return $filtered;
 }
 
 /**
@@ -79,7 +93,17 @@ function aafm_ip_allowlist(): array {
 	 *
 	 * @param array<int, string> $stored Trimmed, non-empty entries.
 	 */
-	return $normalize( apply_filters( 'aafm_ip_allowlist', $stored ) );
+	$filtered = $normalize( apply_filters( 'aafm_ip_allowlist', $stored ) );
+
+	// Fail closed at the filter seam: a filter must not EMPTY an operator-configured non-empty
+	// allowlist, which would widen the endpoint to allow-all. When the filter returns nothing
+	// but the operator stored entries, keep the stored list. An operator-set empty allowlist
+	// stays empty/off by design, which is the no-filter case where $stored is itself empty.
+	if ( array() === $filtered && array() !== $stored ) {
+		return $stored;
+	}
+
+	return $filtered;
 }
 
 /**

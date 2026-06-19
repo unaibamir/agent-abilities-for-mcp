@@ -47,6 +47,47 @@ final class SafetyTest extends TestCase {
 		remove_filter( 'aafm_ip_allowlist', $inject );
 	}
 
+	/**
+	 * T3-3: a filter returning a non-positive rate limit must not disable the limiter. The
+	 * post-filter value is re-clamped to the stored limit, so a buggy filter can't turn off a
+	 * fail-closed control.
+	 */
+	public function test_rate_limit_filter_cannot_disable_a_configured_limit(): void {
+		update_option( 'aafm_rate_limit_per_min', '30' );
+
+		$bad = static fn() => -1;
+		add_filter( 'aafm_rate_limit_per_min', $bad );
+		$this->assertSame( 30, aafm_rate_limit_per_min(), 'A filter returning -1 must not switch off a configured limit.' );
+		remove_filter( 'aafm_rate_limit_per_min', $bad );
+
+		// A filter may still RAISE or LOWER the limit to another positive value.
+		$lower = static fn() => 5;
+		add_filter( 'aafm_rate_limit_per_min', $lower );
+		$this->assertSame( 5, aafm_rate_limit_per_min(), 'A filter may set another positive limit.' );
+		remove_filter( 'aafm_rate_limit_per_min', $lower );
+	}
+
+	/**
+	 * T3-3: a filter returning an empty allowlist must not widen an operator-configured
+	 * non-empty allowlist to allow-all. The stored list wins when the filter empties it.
+	 */
+	public function test_ip_allowlist_filter_cannot_empty_a_configured_allowlist(): void {
+		update_option( 'aafm_ip_allowlist', array( '10.0.0.1', '192.168.0.0/24' ) );
+
+		$empty = static fn() => array();
+		add_filter( 'aafm_ip_allowlist', $empty );
+		$this->assertSame(
+			array( '10.0.0.1', '192.168.0.0/24' ),
+			aafm_ip_allowlist(),
+			'A filter returning [] must not widen a non-empty operator allowlist.'
+		);
+		remove_filter( 'aafm_ip_allowlist', $empty );
+
+		// An operator-set empty allowlist (no filter) stays empty/off by design.
+		update_option( 'aafm_ip_allowlist', array() );
+		$this->assertSame( array(), aafm_ip_allowlist() );
+	}
+
 	public function test_cidr_match_ipv4_and_ipv6(): void {
 		$this->assertTrue( aafm_cidr_match( '192.168.1.50', '192.168.1.0/24' ) );
 		$this->assertFalse( aafm_cidr_match( '192.168.2.50', '192.168.1.0/24' ) );

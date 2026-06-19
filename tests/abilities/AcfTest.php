@@ -166,6 +166,26 @@ final class AcfTest extends TestCase {
 		$this->assertSame( 'Updated headline', ( (array) $read['fields'] )['field_1'], 'The ACF post write must round-trip.' );
 	}
 
+	/**
+	 * T2-1: when update_field() fails (nothing stored), the write returns the generic error,
+	 * not a fake-success refreshed read.
+	 */
+	public function test_update_post_fields_update_failure_returns_error(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AcfStubStore::$update_should_fail = true;
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Will not persist' ),
+			)
+		);
+		\AAFM\Tests\AcfStubStore::$update_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed update_field must surface as an error, not a fake-success read.' );
+	}
+
 	public function test_update_post_fields_sanitizes_each_value(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );

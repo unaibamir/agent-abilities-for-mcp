@@ -56,15 +56,24 @@ class AcfStubStore {
 	public static array $written = array();
 
 	/**
+	 * When true, record() refuses to store and returns false — modelling an update_field()
+	 * failure so the write-failure path is exercisable.
+	 *
+	 * @var bool
+	 */
+	public static bool $update_should_fail = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		self::$groups      = array();
-		self::$field_defs  = array();
-		self::$seed_values = array();
-		self::$written     = array();
+		self::$groups             = array();
+		self::$field_defs         = array();
+		self::$seed_values        = array();
+		self::$written            = array();
+		self::$update_should_fail = false;
 	}
 
 	/**
@@ -130,6 +139,9 @@ class AcfStubStore {
 	 * @return bool
 	 */
 	public static function record( $field_key, $value, $selector ): bool {
+		if ( self::$update_should_fail ) {
+			return false; // Model an update_field() failure: nothing is stored.
+		}
 		$bucket = self::bucket( $selector );
 		if ( ! isset( self::$written[ $bucket ] ) ) {
 			self::$written[ $bucket ] = array();

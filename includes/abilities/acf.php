@@ -376,15 +376,33 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
+ * After each write the stored value is read back and compared to the sanitized value written; a
+ * mismatch (a failed update_field that stored nothing) surfaces as an error so a failed write is
+ * never audited as a success. A no-op write of an unchanged value still matches, so it is not
+ * treated as a failure. An unknown field key (no ACF definition) is sanitized as plain text and
+ * written like any other key — that behavior is unchanged here; the verify step still confirms it
+ * persisted.
+ *
  * @param array<string,mixed> $fields   Caller field map: field key => raw value.
  * @param int|string          $selector ACF object selector.
- * @return array<string,mixed> The refreshed hydrated values, keyed by field key.
+ * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a write
+ *                                       did not persist.
  */
-function aafm_acf_write_fields( array $fields, $selector ): array {
+function aafm_acf_write_fields( array $fields, $selector ) {
 	if ( function_exists( 'update_field' ) ) {
 		foreach ( $fields as $field_key => $raw ) {
 			$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
 			update_field( (string) $field_key, $clean, $selector );
+
+			// Verify the write persisted. A failed update_field() stores nothing, so the read-back
+			// will not equal the value we intended. Compare normalized JSON so scalars and
+			// structured arrays both compare cleanly, and a same-value no-op still matches.
+			if ( function_exists( 'get_field' ) ) {
+				$stored = get_field( (string) $field_key, $selector );
+				if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+					return aafm_generic_error();
+				}
+			}
 		}
 	}
 	return aafm_acf_read_fields( $selector );
@@ -528,10 +546,14 @@ function aafm_exec_acf_update_post_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, $id );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'post_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, $id ),
+		'fields'  => (object) $written,
 	);
 }
 
@@ -681,10 +703,14 @@ function aafm_exec_acf_update_term_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'term_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) ),
+		'fields'  => (object) $written,
 	);
 }
 
@@ -838,9 +864,13 @@ function aafm_exec_acf_update_user_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'user_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) ),
+		'fields'  => (object) $written,
 	);
 }

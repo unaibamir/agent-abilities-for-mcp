@@ -10,10 +10,12 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
-	// v2 adds the refresh_parent_id index on the access-tokens table; bumping the
-	// version makes aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing
-	// installs pick the index up.
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '2' );
+	// v2 adds the refresh_parent_id index on the access-tokens table. v3 widens the
+	// resource (audience) column on the codes and access-tokens tables from VARCHAR(191)
+	// to VARCHAR(2048) so a long endpoint URL is not truncated, which would break the
+	// later audience check. Bumping the version makes aafm_maybe_upgrade_oauth_tables()
+	// re-run dbDelta so existing installs pick the change up.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '3' );
 }
 
 /**
@@ -66,7 +68,7 @@ function aafm_install_oauth_tables(): void {
 		wp_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		redirect_uri TEXT NULL,
 		code_challenge VARCHAR(191) NOT NULL DEFAULT '',
-		resource VARCHAR(191) NOT NULL DEFAULT '',
+		resource VARCHAR(2048) NOT NULL DEFAULT '',
 		expires_at DATETIME NULL,
 		used_at DATETIME NULL,
 		PRIMARY KEY  (id),
@@ -80,7 +82,7 @@ function aafm_install_oauth_tables(): void {
 		refresh_parent_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		wp_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
-		resource VARCHAR(191) NOT NULL DEFAULT '',
+		resource VARCHAR(2048) NOT NULL DEFAULT '',
 		expires_at DATETIME NULL,
 		refresh_expires_at DATETIME NULL,
 		is_active TINYINT(1) NOT NULL DEFAULT 1,

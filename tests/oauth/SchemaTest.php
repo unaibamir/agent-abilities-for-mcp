@@ -68,6 +68,57 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * The declared length of a VARCHAR column, or 0 when not found.
+	 *
+	 * @param string $suffix Unprefixed table suffix.
+	 * @param string $column Column name.
+	 * @return int
+	 */
+	private function varchar_length( string $suffix, string $column ): int {
+		global $wpdb;
+		$table = $wpdb->prefix . $suffix;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SHOW COLUMNS FROM {$table}" );
+		foreach ( (array) $rows as $row ) {
+			// Field/Type are MySQL's own SHOW COLUMNS column names.
+			// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+			if ( isset( $row->Field ) && $column === $row->Field && isset( $row->Type ) && preg_match( '/varchar\((\d+)\)/i', (string) $row->Type, $m ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+				return (int) $m[1];
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * T3-6: the resource (audience) column must be wide enough for long endpoint URLs so an
+	 * audience match never fails on a truncated value.
+	 */
+	public function test_resource_column_holds_long_urls(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'aafm_oauth_codes', 'resource' ), 'codes.resource must not truncate long URLs.' );
+		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'aafm_oauth_access_tokens', 'resource' ), 'access_tokens.resource must not truncate long URLs.' );
+
+		// Round-trip a long resource through the token mint and read it back intact.
+		$long_resource = 'https://' . str_repeat( 'sub.', 60 ) . 'example.com/wp-json/agent-abilities-for-mcp/mcp';
+		$this->assertGreaterThan( 191, strlen( $long_resource ), 'fixture: the resource must exceed the old 191 cap.' );
+
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => 7,
+				'client_id'  => 'c',
+				'resource'   => $long_resource,
+			)
+		);
+		$this->assertIsArray( $tokens );
+
+		$row = aafm_oauth_get_access_token_row( $tokens['access_token'] );
+		$this->assertIsArray( $row );
+		$this->assertSame( $long_resource, $row['resource'], 'A long resource must round-trip without truncation.' );
+	}
+
+	/**
 	 * Installing creates all four OAuth tables and records the schema version.
 	 */
 	public function test_install_creates_all_four_tables(): void {
@@ -99,13 +150,13 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Install records schema version 2 (the refresh_parent_id index bump).
+	 * Install records the current schema version (v3 widens the resource column).
 	 */
-	public function test_install_records_schema_version_2(): void {
+	public function test_install_records_schema_version(): void {
 		aafm_install_oauth_tables();
 
-		$this->assertSame( '2', get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '2', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '3', get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertSame( '3', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**

@@ -157,6 +157,8 @@ function aafm_render_integrations_tab(): void {
 			$disabled ? ' is-disabled' : ''
 		);
 
+		$counts = aafm_integration_manifest()[ $slug ] ?? null;
+
 		// Card head: icon + label + a status pill.
 		echo '<div class="aafm-card-head">';
 		echo '<span class="icon">';
@@ -164,17 +166,8 @@ function aafm_render_integrations_tab(): void {
 		echo '</span>';
 		echo '<h2>' . esc_html( $card['label'] ) . '</h2>';
 		echo aafm_integration_status_pill( $status ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped in the helper.
-		echo '</div>';
 
-		// Status note.
-		echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
-
-		if ( 'active' === $status ) {
-			aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures );
-		} else {
-			// Inactive host: there are no live abilities to toggle, so show the manifest count
-			// ("0 / N · X read, Y write") so the operator sees what activating the plugin unlocks.
-			$counts = aafm_integration_manifest()[ $slug ] ?? null;
+		echo '<span class="abilities-count">';
 			if ( null !== $counts ) {
 				printf(
 					'<p class="aafm-integration-count">%s</p>',
@@ -189,7 +182,14 @@ function aafm_render_integrations_tab(): void {
 					)
 				);
 			}
-		}
+		echo '</span>';
+
+		echo '</div>';
+
+		// Status note.
+		//echo '<p class="aafm-integration-note">' . esc_html( aafm_integration_status_note( $slug, $status ) ) . '</p>';
+
+		aafm_render_integration_abilities( $slug, $rows, $enabled, $disclosures );
 
 		echo '</section>';
 	}

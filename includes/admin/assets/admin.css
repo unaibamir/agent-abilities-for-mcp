@@ -244,6 +244,12 @@
 		border: 1px solid var(--aafm-border);
 		border-radius: var(--aafm-radius);
 		box-shadow: var(--aafm-shadow);
+		margin-bottom: 15px;
+	}
+
+	.aafm-integration-empty {
+		padding-block: 14px;
+		padding-inline: 20px;
 	}
 
 	.aafm-card-pad {
@@ -781,7 +787,7 @@
 		.aafm-integrations-cards {
 			display: flex;
 			flex-direction: column;
-			gap: 20px;
+			gap: 0px;
 		}
 
 		.aafm-integration-note {
@@ -789,6 +795,7 @@
 			color: var(--aafm-text-subtle);
 			margin-block: 8px 0;
 			padding-inline: 20px;
+			margin-bottom: 15px;
 		}
 
 		.aafm-section-toggle {
@@ -1120,7 +1127,7 @@
 	   padding so the step heads and rails line up edge-to-edge top to bottom, regardless
 	   of which content (form, code block, diagnostics) a given step holds. */
 	.aafm-connection .aafm-conn-step {
-		padding-inline: 20px;
+		padding-inline: 0px;
 	}
 
 	.aafm-connection .aafm-step-rail { min-inline-size: 0; }

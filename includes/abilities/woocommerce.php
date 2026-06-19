@@ -4578,7 +4578,7 @@ function aafm_args_wc_delete_customer(): array {
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_delete_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_wc_perm_delete_customer',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -4586,6 +4586,29 @@ function aafm_args_wc_delete_customer(): array {
 			),
 		),
 	);
+}
+
+/**
+ * Permission for aafm/wc-delete-customer.
+ *
+ * Deleting a customer destroys a WordPress user account, so store-management rights are not
+ * enough on their own: the caller must hold manage_woocommerce AND the primitive delete_users
+ * cap AND the per-object delete_user on the target id. This mirrors aafm/delete-user's gate so a
+ * manage_woocommerce-only principal (e.g. a shop manager) can never escalate into account
+ * destruction.
+ *
+ * Returns false with empty input (no id) so discovery falls through to the object-independent
+ * caps; the per-object check still runs at execute time.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_wc_perm_delete_customer( array $input ): bool {
+	$id = isset( $input['customer_id'] ) ? absint( $input['customer_id'] ) : 0;
+	return current_user_can( 'manage_woocommerce' )
+		&& current_user_can( 'delete_users' )
+		&& $id > 0
+		&& current_user_can( 'delete_user', $id );
 }
 
 /**

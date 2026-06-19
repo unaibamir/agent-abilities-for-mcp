@@ -509,6 +509,56 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * A principal with manage_woocommerce but WITHOUT delete_users must be denied at the
+	 * permission gate — store management must not expand into account destruction.
+	 *
+	 * Models a shop-manager-style custom role: it holds manage_woocommerce (so the rest of
+	 * the WC surface is usable) but does not hold the primitive delete_users cap.
+	 */
+	public function test_delete_customer_requires_delete_users_capability(): void {
+		add_role(
+			'aafm_shop_manager_test',
+			'AAFM Shop Manager Test',
+			array(
+				'read'               => true,
+				'manage_woocommerce' => true,
+			)
+		);
+
+		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$manager_id  = $this->factory->user->create( array( 'role' => 'aafm_shop_manager_test' ) );
+		wp_set_current_user( $manager_id );
+
+		$this->assertTrue(
+			current_user_can( 'manage_woocommerce' ),
+			'Fixture sanity: the shop-manager role must hold manage_woocommerce.'
+		);
+		$this->assertFalse(
+			current_user_can( 'delete_users' ),
+			'Fixture sanity: the shop-manager role must NOT hold delete_users.'
+		);
+
+		$denied = wp_get_ability( 'aafm/wc-delete-customer' )->check_permissions(
+			array(
+				'customer_id' => $victim_id,
+				'reassign_to' => $reassign_id,
+			)
+		);
+		$this->assertNotTrue(
+			$denied,
+			'manage_woocommerce alone must not authorize deleting a WP user account.'
+		);
+
+		// The denial must be audited.
+		$audited   = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $audited, 'ability' );
+		$this->assertContains( 'aafm/wc-delete-customer', $abilities );
+
+		remove_role( 'aafm_shop_manager_test' );
+	}
+
+	/**
 	 * Guard 1: non-existent customer id returns WP_Error.
 	 */
 	public function test_delete_customer_unknown_victim_returns_error(): void {

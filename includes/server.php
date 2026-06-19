@@ -185,7 +185,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// wc-delete-order, wc-list-order-notes, wc-get-order-note, wc-create-order-note,
 		// wc-delete-order-note, wc-list-order-refunds, wc-get-order-refund, wc-create-order-refund,
 		// wc-delete-order-refund, wc-list-customers, wc-get-customer, wc-create-customer,
-		// wc-update-customer, wc-delete-customer, wc-list-coupons, wc-get-coupon,
+		// wc-update-customer, wc-list-coupons, wc-get-coupon,
 		// wc-create-coupon, wc-update-coupon, wc-delete-coupon, wc-list-shipping-zones,
 		// wc-get-shipping-zone, wc-create-shipping-zone, wc-update-shipping-zone,
 		// wc-delete-shipping-zone, wc-list-shipping-methods, wc-get-shipping-method,
@@ -195,6 +195,13 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// input, the correct discovery answer. Proven in WooProductsTest / WooVariationsTest /
 		// WooAttributesTest / WooOrdersTest / WooOrderNotesRefundsTest / WooCustomersTest /
 		// WooCouponsTest / WooShippingTest (admin discovers, editor does not).
+		//
+		// wc-delete-customer is the one exception: it destroys a WP user account, so its
+		// permission_callback adds delete_users + per-object delete_user($id). delete_user is
+		// false with empty input, so without a discovery floor the tool would hide from every
+		// capable admin. Floor on the object-independent manage_woocommerce + delete_users.
+		case 'aafm/wc-delete-customer':
+			return static fn(): bool => current_user_can( 'manage_woocommerce' ) && current_user_can( 'delete_users' );
 
 		case 'aafm/get-block':
 		case 'aafm/update-block':

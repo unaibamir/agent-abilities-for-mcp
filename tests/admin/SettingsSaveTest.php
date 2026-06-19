@@ -91,6 +91,37 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-switch', $html );
 	}
 
+	public function test_settings_render_wraps_groups_in_section_component(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$html = (string) ob_get_clean();
+
+		// The three groups (Safety controls / OAuth / Danger zone) each render through
+		// the shared aafm_render_section() component, so the class appears three times.
+		$this->assertSame( 3, substr_count( $html, 'aafm-section aafm-card' ) );
+
+		// Every frozen-contract input name survives the migration unchanged.
+		foreach (
+			array(
+				'aafm_rate_limit_per_min',
+				'aafm_max_title_len',
+				'aafm_force_draft',
+				'aafm_oauth_enabled',
+				'aafm_oauth_dcr_enabled',
+				'aafm_ip_allowlist',
+			) as $name
+		) {
+			$this->assertStringContainsString( 'name="' . $name . '"', $html );
+		}
+
+		// No stray empty card: every card-pad body holds real markup (the Wave-4
+		// empty-card defect class). An empty body would render the two tags back to back.
+		$this->assertStringNotContainsString( 'aafm-section-body"></div>', $html );
+
+		// The frozen AJAX/option-key contract is preserved via the unchanged save action.
+		$this->assertStringContainsString( 'id="aafm-settings-form"', $html );
+	}
+
 	public function test_is_valid_ip_or_cidr_accepts_and_rejects(): void {
 		$this->assertTrue( aafm_is_valid_ip_or_cidr( '10.0.0.1' ) );
 		$this->assertTrue( aafm_is_valid_ip_or_cidr( '192.168.0.0/24' ) );

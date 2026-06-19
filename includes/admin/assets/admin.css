@@ -259,13 +259,30 @@
 		padding-inline: 20px;
 		border-block-end: 1px solid var(--aafm-border);
 
-		h2 {
+		h2,
+		.aafm-card-head-title {
 			margin: 0;
 			font-size: 14px;
 			font-weight: 600;
 		}
 
-		.icon {
+		/* aafm_render_section() wraps the title (and optional description) in a
+		   text column so a pill can sit at the row end; the head still lays the
+		   icon + text out in a row. */
+		.aafm-card-head-text {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+		}
+
+		.aafm-card-head-desc {
+			margin: 0;
+			font-size: 12.5px;
+			color: var(--aafm-text-subtle);
+		}
+
+		.icon,
+		.aafm-card-head-ic {
 			display: flex;
 			color: var(--aafm-text-subtle);
 
@@ -908,9 +925,11 @@
 		.aafm-card-head {
 			border-block-end-color: color-mix( in srgb, var(--aafm-red) 25%, var(--aafm-border) );
 
-			.icon { color: var(--aafm-red); }
+			.icon,
+			.aafm-card-head-ic { color: var(--aafm-red); }
 
-			h2 { color: var(--aafm-red-text); }
+			h2,
+			.aafm-card-head-title { color: var(--aafm-red-text); }
 		}
 
 		.aafm-reset-status {

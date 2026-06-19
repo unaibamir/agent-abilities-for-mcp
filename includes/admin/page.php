@@ -48,6 +48,34 @@ function aafm_register_admin_menu(): void {
 }
 
 /**
+ * Highlight the submenu item for the active tab.
+ *
+ * WordPress matches the current submenu only on the `page` query var, so every tab
+ * would otherwise highlight the first item (Dashboard). This returns the same slug
+ * `add_submenu_page()` registered for the active tab so the correct item is marked
+ * current; for the dashboard, an absent tab, or an unknown tab it returns the bare
+ * parent slug.
+ *
+ * @param string $submenu_file The submenu file WordPress is about to mark current.
+ * @return string Tab-aware slug on our page, otherwise the input unchanged.
+ */
+function aafm_highlight_tab_submenu( $submenu_file ) {
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only menu highlighting, no state change.
+	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( (string) $_GET['page'] ) ) : '';
+	if ( 'agent-abilities-for-mcp' !== $page ) {
+		return $submenu_file;
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only menu highlighting, no state change.
+	$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';
+	if ( 'dashboard' === $tab || ! in_array( $tab, array_keys( aafm_admin_tabs() ), true ) ) {
+		return 'agent-abilities-for-mcp';
+	}
+
+	return 'agent-abilities-for-mcp&tab=' . $tab;
+}
+
+/**
  * Enqueue admin assets only on our top-level admin page.
  *
  * @param string $hook Current admin page hook suffix.

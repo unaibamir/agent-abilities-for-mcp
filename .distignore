@@ -6,6 +6,7 @@
 /.github
 /.ddev
 /.claude
+/.wordpress-org
 /tests
 /bin
 /wp

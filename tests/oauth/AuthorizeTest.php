@@ -407,8 +407,8 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( '<!DOCTYPE html>', $html );
 		$this->assertStringContainsString( 'method="post"', $html );
 
-		// Direction A token reuse and both buttons.
-		$this->assertStringContainsString( '--aafm-accent', $html );
+		// Design tokens present and both decision buttons emitted.
+		$this->assertStringContainsString( '--accent', $html );
 		$this->assertStringContainsString( 'value="approve"', $html );
 		$this->assertStringContainsString( 'value="deny"', $html );
 
@@ -417,16 +417,18 @@ class AuthorizeTest extends TestCase {
 		// so the inline styles must carry their own focus rule.
 		$this->assertStringContainsString( '.aafm-btn:focus-visible', $html );
 
-		// The agent user login is shown.
+		// The agent user login is shown in the "acting as" note.
 		$this->assertStringContainsString( 'mcp-agent', $html );
 
-		// The security-critical clause is emphasized: it renders inside a
-		// <strong class="aafm-consent-warning"> and the stylesheet carries the rule.
-		$this->assertStringContainsString(
-			'<strong class="aafm-consent-warning">It can do anything your account can do.</strong>',
-			$html
-		);
-		$this->assertStringContainsString( '.aafm-consent-warning', $html );
+		// The honest risk is stated plainly: the agent acts as the user's WordPress
+		// account. The redesign reframes the old red scare line as this calm note, but
+		// the truthful "acts as your account" message must remain.
+		$this->assertStringContainsString( 'as your WordPress account', $html );
+
+		// The governance guarantees (the plugin's differentiator) are surfaced as trust
+		// signals, so the consent screen argues the safety case rather than only warning.
+		$this->assertStringContainsString( 'Off by default.', $html );
+		$this->assertStringContainsString( 'Deletes go to Trash.', $html );
 
 		// No script tag anywhere: the page is CSP-clean and self-contained.
 		$this->assertStringNotContainsString( '<script', $html );

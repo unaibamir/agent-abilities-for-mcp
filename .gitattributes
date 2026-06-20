@@ -2,6 +2,7 @@
 /bin            export-ignore
 /public         export-ignore
 /.claude        export-ignore
+.wordpress-org/ export-ignore
 /.ddev          export-ignore
 /.github        export-ignore
 CLAUDE.md       export-ignore

@@ -201,6 +201,7 @@ function aafm_bootstrap() {
 	if ( is_admin() ) {
 		add_action( 'admin_menu', 'aafm_register_admin_menu' );
 		add_filter( 'submenu_file', 'aafm_highlight_tab_submenu' );
+		add_filter( 'plugin_action_links_' . AAFM_PLUGIN_BASENAME, 'aafm_plugin_action_links' );
 		add_action( 'admin_enqueue_scripts', 'aafm_enqueue_admin_assets' );
 		add_action( 'wp_ajax_aafm_save_abilities', 'aafm_ajax_save_abilities' );
 		add_action( 'wp_ajax_aafm_save_post_types', 'aafm_ajax_save_post_types' );

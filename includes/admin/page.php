@@ -15,10 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * @return void
  */
 function aafm_register_admin_menu(): void {
-	// Inline-SVG menu icon (no Dashicons); grey matches the default inactive menu glyph.
-	$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a7aaad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M9 2h6"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>';
-	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding a static literal SVG into a data: URI for the menu icon, not obfuscating code.
-	$icon = 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	$icon = 'dashicons-superhero';
 
 	add_menu_page(
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
@@ -45,6 +42,44 @@ function aafm_register_admin_menu(): void {
 			'aafm_render_admin_page'
 		);
 	}
+}
+
+/**
+ * Add quick links to the plugin's row on the Plugins screen.
+ *
+ * Prepends Getting Started / Abilities / Integrations / Settings before WordPress's own
+ * row actions (Deactivate), so the most-used destinations are one click from the list.
+ *
+ * @param array<string,string> $actions The existing row action links, keyed by handle.
+ * @return array<string,string> The links with ours prepended.
+ */
+function aafm_plugin_action_links( array $actions ): array {
+	$base = 'admin.php?page=agent-abilities-for-mcp';
+
+	$links = array(
+		'aafm-getting-started' => sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( $base ) ),
+			esc_html__( 'Getting Started', 'agent-abilities-for-mcp' )
+		),
+		'aafm-abilities'       => sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( $base . '&tab=abilities' ) ),
+			esc_html__( 'Abilities', 'agent-abilities-for-mcp' )
+		),
+		'aafm-integrations'    => sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( $base . '&tab=integrations' ) ),
+			esc_html__( 'Integrations', 'agent-abilities-for-mcp' )
+		),
+		'aafm-settings'        => sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( admin_url( $base . '&tab=settings' ) ),
+			esc_html__( 'Settings', 'agent-abilities-for-mcp' )
+		),
+	);
+
+	return array_merge( $links, $actions );
 }
 
 /**

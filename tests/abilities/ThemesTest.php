@@ -43,19 +43,6 @@ final class ThemesTest extends TestCase {
 	}
 
 	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action Action name to simulate.
-	 * @param callable $cb     Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Switch the site to a block theme so the FSE template/global-styles abilities have real
 	 * data to act on. The WordPress test library boots with the non-block "default" theme, so the
 	 * block-theme bundled with core (twentytwentyfive) is activated for the duration of the test

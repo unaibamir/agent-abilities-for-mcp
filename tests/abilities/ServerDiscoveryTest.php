@@ -49,22 +49,6 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * Core gates wp_register_ability()/wp_register_ability_category() on doing_action();
-	 * pushing the action name onto $wp_current_filter is the idiom core's own test trait uses.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Enable and register the real 24-ability catalog (the same way CatalogTest does).
 	 */
 	private function register_whole_catalog(): void {

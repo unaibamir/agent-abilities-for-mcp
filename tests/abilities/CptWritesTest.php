@@ -72,19 +72,6 @@ final class CptWritesTest extends TestCase {
 		parent::tear_down();
 	}
 
-	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
 	public function test_cpt_create_schema_is_closed_and_requires_post_type(): void {
 		$schema = aafm_write_cpt_content_schema( true );
 

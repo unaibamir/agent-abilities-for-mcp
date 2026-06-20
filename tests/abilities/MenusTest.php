@@ -18,13 +18,6 @@ use WP_Error;
 
 final class MenusTest extends TestCase {
 
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
 	private function register_menus(): void {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();

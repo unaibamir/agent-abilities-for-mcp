@@ -47,13 +47,6 @@ final class BlocksTest extends TestCase {
 		$this->assertInstanceOf( \WP_Post::class, aafm_get_block_object( $block_id ) );
 	}
 
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
 	private function register_blocks(): void {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();

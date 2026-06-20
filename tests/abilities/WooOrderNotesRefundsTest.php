@@ -48,19 +48,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Push an Abilities API init action onto the filter stack for the duration of the callback.
-	 *
-	 * @param string   $action Action name to simulate.
-	 * @param callable $cb     Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Enable + register the Group A (delete order) ability set.
 	 */
 	private function register_group_a(): void {

@@ -97,22 +97,6 @@ final class ServerToolsTest extends TestCase {
 		return $registry;
 	}
 
-	/**
-	 * Run a callback as if the named Abilities API init action were firing.
-	 *
-	 * Core gates wp_register_ability()/wp_register_ability_category() on doing_action();
-	 * pushing the action name onto $wp_current_filter is the idiom core's own test trait uses.
-	 *
-	 * @param string   $action   Init action name.
-	 * @param callable $callback Registration callback.
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
 	public function test_subscriber_sees_only_callable_tools(): void {
 		$this->acting_as( 'subscriber' );
 		$tools = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );

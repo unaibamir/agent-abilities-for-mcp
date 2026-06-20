@@ -29,19 +29,6 @@ final class PagesReadTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
-	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
 	public function test_get_pages_is_in_registry_as_a_read(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/get-pages', $registry );

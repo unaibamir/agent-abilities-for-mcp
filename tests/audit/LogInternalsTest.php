@@ -22,19 +22,6 @@ final class LogInternalsTest extends TestCase {
 		aafm_clear_activity_log();
 	}
 
-	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
 	public function test_source_ip_validates_remote_addr(): void {
 		// Stashing the real value to restore after the test; no sanitization needed.
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash

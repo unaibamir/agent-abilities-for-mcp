@@ -226,21 +226,4 @@ final class ReadGettersEnrichmentTest extends TestCase {
 		$this->assertStringNotContainsString( 'SECRETMARKER', $json );
 		$this->assertStringNotContainsString( 'Body holding', $json );
 	}
-
-	/**
-	 * Run a callback inside a simulated Abilities API init action so the registry
-	 * wrappers (which refuse to run outside their gated action) will register.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		try {
-			$callback();
-		} finally {
-			array_pop( $wp_current_filter );
-		}
-	}
 }

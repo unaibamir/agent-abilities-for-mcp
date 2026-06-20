@@ -52,19 +52,6 @@ final class CapabilityMatrixTest extends TestCase {
 	}
 
 	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * The expected allow/deny matrix: ability => [ role => bool ].
 	 *
 	 * @return array<string,array<string,bool>>

@@ -81,4 +81,37 @@ abstract class TestCase extends WP_UnitTestCase {
 		wp_set_current_user( $user_id );
 		return $user_id;
 	}
+
+	/**
+	 * Run a callback inside a simulated Abilities API init action.
+	 *
+	 * Core's wp_register_ability()/wp_register_ability_category() refuse to run unless
+	 * their gated init action is doing_action(); simulate that by pushing the action
+	 * name onto $wp_current_filter — the idiom WP core's own ability test trait uses.
+	 * We do NOT call do_action() on the core hook directly: that trips the WPCS
+	 * NonPrefixedHooknameFound sniff (Phase 1 carried issue).
+	 *
+	 * @param string   $action   Action name to simulate.
+	 * @param callable $callback Callback to invoke while the action is "running".
+	 */
+	protected function in_action( string $action, callable $callback ): void {
+		global $wp_current_filter;
+		$wp_current_filter[] = $action;
+		$callback();
+		array_pop( $wp_current_filter );
+	}
+
+	/**
+	 * Enable a set of abilities and register them through the Abilities API init action.
+	 *
+	 * The recurring two-step idiom across the ability suites: write the enabled-abilities
+	 * option, then run aafm_register_enabled_abilities() inside a simulated
+	 * wp_abilities_api_init action so the enabled slugs actually register.
+	 *
+	 * @param string[] $slugs Ability slugs to enable and register.
+	 */
+	protected function register_enabled( array $slugs ): void {
+		update_option( 'aafm_enabled_abilities', $slugs );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
 }

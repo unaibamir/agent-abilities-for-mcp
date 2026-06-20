@@ -48,19 +48,6 @@ final class WooReportsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * @param string   $action Action name.
-	 * @param callable $cb     Callback.
-	 */
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Enable and register the full WC7 ability set.
 	 */
 	private function register_wc_reports(): void {

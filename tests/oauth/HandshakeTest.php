@@ -253,22 +253,6 @@ class HandshakeTest extends TestCase {
 	}
 
 	/**
-	 * Run a callback as if the named Abilities API init action were firing.
-	 *
-	 * Core gates wp_register_ability()/wp_register_ability_category() on doing_action();
-	 * pushing the action name onto $wp_current_filter is the idiom core's own test trait uses.
-	 *
-	 * @param string   $action   Init action name.
-	 * @param callable $callback Registration callback.
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Resolve the MCP tools/list visibility for the CURRENT user.
 	 *
 	 * The live MCP route is a streamable-HTTP transport that requires a full session

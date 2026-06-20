@@ -25,13 +25,6 @@ final class ActivityLogTest extends TestCase {
 		$this->register_activity_log();
 	}
 
-	private function in_action( string $action, callable $cb ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$cb();
-		array_pop( $wp_current_filter );
-	}
-
 	private function register_activity_log(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-activity-log' ) );

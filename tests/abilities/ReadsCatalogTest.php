@@ -46,25 +46,6 @@ final class ReadsCatalogTest extends TestCase {
 	}
 
 	/**
-	 * Run a callback inside a simulated Abilities API init action.
-	 *
-	 * Core's wp_register_ability()/wp_register_ability_category() refuse to run unless
-	 * their gated init action is doing_action(); simulate that by pushing the action name
-	 * onto $wp_current_filter — the idiom WP core's own ability test trait uses. We do
-	 * NOT call do_action() on the core hook directly: that trips the WPCS
-	 * NonPrefixedHooknameFound sniff (Phase 1 carried issue).
-	 *
-	 * @param string   $action   Action name to simulate.
-	 * @param callable $callback Callback to invoke while the action is "running".
-	 */
-	private function in_action( string $action, callable $callback ): void {
-		global $wp_current_filter;
-		$wp_current_filter[] = $action;
-		$callback();
-		array_pop( $wp_current_filter );
-	}
-
-	/**
 	 * Enable every read and register categories + the enabled abilities.
 	 */
 	private function register_all_reads(): void {

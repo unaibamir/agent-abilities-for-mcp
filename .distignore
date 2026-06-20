@@ -9,6 +9,11 @@
 /tests
 /bin
 /wp
+/public
+/CLAUDE.md
+/.mcp.json
+/.DS_Store
+/.phpunit.cache
 /.distignore
 /.gitattributes
 /.gitignore

@@ -5,6 +5,7 @@
 /.ddev          export-ignore
 /.github        export-ignore
 CLAUDE.md       export-ignore
+CONTRIBUTING.md export-ignore
 .mcp.json       export-ignore
 .DS_Store       export-ignore
 .phpunit.cache  export-ignore

@@ -155,8 +155,8 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway ): array {
  */
 function aafm_args_wc_list_payment_gateways(): array {
 	return array(
-		'label'               => __( 'List WooCommerce payment gateways', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists all registered WooCommerce payment gateways with their id, title, and enabled state. Secret or credential settings are never returned. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-payment-gateways' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-payment-gateways' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -226,8 +226,8 @@ function aafm_exec_wc_list_payment_gateways( array $input ): array|\WP_Error { /
  */
 function aafm_args_wc_get_payment_gateway(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-payment-gateway' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-payment-gateway' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -291,8 +291,8 @@ function aafm_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
  */
 function aafm_args_wc_update_payment_gateway(): array {
 	return array(
-		'label'               => __( 'Update WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-payment-gateway' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-payment-gateway' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

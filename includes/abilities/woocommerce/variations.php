@@ -218,8 +218,8 @@ function aafm_wc_variation_output_properties(): array {
  */
 function aafm_args_wc_list_product_variations(): array {
 	return array(
-		'label'               => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Lists a variable product's variations by parent product id (id, parent id, SKU, price, stock status, status) plus a total. Requires the manage-WooCommerce capability.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-product-variations' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-product-variations' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -320,8 +320,8 @@ function aafm_exec_wc_list_product_variations( array $input ) {
  */
 function aafm_args_wc_get_product_variation(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce product variation', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one product variation by id (full shape incl. parent id, prices, stock, image, attribute values). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-product-variation' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-product-variation' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -481,8 +481,8 @@ function aafm_args_wc_create_product_variation(): array {
 	);
 
 	return array(
-		'label'               => __( 'Create WooCommerce product variation', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a variation under a variable product (parent product id required; status, description, prices, SKU, stock, image, attributes optional). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-product-variation' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-product-variation' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -551,8 +551,8 @@ function aafm_args_wc_update_product_variation(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update WooCommerce product variation', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-product-variation' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-product-variation' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -604,8 +604,8 @@ function aafm_exec_wc_update_product_variation( array $input ) {
  */
 function aafm_args_wc_delete_product_variation(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce product variation', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-product-variation' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-product-variation' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

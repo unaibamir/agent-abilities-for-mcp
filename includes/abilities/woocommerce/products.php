@@ -249,8 +249,8 @@ function aafm_wc_product_output_properties(): array {
  */
 function aafm_args_wc_list_products(): array {
 	return array(
-		'label'               => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists WooCommerce products (id, name, SKU, price, stock status, status, categories, featured) plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-products' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-products' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -360,8 +360,8 @@ function aafm_exec_wc_list_products( array $input ): array {
  */
 function aafm_args_wc_get_product(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce product', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one WooCommerce product by id (full shape incl. images, attributes, variation ids). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-product' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-product' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -577,8 +577,8 @@ function aafm_args_wc_create_product(): array {
 	);
 
 	return array(
-		'label'               => __( 'Create WooCommerce product', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a simple WooCommerce product (name required; status, description, prices, SKU, stock, categories, tags, images, attributes optional). Only the simple product type is supported here; a variable, grouped, or external type is rejected. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-product' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-product' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -654,8 +654,8 @@ function aafm_args_wc_update_product(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update WooCommerce product', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-product' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-product' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -707,8 +707,8 @@ function aafm_exec_wc_update_product( array $input ) {
  */
 function aafm_args_wc_delete_product(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce product', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-product' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-product' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

@@ -123,8 +123,8 @@ function aafm_wc_reports_registry_definitions(): array {
  */
 function aafm_args_wc_get_sales_report(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce sales report', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-sales-report' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-sales-report' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -221,8 +221,8 @@ function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
  */
 function aafm_args_wc_get_top_sellers_report(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce top sellers report', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-top-sellers-report' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-top-sellers-report' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -377,8 +377,8 @@ function aafm_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
  */
 function aafm_args_wc_count_orders(): array {
 	return array(
-		'label'               => __( 'Count WooCommerce orders', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-count-orders' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-orders' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -450,8 +450,8 @@ function aafm_exec_wc_count_orders( array $input ): array|\WP_Error { // phpcs:i
  */
 function aafm_args_wc_count_products(): array {
 	return array(
-		'label'               => __( 'Count WooCommerce products', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-count-products' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-products' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -517,8 +517,8 @@ function aafm_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs
  */
 function aafm_args_wc_count_customers(): array {
 	return array(
-		'label'               => __( 'Count WooCommerce customers', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns the count of registered users on the site. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-count-customers' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-customers' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -569,8 +569,8 @@ function aafm_exec_wc_count_customers( array $input ): array|\WP_Error { // phpc
  */
 function aafm_args_wc_count_coupons(): array {
 	return array(
-		'label'               => __( 'Count WooCommerce coupons', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Returns coupon counts broken down by post status (publish, draft, private, pending, trash) plus a total of active coupons. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-count-coupons' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-coupons' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

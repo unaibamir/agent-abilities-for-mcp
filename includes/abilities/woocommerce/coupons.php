@@ -312,8 +312,8 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
  */
 function aafm_args_wc_list_coupons(): array {
 	return array(
-		'label'               => __( 'List WooCommerce coupons', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists WooCommerce coupons (id, code, amount, discount type, expiry date, usage count), plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-coupons' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-coupons' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -411,8 +411,8 @@ function aafm_exec_wc_list_coupons( array $input ) {
  */
 function aafm_args_wc_get_coupon(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce coupon', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one WooCommerce coupon by id: full config including code, discount type, amount, expiry, usage limits, spend limits, product restrictions, and email restrictions. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-coupon' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-coupon' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -465,8 +465,8 @@ function aafm_exec_wc_get_coupon( array $input ) {
  */
 function aafm_args_wc_create_coupon(): array {
 	return array(
-		'label'               => __( 'Create WooCommerce coupon', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a WooCommerce coupon. Provide a code and discount type (percent, fixed_cart, or fixed_product); all other fields are optional. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-coupon' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-coupon' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -533,8 +533,8 @@ function aafm_args_wc_update_coupon(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update WooCommerce coupon', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce coupon by id. Only the fields you include are changed; everything else stays as-is. An empty request body (only coupon_id) is a no-op success. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-coupon' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-coupon' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -598,8 +598,8 @@ function aafm_exec_wc_update_coupon( array $input ) {
  */
 function aafm_args_wc_delete_coupon(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce coupon', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce coupon by id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-coupon' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-coupon' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

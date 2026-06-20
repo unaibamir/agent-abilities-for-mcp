@@ -326,8 +326,8 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
  */
 function aafm_args_wc_list_orders(): array {
 	return array(
-		'label'               => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists WooCommerce orders (id, number, status, total, currency, date, customer id) plus a total count. List rows carry no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-orders' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-orders' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -441,8 +441,8 @@ function aafm_exec_wc_list_orders( array $input ): array {
  */
 function aafm_args_wc_get_order(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce order', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one WooCommerce order by id: line items, totals (total, subtotal, tax, shipping), status, dates, customer note, and the full customer billing address — including email and phone — plus the shipping address. Customer billing PII (email, phone, full address) is returned in full under the Integrations security disclaimer and is always gated by the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-order' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-order' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -852,8 +852,8 @@ function aafm_wc_order_output_properties(): array {
  */
 function aafm_args_wc_create_order(): array {
 	return array(
-		'label'               => __( 'Create WooCommerce order', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a WooCommerce order from optional status, customer id, customer note, billing address, shipping address, and line items. Returns the full order shape including billing and shipping PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-order' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-order' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -921,8 +921,8 @@ function aafm_args_wc_update_order(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update WooCommerce order', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce order by id, changing only the fields you send. An empty request body is a no-op success. Returns the full order shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-order' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-order' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -997,8 +997,8 @@ function aafm_exec_wc_update_order( array $input ) {
  */
 function aafm_args_wc_update_order_status(): array {
 	return array(
-		'label'               => __( 'Update WooCommerce order status', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Sets the status of a WooCommerce order by id. Accepts the short form (e.g. "completed") or the wc-prefixed form (e.g. "wc-completed"). Returns the full order shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-order-status' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-order-status' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1094,8 +1094,8 @@ function aafm_exec_wc_update_order_status( array $input ) {
  */
 function aafm_args_wc_delete_order(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce order', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce order by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-order' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-order' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1245,8 +1245,8 @@ function aafm_wc_refund_output_properties(): array {
  */
 function aafm_args_wc_list_order_notes(): array {
 	return array(
-		'label'               => __( 'List WooCommerce order notes', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists all notes on a WooCommerce order by order id. Returns each note\'s id, text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-order-notes' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-order-notes' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1313,8 +1313,8 @@ function aafm_exec_wc_list_order_notes( array $input ) {
  */
 function aafm_args_wc_get_order_note(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce order note', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads a single note on a WooCommerce order by order id and note id. Returns the note text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-order-note' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-order-note' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1378,8 +1378,8 @@ function aafm_exec_wc_get_order_note( array $input ) {
  */
 function aafm_args_wc_create_order_note(): array {
 	return array(
-		'label'               => __( 'Create WooCommerce order note', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-order-note' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-order-note' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1459,8 +1459,8 @@ function aafm_exec_wc_create_order_note( array $input ) {
  */
 function aafm_args_wc_delete_order_note(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce order note', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a note from a WooCommerce order. Requires both the order id and the note id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-order-note' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-order-note' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1575,8 +1575,8 @@ function aafm_wc_redact_refund( \WC_Order_Refund $refund ): array {
  */
 function aafm_args_wc_list_order_refunds(): array {
 	return array(
-		'label'               => __( 'List WooCommerce order refunds', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists all refunds on a WooCommerce order by order id. Returns each refund\'s id, amount, reason, and date. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-order-refunds' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-order-refunds' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1645,8 +1645,8 @@ function aafm_exec_wc_list_order_refunds( array $input ) {
  */
 function aafm_args_wc_get_order_refund(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce order refund', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads a single refund by refund id. Returns the refund amount, reason, and date. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-order-refund' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-order-refund' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1701,8 +1701,8 @@ function aafm_exec_wc_get_order_refund( array $input ) {
  */
 function aafm_args_wc_create_order_refund(): array {
 	return array(
-		'label'               => __( 'Create WooCommerce order refund', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a refund on a WooCommerce order by order id. Accepts an amount, optional reason, and optional line-item breakdown. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-order-refund' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-order-refund' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1810,8 +1810,8 @@ function aafm_exec_wc_create_order_refund( array $input ) {
  */
 function aafm_args_wc_delete_order_refund(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce order refund', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce order refund by refund id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-order-refund' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-order-refund' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

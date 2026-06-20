@@ -373,8 +373,8 @@ function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): v
  */
 function aafm_args_wc_list_customers(): array {
 	return array(
-		'label'               => __( 'List WooCommerce customers', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists WooCommerce customers (id, email, name, username, order count, total spent). Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-customers' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-customers' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -476,8 +476,8 @@ function aafm_exec_wc_list_customers( array $input ): array {
  */
 function aafm_args_wc_get_customer(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce customer', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one WooCommerce customer by id: email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-customer' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-customer' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -532,8 +532,8 @@ function aafm_args_wc_create_customer(): array {
 	$properties['username'] = array( 'type' => 'string' );
 
 	return array(
-		'label'               => __( 'Create WooCommerce customer', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a WooCommerce customer from an email (required) and optional username, first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-customer' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-customer' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -618,8 +618,8 @@ function aafm_args_wc_update_customer(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update WooCommerce customer', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a WooCommerce customer by id, changing only the fields you send (name, billing, and shipping). Account email and username are not updatable here — use customer management tools for account-level changes. An empty request body (with only customer_id) is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-customer' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-customer' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -680,8 +680,8 @@ function aafm_exec_wc_update_customer( array $input ) {
  */
 function aafm_args_wc_delete_customer(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce customer', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently deletes a WooCommerce customer (WordPress user) by id and reassigns their content to another user. The current user cannot delete their own account. Cannot delete the last administrator. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-customer' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-customer' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

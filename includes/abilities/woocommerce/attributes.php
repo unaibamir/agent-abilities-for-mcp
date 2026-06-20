@@ -187,8 +187,8 @@ function aafm_redact_wc_attribute( \stdClass $attr ): array {
  */
 function aafm_args_wc_list_product_attributes(): array {
 	return array(
-		'label'               => __( 'List WooCommerce product attributes', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists all global WooCommerce product attribute taxonomies with their id, name, slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-list-product-attributes' ),
+		'description'         => aafm_ability_description( 'aafm/wc-list-product-attributes' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -247,8 +247,8 @@ function aafm_exec_wc_list_product_attributes(): array {
  */
 function aafm_args_wc_get_product_attribute(): array {
 	return array(
-		'label'               => __( 'Get WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads one global WooCommerce product attribute taxonomy by id, including its name, slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-get-product-attribute' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-product-attribute' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -319,8 +319,8 @@ function aafm_args_wc_create_product_attribute(): array {
 	$props        = aafm_wc_attribute_write_properties();
 	$output_props = aafm_wc_attribute_output_properties();
 	return array(
-		'label'               => __( 'Create WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a new global WooCommerce product attribute taxonomy from a name (required) plus optional slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-create-product-attribute' ),
+		'description'         => aafm_ability_description( 'aafm/wc-create-product-attribute' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -400,8 +400,8 @@ function aafm_args_wc_update_product_attribute(): array {
 	);
 	$output_props = aafm_wc_attribute_output_properties();
 	return array(
-		'label'               => __( 'Update WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Updates a global WooCommerce product attribute taxonomy by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-update-product-attribute' ),
+		'description'         => aafm_ability_description( 'aafm/wc-update-product-attribute' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -483,8 +483,8 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
  */
 function aafm_args_wc_delete_product_attribute(): array {
 	return array(
-		'label'               => __( 'Delete WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Permanently removes a global WooCommerce product attribute taxonomy by id. This deletes the taxonomy and all terms within it and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/wc-delete-product-attribute' ),
+		'description'         => aafm_ability_description( 'aafm/wc-delete-product-attribute' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

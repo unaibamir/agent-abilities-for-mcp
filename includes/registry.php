@@ -92,6 +92,41 @@ function aafm_get_abilities_registry_full(): array {
 }
 
 /**
+ * The canonical label for an ability, taken from its registry definition.
+ *
+ * The registry entry is the single source of truth for an ability's label, so the args builder, the
+ * Integrations manifest, and the admin UI all read it back through this rather than re-typing it. The
+ * underlying __() literal stays at the registry-definition site, so this returns the already-translated
+ * string and Plugin Check's i18n scanner still sees a real literal at the source. Reads the full view
+ * so a derive call works even for an integration whose host is currently inactive.
+ *
+ * @param string $name Ability name, e.g. 'aafm/get-posts'.
+ * @return string The canonical label, or '' when the name is unknown.
+ */
+function aafm_ability_label( string $name ): string {
+	$registry = aafm_get_abilities_registry_full();
+
+	return isset( $registry[ $name ]['label'] ) ? (string) $registry[ $name ]['label'] : '';
+}
+
+/**
+ * The canonical description for an ability, taken from its registry definition.
+ *
+ * The counterpart to aafm_ability_label(): the registry description is authoritative, and the args
+ * builder and manifest derive from it instead of keeping their own copy. The __() literal stays at the
+ * registry site (so i18n extraction and Plugin Check are unaffected); this returns the translated
+ * string. Reads the full view so it resolves for an inactive-host integration too.
+ *
+ * @param string $name Ability name, e.g. 'aafm/get-posts'.
+ * @return string The canonical description, or '' when the name is unknown.
+ */
+function aafm_ability_description( string $name ): string {
+	$registry = aafm_get_abilities_registry_full();
+
+	return isset( $registry[ $name ]['description'] ) ? (string) $registry[ $name ]['description'] : '';
+}
+
+/**
  * Whether the full-view memo should be flushed on the next read, consuming the flag.
  *
  * Driven off the same flush flag as the live registry: a single aafm_flush_registry_cache() raises a

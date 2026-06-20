@@ -55,8 +55,8 @@ function aafm_perm_list_plugins(): bool {
  */
 function aafm_args_list_plugins(): array {
 	return array(
-		'label'               => __( 'List plugins', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists installed plugins with their name, version, and active state. Read-only. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/list-plugins' ),
+		'description'         => aafm_ability_description( 'aafm/list-plugins' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

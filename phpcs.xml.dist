@@ -62,6 +62,11 @@
 	     file-naming, doc-comment, prefix, and short-ternary sniffs do not apply to them. -->
 	<rule ref="WordPress.Files.FileName">
 		<exclude-pattern>*/tests/*</exclude-pattern>
+		<!-- The WooCommerce domain files share a _shared.php helper file whose leading
+		     underscore makes it sort and load first in the require list, guaranteeing its
+		     cross-cutting helpers exist before any domain file references them. The
+		     intentional underscore is what the hyphenated-lowercase sniff objects to. -->
+		<exclude-pattern>*/includes/abilities/woocommerce/_shared\.php</exclude-pattern>
 	</rule>
 	<rule ref="Squiz.Commenting.ClassComment.Missing">
 		<exclude-pattern>*/tests/*</exclude-pattern>

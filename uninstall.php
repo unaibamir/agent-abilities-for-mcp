@@ -6,6 +6,12 @@
  * transient, the per-site activity log table, and the OAuth tables. On multisite it loops
  * every blog so nothing is left behind. No other plugin's data is touched.
  *
+ * Intentionally left in place: the dedicated agent WordPress user the plugin can create and
+ * any application passwords issued to it. That user is a first-class WordPress account the
+ * operator may have repurposed or assigned other roles, so deleting it (and silently revoking
+ * its credentials) on uninstall would be destructive and surprising. Removing the account is
+ * the operator's call, made from the Users screen.
+ *
  * @package AgentAbilitiesForMCP
  */
 

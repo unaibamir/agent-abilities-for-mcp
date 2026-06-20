@@ -169,6 +169,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/products.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/variations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/attributes.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/orders.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce.php';
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );

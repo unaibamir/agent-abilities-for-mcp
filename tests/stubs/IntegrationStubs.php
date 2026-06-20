@@ -145,6 +145,9 @@ class Post {
 		return $model;
 	}
 	public function save() {
+		if ( \AAFM\Tests\AioseoStubStore::$save_should_fail ) {
+			return false;
+		}
 		\AAFM\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
 		return true;
 	}
@@ -211,7 +214,7 @@ PHP;
 		}
 		if ( ! function_exists( 'get_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function get_field( $selector, $post_id = false, $format = true ) { return \AAFM\Tests\AcfStubStore::value( $selector, $post_id ); }' );
+			eval( 'function get_field( $selector, $post_id = false, $format = true ) { return $format ? \AAFM\Tests\AcfStubStore::value_formatted( $selector, $post_id ) : \AAFM\Tests\AcfStubStore::value( $selector, $post_id ); }' );
 		}
 		if ( ! function_exists( 'update_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
@@ -418,7 +421,7 @@ PHP;
 		}
 		if ( ! function_exists( 'wc_create_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return new \WC_Customer( $id ); }' );
+			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return (int) $id; }' );
 		}
 		if ( ! function_exists( 'wc_update_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -637,7 +640,7 @@ class WC_Product {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); return true; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -687,7 +690,7 @@ class WC_Product_Variation {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); return true; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}

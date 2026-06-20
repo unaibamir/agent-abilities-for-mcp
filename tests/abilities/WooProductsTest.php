@@ -323,6 +323,35 @@ final class WooProductsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'name is required on create.' );
 	}
 
+	/**
+	 * T2-4: requesting a non-simple product type must NOT silently create a simple product and
+	 * report success. The schema enumerates variable/grouped/external but this generic create
+	 * only builds simple products, so a non-simple request is rejected with an error.
+	 */
+	public function test_create_product_rejects_non_simple_type(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( 'variable', 'grouped', 'external' ) as $type ) {
+			$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+				array(
+					'name' => 'Typed Product',
+					'type' => $type,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $res, "Requesting a {$type} product must error, not silently create a simple one." );
+		}
+
+		// An explicit 'simple' type, and the omitted-type default, both still succeed.
+		$simple = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name' => 'Simple Product',
+				'type' => 'simple',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $simple );
+		$this->assertSame( 'simple', $simple['type'] );
+	}
+
 	public function test_create_product_rejects_a_smuggled_top_level_field(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
@@ -531,6 +560,21 @@ final class WooProductsTest extends TestCase {
 		$this->assertFalse( \AAFM\Tests\WcStubStore::exists( 101 ) );
 		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertInstanceOf( WP_Error::class, $read, 'A deleted product can no longer be read.' );
+	}
+
+	/**
+	 * T2-3: when the WC data store reports the delete failed, the ability returns the generic
+	 * error rather than deleted:true. The product is still present afterwards.
+	 */
+	public function test_delete_product_store_failure_returns_error(): void {
+		$this->acting_as( 'administrator' );
+
+		\AAFM\Tests\WcStubStore::$delete_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		\AAFM\Tests\WcStubStore::$delete_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed delete must not report deleted:true.' );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ), 'The product must still exist after a failed delete.' );
 	}
 
 	public function test_delete_product_is_annotated_destructive(): void {

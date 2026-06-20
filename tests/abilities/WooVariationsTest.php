@@ -567,6 +567,21 @@ final class WooVariationsTest extends TestCase {
 		$this->assertNotContains( 601, wp_list_pluck( $list['variations'], 'id' ), 'The parent no longer lists the deleted variation.' );
 	}
 
+	/**
+	 * T2-3: a failed variation delete (the WC data store reports failure) returns the generic
+	 * error, not deleted:true, and the variation is still present.
+	 */
+	public function test_delete_variation_store_failure_returns_error(): void {
+		$this->acting_as( 'administrator' );
+
+		WcStubStore::$delete_should_fail = true;
+		$res                             = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		WcStubStore::$delete_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed variation delete must not report deleted:true.' );
+		$this->assertTrue( WcStubStore::exists( 601 ), 'The variation must still exist after a failed delete.' );
+	}
+
 	public function test_delete_variation_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product-variation' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product-variation must be destructive.' );

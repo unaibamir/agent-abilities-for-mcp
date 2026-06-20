@@ -313,7 +313,11 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		$model->$prop = (bool) $input[ $field ];
 	}
 
-	$model->save();
+	// AIOSEO's model save() returns false on a custom-table write failure. Surface it rather
+	// than reporting a stale read as a success.
+	if ( false === $model->save() ) {
+		return aafm_generic_error();
+	}
 
 	return aafm_aioseo_read_fields( $id );
 }

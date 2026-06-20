@@ -361,9 +361,18 @@ class HandshakeTest extends TestCase {
 		$this->assertGreaterThan( 0, $data['expires_in'], 'expires_in must be a positive lifetime' );
 		$access_token = (string) $data['access_token'];
 
-		// (5) The minted bearer resolves to the approving user on determine_current_user.
+		// (5) The minted bearer resolves to the approving user on determine_current_user —
+		// but only on the MCP route (the resolver is scoped there, not site-wide).
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot of a server superglobal, restored verbatim after the assertion.
+		$prev_uri                      = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token;
+		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ), 'the OAuth bearer must resolve to the approving user' );
+		if ( null === $prev_uri ) {
+			unset( $_SERVER['REQUEST_URI'] );
+		} else {
+			$_SERVER['REQUEST_URI'] = $prev_uri;
+		}
 
 		// (6) Acting AS that uid, tools/list reflects the editor's bounded, strict-subset view.
 		wp_set_current_user( $uid );
@@ -403,6 +412,32 @@ class HandshakeTest extends TestCase {
 			(array) $response->get_data(),
 			'no token may be issued without PKCE'
 		);
+	}
+
+	/**
+	 * T1-8: deactivating a client blocks redemption of a code minted before deactivation —
+	 * is_active is otherwise only checked at authorize-time.
+	 */
+	public function test_deactivated_client_cannot_redeem_code(): void {
+		$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$challenge = $this->challenge_for( self::VERIFIER );
+		$client_id = $this->register_client( array( self::REDIRECT ) );
+		$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $challenge );
+
+		// Disable the client AFTER the code was minted.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array( 'is_active' => 0 ),
+			array( 'client_id' => $client_id ),
+			array( '%d' ),
+			array( '%s' )
+		);
+
+		$response = $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER );
+		$this->assertSame( 400, $response->get_status(), 'a deactivated client must not redeem its code' );
+		$this->assertArrayNotHasKey( 'access_token', (array) $response->get_data(), 'no token may be issued to a deactivated client' );
 	}
 
 	/**

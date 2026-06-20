@@ -72,6 +72,26 @@ class CodesTest extends TestCase {
 	}
 
 	/**
+	 * T1-7: when the row insert fails, mint returns a WP_Error rather than a phantom code —
+	 * a client must never get a successful redirect for a grant that was never persisted.
+	 */
+	public function test_mint_returns_error_when_insert_fails(): void {
+		aafm_install_oauth_tables();
+
+		global $wpdb;
+		// Drop the (temporary) table so the next insert fails inside the sandbox.
+		$suppress = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+
+		$result = aafm_oauth_mint_code( $this->ctx() );
+
+		$wpdb->suppress_errors( $suppress );
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'A failed insert must surface as an error, not a phantom code.' );
+	}
+
+	/**
 	 * A fresh code redeemed with the right client and redirect returns the row.
 	 */
 	public function test_redeem_fresh_code_returns_row(): void {

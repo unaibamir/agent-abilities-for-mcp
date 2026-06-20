@@ -1301,9 +1301,13 @@ function aafm_redact_revision( WP_Post $revision ): array {
  * Build the get-revision payload: the lean metadata shape plus the revision's body
  * content, excerpt, and an optional diff. This is intentionally NOT folded into
  * aafm_redact_revision(): that redactor stays metadata-only for list-revisions, which
- * must never carry body content. The caller (aafm_perm_get_revision) has already proven
- * the parent is editable, so exposing the revision body here is safe — password
- * protection is a front-end visitor gate, not an editor gate, and does not apply.
+ * must never carry body content.
+ *
+ * SECURITY: when the parent post is password-protected, the body, excerpt, and diff are
+ * withheld — the metadata shape still returns, but content is '' for both rendered and
+ * content_format=raw, and diff is null. This matches aafm_rich_post()'s chokepoint for
+ * live content getters so a protected body can't leak through revision history. For a
+ * normal (non-protected) post the Wave-1 enrichment is unchanged.
  *
  * Note: rendered output is best-effort — an MCP request has no full post context
  * (no setup_postdata / loop), so a third-party the_content filter that reads
@@ -1318,7 +1322,16 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$raw    = (string) $revision->post_content;
 
-	if ( 'raw' === $format ) {
+	// The password lives on the parent post, not the revision. A revision of a
+	// password-protected post must not expose its body/excerpt (rendered or raw) or a
+	// body-revealing diff. The edit_post gate does not inspect post_password, so this is
+	// the chokepoint.
+	$parent       = get_post( (int) $revision->post_parent );
+	$is_protected = $parent instanceof WP_Post && '' !== (string) $parent->post_password;
+
+	if ( $is_protected ) {
+		$content = '';
+	} elseif ( 'raw' === $format ) {
 		$content = $raw;
 	} else {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core filter, applied so blocks/shortcodes render.
@@ -1327,9 +1340,9 @@ function aafm_get_revision_payload( WP_Post $revision, array $input ): array {
 
 	$payload            = aafm_redact_revision( $revision );
 	$payload['content'] = $content;
-	$payload['excerpt'] = (string) $revision->post_excerpt;
+	$payload['excerpt'] = $is_protected ? '' : (string) $revision->post_excerpt;
 	$payload['diff']    = null;
-	if ( ! empty( $input['with_diff'] ) ) {
+	if ( ! $is_protected && ! empty( $input['with_diff'] ) ) {
 		if ( ! function_exists( 'wp_text_diff' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/revision.php';
 		}

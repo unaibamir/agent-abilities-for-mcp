@@ -124,7 +124,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		}
 
 		$allowed = $original_permission( $input );
-		if ( false === $allowed || is_wp_error( $allowed ) ) {
+		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
+		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
+		// callback's denial is never silently unlogged.
+		if ( true !== $allowed ) {
 			aafm_log_activity(
 				array_merge(
 					$p,

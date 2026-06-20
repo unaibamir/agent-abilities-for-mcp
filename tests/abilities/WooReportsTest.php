@@ -182,6 +182,117 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * T2-5: a seeded completed order with line items produces a non-empty, correct top-sellers
+	 * row — product ids come from order ITEM data, not shop_order post meta.
+	 */
+	public function test_get_top_sellers_aggregates_order_line_items(): void {
+		\AAFM\Tests\WcOrderStubStore::reset();
+		// Product 101 is seeded by stub_woocommerce(); add a second product to rank below it.
+		\AAFM\Tests\WcStubStore::seed( 202, array( 'name' => 'Runner Up' ) );
+
+		$today = gmdate( 'Y-m-d\TH:i:s' );
+		\AAFM\Tests\WcOrderStubStore::seed(
+			6001,
+			array(
+				'status'       => 'completed',
+				'date_created' => $today,
+				'items'        => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 5,
+					),
+					array(
+						'product_id' => 202,
+						'quantity'   => 2,
+					),
+				),
+			)
+		);
+		\AAFM\Tests\WcOrderStubStore::seed(
+			6002,
+			array(
+				'status'       => 'processing',
+				'date_created' => $today,
+				'items'        => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 3,
+					),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertNotEmpty( $res['items'], 'A seeded order with line items must produce rows.' );
+
+		// Product 101 sold 8 (5 + 3) and ranks first; product 202 sold 2 and ranks second.
+		$this->assertSame( 101, $res['items'][0]['product_id'] );
+		$this->assertSame( 8, $res['items'][0]['quantity'] );
+		$this->assertSame( 'Test Widget', $res['items'][0]['name'] );
+		$this->assertSame( 202, $res['items'][1]['product_id'] );
+		$this->assertSame( 2, $res['items'][1]['quantity'] );
+	}
+
+	/**
+	 * TF-3: the date window is pushed into the wc_get_orders() query, not applied after loading
+	 * every order. An order outside the window must not be aggregated, and the query that ran must
+	 * carry the date window rather than an unbounded limit => -1 full table scan.
+	 */
+	public function test_get_top_sellers_constrains_query_to_window(): void {
+		\AAFM\Tests\WcOrderStubStore::reset();
+		\AAFM\Tests\WcStubStore::seed( 303, array( 'name' => 'Stale Product' ) );
+
+		$in_window  = gmdate( 'Y-m-d\TH:i:s' );
+		$out_window = gmdate( 'Y-m-d\TH:i:s', strtotime( '-2 years' ) );
+
+		// In-window order: product 101, qty 4.
+		\AAFM\Tests\WcOrderStubStore::seed(
+			7001,
+			array(
+				'status'       => 'completed',
+				'date_created' => $in_window,
+				'items'        => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 4,
+					),
+				),
+			)
+		);
+		// Out-of-window order, two years ago: must never be aggregated.
+		\AAFM\Tests\WcOrderStubStore::seed(
+			7002,
+			array(
+				'status'       => 'completed',
+				'date_created' => $out_window,
+				'items'        => array(
+					array(
+						'product_id' => 303,
+						'quantity'   => 50,
+					),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		// Only the in-window product is aggregated; the two-year-old order is excluded.
+		$product_ids = array_column( $res['items'], 'product_id' );
+		$this->assertContains( 101, $product_ids, 'The in-window product must be aggregated.' );
+		$this->assertNotContains( 303, $product_ids, 'A product sold only outside the window must not be aggregated.' );
+
+		// The query itself was constrained to the window, not an unbounded full-table scan.
+		$args = \AAFM\Tests\WcOrderStubStore::$last_query_args;
+		$this->assertArrayHasKey( 'date_created', $args, 'The date window must be pushed into the wc_get_orders() query.' );
+		$this->assertStringStartsWith( '>=', (string) $args['date_created'], 'The window must constrain date_created as a lower bound.' );
+		$this->assertNotSame( -1, $args['limit'] ?? null, 'The query must not load every order with limit => -1.' );
+	}
+
+	/**
 	 * Top sellers accepts all valid period values.
 	 */
 	public function test_get_top_sellers_accepts_all_periods(): void {
@@ -435,6 +546,58 @@ final class WooReportsTest extends TestCase {
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayNotHasKey( 'stripe_secret', $res['settings'] );
+	}
+
+	/**
+	 * A secret nested under a benign parent key must be redacted at depth — shallow,
+	 * top-level-only redaction leaks credentials stored inside a sub-array.
+	 */
+	public function test_get_payment_gateway_redacts_nested_secret(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title'    => 'PayPal',
+					'advanced' => array(
+						'mode'       => 'live',
+						'api_secret' => 'nested-secret-value',
+					),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$json = wp_json_encode( $res['settings'] );
+		$this->assertStringNotContainsString( 'nested-secret-value', (string) $json, 'A secret two levels deep must not leak.' );
+		// The benign sibling under the same parent must survive.
+		$this->assertSame( 'live', $res['settings']['advanced']['mode'] );
+	}
+
+	/**
+	 * A credential stored under an unconventional key name (one not in the original
+	 * key/secret/token/password/api/private list) must still be redacted.
+	 */
+	public function test_get_payment_gateway_redacts_unconventional_secret_key(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title'      => 'PayPal',
+					'credential' => 'unconventional-credential-value',
+					'auth_pwd'   => 'unconventional-pwd-value',
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertArrayNotHasKey( 'credential', $res['settings'], 'A "credential" key must be redacted.' );
+		$this->assertArrayNotHasKey( 'auth_pwd', $res['settings'], 'An "auth_pwd" key must be redacted.' );
 	}
 
 	/**

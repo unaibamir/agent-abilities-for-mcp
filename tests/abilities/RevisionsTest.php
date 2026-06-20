@@ -349,6 +349,64 @@ final class RevisionsTest extends TestCase {
 		$this->assertStringContainsString( 'gamma', $with['revision']['diff'], 'Added token (current content) should appear in the diff.' );
 	}
 
+	/**
+	 * A revision of a password-protected parent post must withhold the body and excerpt —
+	 * rendered AND content_format=raw — and must not leak the body through a diff. A normal
+	 * post still returns its body (the Wave-1 enrichment).
+	 */
+	public function test_get_revision_withholds_body_for_password_protected_parent(): void {
+		require_once ABSPATH . 'wp-admin/includes/revision.php';
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'   => $author,
+				'post_content'  => 'secret v1 body',
+				'post_password' => 'hunter2',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'secret v2 body',
+				'post_excerpt' => 'secret excerpt',
+			)
+		);
+		$revs = wp_get_post_revisions( $pid ); // newest first.
+		$rev  = array_shift( $revs );
+
+		// Rendered: body and excerpt must be withheld (empty), no secret markup.
+		$rendered = aafm_exec_get_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $rev->ID,
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $rendered );
+		$this->assertSame( '', $rendered['revision']['content'], 'Rendered body must be withheld for a password-protected parent.' );
+		$this->assertSame( '', $rendered['revision']['excerpt'], 'Excerpt must be withheld for a password-protected parent.' );
+
+		// Raw: the stored markup must also be withheld.
+		$raw = aafm_exec_get_revision(
+			array(
+				'post_id'        => $pid,
+				'revision_id'    => (int) $rev->ID,
+				'content_format' => 'raw',
+			)
+		);
+		$this->assertSame( '', $raw['revision']['content'], 'Raw stored markup must be withheld for a password-protected parent.' );
+
+		// Diff must not leak the protected body either.
+		$with = aafm_exec_get_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $rev->ID,
+				'with_diff'   => true,
+			)
+		);
+		$this->assertNull( $with['revision']['diff'], 'Diff must be withheld for a password-protected parent.' );
+	}
+
 	public function test_delete_revision_removes_one_revision(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );

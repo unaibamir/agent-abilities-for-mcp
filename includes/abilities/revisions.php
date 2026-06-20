@@ -2,8 +2,10 @@
 /**
  * Governed revision abilities. Every revision operation passes the shared
  * aafm_revision_parent_editable() gate: the parent post must be editable by the agent
- * (Unit 1 per-object resolver). Revisions are exposed metadata-only — the redactor never
- * returns post_content, so no raw body reaches the agent through this surface.
+ * (Unit 1 per-object resolver). list-revisions stays metadata-only (the lean redactor
+ * never returns post_content). get-revision additionally returns the revision body and
+ * excerpt (Wave 1 enrichment) for a normal post, but withholds the body, excerpt, and
+ * diff when the parent post is password-protected — see aafm_get_revision_payload().
  *
  * @package AgentAbilitiesForMCP
  */

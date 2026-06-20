@@ -102,6 +102,14 @@ class WcOrderStubStore {
 	public static bool $add_note_should_fail = false;
 
 	/**
+	 * The args from the most recent query() call, so a test can assert what was pushed into
+	 * wc_get_orders() (e.g. that a date window constrained the query rather than -1 + PHP filter).
+	 *
+	 * @var array<string,mixed>
+	 */
+	public static array $last_query_args = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -118,6 +126,7 @@ class WcOrderStubStore {
 		self::$delete_note_should_fail   = false;
 		self::$delete_refund_should_fail = false;
 		self::$add_note_should_fail      = false;
+		self::$last_query_args           = array();
 	}
 
 	/**
@@ -209,12 +218,13 @@ class WcOrderStubStore {
 	 * full matching count before slicing). Without paginate it returns a plain array. This mirrors
 	 * the real WooCommerce wc_get_orders() paginate contract the order abilities depend on.
 	 *
-	 * @param array<string,mixed> $args Query args (status, limit, paged, paginate).
+	 * @param array<string,mixed> $args Query args (status, date_created, limit, paged, paginate).
 	 * @return array<int,\WC_Order>|object
 	 */
 	public static function query( array $args = array() ) {
-		$status = $args['status'] ?? '';
-		$rows   = self::all();
+		self::$last_query_args = $args;
+		$status                = $args['status'] ?? '';
+		$rows                  = self::all();
 
 		if ( '' !== $status && 'any' !== $status ) {
 			$wanted = (array) $status;
@@ -222,6 +232,23 @@ class WcOrderStubStore {
 				array_filter(
 					$rows,
 					static fn( array $row ): bool => in_array( (string) ( $row['status'] ?? '' ), $wanted, true )
+				)
+			);
+		}
+
+		// Date window: model wc_get_orders()'s `date_created => '>=<ts>'` lower-bound form, the
+		// shape the top-sellers report uses to push its window into the query. An order with no
+		// date_created (or one before the bound) is excluded, exactly as WC would exclude it.
+		if ( isset( $args['date_created'] ) && is_string( $args['date_created'] )
+			&& 0 === strpos( $args['date_created'], '>=' ) ) {
+			$bound_ts = (int) substr( $args['date_created'], 2 );
+			$rows     = array_values(
+				array_filter(
+					$rows,
+					static function ( array $row ) use ( $bound_ts ): bool {
+						$created = (string) ( $row['date_created'] ?? '' );
+						return '' !== $created && (int) strtotime( $created ) >= $bound_ts;
+					}
 				)
 			);
 		}

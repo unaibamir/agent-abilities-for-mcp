@@ -54,20 +54,36 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 3. Read the bearer credential from the Authorization header. Some FastCGI
+	// 3. Scope strictly to the MCP REST route. An aafm_oat_ token is a credential
+	// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
+	// other route would turn an MCP token into a general credential for every route
+	// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
+	// current_user untouched, exactly as Application Passwords are. determine_current_user
+	// fires before REST routing, so the target is read from the request URI.
+	if ( ! aafm_oauth_request_targets_mcp_route() ) {
+		return $user_id;
+	}
+
+	// 4. Enforce the HTTPS policy. Where HTTPS is required, a bearer presented over
+	// plain http never resolves a user (the other OAuth paths already refuse http).
+	if ( aafm_oauth_https_required() && ! is_ssl() ) {
+		return $user_id;
+	}
+
+	// 5. Read the bearer credential from the Authorization header. Some FastCGI
 	// setups only expose it under REDIRECT_HTTP_AUTHORIZATION.
 	$credential = aafm_oauth_read_bearer_token();
 	if ( null === $credential ) {
 		return $user_id;
 	}
 
-	// 4. Scope strictly to our own access tokens. A bearer that is not ours
+	// 6. Scope strictly to our own access tokens. A bearer that is not ours
 	// (App Password, any other scheme) is left for its own resolver.
 	if ( 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
 		return $user_id;
 	}
 
-	// 5. Resolve the token to its row in a single indexed lookup. The row
+	// 7. Resolve the token to its row in a single indexed lookup. The row
 	// resolver already gates on (active + unexpired), so a null row covers
 	// every present-but-invalid case — unknown, inactive, expired — and a
 	// present-but-invalid OAuth token simply fails to resolve a user rather
@@ -77,13 +93,77 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 6. Audience binding (RFC 8707): the token must have been minted for THIS
+	// 8. Audience binding (RFC 8707): the token must have been minted for THIS
 	// endpoint. A token scoped to a different audience resolves no user here.
 	if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
 		return $user_id;
 	}
 
+	// 9. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
+	// already in a client's hands keeps working unless its owning client is re-checked here —
+	// so disabling a compromised client invalidates its live access tokens immediately.
+	if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
+		return $user_id;
+	}
+
 	return (int) $row['wp_user_id'];
+}
+
+/**
+ * Whether the current request targets the MCP REST route.
+ *
+ * The determine_current_user filter runs before REST routing resolves $request->get_route(),
+ * so the target is derived from the raw request: the URI path (pretty permalinks give
+ * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route query var (plain permalinks give
+ * ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
+ * endpoint so it tracks any future rename.
+ *
+ * @return bool True only when the request is for the MCP endpoint.
+ */
+function aafm_oauth_request_targets_mcp_route(): bool {
+	$mcp_route = '/agent-abilities-for-mcp/mcp';
+
+	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp.
+	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
+		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( rtrim( $rest_route, '/' ) === $mcp_route ) {
+			return true;
+		}
+	}
+
+	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
+	// expected path from rest_url() so a site installed under a path prefix (e.g.
+	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison — a
+	// hardcoded /wp-json/... literal never matches there.
+	$request_uri = isset( $_SERVER['REQUEST_URI'] )
+		? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
+		: '';
+	$path        = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
+	if ( '' === $path ) {
+		return false;
+	}
+
+	$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
+
+	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
+	// component collapses to .../index.php and carries no route — that case is the rest_route branch
+	// above. Only treat the rest_url() path as the pretty target when it actually ends with the MCP
+	// route. Otherwise reconstruct the expected pretty path from the install's home-path prefix so a
+	// subdirectory install still matches even with plain permalinks pretty-routing through.
+	if ( substr( rtrim( $rest_url_path, '/' ), -strlen( $mcp_route ) ) === $mcp_route ) {
+		$mcp_rest_path = $rest_url_path;
+	} else {
+		$home_path     = (string) wp_parse_url( home_url( '/' ), PHP_URL_PATH );
+		$segments      = array_filter(
+			array( trim( $home_path, '/' ), trim( rest_get_url_prefix(), '/' ) ),
+			static function ( string $segment ): bool {
+				return '' !== $segment;
+			}
+		);
+		$mcp_rest_path = '/' . implode( '/', $segments ) . $mcp_route;
+	}
+
+	return rtrim( $path, '/' ) === rtrim( $mcp_rest_path, '/' );
 }
 
 /**

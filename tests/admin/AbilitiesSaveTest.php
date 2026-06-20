@@ -31,6 +31,63 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertSame( array(), $enabled );
 	}
 
+	/**
+	 * T3-2: a scoped save (the Integrations tab) must NOT trust client-supplied off-tab state.
+	 * Posting with aafm_scope set to the integration subjects, but with an off-tab core ability
+	 * absent from aafm_abilities, must preserve that core ability from the persisted option.
+	 */
+	public function test_scoped_save_preserves_off_tab_abilities(): void {
+		// A core ability (subject 'content', outside any integration scope) is enabled.
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		// The Integrations form posts ONLY its own scope and no aafm_abilities at all (every
+		// integration toggle is off), exactly the case a stale/tampered client would send.
+		$resolved = aafm_resolve_scoped_enabled_input(
+			array(
+				'aafm_scope'     => array( 'yoast', 'rankmath', 'aioseo', 'acf', 'woocommerce' ),
+				'aafm_abilities' => array(),
+			)
+		);
+
+		$this->assertContains( 'aafm/get-posts', $resolved, 'An off-tab core ability must survive a scoped save.' );
+	}
+
+	/**
+	 * T3-2: a scoped save still toggles abilities WITHIN its scope. Posting scope=[woocommerce]
+	 * with no in-scope abilities disables a previously enabled woocommerce ability, while leaving
+	 * an off-tab ability untouched.
+	 */
+	public function test_scoped_save_updates_in_scope_abilities(): void {
+		// Pretend a woocommerce-subject ability was enabled by faking the registry subject.
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ): array {
+				$registry['aafm/fake-wc'] = array(
+					'subject' => 'woocommerce',
+					'risk'    => 'read',
+				);
+				return $registry;
+			}
+		);
+		aafm_registry_cache_should_flush( true );
+
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-wc' ) );
+
+		// Integrations save: scope=woocommerce, and the fake-wc toggle is OFF (absent).
+		$resolved = aafm_resolve_scoped_enabled_input(
+			array(
+				'aafm_scope'     => array( 'woocommerce' ),
+				'aafm_abilities' => array(),
+			)
+		);
+
+		$this->assertContains( 'aafm/get-posts', $resolved, 'The off-tab ability is preserved.' );
+		$this->assertNotContains( 'aafm/fake-wc', $resolved, 'An in-scope ability the form turned off is removed.' );
+
+		remove_all_filters( 'aafm_abilities_registry' );
+		aafm_registry_cache_should_flush( true );
+	}
+
 	public function test_menu_is_registered_for_admins(): void {
 		$this->acting_as( 'administrator' );
 		aafm_register_admin_menu();

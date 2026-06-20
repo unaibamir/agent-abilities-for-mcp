@@ -430,6 +430,60 @@ function aafm_perm_update_user( array $input ): bool {
 }
 
 /**
+ * Count the site's administrators, capped at a small ceiling.
+ *
+ * @param int $max Stop counting at this many (2 is enough to answer "is this the last admin").
+ * @return int Number of administrators, up to $max.
+ */
+function aafm_count_administrators( int $max = 2 ): int {
+	$admins = get_users(
+		array(
+			'role'   => 'administrator',
+			'fields' => 'ID',
+			'number' => $max,
+		)
+	);
+	return count( $admins );
+}
+
+/**
+ * Run a callback inside a process-wide critical section keyed by name, using a MySQL named
+ * lock so concurrent requests serialize.
+ *
+ * The last-admin guards are a check-then-mutate pair; without serialization two concurrent
+ * demote/delete calls can both pass the count check and orphan the site (no administrator).
+ * GET_LOCK gives a cross-connection advisory lock so the check and the mutation run as one
+ * critical section. If the lock can't be acquired (timeout, or a backend without GET_LOCK such
+ * as SQLite), the callback still runs — the pre-check remains as the best-effort floor, so this
+ * never makes the guard weaker than before, only stronger when the lock is available.
+ *
+ * @template T
+ * @param string       $name     Logical lock name (namespaced internally).
+ * @param callable():T $callback The critical section.
+ * @return T The callback's return value.
+ */
+function aafm_with_named_lock( string $name, callable $callback ) {
+	global $wpdb;
+	$lock     = 'aafm_' . md5( $name );
+	$acquired = false;
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $lock, 5 ) );
+	if ( '1' === (string) $got ) {
+		$acquired = true;
+	}
+
+	try {
+		return $callback();
+	} finally {
+		if ( $acquired ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $lock ) );
+		}
+	}
+}
+
+/**
  * Execute aafm/update-user.
  *
  * Edits the safe profile fields by id. A role change is honored ONLY when the caller can
@@ -462,38 +516,47 @@ function aafm_exec_update_user( array $input ) {
 		$data['user_email'] = $email;
 	}
 
+	$demotes_admin = false;
 	if ( isset( $input['role'] ) ) {
 		// Role change is admin-only (promote_users) and must target a real role.
 		$role = sanitize_key( (string) $input['role'] );
 		if ( ! current_user_can( 'promote_users' ) || null === get_role( $role ) ) {
 			return aafm_generic_error();
 		}
-		// M2: never demote the sole remaining administrator (a lockout guard mirroring
-		// the delete-user last-admin floor). Only relevant when the new role is NOT admin
-		// and the target currently IS an admin.
-		if ( 'administrator' !== $role ) {
-			if ( in_array( 'administrator', (array) $target->roles, true ) ) {
-				$admins = get_users(
-					array(
-						'role'   => 'administrator',
-						'fields' => 'ID',
-						'number' => 2,
-					)
-				);
-				if ( count( $admins ) <= 1 ) {
-					return aafm_generic_error();
-				}
-			}
+		$data['role']  = $role;
+		$demotes_admin = 'administrator' !== $role && in_array( 'administrator', (array) $target->roles, true );
+	}
+
+	// A demote of an administrator runs inside a critical section: the last-admin check and the
+	// write are serialized against concurrent demote/delete calls so two of them can't both
+	// pass the pre-check and leave the site with no administrator. A non-admin-affecting edit
+	// takes the plain path. The check is also re-run inside the lock, and the result re-verified
+	// after the write, rolling the admin role back if the demote left zero admins.
+	$writer = static function () use ( $data, $id, $demotes_admin ) {
+		if ( $demotes_admin && aafm_count_administrators() <= 1 ) {
+			return aafm_generic_error();
 		}
-		$data['role'] = $role;
-	}
 
-	$result = wp_update_user( $data );
-	if ( is_wp_error( $result ) ) {
-		return aafm_generic_error();
-	}
+		$result = wp_update_user( $data );
+		if ( is_wp_error( $result ) ) {
+			return aafm_generic_error();
+		}
 
-	return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+		// Defense in depth: if this write somehow left the site admin-less, restore the role.
+		if ( $demotes_admin && aafm_count_administrators() < 1 ) {
+			$restored = get_userdata( $id );
+			if ( $restored instanceof WP_User ) {
+				$restored->set_role( 'administrator' );
+			}
+			return aafm_generic_error();
+		}
+
+		return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+	};
+
+	return $demotes_admin
+		? aafm_with_named_lock( 'last_admin', $writer )
+		: $writer();
 }
 
 /**
@@ -587,25 +650,27 @@ function aafm_exec_delete_user( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Never delete the last administrator.
-	if ( in_array( 'administrator', (array) $victim->roles, true ) ) {
-		$admins = get_users(
-			array(
-				'role'   => 'administrator',
-				'fields' => 'ID',
-				'number' => 2,
-			)
-		);
-		if ( count( $admins ) <= 1 ) {
+	$victim_is_admin = in_array( 'administrator', (array) $victim->roles, true );
+
+	// Deleting an administrator runs inside the same last-admin critical section as the demote
+	// path, so the count check and wp_delete_user() are serialized against concurrent calls and
+	// two of them can't both pass the pre-check and orphan the site. A non-admin delete takes
+	// the plain path. The check is re-run inside the lock.
+	$deleter = static function () use ( $id, $reassign, $victim_is_admin ) {
+		if ( $victim_is_admin && aafm_count_administrators() <= 1 ) {
 			return aafm_generic_error();
 		}
-	}
 
-	require_once ABSPATH . 'wp-admin/includes/user.php';
-	$ok = wp_delete_user( $id, $reassign );
-	if ( ! $ok ) {
-		return aafm_generic_error();
-	}
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		$ok = wp_delete_user( $id, $reassign );
+		if ( ! $ok ) {
+			return aafm_generic_error();
+		}
 
-	return array( 'deleted' => true );
+		return array( 'deleted' => true );
+	};
+
+	return $victim_is_admin
+		? aafm_with_named_lock( 'last_admin', $deleter )
+		: $deleter();
 }

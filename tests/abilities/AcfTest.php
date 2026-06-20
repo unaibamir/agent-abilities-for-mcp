@@ -166,6 +166,26 @@ final class AcfTest extends TestCase {
 		$this->assertSame( 'Updated headline', ( (array) $read['fields'] )['field_1'], 'The ACF post write must round-trip.' );
 	}
 
+	/**
+	 * T2-1: when update_field() fails (nothing stored), the write returns the generic error,
+	 * not a fake-success refreshed read.
+	 */
+	public function test_update_post_fields_update_failure_returns_error(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AcfStubStore::$update_should_fail = true;
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'Will not persist' ),
+			)
+		);
+		\AAFM\Tests\AcfStubStore::$update_should_fail = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A failed update_field must surface as an error, not a fake-success read.' );
+	}
+
 	public function test_update_post_fields_sanitizes_each_value(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
@@ -684,6 +704,153 @@ final class AcfTest extends TestCase {
 		);
 		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_url', $post_id );
 		$this->assertStringNotContainsString( 'javascript:', $stored, 'esc_url_raw must strip a javascript: scheme.' );
+	}
+
+	/**
+	 * TF-1: an image/file field stores an attachment ID but ACF reads it back FORMATTED (an array).
+	 * A successful write must not be reported as an error just because the formatted read-back
+	 * differs from the stored attachment id. The verify step has to compare the RAW stored value.
+	 */
+	public function test_update_post_fields_image_attachment_id_writes_without_false_error(): void {
+		$this->stub_acf_typed_field( 'field_image', 'image' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_image' => 42 ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'An image field writing an attachment id must not be reported as a failed write.'
+		);
+		$this->assertSame(
+			'42',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_image', $post_id ),
+			'The raw attachment id must persist under the post selector.'
+		);
+	}
+
+	/**
+	 * TF-1: a date_picker field stores Ymd but reads back FORMATTED (d/m/Y). A successful write
+	 * must not surface as an error from the format divergence alone.
+	 */
+	public function test_update_post_fields_date_writes_without_false_error(): void {
+		$this->stub_acf_typed_field( 'field_date', 'date_picker' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_date' => '20260620' ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A date field write must not be reported as a failure due to formatted read-back.'
+		);
+		$this->assertSame(
+			'20260620',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_date', $post_id ),
+			'The raw Ymd date must persist under the post selector.'
+		);
+	}
+
+	/**
+	 * TF-1: the genuine-failure detection from T2-1 still holds for a formatted field — when
+	 * update_field() stores nothing, the write still returns the generic error.
+	 */
+	public function test_update_post_fields_formatted_field_real_failure_still_errors(): void {
+		$this->stub_acf_typed_field( 'field_image', 'image' );
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AcfStubStore::$update_should_fail = true;
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_image' => 42 ),
+			)
+		);
+		\AAFM\Tests\AcfStubStore::$update_should_fail = false;
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A real failed write on a formatted field must still surface as the generic error.'
+		);
+	}
+
+	/**
+	 * T1-6: a repeater whose sub_fields include a URL subfield must run that nested leaf through
+	 * esc_url_raw, not the plain-text sanitizer — otherwise a javascript: scheme stored in a
+	 * repeater row survives to be rendered by a theme. The plain-text sub_field round-trips
+	 * intact, and the structured shape is preserved.
+	 */
+	public function test_update_post_fields_repeater_url_subfield_strips_javascript(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_rep',
+						'title'  => 'Repeater group',
+						'fields' => array(
+							array(
+								'key'        => 'field_rep',
+								'name'       => 'rep',
+								'label'      => 'Rows',
+								'type'       => 'repeater',
+								'sub_fields' => array(
+									array(
+										'key'  => 'field_rep_link',
+										'name' => 'link',
+										'type' => 'url',
+									),
+									array(
+										'key'  => 'field_rep_caption',
+										'name' => 'caption',
+										'type' => 'text',
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_rep' => array(
+						array(
+							'link'    => 'javascript:alert(1)',
+							'caption' => 'Plain caption',
+						),
+					),
+				),
+			)
+		);
+
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_rep', $post_id );
+		$this->assertIsArray( $stored );
+		$this->assertStringNotContainsString( 'javascript:', (string) $stored[0]['link'], 'A url subfield in a repeater must have its javascript: scheme stripped at depth.' );
+		$this->assertSame( 'Plain caption', $stored[0]['caption'], 'A plain-text subfield must round-trip intact.' );
 	}
 
 	/**

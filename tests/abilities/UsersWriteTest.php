@@ -161,6 +161,47 @@ final class UsersWriteTest extends TestCase {
 		$this->assertContains( 'administrator', (array) get_userdata( $admin )->roles, 'sole admin must stay an admin.' );
 	}
 
+	/**
+	 * T3-5: with more than one administrator, demoting one IS allowed and runs through the
+	 * last-admin critical section without breaking the happy path.
+	 */
+	public function test_update_user_demote_allowed_when_other_admins_remain(): void {
+		$this->acting_as( 'administrator' );
+		$victim = $this->factory->user->create( array( 'role' => 'administrator' ) );
+		$this->assertGreaterThanOrEqual( 2, aafm_count_administrators(), 'fixture needs two or more admins.' );
+
+		$res = wp_get_ability( 'aafm/update-user' )->execute(
+			array(
+				'user_id' => $victim,
+				'role'    => 'editor',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'a demote with other admins present must succeed.' );
+		$this->assertContains( 'editor', (array) get_userdata( $victim )->roles );
+		$this->assertNotContains( 'administrator', (array) get_userdata( $victim )->roles );
+	}
+
+	/**
+	 * T3-5: the named-lock critical-section helper runs its callback and returns its value
+	 * (and releases the lock so a second acquisition succeeds in the same process).
+	 */
+	public function test_named_lock_runs_callback_and_releases(): void {
+		$ran = false;
+		$out = aafm_with_named_lock(
+			'last_admin',
+			static function () use ( &$ran ) {
+				$ran = true;
+				return 'done';
+			}
+		);
+		$this->assertTrue( $ran, 'the critical section must run.' );
+		$this->assertSame( 'done', $out, 'the helper must return the callback value.' );
+
+		// A second acquisition must still succeed (the first lock was released).
+		$out2 = aafm_with_named_lock( 'last_admin', static fn() => 'again' );
+		$this->assertSame( 'again', $out2 );
+	}
+
 	public function test_delete_user_requires_delete_users_and_reassign(): void {
 		$this->acting_as( 'administrator' );
 		$victim   = self::factory()->user->create( array( 'role' => 'author' ) );

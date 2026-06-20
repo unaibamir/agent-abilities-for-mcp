@@ -120,6 +120,32 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertSame( 'aafm/needs-admin', $rows[0]['ability'] );
 	}
 
+	/**
+	 * T3-4: a permission callback returning a non-true, non-false value (null) is still a
+	 * denial — the WP Abilities API admits only true — so it must be audited as denied.
+	 */
+	public function test_null_permission_return_is_logged_as_denied(): void {
+		$this->acting_as( 'subscriber' );
+		$this->register(
+			'aafm/null-perm',
+			array(
+				'label'               => 'Null Perm',
+				'description'         => 'Permission callback returns null.',
+				'category'            => 'aafm-writes',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'done' => true ),
+				'permission_callback' => static fn() => null,
+			)
+		);
+
+		$ability = wp_get_ability( 'aafm/null-perm' );
+		$ability->check_permissions( array() );
+
+		$rows      = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $rows, 'ability' );
+		$this->assertContains( 'aafm/null-perm', $abilities, 'A null permission return must be audited as denied.' );
+	}
+
 	public function test_categories_are_registered(): void {
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-reads' ) );
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-writes' ) );

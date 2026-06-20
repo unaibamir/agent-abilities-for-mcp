@@ -262,6 +262,34 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * Real WooCommerce wc_create_customer() returns an int user id (or WP_Error), not a
+	 * WC_Customer object. A successful create must return the rich shape exactly once and
+	 * leave a single customer behind — no false error on the success path, no duplicate.
+	 */
+	public function test_create_customer_int_return_is_success_no_duplicate(): void {
+		WcCustomerStubStore::reset();
+		$this->acting_as( 'administrator' );
+
+		$first = wp_get_ability( 'aafm/wc-create-customer' )->execute(
+			array(
+				'email'      => 'intreturn@example.com',
+				'first_name' => 'Int',
+				'last_name'  => 'Return',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $first, 'A positive int return must be treated as success, not an error.' );
+		$this->assertArrayHasKey( 'id', $first );
+		$this->assertGreaterThan( 0, $first['id'] );
+		$this->assertSame( 'Int', $first['first_name'] );
+
+		// Exactly one customer exists after a single create — no duplicate spawned on the
+		// success path (the inverted check used to create then return an error).
+		$after_one = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
+		$this->assertNotInstanceOf( WP_Error::class, $after_one );
+		$this->assertSame( 1, $after_one['total'], 'A single create must leave exactly one customer.' );
+	}
+
+	/**
 	 * Create with billing fields writes them through to the returned shape.
 	 */
 	public function test_create_customer_with_billing_fields(): void {
@@ -506,6 +534,56 @@ final class WooCustomersTest extends TestCase {
 				)
 			)
 		);
+	}
+
+	/**
+	 * A principal with manage_woocommerce but WITHOUT delete_users must be denied at the
+	 * permission gate — store management must not expand into account destruction.
+	 *
+	 * Models a shop-manager-style custom role: it holds manage_woocommerce (so the rest of
+	 * the WC surface is usable) but does not hold the primitive delete_users cap.
+	 */
+	public function test_delete_customer_requires_delete_users_capability(): void {
+		add_role(
+			'aafm_shop_manager_test',
+			'AAFM Shop Manager Test',
+			array(
+				'read'               => true,
+				'manage_woocommerce' => true,
+			)
+		);
+
+		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		$manager_id  = $this->factory->user->create( array( 'role' => 'aafm_shop_manager_test' ) );
+		wp_set_current_user( $manager_id );
+
+		$this->assertTrue(
+			current_user_can( 'manage_woocommerce' ),
+			'Fixture sanity: the shop-manager role must hold manage_woocommerce.'
+		);
+		$this->assertFalse(
+			current_user_can( 'delete_users' ),
+			'Fixture sanity: the shop-manager role must NOT hold delete_users.'
+		);
+
+		$denied = wp_get_ability( 'aafm/wc-delete-customer' )->check_permissions(
+			array(
+				'customer_id' => $victim_id,
+				'reassign_to' => $reassign_id,
+			)
+		);
+		$this->assertNotTrue(
+			$denied,
+			'manage_woocommerce alone must not authorize deleting a WP user account.'
+		);
+
+		// The denial must be audited.
+		$audited   = aafm_query_activity( array( 'status' => 'denied' ) );
+		$abilities = wp_list_pluck( $audited, 'ability' );
+		$this->assertContains( 'aafm/wc-delete-customer', $abilities );
+
+		remove_role( 'aafm_shop_manager_test' );
 	}
 
 	/**

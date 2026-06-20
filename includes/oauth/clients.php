@@ -98,6 +98,38 @@ function aafm_oauth_register_client( array $req ) {
 }
 
 /**
+ * Whether a client row exists for this id but has been deactivated (is_active = 0).
+ *
+ * Used to re-enforce a client deactivation AFTER authorize-time, at code redemption, refresh
+ * rotation, and bearer validation — so disabling a compromised client stops its already-issued
+ * tokens, its refresh rotation, and the redemption of a code minted before deactivation. Returns
+ * false when no row exists at all, so synthetic client ids (never registered) are not blocked —
+ * only a known-and-disabled client is.
+ *
+ * @param string $client_id The client identifier carried by a code/token row.
+ * @return bool True only when a client row exists AND is inactive.
+ */
+function aafm_oauth_client_is_deactivated( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$is_active = $wpdb->get_var(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"SELECT is_active FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s",
+			$client_id
+		)
+	);
+
+	// null => no row (synthetic / never-registered id): not deactivated. A row with is_active 0
+	// is the only "deactivated" case.
+	return null !== $is_active && 0 === (int) $is_active;
+}
+
+/**
  * Validate a single redirect URI against the registration allowlist.
  *
  * Enforces: non-empty and at most 2048 bytes; no wildcard anywhere; no fragment and

@@ -402,6 +402,49 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * A shipping method's settings can hold carrier API keys / account credentials / license
+	 * keys. Those must be redacted in the returned shape — including secrets nested in a
+	 * sub-array and secrets under an unconventional key name.
+	 */
+	public function test_get_shipping_method_redacts_secrets(): void {
+		\AAFM\Tests\WcShippingStubStore::seed_method(
+			1,
+			1,
+			array(
+				'id'           => 'flat_rate',
+				'method_title' => 'Flat rate',
+				'enabled'      => 'yes',
+				'settings'     => array(
+					'title'      => 'Flat rate',
+					'api_key'    => 'carrier-api-key-value',
+					'credential' => 'carrier-credential-value',
+					'advanced'   => array(
+						'mode'          => 'live',
+						'account_token' => 'nested-account-token-value',
+					),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$json = wp_json_encode( $res['settings'] );
+		$this->assertStringNotContainsString( 'carrier-api-key-value', (string) $json, 'A top-level api_key must be redacted.' );
+		$this->assertStringNotContainsString( 'carrier-credential-value', (string) $json, 'An unconventional "credential" key must be redacted.' );
+		$this->assertStringNotContainsString( 'nested-account-token-value', (string) $json, 'A secret nested two levels deep must be redacted.' );
+		// The benign title and nested mode must survive.
+		$this->assertSame( 'Flat rate', $res['settings']['title'] );
+		$this->assertSame( 'live', $res['settings']['advanced']['mode'] );
+	}
+
+	/**
 	 * Unknown instance id returns WP_Error.
 	 */
 	public function test_get_shipping_method_unknown_instance_returns_error(): void {

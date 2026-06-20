@@ -253,49 +253,97 @@ function aafm_acf_url_leaf_keys(): array {
 }
 
 /**
+ * The ACF container field types whose value is a list of rows / a group keyed by sub-field name.
+ *
+ * @return string[]
+ */
+function aafm_acf_container_field_types(): array {
+	return array( 'repeater', 'group', 'flexible_content' );
+}
+
+/**
+ * Resolve a sub-field's ACF definition by its name within a parent field definition.
+ *
+ * ACF repeater/group/flexible-content values are keyed by the sub-field NAME, so a nested leaf's
+ * own type is found by matching that key against the parent def's `sub_fields`. Returns null when
+ * the parent has no matching sub-field (e.g. a free-form nested array).
+ *
+ * @param array<string,mixed> $parent_def The parent field definition.
+ * @param string              $name       The nested key (a sub-field name).
+ * @return array<string,mixed>|null The sub-field definition, or null when not found.
+ */
+function aafm_acf_sub_field_def( array $parent_def, string $name ): ?array {
+	$sub_fields = isset( $parent_def['sub_fields'] ) && is_array( $parent_def['sub_fields'] ) ? $parent_def['sub_fields'] : array();
+	foreach ( $sub_fields as $sub ) {
+		if ( is_array( $sub ) && isset( $sub['name'] ) && (string) $sub['name'] === $name ) {
+			return $sub;
+		}
+	}
+	return null;
+}
+
+/**
  * Recursively sanitize one ACF field value for writing.
  *
  * Scalars are sanitized by the field's resolved type: a URL-type value through esc_url_raw, a
  * wysiwyg/textarea value through wp_kses_post, everything else through sanitize_text_field. Arrays
- * (repeaters, relationships, nested groups) recurse — every leaf is sanitized, so a script payload
- * cannot survive at any depth. Values that are neither scalar nor array (objects/resources) are
- * dropped. Caller input is NEVER passed to update_field() unsanitized.
- *
- * The field type is resolved once for the top-level field key. A URL-typed field whose value is an
- * ARRAY (link/image/file return formats: title/url/target, alt/caption/filename, …) is NOT blanket
- * esc_url_raw'd: that would mangle the plain-text members. Instead only the url/src-keyed leaves get
- * esc_url_raw and every other leaf is sanitized as text. A scalar URL-typed value keeps esc_url_raw.
+ * recurse, and crucially each level resolves its OWN field type rather than carrying the top-level
+ * type down: a repeater/group/flexible-content sub-field's type comes from the parent def's
+ * `sub_fields`, so a URL/link/image sub-field nested in a repeater is still esc_url_raw'd at depth
+ * (a stored `javascript:` scheme can't survive in a repeater row). A URL-typed field whose value is
+ * a structured ARRAY (link/image/file return formats) keeps the existing url/src-leaf handling so
+ * its plain-text members (title, target, alt, caption, …) survive intact. Values that are neither
+ * scalar nor array are dropped. Caller input is NEVER passed to update_field() unsanitized.
  *
  * @param mixed  $value     Raw caller value.
  * @param string $field_key The top-level field key (to resolve its type).
  * @return mixed Sanitized value.
  */
 function aafm_acf_sanitize_value( $value, string $field_key ) {
-	$type = '';
+	$def = array();
 	if ( function_exists( 'acf_get_field' ) ) {
-		$def  = acf_get_field( $field_key );
-		$type = is_array( $def ) ? (string) ( $def['type'] ?? '' ) : '';
+		$resolved = acf_get_field( $field_key );
+		$def      = is_array( $resolved ) ? $resolved : array();
 	}
-	$is_url = in_array( $type, aafm_acf_url_field_types(), true );
-	return aafm_acf_sanitize_leaf( $value, $type, $is_url );
+	return aafm_acf_sanitize_leaf( $value, $def );
 }
 
 /**
  * The depth-recursing core of the ACF write sanitizer.
  *
- * @param mixed  $value     Raw value at this depth.
- * @param string $type      Resolved ACF field type for the top-level field.
- * @param bool   $url_typed Whether the top-level field is a URL-style type, so url/src leaves of a
- *                          structured value (link/image/file array) get esc_url_raw, the rest text.
- * @param string $key       The array key this leaf sits under (for url/src-aware url sanitizing).
+ * @param mixed                    $value          Raw value at this depth.
+ * @param array<string,mixed>|null $def            The ACF field definition for THIS value (resolves
+ *                                                 type), or null when none applies (free-form key).
+ * @param bool                     $in_url_struct  True when this value is a member of a URL-typed
+ *                                                 field's structured array (link/image/file), so only
+ *                                                 url/src-keyed leaves get esc_url_raw, the rest text.
+ * @param string                   $key            The array key this leaf sits under (used only when
+ *                                                 $in_url_struct is true).
  * @return mixed Sanitized value.
  */
-function aafm_acf_sanitize_leaf( $value, string $type, bool $url_typed = false, string $key = '' ) {
+function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = false, string $key = '' ) {
+	$type    = is_array( $def ) ? (string) ( $def['type'] ?? '' ) : '';
+	$is_url  = in_array( $type, aafm_acf_url_field_types(), true );
+	$is_cont = in_array( $type, aafm_acf_container_field_types(), true );
+
 	if ( is_array( $value ) ) {
 		$clean = array();
 		foreach ( $value as $sub_key => $sub ) {
-			$safe_key           = is_string( $sub_key ) ? sanitize_text_field( $sub_key ) : $sub_key;
-			$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $type, $url_typed, (string) $sub_key );
+			$safe_key = is_string( $sub_key ) ? sanitize_text_field( $sub_key ) : $sub_key;
+			if ( $is_cont && $def ) {
+				// A repeater/group/flexible-content level. Numeric keys are row indices that
+				// keep the same container def; string keys are sub-field names whose own def
+				// drives their sanitizing — so a URL sub-field is esc_url_raw'd at depth.
+				$child_def          = is_string( $sub_key ) ? aafm_acf_sub_field_def( $def, (string) $sub_key ) : $def;
+				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $child_def, false, (string) $sub_key );
+			} else {
+				// A URL-typed field whose value is a structured array (link/image/file): recurse
+				// with $in_url_struct so only the url/src leaf is esc_url_raw'd and the plain-text
+				// members (title/target/alt/caption/…) survive. A free-form nested array (no def)
+				// carries the same handling down.
+				$struct             = $in_url_struct || $is_url;
+				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $def, $struct, (string) $sub_key );
+			}
 		}
 		return $clean;
 	}
@@ -306,14 +354,17 @@ function aafm_acf_sanitize_leaf( $value, string $type, bool $url_typed = false, 
 		return ''; // Drop objects / resources / null to an empty string.
 	}
 	$as_string = (string) $value;
-	if ( $url_typed ) {
-		// A URL-typed field. A scalar value (no enclosing key) is the URL itself → esc_url_raw.
-		// Inside a structured array only the url/src-keyed leaf is a URL; the rest (title, target,
-		// alt, caption, filename, …) is plain text and must NOT be esc_url_raw'd.
-		if ( '' === $key || in_array( $key, aafm_acf_url_leaf_keys(), true ) ) {
-			return esc_url_raw( $as_string );
-		}
-		return sanitize_text_field( $as_string );
+
+	if ( $in_url_struct ) {
+		// A member of a URL-typed field's structured array. Only the url/src-keyed leaf is a URL;
+		// the rest is plain text and must NOT be esc_url_raw'd.
+		return in_array( $key, aafm_acf_url_leaf_keys(), true )
+			? esc_url_raw( $as_string )
+			: sanitize_text_field( $as_string );
+	}
+	if ( $is_url ) {
+		// A URL-typed field with a scalar value: the value IS the URL, regardless of key name.
+		return esc_url_raw( $as_string );
 	}
 	if ( in_array( $type, aafm_acf_wysiwyg_field_types(), true ) ) {
 		return wp_kses_post( $as_string );
@@ -325,15 +376,38 @@ function aafm_acf_sanitize_leaf( $value, string $type, bool $url_typed = false, 
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
+ * After each write the stored value is read back and compared to the sanitized value written; a
+ * mismatch (a failed update_field that stored nothing) surfaces as an error so a failed write is
+ * never audited as a success. A no-op write of an unchanged value still matches, so it is not
+ * treated as a failure. An unknown field key (no ACF definition) is sanitized as plain text and
+ * written like any other key — that behavior is unchanged here; the verify step still confirms it
+ * persisted.
+ *
  * @param array<string,mixed> $fields   Caller field map: field key => raw value.
  * @param int|string          $selector ACF object selector.
- * @return array<string,mixed> The refreshed hydrated values, keyed by field key.
+ * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a write
+ *                                       did not persist.
  */
-function aafm_acf_write_fields( array $fields, $selector ): array {
+function aafm_acf_write_fields( array $fields, $selector ) {
 	if ( function_exists( 'update_field' ) ) {
 		foreach ( $fields as $field_key => $raw ) {
 			$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
 			update_field( (string) $field_key, $clean, $selector );
+
+			// Verify the write persisted. A failed update_field() stores nothing, so the read-back
+			// will not equal the value we intended. Read the RAW (unformatted) value — get_field()'s
+			// third arg false — because the formatted read diverges from the stored value for whole
+			// field families (image/file return an array or URL while storing an attachment ID, date
+			// pickers reformat, relationship/post-object return objects); comparing the formatted
+			// shape would flag those successful writes as failures. Compare normalized JSON so
+			// scalars and structured arrays both compare cleanly, and a same-value no-op still
+			// matches.
+			if ( function_exists( 'get_field' ) ) {
+				$stored = get_field( (string) $field_key, $selector, false );
+				if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+					return aafm_generic_error();
+				}
+			}
 		}
 	}
 	return aafm_acf_read_fields( $selector );
@@ -477,10 +551,14 @@ function aafm_exec_acf_update_post_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, $id );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'post_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, $id ),
+		'fields'  => (object) $written,
 	);
 }
 
@@ -630,10 +708,14 @@ function aafm_exec_acf_update_term_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'term_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) ),
+		'fields'  => (object) $written,
 	);
 }
 
@@ -787,9 +869,13 @@ function aafm_exec_acf_update_user_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
+	$written = aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) );
+	if ( is_wp_error( $written ) ) {
+		return $written;
+	}
 	return array(
 		'user_id' => $id,
 		// (object) so an empty refreshed map encodes to "{}" per the schema (see the read executor).
-		'fields'  => (object) aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) ),
+		'fields'  => (object) $written,
 	);
 }

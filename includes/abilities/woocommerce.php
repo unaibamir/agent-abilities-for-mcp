@@ -1109,7 +1109,7 @@ function aafm_args_wc_create_product(): array {
 
 	return array(
 		'label'               => __( 'Create WooCommerce product', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Creates a WooCommerce product (name required; type, status, description, prices, SKU, stock, categories, tags, images, attributes optional). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Creates a simple WooCommerce product (name required; status, description, prices, SKU, stock, categories, tags, images, attributes optional). Only the simple product type is supported here; a variable, grouped, or external type is rejected. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -1147,9 +1147,16 @@ function aafm_exec_wc_create_product( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// This generic create only builds simple products. A variable/grouped/external product is a
+	// different construction (and, for variable, needs variations added afterward), so reject a
+	// non-simple request rather than silently downgrading it to a simple product and reporting
+	// success. The schema enumerates the other types, but they are not honored here.
+	$requested_type = isset( $input['type'] ) ? (string) $input['type'] : 'simple';
+	if ( 'simple' !== $requested_type ) {
+		return aafm_generic_error();
+	}
+
 	$product = new \WC_Product();
-	// The product type is fixed by the WC_Product subclass at construction in real WooCommerce, so the
-	// generic create here applies the remaining fields onto a simple product and ignores `type`.
 	unset( $input['type'] );
 	aafm_wc_apply_product_input( $product, $input );
 	$id = (int) $product->save();
@@ -1280,7 +1287,11 @@ function aafm_exec_wc_delete_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
-	$product->delete( true );
+	// WC_Data::delete( true ) returns false when the data store could not remove the row.
+	// Honor it rather than reporting deleted:true on a failed delete.
+	if ( false === $product->delete( true ) ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'      => $id,
@@ -1838,7 +1849,10 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	if ( null === $variation ) {
 		return aafm_generic_error();
 	}
-	$variation->delete( true );
+	// WC_Data::delete( true ) returns false when the data store could not remove the row.
+	if ( false === $variation->delete( true ) ) {
+		return aafm_generic_error();
+	}
 
 	return array(
 		'id'      => $id,
@@ -4455,17 +4469,26 @@ function aafm_exec_wc_create_customer( array $input ) {
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	$username = sanitize_user( (string) ( $input['username'] ?? $email ) );
 
-	$customer = wc_create_customer( $email, $username, wp_generate_password() );
-	if ( $customer instanceof \WP_Error ) {
+	// wc_create_customer() returns the new user id as an int, or a WP_Error — never a
+	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
+	// create error can't be misread as success (and a real success can't be misread as a
+	// failure after the account is already persisted).
+	$created = wc_create_customer( $email, $username, wp_generate_password() );
+	if ( $created instanceof \WP_Error ) {
 		return aafm_generic_error();
 	}
-	if ( ! ( $customer instanceof \WC_Customer ) ) {
+	$id = (int) $created;
+	if ( $id < 1 ) {
 		return aafm_generic_error();
 	}
 
+	// Hydrate the persisted customer, layer on the optional address fields, and save once.
+	$customer = aafm_wc_get_customer_object( $id );
+	if ( null === $customer ) {
+		return aafm_generic_error();
+	}
 	aafm_wc_apply_customer_input( $customer, $input );
-	$id = (int) $customer->save();
-	if ( $id < 1 ) {
+	if ( (int) $customer->save() < 1 ) {
 		return aafm_generic_error();
 	}
 
@@ -4578,7 +4601,7 @@ function aafm_args_wc_delete_customer(): array {
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_delete_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_wc_perm_delete_customer',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -4586,6 +4609,29 @@ function aafm_args_wc_delete_customer(): array {
 			),
 		),
 	);
+}
+
+/**
+ * Permission for aafm/wc-delete-customer.
+ *
+ * Deleting a customer destroys a WordPress user account, so store-management rights are not
+ * enough on their own: the caller must hold manage_woocommerce AND the primitive delete_users
+ * cap AND the per-object delete_user on the target id. This mirrors aafm/delete-user's gate so a
+ * manage_woocommerce-only principal (e.g. a shop manager) can never escalate into account
+ * destruction.
+ *
+ * Returns false with empty input (no id) so discovery falls through to the object-independent
+ * caps; the per-object check still runs at execute time.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_wc_perm_delete_customer( array $input ): bool {
+	$id = isset( $input['customer_id'] ) ? absint( $input['customer_id'] ) : 0;
+	return current_user_can( 'manage_woocommerce' )
+		&& current_user_can( 'delete_users' )
+		&& $id > 0
+		&& current_user_can( 'delete_user', $id );
 }
 
 /**
@@ -5657,7 +5703,9 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 		'id'           => (string) $method->id,
 		'method_title' => (string) $method->method_title,
 		'enabled'      => (string) $method->enabled,
-		'settings'     => (array) $method->settings,
+		// Shipping plugins store carrier API keys / account creds / license keys in settings.
+		// Run them through the recursive deny-by-default redactor before returning.
+		'settings'     => aafm_wc_redact_settings_deep( (array) $method->settings ),
 	);
 }
 
@@ -6851,24 +6899,39 @@ function aafm_exec_wc_delete_tax_class( array $input ): array|\WP_Error {
 // =============================================================================
 
 /**
- * Redact secret/key/token/password fields from a gateway's settings array.
+ * Recursively strip secret/credential fields from an arbitrary settings array.
  *
- * Any setting key whose name contains key, secret, token, password, api, or private
- * is stripped before the array is returned to the caller.
+ * Deny-by-default at every depth: any key whose name matches the secret pattern is dropped,
+ * and the walk recurses into nested arrays so a credential hidden under a benign parent key
+ * (or several levels down) can't slip through. The pattern covers the obvious credential
+ * tokens (key, secret, token, password/pwd, api, private, auth, credential, signature/sign,
+ * client_id) so a value stored under a slightly unconventional name is still caught.
  *
- * @param array<string,mixed> $settings Raw gateway settings array.
- * @return array<string,mixed>
+ * @param array<int|string,mixed> $settings Raw settings array (may be nested).
+ * @return array<int|string,mixed>
  */
-function aafm_wc_redact_gateway_settings( array $settings ): array {
+function aafm_wc_redact_settings_deep( array $settings ): array {
+	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)/i';
 	$redacted       = array();
-	$secret_pattern = '/(?:key|secret|token|password|api|private)/i';
 	foreach ( $settings as $key => $value ) {
 		if ( preg_match( $secret_pattern, (string) $key ) ) {
 			continue;
 		}
-		$redacted[ $key ] = $value;
+		$redacted[ $key ] = is_array( $value ) ? aafm_wc_redact_settings_deep( $value ) : $value;
 	}
 	return $redacted;
+}
+
+/**
+ * Redact secret/key/token/password fields from a gateway's settings array.
+ *
+ * Thin wrapper over the recursive deny-by-default redactor.
+ *
+ * @param array<string,mixed> $settings Raw gateway settings array.
+ * @return array<int|string,mixed>
+ */
+function aafm_wc_redact_gateway_settings( array $settings ): array {
+	return aafm_wc_redact_settings_deep( $settings );
 }
 
 /**
@@ -7057,7 +7120,6 @@ function aafm_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
-	global $wpdb;
 	$period = sanitize_text_field( (string) ( $input['period'] ?? 'month' ) );
 	$limit  = max( 1, min( 100, (int) ( $input['limit'] ?? 10 ) ) );
 
@@ -7067,40 +7129,79 @@ function aafm_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
 		default => gmdate( 'Y-m-01' ),
 	};
 
-	$statuses     = array( 'wc-completed', 'wc-processing' );
-	$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
-
-	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-	$rows = $wpdb->get_results(
-		$wpdb->prepare(
-			"SELECT pm.meta_value AS product_id, COUNT(*) AS qty_sold
-			 FROM {$wpdb->posts} p
-			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-			 WHERE p.post_type = 'shop_order'
-			   AND p.post_status IN ( {$placeholders} )
-			   AND pm.meta_key = '_product_id'
-			   AND p.post_date >= %s
-			 GROUP BY pm.meta_value
-			 ORDER BY qty_sold DESC
-			 LIMIT %d",
-			array_merge( $statuses, array( $start . ' 00:00:00', $limit ) )
-		),
-		ARRAY_A
-	);
-	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-
-	if ( ! is_array( $rows ) ) {
-		$rows = array();
+	if ( ! function_exists( 'wc_get_orders' ) ) {
+		return aafm_generic_error();
 	}
 
+	// Product ids live in ORDER ITEM meta, not shop_order post meta, so aggregate quantities
+	// from each order's line items via the WC CRUD layer (HPOS-aware). The previous postmeta
+	// join keyed on _product_id, which never exists on the order post, so it returned nothing.
+	$start_ts = (int) strtotime( $start . ' 00:00:00' );
+
+	// Push the date window into the query (date_created lower bound) and page through results
+	// instead of pulling every order with limit => -1, which can time out or exhaust memory on a
+	// large order history. wc_get_orders() applies the window in storage (HPOS or legacy), so only
+	// in-window orders are loaded.
+	$page           = 1;
+	$per_page       = 200;
+	$qty_by_product = array();
+
+	do {
+		$result = wc_get_orders(
+			array(
+				'status'       => array( 'completed', 'processing' ),
+				'date_created' => '>=' . $start_ts,
+				'limit'        => $per_page,
+				'paged'        => $page,
+				'paginate'     => true,
+				'orderby'      => 'date',
+				'order'        => 'DESC',
+			)
+		);
+
+		$orders = is_object( $result ) && isset( $result->orders ) && is_array( $result->orders )
+			? $result->orders
+			: ( is_array( $result ) ? $result : array() );
+
+		$page_count = count( $orders );
+
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof \WC_Order ) {
+				continue;
+			}
+
+			foreach ( $order->get_items() as $item ) {
+				if ( is_array( $item ) ) {
+					$product_id = (int) ( $item['product_id'] ?? 0 );
+					$quantity   = (int) ( $item['quantity'] ?? 0 );
+				} elseif ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
+					$product_id = (int) $item->get_product_id();
+					$quantity   = method_exists( $item, 'get_quantity' ) ? (int) $item->get_quantity() : 0;
+				} else {
+					continue;
+				}
+
+				if ( $product_id < 1 ) {
+					continue;
+				}
+				$qty_by_product[ $product_id ] = ( $qty_by_product[ $product_id ] ?? 0 ) + max( 0, $quantity );
+			}
+		}
+
+		++$page;
+		// Stop once a short (or empty) page is returned: that is the last page of the window.
+	} while ( $page_count === $per_page );
+
+	arsort( $qty_by_product );
+	$qty_by_product = array_slice( $qty_by_product, 0, $limit, true );
+
 	$items = array();
-	foreach ( $rows as $row ) {
-		$product_id = (int) $row['product_id'];
-		$post       = get_post( $product_id );
-		$items[]    = array(
-			'product_id' => $product_id,
-			'name'       => $post instanceof \WP_Post ? $post->post_title : '',
-			'quantity'   => (int) $row['qty_sold'],
+	foreach ( $qty_by_product as $product_id => $quantity ) {
+		$product = aafm_wc_get_product( (int) $product_id );
+		$items[] = array(
+			'product_id' => (int) $product_id,
+			'name'       => null !== $product ? (string) $product->get_name() : '',
+			'quantity'   => (int) $quantity,
 		);
 	}
 

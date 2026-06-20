@@ -15,10 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * @return void
  */
 function aafm_register_admin_menu(): void {
-	// Inline-SVG menu icon (no Dashicons); grey matches the default inactive menu glyph.
-	$svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#a7aaad" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M12 8V4M9 2h6"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/></svg>';
-	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding a static literal SVG into a data: URI for the menu icon, not obfuscating code.
-	$icon = 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	$icon = 'dashicons-superhero';
 
 	add_menu_page(
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),

@@ -136,8 +136,8 @@ function aafm_perm_acf_list_field_groups(): bool {
  */
 function aafm_args_acf_list_field_groups(): array {
 	return array(
-		'label'               => __( 'List ACF field groups', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Lists ACF field groups and their fields (key, label, type) for discovery — structure only, no values. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-list-field-groups' ),
+		'description'         => aafm_ability_description( 'aafm/acf-list-field-groups' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -457,8 +457,8 @@ function aafm_perm_acf_post( array $input ): bool {
  */
 function aafm_args_acf_get_post_fields(): array {
 	return array(
-		'label'               => __( 'Get post ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads all of a post's ACF field values, hydrated by field key. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-get-post-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-get-post-fields' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -523,8 +523,8 @@ function aafm_exec_acf_get_post_fields( array $input ) {
  */
 function aafm_args_acf_update_post_fields(): array {
 	return array(
-		'label'               => __( 'Update post ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Writes ACF field values on a post by field key, each value sanitized for its field type. Requires edit access to that post.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-update-post-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-update-post-fields' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -620,8 +620,8 @@ function aafm_acf_term_selector( int $id ): string {
  */
 function aafm_args_acf_get_term_fields(): array {
 	return array(
-		'label'               => __( 'Get term ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads all of a term's ACF field values, hydrated by field key. Requires edit access to that term.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-get-term-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-get-term-fields' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -680,8 +680,8 @@ function aafm_exec_acf_get_term_fields( array $input ) {
  */
 function aafm_args_acf_update_term_fields(): array {
 	return array(
-		'label'               => __( 'Update term ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Writes ACF field values on a term by field key, each value sanitized for its field type. Requires edit access to that term.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-update-term-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-update-term-fields' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -777,8 +777,8 @@ function aafm_acf_user_selector( int $id ): string {
  */
 function aafm_args_acf_get_user_fields(): array {
 	return array(
-		'label'               => __( 'Get user ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads all of a user's ACF field values, hydrated by field key. A user_email-type field returns the real address under the integration disclaimer. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-get-user-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-get-user-fields' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -841,8 +841,8 @@ function aafm_exec_acf_get_user_fields( array $input ) {
  */
 function aafm_args_acf_update_user_fields(): array {
 	return array(
-		'label'               => __( 'Update user ACF fields', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/acf-update-user-fields' ),
+		'description'         => aafm_ability_description( 'aafm/acf-update-user-fields' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

@@ -211,8 +211,8 @@ function aafm_aioseo_output_properties(): array {
  */
 function aafm_args_aioseo_get_post(): array {
 	return array(
-		'label'               => __( 'Get post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads a post's All in One SEO fields from the plugin's own data store. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/aioseo-get-post' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-get-post' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -274,8 +274,8 @@ function aafm_args_aioseo_update_post(): array {
 	}
 
 	return array(
-		'label'               => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Writes a post's All in One SEO fields through the plugin's own data store. URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/aioseo-update-post' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-update-post' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -355,8 +355,8 @@ function aafm_exec_aioseo_update_post( array $input ) {
  */
 function aafm_args_aioseo_get_head(): array {
 	return array(
-		'label'               => __( 'Get post SEO head (All in One SEO)', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads the rendered All in One SEO <head> markup for a post, best-effort. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/aioseo-get-head' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-get-head' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

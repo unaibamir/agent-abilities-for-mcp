@@ -186,8 +186,8 @@ function aafm_yoast_output_properties(): array {
  */
 function aafm_args_yoast_get_post(): array {
 	return array(
-		'label'               => __( 'Get post SEO (Yoast)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads a post's Yoast SEO fields. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/yoast-get-post' ),
+		'description'         => aafm_ability_description( 'aafm/yoast-get-post' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -250,7 +250,7 @@ function aafm_args_yoast_update_post(): array {
 	$properties['robots_noindex']  = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1', '2' ),
-		'description' => __( 'Yoast noindex directive: 0 = default, 1 = noindex, 2 = index.', 'agent-abilities-for-mcp' ),
+		'description' => aafm_ability_description( 'aafm/yoast-update-post' ),
 	);
 	$properties['robots_nofollow'] = array(
 		'type'        => 'string',
@@ -263,7 +263,7 @@ function aafm_args_yoast_update_post(): array {
 	);
 
 	return array(
-		'label'               => __( 'Update post SEO (Yoast)', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/yoast-update-post' ),
 		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
@@ -346,8 +346,8 @@ function aafm_exec_yoast_update_post( array $input ) {
  */
 function aafm_args_yoast_get_head(): array {
 	return array(
-		'label'               => __( 'Get post SEO head (Yoast)', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads the rendered Yoast SEO <head> markup for a post, best-effort. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/yoast-get-head' ),
+		'description'         => aafm_ability_description( 'aafm/yoast-get-head' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

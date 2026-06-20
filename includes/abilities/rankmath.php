@@ -195,8 +195,8 @@ function aafm_rankmath_output_properties(): array {
  */
 function aafm_args_rankmath_get_post(): array {
 	return array(
-		'label'               => __( 'Get post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads a post's Rank Math SEO fields. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/rankmath-get-post' ),
+		'description'         => aafm_ability_description( 'aafm/rankmath-get-post' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -255,11 +255,11 @@ function aafm_args_rankmath_update_post(): array {
 	}
 	$properties['robots'] = array(
 		'type'        => 'string',
-		'description' => __( 'Robots directives as a comma-separated list, stored as Rank Math\'s directive array. Accepted tokens: index, noindex, nofollow, noarchive, noimageindex, nosnippet. Unknown tokens are dropped.', 'agent-abilities-for-mcp' ),
+		'description' => aafm_ability_description( 'aafm/rankmath-update-post' ),
 	);
 
 	return array(
-		'label'               => __( 'Update post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
 		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
@@ -343,8 +343,8 @@ function aafm_rankmath_validate_schema_type( string $type ): string {
  */
 function aafm_args_rankmath_get_schema(): array {
 	return array(
-		'label'               => __( 'Get post schema (Rank Math)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Reads a post's structured-data schema of a given type from Rank Math. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/rankmath-get-schema' ),
+		'description'         => aafm_ability_description( 'aafm/rankmath-get-schema' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -412,8 +412,8 @@ function aafm_exec_rankmath_get_schema( array $input ) {
  */
 function aafm_args_rankmath_update_schema(): array {
 	return array(
-		'label'               => __( 'Update post schema (Rank Math)', 'agent-abilities-for-mcp' ),
-		'description'         => __( "Writes a post's structured-data schema of a given type to Rank Math, recursively sanitized. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/rankmath-update-schema' ),
+		'description'         => aafm_ability_description( 'aafm/rankmath-update-schema' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -491,8 +491,8 @@ function aafm_exec_rankmath_update_schema( array $input ) {
  */
 function aafm_args_rankmath_get_head(): array {
 	return array(
-		'label'               => __( 'Get post SEO head (Rank Math)', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Reads the rendered Rank Math SEO <head> markup for a post, best-effort. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/rankmath-get-head' ),
+		'description'         => aafm_ability_description( 'aafm/rankmath-get-head' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

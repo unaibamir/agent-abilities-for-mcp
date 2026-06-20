@@ -70,8 +70,8 @@ function aafm_perm_manage_options(): bool {
  */
 function aafm_args_get_site_settings(): array {
 	return array(
-		'label'               => __( 'Get site settings', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Read a small allowlist of site settings. Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/get-site-settings' ),
+		'description'         => aafm_ability_description( 'aafm/get-site-settings' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -123,8 +123,8 @@ function aafm_exec_get_site_settings(): array {
  */
 function aafm_args_update_site_settings(): array {
 	return array(
-		'label'               => __( 'Update site settings', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Write a small allowlist of site settings only. It can never change the site URL, admin email, default role, or open registration. Requires manage-options.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/update-site-settings' ),
+		'description'         => aafm_ability_description( 'aafm/update-site-settings' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

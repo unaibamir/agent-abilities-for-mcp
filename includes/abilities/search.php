@@ -36,8 +36,8 @@ function aafm_register_search_definitions( array $registry ): array {
  */
 function aafm_args_search_content(): array {
 	return array(
-		'label'               => __( 'Search content', 'agent-abilities-for-mcp' ),
-		'description'         => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
+		'label'               => aafm_ability_label( 'aafm/search-content' ),
+		'description'         => aafm_ability_description( 'aafm/search-content' ),
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',

@@ -1,14 +1,11 @@
 <?php
 /**
- * WooCommerce integration abilities — product reads and writes (sub-slice W4-WC1a).
+ * WooCommerce integration abilities — payment gateway reads and writes (sub-slice W4-WC7).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
- * site contributes zero entries to the registry. Every product ability gates on the flat,
- * object-independent manage_woocommerce capability — the same capability WordPress puts on the
- * WooCommerce admin screens — so each is object-independent and falls through to its real
- * permission_callback at discovery (no server.php case). All product data is read and written through
- * WooCommerce's own CRUD layer (wc_get_products / wc_get_product / WC_Product getters + setters +
- * save/delete), never a raw $wpdb query, and the redactor/assembler never returns a filesystem path.
+ * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
+ * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
+ * server.php case). Shared helpers live in _shared.php, loaded before this file.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -17,21 +14,21 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_woocommerce_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_wc_gateways_definitions' );
 
 /**
- * Contribute the WooCommerce product definitions to the registry, but only when WooCommerce is
+ * Contribute the WooCommerce gateways definitions to the registry, but only when WooCommerce is
  * active. Host inactive: the registry is returned unchanged.
  *
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_woocommerce_definitions( array $registry ): array {
+function aafm_register_wc_gateways_definitions( array $registry ): array {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	$registry['aafm/wc-list-payment-gateways']  = array(
+	$registry['aafm/wc-list-payment-gateways'] = array(
 		'label'        => __( 'List WooCommerce payment gateways', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Lists all registered WooCommerce payment gateways with their id, title, and enabled state. Secret or credential settings are never returned. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -39,7 +36,8 @@ function aafm_register_woocommerce_definitions( array $registry ): array {
 		'subject'      => 'woocommerce',
 		'args_builder' => 'aafm_args_wc_list_payment_gateways',
 	);
-	$registry['aafm/wc-get-payment-gateway']    = array(
+
+	$registry['aafm/wc-get-payment-gateway'] = array(
 		'label'        => __( 'Get WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
@@ -47,6 +45,7 @@ function aafm_register_woocommerce_definitions( array $registry ): array {
 		'subject'      => 'woocommerce',
 		'args_builder' => 'aafm_args_wc_get_payment_gateway',
 	);
+
 	$registry['aafm/wc-update-payment-gateway'] = array(
 		'label'        => __( 'Update WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
 		'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),

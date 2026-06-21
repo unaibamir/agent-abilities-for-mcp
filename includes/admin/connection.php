@@ -587,7 +587,8 @@ function aafm_format_admin_datetime( string $utc ): string {
 	if ( false === $ts ) {
 		return $utc;
 	}
-	return wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $ts );
+	$formatted = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $ts );
+	return false === $formatted ? $utc : $formatted;
 }
 
 /**

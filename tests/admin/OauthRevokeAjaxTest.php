@@ -95,10 +95,55 @@ final class OauthRevokeAjaxTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Seed a pending (not-yet-redeemed) authorization code for a client+user.
+	 *
+	 * @param string $client_id Owning client.
+	 * @param int    $user_id   Owning user.
+	 * @return void
+	 */
+	private function seed_code( string $client_id, int $user_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_codes',
+			array(
+				'code_hash'  => hash( 'sha256', $client_id . $user_id . wp_rand() ),
+				'client_id'  => $client_id,
+				'wp_user_id' => $user_id,
+				'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 60 ),
+			),
+			array( '%s', '%s', '%d', '%s' )
+		);
+	}
+
+	/**
+	 * Count pending authorization codes for a client+user pair.
+	 *
+	 * @param string $client_id Client to count.
+	 * @param int    $user_id   User to scope to.
+	 * @return int
+	 */
+	private function codes( string $client_id, int $user_id ): int {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
+				$client_id,
+				$user_id
+			)
+		);
+	}
+
 	public function test_revoke_client_succeeds_for_admin(): void {
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $admin );
 		$this->seed_client_with_token( 'client_abc', 7 );
+		// A pending authorization code is still redeemable within its 60s window unless revoke
+		// drops it too, so seed one and prove the handler clears it (the race fix at connection.php).
+		$this->seed_code( 'client_abc', 7 );
 
 		$nonce              = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']     = $nonce;
@@ -121,6 +166,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 			)
 		);
 		$this->assertSame( 0, $active, 'The client tokens should be revoked.' );
+		$this->assertSame( 0, $this->codes( 'client_abc', 7 ), 'Pending authorization codes must be dropped on client revoke.' );
 	}
 
 	public function test_revoke_client_denied_for_subscriber(): void {
@@ -164,6 +210,9 @@ final class OauthRevokeAjaxTest extends TestCase {
 			),
 			array( '%d', '%s' )
 		);
+		// Pending code for this grant: revoke must drop it so it can't mint fresh tokens after
+		// the consent and tokens are gone (the per-grant half of the revocation race fix).
+		$this->seed_code( 'client_abc', $admin );
 
 		$nonce              = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']     = $nonce;
@@ -185,5 +234,6 @@ final class OauthRevokeAjaxTest extends TestCase {
 			)
 		);
 		$this->assertSame( 0, $remaining, 'The consent should be deleted.' );
+		$this->assertSame( 0, $this->codes( 'client_abc', $admin ), 'Pending authorization codes must be dropped on grant revoke.' );
 	}
 }

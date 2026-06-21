@@ -136,12 +136,12 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Bulk-loop `*` asymmetry pin — the get-all-post-meta bulk reader iterates the literal
-	 * allow list, so allow=['*'] alone (no literals) yields an EMPTY map. This pins the
-	 * documented single/write-honor-`*` vs bulk-explicit-only asymmetry — a future change
-	 * that walks the whole post-meta table to honor `*` in bulk goes red here.
+	 * Bulk-loop `*` symmetry pin — under allow=['*'] the get-all-post-meta bulk reader
+	 * enumerates the post's OWN stored scalar meta, matching the single get-post-meta reader
+	 * and the write path. Deny-`*` still wins (deny beats allow), so a deny-all kill switch
+	 * returns an empty map even with allow-`*` set.
 	 */
-	public function test_bulk_get_all_post_meta_does_not_honor_allow_star(): void {
+	public function test_bulk_get_all_post_meta_honors_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array() );
 		$id = self::factory()->post->create( array( 'post_type' => 'post' ) );
 		update_post_meta( $id, 'subtitle', 'a custom value' );
@@ -149,6 +149,11 @@ final class MetaPrecedenceTest extends TestCase {
 		$result = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
 
 		$this->assertIsArray( $result );
+		$this->assertEquals( (object) array( 'subtitle' => 'a custom value' ), $result['meta'] );
+
+		// Deny-`*` kill switch beats allow-`*`: the bulk map collapses back to empty.
+		$this->set_meta_options( array( '*' ), array( '*' ) );
+		$result = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
 		$this->assertEquals( (object) array(), $result['meta'] );
 	}
 }

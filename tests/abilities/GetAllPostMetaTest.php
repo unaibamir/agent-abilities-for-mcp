@@ -58,6 +58,43 @@ final class GetAllPostMetaTest extends TestCase {
 		$this->assertArrayNotHasKey( '_edit_lock', $meta );
 	}
 
+	public function test_wildcard_returns_post_own_scalar_meta(): void {
+		// Under allow-`*` the bulk reader must match the single get-post-meta reader:
+		// it enumerates the post's OWN stored scalar meta, not just literal allowlist keys.
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'subtitle', 'A scalar' );
+		update_post_meta( $id, 'rating', '5' );
+		update_post_meta( $id, 'blob', array( 'x' => 1 ) ); // non-scalar, skipped.
+
+		$out  = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+		$meta = (array) $out['meta'];
+
+		$this->assertSame( 'A scalar', $meta['subtitle'] );
+		$this->assertSame( '5', $meta['rating'] );
+		$this->assertArrayNotHasKey( 'blob', $meta );
+		$this->assertArrayNotHasKey( '_edit_lock', $meta ); // protected, never under `*`.
+	}
+
+	public function test_wildcard_still_excludes_denied_and_protected_keys(): void {
+		// Deny beats allow-`*` in the bulk reader exactly as in the single reader.
+		update_option( 'aafm_allowed_meta_keys', array( '*' ) );
+		update_option( 'aafm_denied_meta_keys', array( 'secret_key' ) );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$id = self::factory()->post->create( array( 'post_author' => $author ) );
+		update_post_meta( $id, 'subtitle', 'shown' );
+		update_post_meta( $id, 'secret_key', 'hidden' );
+
+		$out  = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+		$meta = (array) $out['meta'];
+
+		$this->assertSame( 'shown', $meta['subtitle'] );
+		$this->assertArrayNotHasKey( 'secret_key', $meta );
+	}
+
 	public function test_denied_for_low_cap_user(): void {
 		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );

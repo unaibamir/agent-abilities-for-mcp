@@ -213,11 +213,14 @@ function aafm_perm_get_all_post_meta( array $input ): bool {
 /**
  * Execute aafm/get-all-post-meta.
  *
- * Iterates the post-meta allowlist (aafm_allowed_meta_keys, already hard-block-floored).
- * For each present key, returns its single scalar value; keys with no value, or whose
- * stored value is non-scalar (a serialized array/object), are skipped so nothing
- * unsanitized or structured is ever dumped to the agent. Default-deny by construction:
- * with no allowlist configured the map is empty.
+ * Returns each exposed post-meta key's single scalar value. The candidate set is the
+ * literal allowlist, or — when the allow-`*` wildcard is set — the post's own stored meta
+ * keys, so the bulk reader matches the single get-post-meta reader under allow-all. Every
+ * candidate is re-validated through aafm_validate_meta_key() (hard-block -> deny -> allow/`*`),
+ * so protected, denied, and deny-`*` keys are never returned. Keys with no value, or whose
+ * stored value is non-scalar (a serialized array/object), are skipped so nothing unsanitized
+ * or structured is ever dumped to the agent. Default-deny by construction: with no allowlist
+ * and no wildcard the map is empty.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -228,16 +231,28 @@ function aafm_exec_get_all_post_meta( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Candidate keys: under allow-`*` enumerate the post's OWN stored meta so the bulk
+	// reader matches the single get-post-meta reader's wildcard behavior; otherwise iterate
+	// the literal allowlist. Either way every key is re-validated through the full precedence
+	// chain (hard-block -> deny -> allow/`*`) via aafm_validate_meta_key(), so protected
+	// (`_`-prefixed), denied, and deny-`*` keys never slip through under the wildcard.
+	$candidate_keys = aafm_meta_allow_has_star()
+		? array_keys( get_post_meta( $id ) )
+		: aafm_allowed_meta_keys();
+
 	$meta = array();
-	foreach ( aafm_allowed_meta_keys() as $key ) {
-		$value = get_post_meta( $id, $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- allowlisted key, bounded loop.
+	foreach ( $candidate_keys as $key ) {
+		if ( ! is_string( aafm_validate_meta_key( (string) $key ) ) ) {
+			continue; // hard-blocked, denied, or not allowed.
+		}
+		$value = get_post_meta( $id, (string) $key, true ); // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- validated key, bounded loop.
 		// Deliberately SKIPS empty/missing keys (a bulk map omits absent keys),
 		// unlike the single get-post-meta reader which returns an empty value as-is.
 		// The opposite-looking phrasing is intentional; both keep a stored '0'.
 		if ( '' === $value || ! is_scalar( $value ) ) {
 			continue; // skip empty/missing and never dump arrays/serialized blobs.
 		}
-		$meta[ $key ] = $value;
+		$meta[ (string) $key ] = $value;
 	}
 
 	return array(

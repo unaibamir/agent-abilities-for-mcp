@@ -11,18 +11,69 @@
  * This is a developer QA tool, not part of the shipped plugin. It lives under
  * /bin, which is export-ignored from the wordpress.org build.
  *
+ * LOCAL vs REMOTE TARGETS
+ *   Some fixtures (the post-meta/term-meta allowlists, the throwaway agent-writable CPT, the ACF
+ *   field group, and a database-backed wp_template to edit) are FILTER/code configuration that can
+ *   only be set host-side through a LOCAL DDEV WP-CLI bridge (`ddev` / `ddev wp` / `ddev exec`). That
+ *   bridge always talks to the local DDEV site, never the --url target, so it is usable only when the
+ *   harness's --url actually IS that local site ("local mode").
+ *
+ *   The harness auto-detects this: it reads the DDEV site's home URL once and compares its host to the
+ *   --url host. They match -> local mode (full coverage, every fixture configured and cleaned via the
+ *   bridge). They differ, or `ddev` is unavailable -> "remote mode": the bridge is NEVER touched (so a
+ *   remote run cannot mutate the local site), the fixture-setup-dependent checks SKIP with a clear
+ *   reason, and only the over-the-wire tools run. Pass --no-cli (alias --remote) to force remote mode
+ *   regardless of detection.
+ *
+ *   In remote mode the harness also refuses, by default, to create anything it could not clean up purely
+ *   over MCP: terms (no delete-term ability) and reusable blocks (delete-block only trashes — there is no
+ *   MCP force-delete) are SKIPped rather than left as orphans; read-path term tests against pre-existing
+ *   terms still run. Escape hatches close the remaining remote gaps without the bridge: the meta write
+ *   paths run over pure MCP when the operator names an allowlisted key (--meta-key / --term-meta-key /
+ *   --user-meta-key) — term-meta is exercised against the EXISTING category 1 so no term is created — and
+ *   CPT/template coverage auto-discovers an agent-writable type / a custom template from the remote's own
+ *   config. The term create/update lifecycle (--remote-terms) and the reusable-block lifecycle
+ *   (--remote-blocks) stay opt-in because neither can be fully cleaned over MCP; each leaves one warned
+ *   residue (an orphan category term, a trashed wp_block).
+ *
  * USAGE
  *   php bin/mcp-regression.php --url=https://example.com --user=admin --pass="xxxx xxxx xxxx xxxx xxxx xxxx"
  *
- *   --url       Site base URL (the MCP route is appended) or the full MCP endpoint.
- *   --user      WordPress username for Application Password auth.
- *   --pass      Application Password (spaces are fine; they are stripped).
- *   --bearer    OAuth bearer token, used instead of --user/--pass.
- *   --meta-key  An allowlisted post-meta key to exercise the meta tools for real.
- *   --cpt       An agent-writable custom post type slug to exercise the CPT tools.
- *   --keep      Do not delete the fixtures (for inspecting state after a run).
- *   --list      Only initialize + tools/list, then exit (quick connectivity check).
- *   --verbose   Print every request and response.
+ *   --url            Site base URL (the MCP route is appended) or the full MCP endpoint.
+ *   --user           WordPress username for Application Password auth.
+ *   --pass           Application Password (spaces are fine; they are stripped).
+ *   --bearer         OAuth bearer token, used instead of --user/--pass.
+ *   --meta-key       An allowlisted post-meta key to exercise the post-meta tools for real
+ *                    (pure MCP, snapshot-safe; works on a remote target too).
+ *   --term-meta-key  An allowlisted term-meta key to exercise the term-meta tools against the
+ *                    EXISTING category 1 ("Uncategorized") over MCP (snapshot-safe; remote-capable).
+ *   --user-meta-key  An allowlisted user-meta key to exercise the user-meta tools against the
+ *                    throwaway user the harness creates and deletes (pure MCP; remote-capable).
+ *   --cpt            An agent-writable custom post type slug to exercise the CPT tools. On a remote
+ *                    target, when omitted, the harness auto-discovers a writable type via get-post-types.
+ *   --template-id    A specific (custom / DB-backed) template id to exercise update-template against.
+ *                    On a remote target, when omitted, the harness auto-discovers one from list-templates.
+ *   --remote-blocks  On a remote target, opt in to the full reusable-block lifecycle. delete-block only
+ *                    trashes (no MCP force-delete), so one trashed wp_block is left behind and warned about.
+ *   --remote-terms   On a remote target, opt in to the full term create/update lifecycle (create-term ->
+ *                    get-term -> get-terms -> update-term). There is no delete-term MCP ability, so one
+ *                    orphan category term is left behind and warned about. No-op in local mode (terms are
+ *                    created and swept via the WP-CLI bridge there as usual).
+ *   --no-cli         Force remote mode: never use the local DDEV WP-CLI bridge, even if it would
+ *   --remote         reach the target. (Alias of --no-cli.) Local-only fixture-setup tests SKIP instead.
+ *   --keep           Do not delete the fixtures (for inspecting state after a run).
+ *   --list           Only initialize + tools/list, then exit (quick connectivity check).
+ *   --verbose        Print every request and response.
+ *
+ * Note: against a REMOTE target the post-/term-/user-meta, CPT, and template write paths run only when
+ * the matching config actually exists on that site — supplied explicitly via --meta-key / --term-meta-key /
+ * --user-meta-key / --cpt / --template-id, or auto-discovered (writable CPT via get-post-types, custom
+ * template via list-templates). When neither a flag nor a discovered fixture is available, the check SKIPs
+ * with a clear reason. Every remote write path is snapshot-safe and leaves zero residue; the exceptions are
+ * the two opt-in lifecycles: the reusable-block lifecycle (--remote-blocks) leaves one trashed wp_block, and
+ * the term create/update lifecycle (--remote-terms) leaves one orphan category term — both warned at the
+ * end, because neither delete-block (only trashes, no MCP force-delete) nor a delete-term ability (none
+ * exists) can finish the cleanup over the wire.
  *
  * Environment fallbacks: AAFM_MCP_URL, AAFM_MCP_USER, AAFM_MCP_PASS, AAFM_MCP_BEARER.
  *
@@ -97,6 +148,14 @@ final class AAFM_Mcp_Regression {
 	private array $created_templates = [];
 
 	private bool $use_color;
+
+	/**
+	 * Cached result of cli_targets_endpoint(): does the local DDEV WP-CLI bridge reach the --url
+	 * target? null = not yet probed. true = "local mode" (bridge usable). false = "remote mode"
+	 * (bridge NEVER touched — fixture setup/cleanup that needs it is skipped, and a remote run cannot
+	 * mutate the local site). Forced to false by --no-cli/--remote.
+	 */
+	private ?bool $cli_targets_endpoint = null;
 
 	/** Whether the temporary fixtures mu-plugin (term-meta allowlist + ACF field group) is installed. */
 	private bool $fixture_plugin_installed = false;
@@ -382,40 +441,76 @@ final class AAFM_Mcp_Regression {
 		$all = $this->call( 'get-all-post-meta', [ 'post_id' => $post_id ] );
 		$this->record( $section, 'get-all-post-meta returns a map', ! $all['isError'] && is_array( $all['data'] ) ? 'PASS' : 'FAIL', '' );
 
-		// Governance probe runs regardless: an unlisted post-meta key MUST be refused (default-deny
-		// allowlist). 'aafm_regression_probe' is never allowlisted by the fixtures mu-plugin.
-		$probe    = $this->call( 'update-post-meta', [ 'post_id' => $post_id, 'meta_key' => 'aafm_regression_probe', 'value' => '1' ] );
-		$governed = $probe['isError'];
-		$this->record( $section, 'update-post-meta refuses an unlisted key (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted an unlisted key' );
-
-		// Resolve the key to exercise: an explicit --meta-key override wins; otherwise the fixtures
-		// mu-plugin's allowlisted key (aafm_regression_pm via the aafm_allowed_meta_keys filter). If
-		// neither is available (mu-plugin could not install and no override given), SKIP the write path
-		// with a clear reason rather than fabricate a permanent option entry.
+		// Resolve the key to exercise: an explicit --meta-key override wins (pure MCP, snapshot-safe; works
+		// on a remote target too); otherwise the fixtures mu-plugin's allowlisted key (aafm_regression_pm
+		// via the aafm_allowed_meta_keys filter, local mode only). If neither is available (no override and
+		// the mu-plugin could not install), SKIP the write path with a clear reason rather than fabricate a
+		// permanent option entry.
 		$key      = (string) ( $this->opts['meta-key'] ?? '' );
 		$override = '' !== $key;
+
+		// Governance probe: an unlisted post-meta key MUST be refused under a default-deny allowlist.
+		// 'aafm_regression_probe' is never the configured key. The probe meta dies with the throwaway
+		// primary post at cleanup, so an accepted write leaves nothing behind.
+		$probe = $this->call( 'update-post-meta', [ 'post_id' => $post_id, 'meta_key' => 'aafm_regression_probe', 'value' => '1' ] );
+		$this->record_default_deny_probe( $section, 'update-post-meta refuses an unlisted key (default)', (bool) $probe['isError'], $override );
 		if ( ! $override ) {
 			if ( ! $this->install_fixture_plugin() ) {
-				$this->record( $section, 'meta write/get/delete (allowlist not configurable)', 'SKIP', 'could not install the fixtures mu-plugin via the DDEV bridge' );
+				$reason = $this->cli_targets_endpoint()
+					? 'could not install the fixtures mu-plugin via the DDEV bridge'
+					: 'requires local DDEV WP-CLI to configure the post-meta allowlist, or pass --meta-key for a remote target';
+				$this->record( $section, 'meta write/get/delete (allowlist not configurable)', 'SKIP', $reason );
 				return;
 			}
 			$key = 'aafm_regression_pm';
 		}
 
-		// Real exercise against the allowlisted key: write -> get -> get-all -> delete.
-		$w = $this->call( 'update-post-meta', [ 'post_id' => $post_id, 'meta_key' => $key, 'value' => 'aafm-meta-value' ] );
-		$this->record( $section, "update-post-meta writes '{$key}'", ! $w['isError'] ? 'PASS' : 'FAIL', '' );
+		// Choose the host post. The mu-plugin (non-override) path keeps using the primary post fixture so
+		// LOCAL coverage is unchanged. The --override path runs on a dedicated throwaway post and asserts
+		// the key is absent first, so it is fully snapshot-safe against any target (local or remote) and
+		// never reads/mutates a pre-existing meta value.
+		$meta_pid = $post_id;
+		if ( $override ) {
+			$meta_host = $this->call( 'create-post', [
+				'title'   => $this->marker . ' meta-host',
+				'content' => '<p>post-meta host body</p>',
+				'status'  => 'publish',
+			] );
+			$meta_pid = (int) ( $this->post_of( (array) ( $meta_host['data'] ?? [] ) )['id'] ?? 0 );
+			if ( $meta_pid > 0 ) {
+				$this->created_posts[] = $meta_pid;
+			}
+			if ( $meta_pid <= 0 ) {
+				$this->record( $section, 'meta write/get/delete', 'FAIL', 'could not create the meta-host post' );
+				return;
+			}
+			$before = $this->call_data( 'get-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key ] );
+			$this->record( $section, "post-meta key '{$key}' starts absent on the fixture", '' === (string) $this->scalar( $before['value'] ?? '' ) ? 'PASS' : 'FAIL', '' );
 
-		$r  = $this->call_data( 'get-post-meta', [ 'post_id' => $post_id, 'meta_key' => $key ] );
+			// The harness cannot know the remote allowlists the supplied key; a refused write is handled
+			// (reported SKIP), not a crash, so passing a non-allowlisted key on a remote stays clean.
+			$probe_w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'aafm-meta-value' ] );
+			if ( $probe_w['isError'] ) {
+				$this->record( $section, "update-post-meta writes '{$key}'", 'SKIP', 'target did not allowlist the supplied --meta-key (write refused cleanly)' );
+				return;
+			}
+			$this->record( $section, "update-post-meta writes '{$key}'", 'PASS', '' );
+		} else {
+			// Real exercise against the allowlisted key: write -> get -> get-all -> delete.
+			$w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'aafm-meta-value' ] );
+			$this->record( $section, "update-post-meta writes '{$key}'", ! $w['isError'] ? 'PASS' : 'FAIL', '' );
+		}
+
+		$r  = $this->call_data( 'get-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key ] );
 		$ok = 'aafm-meta-value' === (string) $this->scalar( $r['value'] ?? $r['meta_value'] ?? ( $r[ $key ] ?? '' ) );
 		$this->record( $section, 'get-post-meta reads the value back', $ok ? 'PASS' : 'FAIL', '' );
 
-		$all2    = $this->call_data( 'get-all-post-meta', [ 'post_id' => $post_id ] );
+		$all2    = $this->call_data( 'get-all-post-meta', [ 'post_id' => $meta_pid ] );
 		$present = is_array( $all2 ) && ( array_key_exists( $key, $all2 ) || array_key_exists( $key, $all2['meta'] ?? [] ) );
 		$this->record( $section, 'get-all-post-meta includes the key', $present ? 'PASS' : 'FAIL', '' );
 
-		$d       = $this->call( 'delete-post-meta', [ 'post_id' => $post_id, 'meta_key' => $key ] );
-		$after_d = $this->call_data( 'get-post-meta', [ 'post_id' => $post_id, 'meta_key' => $key ] );
+		$d       = $this->call( 'delete-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key ] );
+		$after_d = $this->call_data( 'get-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key ] );
 		$del_ok  = ! $d['isError'] && (bool) ( $d['data']['deleted'] ?? false ) && '' === (string) $this->scalar( $after_d['value'] ?? '' );
 		$this->record( $section, 'delete-post-meta removes the key', $del_ok ? 'PASS' : 'FAIL', '' );
 	}
@@ -507,6 +602,91 @@ final class AAFM_Mcp_Regression {
 	}
 
 	/**
+	 * Read-path term tests against the PRE-EXISTING category 1 (Uncategorized). No fixture is created,
+	 * so these never orphan anything. Used as the remote-mode stand-in for the create-term-based reads
+	 * that test_terms_full_lifecycle() must skip when there is no local WP-CLI bridge to clean up the
+	 * created term.
+	 */
+	private function test_terms_read_paths(): void {
+		$section = 'Terms (full)';
+
+		$gt     = $this->call_unwrap( 'get-term', [ 'taxonomy' => 'category', 'term_id' => 1 ], 'term' );
+		$get_ok = (int) ( $gt['id'] ?? 0 ) === 1
+			&& 'category' === ( $gt['taxonomy'] ?? '' )
+			&& array_key_exists( 'count', $gt );
+		$this->record( $section, 'get-term returns an existing term by id', $get_ok ? 'PASS' : 'FAIL', '' );
+
+		$terms     = $this->call_data( 'get-terms', [ 'taxonomy' => 'category', 'per_page' => 50 ] )['terms'] ?? [];
+		$found_one = false;
+		foreach ( $terms as $t ) {
+			if ( (int) ( $t['id'] ?? 0 ) === 1 ) {
+				$found_one = true;
+				break;
+			}
+		}
+		$this->record( $section, 'get-terms lists existing category terms', $found_one ? 'PASS' : 'FAIL', 'count=' . count( $terms ) );
+	}
+
+	/**
+	 * Remote-mode term create/update lifecycle (opt-in via --remote-terms). Mirrors --remote-blocks:
+	 * there is NO delete-term MCP tool, so a created category term cannot be removed over the wire and
+	 * the local WP-CLI bridge can't reach a remote target. Rather than skip the write path entirely,
+	 * this runs create-term -> get-term -> get-terms -> update-term over pure MCP, then TRACKS the
+	 * created term id in $remote_orphan_terms purely so the run warns at the end about the one orphan
+	 * category it deliberately leaves behind. The id is NOT added to $created_terms (the WP-CLI cleanup
+	 * list) because that sweep is a no-op in remote mode and would only mislead.
+	 */
+	private function test_terms_remote_lifecycle( string $section ): void {
+		// create-term: marker name in category; returns {term:{id,name,slug,parent}}.
+		$cr      = $this->call_unwrap( 'create-term', [
+			'taxonomy'    => 'category',
+			'name'        => $this->marker . ' term',
+			'description' => 'aafm regression term',
+		], 'term' );
+		$term_id = (int) ( $cr['id'] ?? 0 );
+		if ( $term_id > 0 ) {
+			$this->remote_orphan_terms[] = $term_id;
+		}
+		$create_ok = $term_id > 0 && false !== strpos( (string) ( $cr['name'] ?? '' ), $this->marker );
+		$this->record( $section, 'create-term creates a category term', $create_ok ? 'PASS' : 'FAIL', "id={$term_id}" );
+		if ( $term_id <= 0 ) {
+			$this->record( $section, 'remaining term tests', 'FAIL', 'no term id; skipping dependent steps' );
+			return;
+		}
+
+		// get-term: round-trips the rich shape by id.
+		$gt     = $this->call_unwrap( 'get-term', [ 'taxonomy' => 'category', 'term_id' => $term_id ], 'term' );
+		$get_ok = (int) ( $gt['id'] ?? 0 ) === $term_id
+			&& false !== strpos( (string) ( $gt['name'] ?? '' ), $this->marker )
+			&& 'category' === ( $gt['taxonomy'] ?? '' )
+			&& array_key_exists( 'count', $gt );
+		$this->record( $section, 'get-term returns the term by id', $get_ok ? 'PASS' : 'FAIL', '' );
+
+		// get-terms: the new term is findable via search by its marker name.
+		$found = false;
+		foreach ( ( $this->call_data( 'get-terms', [ 'taxonomy' => 'category', 'search' => $this->marker, 'per_page' => 50 ] )['terms'] ?? [] ) as $t ) {
+			if ( (int) ( $t['id'] ?? 0 ) === $term_id ) {
+				$found = true;
+				break;
+			}
+		}
+		$this->record( $section, 'get-terms finds the term via search', $found ? 'PASS' : 'FAIL', '' );
+
+		// update-term: rename + change description, verify both round-trip via get-term.
+		$ut       = $this->call( 'update-term', [
+			'taxonomy'    => 'category',
+			'term_id'     => $term_id,
+			'name'        => $this->marker . ' term renamed',
+			'description' => 'aafm regression term edited',
+		] );
+		$after_ut = $this->call_unwrap( 'get-term', [ 'taxonomy' => 'category', 'term_id' => $term_id ], 'term' );
+		$upd_ok   = ! $ut['isError']
+			&& false !== strpos( (string) ( $after_ut['name'] ?? '' ), 'renamed' )
+			&& false !== strpos( (string) ( $after_ut['description'] ?? '' ), 'edited' );
+		$this->record( $section, 'update-term renames + re-describes the term', $upd_ok ? 'PASS' : 'FAIL', '' );
+	}
+
+	/**
 	 * Full term CRUD lifecycle on a throwaway category term + the term-meta governance/write path.
 	 *
 	 * There is NO delete-term MCP tool, so created terms carry the AAFM-REGRESSION marker in their
@@ -526,6 +706,33 @@ final class AAFM_Mcp_Regression {
 	private function test_terms_full_lifecycle(): void {
 		$section  = 'Terms (full)';
 		$meta_key = 'aafm_regression_tm';
+
+		// There is NO delete-term MCP tool — created terms are swept host-side via the local WP-CLI
+		// bridge. In remote mode that bridge can't reach the target, so creating a term here would
+		// orphan it on the remote site. By default, run the read paths against the pre-existing
+		// category 1 instead (no fixture created), then either exercise the term-meta write path against
+		// that EXISTING term (when --term-meta-key names an allowlisted key — pure MCP, snapshot-safe, no
+		// term created) or SKIP it. --remote-terms opts in to the full create/update lifecycle anyway,
+		// accepting one warned orphan category term that cannot be removed over the wire.
+		if ( ! $this->cli_targets_endpoint() ) {
+			if ( isset( $this->opts['remote-terms'] ) ) {
+				// Opt-in: run the create -> get -> get-terms -> update lifecycle over MCP, tracking the
+				// created term for the end-of-run orphan warning (no MCP delete-term to remove it).
+				$this->test_terms_remote_lifecycle( $section );
+			} else {
+				// Default: read-only against the pre-existing category 1, plus a SKIP noting the
+				// create/update lifecycle is opt-in (it would orphan a term with no MCP delete).
+				$this->test_terms_read_paths();
+				$this->record( $section, 'create-term + update-term lifecycle', 'SKIP', 'create-term has no MCP delete; cleanup requires local DDEV WP-CLI. Pass --remote-terms to run it anyway (leaves one warned orphan category term)' );
+			}
+			$tmk = (string) ( $this->opts['term-meta-key'] ?? '' );
+			if ( '' !== $tmk ) {
+				$this->exercise_term_meta_on_existing( $section, $tmk );
+			} else {
+				$this->record( $section, 'term-meta write/get/delete', 'SKIP', 'term-meta allowlist (aafm_allowed_term_meta_keys) is filter-only and not configurable via an admin option on the target. Pass --term-meta-key to exercise term-meta on the existing category 1 over MCP' );
+			}
+			return;
+		}
 
 		// create-term: marker name in category; returns {term:{id,name,slug,parent}}.
 		$cr      = $this->call_unwrap( 'create-term', [
@@ -580,6 +787,16 @@ final class AAFM_Mcp_Regression {
 		$governed = $probe['isError'];
 		$this->record( $section, 'update-term-meta refuses an unlisted key (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted an unlisted key' );
 
+		// An explicit --term-meta-key override wins: exercise it against the EXISTING category 1 over MCP
+		// (snapshot-safe), then publish the created term for ACF and return. Otherwise configure the
+		// allowlist via the temporary fixtures mu-plugin and exercise the write path on the created term.
+		$tmk = (string) ( $this->opts['term-meta-key'] ?? '' );
+		if ( '' !== $tmk ) {
+			$this->exercise_term_meta_on_existing( $section, $tmk );
+			$this->primary_term_id = $term_id;
+			return;
+		}
+
 		// Configure the allowlist via the temporary fixtures mu-plugin, then exercise write/get/delete.
 		// If the drop-in cannot be installed, record a justified SKIP for the write path.
 		if ( ! $this->install_fixture_plugin() ) {
@@ -605,6 +822,61 @@ final class AAFM_Mcp_Regression {
 
 		// Publish the created term id for test_acf_lifecycle (its term-fields path needs an editable term).
 		$this->primary_term_id = $term_id;
+	}
+
+	/**
+	 * Exercise the term-meta write path against the EXISTING category 1 ("Uncategorized") over pure MCP
+	 * (no WP-CLI bridge), snapshot-safe. Category 1 is a real pre-existing term, so the meta key MUST be
+	 * snapshotted and restored exactly: assert absent first, write, verify, delete, confirm gone — and if
+	 * it was somehow present before, restore the prior value. Only this one meta key on the term is ever
+	 * touched, and only when --term-meta-key names it; the term itself is never created or modified.
+	 *
+	 * The harness cannot know the supplied key is allowlisted on a given target, so a refused write is a
+	 * handled SKIP, not a crash — passing a non-allowlisted key on a remote stays clean.
+	 */
+	private function exercise_term_meta_on_existing( string $section, string $meta_key ): void {
+		$existing_term = 1; // Uncategorized — present on every install. Never created/deleted here.
+
+		// Snapshot the prior value so a pre-existing meta is restored exactly (expected absent).
+		$snap        = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
+		$prior_value = (string) ( $snap['value'] ?? '' );
+		$this->record( $section, "term-meta key '{$meta_key}' starts absent on category 1", '' === $prior_value ? 'PASS' : 'FAIL', '' );
+
+		// Register a restore BEFORE the write so a mid-test fatal() puts category 1 back exactly. The
+		// restore deletes the key when it was absent before, else re-writes the prior value.
+		$this->register_restore( 'term-meta:' . $existing_term . ':' . $meta_key, function () use ( $existing_term, $meta_key, $prior_value ): void {
+			if ( '' === $prior_value ) {
+				$this->call_quiet( 'delete-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
+			} else {
+				$this->call_quiet( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key, 'value' => $prior_value ] );
+			}
+		} );
+
+		$w = $this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key, 'value' => 'aafm-tm-value' ] );
+		if ( $w['isError'] ) {
+			$this->clear_pending_restore( 'term-meta:' . $existing_term . ':' . $meta_key );
+			$this->record( $section, "update-term-meta writes '{$meta_key}' on category 1", 'SKIP', 'target did not allowlist the supplied --term-meta-key (write refused cleanly)' );
+			return;
+		}
+		$write_ok = 'aafm-tm-value' === (string) ( $w['data']['value'] ?? '' );
+		$this->record( $section, "update-term-meta writes '{$meta_key}' on category 1", $write_ok ? 'PASS' : 'FAIL', '' );
+
+		$r       = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
+		$read_ok = 'aafm-tm-value' === (string) ( $r['value'] ?? '' );
+		$this->record( $section, 'get-term-meta reads the value back', $read_ok ? 'PASS' : 'FAIL', '' );
+
+		// Restore category 1 to its exact prior state (delete when it was absent before, else re-write).
+		$d = $this->call( 'delete-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
+		if ( '' !== $prior_value ) {
+			$this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key, 'value' => $prior_value ] );
+		}
+		$after   = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
+		$now     = (string) ( $after['value'] ?? '' );
+		$del_ok  = ! $d['isError'] && $now === $prior_value;
+		$this->record( $section, 'delete-term-meta restores category 1 to its prior state', $del_ok ? 'PASS' : 'FAIL', '' );
+		if ( $del_ok ) {
+			$this->clear_pending_restore( 'term-meta:' . $existing_term . ':' . $meta_key );
+		}
 	}
 
 	/**
@@ -814,10 +1086,38 @@ final class AAFM_Mcp_Regression {
 			return;
 		}
 
-		// Governance probe: an unlisted key must be refused (default-deny allowlist).
-		$probe    = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => 'aafm_regression_unlisted', 'value' => '1' ] );
-		$governed = $probe['isError'];
-		$this->record( $section, 'update-user-meta refuses an unlisted key (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted an unlisted key' );
+		// An explicit --user-meta-key override wins: exercise the write path against the throwaway user
+		// over pure MCP (no WP-CLI bridge), assuming the operator already allowlisted the key on the
+		// target. Snapshot-safe by construction — the user is created blank this run and deleted in
+		// cleanup, so the key starts absent and dies with the user. A refused write is a handled SKIP.
+		$umk = (string) ( $this->opts['user-meta-key'] ?? '' );
+
+		// Governance probe: an unlisted key must be refused under a default-deny allowlist. The probe
+		// meta dies with the throwaway user at cleanup, so an accepted write leaves nothing behind.
+		$probe = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => 'aafm_regression_unlisted', 'value' => '1' ] );
+		$this->record_default_deny_probe( $section, 'update-user-meta refuses an unlisted key (default)', (bool) $probe['isError'], '' !== $umk );
+		if ( '' !== $umk ) {
+			$before = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
+			$this->record( $section, "user-meta key '{$umk}' starts absent on the throwaway user", '' === (string) ( $before['value'] ?? '' ) ? 'PASS' : 'FAIL', '' );
+
+			$wo = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => $umk, 'value' => 'aafm-um-value' ] );
+			if ( $wo['isError'] ) {
+				$this->record( $section, "update-user-meta writes '{$umk}'", 'SKIP', 'target did not allowlist the supplied --user-meta-key (write refused cleanly)' );
+				return;
+			}
+			$wo_ok = 'aafm-um-value' === (string) ( $wo['data']['value'] ?? '' ) && ( $wo['data']['key'] ?? '' ) === $umk;
+			$this->record( $section, "update-user-meta writes '{$umk}'", $wo_ok ? 'PASS' : 'FAIL', '' );
+
+			$ro      = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
+			$ro_ok   = 'aafm-um-value' === (string) ( $ro['value'] ?? '' );
+			$this->record( $section, 'get-user-meta reads the value back', $ro_ok ? 'PASS' : 'FAIL', '' );
+
+			$do      = $this->call( 'delete-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
+			$after_o = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
+			$do_ok   = ! $do['isError'] && (bool) ( $do['data']['deleted'] ?? false ) && '' === (string) ( $after_o['value'] ?? '' );
+			$this->record( $section, 'delete-user-meta removes the key', $do_ok ? 'PASS' : 'FAIL', '' );
+			return;
+		}
 
 		// Snapshot the allowlist option (registered for restore BEFORE the mutation so cleanup() reverses
 		// it even if a later transport fatal() exits before the inline restore below), add the test key,
@@ -826,7 +1126,10 @@ final class AAFM_Mcp_Regression {
 		$configured = $this->cli_set_option_array( $option, [ $test_key ] );
 		if ( ! $configured ) {
 			$this->clear_pending_restore( $option );
-			$this->record( $section, 'user-meta write/get/delete (allowlist not configurable)', 'SKIP', 'could not snapshot/set ' . $option . ' via WP-CLI' );
+			$reason = $this->cli_targets_endpoint()
+				? 'could not snapshot/set ' . $option . ' via WP-CLI'
+				: 'requires local DDEV WP-CLI to configure ' . $option . '; not available for a remote target';
+			$this->record( $section, 'user-meta write/get/delete (allowlist not configurable)', 'SKIP', $reason );
 			return;
 		}
 
@@ -896,18 +1199,30 @@ final class AAFM_Mcp_Regression {
 		$governed = $probe['isError'];
 		$this->record( $section, 'create-cpt-item refuses an unexposed type (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted' );
 
-		// Resolve the writable type to exercise: a --cpt override wins; otherwise the fixtures mu-plugin
-		// registers + allowlists a throwaway type ('aafm_regression_cpt': public, show_in_rest, map_meta_cap,
-		// capability_type post so the admin agent can create/edit/publish it). If neither is available, SKIP
-		// the write path with a clear reason rather than register a permanent type.
+		// Resolve the writable type to exercise. Precedence:
+		//   1. --cpt override always wins.
+		//   2. Local mode: the fixtures mu-plugin registers + allowlists a throwaway type
+		//      ('aafm_regression_cpt': public, show_in_rest, map_meta_cap, capability_type post so the
+		//      admin agent can create/edit/publish it).
+		//   3. Remote mode: auto-discover an agent-writable type from get-post-types — the first item with
+		//      writable===true that is not post/page — and exercise the lifecycle against it. If none is
+		//      writable, SKIP with a clear reason rather than register a permanent type.
 		$cpt      = (string) ( $this->opts['cpt'] ?? '' );
 		$override = '' !== $cpt;
 		if ( ! $override ) {
-			if ( ! $this->install_fixture_plugin() ) {
-				$this->record( $section, 'CPT create/update (no agent-writable type)', 'SKIP', 'could not install the fixtures mu-plugin via the DDEV bridge' );
-				return;
+			if ( $this->cli_targets_endpoint() ) {
+				if ( ! $this->install_fixture_plugin() ) {
+					$this->record( $section, 'CPT create/update (no agent-writable type)', 'SKIP', 'could not install the fixtures mu-plugin via the DDEV bridge' );
+					return;
+				}
+				$cpt = 'aafm_regression_cpt';
+			} else {
+				$cpt = $this->discover_writable_cpt();
+				if ( '' === $cpt ) {
+					$this->record( $section, 'CPT create/update (no agent-writable type)', 'SKIP', 'no agent-writable custom post type advertised by get-post-types on the target; pass --cpt to force one' );
+					return;
+				}
 			}
-			$cpt = 'aafm_regression_cpt';
 		}
 
 		// create-cpt-item: publish so the round-trip is exercised end-to-end (the agent admin holds the
@@ -936,6 +1251,27 @@ final class AAFM_Mcp_Regression {
 		$after    = $this->call_post( 'get-post', [ 'post_id' => $item_id ] );
 		$upd_ok   = ! $upd['isError'] && false !== strpos( (string) $this->scalar( $after['title'] ?? '' ), 'updated' );
 		$this->record( $section, 'update-cpt-item updates the item', $upd_ok ? 'PASS' : 'FAIL', '' );
+	}
+
+	/**
+	 * Discover an agent-writable custom post type from get-post-types for remote-mode CPT coverage.
+	 * Returns the slug of the first item whose writable flag is true and whose slug is neither 'post'
+	 * nor 'page' (both are exercised elsewhere and not custom types), or '' when none is writable.
+	 * The created item is deleted via delete-post in cleanup, so any item-supporting writable type
+	 * round-trips and cleans up purely over MCP.
+	 */
+	private function discover_writable_cpt(): string {
+		$types = $this->call_data( 'get-post-types', [] )['post_types'] ?? [];
+		foreach ( $types as $t ) {
+			$slug = (string) ( $t['slug'] ?? '' );
+			if ( '' === $slug || 'post' === $slug || 'page' === $slug ) {
+				continue;
+			}
+			if ( ! empty( $t['writable'] ) ) {
+				return $slug;
+			}
+		}
+		return '';
 	}
 
 	private function test_structure_reads(): void {
@@ -1077,22 +1413,38 @@ final class AAFM_Mcp_Regression {
 			return;
 		}
 
-		// Pick a database-backed ('custom') template so update-template has a wp_id to edit;
-		// fall back to the first template for the read-only get-template assertion.
-		$editable = null;
-		foreach ( $templates as $t ) {
-			if ( 'custom' === ( $t['source'] ?? '' ) ) {
-				$editable = $t;
-				break;
+		// Pick a database-backed template so update-template has a wp_id to edit; fall back to the first
+		// template for the read-only get-template assertion. Precedence:
+		//   1. --template-id override: use the listed template with that exact id.
+		//   2. A custom / DB-backed template already in the listing (source 'custom', or a wp_id present).
+		//   3. Local mode only: drop a throwaway DB-backed template host-side via the WP-CLI bridge.
+		$template_override = (string) ( $this->opts['template-id'] ?? '' );
+		$editable          = null;
+		if ( '' !== $template_override ) {
+			foreach ( $templates as $t ) {
+				if ( (string) ( $t['id'] ?? '' ) === $template_override ) {
+					$editable = $t;
+					break;
+				}
+			}
+		}
+		if ( null === $editable ) {
+			foreach ( $templates as $t ) {
+				if ( 'custom' === ( $t['source'] ?? '' ) || ! empty( $t['wp_id'] ) ) {
+					$editable = $t;
+					break;
+				}
 			}
 		}
 
 		// A fresh block-theme install ships only theme-FILE templates (source 'theme'), which
-		// update-template refuses by design. Drop one throwaway database-backed (source 'custom')
-		// template host-side via the WP-CLI bridge so the write path is genuinely exercised, then
-		// re-read the listing so $editable is the real ability-returned shape (it carries the wp_id).
+		// update-template refuses by design. In LOCAL mode, drop one throwaway database-backed (source
+		// 'custom') template host-side via the WP-CLI bridge so the write path is genuinely exercised,
+		// then re-read the listing so $editable is the real ability-returned shape (it carries the wp_id).
 		// The template post is tracked and force-deleted in cleanup() — never a pre-existing template.
-		if ( null === $editable ) {
+		// On a remote target the bridge is unavailable, so there is nothing to seed: $editable stays null
+		// when no custom template already exists, and the write path SKIPs below.
+		if ( null === $editable && '' === $template_override ) {
 			$created = $this->create_db_template();
 			if ( null !== $created ) {
 				$templates = $this->call_data( 'list-templates', [ 'type' => 'wp_template' ] )['templates'] ?? $templates;
@@ -1114,7 +1466,10 @@ final class AAFM_Mcp_Regression {
 		// templates have no backing post and are refused by design — that is not a failure here,
 		// so SKIP with the reason when none is database-backed.
 		if ( null === $editable ) {
-			$this->record( $section, 'update-template edits + restores a template', 'SKIP', 'no database-backed (custom) template to edit; theme-file templates are refused by design' );
+			$reason = $this->cli_targets_endpoint()
+				? 'no database-backed (custom) template to edit; theme-file templates are refused by design'
+				: 'no custom (DB-backed) template on the target to edit; theme-file templates are refused by design. Pass --template-id to force one';
+			$this->record( $section, 'update-template edits + restores a template', 'SKIP', $reason );
 			return;
 		}
 
@@ -1133,14 +1488,18 @@ final class AAFM_Mcp_Regression {
 		$after    = (string) ( $this->call_data( 'get-template', [ 'template_id' => $edit_id, 'type' => 'wp_template' ] )['content'] ?? '' );
 		$took     = ! $upd['isError'] && false !== strpos( $after, $this->marker . '-TPL' );
 
-		// Restore the exact original content regardless of whether the edit assertion passed.
-		$restore  = $this->call( 'update-template', [ 'template_id' => $edit_id, 'type' => 'wp_template', 'content' => $snapshot ] );
-		$restored = (string) ( $this->call_data( 'get-template', [ 'template_id' => $edit_id, 'type' => 'wp_template' ] )['content'] ?? '' );
-		if ( ! $restore['isError'] && $restored === $snapshot ) {
+		// Restore the original content regardless of whether the edit assertion passed. Verify the
+		// restore semantically: the probe marker is gone AND the content matches the snapshot modulo
+		// the whitespace reflow wp_kses_post() applies on save (a byte compare false-fails there).
+		$restore     = $this->call( 'update-template', [ 'template_id' => $edit_id, 'type' => 'wp_template', 'content' => $snapshot ] );
+		$restored    = (string) ( $this->call_data( 'get-template', [ 'template_id' => $edit_id, 'type' => 'wp_template' ] )['content'] ?? '' );
+		$marker_gone = false === strpos( $restored, $this->marker . '-TPL' );
+		$reverted    = ! $restore['isError'] && $marker_gone && $this->templates_equivalent( $restored, $snapshot );
+		if ( $reverted ) {
 			$this->clear_pending_restore( 'template:' . $edit_id );
 		}
-		$ok       = $took && ! $restore['isError'] && $restored === $snapshot;
-		$this->record( $section, 'update-template edits + restores a template', $ok ? 'PASS' : 'FAIL', "id={$edit_id} restored=" . var_export( $restored === $snapshot, true ) );
+		$ok       = $took && $reverted;
+		$this->record( $section, 'update-template edits + restores a template', $ok ? 'PASS' : 'FAIL', "id={$edit_id} reverted=" . var_export( $reverted, true ) );
 	}
 
 	private function test_settings_lifecycle(): void {
@@ -1405,12 +1764,27 @@ final class AAFM_Mcp_Regression {
 	private function test_blocks_lifecycle(): void {
 		$section = 'Blocks';
 
+		// delete-block only TRASHES (wp_trash_post) — there is no MCP force-delete for wp_block, so a
+		// created block can only be permanently removed host-side via the local WP-CLI bridge. In remote
+		// mode that bridge can't reach the target, so create-block would leave a trashed orphan we cannot
+		// clean up over the wire. By default SKIP the whole block lifecycle rather than orphan a trashed
+		// block; --remote-blocks opts in to running it anyway, accepting one warned trashed wp_block.
+		$remote          = ! $this->cli_targets_endpoint();
+		$remote_blocks   = $remote && isset( $this->opts['remote-blocks'] );
+		if ( $remote && ! $remote_blocks ) {
+			$this->record( $section, 'block create/get/update/delete lifecycle', 'SKIP', 'delete-block only trashes; permanent removal needs local DDEV WP-CLI. Pass --remote-blocks to run it anyway (leaves one warned trashed wp_block)' );
+			return;
+		}
+
 		$markup = '<!-- wp:paragraph --><p>' . $this->marker . ' block body</p><!-- /wp:paragraph -->';
 
-		// create-block: marker title + block markup; returns the rich shape directly.
+		// create-block: marker title + block markup; returns the rich shape directly. In local mode the
+		// block is tracked for the host-side WP-CLI force-delete in cleanup(). In --remote-blocks mode there
+		// is no MCP force-delete, so it is tracked separately ($remote_trashed_blocks) purely so the run can
+		// warn about the one trashed block it deliberately leaves behind.
 		$cb       = $this->call( 'create-block', [ 'title' => $this->marker . ' block', 'content' => $markup ] );
 		$block_id = (int) ( $cb['data']['id'] ?? 0 );
-		if ( $block_id > 0 ) {
+		if ( $block_id > 0 && ! $remote_blocks ) {
 			$this->created_blocks[] = $block_id;
 		}
 		$create_ok = ! $cb['isError'] && $block_id > 0
@@ -1446,10 +1820,15 @@ final class AAFM_Mcp_Regression {
 		$upd_ok     = ! $ub['isError'] && false !== strpos( (string) ( $after_ub['content'] ?? '' ), 'body edited' );
 		$this->record( $section, 'update-block changes the markup', $upd_ok ? 'PASS' : 'FAIL', '' );
 
-		// delete-block: trash it (recoverable), confirm status flipped; cleanup force-purges later.
+		// delete-block: trash it (recoverable), confirm status flipped. In local mode cleanup force-purges
+		// the trashed block via WP-CLI. In --remote-blocks mode there is no MCP force-delete, so the trash
+		// move is the documented terminal state — record it as the trashed id so the run warns at the end.
 		$db     = $this->call( 'delete-block', [ 'block_id' => $block_id ] );
 		$del_ok = ! $db['isError'] && 'trash' === (string) ( $db['data']['status'] ?? '' );
 		$this->record( $section, 'delete-block moves the block to the trash', $del_ok ? 'PASS' : 'FAIL', 'status=' . ( $db['data']['status'] ?? '?' ) );
+		if ( $remote_blocks && $del_ok ) {
+			$this->remote_trashed_blocks[] = $block_id;
+		}
 	}
 
 	/**
@@ -1484,6 +1863,14 @@ final class AAFM_Mcp_Regression {
 		}
 		if ( ! $acf_exposed ) {
 			$this->record( $section, 'ACF abilities (7) exercised', 'SKIP', 'ACF plugin not active on the test site (integration-style group)' );
+			return;
+		}
+
+		// Remote mode: no local mu-plugin to register a known field group. Exercise the ACF tools
+		// against whatever field groups already exist on the remote, using throwaway fixtures and
+		// MCP-only snapshot/restore. If the remote has no field groups, SKIP every ACF check.
+		if ( ! $this->cli_targets_endpoint() ) {
+			$this->test_acf_remote();
 			return;
 		}
 
@@ -1564,6 +1951,117 @@ final class AAFM_Mcp_Regression {
 			$uvalue  = (string) ( ( $gu1['fields'][ $field_name ] ?? '' ) );
 			$user_ok = isset( $gu0['user_id'] ) && ! $wrote_u['isError'] && false !== strpos( $uvalue, 'acf user value' );
 			$this->record( $section, 'acf user-field read/write round-trips', $user_ok ? 'PASS' : 'FAIL', '' );
+		}
+	}
+
+	/**
+	 * Remote-mode ACF exercise. There is no local mu-plugin field group to lean on, so this works
+	 * against the field groups that already exist on the target:
+	 *
+	 *   - acf-list-field-groups always runs (structure read). If the remote has ZERO field groups,
+	 *     every value round-trip is SKIPped with a clear reason.
+	 *   - Otherwise it finds an existing group with a post-located and/or user-located text-like field,
+	 *     then exercises acf get/update against a THROWAWAY post and user (created blank by this run,
+	 *     deleted in cleanup), snapshotting the field via MCP and restoring it via MCP afterwards.
+	 *
+	 * No WP-CLI bridge is touched and no live object is mutated — only throwaway fixtures, whose own
+	 * field values are written then created-fresh-and-deleted anyway. The term path is intentionally
+	 * omitted on remote: creating a category term to host a field has no MCP delete (it would orphan).
+	 */
+	private function test_acf_remote(): void {
+		$section = 'ACF';
+
+		$groups = $this->call_data( 'acf-list-field-groups', [] )['field_groups'] ?? [];
+		$this->record( $section, 'acf-list-field-groups lists the field group structure', ! empty( $groups ) ? 'PASS' : 'FAIL', 'groups=' . count( $groups ) );
+		if ( empty( $groups ) ) {
+			$this->record( $section, 'acf field reads/writes against an existing group', 'SKIP', 'ACF active but no field groups on the target' );
+			return;
+		}
+
+		// Pick the first simple, writable text-like field key from any group. ACF list shape exposes
+		// {key,label,type} per field; text/textarea/url/email round-trip a plain string cleanly.
+		$writable_types = [ 'text', 'textarea', 'url', 'email', 'number', 'password' ];
+		$field_key      = '';
+		foreach ( $groups as $g ) {
+			foreach ( ( $g['fields'] ?? [] ) as $f ) {
+				if ( in_array( (string) ( $f['type'] ?? '' ), $writable_types, true ) && '' !== (string) ( $f['key'] ?? '' ) ) {
+					$field_key = (string) $f['key'];
+					break 2;
+				}
+			}
+		}
+		if ( '' === $field_key ) {
+			$this->record( $section, 'acf field reads/writes against an existing group', 'SKIP', 'no simple text-like field in any existing group to round-trip safely' );
+			return;
+		}
+
+		$probe_value = $this->marker . ' acf remote value';
+
+		// --- Post fields against a throwaway post (blank by creation; deleted in cleanup). ---
+		$created = $this->call( 'create-post', [
+			'title'   => $this->marker . ' acf-post',
+			'content' => '<p>acf host body</p>',
+			'status'  => 'publish',
+		] );
+		$post_id = (int) ( $this->post_of( (array) ( $created['data'] ?? [] ) )['id'] ?? 0 );
+		if ( $post_id > 0 ) {
+			$this->created_posts[] = $post_id;
+		}
+		if ( $post_id <= 0 ) {
+			$this->record( $section, 'acf post-field read/write round-trips (existing group)', 'FAIL', 'could not create host post' );
+		} else {
+			// The field key may not be located on plain posts in the remote's group config. Probe get
+			// first; only assert the round-trip when the field actually hydrates for this object.
+			$g0       = $this->call( 'acf-get-post-fields', [ 'post_id' => $post_id ] );
+			$applies  = ! $g0['isError'] && isset( $g0['data']['post_id'] );
+			if ( ! $applies ) {
+				$this->record( $section, 'acf post-field read/write round-trips (existing group)', 'SKIP', 'no ACF field group located on plain posts on the target' );
+			} else {
+				$wrote   = $this->call( 'acf-update-post-fields', [ 'post_id' => $post_id, 'fields' => [ $field_key => $probe_value ] ] );
+				$g1      = $this->call_data( 'acf-get-post-fields', [ 'post_id' => $post_id ] );
+				$present = false;
+				foreach ( (array) ( $g1['fields'] ?? [] ) as $v ) {
+					if ( is_string( $v ) && false !== strpos( $v, 'acf remote value' ) ) {
+						$present = true;
+						break;
+					}
+				}
+				$this->record( $section, 'acf post-field read/write round-trips (existing group)', ( ! $wrote['isError'] && $present ) ? 'PASS' : 'FAIL', '' );
+			}
+			// The post is a throwaway deleted in cleanup, so the written field value dies with it — no
+			// restore needed.
+		}
+
+		// --- User fields against a throwaway user (blank by creation; deleted in cleanup). ---
+		$rand    = substr( (string) random_int( 100000, 999999 ), 0, 6 );
+		$cu      = $this->call_unwrap( 'create-user', [
+			'username'     => 'aafm_regression_acf_' . $rand,
+			'email'        => 'aafm_regression_acf_' . $rand . '@example.test',
+			'display_name' => $this->marker . ' acf-user',
+		], 'user' );
+		$user_id = (int) ( $cu['id'] ?? 0 );
+		if ( $user_id > 0 ) {
+			$this->created_users[] = $user_id;
+		}
+		if ( $user_id <= 0 ) {
+			$this->record( $section, 'acf user-field read/write round-trips (existing group)', 'SKIP', 'could not create host user' );
+		} else {
+			$gu0     = $this->call( 'acf-get-user-fields', [ 'user_id' => $user_id ] );
+			$applies = ! $gu0['isError'] && isset( $gu0['data']['user_id'] );
+			if ( ! $applies ) {
+				$this->record( $section, 'acf user-field read/write round-trips (existing group)', 'SKIP', 'no ACF field group located on users on the target' );
+			} else {
+				$wrote_u = $this->call( 'acf-update-user-fields', [ 'user_id' => $user_id, 'fields' => [ $field_key => $probe_value ] ] );
+				$gu1     = $this->call_data( 'acf-get-user-fields', [ 'user_id' => $user_id ] );
+				$present = false;
+				foreach ( (array) ( $gu1['fields'] ?? [] ) as $v ) {
+					if ( is_string( $v ) && false !== strpos( $v, 'acf remote value' ) ) {
+						$present = true;
+						break;
+					}
+				}
+				$this->record( $section, 'acf user-field read/write round-trips (existing group)', ( ! $wrote_u['isError'] && $present ) ? 'PASS' : 'FAIL', '' );
+			}
 		}
 	}
 
@@ -1964,6 +2462,12 @@ final class AAFM_Mcp_Regression {
 		if ( $this->fixture_plugin_installed ) {
 			return true;
 		}
+		// Remote mode: the bridge would drop the mu-plugin onto the LOCAL DDEV site, not the --url
+		// target — useless for the test and a forbidden mutation of the local site. Refuse so callers
+		// SKIP the fixture-dependent write paths.
+		if ( ! $this->cli_targets_endpoint() ) {
+			return false;
+		}
 		$php = <<<'PHP'
 <?php
 // AAFM-REGRESSION temporary fixtures. Registers, for the duration of a regression run: one allowlisted
@@ -2031,8 +2535,13 @@ PHP;
 		return true;
 	}
 
-	/** Remove the fixtures mu-plugin if present. Best-effort; idempotent. */
+	/** Remove the fixtures mu-plugin if present. Best-effort; idempotent. No-op in remote mode (the
+	 * bridge is never used there, so nothing was dropped on the local site to remove). */
 	private function remove_fixture_plugin(): void {
+		if ( ! $this->cli_targets_endpoint() ) {
+			$this->fixture_plugin_installed = false;
+			return;
+		}
 		$path = $this->fixture_plugin_path();
 		$cmd  = 'ddev exec ' . escapeshellarg( 'rm -f ' . escapeshellarg( $path ) ) . ' 2>/dev/null';
 		shell_exec( $cmd );
@@ -2115,11 +2624,67 @@ PHP;
 	}
 
 	/**
-	 * Run `ddev wp <args>` and return trimmed STDOUT, or null on failure. Quiet on stderr.
+	 * Does the local DDEV WP-CLI bridge actually target the --url endpoint? Cached after the first
+	 * probe. This is the single gate for every `ddev`/`ddev wp`/`ddev exec` usage: true = "local mode"
+	 * (the bridge talks to the same site the harness is testing, so fixture setup/cleanup through it is
+	 * safe and meaningful); false = "remote mode" (the bridge would hit the local DDEV site, NOT the
+	 * --url target — so we must never touch it, both to avoid mutating the local site and because the
+	 * fixtures would land on the wrong site).
+	 *
+	 * Detection: --no-cli/--remote forces false. Otherwise run `ddev wp option get home` once; if
+	 * `ddev` is missing or errors, false. Compare the host of that URL to the host of the harness's
+	 * --url endpoint — true only when they match.
+	 */
+	private function cli_targets_endpoint(): bool {
+		if ( null !== $this->cli_targets_endpoint ) {
+			return $this->cli_targets_endpoint;
+		}
+		// Explicit override: never use the bridge.
+		if ( isset( $this->opts['no-cli'] ) || isset( $this->opts['remote'] ) ) {
+			return $this->cli_targets_endpoint = false;
+		}
+
+		$endpoint_host = $this->host_of( $this->endpoint );
+		if ( '' === $endpoint_host ) {
+			return $this->cli_targets_endpoint = false;
+		}
+
+		// Probe the DDEV site's own URL. shell_exec returns null when `ddev` is unavailable or the
+		// command fails; either way the bridge is unusable for this target. WP-CLI can emit PHP
+		// notices ahead of the value, so scan EVERY output line for a URL whose host matches — never
+		// assume the value is the whole (possibly multi-line) blob.
+		$home    = shell_exec( 'ddev wp option get home 2>/dev/null' );
+		$siteurl = shell_exec( 'ddev wp option get siteurl 2>/dev/null' );
+		foreach ( [ $home, $siteurl ] as $candidate ) {
+			if ( ! is_string( $candidate ) ) {
+				continue;
+			}
+			foreach ( preg_split( '/\r?\n/', $candidate ) as $line ) {
+				$host = $this->host_of( trim( $line ) );
+				if ( '' !== $host && $host === $endpoint_host ) {
+					return $this->cli_targets_endpoint = true;
+				}
+			}
+		}
+		return $this->cli_targets_endpoint = false;
+	}
+
+	/** Lowercased host portion of a URL (no port), or '' when it cannot be parsed. */
+	private function host_of( string $url ): string {
+		$host = (string) ( parse_url( $url, PHP_URL_HOST ) ?? '' );
+		return strtolower( $host );
+	}
+
+	/**
+	 * Run `ddev wp <args>` and return trimmed STDOUT, or null on failure. Quiet on stderr. Returns null
+	 * immediately in remote mode so no caller can reach the local DDEV site against a remote --url.
 	 *
 	 * @param list<string> $args WP-CLI arguments.
 	 */
 	private function ddev_wp( array $args ): ?string {
+		if ( ! $this->cli_targets_endpoint() ) {
+			return null;
+		}
 		$cmd = 'ddev wp ' . implode( ' ', array_map( 'escapeshellarg', $args ) ) . ' 2>/dev/null';
 		$out = shell_exec( $cmd );
 		if ( null === $out ) {
@@ -2135,6 +2700,9 @@ PHP;
 	 * @return array{exists:bool,json:string}|null
 	 */
 	private function cli_get_option( string $name ): ?array {
+		if ( ! $this->cli_targets_endpoint() ) {
+			return null;
+		}
 		$exists = $this->ddev_wp( [ 'option', 'get', $name, '--format=json' ] );
 		if ( null === $exists || '' === trim( $exists ) ) {
 			// Distinguish "absent" from "empty/error": option list lookup.
@@ -2149,6 +2717,9 @@ PHP;
 	 * @param list<string> $value Array of string keys.
 	 */
 	private function cli_set_option_array( string $name, array $value ): bool {
+		if ( ! $this->cli_targets_endpoint() ) {
+			return false;
+		}
 		$json = (string) json_encode( array_values( $value ) );
 		$cmd  = 'ddev wp option update ' . escapeshellarg( $name ) . ' ' . escapeshellarg( $json ) . ' --format=json 2>/dev/null';
 		$out  = shell_exec( $cmd );
@@ -2167,6 +2738,9 @@ PHP;
 	 * @param array{exists:bool,json:string}|null $snapshot Prior state.
 	 */
 	private function cli_restore_option( string $name, ?array $snapshot ): bool {
+		if ( ! $this->cli_targets_endpoint() ) {
+			return false;
+		}
 		if ( null === $snapshot || ! $snapshot['exists'] ) {
 			$this->ddev_wp( [ 'option', 'delete', $name ] );
 			$after = $this->cli_get_option( $name );
@@ -2472,6 +3046,40 @@ PHP;
 		$this->line( sprintf( '  [%s] %s%s', $tag, $label, '' !== $detail ? "  ({$detail})" : '' ) );
 	}
 
+	/**
+	 * Record a default-deny governance probe (an unlisted meta key MUST be refused).
+	 *
+	 * A refused write is always a PASS — governance honored. An ACCEPTED write only proves a bug
+	 * when we know the target is default-deny, which holds in LOCAL mode with no override key (the
+	 * fixtures bridge controls the allowlist there). When access is opened — an override key was
+	 * supplied, or the target is remote and may run allow-all (`*`) — an accepted write is the
+	 * operator's own configuration, not a regression, so it is a SKIP rather than a FAIL.
+	 */
+	private function record_default_deny_probe( string $section, string $label, bool $refused, bool $override ): void {
+		if ( $refused ) {
+			$this->record( $section, $label, 'PASS', 'correctly refused' );
+			return;
+		}
+		if ( $override || ! $this->cli_targets_endpoint() ) {
+			$this->record( $section, $label, 'SKIP', 'allowlist is opened on this target (allow-all or operator-configured); default-deny not assertable' );
+			return;
+		}
+		$this->record( $section, $label, 'FAIL', 'UNEXPECTEDLY accepted an unlisted key' );
+	}
+
+	/**
+	 * Whether two template bodies are equivalent ignoring insignificant whitespace.
+	 *
+	 * update-template runs saved content through wp_kses_post(), which can reflow newlines and
+	 * attribute spacing, so a byte-for-byte compare flags a semantically correct restore as a
+	 * mismatch. Collapsing whitespace runs verifies the substantive markup matches without that
+	 * false negative.
+	 */
+	private function templates_equivalent( string $a, string $b ): bool {
+		$norm = static fn( string $s ): string => trim( (string) preg_replace( '/\s+/', ' ', $s ) );
+		return $norm( $a ) === $norm( $b );
+	}
+
 	private function summary(): int {
 		$counts  = [ 'PASS' => 0, 'FAIL' => 0, 'SKIP' => 0 ];
 		$section = '';
@@ -2495,7 +3103,51 @@ PHP;
 				}
 			}
 		}
+		$this->warn_remote_trashed_blocks();
+		$this->warn_remote_orphan_terms();
 		return $counts['FAIL'];
+	}
+
+	/**
+	 * Print a prominent warning when the --remote-blocks path left one or more wp_block posts in the
+	 * remote's Trash. delete-block only trashes and there is no MCP force-delete for wp_block on a remote
+	 * target, so these cannot be removed over the wire — the operator must empty the Trash (or run
+	 * `wp post delete <id> --force`) to finish the cleanup. Never let a trashed block pass silently.
+	 */
+	private function warn_remote_trashed_blocks(): void {
+		if ( empty( $this->remote_trashed_blocks ) ) {
+			return;
+		}
+		$ids = implode( ', ', $this->remote_trashed_blocks );
+		$this->line( '' );
+		$this->line( $this->colorize( str_repeat( '!', 60 ), 'SKIP' ) );
+		$this->line( $this->colorize( 'WARNING: ' . count( $this->remote_trashed_blocks ) . ' trashed reusable block(s) remain on the remote.', 'SKIP' ) );
+		$this->line( $this->colorize( "  wp_block id(s): {$ids}", 'SKIP' ) );
+		$this->line( $this->colorize( '  delete-block only moves to Trash and there is no MCP force-delete for wp_block,', 'SKIP' ) );
+		$this->line( $this->colorize( '  so the harness cannot remove these over the wire. Empty the Trash on the remote', 'SKIP' ) );
+		$this->line( $this->colorize( '  (or run `wp post delete <id> --force`) to finish cleanup.', 'SKIP' ) );
+		$this->line( $this->colorize( str_repeat( '!', 60 ), 'SKIP' ) );
+	}
+
+	/**
+	 * Print a prominent warning when the --remote-terms path created one or more category terms on the
+	 * remote that cannot be removed over the wire. There is no delete-term MCP tool, and the local
+	 * WP-CLI bridge can't reach a remote target, so the operator must delete these by hand (or run
+	 * `wp term delete category <id>`). Never let an orphan term pass silently.
+	 */
+	private function warn_remote_orphan_terms(): void {
+		if ( empty( $this->remote_orphan_terms ) ) {
+			return;
+		}
+		$ids = implode( ', ', $this->remote_orphan_terms );
+		$this->line( '' );
+		$this->line( $this->colorize( str_repeat( '!', 60 ), 'SKIP' ) );
+		$this->line( $this->colorize( 'WARNING: ' . count( $this->remote_orphan_terms ) . ' category term(s) created by --remote-terms remain on the remote.', 'SKIP' ) );
+		$this->line( $this->colorize( "  category term id(s): {$ids}", 'SKIP' ) );
+		$this->line( $this->colorize( '  There is no delete-term MCP ability, so the harness cannot remove these over the', 'SKIP' ) );
+		$this->line( $this->colorize( '  wire. Delete them on the remote (or run `wp term delete category <id>`) to finish', 'SKIP' ) );
+		$this->line( $this->colorize( '  cleanup.', 'SKIP' ) );
+		$this->line( $this->colorize( str_repeat( '!', 60 ), 'SKIP' ) );
 	}
 
 	/** Pull an integer count for a status out of count-posts' varied shapes. */
@@ -2546,6 +3198,24 @@ PHP;
 	private ?int $primary_post_id  = null;
 	private ?int $primary_term_id  = null;
 	private ?int $reassign_user_id = null;
+
+	/**
+	 * Reusable-block ids the --remote-blocks path moved to the trash and could NOT permanently remove
+	 * (delete-block only trashes; there is no MCP force-delete for wp_block on a remote target). Warned
+	 * about prominently at the end of the run so a trashed block is never left silently.
+	 *
+	 * @var list<int>
+	 */
+	private array $remote_trashed_blocks = [];
+
+	/**
+	 * Category term ids the --remote-terms path created over MCP and could NOT remove (there is no
+	 * delete-term MCP tool, and the local WP-CLI bridge can't reach a remote target). Warned about
+	 * prominently at the end of the run so an orphan term is never left silently.
+	 *
+	 * @var list<int>
+	 */
+	private array $remote_orphan_terms = [];
 }
 
 /* -------------------------------------------------------------------------

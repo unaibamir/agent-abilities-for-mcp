@@ -165,6 +165,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'resetFailed'              => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
 				'sectionToggleConfirm'     => __( 'This section includes destructive abilities (trash/delete). Enable all of them?', 'agent-abilities-for-mcp' ),
 				'integrationToggleConfirm' => __( 'These abilities can read and change personal data such as customer details and orders. Turn all of them on?', 'agent-abilities-for-mcp' ),
+				'revokeClientConfirm'      => __( 'Revoke this client? It is turned off and its active sessions end right away.', 'agent-abilities-for-mcp' ),
+				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
+				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
+				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -1309,7 +1313,7 @@ function aafm_render_activity_tab(): void {
 
 	$total       = aafm_activity_count();
 	$total_pages = max( 1, (int) ceil( $total / $per_page ) );
-	$log_cap     = defined( 'AAFM_LOG_MAX_ROWS' ) ? (int) AAFM_LOG_MAX_ROWS : 10000;
+	$retention   = aafm_log_retention_days();
 
 	echo '<div class="aafm-activity">';
 	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
@@ -1323,17 +1327,25 @@ function aafm_render_activity_tab(): void {
 	echo '<button type="button" class="aafm-seg-btn" data-filter="denied" aria-pressed="false">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 
-	// Live count headline plus a plain clarifier that the log is a rolling window.
+	// Live count headline plus a plain clarifier describing the retention window.
+	if ( $retention > 0 ) {
+		$count_note = sprintf(
+			/* translators: %s: number of days of activity the log keeps. */
+			_n(
+				'entries, keeping the last %s day',
+				'entries, keeping the last %s days',
+				$retention,
+				'agent-abilities-for-mcp'
+			),
+			number_format_i18n( $retention )
+		);
+	} else {
+		$count_note = __( 'entries, keeping everything', 'agent-abilities-for-mcp' );
+	}
 	printf(
 		'<span class="aafm-activity-count" aria-live="polite"><strong class="aafm-count-num">%1$s</strong> <span class="aafm-count-note">%2$s</span></span>',
 		esc_html( number_format_i18n( $total ) ),
-		esc_html(
-			sprintf(
-				/* translators: %s: maximum number of entries the log keeps. */
-				__( 'entries — keeps the most recent %s, then drops the oldest', 'agent-abilities-for-mcp' ),
-				number_format_i18n( $log_cap )
-			)
-		)
+		esc_html( $count_note )
 	);
 
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';

@@ -27,6 +27,7 @@ final class ResetPluginTest extends TestCase {
 				'aafm_allowed_meta_keys',
 				'aafm_rate_limit_per_min',
 				'aafm_max_title_len',
+				'aafm_log_retention_days',
 				'aafm_force_draft',
 				'aafm_ip_allowlist',
 				'aafm_denied_meta_keys',

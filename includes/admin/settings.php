@@ -33,12 +33,14 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_force_draft:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
 	$title = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_max_title_len'] ?? 0 ) ) );
-	$draft = ! empty( $posted['aafm_force_draft'] );
+	// Retention has its own tighter ceiling (ten years); 0 keeps every entry forever.
+	$retention = min( 3650, max( 0, (int) ( $posted['aafm_log_retention_days'] ?? 30 ) ) );
+	$draft     = ! empty( $posted['aafm_force_draft'] );
 
 	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
 	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
@@ -56,6 +58,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	return array(
 		'aafm_rate_limit_per_min' => $rate,
 		'aafm_max_title_len'      => $title,
+		'aafm_log_retention_days' => $retention,
 		'aafm_force_draft'        => $draft,
 		'aafm_oauth_enabled'      => $oauth,
 		'aafm_oauth_dcr_enabled'  => $oauth_dcr,
@@ -114,6 +117,7 @@ function aafm_ajax_save_settings(): void {
 
 	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
+	update_option( 'aafm_log_retention_days', $clean['aafm_log_retention_days'] );
 	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
@@ -123,6 +127,7 @@ function aafm_ajax_save_settings(): void {
 		array(
 			'aafm_rate_limit_per_min' => $clean['aafm_rate_limit_per_min'],
 			'aafm_max_title_len'      => $clean['aafm_max_title_len'],
+			'aafm_log_retention_days' => $clean['aafm_log_retention_days'],
 			'aafm_force_draft'        => $clean['aafm_force_draft'],
 			'aafm_oauth_enabled'      => $clean['aafm_oauth_enabled'],
 			'aafm_oauth_dcr_enabled'  => $clean['aafm_oauth_dcr_enabled'],
@@ -150,6 +155,7 @@ function aafm_config_option_names(): array {
 		'aafm_allowed_meta_keys',
 		'aafm_rate_limit_per_min',
 		'aafm_max_title_len',
+		'aafm_log_retention_days',
 		'aafm_force_draft',
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
@@ -280,6 +286,19 @@ function aafm_render_settings_tab(): void {
 				esc_attr( (string) aafm_max_title_len() )
 			),
 			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
+	// Activity-log retention. A daily job removes entries older than this many days.
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Keep activity log for', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Days', 'agent-abilities-for-mcp' ),
+			'control' => sprintf(
+				'<input type="number" id="aafm-log-retention" name="aafm_log_retention_days" class="small-text" min="0" max="3650" step="1" value="%s">',
+				esc_attr( (string) aafm_log_retention_days() )
+			),
+			'help'    => __( 'How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

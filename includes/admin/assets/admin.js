@@ -64,6 +64,7 @@
 			this.#bindLogPaginationAndFilters();
 			this.#bindResetPlugin();
 			this.#bindQuickstarts();
+			this.#bindOauthRevoke();
 		}
 
 		#bindQuickstarts() {
@@ -622,6 +623,9 @@
 				const status = form.querySelector( '.aafm-save-status' );
 				const rate = form.querySelector( 'input[name="aafm_rate_limit_per_min"]' );
 				const title = form.querySelector( 'input[name="aafm_max_title_len"]' );
+				const retention = form.querySelector(
+					'input[name="aafm_log_retention_days"]'
+				);
 				const draft = form.querySelector( 'input[name="aafm_force_draft"]' );
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 
@@ -630,6 +634,7 @@
 				body.append( 'nonce', this.#nonce );
 				body.append( 'aafm_rate_limit_per_min', rate?.value ?? '0' );
 				body.append( 'aafm_max_title_len', title?.value ?? '0' );
+				body.append( 'aafm_log_retention_days', retention?.value ?? '30' );
 				if ( draft?.checked ) {
 					body.append( 'aafm_force_draft', '1' );
 				}
@@ -985,6 +990,93 @@
 			if ( next ) {
 				next.disabled = page >= totalPages;
 			}
+		}
+
+		/**
+		 * Wire the OAuth management tables' Revoke buttons (Registered clients +
+		 * Active grants). Clicks are delegated off the .aafm-oauth-manage container so
+		 * a single listener covers both tables. Each revoke confirms first, then POSTs
+		 * the nonce-checked AJAX action; on success the row is updated in place — the
+		 * client's Status pill flips to Revoked and its button is removed, and a grant
+		 * row is removed entirely. Every DOM change is textContent / class / attribute
+		 * only, never innerHTML, so the response is never an HTML sink.
+		 */
+		#bindOauthRevoke() {
+			const root = document.querySelector( '.aafm-oauth-manage' );
+			if ( ! root ) {
+				return;
+			}
+			root.addEventListener( 'click', async ( e ) => {
+				const clientBtn = e.target.closest( '.aafm-revoke-client' );
+				const grantBtn = e.target.closest( '.aafm-revoke-grant' );
+				const btn = clientBtn ?? grantBtn;
+				if ( ! btn || ! root.contains( btn ) ) {
+					return;
+				}
+
+				const isGrant = Boolean( grantBtn );
+				const confirmMsg = isGrant
+					? this.#t(
+							'revokeGrantConfirm',
+							'Revoke this grant? The user will have to approve again to reconnect.'
+					  )
+					: this.#t(
+							'revokeClientConfirm',
+							'Revoke this client? It is turned off and its active sessions end right away.'
+					  );
+				if ( ! window.confirm( confirmMsg ) ) {
+					return;
+				}
+
+				const clientId = btn.dataset.clientId ?? '';
+				btn.disabled = true;
+
+				let json;
+				if ( isGrant ) {
+					json = await this.#post( 'aafm_oauth_revoke_grant', {
+						user_id: btn.dataset.userId ?? '',
+						client_id: clientId,
+					} );
+				} else {
+					json = await this.#post( 'aafm_oauth_revoke_client', {
+						client_id: clientId,
+					} );
+				}
+
+				if ( ! json?.success ) {
+					btn.disabled = false;
+					window.alert(
+						json?.data?.message ??
+							this.#t( 'revokeFailed', 'Could not revoke. Please try again.' )
+					);
+					return;
+				}
+
+				const row = btn.closest( 'tr' );
+				if ( ! row ) {
+					return;
+				}
+				if ( isGrant ) {
+					// The grant no longer exists: drop the row.
+					row.remove();
+				} else {
+					// Flip the Status pill to Revoked and replace the button with plain text.
+					const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
+					if ( pill ) {
+						pill.classList.remove( 'aafm-pill-success' );
+						pill.classList.add( 'aafm-pill-neutral' );
+						pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
+					}
+					const cell = btn.parentElement;
+					btn.remove();
+					if ( cell ) {
+						const note = document.createElement( 'span' );
+						note.className = 'aafm-muted';
+						note.textContent = this.#t( 'statusRevoked', 'Revoked' );
+						cell.append( note );
+					}
+				}
+			} );
 		}
 
 		#bindResetPlugin() {

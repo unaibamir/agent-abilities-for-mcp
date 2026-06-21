@@ -106,77 +106,33 @@ function aafm_log_activity( array $record ): int {
 	 */
 	do_action( 'aafm_ability_called', $record );
 
-	// Keep the table bounded. Pruning on every insert would add a DELETE to every
-	// call, so only sweep once per prune interval — cheap, index-backed, and enough
-	// to stop a deny-loop from growing the table without limit.
-	$interval = aafm_log_prune_interval();
-	if ( $row_id > 0 && $interval > 0 && 0 === $row_id % $interval ) {
-		aafm_prune_activity_log();
-	}
-
 	return $row_id;
 }
 
 /**
- * The maximum number of activity rows to retain (filterable).
+ * Delete activity rows older than the configured retention window.
  *
- * @return int
- */
-function aafm_log_max_rows(): int {
-	$max = defined( 'AAFM_LOG_MAX_ROWS' ) ? (int) AAFM_LOG_MAX_ROWS : 10000;
-
-	/**
-	 * Filters the activity-log row ceiling. Rows beyond the newest N are pruned.
-	 *
-	 * @param int $max Maximum rows to keep.
-	 */
-	$max = (int) apply_filters( 'aafm_log_max_rows', $max );
-
-	return max( 1, $max );
-}
-
-/**
- * How often (every Nth insert) the log auto-prunes (filterable).
- *
- * @return int
- */
-function aafm_log_prune_interval(): int {
-	$interval = defined( 'AAFM_LOG_PRUNE_INTERVAL' ) ? (int) AAFM_LOG_PRUNE_INTERVAL : 200;
-
-	/**
-	 * Filters how often the activity log is pruned, in rows between sweeps.
-	 *
-	 * @param int $interval Prune every Nth inserted row.
-	 */
-	$interval = (int) apply_filters( 'aafm_log_prune_interval', $interval );
-
-	return max( 1, $interval );
-}
-
-/**
- * Delete activity rows beyond the newest aafm_log_max_rows().
- *
- * Keyed on the PRIMARY KEY (id is monotonic), so this is a single indexed range
- * delete — never a COUNT(*) or a full scan. Touches only this plugin's own table.
+ * Driven by the daily `aafm_prune_activity_log_daily` cron event, not by the write
+ * path, so an insert never pays for a DELETE. When retention is 0 the log is kept
+ * forever and this is a no-op. Otherwise it removes every row whose created_at is
+ * older than the cutoff in one prepared, index-backed range delete (created_at is
+ * indexed) against this plugin's own table.
  *
  * @return void
  */
 function aafm_prune_activity_log(): void {
-	global $wpdb;
-
-	$max = aafm_log_max_rows();
-	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$max_id = (int) $wpdb->get_var( "SELECT MAX(id) FROM {$table}" );
-	if ( $max_id <= $max ) {
-		return;
+	$days = aafm_log_retention_days();
+	if ( 0 === $days ) {
+		return; // 0 = keep every entry forever.
 	}
 
-	$cutoff = $max_id - $max;
+	global $wpdb;
+	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
+	$table  = esc_sql( aafm_activity_log_table() );
+	$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE id <= %d", $cutoff ) );
+	$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s", $cutoff ) );
 }
 
 /**

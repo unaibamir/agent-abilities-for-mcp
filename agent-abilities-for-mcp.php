@@ -28,19 +28,39 @@ define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 
-// Bound the activity log so a chatty (or adversarial deny-loop) agent can't grow it
-// without limit. Pruned on insert, keeping the newest AAFM_LOG_MAX_ROWS rows. Both
-// values are filterable (aafm_log_max_rows / aafm_log_prune_interval).
-if ( ! defined( 'AAFM_LOG_MAX_ROWS' ) ) {
-	define( 'AAFM_LOG_MAX_ROWS', 10000 );
-}
-if ( ! defined( 'AAFM_LOG_PRUNE_INTERVAL' ) ) {
-	define( 'AAFM_LOG_PRUNE_INTERVAL', 200 );
-}
-
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
+
+/**
+ * Schedule the daily activity-log prune event, if not already scheduled.
+ *
+ * The event fires `aafm_prune_activity_log_daily`, which trims entries older than the
+ * configured retention window. Runs on activation and self-heals on admin_init so an
+ * install that predates this event still picks it up without a reactivation.
+ *
+ * @return void
+ */
+function aafm_schedule_log_prune(): void {
+	if ( ! wp_next_scheduled( 'aafm_prune_activity_log_daily' ) ) {
+		wp_schedule_event( time(), 'daily', 'aafm_prune_activity_log_daily' );
+	}
+}
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_schedule_log_prune' );
+add_action( 'admin_init', 'aafm_schedule_log_prune' );
+
+/**
+ * Clear the scheduled activity-log prune event on deactivation.
+ *
+ * @return void
+ */
+function aafm_unschedule_log_prune(): void {
+	wp_clear_scheduled_hook( 'aafm_prune_activity_log_daily' );
+}
+register_deactivation_hook( AAFM_PLUGIN_FILE, 'aafm_unschedule_log_prune' );
+
+// The cron event fires this action; the handler prunes entries past the retention window.
+add_action( 'aafm_prune_activity_log_daily', 'aafm_prune_activity_log' );
 
 // OAuth storage schema is required early so the activation hook can install its tables.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';
@@ -214,6 +234,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );
 		add_action( 'wp_ajax_aafm_create_agent_user', 'aafm_ajax_create_agent_user' );
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
+		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
+		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
 	}
 
 	aafm_init_mcp();

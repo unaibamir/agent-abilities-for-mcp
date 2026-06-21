@@ -312,6 +312,66 @@ function aafm_oauth_revoke_token( string $raw ): bool {
 }
 
 /**
+ * Revoke every active token issued to a client (admin "Revoke client" action).
+ *
+ * Deactivates all of the client's still-active access/refresh rows in one prepared
+ * UPDATE, so a deactivated client's already-issued sessions stop validating at once.
+ *
+ * @param string $client_id The public client identifier.
+ * @return int Number of token rows deactivated.
+ */
+function aafm_oauth_revoke_client_tokens( string $client_id ): int {
+	if ( '' === $client_id ) {
+		return 0;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"UPDATE {$table} SET is_active = 0 WHERE client_id = %s AND is_active = 1",
+			$client_id
+		)
+	);
+
+	return (int) $wpdb->rows_affected;
+}
+
+/**
+ * Revoke every active token a single user holds for one client (admin "Revoke grant").
+ *
+ * Scoped to that user+client pair, so other users' sessions with the same client and
+ * the user's sessions with other clients are untouched.
+ *
+ * @param int    $user_id   The WordPress user id whose tokens are revoked.
+ * @param string $client_id The client the tokens belong to.
+ * @return int Number of token rows deactivated.
+ */
+function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id ): int {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return 0;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"UPDATE {$table} SET is_active = 0 WHERE wp_user_id = %d AND client_id = %s AND is_active = 1",
+			$user_id,
+			$client_id
+		)
+	);
+
+	return (int) $wpdb->rows_affected;
+}
+
+/**
  * Revoke an entire refresh-token lineage, given any one row id in it.
  *
  * Each rotation links child.refresh_parent_id = parent.id, so the lineage is a

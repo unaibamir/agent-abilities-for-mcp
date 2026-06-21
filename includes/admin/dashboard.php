@@ -188,7 +188,7 @@ function aafm_render_dashboard_tab(): void {
 	$candidates    = aafm_agent_user_candidates();
 	$recent        = aafm_recent_agent_count();
 	$log_rows      = aafm_activity_count();
-	$log_cap       = defined( 'AAFM_LOG_MAX_ROWS' ) ? (int) AAFM_LOG_MAX_ROWS : 10000;
+	$retention     = aafm_log_retention_days();
 	$admin_agents  = array_values( array_filter( $candidates, static fn( array $c ): bool => ! empty( $c['is_admin'] ) ) );
 	$adapter_label = ( null === $adapter ) ? __( 'not loaded', 'agent-abilities-for-mcp' ) : $adapter;
 
@@ -356,16 +356,21 @@ function aafm_render_dashboard_tab(): void {
 		esc_html( number_format_i18n( $log_rows ) ),
 		esc_html( _n( 'entry', 'entries', $log_rows, 'agent-abilities-for-mcp' ) )
 	);
-	printf(
-		'<div class="stat-sub">%s</div>',
-		esc_html(
-			sprintf(
-				/* translators: %s: maximum number of rows the log keeps. */
-				__( 'Keeps the most recent %s entries, then drops the oldest.', 'agent-abilities-for-mcp' ),
-				number_format_i18n( $log_cap )
-			)
-		)
-	);
+	if ( $retention > 0 ) {
+		$log_sub = sprintf(
+			/* translators: %s: number of days of activity the log keeps. */
+			_n(
+				'Keeping the last %s day of activity.',
+				'Keeping the last %s days of activity.',
+				$retention,
+				'agent-abilities-for-mcp'
+			),
+			number_format_i18n( $retention )
+		);
+	} else {
+		$log_sub = __( 'Keeping all activity.', 'agent-abilities-for-mcp' );
+	}
+	printf( '<div class="stat-sub">%s</div>', esc_html( $log_sub ) );
 	echo '</div>';
 
 	// Agent users. The security signal is preserved: when an admin-capable agent exists,

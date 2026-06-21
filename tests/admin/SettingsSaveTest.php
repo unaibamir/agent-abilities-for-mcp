@@ -77,6 +77,24 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertSame( 0, aafm_count_dropped_ip_lines( '' ) );
 	}
 
+	public function test_retention_days_getter_clamps(): void {
+		update_option( 'aafm_log_retention_days', 30 );
+		$this->assertSame( 30, aafm_log_retention_days() );
+		update_option( 'aafm_log_retention_days', -5 );
+		$this->assertSame( 0, aafm_log_retention_days() ); // 0 = keep forever.
+		update_option( 'aafm_log_retention_days', 99999 );
+		$this->assertSame( 3650, aafm_log_retention_days() );
+		delete_option( 'aafm_log_retention_days' );
+		$this->assertSame( 30, aafm_log_retention_days() ); // Default.
+	}
+
+	public function test_settings_sanitizer_bounds_retention_days(): void {
+		$this->assertSame( 30, aafm_sanitize_settings_input( array() )['aafm_log_retention_days'] );
+		$this->assertSame( 0, aafm_sanitize_settings_input( array( 'aafm_log_retention_days' => '-5' ) )['aafm_log_retention_days'] );
+		$this->assertSame( 3650, aafm_sanitize_settings_input( array( 'aafm_log_retention_days' => '99999' ) )['aafm_log_retention_days'] );
+		$this->assertSame( 14, aafm_sanitize_settings_input( array( 'aafm_log_retention_days' => '14' ) )['aafm_log_retention_days'] );
+	}
+
 	public function test_settings_render_uses_warning_notice(): void {
 		ob_start();
 		aafm_render_settings_tab();
@@ -85,6 +103,7 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertStringContainsString( 'name="aafm_ip_allowlist"', $html );
 		$this->assertStringContainsString( 'name="aafm_force_draft"', $html );
 		$this->assertStringContainsString( 'name="aafm_max_title_len"', $html );
+		$this->assertStringContainsString( 'name="aafm_log_retention_days"', $html );
 		$this->assertStringContainsString( 'aafm-notice-warning', $html );
 		$this->assertStringContainsString( 'id="aafm-settings-form"', $html );
 		$this->assertStringContainsString( 'aafm-set-row', $html );
@@ -105,6 +124,7 @@ final class SettingsSaveTest extends TestCase {
 			array(
 				'aafm_rate_limit_per_min',
 				'aafm_max_title_len',
+				'aafm_log_retention_days',
 				'aafm_force_draft',
 				'aafm_oauth_enabled',
 				'aafm_oauth_dcr_enabled',

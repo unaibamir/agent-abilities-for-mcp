@@ -187,3 +187,177 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
 
 	return false;
 }
+
+/**
+ * List every registered OAuth client for the admin management table.
+ *
+ * Each row carries the stored client fields plus a live count of its active,
+ * unexpired access tokens (a correlated COUNT against the access-tokens table).
+ * redirect_uris is decoded from its stored JSON to a string array; a malformed or
+ * non-array value decodes to an empty array so the caller never has to guard it.
+ * Ordered newest first. Read-only, prepared queries against the plugin's own tables.
+ *
+ * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int}>
+ */
+function aafm_oauth_list_clients(): array {
+	global $wpdb;
+	$clients_table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$tokens_table  = $wpdb->prefix . 'aafm_oauth_access_tokens';
+	$now           = gmdate( 'Y-m-d H:i:s', time() );
+
+	// Read-only listing for the admin table: tolerate a not-yet-installed table
+	// (a brand-new install before activation finishes) by returning an empty list
+	// instead of surfacing a DB error.
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	$rows = $wpdb->get_results( "SELECT client_id, client_name, redirect_uris, created_at, is_active FROM {$clients_table} ORDER BY created_at DESC, id DESC", ARRAY_A );
+	$wpdb->suppress_errors( $suppressed );
+
+	if ( ! is_array( $rows ) ) {
+		return array();
+	}
+
+	$out = array();
+	foreach ( $rows as $row ) {
+		$decoded = json_decode( (string) $row['redirect_uris'], true );
+		$uris    = is_array( $decoded ) ? array_values( array_filter( $decoded, 'is_string' ) ) : array();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$active_tokens = (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT COUNT(*) FROM {$tokens_table} WHERE client_id = %s AND is_active = 1 AND ( expires_at IS NULL OR expires_at > %s )",
+				(string) $row['client_id'],
+				$now
+			)
+		);
+
+		$out[] = array(
+			'client_id'     => (string) $row['client_id'],
+			'client_name'   => (string) $row['client_name'],
+			'redirect_uris' => $uris,
+			'created_at'    => (string) $row['created_at'],
+			'is_active'     => 1 === (int) $row['is_active'],
+			'active_tokens' => $active_tokens,
+		);
+	}
+
+	return $out;
+}
+
+/**
+ * List every active OAuth grant (consent) for the admin management table.
+ *
+ * Joins the consents table to the clients table for the client display name and
+ * resolves each consent's WordPress user for its display name and login. A consent
+ * whose user no longer exists is skipped (there is nothing meaningful to show or
+ * revoke for a deleted account). Ordered newest first. Read-only, prepared query.
+ *
+ * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string}>
+ */
+function aafm_oauth_list_grants(): array {
+	global $wpdb;
+	// Internal constant table names; esc_sql() makes the safety explicit for analyzers.
+	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );
+	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+
+	// Read-only listing for the admin table: tolerate a not-yet-installed table
+	// by returning an empty list instead of surfacing a DB error. Table names are
+	// internal constants; the LEFT JOIN keeps a consent whose client row was removed.
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	$rows = $wpdb->get_results(
+		"SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
+		 FROM {$consents_table} c
+		 LEFT JOIN {$clients_table} cl ON cl.client_id = c.client_id
+		 ORDER BY c.granted_at DESC, c.id DESC",
+		ARRAY_A
+	);
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	$wpdb->suppress_errors( $suppressed );
+
+	if ( ! is_array( $rows ) ) {
+		return array();
+	}
+
+	$out = array();
+	foreach ( $rows as $row ) {
+		$user_id = (int) $row['wp_user_id'];
+		$user    = get_userdata( $user_id );
+		if ( ! $user ) {
+			continue; // The account is gone; nothing to display or revoke.
+		}
+
+		$out[] = array(
+			'user_id'      => $user_id,
+			'user_display' => (string) $user->display_name,
+			'user_login'   => (string) $user->user_login,
+			'client_id'    => (string) $row['client_id'],
+			'client_name'  => (string) $row['client_name'],
+			'granted_at'   => (string) $row['granted_at'],
+		);
+	}
+
+	return $out;
+}
+
+/**
+ * Deactivate an OAuth client by its public client_id (sets is_active = 0).
+ *
+ * Locks the client out immediately: deactivation is re-enforced at code redemption,
+ * refresh rotation, and bearer validation. Revoking the client's live tokens is the
+ * caller's separate step (aafm_oauth_revoke_client_tokens()).
+ *
+ * @param string $client_id The public client identifier.
+ * @return bool True when a client row was updated.
+ */
+function aafm_oauth_deactivate_client( string $client_id ): bool {
+	if ( '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_clients';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$updated = $wpdb->query(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+			"UPDATE {$table} SET is_active = 0 WHERE client_id = %s AND is_active = 1",
+			$client_id
+		)
+	);
+
+	return (int) $updated > 0;
+}
+
+/**
+ * Delete a single user's consent (grant) for one client.
+ *
+ * After this, the user must re-approve the client to reconnect. Revoking the
+ * matching tokens is the caller's separate step (aafm_oauth_revoke_user_client_tokens()).
+ *
+ * @param int    $user_id   The WordPress user id whose grant is removed.
+ * @param string $client_id The client the grant is for.
+ * @return bool True when a consent row was deleted.
+ */
+function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
+	if ( $user_id <= 0 || '' === $client_id ) {
+		return false;
+	}
+
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_consents';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$deleted = $wpdb->delete(
+		$table,
+		array(
+			'wp_user_id' => $user_id,
+			'client_id'  => $client_id,
+		),
+		array( '%d', '%s' )
+	);
+
+	return (int) $deleted > 0;
+}

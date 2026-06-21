@@ -271,6 +271,20 @@ function aafm_max_title_len(): int {
 }
 
 /**
+ * How many days of activity log to keep. 0 means keep every entry forever.
+ *
+ * The stored value is clamped to [0, 3650] (ten years) so a pasted-in absurd or
+ * negative number can never be stored. The daily prune cron reads this getter to
+ * decide the cutoff date; the dashboard and activity tab read it for their copy.
+ *
+ * @return int Retention window in days, clamped to [0, 3650]. Default 30.
+ */
+function aafm_log_retention_days(): int {
+	$raw = (int) get_option( 'aafm_log_retention_days', 30 );
+	return max( 0, min( 3650, $raw ) );
+}
+
+/**
  * Whether a title is within the configured maximum length.
  *
  * Off (cap <= 0) always passes. Counted with mb_strlen so multibyte titles

@@ -90,4 +90,71 @@ class ConnectionRenderTest extends TestCase {
 		$this->assertStringContainsString( 'Connect your client', $html );
 		$this->assertStringContainsString( 'Check the endpoint is reachable', $html );
 	}
+
+	/**
+	 * With OAuth on and no clients/grants, the management tables show empty states.
+	 */
+	public function test_oauth_management_empty_states_render(): void {
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+
+		$html = $this->render_connection_tab();
+
+		$this->assertStringContainsString( 'Registered clients', $html );
+		$this->assertStringContainsString( 'Active grants', $html );
+		$this->assertStringContainsString( 'No clients have registered yet.', $html );
+		$this->assertStringContainsString( 'No one has approved an OAuth connection yet.', $html );
+		// The revoke AJAX nonce field is printed for the JS to read.
+		$this->assertStringContainsString( 'aafm_oauth_admin_nonce', $html );
+	}
+
+	/**
+	 * A seeded client and grant render in the tables, escaped, with revoke controls.
+	 */
+	public function test_oauth_management_renders_rows_escaped(): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
+
+		$user_id = self::factory()->user->create(
+			array(
+				'user_login'   => 'grant_owner',
+				'display_name' => 'Grant Owner',
+			)
+		);
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_clients',
+			array(
+				'client_id'     => 'client_abc123def456',
+				'client_name'   => 'Claude',
+				'redirect_uris' => wp_json_encode( array( 'https://claude.ai/cb' ) ),
+				'is_active'     => 1,
+			),
+			array( '%s', '%s', '%s', '%d' )
+		);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'wp_user_id' => $user_id,
+				'client_id'  => 'client_abc123def456',
+			),
+			array( '%d', '%s' )
+		);
+
+		$html = $this->render_connection_tab();
+
+		$this->assertStringContainsString( 'widefat striped aafm-oauth-table', $html );
+		$this->assertStringContainsString( 'data-client-id="client_abc123def456"', $html );
+		$this->assertStringContainsString( 'aafm-revoke-client', $html );
+		$this->assertStringContainsString( 'aafm-revoke-grant', $html );
+		$this->assertStringContainsString( 'grant_owner', $html );
+		$this->assertStringContainsString( 'Grant Owner', $html );
+		// Redirect URI rendered through esc_url as a link.
+		$this->assertStringContainsString( 'href="https://claude.ai/cb"', $html );
+		// Active client shows the success pill.
+		$this->assertStringContainsString( 'aafm-pill aafm-pill-success', $html );
+	}
 }

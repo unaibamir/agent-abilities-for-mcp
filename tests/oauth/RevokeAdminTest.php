@@ -131,4 +131,77 @@ final class RevokeAdminTest extends TestCase {
 		$this->assertSame( 1, aafm_oauth_revoke_user_client_tokens( 7, 'client_abc' ) );
 		$this->assertSame( 1, $this->active_tokens( 'client_abc' ) );
 	}
+
+	/**
+	 * Seed a pending (not-yet-redeemed) authorization code.
+	 *
+	 * @param string $client_id Owning client.
+	 * @param int    $user_id   Owning user.
+	 * @return void
+	 */
+	private function seed_code( string $client_id, int $user_id ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->insert(
+			$wpdb->prefix . 'aafm_oauth_codes',
+			array(
+				'code_hash'  => hash( 'sha256', $client_id . $user_id . wp_rand() ),
+				'client_id'  => $client_id,
+				'wp_user_id' => $user_id,
+				'expires_at' => gmdate( 'Y-m-d H:i:s', time() + 60 ),
+			),
+			array( '%s', '%s', '%d', '%s' )
+		);
+	}
+
+	/**
+	 * Count authorization codes for a client (optionally a single user).
+	 *
+	 * @param string   $client_id Client to count.
+	 * @param int|null $user_id   When set, scope to this user.
+	 * @return int
+	 */
+	private function codes( string $client_id, ?int $user_id = null ): int {
+		global $wpdb;
+		if ( null === $user_id ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			return (int) $wpdb->get_var(
+				$wpdb->prepare(
+					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+					"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s",
+					$client_id
+				)
+			);
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
+				$client_id,
+				$user_id
+			)
+		);
+	}
+
+	public function test_revoke_client_codes_drops_all_pending_codes(): void {
+		$this->seed_code( 'client_abc', 7 );
+		$this->seed_code( 'client_abc', 8 );
+		$this->seed_code( 'client_other', 7 );
+
+		$this->assertSame( 2, aafm_oauth_revoke_client_codes( 'client_abc' ) );
+		$this->assertSame( 0, $this->codes( 'client_abc' ) );
+		// A different client's pending code is untouched.
+		$this->assertSame( 1, $this->codes( 'client_other' ) );
+	}
+
+	public function test_revoke_user_client_codes_is_scoped_to_the_pair(): void {
+		$this->seed_code( 'client_abc', 7 );
+		$this->seed_code( 'client_abc', 8 );
+
+		$this->assertSame( 1, aafm_oauth_revoke_user_client_codes( 7, 'client_abc' ) );
+		$this->assertSame( 0, $this->codes( 'client_abc', 7 ) );
+		// User 8's pending code for the same client survives.
+		$this->assertSame( 1, $this->codes( 'client_abc', 8 ) );
+	}
 }

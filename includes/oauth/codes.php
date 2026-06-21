@@ -140,3 +140,52 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 
 	return $row;
 }
+
+/**
+ * Delete every authorization code issued to a client, redeemed or not.
+ *
+ * Used when an admin revokes the client: a code is valid for ~60s and the token endpoint does not
+ * re-check consent at redemption, so a pending (not-yet-redeemed) code must be removed or it could
+ * still mint fresh tokens after the revoke.
+ *
+ * @param string $client_id The public client identifier.
+ * @return int Rows deleted.
+ */
+function aafm_oauth_revoke_client_codes( string $client_id ): int {
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	return (int) $wpdb->query(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; the value is bound.
+			"DELETE FROM {$table} WHERE client_id = %s",
+			$client_id
+		)
+	);
+}
+
+/**
+ * Delete every authorization code issued to one user for one client.
+ *
+ * Used when an admin revokes a single grant: removes any pending code so it cannot mint tokens
+ * after the consent and existing tokens are gone.
+ *
+ * @param int    $user_id   The WordPress user.
+ * @param string $client_id The public client identifier.
+ * @return int Rows deleted.
+ */
+function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ): int {
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	return (int) $wpdb->query(
+		$wpdb->prepare(
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; values are bound.
+			"DELETE FROM {$table} WHERE wp_user_id = %d AND client_id = %s",
+			$user_id,
+			$client_id
+		)
+	);
+}

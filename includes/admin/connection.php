@@ -308,6 +308,9 @@ function aafm_ajax_oauth_revoke_client(): void {
 
 	aafm_oauth_deactivate_client( $client_id );
 	$revoked = aafm_oauth_revoke_client_tokens( $client_id );
+	// Drop any pending (not-yet-redeemed) authorization codes too, or one could still mint
+	// fresh tokens within its short window after the client is revoked.
+	aafm_oauth_revoke_client_codes( $client_id );
 
 	wp_send_json_success(
 		array(
@@ -341,6 +344,9 @@ function aafm_ajax_oauth_revoke_grant(): void {
 
 	aafm_oauth_delete_consent( $user_id, $client_id );
 	$revoked = aafm_oauth_revoke_user_client_tokens( $user_id, $client_id );
+	// Drop any pending (not-yet-redeemed) authorization codes for this user+client too, or one
+	// could still mint fresh tokens after the consent and existing tokens are gone.
+	aafm_oauth_revoke_user_client_codes( $user_id, $client_id );
 
 	wp_send_json_success(
 		array(

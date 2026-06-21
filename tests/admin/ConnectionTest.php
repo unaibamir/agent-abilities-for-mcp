@@ -329,4 +329,90 @@ final class ConnectionTest extends TestCase {
 		$this->assertMatchesRegularExpression( '/<details[^>]*\bopen\b/', $html );
 		update_option( 'aafm_oauth_enabled', '1' ); // Restore default state.
 	}
+
+	/**
+	 * Regression guard: the OAuth snippet section must never contain Application Password
+	 * credential placeholders, and the App-Password fallback must contain them.
+	 *
+	 * This locks the critical Defect 1 bug: the App-Password client picker used to overwrite
+	 * OAuth snippet content because it selected .aafm-snippet[data-os] globally.  The server-
+	 * rendered markup enforces the structural separation the JS scoping relies on.
+	 */
+	public function test_oauth_section_is_credential_free_and_app_password_section_carries_placeholder(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		// Isolate the OAuth card (everything inside .aafm-oauth-card).
+		$oauth_start = strpos( $html, 'aafm-oauth-card' );
+		$this->assertNotFalse( $oauth_start, 'OAuth card wrapper not found in rendered HTML.' );
+
+		// Isolate the App-Password fallback (everything inside .aafm-app-password-fallback).
+		$ap_start = strpos( $html, 'aafm-app-password-fallback' );
+		$this->assertNotFalse( $ap_start, 'App-Password fallback wrapper not found in rendered HTML.' );
+
+		// The two sections must be structurally separate — AP fallback follows OAuth card.
+		$this->assertGreaterThan( $oauth_start, $ap_start, 'App-Password fallback must come after the OAuth card.' );
+
+		// Extract the OAuth card region (up to where the app-password fallback starts).
+		$oauth_region = substr( $html, $oauth_start, $ap_start - $oauth_start );
+
+		// The OAuth region must be entirely credential-free.
+		$this->assertStringNotContainsString(
+			'WP_API_PASSWORD',
+			$oauth_region,
+			'OAuth card must not contain WP_API_PASSWORD — OAuth needs no stored secret.'
+		);
+		$this->assertStringNotContainsString(
+			'PASTE-APPLICATION-PASSWORD-HERE',
+			$oauth_region,
+			'OAuth card must not contain the app-password placeholder.'
+		);
+		$this->assertStringNotContainsString(
+			'WP_API_USERNAME',
+			$oauth_region,
+			'OAuth card must not contain WP_API_USERNAME.'
+		);
+
+		// The App-Password region must contain the credential placeholder.
+		$ap_region = substr( $html, $ap_start );
+		$this->assertStringContainsString(
+			'PASTE-APPLICATION-PASSWORD-HERE',
+			$ap_region,
+			'App-Password fallback must contain the credential paste placeholder.'
+		);
+	}
+
+	/**
+	 * Regression guard: the <details> wrapper for the App-Password fallback must be
+	 * balanced — the number of <details> opens in the fallback region must equal the
+	 * number of </details> closes in that region.
+	 *
+	 * Finds the full <details ...aafm-app-password-fallback...> tag so the region
+	 * starts at the opening angle-bracket and includes the opening tag itself.
+	 */
+	public function test_app_password_fallback_details_element_is_balanced(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		// Find the <details that carries aafm-app-password-fallback.
+		// preg_match with PREG_OFFSET_CAPTURE gives us the byte offset of the match start.
+		$matched = preg_match( '/<details[^>]*aafm-app-password-fallback[^>]*>/', $html, $m, PREG_OFFSET_CAPTURE );
+		$this->assertSame( 1, $matched, 'Exactly one <details class="aafm-app-password-fallback"> must exist.' );
+
+		$region_start = $m[0][1]; // Byte offset of the match.
+		$ap_region    = substr( $html, $region_start );
+
+		$opens  = substr_count( $ap_region, '<details' );
+		$closes = substr_count( $ap_region, '</details>' );
+
+		$this->assertSame(
+			$opens,
+			$closes,
+			sprintf(
+				'<details> open/close mismatch in .aafm-app-password-fallback region: %d open(s), %d close(s). The outer </details> is likely missing.',
+				$opens,
+				$closes
+			)
+		);
+	}
 }

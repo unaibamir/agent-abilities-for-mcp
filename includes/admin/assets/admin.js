@@ -110,7 +110,12 @@
 		}
 
 		#bindClientPicker() {
-			const cards = document.querySelectorAll( '#aafm-clients .aafm-client' );
+			// Scope strictly to the App-Password fallback subtree. The OAuth picker has
+			// its own #bindOauthClientPicker and must never be touched here.
+			const root = document.querySelector( '.aafm-app-password-fallback' );
+			const cards = root
+				? root.querySelectorAll( '#aafm-clients .aafm-client' )
+				: document.querySelectorAll( '#aafm-clients .aafm-client' );
 			if ( ! cards.length ) {
 				return;
 			}
@@ -120,12 +125,16 @@
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
-					const source = document.querySelector(
+					// Search within the fallback root only — never touch OAuth elements.
+					const searchRoot = root ?? document;
+					const source = searchRoot.querySelector(
 						`.aafm-quickstart-card[data-client="${ client }"]`
 					);
 					const unixCfg = source?.dataset.config ?? '';
 
-					document
+					// Update only snippet blocks within the App-Password fallback, never
+					// the OAuth card's .aafm-snippet elements.
+					searchRoot
 						.querySelectorAll( '.aafm-snippet[data-os]' )
 						.forEach( ( block ) => {
 							const pre = block.querySelector( 'pre' );
@@ -200,6 +209,10 @@
 		}
 
 		#bindOsTabs() {
+			// There are two independent OS-tab groups on the Connection tab: one inside
+			// .aafm-oauth-picker and one inside .aafm-app-password-fallback. Each click
+			// must only affect the tabs and snippet blocks within its own group's container
+			// so the two pickers operate independently of one another.
 			const tabs = document.querySelectorAll( '.aafm-os-tab' );
 			if ( ! tabs.length ) {
 				return;
@@ -207,12 +220,27 @@
 			tabs.forEach( ( tab ) => {
 				tab.addEventListener( 'click', () => {
 					const os = tab.dataset.os;
-					tabs.forEach( ( t ) => {
+
+					// The closest container that holds this tab's sibling tabs and snippet
+					// blocks. The OS tabs sit inside .aafm-seg.aafm-os-tabs; the snippet
+					// blocks are siblings or cousins within the same picker wrapper.
+					// Walking up to .aafm-oauth-picker or .aafm-app-password-fallback (or
+					// the parent card as a safe fallback) keeps each group isolated.
+					const container =
+						tab.closest( '.aafm-oauth-picker' ) ??
+						tab.closest( '.aafm-app-password-fallback' ) ??
+						tab.closest( '.aafm-card' ) ??
+						document;
+
+					// Update active state only for sibling tabs in the same container.
+					container.querySelectorAll( '.aafm-os-tab' ).forEach( ( t ) => {
 						const active = t === tab;
 						t.classList.toggle( 'is-active', active );
 						t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
 					} );
-					document
+
+					// Toggle snippet visibility only within this container.
+					container
 						.querySelectorAll( '.aafm-snippet[data-os]' )
 						.forEach( ( box ) => {
 							box.hidden = box.dataset.os !== os;

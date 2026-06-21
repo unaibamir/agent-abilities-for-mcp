@@ -1049,5 +1049,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div></div>'; // .aafm-card / .aafm-step-rail
 	echo '</div>'; // .aafm-step 3
 
+	echo '</details>'; // .aafm-app-password-fallback
+
 	echo '</div>'; // .aafm-connection
 }

@@ -261,6 +261,102 @@ function aafm_quickstart_note( string $client ): string {
 }
 
 /**
+ * Build a copy-paste config snippet for the OAuth bridge path.
+ *
+ * Like {@see aafm_client_snippet()}, but for the OAuth connection method.  The
+ * agent connects over the browser-based OAuth approval flow — no stored secret
+ * is ever needed, so the snippet carries only the endpoint URL (via mcp-remote)
+ * and never any `WP_API_*` env vars.
+ *
+ * On a local install the `env` block carries `NODE_EXTRA_CA_CERTS` pointing at a
+ * placeholder path so the operator can substitute their own mkcert root CA and
+ * avoid Node rejecting the locally-trusted certificate.  Production snippets
+ * include no `env` block at all.
+ *
+ * The unix/windows and VS Code root-key rules match {@see aafm_client_snippet()}
+ * exactly so the two snippet renderers feel consistent.
+ *
+ * @param string $client Target client slug (see {@see aafm_quickstart_clients()}).
+ * @param string $os     Target OS shape: 'unix' (default) or 'windows'.
+ * @return string JSON snippet, credential-free.
+ */
+function aafm_oauth_client_snippet( string $client, string $os = 'unix' ): string {
+	$package = 'mcp-remote';
+	$url     = aafm_endpoint_url();
+
+	if ( 'windows' === $os ) {
+		$command = 'cmd';
+		$args    = array( '/c', 'npx', '-y', $package, $url );
+	} else {
+		$command = 'npx';
+		$args    = array( '-y', $package, $url );
+	}
+
+	$entry = array(
+		'command' => $command,
+		'args'    => $args,
+	);
+
+	if ( aafm_site_is_local() ) {
+		// Placeholder path: local TLS certificates (mkcert, DDEV, Valet) are machine-specific.
+		// The operator replaces this string with the real path from `mkcert -CAROOT`.
+		$entry['env'] = array( 'NODE_EXTRA_CA_CERTS' => 'PATH-TO-YOUR-mkcert-rootCA.pem' );
+	}
+
+	$server   = array( 'agent-abilities' => $entry );
+	$root_key = ( 'vscode' === $client ) ? 'servers' : 'mcpServers';
+
+	return (string) wp_json_encode( array( $root_key => $server ), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+}
+
+/**
+ * Whether this client's primary OAuth connection mode is native (URL-based) or bridge.
+ *
+ * Clients that have first-class support for adding a remote MCP server by URL and running
+ * the OAuth browser flow natively are classed as 'native'.  Clients that cannot run the
+ * browser flow by themselves are guided through the mcp-remote stdio bridge first ('bridge').
+ *
+ * @param string $client Client slug.
+ * @return string 'native' or 'bridge'.
+ */
+function aafm_oauth_client_mode( string $client ): string {
+	$native_clients = array( 'claude-desktop', 'claude-code', 'cursor', 'vscode', 'windsurf', 'gemini-cli' );
+	return in_array( $client, $native_clients, true ) ? 'native' : 'bridge';
+}
+
+/**
+ * Per-client one-line note explaining where to paste the OAuth endpoint URL.
+ *
+ * Plain prose, no markup, fully translatable. Returns an empty string for unknown slugs so
+ * callers can skip the note rather than rendering a blank paragraph.
+ *
+ * @param string $client Client slug.
+ * @return string Localized instruction, or '' for an unknown slug.
+ */
+function aafm_oauth_client_note( string $client ): string {
+	switch ( $client ) {
+		case 'claude-desktop':
+			return __( 'Settings → Connectors → Add custom connector, then paste the endpoint URL.', 'agent-abilities-for-mcp' );
+		case 'claude-code':
+			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
+		case 'cursor':
+			return __( 'Add a server to ~/.cursor/mcp.json with a "url" pointing at the endpoint, then reload.', 'agent-abilities-for-mcp' );
+		case 'vscode':
+			return __( 'Add a .vscode/mcp.json server with "type":"http" and the endpoint "url" (key is "servers").', 'agent-abilities-for-mcp' );
+		case 'windsurf':
+			return __( "Add the endpoint URL as a server in Windsurf's MCP config, then refresh.", 'agent-abilities-for-mcp' );
+		case 'gemini-cli':
+			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' );
+		case 'manus':
+			return __( "Add the endpoint URL in Manus's MCP server config.", 'agent-abilities-for-mcp' );
+		case 'generic':
+			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' );
+		default:
+			return '';
+	}
+}
+
+/**
  * AJAX: create the dedicated agent user.
  *
  * @return void

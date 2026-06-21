@@ -251,4 +251,86 @@ final class ConnectionTest extends TestCase {
 		// left and right edges line up top to bottom.
 		$this->assertSame( 3, substr_count( $html, 'aafm-conn-step' ) );
 	}
+
+	// ---- Task 1: OAuth client-guidance helpers ----
+
+	public function test_oauth_client_snippet_carries_no_credentials(): void {
+		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		$this->assertStringContainsString( 'mcp-remote', $snippet );
+		$this->assertStringContainsString( aafm_endpoint_url(), $snippet );
+		// OAuth = browser approval, never a stored secret.
+		$this->assertStringNotContainsString( 'WP_API_PASSWORD', $snippet );
+		$this->assertStringNotContainsString( 'WP_API_USERNAME', $snippet );
+		$this->assertStringNotContainsString( 'PASTE-APPLICATION-PASSWORD-HERE', $snippet );
+	}
+
+	public function test_oauth_client_snippet_local_adds_ca_placeholder(): void {
+		add_filter( 'aafm_site_is_local', '__return_true' );
+		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		remove_filter( 'aafm_site_is_local', '__return_true' );
+		$this->assertStringContainsString( 'NODE_EXTRA_CA_CERTS', $snippet );
+		// Path is machine-specific — placeholder only, never a hardcoded real path.
+		$this->assertStringContainsString( 'PATH-TO-YOUR-mkcert-rootCA.pem', $snippet );
+	}
+
+	public function test_oauth_client_snippet_production_omits_env(): void {
+		add_filter( 'aafm_site_is_local', '__return_false' );
+		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		remove_filter( 'aafm_site_is_local', '__return_false' );
+		$this->assertStringNotContainsString( 'NODE_EXTRA_CA_CERTS', $snippet );
+	}
+
+	public function test_oauth_client_snippet_windows_wraps_cmd(): void {
+		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'windows' );
+		$this->assertStringContainsString( 'cmd', $snippet );
+		$this->assertStringContainsString( '/c', $snippet );
+	}
+
+	public function test_oauth_client_snippet_vscode_uses_servers_key(): void {
+		$vscode  = aafm_oauth_client_snippet( 'vscode', 'unix' );
+		$generic = aafm_oauth_client_snippet( 'generic', 'unix' );
+		$this->assertStringContainsString( '"servers"', $vscode );
+		$this->assertStringContainsString( '"mcpServers"', $generic );
+	}
+
+	public function test_oauth_client_mode_known_for_every_client(): void {
+		foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+			$this->assertContains( aafm_oauth_client_mode( $slug ), array( 'native', 'bridge' ), $slug );
+		}
+	}
+
+	public function test_oauth_client_note_present_for_every_client(): void {
+		foreach ( array_keys( aafm_quickstart_clients() ) as $slug ) {
+			$this->assertNotSame( '', aafm_oauth_client_note( $slug ), $slug );
+		}
+		$this->assertSame( '', aafm_oauth_client_note( 'does-not-exist' ) );
+	}
+
+	// ---- Task 3: OAuth-first render smoke tests ----
+
+	public function test_connection_tab_leads_with_oauth_when_enabled(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		ob_start();
+		aafm_render_connection_tab();
+		$html = (string) ob_get_clean();
+		// OAuth section is present and marked recommended.
+		$this->assertStringContainsString( 'Connect with OAuth', $html );
+		$this->assertStringContainsString( 'Recommended', $html );
+		// App Password path is present as a collapsed fallback (<details>).
+		$this->assertStringContainsString( '<details', $html );
+		$this->assertStringContainsString( 'Application Password', $html );
+		// Endpoint still shown once.
+		$this->assertStringContainsString( aafm_endpoint_url(), $html );
+	}
+
+	public function test_connection_tab_oauth_disabled_expands_app_password(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+		ob_start();
+		aafm_render_connection_tab();
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'Application Password', $html );
+		// The fallback renders open when OAuth is off.
+		$this->assertMatchesRegularExpression( '/<details[^>]*\bopen\b/', $html );
+		update_option( 'aafm_oauth_enabled', '1' ); // restore
+	}
 }

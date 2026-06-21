@@ -481,4 +481,38 @@ class ValidatorTest extends TestCase {
 		$error = new WP_Error( 'x', 'y' );
 		$this->assertSame( $error, aafm_oauth_rest_authentication_errors( $error ) );
 	}
+
+	/**
+	 * The route guard runs on determine_current_user, which can fire before WordPress
+	 * instantiates the global $wp_rewrite (Query Monitor calls current_user_can() that
+	 * early). rest_url() -> get_rest_url() dereferences $wp_rewrite and would fatal on
+	 * null. With $wp_rewrite nulled, the guard must still (a) not fatal and (b) classify
+	 * the MCP route as true and a non-MCP route as false, falling back to the
+	 * home_url() + rest_get_url_prefix() reconstruction (neither touches $wp_rewrite).
+	 */
+	public function test_route_guard_survives_null_wp_rewrite(): void {
+		$saved_rewrite = $GLOBALS['wp_rewrite'] ?? null;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- deliberately simulate the early-bootstrap state where $wp_rewrite is not yet set.
+		$GLOBALS['wp_rewrite'] = null;
+
+		try {
+			// Pretty-permalink MCP request path, reconstructed without $wp_rewrite.
+			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+			unset( $_GET['rest_route'] );
+			$this->assertTrue(
+				aafm_oauth_request_targets_mcp_route(),
+				'The MCP route must be recognised even when $wp_rewrite is null.'
+			);
+
+			// A non-MCP REST route must not match.
+			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/wp/v2/posts';
+			$this->assertFalse(
+				aafm_oauth_request_targets_mcp_route(),
+				'A non-MCP route must not match when $wp_rewrite is null.'
+			);
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restore the exact prior global so the null state never bleeds into another test.
+			$GLOBALS['wp_rewrite'] = $saved_rewrite;
+		}
+	}
 }

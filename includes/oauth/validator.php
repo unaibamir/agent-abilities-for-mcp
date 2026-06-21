@@ -143,7 +143,15 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		return false;
 	}
 
-	$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
+	// rest_url() -> get_rest_url() dereferences the global $wp_rewrite. The determine_current_user
+	// filter can fire before WordPress instantiates $wp_rewrite (e.g. Query Monitor calling
+	// current_user_can() that early), so calling rest_url() then fatals on a null $wp_rewrite. Only
+	// use rest_url() once $wp_rewrite exists; otherwise leave the path empty so the home_url() +
+	// rest_get_url_prefix() reconstruction below (neither touches $wp_rewrite) produces the route.
+	$rest_url_path = '';
+	if ( isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite ) {
+		$rest_url_path = (string) wp_parse_url( rest_url( ltrim( $mcp_route, '/' ) ), PHP_URL_PATH );
+	}
 
 	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
 	// component collapses to .../index.php and carries no route — that case is the rest_route branch

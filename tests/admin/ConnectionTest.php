@@ -383,6 +383,35 @@ final class ConnectionTest extends TestCase {
 	}
 
 	/**
+	 * Regression guard: the OAuth card must render BOTH OS snippet variants so the OAuth
+	 * OS toggle has something to switch to.
+	 *
+	 * Locks the regression where the OS-tab handler was scoped to .aafm-oauth-picker, which
+	 * holds only the tabs — the snippets live in the sibling .aafm-oauth-panels, so a Windows
+	 * user on the recommended OAuth path was shown the macOS/Linux command. Asserting both
+	 * variants render (npx for unix, cmd for windows) proves the toggle has valid targets in
+	 * the card the JS now scopes to (.aafm-oauth-card).
+	 */
+	public function test_oauth_card_renders_both_os_snippet_variants(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		$oauth_start = strpos( $html, 'aafm-oauth-card' );
+		$ap_start    = strpos( $html, 'aafm-app-password-fallback' );
+		$this->assertNotFalse( $oauth_start, 'OAuth card wrapper not found.' );
+		$this->assertNotFalse( $ap_start, 'App-Password fallback wrapper not found.' );
+		$oauth_region = substr( $html, $oauth_start, $ap_start - $oauth_start );
+
+		// Both OS variants must be present in the OAuth card.
+		$this->assertStringContainsString( 'data-os="unix"', $oauth_region, 'OAuth card missing the unix snippet variant.' );
+		$this->assertStringContainsString( 'data-os="windows"', $oauth_region, 'OAuth card missing the windows snippet variant.' );
+
+		// The two variants must genuinely differ: unix launches npx directly, windows wraps cmd.
+		$this->assertStringContainsString( 'npx', $oauth_region, 'OAuth unix snippet should launch npx.' );
+		$this->assertStringContainsString( 'cmd', $oauth_region, 'OAuth windows snippet should wrap the launcher in cmd.' );
+	}
+
+	/**
 	 * Regression guard: the <details> wrapper for the App-Password fallback must be
 	 * balanced — the number of <details> opens in the fallback region must equal the
 	 * number of </details> closes in that region.

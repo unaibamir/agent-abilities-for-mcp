@@ -226,8 +226,12 @@
 					// blocks are siblings or cousins within the same picker wrapper.
 					// Walking up to .aafm-oauth-picker or .aafm-app-password-fallback (or
 					// the parent card as a safe fallback) keeps each group isolated.
+					// The OAuth OS tabs sit in .aafm-oauth-picker, but the OAuth snippet
+					// blocks live in the sibling .aafm-oauth-panels — both inside
+					// .aafm-oauth-card, so scope to the card to reach the snippets while
+					// staying clear of the App-Password fallback (a sibling, not nested).
 					const container =
-						tab.closest( '.aafm-oauth-picker' ) ??
+						tab.closest( '.aafm-oauth-card' ) ??
 						tab.closest( '.aafm-app-password-fallback' ) ??
 						tab.closest( '.aafm-card' ) ??
 						document;

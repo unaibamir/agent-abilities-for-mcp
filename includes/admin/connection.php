@@ -486,7 +486,7 @@ function aafm_render_oauth_management(): void {
 			echo '</td>';
 
 			printf( '<td>%s</td>', esc_html( aafm_format_admin_datetime( $client['created_at'] ) ) );
-			printf( '<td>%s</td>', esc_html( number_format_i18n( $client['active_tokens'] ) ) );
+			printf( '<td class="aafm-client-tokens">%s</td>', esc_html( number_format_i18n( $client['active_tokens'] ) ) );
 
 			echo '<td class="aafm-status-cell">';
 			if ( $client['is_active'] ) {

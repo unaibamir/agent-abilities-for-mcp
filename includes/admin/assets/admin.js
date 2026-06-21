@@ -1056,10 +1056,18 @@
 				if ( ! row ) {
 					return;
 				}
+				const revoked = Number( json?.data?.revoked_tokens ) || 0;
 				if ( isGrant ) {
-					// The grant no longer exists: drop the row.
+					// The grant is gone: drop its row, and lower the owning client's active-token
+					// count by the tokens we just revoked so it does not read stale.
+					this.#adjustClientTokens( root, clientId, -revoked );
 					row.remove();
 				} else {
+					// The client and all its tokens are revoked: its active-token count is now 0.
+					const tokensCell = row.querySelector( '.aafm-client-tokens' );
+					if ( tokensCell ) {
+						tokensCell.textContent = '0';
+					}
 					// Flip the Status pill to Revoked and replace the button with plain text.
 					const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
 					if ( pill ) {
@@ -1077,6 +1085,24 @@
 					}
 				}
 			} );
+		}
+
+		// Adjust a client's "Active tokens" cell in place after a revoke, so the count stays
+		// truthful without a page reload. Matches the row by dataset (no selector injection).
+		#adjustClientTokens( root, clientId, delta ) {
+			if ( ! clientId || ! delta ) {
+				return;
+			}
+			const clientRow = Array.from(
+				root.querySelectorAll( '[data-client-row]' )
+			).find( ( el ) => el.dataset.clientRow === clientId );
+			const cell = clientRow?.querySelector( '.aafm-client-tokens' );
+			if ( ! cell ) {
+				return;
+			}
+			const current =
+				parseInt( ( cell.textContent || '' ).replace( /[^0-9]/g, '' ), 10 ) || 0;
+			cell.textContent = String( Math.max( 0, current + delta ) );
 		}
 
 		#bindResetPlugin() {

@@ -407,21 +407,19 @@ PHP;
 		}
 
 		// Customer stubs (W4-WC3). WC_Customer is defined via eval so class_exists prevents
-		// double-define across tests. wc_get_customer() / wc_create_customer() / wc_update_customer()
-		// delegate to WcCustomerStubStore. The delete path is intentionally NOT stubbed here: the
-		// wc-delete-customer executor calls wp_delete_user() on a real WP user (same as the
-		// delete-user ability), so delete tests create real WP users via the factory.
+		// double-define across tests. The customer abilities hydrate via `new WC_Customer( $id )` and
+		// validate with get_id() (mirroring real WooCommerce, which has NO wc_get_customer() helper),
+		// so the WC_Customer stub constructor leaves data['id'] = 0 for unknown ids. The delete path
+		// is intentionally NOT stubbed here: the wc-delete-customer executor calls wp_delete_user() on
+		// a real WP user (same as the delete-user ability), so delete tests create real WP users.
 		if ( ! class_exists( 'WC_Customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_wc_customer_class_source() );
 		}
-		if ( ! function_exists( 'wc_get_customer' ) ) {
+		if ( ! function_exists( 'wc_create_new_customer' ) ) {
+			// Mirrors the real WooCommerce wc_create_new_customer() signature.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_customer( $id ) { $id = (int) $id; if ( ! \AAFM\Tests\WcCustomerStubStore::exists( $id ) ) { return false; } return new \WC_Customer( $id ); }' );
-		}
-		if ( ! function_exists( 'wc_create_customer' ) ) {
-			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_customer( $email, $username, $password ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "wc_create_customer_failed", "Create failed." ); } return (int) $id; }' );
+			eval( 'function wc_create_new_customer( $email, $username = "", $password = "", $args = array() ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "registration-error", "Create failed." ); } return (int) $id; }' );
 		}
 		if ( ! function_exists( 'wc_update_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -576,8 +574,21 @@ class WC_Order {
 	public function set_shipping_country( $v ) { $this->data['shipping']['country'] = (string) $v; }
 	public function add_product( $product, $qty = 1 ) {
 		$pid = is_object( $product ) && method_exists( $product, 'get_id' ) ? (int) $product->get_id() : (int) $product;
-		$this->data['items'][] = array( 'name' => '', 'product_id' => $pid, 'quantity' => (int) $qty, 'subtotal' => '0.00', 'total' => '0.00' );
+		$qty = (int) $qty;
+		$price = is_object( $product ) && method_exists( $product, 'get_price' ) ? (float) $product->get_price() : 0.0;
+		$name = is_object( $product ) && method_exists( $product, 'get_name' ) ? (string) $product->get_name() : '';
+		$line = number_format( $price * $qty, 2, '.', '' );
+		$this->data['items'][] = array( 'name' => $name, 'product_id' => $pid, 'quantity' => $qty, 'subtotal' => $line, 'total' => $line );
 		return count( $this->data['items'] ) - 1;
+	}
+	public function calculate_totals( $and_taxes = true ) {
+		$subtotal = 0.0;
+		foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) {
+			$subtotal += (float) ( $item['total'] ?? 0 );
+		}
+		$this->data['subtotal'] = number_format( $subtotal, 2, '.', '' );
+		$this->data['total']    = number_format( $subtotal + (float) ( $this->data['shipping_total'] ?? 0 ) + (float) ( $this->data['total_tax'] ?? 0 ), 2, '.', '' );
+		return $this->data['total'];
 	}
 	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
 	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
@@ -906,21 +917,29 @@ PHP;
 	 * Define the minimal WooCommerce coupon surface so the coupon abilities can list/read/create/
 	 * update/delete through the WC CRUD layer.
 	 *
-	 * The WC_Coupon class and wc_get_coupons() / wc_get_coupon_id_by_code() are global and defined
-	 * once per process, so the actual coupon state lives in WcCouponStubStore. This helper must be
-	 * called AFTER stub_woocommerce() (which defines the WooCommerce marker class and grants the
-	 * manage_woocommerce capability), because it piggy-backs on that infrastructure.
+	 * Real WooCommerce has no wc_get_coupons(): coupons are the 'shop_coupon' post type, listed via
+	 * WP_Query and hydrated through WC_Coupon. This helper registers that post type so the list
+	 * query can find the seeded posts, defines the WC_Coupon class (global, once per process), and
+	 * provides wc_get_coupon_id_by_code() for the code-string constructor path. The field data lives
+	 * in WcCouponStubStore. Must be called AFTER stub_woocommerce() (which defines the WooCommerce
+	 * marker class and grants the manage_woocommerce capability), because it piggy-backs on that
+	 * infrastructure.
 	 *
 	 * @return void
 	 */
 	protected function stub_wc_coupons(): void {
+		if ( ! post_type_exists( 'shop_coupon' ) ) {
+			register_post_type(
+				'shop_coupon',
+				array(
+					'public'  => false,
+					'show_ui' => false,
+				)
+			);
+		}
 		if ( ! class_exists( 'WC_Coupon' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_wc_coupon_class_source() );
-		}
-		if ( ! function_exists( 'wc_get_coupons' ) ) {
-			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_coupons( $args = array() ) { return \AAFM\Tests\WcCouponStubStore::query( $args ); }' );
 		}
 		if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -1074,6 +1093,11 @@ PHP;
 			)
 		);
 		WcShippingStubStore::$next_instance_id = 5;
+
+		// Back the is_enabled toggle with a real temp table so the production $wpdb->update()
+		// against woocommerce_shipping_zone_methods works unmodified (same pattern as the tax stub).
+		WcShippingStubStore::drop_methods_table();
+		WcShippingStubStore::create_methods_table();
 	}
 
 	/**
@@ -1175,8 +1199,10 @@ class WC_Shipping_Method {
 	public $instance_id = 0;
 	public $id = '';
 	public $method_title = '';
+	public $title = '';
 	public $enabled = 'yes';
 	public $settings = array();
+	public $instance_settings = array();
 	private $zone_id = 0;
 	public function __construct( $instance_id = 0, $zone_id = 0 ) {
 		$this->instance_id = (int) $instance_id;
@@ -1185,12 +1211,42 @@ class WC_Shipping_Method {
 		if ( is_array( $stored ) ) {
 			$this->id           = (string) ( $stored['id'] ?? 'flat_rate' );
 			$this->method_title = (string) ( $stored['method_title'] ?? '' );
-			$this->enabled      = (string) ( $stored['enabled'] ?? 'yes' );
 			$this->settings     = (array) ( $stored['settings'] ?? array() );
+			// The production code persists instance settings as a WP option keyed by
+			// get_instance_option_key() (core update_option()), exactly as WC does. Merge that
+			// option over the seeded settings so a write round-trips on the next read — this is
+			// what WC_Settings_API::init_settings() does on construct.
+			$option = get_option( $this->get_instance_option_key() );
+			if ( is_array( $option ) ) {
+				$this->settings = array_merge( $this->settings, $option );
+			}
+			// WC populates $title from the "title" instance setting; mirror that so a
+			// write through the instance settings option round-trips on the next read.
+			$this->title = (string) ( $this->settings['title'] ?? $this->method_title );
+			// is_enabled lives in the woocommerce_shipping_zone_methods table, which the
+			// production toggle writes via $wpdb->update(). Read it back from the table when
+			// a row exists, falling back to the in-memory store flag.
+			$is_enabled = \AAFM\Tests\WcShippingStubStore::read_is_enabled( $this->instance_id );
+			if ( null !== $is_enabled ) {
+				$this->enabled = ( 1 === $is_enabled ) ? 'yes' : 'no';
+			} else {
+				$this->enabled = (string) ( $stored['enabled'] ?? 'yes' );
+			}
 		}
 	}
 	public function get_instance_id() { return $this->instance_id; }
-	public function save() { $delta = array( 'method_title' => $this->method_title, 'enabled' => $this->enabled, 'settings' => $this->settings ); $ok = \AAFM\Tests\WcShippingStubStore::update_method( $this->zone_id, $this->instance_id, $delta ); return ( $ok > 0 ) ? $this->instance_id : false; }
+	public function init_instance_settings() { $this->instance_settings = (array) $this->settings; }
+	public function get_instance_option_key() { return 'woocommerce_' . $this->id . '_' . $this->instance_id . '_settings'; }
+	// Mirrors WC_Settings_API::update_option(): persist a single instance setting into the WP
+	// option keyed by get_instance_option_key(), the same place the constructor reads back from.
+	// Production update_shipping_method() writes the whole array via core update_option() directly;
+	// this method exists to match WC's real API surface.
+	public function update_option( $key, $value = '' ) {
+		$option = get_option( $this->get_instance_option_key() );
+		$option = is_array( $option ) ? $option : array();
+		$option[ $key ] = $value;
+		return update_option( $this->get_instance_option_key(), $option );
+	}
 }
 PHP;
 	}
@@ -1259,11 +1315,20 @@ PHP;
 		return <<<'PHP'
 class WC_Tax {
 	/**
-	 * Return all custom tax class slugs (standard is NOT included, mirroring real WC).
+	 * Return all custom tax class NAMES (standard is NOT included, mirroring real WC).
 	 *
 	 * @return string[]
 	 */
 	public static function get_tax_classes(): array {
+		return array_values( \AAFM\Tests\WcTaxStubStore::$classes );
+	}
+
+	/**
+	 * Return all custom tax class SLUGS, in the same order as get_tax_classes() names.
+	 *
+	 * @return string[]
+	 */
+	public static function get_tax_class_slugs(): array {
 		return array_keys( \AAFM\Tests\WcTaxStubStore::$classes );
 	}
 
@@ -1366,27 +1431,39 @@ class WC_Payment_Gateway {
 	}
 
 	/**
+	 * Mirrors WC_Settings_API::update_option(): writes the value, then returns WordPress
+	 * update_option()'s result, which is false when the value was unchanged (no write needed) —
+	 * NOT only on failure. The new value is persisted to in-memory settings either way.
+	 *
 	 * @param string $key
 	 * @param mixed  $value
 	 * @return bool
 	 */
 	public function update_option( $key, $value ) {
-		return \AAFM\Tests\WcGatewayStubStore::update_option( $this->id, (string) $key, $value );
+		$key = (string) $key;
+		$changed = \AAFM\Tests\WcGatewayStubStore::update_option( $this->id, $key, $value );
+		// Keep the in-memory settings in sync with what the store accepted so get_option() reflects
+		// the persisted state (matching how real WC_Settings_API caches $this->settings).
+		$stored = \AAFM\Tests\WcGatewayStubStore::get( $this->id );
+		if ( is_array( $stored ) ) {
+			$this->settings = $stored['settings'] ?? array();
+		}
+		return $changed;
 	}
 
-	/** @return bool */
-	public function save() {
-		return \AAFM\Tests\WcGatewayStubStore::save_gateway(
-			$this->id,
-			array(
-				'id'          => $this->id,
-				'title'       => $this->title,
-				'description' => $this->description,
-				'enabled'     => $this->enabled,
-				'order'       => $this->order,
-				'settings'    => $this->settings,
-			)
-		);
+	/**
+	 * Mirrors WC_Settings_API::get_option(): reads from the in-memory settings cache.
+	 *
+	 * @param string $key
+	 * @param mixed  $empty_value
+	 * @return mixed
+	 */
+	public function get_option( $key, $empty_value = null ) {
+		$key = (string) $key;
+		if ( isset( $this->settings[ $key ] ) ) {
+			return $this->settings[ $key ];
+		}
+		return $empty_value;
 	}
 }
 PHP;

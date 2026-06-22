@@ -614,10 +614,17 @@ function aafm_wc_get_shipping_method_object( int $zone_id, int $instance_id ): ?
  * @return array<string,mixed>
  */
 function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
+	// The per-instance display title is the "title" instance setting (WC populates
+	// $method->title from it). Fall back to the generic method label when no instance
+	// title has been saved. update_shipping_method persists to the same place, so a
+	// write -> read round-trip is consistent.
+	$instance_title = (string) $method->title;
+	$display_title  = ( '' !== $instance_title ) ? $instance_title : (string) $method->method_title;
+
 	return array(
 		'instance_id'  => (int) $method->instance_id,
 		'id'           => (string) $method->id,
-		'method_title' => (string) $method->method_title,
+		'method_title' => $display_title,
 		'enabled'      => (string) $method->enabled,
 		// Shipping plugins store carrier API keys / account creds / license keys in settings.
 		// Run them through the recursive deny-by-default redactor before returning.
@@ -918,21 +925,53 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Apply only the supplied optional fields via the method's own property setters.
+	// Persist the per-instance display title ("method_title" in this ability) into the
+	// method's "title" instance setting. WC_Shipping_Method has no per-object save();
+	// instance settings are written by update_option() on the method's instance option
+	// key, mirroring WC core's WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
 	if ( array_key_exists( 'method_title', $input ) ) {
-		$method->method_title = sanitize_text_field( (string) $input['method_title'] );
+		$title = sanitize_text_field( (string) $input['method_title'] );
+
+		$method->init_instance_settings();
+		$instance_settings          = is_array( $method->instance_settings ) ? $method->instance_settings : array();
+		$instance_settings['title'] = $title;
+
+		// This filter is documented in WooCommerce: includes/abstracts/abstract-wc-settings-api.php.
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce-core filter; we mirror WC's own write so extending plugins still fire.
+		$instance_settings = apply_filters( 'woocommerce_shipping_' . $method->id . '_instance_settings_values', $instance_settings, $method );
+
+		update_option( $method->get_instance_option_key(), $instance_settings );
 	}
+
+	// Persist the enabled flag. For a zone method this is NOT an instance setting — it
+	// lives in the is_enabled column of the woocommerce_shipping_zone_methods table, keyed
+	// by instance_id. WC core toggles it with a direct $wpdb->update() and then bumps the
+	// shipping transient version; there is no higher-level API for this column.
 	if ( array_key_exists( 'enabled', $input ) ) {
-		$method->enabled = in_array( $input['enabled'], array( 'yes', 'no' ), true ) ? $input['enabled'] : 'yes';
+		global $wpdb;
+
+		$is_enabled = ( 'no' === $input['enabled'] ) ? 0 : 1;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API exists for the is_enabled column; this mirrors WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
+		$updated_rows = $wpdb->update(
+			$wpdb->prefix . 'woocommerce_shipping_zone_methods',
+			array( 'is_enabled' => $is_enabled ),
+			array( 'instance_id' => $instance_id ),
+			array( '%d' ),
+			array( '%d' )
+		);
+
+		if ( false === $updated_rows ) {
+			return aafm_generic_error();
+		}
+
+		// Invalidate the shipping cache so the toggle is reflected on the next read.
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			\WC_Cache_Helper::get_transient_version( 'shipping', true );
+		}
 	}
 
-	// Persist via the method's own save() — writes the WC instance option row in production;
-	// delegates to WcShippingStubStore::update_method() in tests via the stub class.
-	$ok = $method->save();
-	if ( false === $ok || is_wp_error( $ok ) ) {
-		return aafm_generic_error();
-	}
-
+	// Re-resolve from the zone so the returned shape reflects what was just persisted.
 	$updated = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $updated ) {
 		return aafm_generic_error();

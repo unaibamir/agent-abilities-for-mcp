@@ -757,7 +757,9 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * Update gateway returns WP_Error when save() fails.
+	 * Update gateway returns WP_Error on a genuine persistence failure: the write is rejected, so a
+	 * read-back of the setting still shows the old value (mismatch). This is distinct from
+	 * WooCommerce's update_option() returning false merely because the value was unchanged.
 	 */
 	public function test_update_payment_gateway_save_failure(): void {
 		$this->acting_as( 'administrator' );
@@ -771,6 +773,28 @@ final class WooReportsTest extends TestCase {
 		WcGatewayStubStore::$force_save_failure = false;
 
 		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
+	 * Update gateway succeeds when the requested value already equals the stored value.
+	 *
+	 * Regression: WC_Settings_API::update_option() returns false when the value is unchanged (no write
+	 * needed), which a naive return-value gate mistook for a failure. The executor must verify the
+	 * desired end-state by read-back, so setting an already-correct value still succeeds. The paypal
+	 * fixture seeds enabled => 'yes', so re-enabling it is the unchanged-value case.
+	 */
+	public function test_update_payment_gateway_unchanged_value_succeeds(): void {
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'enabled'    => true,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$stored = WcGatewayStubStore::get( 'paypal' );
+		$this->assertSame( 'yes', $stored['enabled'] );
 	}
 
 	/**

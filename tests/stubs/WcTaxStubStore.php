@@ -91,7 +91,7 @@ class WcTaxStubStore {
 				tax_rate_id       BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 				tax_rate_country  varchar(200)  NOT NULL DEFAULT '',
 				tax_rate_state    varchar(200)  NOT NULL DEFAULT '',
-				tax_rate_rate     decimal(26,4) NOT NULL DEFAULT '0.0000',
+				tax_rate     decimal(26,4) NOT NULL DEFAULT '0.0000',
 				tax_rate_name     varchar(200)  NOT NULL DEFAULT '',
 				tax_rate_priority BIGINT UNSIGNED NOT NULL DEFAULT 1,
 				tax_rate_compound int(1)        NOT NULL DEFAULT 0,
@@ -131,7 +131,7 @@ class WcTaxStubStore {
 			array(
 				'tax_rate_country'  => 'GB',
 				'tax_rate_state'    => '',
-				'tax_rate_rate'     => '20.0000',
+				'tax_rate'          => '20.0000',
 				'tax_rate_name'     => 'VAT',
 				'tax_rate_priority' => 1,
 				'tax_rate_compound' => 0,
@@ -148,7 +148,7 @@ class WcTaxStubStore {
 			array(
 				'tax_rate_country'  => 'GB',
 				'tax_rate_state'    => '',
-				'tax_rate_rate'     => '5.0000',
+				'tax_rate'          => '5.0000',
 				'tax_rate_name'     => 'Reduced VAT',
 				'tax_rate_priority' => 1,
 				'tax_rate_compound' => 0,

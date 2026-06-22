@@ -302,6 +302,11 @@ if ( ! class_exists( 'WC_Order' ) ) {
 	 * Stub WC_Order for PHPStan — mirrors the getters the order abilities call.
 	 */
 	class WC_Order {
+		/**
+		 * @param bool $and_taxes
+		 * @return string
+		 */
+		public function calculate_totals( $and_taxes = true ) { return '0.00'; }
 		/** @return int */
 		public function get_id() { return 0; }
 		/** @return string */
@@ -634,15 +639,6 @@ if ( ! class_exists( 'WC_Customer' ) ) {
 		public function save() { return 0; }
 	}
 }
-if ( ! function_exists( 'wc_get_customer' ) ) {
-	/**
-	 * @param int $id
-	 * @return \WC_Customer|false
-	 */
-	function wc_get_customer( $id ) {
-		return false;
-	}
-}
 if ( ! function_exists( 'wc_get_customers' ) ) {
 	/**
 	 * @param array<string,mixed> $args
@@ -743,15 +739,6 @@ if ( ! class_exists( 'WC_Coupon' ) ) {
 		public function delete( $force = false ) { return false; }
 	}
 }
-if ( ! function_exists( 'wc_get_coupons' ) ) {
-	/**
-	 * @param array<string,mixed> $args
-	 * @return array<int,\WC_Coupon>|object
-	 */
-	function wc_get_coupons( $args = array() ) {
-		return array();
-	}
-}
 if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 	/**
 	 * @param string $code
@@ -807,9 +794,13 @@ if ( ! class_exists( 'WC_Shipping_Method' ) ) {
 		/** @var string */
 		public $method_title = '';
 		/** @var string */
+		public $title = '';
+		/** @var string */
 		public $enabled = 'yes';
 		/** @var array<string,mixed> */
 		public $settings = array();
+		/** @var array<string,mixed> */
+		public $instance_settings = array();
 		/**
 		 * @param int $instance_id
 		 * @param int $zone_id
@@ -817,8 +808,10 @@ if ( ! class_exists( 'WC_Shipping_Method' ) ) {
 		public function __construct( $instance_id = 0, $zone_id = 0 ) {}
 		/** @return int */
 		public function get_instance_id() { return 0; }
-		/** @return int|false */
-		public function save() { return false; }
+		/** @return void */
+		public function init_instance_settings() {}
+		/** @return string */
+		public function get_instance_option_key() { return ''; }
 	}
 }
 if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
@@ -844,6 +837,13 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @return string[]
 		 */
 		public static function get_tax_classes(): array { return array(); }
+
+		/**
+		 * Return all custom tax class slugs, parallel to get_tax_classes() names.
+		 *
+		 * @return string[]
+		 */
+		public static function get_tax_class_slugs(): array { return array(); }
 
 		/**
 		 * Create a tax class.
@@ -877,8 +877,8 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		public $description = '';
 		/** @var string */
 		public $enabled = 'yes';
-		/** @var int */
-		public $order = 0;
+		/** @var int|null */
+		public ?int $order = null;
 		/** @var array<string,mixed> */
 		public $settings = array();
 		/**
@@ -891,6 +891,12 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		 * @return bool
 		 */
 		public function update_option( $key, $value ) { return false; }
+		/**
+		 * @param string $key
+		 * @param mixed  $empty_value
+		 * @return mixed
+		 */
+		public function get_option( $key, $empty_value = null ) { return $empty_value; }
 		/** @return bool */
 		public function save() { return false; }
 	}

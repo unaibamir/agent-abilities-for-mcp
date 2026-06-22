@@ -82,6 +82,138 @@ class WcShippingStubStore {
 	}
 
 	// =========================================================================
+	// is_enabled table (mirrors WC's woocommerce_shipping_zone_methods table)
+	// =========================================================================
+
+	/**
+	 * Fully-qualified name of the temp methods table in the test DB.
+	 *
+	 * @return string
+	 */
+	private static function methods_table(): string {
+		global $wpdb;
+		return $wpdb->prefix . 'woocommerce_shipping_zone_methods';
+	}
+
+	/**
+	 * Whether the temp methods table currently exists in the test DB.
+	 *
+	 * @return bool
+	 */
+	private static function methods_table_exists(): bool {
+		global $wpdb;
+		$table      = self::methods_table();
+		$suppressed = $wpdb->suppress_errors( true );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- existence probe; table name is internal.
+		$wpdb->query( "SELECT 1 FROM `{$table}` LIMIT 0" );
+		$exists = ( '' === $wpdb->last_error );
+		$wpdb->suppress_errors( $suppressed );
+		return $exists;
+	}
+
+	/**
+	 * Create the woocommerce_shipping_zone_methods temp table in the test DB.
+	 *
+	 * The production enabled toggle in aafm_exec_wc_update_shipping_method() runs a direct
+	 * $wpdb->update() against this table (no core API exists for the is_enabled column), so a
+	 * real table is created here — mirroring how WcTaxStubStore backs the tax-rate queries — and
+	 * the stub WC_Shipping_Method constructor reads is_enabled back from it. Call from the
+	 * shipping test set_up after seeding the in-memory store.
+	 *
+	 * @return void
+	 */
+	public static function create_methods_table(): void {
+		global $wpdb;
+		$table   = self::methods_table();
+		$charset = $wpdb->get_charset_collate();
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- DDL; table name and charset are internal constants, no user input.
+		$wpdb->query(
+			"CREATE TABLE IF NOT EXISTS `{$table}` (
+				zone_id      BIGINT UNSIGNED NOT NULL,
+				instance_id  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+				method_id    varchar(200)    NOT NULL,
+				method_order BIGINT UNSIGNED NOT NULL,
+				is_enabled   tinyint(1)      NOT NULL DEFAULT 1,
+				PRIMARY KEY (instance_id)
+			) {$charset}"
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		// Mirror every seeded in-memory method into the table so its is_enabled column
+		// agrees with the stored enabled flag.
+		foreach ( self::$methods as $method ) {
+			self::sync_method_row(
+				(int) ( $method['zone_id'] ?? 0 ),
+				(int) ( $method['instance_id'] ?? 0 ),
+				(string) ( $method['id'] ?? 'flat_rate' ),
+				'no' === (string) ( $method['enabled'] ?? 'yes' ) ? 0 : 1
+			);
+		}
+	}
+
+	/**
+	 * Drop the woocommerce_shipping_zone_methods temp table.
+	 *
+	 * @return void
+	 */
+	public static function drop_methods_table(): void {
+		global $wpdb;
+		$table = self::methods_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- DDL; table name is an internal constant, no user input.
+		$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" );
+	}
+
+	/**
+	 * Insert or update a single is_enabled row in the temp table.
+	 *
+	 * @param int    $zone_id     Zone id.
+	 * @param int    $instance_id Instance id.
+	 * @param string $method_id   Method type (e.g. flat_rate).
+	 * @param int    $is_enabled  1 or 0.
+	 * @return void
+	 */
+	public static function sync_method_row( int $zone_id, int $instance_id, string $method_id, int $is_enabled ): void {
+		global $wpdb;
+		if ( ! self::methods_table_exists() ) {
+			return;
+		}
+		$table = self::methods_table();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- test fixture row sync into the temp table.
+		$wpdb->replace(
+			$table,
+			array(
+				'zone_id'      => $zone_id,
+				'instance_id'  => $instance_id,
+				'method_id'    => $method_id,
+				'method_order' => $instance_id,
+				'is_enabled'   => $is_enabled,
+			),
+			array( '%d', '%d', '%s', '%d', '%d' )
+		);
+	}
+
+	/**
+	 * Read the is_enabled column for an instance, or null when no row exists.
+	 *
+	 * @param int $instance_id Instance id.
+	 * @return int|null 1, 0, or null.
+	 */
+	public static function read_is_enabled( int $instance_id ): ?int {
+		global $wpdb;
+		if ( ! self::methods_table_exists() ) {
+			return null;
+		}
+		$table = self::methods_table();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- test fixture read from the temp table; table name is internal.
+		$val = $wpdb->get_var( $wpdb->prepare( "SELECT is_enabled FROM `{$table}` WHERE instance_id = %d", $instance_id ) );
+
+		return ( null === $val ) ? null : (int) $val;
+	}
+
+	// =========================================================================
 	// Zone helpers
 	// =========================================================================
 
@@ -277,6 +409,10 @@ class WcShippingStubStore {
 				'settings'     => array(),
 			)
 		);
+
+		// Mirror the new method into the is_enabled temp table (when it exists) so a subsequent
+		// enabled toggle through the production $wpdb->update() finds a row to update.
+		self::sync_method_row( $zone_id, $instance_id, $type, 1 );
 
 		return $instance_id;
 	}

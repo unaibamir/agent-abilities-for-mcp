@@ -123,11 +123,16 @@ function aafm_wc_customers_registry_definitions(): array {
  * @return \WC_Customer|null
  */
 function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
-	if ( ! function_exists( 'wc_get_customer' ) ) {
+	if ( ! class_exists( 'WC_Customer' ) ) {
 		return null;
 	}
-	$customer = wc_get_customer( $id );
-	return ( $customer instanceof \WC_Customer ) ? $customer : null;
+	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly.
+	// A non-existent id leaves the object empty, so get_id() returns 0 — treat that as "not found".
+	$customer = new \WC_Customer( $id );
+	if ( $customer->get_id() !== $id ) {
+		return null;
+	}
+	return $customer;
 }
 
 /**
@@ -559,25 +564,25 @@ function aafm_args_wc_create_customer(): array {
 /**
  * Execute aafm/wc-create-customer.
  *
- * Creates via wc_create_customer(), then applies optional address fields and saves.
+ * Creates via wc_create_new_customer(), then applies optional address fields and saves.
  * Returns WP_Error on any failure.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_create_customer( array $input ) {
-	if ( ! function_exists( 'wc_create_customer' ) ) {
+	if ( ! function_exists( 'wc_create_new_customer' ) ) {
 		return aafm_generic_error();
 	}
 
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	$username = sanitize_user( (string) ( $input['username'] ?? $email ) );
 
-	// wc_create_customer() returns the new user id as an int, or a WP_Error — never a
+	// wc_create_new_customer() returns the new user id as an int, or a WP_Error — never a
 	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
 	// create error can't be misread as success (and a real success can't be misread as a
 	// failure after the account is already persisted).
-	$created = wc_create_customer( $email, $username, wp_generate_password() );
+	$created = wc_create_new_customer( $email, $username, wp_generate_password() );
 	if ( $created instanceof \WP_Error ) {
 		return aafm_generic_error();
 	}

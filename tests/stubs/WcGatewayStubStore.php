@@ -26,7 +26,9 @@ class WcGatewayStubStore {
 	public static array $gateways = array();
 
 	/**
-	 * When true, save() returns false so the update-failure path is exercisable.
+	 * When true, update_option() rejects the write entirely (value is NOT persisted), so a read-back
+	 * verification sees the old value and the executor's mismatch path is exercisable. This models a
+	 * genuine persistence failure, distinct from WooCommerce returning false for an unchanged value.
 	 *
 	 * @var bool
 	 */
@@ -109,16 +111,28 @@ class WcGatewayStubStore {
 	/**
 	 * Persist an update_option() call on a gateway setting.
 	 *
+	 * Mirrors WordPress update_option()/WC_Settings_API semantics: the return value reflects whether
+	 * the stored value CHANGED — false when the new value equals the existing one (no write needed)
+	 * or when the gateway is unknown, true when a different value was written. The value is persisted
+	 * whenever it differs. When $force_save_failure is set, the write is rejected outright (value not
+	 * persisted) to simulate a genuine persistence failure for read-back verification tests.
+	 *
 	 * @param string $gateway_id Gateway id.
 	 * @param string $key        Setting key.
 	 * @param mixed  $value      Setting value.
 	 * @return bool
 	 */
 	public static function update_option( string $gateway_id, string $key, mixed $value ): bool {
-		if ( self::$force_save_failure ) {
+		if ( ! isset( self::$gateways[ $gateway_id ] ) ) {
 			return false;
 		}
-		if ( ! isset( self::$gateways[ $gateway_id ] ) ) {
+		if ( self::$force_save_failure ) {
+			// Reject the write: nothing persists, so a subsequent read-back sees the old value.
+			return false;
+		}
+		$existing = self::$gateways[ $gateway_id ]['settings'][ $key ] ?? null;
+		if ( $existing === $value ) {
+			// Unchanged — WordPress update_option() returns false but the stored value already holds it.
 			return false;
 		}
 		self::$gateways[ $gateway_id ]['settings'][ $key ] = $value;

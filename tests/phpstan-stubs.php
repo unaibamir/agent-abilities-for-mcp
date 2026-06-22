@@ -943,6 +943,8 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 		public $robots_noindex = false;
 		/** @var bool */
 		public $robots_nofollow = false;
+		/** @var bool */
+		public $robots_default = true;
 		/**
 		 * @param int $post_id
 		 * @return self

@@ -23,6 +23,97 @@ const AAFM_AIOSEO_MODEL = 'AIOSEO\\Plugin\\Common\\Models\\Post';
 add_filter( 'aafm_abilities_registry', 'aafm_register_aioseo_definitions' );
 add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_aioseo_full_definitions' );
 
+// Production rendered-head seam. Registered unconditionally because host plugins may load after us
+// on plugins_loaded (so a load-time activity check could miss AIOSEO); the callback's own
+// function_exists('aioseo') + aioseo()->head guards make it inert until AIOSEO is genuinely
+// present. Under the PHPUnit stubs aioseo() returns a bare stdClass with no ->head, so this passes
+// through and the test stub's own filter supplies the canned head — production and test wiring
+// never collide.
+add_filter( 'aafm_seo_rendered_head', 'aafm_aioseo_rendered_head', 10, 3 );
+
+/**
+ * Produce AIOSEO's rendered SEO head markup for a post.
+ *
+ * AIOSEO exposes no string-returning per-post head API: its head is emitted on wp_head via
+ * aioseo()->head->output(), which echoes against the queried object. So this renders inside a
+ * controlled, fully restored singular query for the post — snapshot the main-query globals, build a
+ * throwaway singular WP_Query for the post, buffer output(), then restore the originals (including
+ * the global $post) exactly. Honors $source (passthrough unless 'aioseo') and guards the API
+ * defensively: a missing aioseo()->head, an error, or empty output all fall back to the passed
+ * head rather than fataling.
+ *
+ * @param string $head   Head markup accumulated so far (passthrough default).
+ * @param int    $post_id Post id.
+ * @param string $source Integration slug the caller is asking for.
+ * @return string
+ */
+function aafm_aioseo_rendered_head( string $head, int $post_id, string $source ): string {
+	if ( 'aioseo' !== $source || ! function_exists( 'aioseo' ) ) {
+		return $head;
+	}
+
+	$aioseo = aioseo();
+	if ( ! is_object( $aioseo ) || ! isset( $aioseo->head ) || ! is_object( $aioseo->head ) || ! method_exists( $aioseo->head, 'output' ) ) {
+		return $head; // AIOSEO present but no head renderer (e.g. older/newer shape): best-effort.
+	}
+
+	$post = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return $head;
+	}
+
+	// Snapshot the query globals AIOSEO reads, so the throwaway query never leaks out of this call.
+	$saved_wp_query     = $GLOBALS['wp_query'] ?? null;
+	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
+	$saved_post         = $GLOBALS['post'] ?? null;
+
+	$rendered = '';
+	try {
+		$temp_query = new WP_Query(
+			array(
+				'p'                      => $post_id,
+				'post_type'              => $post->post_type,
+				'posts_per_page'         => 1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		// Point the main-query globals at our singular query so is_singular()/get_queried_object()
+		// resolve to this post while AIOSEO builds the head. Both originals are snapshotted above and
+		// restored in the finally block, so this swap never leaks past this call.
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_query'] = $temp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_the_query'] = $temp_query;
+		if ( $temp_query->have_posts() ) {
+			$temp_query->the_post();
+		}
+
+		ob_start();
+		$aioseo->head->output();
+		$rendered = (string) ob_get_clean();
+	} catch ( \Throwable $e ) {
+		// Make sure a half-open buffer from a throw inside output() is closed before we bail.
+		if ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+		$rendered = '';
+	} finally {
+		// Restore the originals exactly (order matters: globals first, then reset postdata).
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['wp_query'] = $saved_wp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['wp_the_query'] = $saved_wp_the_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['post'] = $saved_post;
+		wp_reset_postdata();
+	}
+
+	$rendered = trim( $rendered );
+	return '' !== $rendered ? $rendered : $head;
+}
+
 /**
  * Contribute the AIOSEO definitions to the registry, but only when AIOSEO is active. Host inactive:
  * the registry is returned unchanged.
@@ -332,11 +423,22 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		$raw          = (string) $input[ $field ];
 		$model->$prop = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
 	}
+	$robots_touched = false;
 	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {
 		if ( ! array_key_exists( $field, $input ) || ! property_exists( $model, $prop ) ) {
 			continue;
 		}
-		$model->$prop = (bool) $input[ $field ];
+		$model->$prop   = (bool) $input[ $field ];
+		$robots_touched = true;
+	}
+
+	// AIOSEO honors the per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy
+	// (see AIOSEO\Plugin\Common\Meta\Robots: it reads the custom flags behind `! $metaData->robots_default`,
+	// and the sitemap queries treat robots_default = 1 as "use site default, ignore noindex"). A fresh
+	// row defaults robots_default to true, so writing noindex/nofollow alone is a silent no-op. Flip it
+	// off whenever the caller sets an explicit robots flag, mirroring what the AIOSEO editor does.
+	if ( $robots_touched && property_exists( $model, 'robots_default' ) ) {
+		$model->robots_default = false;
 	}
 
 	// AIOSEO's model save() returns false on a custom-table write failure. Surface it rather

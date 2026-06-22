@@ -89,6 +89,11 @@ class AioseoStubStore {
 			'twitter_image_custom_url' => '',
 			'robots_noindex'           => false,
 			'robots_nofollow'          => false,
+			// Mirrors the real wp_aioseo_posts column: a fresh row defaults to true ("use site default"),
+			// and AIOSEO ignores the per-post noindex/nofollow until this is flipped false. The update
+			// ability flips it whenever a robots flag is set, so the stub must carry it to catch a
+			// regression where that flip is dropped.
+			'robots_default'           => true,
 		);
 	}
 }

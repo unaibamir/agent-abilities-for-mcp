@@ -85,6 +85,51 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * Setting a robots flag must also flip the model's robots_default column to false. AIOSEO honors the
+	 * per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy (its Robots meta reads
+	 * the custom flags behind `! $metaData->robots_default`, and its sitemap treats robots_default = 1 as
+	 * "use site default, ignore noindex"). A fresh row defaults robots_default to true, so without this
+	 * flip the noindex write is a silent no-op on the real plugin. Asserted against the backing store so
+	 * the regression cannot reopen.
+	 */
+	public function test_aioseo_update_robots_clears_robots_default(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'        => $post_id,
+				'robots_noindex' => true,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+		$this->assertTrue( (bool) $row['robots_noindex'], 'The noindex flag must persist.' );
+		$this->assertFalse( (bool) $row['robots_default'], 'Writing a robots flag must clear robots_default so AIOSEO honors it.' );
+	}
+
+	/**
+	 * A write that touches no robots flag must leave robots_default untouched (still the row default), so
+	 * a title-only edit does not silently change the post's indexing behavior.
+	 */
+	public function test_aioseo_update_without_robots_leaves_robots_default(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'Just a title',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+		$this->assertTrue( (bool) $row['robots_default'], 'A non-robots write must not flip robots_default.' );
+	}
+
+	/**
 	 * T2-2: when the model's save() reports failure (nothing persisted in the custom table), the
 	 * write returns the generic error rather than a successful stale read.
 	 */

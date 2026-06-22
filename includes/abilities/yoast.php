@@ -20,6 +20,51 @@ defined( 'ABSPATH' ) || exit;
 add_filter( 'aafm_abilities_registry', 'aafm_register_yoast_definitions' );
 add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_yoast_full_definitions' );
 
+// Production rendered-head seam. Registered unconditionally because host plugins may load after us
+// on plugins_loaded (so a load-time activity check could miss Yoast); the callback's own
+// function_exists('YoastSEO') guard makes it inert until Yoast is genuinely present. Under the
+// PHPUnit stubs YoastSEO() is undefined, so this passes through and the test stub's own filter
+// supplies the canned head — production and test wiring never collide.
+add_filter( 'aafm_seo_rendered_head', 'aafm_yoast_rendered_head', 10, 3 );
+
+/**
+ * Produce Yoast's rendered SEO head markup for a post via its public meta surface.
+ *
+ * Honors $source: returns the passed-through $head untouched unless $source is 'yoast', so a site
+ * running multiple SEO plugins never has Yoast answer for another plugin's head. Guards the real
+ * Yoast API (YoastSEO() and the for_post->get_head->html chain) defensively — any missing piece or
+ * thrown error falls back to the passed-through $head rather than fataling.
+ *
+ * @param string $head   Head markup accumulated so far (passthrough default).
+ * @param int    $post_id Post id.
+ * @param string $source Integration slug the caller is asking for.
+ * @return string
+ */
+function aafm_yoast_rendered_head( string $head, int $post_id, string $source ): string {
+	if ( 'yoast' !== $source || ! function_exists( 'YoastSEO' ) ) {
+		return $head;
+	}
+
+	try {
+		$meta = YoastSEO()->meta->for_post( $post_id );
+		if ( null === $meta || ! is_object( $meta ) || ! method_exists( $meta, 'get_head' ) ) {
+			return $head;
+		}
+		$result = $meta->get_head();
+		// for_post()->get_head() returns an object with an ->html string property.
+		if ( is_object( $result ) && isset( $result->html ) && is_string( $result->html ) ) {
+			return $result->html;
+		}
+		if ( is_string( $result ) ) {
+			return $result;
+		}
+	} catch ( \Throwable $e ) {
+		return $head; // The real API shape changed or threw: stay best-effort, never fatal.
+	}
+
+	return $head;
+}
+
 /**
  * Contribute the Yoast definitions to the registry, but only when Yoast is active. Host inactive:
  * the registry is returned unchanged.

@@ -133,6 +133,7 @@ class Post {
 	public $twitter_image_custom_url = '';
 	public $robots_noindex = false;
 	public $robots_nofollow = false;
+	public $robots_default = true;
 	public static function getPost( $post_id ) {
 		$row = \AAFM\Tests\AioseoStubStore::get( (int) $post_id );
 		$model = new self();

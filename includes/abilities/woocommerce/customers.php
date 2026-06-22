@@ -126,9 +126,16 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
 	if ( ! class_exists( 'WC_Customer' ) ) {
 		return null;
 	}
-	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly.
-	// A non-existent id leaves the object empty, so get_id() returns 0 — treat that as "not found".
-	$customer = new \WC_Customer( $id );
+	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly. A
+	// non-existent id leaves the object empty, so get_id() returns 0 — treat that as "not found".
+	// WC_Customer's constructor already catches the data-store "Invalid customer" exception and
+	// zeroes the id, but guard the call so any other WC version/edge case returns not-found rather
+	// than surfacing a raw exception.
+	try {
+		$customer = new \WC_Customer( $id );
+	} catch ( \Exception $e ) {
+		return null;
+	}
 	if ( $customer->get_id() !== $id ) {
 		return null;
 	}

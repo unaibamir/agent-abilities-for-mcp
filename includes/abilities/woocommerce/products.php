@@ -234,7 +234,21 @@ function aafm_wc_product_output_properties(): array {
 			'type'  => 'array',
 			'items' => array( 'type' => 'integer' ),
 		),
-		'attributes'        => array( 'type' => 'object' ),
+		'attributes'        => array(
+			'type'                 => 'object',
+			// Keys are attribute slugs; each value is a {name, options[]} pair. The key set is
+			// product-defined, so the map is open and the value shape is declared here (A3).
+			'additionalProperties' => array(
+				'type'       => 'object',
+				'properties' => array(
+					'name'    => array( 'type' => 'string' ),
+					'options' => array(
+						'type'  => 'array',
+						'items' => array( 'type' => 'string' ),
+					),
+				),
+			),
+		),
 		'variation_ids'     => array(
 			'type'  => 'array',
 			'items' => array( 'type' => 'integer' ),
@@ -304,6 +318,7 @@ function aafm_args_wc_list_products(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -384,6 +399,7 @@ function aafm_args_wc_get_product(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -427,13 +443,25 @@ function aafm_wc_product_write_properties(): array {
 		'description'       => array( 'type' => 'string' ),
 		'short_description' => array( 'type' => 'string' ),
 		'sku'               => array( 'type' => 'string' ),
-		'regular_price'     => array( 'type' => 'string' ),
-		'sale_price'        => array( 'type' => 'string' ),
+		'regular_price'     => array(
+			'type'        => 'string',
+			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+		),
+		'sale_price'        => array(
+			'type'        => 'string',
+			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
+		),
 		'stock_status'      => array(
 			'type' => 'string',
 			'enum' => array( 'instock', 'outofstock', 'onbackorder' ),
 		),
-		'stock_quantity'    => array( 'type' => 'integer' ),
+		'stock_quantity'    => array(
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+		),
 		'manage_stock'      => array( 'type' => 'boolean' ),
 		'featured'          => array( 'type' => 'boolean' ),
 		'categories'        => array(

@@ -76,7 +76,7 @@ function aafm_wc_reports_registry_definitions(): array {
 
 		'aafm/wc-count-orders'           => array(
 			'label'        => __( 'Count WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -155,6 +155,7 @@ function aafm_args_wc_get_sales_report(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -171,35 +172,57 @@ function aafm_args_wc_get_sales_report(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
 		return aafm_generic_error();
 	}
-	global $wpdb;
 	$start = sanitize_text_field( (string) ( $input['start_date'] ?? gmdate( 'Y-m-01' ) ) );
 	$end   = sanitize_text_field( (string) ( $input['end_date'] ?? gmdate( 'Y-m-d' ) ) );
 
-	$statuses     = array( 'wc-completed', 'wc-processing' );
-	$placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+	// HPOS-aware: aggregate through wc_get_orders() so the totals come from WooCommerce's own
+	// order storage (custom order tables OR legacy posts) instead of a raw shop_order/postmeta
+	// join that only ever sees the legacy tables (B3). The date window is pushed into the query
+	// and results are paged so a large order history never loads in one unbounded fetch (mirrors
+	// the top-sellers path).
+	$start_ts = (int) strtotime( $start . ' 00:00:00' );
+	$end_ts   = (int) strtotime( $end . ' 23:59:59' );
 
-	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-	$row = $wpdb->get_row(
-		$wpdb->prepare(
-			"SELECT SUM( pm.meta_value + 0 ) AS total_sales, COUNT( DISTINCT p.ID ) AS order_count
-			 FROM {$wpdb->posts} p
-			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-			 WHERE p.post_type = 'shop_order'
-			   AND p.post_status IN ( {$placeholders} )
-			   AND pm.meta_key = '_order_total'
-			   AND p.post_date >= %s
-			   AND p.post_date <= %s",
-			array_merge( $statuses, array( $start . ' 00:00:00', $end . ' 23:59:59' ) )
-		),
-		ARRAY_A
-	);
-	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$page        = 1;
+	$per_page    = 200;
+	$total_sales = 0.0;
+	$order_count = 0;
 
-	$total_sales = round( (float) ( $row['total_sales'] ?? 0 ), 2 );
-	$order_count = (int) ( $row['order_count'] ?? 0 );
+	do {
+		$result = wc_get_orders(
+			array(
+				'status'       => array( 'completed', 'processing' ),
+				'date_created' => $start_ts . '...' . $end_ts,
+				'limit'        => $per_page,
+				'paged'        => $page,
+				'paginate'     => true,
+				'orderby'      => 'date',
+				'order'        => 'DESC',
+			)
+		);
+
+		$orders = is_object( $result ) && isset( $result->orders ) && is_array( $result->orders )
+			? $result->orders
+			: ( is_array( $result ) ? $result : array() );
+
+		$page_count = count( $orders );
+
+		foreach ( $orders as $order ) {
+			if ( ! $order instanceof \WC_Order ) {
+				continue;
+			}
+			$total_sales += (float) $order->get_total();
+			++$order_count;
+		}
+
+		++$page;
+		// Stop once a short (or empty) page is returned: that is the last page of the window.
+	} while ( $page_count === $per_page );
+
+	$total_sales = round( $total_sales, 2 );
 	$avg         = $order_count > 0 ? round( $total_sales / $order_count, 2 ) : 0.0;
 
 	return array(
@@ -263,6 +286,7 @@ function aafm_args_wc_get_top_sellers_report(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -404,6 +428,7 @@ function aafm_args_wc_count_orders(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -416,27 +441,55 @@ function aafm_args_wc_count_orders(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_count_orders( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
 		return aafm_generic_error();
 	}
-	$counts     = wp_count_posts( 'shop_order' );
-	$pending    = (int) ( $counts->{'wc-pending'} ?? 0 );
-	$processing = (int) ( $counts->{'wc-processing'} ?? 0 );
-	$on_hold    = (int) ( $counts->{'wc-on-hold'} ?? 0 );
-	$completed  = (int) ( $counts->{'wc-completed'} ?? 0 );
-	$cancelled  = (int) ( $counts->{'wc-cancelled'} ?? 0 );
-	$refunded   = (int) ( $counts->{'wc-refunded'} ?? 0 );
-	$failed     = (int) ( $counts->{'wc-failed'} ?? 0 );
+
+	// HPOS-aware: count per status through wc_get_orders() (which targets the custom order tables
+	// when HPOS is on, and the legacy posts otherwise) rather than wp_count_posts('shop_order'),
+	// which never sees the HPOS tables and would under-report on an HPOS site (B3). Each status is
+	// a paginated 1-row probe so only the storage-side total is read, not the order rows.
+	$by_status = array();
+	foreach ( array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ) as $status ) {
+		$by_status[ $status ] = aafm_wc_count_orders_by_status( $status );
+	}
+
+	// total sums these active order statuses; trashed orders are deliberately excluded, matching
+	// the non-trash "active" total convention shared by count-products and count-coupons (B4).
+	$total = array_sum( $by_status );
+
 	return array(
-		'pending'    => $pending,
-		'processing' => $processing,
-		'on_hold'    => $on_hold,
-		'completed'  => $completed,
-		'cancelled'  => $cancelled,
-		'refunded'   => $refunded,
-		'failed'     => $failed,
-		'total'      => $pending + $processing + $on_hold + $completed + $cancelled + $refunded + $failed,
+		'pending'    => $by_status['pending'],
+		'processing' => $by_status['processing'],
+		'on_hold'    => $by_status['on-hold'],
+		'completed'  => $by_status['completed'],
+		'cancelled'  => $by_status['cancelled'],
+		'refunded'   => $by_status['refunded'],
+		'failed'     => $by_status['failed'],
+		'total'      => $total,
 	);
+}
+
+/**
+ * HPOS-aware count of orders in a single WooCommerce status.
+ *
+ * Runs a paginated wc_get_orders() probe (limit 1, ids only) and reads the storage-reported
+ * total, so the count is correct under both High-Performance Order Storage and the legacy
+ * post-based storage. Returns 0 when the query shape is unexpected.
+ *
+ * @param string $status WooCommerce order status slug, without the wc- prefix (e.g. 'completed').
+ * @return int
+ */
+function aafm_wc_count_orders_by_status( string $status ): int {
+	$result = wc_get_orders(
+		array(
+			'status'   => $status,
+			'limit'    => 1,
+			'paginate' => true,
+			'return'   => 'ids',
+		)
+	);
+	return ( is_object( $result ) && isset( $result->total ) ) ? (int) $result->total : 0;
 }
 
 // =============================================================================
@@ -475,6 +528,7 @@ function aafm_args_wc_count_products(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -496,6 +550,8 @@ function aafm_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs
 	$private = (int) ( $counts->private ?? 0 );
 	$pending = (int) ( $counts->pending ?? 0 );
 	$trash   = (int) ( $counts->trash ?? 0 );
+	// total counts ACTIVE (non-trashed) products only — trash is reported as its own line but is
+	// deliberately excluded from total, the shared count convention across the count siblings (B4).
 	return array(
 		'publish' => $publish,
 		'draft'   => $draft,
@@ -537,6 +593,7 @@ function aafm_args_wc_count_customers(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -594,6 +651,7 @@ function aafm_args_wc_count_coupons(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -615,6 +673,8 @@ function aafm_exec_wc_count_coupons( array $input ): array|\WP_Error { // phpcs:
 	$private = (int) ( $counts->private ?? 0 );
 	$pending = (int) ( $counts->pending ?? 0 );
 	$trash   = (int) ( $counts->trash ?? 0 );
+	// total counts ACTIVE (non-trashed) coupons only — trash is reported as its own line but is
+	// deliberately excluded from total, the shared count convention across the count siblings (B4).
 	return array(
 		'publish' => $publish,
 		'draft'   => $draft,

@@ -185,6 +185,7 @@ function aafm_args_wc_list_payment_gateways(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -254,6 +255,7 @@ function aafm_args_wc_get_payment_gateway(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -300,7 +302,10 @@ function aafm_args_wc_update_payment_gateway(): array {
 			'required'             => array( 'gateway_id' ),
 			'properties'           => array(
 				'gateway_id'  => array( 'type' => 'string' ),
-				'enabled'     => array( 'type' => 'boolean' ),
+				'enabled'     => array(
+					'type'        => 'boolean',
+					'description' => 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".',
+				),
 				'title'       => array( 'type' => 'string' ),
 				'description' => array( 'type' => 'string' ),
 				'order'       => array(

@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
 function aafm_register_activity_log_definitions( array $registry ): array {
 	$registry['aafm/get-activity-log'] = array(
 		'label'        => __( 'Get activity log', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, and the timestamp. Most recent first. Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, and the timestamp. Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -54,8 +54,16 @@ function aafm_args_get_activity_log(): array {
 					'enum' => array( 'started', 'success', 'error', 'denied' ),
 				),
 				'ability'  => array( 'type' => 'string' ),
-				'page'     => array( 'type' => 'integer' ),
-				'per_page' => array( 'type' => 'integer' ),
+				'page'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
+				),
+				'per_page' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 200,
+				),
 			),
 			'additionalProperties' => false,
 		),
@@ -63,6 +71,7 @@ function aafm_args_get_activity_log(): array {
 			'type'       => 'object',
 			'properties' => array(
 				'entries' => array( 'type' => 'array' ),
+				'total'   => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_activity_log',
@@ -71,6 +80,7 @@ function aafm_args_get_activity_log(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -115,5 +125,13 @@ function aafm_exec_get_activity_log( array $input ): array {
 		);
 	}
 
-	return array( 'entries' => $entries );
+	// total counts the set narrowed by the optional status filter (the count helper supports
+	// status only); when an ability filter is also supplied, total still reflects the status
+	// scope and may exceed the per-ability entries shown. See the output_schema note.
+	$total = aafm_activity_count_filtered( isset( $args['status'] ) ? (string) $args['status'] : null );
+
+	return array(
+		'entries' => $entries,
+		'total'   => $total,
+	);
 }

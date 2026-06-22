@@ -49,7 +49,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-revision']  = array(
 		'label'        => __( 'Delete revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Permanently delete a single revision from a post's history. The live post is not changed. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -90,11 +90,12 @@ function aafm_args_list_revisions(): array {
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -113,6 +114,7 @@ function aafm_args_list_revisions(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -144,7 +146,7 @@ function aafm_exec_list_revisions( array $input ) {
 		return aafm_generic_error();
 	}
 	$all    = wp_get_post_revisions( $id, array( 'fields' => 'ids' ) );
-	$paging = aafm_paginate_args( $input, 50 );
+	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$slice  = array_slice( array_values( $all ), ( $paging['page'] - 1 ) * $paging['per_page'], $paging['per_page'] );
 	$rows   = array();
 	foreach ( $slice as $rid ) {
@@ -207,6 +209,7 @@ function aafm_args_get_revision(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

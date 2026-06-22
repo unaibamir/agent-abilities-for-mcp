@@ -212,11 +212,15 @@ function aafm_wc_coupon_write_properties(): array {
 		'code'                 => array( 'type' => 'string' ),
 		'amount'               => array( 'type' => 'string' ),
 		'discount_type'        => array(
-			'type' => 'string',
-			'enum' => array( 'percent', 'fixed_cart', 'fixed_product' ),
+			'type'        => 'string',
+			'enum'        => array( 'percent', 'fixed_cart', 'fixed_product' ),
+			'description' => 'How the coupon discounts: percent (a percentage of the cart), fixed_cart (a fixed amount off the whole cart), or fixed_product (a fixed amount off each matching product).',
 		),
 		'description'          => array( 'type' => 'string' ),
-		'date_expires'         => array( 'type' => array( 'string', 'null' ) ),
+		'date_expires'         => array(
+			'type'        => array( 'string', 'null' ),
+			'description' => 'Expiry date as a YYYY-MM-DD string (the coupon expires at the start of that day, site timezone). Pass null or an empty string for no expiry.',
+		),
 		'usage_limit'          => array( 'type' => array( 'integer', 'null' ) ),
 		'usage_limit_per_user' => array( 'type' => array( 'integer', 'null' ) ),
 		'minimum_amount'       => array( 'type' => 'string' ),
@@ -357,6 +361,7 @@ function aafm_args_wc_list_coupons(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -441,6 +446,7 @@ function aafm_args_wc_get_coupon(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

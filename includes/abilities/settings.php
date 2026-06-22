@@ -41,7 +41,7 @@ function aafm_register_settings_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-site-settings'] = array(
 		'label'        => __( 'Update site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a small allowlist of site settings only (name, tagline, timezone, formats, posts per page). It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
@@ -90,6 +90,7 @@ function aafm_args_get_site_settings(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -130,7 +131,8 @@ function aafm_args_update_site_settings(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'settings' => array(
-					'type' => 'object',
+					'type'        => 'object',
+					'description' => __( 'A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page. Any other key rejects the whole call.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'settings' ),
@@ -174,17 +176,39 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	$allow = aafm_allowed_site_settings();
 	// Fail closed: any key not on the allowlist rejects the whole call before a single write.
+	// The error names the rejected key and the allowed set so the agent can correct the call.
 	foreach ( array_keys( $settings ) as $key ) {
 		if ( ! in_array( (string) $key, $allow, true ) ) {
-			return aafm_generic_error();
+			return new WP_Error(
+				'aafm_setting_not_allowed',
+				sprintf(
+					/* translators: 1: the rejected setting key, 2: the comma-separated list of allowed setting keys. */
+					__( 'The setting "%1$s" cannot be changed. Allowed settings are: %2$s.', 'agent-abilities-for-mcp' ),
+					(string) $key,
+					implode( ', ', $allow )
+				)
+			);
 		}
 	}
 
-	// Scalar-only: a non-scalar value (array/object) is refused outright, before any write,
-	// so the agent can never store a structure and the execute never hits an Array-to-string.
-	foreach ( $settings as $value ) {
+	// Scalar-only with a string-type guard: a non-scalar value (array/object) is refused outright,
+	// and a boolean is refused for the string-typed settings (sending true/false for a name or
+	// format is almost always a mistake and would silently store "1"/"" — B10). The two integer
+	// settings DO accept a boolean, since the int clamp turns it into a sane 0/1 in range.
+	$integer_keys = array( 'posts_per_page', 'start_of_week' );
+	foreach ( $settings as $key => $value ) {
 		if ( ! is_scalar( $value ) ) {
 			return aafm_generic_error();
+		}
+		if ( is_bool( $value ) && ! in_array( (string) $key, $integer_keys, true ) ) {
+			return new WP_Error(
+				'aafm_setting_bad_type',
+				sprintf(
+					/* translators: %s: the setting key that received a boolean value. */
+					__( 'The setting "%s" expects a text value, not true/false.', 'agent-abilities-for-mcp' ),
+					(string) $key
+				)
+			);
 		}
 	}
 

@@ -219,6 +219,7 @@ function aafm_args_rankmath_get_post(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -255,7 +256,7 @@ function aafm_args_rankmath_update_post(): array {
 	}
 	$properties['robots'] = array(
 		'type'        => 'string',
-		'description' => aafm_ability_description( 'aafm/rankmath-update-post' ),
+		'description' => __( 'Robots directives as a comma-separated list. Accepted tokens: index, noindex, nofollow, noarchive, noimageindex, nosnippet. Unknown tokens are dropped, and the value is stored as Rank Math\'s serialized directive array.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
@@ -355,7 +356,8 @@ function aafm_args_rankmath_get_schema(): array {
 				),
 				'type'    => array(
 					'type'        => 'string',
-					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo.', 'agent-abilities-for-mcp' ),
+					'pattern'     => '^[A-Za-z][A-Za-z0-9]*$',
+					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'type' ),
@@ -375,6 +377,7 @@ function aafm_args_rankmath_get_schema(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -424,7 +427,8 @@ function aafm_args_rankmath_update_schema(): array {
 				),
 				'type'    => array(
 					'type'        => 'string',
-					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo.', 'agent-abilities-for-mcp' ),
+					'pattern'     => '^[A-Za-z][A-Za-z0-9]*$',
+					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'agent-abilities-for-mcp' ),
 				),
 				'schema'  => array( 'type' => 'object' ),
 			),
@@ -519,6 +523,7 @@ function aafm_args_rankmath_get_head(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

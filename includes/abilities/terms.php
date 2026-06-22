@@ -20,7 +20,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
 function aafm_register_terms_definitions( array $registry ): array {
 	$registry['aafm/get-terms']        = array(
 		'label'        => __( 'Get terms', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List terms (with counts) for a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List terms (with counts) for a public taxonomy. Response includes total (the full match count for the taxonomy and search).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
@@ -106,11 +106,12 @@ function aafm_args_get_terms(): array {
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 100,
+					'maximum' => AAFM_TERMS_PER_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -122,6 +123,7 @@ function aafm_args_get_terms(): array {
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
+				'total' => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_terms',
@@ -130,6 +132,7 @@ function aafm_args_get_terms(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -150,7 +153,7 @@ function aafm_exec_get_terms( array $input ) {
 		return $taxonomy;
 	}
 
-	$paging = aafm_paginate_args( $input, 100 );
+	$paging = aafm_paginate_args( $input, AAFM_TERMS_PER_PAGE_MAX );
 
 	$terms = get_terms(
 		array(
@@ -170,7 +173,21 @@ function aafm_exec_get_terms( array $input ) {
 		static fn( $term ): bool => $term instanceof WP_Term
 	);
 
-	return array( 'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ) );
+	// total is the full match count for the same taxonomy + search filter (not paged), so an
+	// agent can page through the whole set. wp_count_terms() honors hide_empty/search the same
+	// way the listing query does.
+	$total = wp_count_terms(
+		array(
+			'taxonomy'   => $taxonomy,
+			'hide_empty' => false,
+			'search'     => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+		)
+	);
+
+	return array(
+		'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ),
+		'total' => is_wp_error( $total ) ? count( $objects ) : (int) $total,
+	);
 }
 
 /**
@@ -208,6 +225,7 @@ function aafm_args_get_term(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -417,6 +435,7 @@ function aafm_args_get_term_meta(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

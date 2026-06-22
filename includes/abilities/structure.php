@@ -79,6 +79,7 @@ function aafm_args_structure_read( string $label, string $desc, string $execute,
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -90,12 +91,27 @@ function aafm_args_structure_read( string $label, string $desc, string $execute,
  * @return array<string,mixed>
  */
 function aafm_args_get_taxonomies(): array {
-	return aafm_args_structure_read(
+	$args = aafm_args_structure_read(
 		aafm_ability_label( 'aafm/get-taxonomies' ),
 		aafm_ability_description( 'aafm/get-taxonomies' ),
 		'aafm_exec_get_taxonomies',
 		'taxonomies'
 	);
+	// Declare the per-taxonomy item shape so the published schema documents each field (A3).
+	$args['output_schema']['properties']['taxonomies']['items'] = array(
+		'type'       => 'object',
+		'properties' => array(
+			'slug'         => array( 'type' => 'string' ),
+			'label'        => array( 'type' => 'string' ),
+			'hierarchical' => array( 'type' => 'boolean' ),
+			'public'       => array( 'type' => 'boolean' ),
+			'object_types' => array(
+				'type'  => 'array',
+				'items' => array( 'type' => 'string' ),
+			),
+		),
+	);
+	return $args;
 }
 
 /**
@@ -190,7 +206,17 @@ function aafm_args_get_site_info(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => array( 'site' => array( 'type' => 'object' ) ),
+			'properties' => array(
+				'site' => array(
+					'type'       => 'object',
+					'properties' => array(
+						'name'     => array( 'type' => 'string' ),
+						'tagline'  => array( 'type' => 'string' ),
+						'url'      => array( 'type' => 'string' ),
+						'language' => array( 'type' => 'string' ),
+					),
+				),
+			),
 		),
 		'execute_callback'    => 'aafm_exec_get_site_info',
 		'permission_callback' => 'aafm_perm_read',
@@ -198,6 +224,7 @@ function aafm_args_get_site_info(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

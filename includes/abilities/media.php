@@ -21,7 +21,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
 function aafm_register_media_definitions( array $registry ): array {
 	$registry['aafm/get-media']          = array(
 		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List media library items (URL, alt, mime, dimensions).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
@@ -97,11 +97,12 @@ function aafm_args_get_media(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -113,6 +114,7 @@ function aafm_args_get_media(): array {
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
+				'total' => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_media',
@@ -121,6 +123,7 @@ function aafm_args_get_media(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -150,7 +153,7 @@ function aafm_perm_get_media(): bool {
  * @return array<string,mixed>
  */
 function aafm_exec_get_media( array $input ): array {
-	$paging = aafm_paginate_args( $input, 50 );
+	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$query  = new WP_Query(
 		array(
 			'post_type'      => 'attachment',
@@ -158,6 +161,7 @@ function aafm_exec_get_media( array $input ): array {
 			's'              => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
 			'posts_per_page' => $paging['per_page'],
 			'paged'          => $paging['page'],
+			'no_found_rows'  => false,
 		)
 	);
 
@@ -167,7 +171,11 @@ function aafm_exec_get_media( array $input ): array {
 		static fn( $post ): bool => $post instanceof WP_Post
 	);
 
-	return array( 'media' => array_values( array_map( 'aafm_redact_media', $attachments ) ) );
+	return array(
+		'media' => array_values( array_map( 'aafm_redact_media', $attachments ) ),
+		// Full match count for the search filter so an agent can page through the library.
+		'total' => (int) $query->found_posts,
+	);
 }
 
 /**
@@ -203,6 +211,7 @@ function aafm_args_get_media_item(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -257,6 +266,7 @@ function aafm_args_count_media(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

@@ -214,6 +214,7 @@ function aafm_args_wc_list_product_attributes(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -271,6 +272,7 @@ function aafm_args_wc_get_product_attribute(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -304,8 +306,16 @@ function aafm_wc_attribute_write_properties(): array {
 	return array(
 		'name'         => array( 'type' => 'string' ),
 		'slug'         => array( 'type' => 'string' ),
-		'type'         => array( 'type' => 'string' ),
-		'order_by'     => array( 'type' => 'string' ),
+		'type'         => array(
+			'type'        => 'string',
+			'enum'        => array( 'select', 'text' ),
+			'description' => 'Attribute input type: "select" (predefined terms) or "text" (free text). Defaults to select.',
+		),
+		'order_by'     => array(
+			'type'        => 'string',
+			'enum'        => array( 'menu_order', 'name', 'name_num', 'id' ),
+			'description' => 'Default term sort order for this attribute: menu_order (custom), name, name_num (name treated numerically), or id. Defaults to menu_order.',
+		),
 		'has_archives' => array( 'type' => 'boolean' ),
 	);
 }

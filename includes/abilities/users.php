@@ -17,6 +17,21 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Generated-password length (characters) for create-user when the caller supplies none.
+ * wp_generate_password() with this length and special characters yields a strong default.
+ */
+const AAFM_GENERATED_PASSWORD_LENGTH = 24;
+
+/**
+ * The logical name of the named lock that serializes the last-administrator guard across the
+ * demote (update-user) and delete (delete-user) critical sections. Hoisted to a constant so the
+ * two call sites share one literal and can never drift to different lock names (which would let a
+ * concurrent demote and delete slip past each other's check). The value is the established
+ * 'last_admin' lock name (kept stable for the existing tests that acquire it by that literal).
+ */
+const AAFM_LAST_ADMIN_LOCK = 'last_admin';
+
 add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
 
 /**
@@ -28,7 +43,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
 function aafm_register_users_definitions( array $registry ): array {
 	$registry['aafm/get-users']   = array(
 		'label'        => __( 'Get users', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List users: id, display name, email, roles, and post count. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List users: id, display name, email, roles, and post count. Response includes total (the full match count). Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
@@ -91,11 +106,12 @@ function aafm_args_get_users(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -107,6 +123,7 @@ function aafm_args_get_users(): array {
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
+				'total' => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_users',
@@ -115,6 +132,7 @@ function aafm_args_get_users(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -153,6 +171,7 @@ function aafm_args_get_user(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -201,11 +220,13 @@ function aafm_perm_list_users(): bool {
  * @return array<string,mixed>
  */
 function aafm_exec_get_users( array $input ): array {
-	$paging = aafm_paginate_args( $input, 50 );
+	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$args   = array(
-		'number' => $paging['per_page'],
-		'paged'  => $paging['page'],
-		'fields' => 'all',
+		'number'      => $paging['per_page'],
+		'paged'       => $paging['page'],
+		'fields'      => 'all',
+		// Ask WP_User_Query for the full match count so the response can report total for paging.
+		'count_total' => true,
 	);
 
 	if ( ! empty( $input['role'] ) ) {
@@ -215,7 +236,9 @@ function aafm_exec_get_users( array $input ): array {
 		$args['search'] = '*' . sanitize_text_field( (string) $input['search'] ) . '*';
 	}
 
-	$users = get_users( $args );
+	// Run the query directly (not get_users(), which discards the total) so total_users is available.
+	$query = new WP_User_Query( $args );
+	$users = $query->get_results();
 
 	// Resolve every user's post count in ONE batched query instead of a COUNT(*)
 	// per row. count_many_users_posts() uses the same defaults as count_user_posts()
@@ -235,7 +258,10 @@ function aafm_exec_get_users( array $input ): array {
 		$redacted[] = aafm_redact_user( $user, $count );
 	}
 
-	return array( 'users' => $redacted );
+	return array(
+		'users' => $redacted,
+		'total' => (int) $query->get_total(),
+	);
 }
 
 /**
@@ -331,7 +357,7 @@ function aafm_exec_create_user( array $input ) {
 
 	$password = isset( $input['password'] ) && '' !== (string) $input['password']
 		? (string) $input['password']
-		: wp_generate_password( 24, true );
+		: wp_generate_password( AAFM_GENERATED_PASSWORD_LENGTH, true );
 
 	// Invariant: an agent can never mint a privileged account here. The role is forced to the
 	// site default and never caller-chosen — but the default_role option is itself attacker- or
@@ -454,6 +480,8 @@ function aafm_perm_update_user( array $input ): bool {
  * @return int Number of administrators, up to $max.
  */
 function aafm_count_administrators( int $max = 2 ): int {
+	// The default ceiling is 2: the only question every caller asks is "is this the LAST
+	// administrator?", and finding 2 already answers "no" — counting the rest is wasted work.
 	$admins = get_users(
 		array(
 			'role'   => 'administrator',
@@ -467,6 +495,11 @@ function aafm_count_administrators( int $max = 2 ): int {
 /**
  * Run a callback inside a process-wide critical section keyed by name, using a MySQL named
  * lock so concurrent requests serialize.
+ *
+ * In this plugin the sole caller passes AAFM_LAST_ADMIN_LOCK: it serializes the last-
+ * administrator guard shared by update-user (role demote) and delete-user, so a concurrent
+ * demote and delete cannot both pass the "is this the last admin?" pre-check and orphan the
+ * site. The helper itself is generic — the name parameter is what scopes the lock.
  *
  * The last-admin guards are a check-then-mutate pair; without serialization two concurrent
  * demote/delete calls can both pass the count check and orphan the site (no administrator).
@@ -592,7 +625,7 @@ function aafm_exec_update_user( array $input ) {
 	};
 
 	return $demotes_admin
-		? aafm_with_named_lock( 'last_admin', $writer )
+		? aafm_with_named_lock( AAFM_LAST_ADMIN_LOCK, $writer )
 		: $writer();
 }
 
@@ -708,6 +741,6 @@ function aafm_exec_delete_user( array $input ) {
 	};
 
 	return $victim_is_admin
-		? aafm_with_named_lock( 'last_admin', $deleter )
+		? aafm_with_named_lock( AAFM_LAST_ADMIN_LOCK, $deleter )
 		: $deleter();
 }

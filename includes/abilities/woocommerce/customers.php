@@ -431,6 +431,7 @@ function aafm_args_wc_list_customers(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -512,6 +513,7 @@ function aafm_args_wc_get_customer(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

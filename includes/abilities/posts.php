@@ -9,6 +9,26 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * The default upper bound on a list ability's `per_page`. Used both as the schema `maximum`
+ * and the cap passed to aafm_paginate_args() so the declared bound and the enforced bound
+ * never drift. Shared across the post/page/user/media/comment/revision/search list tools.
+ */
+const AAFM_LIST_PER_PAGE_MAX = 50;
+
+/**
+ * The upper bound on `per_page` for taxonomy term lists. Terms are lightweight rows and a
+ * tree often runs to the hundreds, so the term lists allow a higher ceiling than the
+ * content lists (AAFM_LIST_PER_PAGE_MAX) to fetch a whole vocabulary in one page.
+ */
+const AAFM_TERMS_PER_PAGE_MAX = 100;
+
+/**
+ * The upper bound on a list ability's `page` number. A generous ceiling that still caps an
+ * agent from requesting an unbounded page offset; declared on every list tool's `page` arg.
+ */
+const AAFM_LIST_PAGE_MAX = 100000;
+
 add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
 
 /**
@@ -20,7 +40,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
 function aafm_register_posts_definitions( array $registry ): array {
 	$registry['aafm/get-posts']       = array(
 		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -28,7 +48,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/count-posts']     = array(
 		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count posts of an allowlisted post type, total and broken down by status (publish, draft, pending, private, future, trash).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -134,11 +154,12 @@ function aafm_args_get_posts(): array {
 				'page'            => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'content_format'  => array(
 					'type'    => 'string',
@@ -171,6 +192,7 @@ function aafm_args_get_posts(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -208,7 +230,7 @@ function aafm_exec_get_posts( array $input ) {
 		return $status;
 	}
 
-	$paging = aafm_paginate_args( $input, 50 );
+	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 
 	$query = new WP_Query(
 		array(
@@ -275,6 +297,7 @@ function aafm_args_count_posts(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -283,8 +306,14 @@ function aafm_args_count_posts(): array {
 /**
  * Execute aafm/count-posts. The post type defaults to 'post' and MUST clear the
  * eligibility floor + allowlist (aafm_validate_post_type); a non-allowlisted type is
- * refused. wp_count_posts() returns an object keyed by status; expose it as a status map
- * plus a summed total.
+ * refused. wp_count_posts() returns an object keyed by status; expose every status in
+ * by_status, and a `total` of ACTIVE (non-trashed) items only.
+ *
+ * `total` deliberately excludes the `trash` and `auto-draft` statuses — trash is recoverable
+ * removed content and auto-draft is abandoned editor scratch, neither of which is a live item.
+ * This matches the non-trash "active" total convention used by the WooCommerce count siblings
+ * (wc-count-products / wc-count-coupons / wc-count-orders). The per-status breakdown in
+ * by_status still reports trash and auto-draft for transparency (B4).
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -295,13 +324,19 @@ function aafm_exec_count_posts( array $input ) {
 		return $type;
 	}
 
+	// Statuses excluded from the active total (still surfaced in by_status).
+	$non_active = array( 'trash', 'auto-draft' );
+
 	$counts    = (array) wp_count_posts( $type );
 	$by_status = array();
 	$total     = 0;
 	foreach ( $counts as $status => $n ) {
-		$n                             = (int) $n;
-		$by_status[ (string) $status ] = $n;
-		$total                        += $n;
+		$status               = (string) $status;
+		$n                    = (int) $n;
+		$by_status[ $status ] = $n;
+		if ( ! in_array( $status, $non_active, true ) ) {
+			$total += $n;
+		}
 	}
 
 	return array(
@@ -352,6 +387,7 @@ function aafm_args_get_post(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -781,8 +817,9 @@ function aafm_perm_update_post( array $input ): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_update_post( array $input ) {
-	$id = absint( $input['post_id'] );
-	if ( ! get_post( $id ) instanceof WP_Post ) {
+	$id   = absint( $input['post_id'] );
+	$post = get_post( $id );
+	if ( ! $post instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 
@@ -814,7 +851,13 @@ function aafm_exec_update_post( array $input ) {
 		}
 	}
 	if ( isset( $input['status'] ) ) {
-		$status = aafm_validate_post_status( (string) $input['status'], current_user_can( 'edit_others_posts' ) );
+		// Gate non-public target statuses on the POST TYPE's own edit_others cap, not the
+		// hardcoded 'edit_others_posts'. A custom type maps this to its own cap (e.g.
+		// edit_others_products), so a CPT update is judged by that type's capability model,
+		// never the generic post primitive (B5).
+		$type_object = get_post_type_object( $post->post_type );
+		$others_cap  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_posts';
+		$status      = aafm_validate_post_status( (string) $input['status'], current_user_can( $others_cap ) );
 		if ( is_wp_error( $status ) ) {
 			return $status;
 		}
@@ -1163,6 +1206,11 @@ function aafm_perm_delete_post( array $input ): bool {
  * in the abilities layer. delete-page delegates here with the page type pinned, so pages.php
  * never force-deletes directly — proven by SecurityRegressionTest::test_no_force_delete_in_source,
  * which sanctions only this file. Callers must have already capability-checked the id.
+ *
+ * Naming note: "force_delete" mirrors WordPress's own `wp_delete_post( $id, $force_delete = true )`
+ * argument — it means "bypass the Trash and delete permanently," NOT "bypass the capability
+ * guard." The permission callback (aafm_perm_delete_post / aafm_perm_delete_page) has already
+ * run before any caller reaches here; this function performs no capability check of its own.
  *
  * @param int    $id            Post id (already capability-checked by the caller).
  * @param string $expected_type Post type to pin (e.g. 'page'), or '' to accept any.

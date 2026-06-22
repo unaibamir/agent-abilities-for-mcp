@@ -157,6 +157,7 @@ function aafm_args_list_menus(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -210,6 +211,7 @@ function aafm_args_get_menu(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -268,6 +270,7 @@ function aafm_args_list_menu_items(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -564,7 +567,14 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( is_wp_error( $item_id ) || 0 === (int) $item_id ) {
 		return aafm_generic_error();
 	}
-	return aafm_redact_menu_item( aafm_menu_item_by_id( $menu_id, (int) $item_id ) );
+	// Re-read the saved item to return the canonical redacted shape. If the re-fetch comes back
+	// null (a hook deleted it, or a cache race), surface a generic error rather than redacting
+	// null into an empty object that would violate the menu-item output schema (B9).
+	$saved = aafm_menu_item_by_id( $menu_id, (int) $item_id );
+	if ( null === $saved ) {
+		return aafm_generic_error();
+	}
+	return aafm_redact_menu_item( $saved );
 }
 
 /**
@@ -641,7 +651,13 @@ function aafm_exec_update_menu_item( array $input ) {
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
-	return aafm_redact_menu_item( aafm_menu_item_by_id( $menu_id, $item_id ) );
+	// Same B9 guard as create-menu-item: a null re-fetch must not be redacted into an empty
+	// object that violates the output schema.
+	$saved = aafm_menu_item_by_id( $menu_id, $item_id );
+	if ( null === $saved ) {
+		return aafm_generic_error();
+	}
+	return aafm_redact_menu_item( $saved );
 }
 
 /**

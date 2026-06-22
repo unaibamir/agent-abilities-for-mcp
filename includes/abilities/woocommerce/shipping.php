@@ -294,6 +294,7 @@ function aafm_args_wc_list_shipping_zones(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -360,6 +361,7 @@ function aafm_args_wc_get_shipping_zone(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -695,6 +697,7 @@ function aafm_args_wc_list_shipping_methods(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -751,8 +754,9 @@ function aafm_args_wc_get_shipping_method(): array {
 					'minimum' => 0,
 				),
 				'instance_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => 'The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method.',
 				),
 			),
 		),
@@ -766,6 +770,7 @@ function aafm_args_wc_get_shipping_method(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -810,7 +815,11 @@ function aafm_args_wc_create_shipping_method(): array {
 					'type'    => 'integer',
 					'minimum' => 0,
 				),
-				'method_type' => array( 'type' => 'string' ),
+				'method_type' => array(
+					'type'        => 'string',
+					'enum'        => array( 'flat_rate', 'free_shipping', 'local_pickup' ),
+					'description' => 'The WooCommerce shipping method type to add to the zone: flat_rate, free_shipping, or local_pickup.',
+				),
 			),
 		),
 		'output_schema'       => array(
@@ -880,13 +889,15 @@ function aafm_args_wc_update_shipping_method(): array {
 					'minimum' => 0,
 				),
 				'instance_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => 'The shipping method INSTANCE id within the zone (from wc-list-shipping-methods or the instance_id returned by wc-create-shipping-method).',
 				),
 				'method_title' => array( 'type' => 'string' ),
 				'enabled'      => array(
-					'type' => 'string',
-					'enum' => array( 'yes', 'no' ),
+					'type'        => 'string',
+					'enum'        => array( 'yes', 'no' ),
+					'description' => 'Whether the shipping method is enabled, as the string "yes" or "no". This differs from the payment-gateway abilities, where the equivalent enabled flag is a boolean (true/false); shipping keeps a string to match WooCommerce\'s own shipping-method storage.',
 				),
 			),
 		),
@@ -1004,8 +1015,9 @@ function aafm_args_wc_delete_shipping_method(): array {
 					'minimum' => 0,
 				),
 				'instance_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => 'The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method.',
 				),
 			),
 		),

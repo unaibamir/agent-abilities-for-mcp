@@ -121,7 +121,7 @@ function aafm_yoast_registry_definitions(): array {
 		),
 		'aafm/yoast-get-head'    => array(
 			'label'        => __( 'Get post SEO head (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort (empty when no head API is available). Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
@@ -255,6 +255,7 @@ function aafm_args_yoast_get_post(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -295,7 +296,7 @@ function aafm_args_yoast_update_post(): array {
 	$properties['robots_noindex']  = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1', '2' ),
-		'description' => aafm_ability_description( 'aafm/yoast-update-post' ),
+		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'agent-abilities-for-mcp' ),
 	);
 	$properties['robots_nofollow'] = array(
 		'type'        => 'string',
@@ -419,6 +420,7 @@ function aafm_args_yoast_get_head(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

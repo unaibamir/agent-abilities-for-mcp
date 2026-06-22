@@ -119,6 +119,11 @@ function aafm_wc_variations_registry_definitions(): array {
  * Resolve a variation id to a WC_Product_Variation, or null when WooCommerce is unavailable, the id
  * is unknown, or the product at that id is not actually a variation.
  *
+ * The WooCommerce PHPStan stub types wc_get_product() without WC_Product_Variation in its return
+ * union, so PHPStan reports this function's WC_Product_Variation return arm as unused. At runtime
+ * wc_get_product() genuinely returns a WC_Product_Variation for a variation id, so the declared
+ * type is correct. The runtime guard re-asserts the type for PHPStan via the @var below.
+ *
  * @param int $id Variation id.
  * @return \WC_Product_Variation|null
  */
@@ -130,10 +135,18 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	if ( $variation instanceof \WC_Product_Variation ) {
 		return $variation;
 	}
-	// A non-variation product (or false) at this id is not a valid variation target.
+	// A variation id that resolved to a plain WC_Product (the parent or another type) still yields a
+	// genuine WC_Product_Variation when constructed directly. This branch also gives PHPStan a
+	// concrete WC_Product_Variation return so the declared return type is not seen as unused — under
+	// the live WooCommerce types wc_get_product() already returns the variation above, making this a
+	// belt-and-braces fallback rather than a second code path.
 	if ( $variation instanceof \WC_Product && 'variation' === $variation->get_type() && class_exists( 'WC_Product_Variation' ) ) {
 		return new \WC_Product_Variation( $id );
 	}
+	// Anything else at this id (a non-variation product, or false) is not a valid variation
+	// target. A variation-type product is always returned as a WC_Product_Variation by
+	// wc_get_product(), so the instanceof check above already covers it — there is no separate
+	// "WC_Product whose type is variation" case to handle (B11).
 	return null;
 }
 
@@ -269,6 +282,7 @@ function aafm_args_wc_list_product_variations(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -344,6 +358,7 @@ function aafm_args_wc_get_product_variation(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -383,13 +398,25 @@ function aafm_wc_variation_write_properties(): array {
 		),
 		'description'    => array( 'type' => 'string' ),
 		'sku'            => array( 'type' => 'string' ),
-		'regular_price'  => array( 'type' => 'string' ),
-		'sale_price'     => array( 'type' => 'string' ),
+		'regular_price'  => array(
+			'type'        => 'string',
+			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+		),
+		'sale_price'     => array(
+			'type'        => 'string',
+			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
+		),
 		'stock_status'   => array(
 			'type' => 'string',
 			'enum' => array( 'instock', 'outofstock', 'onbackorder' ),
 		),
-		'stock_quantity' => array( 'type' => 'integer' ),
+		'stock_quantity' => array(
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => 'On-hand quantity (only applied when manage_stock is true).',
+		),
 		'manage_stock'   => array( 'type' => 'boolean' ),
 		'image_id'       => array(
 			'type'    => 'integer',

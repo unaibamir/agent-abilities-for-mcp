@@ -51,17 +51,19 @@ function aafm_args_search_content(): array {
 					'items' => array( 'type' => 'string' ),
 				),
 				'status'          => array(
-					'type'    => 'string',
-					'default' => 'publish',
+					'type'        => 'string',
+					'default'     => 'publish',
+					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
 				),
 				'page'            => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'content_format'  => array(
 					'type'    => 'string',
@@ -95,6 +97,7 @@ function aafm_args_search_content(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -151,7 +154,7 @@ function aafm_exec_search_content( array $input ) {
 		}
 	}
 
-	$paging  = aafm_paginate_args( $input, 50 );
+	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$query   = new WP_Query(
 		array(
 			'post_type'        => $types,

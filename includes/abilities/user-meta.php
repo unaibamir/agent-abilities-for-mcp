@@ -86,8 +86,9 @@ function aafm_args_get_user_meta(): array {
 					'minimum' => 1,
 				),
 				'key'     => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),
@@ -99,7 +100,8 @@ function aafm_args_get_user_meta(): array {
 				'user_id' => array( 'type' => 'integer' ),
 				'key'     => array( 'type' => 'string' ),
 				'value'   => array(
-					'type' => array( 'string', 'number', 'boolean', 'null' ),
+					'type'        => array( 'string', 'number', 'boolean' ),
+					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -109,6 +111,7 @@ function aafm_args_get_user_meta(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -132,8 +135,9 @@ function aafm_args_update_user_meta(): array {
 					'minimum' => 1,
 				),
 				'key'     => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 				'value'   => array(
 					'type' => array( 'string', 'number', 'boolean', 'integer' ),
@@ -181,8 +185,9 @@ function aafm_args_delete_user_meta(): array {
 					'minimum' => 1,
 				),
 				'key'     => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),

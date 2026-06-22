@@ -75,6 +75,7 @@ function aafm_args_list_plugins(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

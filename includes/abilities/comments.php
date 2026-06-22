@@ -98,11 +98,12 @@ function aafm_args_get_comments(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -114,6 +115,7 @@ function aafm_args_get_comments(): array {
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
+				'total'    => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_comments',
@@ -122,6 +124,7 @@ function aafm_args_get_comments(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -170,7 +173,7 @@ function aafm_perm_get_comments( array $input ): bool {
  * @return array<string,mixed>
  */
 function aafm_exec_get_comments( array $input ): array {
-	$paging  = aafm_paginate_args( $input, 50 );
+	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 
 	$comments = get_comments(
@@ -196,7 +199,22 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	return array( 'comments' => aafm_redact_comments( $comments ) );
+	// total is the count for the same status+post filter, BEFORE the site-wide visibility
+	// post-filter above. For a post-scoped query (post_id given) the post is already gated, so
+	// total is exact; for the whole-site unprivileged listing it counts approved comments and
+	// may exceed the visible rows. The post-scoped case is the common one and pages correctly.
+	$total = (int) get_comments(
+		array(
+			'post_id' => $post_id,
+			'status'  => 'approve',
+			'count'   => true,
+		)
+	);
+
+	return array(
+		'comments' => aafm_redact_comments( $comments ),
+		'total'    => $total,
+	);
 }
 
 /**
@@ -285,6 +303,7 @@ function aafm_args_get_comment(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -379,6 +398,10 @@ function aafm_args_create_comment(): array {
 				'content' => array(
 					'type'      => 'string',
 					'minLength' => 1,
+					// Character cap, not a byte cap: WordPress stores comment_content in a TEXT
+					// column (~65,535 BYTES). A comment of multi-byte (UTF-8) characters can still
+					// exceed the byte limit even under this length, so the DB write is the final
+					// guard; this bound just rejects the obviously-oversized payload up front.
 					'maxLength' => 65525,
 				),
 				'parent'  => array(
@@ -520,11 +543,12 @@ function aafm_args_get_pending_comments(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => 50,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -536,6 +560,7 @@ function aafm_args_get_pending_comments(): array {
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
+				'total'    => array( 'type' => 'integer' ),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_pending_comments',
@@ -544,6 +569,7 @@ function aafm_args_get_pending_comments(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -569,7 +595,7 @@ function aafm_perm_moderate_comments(): bool {
  * @return array<string,mixed>
  */
 function aafm_exec_get_pending_comments( array $input ): array {
-	$paging   = aafm_paginate_args( $input, 50 );
+	$paging   = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$comments = get_comments(
 		array(
 			'status' => 'hold',
@@ -578,7 +604,17 @@ function aafm_exec_get_pending_comments( array $input ): array {
 		)
 	);
 
-	return array( 'comments' => aafm_redact_comments( $comments ) );
+	$total = (int) get_comments(
+		array(
+			'status' => 'hold',
+			'count'  => true,
+		)
+	);
+
+	return array(
+		'comments' => aafm_redact_comments( $comments ),
+		'total'    => $total,
+	);
 }
 
 
@@ -604,8 +640,9 @@ function aafm_args_moderate_comment(): array {
 					'minimum' => 1,
 				),
 				'action'     => array(
-					'type' => 'string',
-					'enum' => array( 'approve', 'unapprove', 'spam', 'trash' ),
+					'type'        => 'string',
+					'enum'        => array( 'approve', 'unapprove', 'spam', 'trash' ),
+					'description' => __( 'Moderation action: approve (publish the comment), unapprove (return it to the pending queue), spam (mark as spam), or trash (move to the Trash).', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'comment_id', 'action' ),
@@ -723,6 +760,10 @@ function aafm_args_update_comment(): array {
 				'content'    => array(
 					'type'      => 'string',
 					'minLength' => 1,
+					// Character cap, not a byte cap: WordPress stores comment_content in a TEXT
+					// column (~65,535 BYTES). A comment of multi-byte (UTF-8) characters can still
+					// exceed the byte limit even under this length, so the DB write is the final
+					// guard; this bound just rejects the obviously-oversized payload up front.
 					'maxLength' => 65525,
 				),
 			),

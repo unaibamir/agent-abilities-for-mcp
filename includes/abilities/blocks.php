@@ -30,7 +30,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
 function aafm_register_blocks_definitions( array $registry ): array {
 	$registry['aafm/list-blocks']  = array(
 		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -117,8 +117,16 @@ function aafm_args_list_blocks(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'page'     => array( 'type' => 'integer' ),
-				'per_page' => array( 'type' => 'integer' ),
+				'page'     => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => AAFM_LIST_PAGE_MAX,
+				),
+				'per_page' => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 100,
+				),
 				'search'   => array( 'type' => 'string' ),
 			),
 			'additionalProperties' => false,
@@ -136,6 +144,7 @@ function aafm_args_list_blocks(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -149,27 +158,39 @@ function aafm_args_list_blocks(): array {
  */
 function aafm_exec_list_blocks( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
-	$query    = new WP_Query(
-		array(
-			'post_type'      => 'wp_block',
-			'post_status'    => array( 'publish', 'draft' ),
-			'posts_per_page' => $per_page,
-			'paged'          => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
-			's'              => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-		)
+
+	$query_args = array(
+		'post_type'      => 'wp_block',
+		'post_status'    => array( 'publish', 'draft' ),
+		'posts_per_page' => $per_page,
+		'paged'          => isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1,
+		'no_found_rows'  => false,
 	);
-	$blocks   = array();
+	// Only pass a search term when one was actually given: an empty 's' makes WP_Query run a
+	// pointless LIKE on every row, so omit it entirely when no search is requested (B6).
+	$search = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
+	if ( '' !== $search ) {
+		$query_args['s'] = $search;
+	}
+
+	$query  = new WP_Query( $query_args );
+	$blocks = array();
 	foreach ( $query->posts as $block ) {
 		// Scope to blocks the caller can actually edit: the discovery floor (edit_posts) lets a
 		// contributor reach this list, but they must not enumerate id/title/slug of OTHER
 		// authors' blocks they lack edit_post on. Filtering here keeps the lean rows aligned
-		// with the per-object get/update gates. total reflects the filtered (visible) rows.
+		// with the per-object get/update gates.
 		if ( $block instanceof WP_Post && current_user_can( 'edit_post', $block->ID ) ) {
 			$blocks[] = aafm_redact_block( $block );
 		}
 	}
 	return array(
 		'blocks' => $blocks,
+		// total reflects the visible (capability-filtered) rows on this page, not the query-wide
+		// found_posts. Because blocks are filtered by per-object edit_post AFTER the query, a
+		// query-wide count would over-report blocks the caller can never see (e.g. another
+		// author's drafts) and mislead the agent. On a typical block-editing role (editor/admin)
+		// the unfiltered and filtered sets are identical anyway.
 		'total'  => count( $blocks ),
 	);
 }
@@ -200,6 +221,7 @@ function aafm_args_get_block(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

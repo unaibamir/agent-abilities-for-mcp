@@ -103,7 +103,8 @@ function aafm_args_get_post_meta(): array {
 				'post_id'  => array( 'type' => 'integer' ),
 				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 				'value'    => array(
-					'type' => array( 'string', 'number', 'boolean', 'null' ),
+					'type'        => array( 'string', 'number', 'boolean' ),
+					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -113,6 +114,7 @@ function aafm_args_get_post_meta(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -188,6 +190,7 @@ function aafm_args_get_all_post_meta(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

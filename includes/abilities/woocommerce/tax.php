@@ -235,7 +235,21 @@ function aafm_args_wc_list_tax_rates(): array {
 			'properties' => array(
 				'rates' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'id'       => array( 'type' => 'integer' ),
+							'country'  => array( 'type' => 'string' ),
+							'state'    => array( 'type' => 'string' ),
+							'rate'     => array( 'type' => 'string' ),
+							'name'     => array( 'type' => 'string' ),
+							'priority' => array( 'type' => 'integer' ),
+							'compound' => array( 'type' => 'boolean' ),
+							'shipping' => array( 'type' => 'boolean' ),
+							'order'    => array( 'type' => 'integer' ),
+							'class'    => array( 'type' => 'string' ),
+						),
+					),
 				),
 				'total' => array( 'type' => 'integer' ),
 			),
@@ -246,6 +260,7 @@ function aafm_args_wc_list_tax_rates(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -315,6 +330,7 @@ function aafm_args_wc_get_tax_rate(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -359,8 +375,14 @@ function aafm_args_wc_create_tax_rate(): array {
 			'required'             => array( 'rate' ),
 			'properties'           => array(
 				'rate'     => array( 'type' => 'string' ),
-				'country'  => array( 'type' => 'string' ),
-				'state'    => array( 'type' => 'string' ),
+				'country'  => array(
+					'type'        => 'string',
+					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
+				),
+				'state'    => array(
+					'type'        => 'string',
+					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
+				),
 				'name'     => array( 'type' => 'string' ),
 				'priority' => array( 'type' => 'integer' ),
 				'compound' => array( 'type' => 'boolean' ),
@@ -462,8 +484,14 @@ function aafm_args_wc_update_tax_rate(): array {
 					'minimum' => 1,
 				),
 				'rate'     => array( 'type' => 'string' ),
-				'country'  => array( 'type' => 'string' ),
-				'state'    => array( 'type' => 'string' ),
+				'country'  => array(
+					'type'        => 'string',
+					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
+				),
+				'state'    => array(
+					'type'        => 'string',
+					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
+				),
 				'name'     => array( 'type' => 'string' ),
 				'priority' => array( 'type' => 'integer' ),
 				'compound' => array( 'type' => 'boolean' ),
@@ -702,7 +730,13 @@ function aafm_args_wc_list_tax_classes(): array {
 			'properties' => array(
 				'classes' => array(
 					'type'  => 'array',
-					'items' => array( 'type' => 'object' ),
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'name' => array( 'type' => 'string' ),
+							'slug' => array( 'type' => 'string' ),
+						),
+					),
 				),
 				'total'   => array( 'type' => 'integer' ),
 			),
@@ -713,6 +747,7 @@ function aafm_args_wc_list_tax_classes(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -771,6 +806,7 @@ function aafm_args_wc_get_tax_class(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -861,9 +897,19 @@ function aafm_exec_wc_create_tax_class( array $input ): array|\WP_Error {
 		return $result;
 	}
 
+	// WC_Tax::create_tax_class() returns the CANONICAL stored slug in $result['slug'], which WC may
+	// have de-duplicated (e.g. a second "Reduced rate" becomes "reduced-rate-1"). Always report that
+	// slug so the response is the real lookup key. Only when WC omits it do we fall back — to the
+	// requested slug if one was given, else the name-derived slug (B12: the old code fell back to
+	// sanitize_title($name) unconditionally, which dropped an explicit slug and could mismatch the
+	// de-duplicated slug WC actually stored).
+	$stored_slug = isset( $result['slug'] ) && '' !== (string) $result['slug']
+		? (string) $result['slug']
+		: ( '' !== $slug ? $slug : sanitize_title( $name ) );
+
 	return array(
 		'name' => (string) ( $result['name'] ?? $name ),
-		'slug' => (string) ( $result['slug'] ?? sanitize_title( $name ) ),
+		'slug' => $stored_slug,
 	);
 }
 

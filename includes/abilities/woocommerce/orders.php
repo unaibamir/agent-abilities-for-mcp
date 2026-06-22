@@ -343,7 +343,8 @@ function aafm_args_wc_list_orders(): array {
 				),
 				'status'   => array(
 					'type'        => 'string',
-					'description' => "Status filter; 'any' returns all states.",
+					'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
+					'description' => "Order status to filter by; 'any' (the default) returns all states. Uses the short form without the wc- prefix.",
 				),
 			),
 			'additionalProperties' => false,
@@ -376,6 +377,7 @@ function aafm_args_wc_list_orders(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -530,6 +532,7 @@ function aafm_args_wc_get_order(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -1281,6 +1284,7 @@ function aafm_args_wc_list_order_notes(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -1345,6 +1349,7 @@ function aafm_args_wc_get_order_note(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -1445,12 +1450,20 @@ function aafm_exec_wc_create_order_note( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Re-read the saved note so the response reflects WooCommerce's stored row (real date_created,
+	// real added_by, normalized content) instead of fabricating a date and hardcoding
+	// added_by_user (B2). Fall back to a minimal truthful shape only if the re-read fails.
+	$saved = aafm_wc_get_order_note( $order_id, (int) $note_id );
+	if ( $saved instanceof \stdClass || is_object( $saved ) ) {
+		return aafm_wc_redact_note( $saved );
+	}
+
 	return array(
 		'id'            => (int) $note_id,
 		'note'          => $note_text,
 		'added_by_user' => true,
 		'customer_note' => $customer_note,
-		'date_created'  => gmdate( 'Y-m-d\TH:i:s' ),
+		'date_created'  => '',
 	);
 }
 
@@ -1611,6 +1624,7 @@ function aafm_args_wc_list_order_refunds(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);
@@ -1673,6 +1687,7 @@ function aafm_args_wc_get_order_refund(): array {
 			'annotations' => array(
 				'readonly'    => true,
 				'destructive' => false,
+				'idempotent'  => true,
 			),
 		),
 	);

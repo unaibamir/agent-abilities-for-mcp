@@ -16,11 +16,13 @@ namespace AAFM\Tests;
 /**
  * Process-wide backing store for the WooCommerce coupon stubs.
  *
- * WooCommerce's WC_Coupon object and wc_get_coupons() are defined once per process; this static
- * store holds seeded coupons keyed by id so a value written through ->save() (create or update)
- * is visible to a following wc_get_coupons() / new WC_Coupon() inside one test, and ->delete()
- * removes it. stub_wc_coupons() reset()s and seeds it each test; reset_integration_stubs() clears
- * it on tear-down.
+ * WooCommerce stores coupons as the 'shop_coupon' post type; the list ability queries them with
+ * WP_Query and hydrates each through WC_Coupon. To exercise that real path the store seeds genuine
+ * shop_coupon posts (so WP_Query finds them) and keeps the field data in this static map keyed by
+ * the post id (so the WC_Coupon getters can read it). A value written through ->save() (create or
+ * update) is visible to a following WP_Query / new WC_Coupon() inside one test, and ->delete()
+ * removes both the post and the field row. stub_wc_coupons() reset()s and seeds it each test;
+ * reset_integration_stubs() clears it on tear-down.
  */
 class WcCouponStubStore {
 
@@ -30,13 +32,6 @@ class WcCouponStubStore {
 	 * @var array<int,array<string,mixed>>
 	 */
 	public static array $coupons = array();
-
-	/**
-	 * The next id handed out to a created coupon.
-	 *
-	 * @var int
-	 */
-	public static int $next_id = 5000;
 
 	/**
 	 * When true, save() returns 0 so create/update failure paths are exercisable.
@@ -53,26 +48,29 @@ class WcCouponStubStore {
 	public static bool $force_delete_failure = false;
 
 	/**
-	 * Clear all state.
+	 * Clear all state, removing any shop_coupon posts created during the test.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
+		foreach ( array_keys( self::$coupons ) as $id ) {
+			wp_delete_post( (int) $id, true );
+		}
 		self::$coupons              = array();
-		self::$next_id              = 5000;
 		self::$force_save_failure   = false;
 		self::$force_delete_failure = false;
 	}
 
 	/**
-	 * Seed one coupon's data under its id (the test fixture's setup path).
+	 * Seed one coupon's data, backed by a real shop_coupon post forced to the given id.
 	 *
-	 * @param int                 $id   Coupon id.
+	 * @param int                 $id   Coupon id (forced as the post id).
 	 * @param array<string,mixed> $data Coupon data.
 	 * @return void
 	 */
 	public static function seed( int $id, array $data ): void {
-		$data['id']           = $id;
+		$data['id'] = $id;
+		self::insert_post( $id, (string) ( $data['code'] ?? '' ) );
 		self::$coupons[ $id ] = self::with_defaults( $data );
 	}
 
@@ -114,6 +112,7 @@ class WcCouponStubStore {
 	/**
 	 * Persist coupon data (create when id is 0/absent, else update), returning the id.
 	 *
+	 * On create a real shop_coupon post is inserted so the list query (WP_Query) sees it.
 	 * Returns 0 when self::$force_save_failure is true.
 	 *
 	 * @param array<string,mixed> $data Coupon data, including 'id' (0 to create).
@@ -126,8 +125,9 @@ class WcCouponStubStore {
 
 		$id = (int) ( $data['id'] ?? 0 );
 		if ( $id <= 0 ) {
-			$id = self::$next_id;
-			++self::$next_id;
+			$id = self::insert_post( 0, (string) ( $data['code'] ?? '' ) );
+		} else {
+			self::insert_post( $id, (string) ( $data['code'] ?? '' ) );
 		}
 		$data['id']           = $id;
 		self::$coupons[ $id ] = self::with_defaults( $data );
@@ -135,7 +135,7 @@ class WcCouponStubStore {
 	}
 
 	/**
-	 * Permanently remove a coupon by id.
+	 * Permanently remove a coupon by id, deleting both the field row and the shop_coupon post.
 	 *
 	 * Returns false when self::$force_delete_failure is true.
 	 *
@@ -146,56 +146,34 @@ class WcCouponStubStore {
 		if ( self::$force_delete_failure ) {
 			return false;
 		}
+		wp_delete_post( $id, true );
 		unset( self::$coupons[ $id ] );
 		return true;
 	}
 
 	/**
-	 * All stored coupons in id order (the wc_get_coupons() source).
+	 * Insert (or re-use) a published shop_coupon post for a coupon id.
 	 *
-	 * @return array<int,array<string,mixed>>
+	 * Passing $id = 0 lets WordPress assign the id; passing a positive id forces it via import_id so
+	 * seeded fixtures keep their stable ids. Returns the resulting post id.
+	 *
+	 * @param int    $id   Forced post id, or 0 to let WordPress assign one.
+	 * @param string $code Coupon code, used as the post title.
+	 * @return int
 	 */
-	public static function all(): array {
-		$out = array_values( self::$coupons );
-		usort(
-			$out,
-			static fn( array $a, array $b ): int => ( (int) $a['id'] ) <=> ( (int) $b['id'] )
+	private static function insert_post( int $id, string $code ): int {
+		if ( $id > 0 && null !== get_post( $id ) ) {
+			return $id;
+		}
+		$args = array(
+			'post_type'   => 'shop_coupon',
+			'post_status' => 'publish',
+			'post_title'  => strtolower( $code ),
 		);
-		return $out;
-	}
-
-	/**
-	 * The wc_get_coupons() stub: returns WC_Coupon objects for seeded coupons, honouring limit/page
-	 * paging. When `paginate` is set, returns a stdClass with `->coupons` and `->total`; otherwise
-	 * returns the plain page-sliced array.
-	 *
-	 * @param array<string,mixed> $args Query args (limit, page, paginate).
-	 * @return array<int,\WC_Coupon>|object
-	 */
-	public static function query( array $args = array() ) {
-		$rows  = self::all();
-		$total = count( $rows );
-
-		$limit = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
-		if ( $limit > 0 ) {
-			$page   = isset( $args['page'] ) ? max( 1, (int) $args['page'] ) : 1;
-			$offset = ( $page - 1 ) * $limit;
-			$rows   = array_slice( $rows, $offset, $limit );
+		if ( $id > 0 ) {
+			$args['import_id'] = $id;
 		}
-
-		$out = array();
-		foreach ( $rows as $row ) {
-			$out[] = new \WC_Coupon( (int) $row['id'] );
-		}
-
-		if ( ! empty( $args['paginate'] ) ) {
-			$result          = new \stdClass();
-			$result->coupons = $out;
-			$result->total   = $total;
-			return $result;
-		}
-
-		return $out;
+		return (int) wp_insert_post( $args );
 	}
 
 	/**

@@ -155,7 +155,7 @@ function aafm_wc_tax_rate_shape( array $row ): array {
 		'id'       => (int) ( $row['id'] ?? $row['tax_rate_id'] ?? 0 ),
 		'country'  => (string) ( $row['country'] ?? $row['tax_rate_country'] ?? '' ),
 		'state'    => (string) ( $row['state'] ?? $row['tax_rate_state'] ?? '' ),
-		'rate'     => (string) ( $row['rate'] ?? $row['tax_rate_rate'] ?? '0.0000' ),
+		'rate'     => (string) ( $row['rate'] ?? $row['tax_rate'] ?? '0.0000' ),
 		'name'     => (string) ( $row['name'] ?? $row['tax_rate_name'] ?? '' ),
 		'priority' => (int) ( $row['priority'] ?? $row['tax_rate_priority'] ?? 1 ),
 		'compound' => (bool) ( $row['compound'] ?? $row['tax_rate_compound'] ?? false ),
@@ -177,7 +177,7 @@ function aafm_wc_get_all_tax_rates(): array {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 	$rows = $wpdb->get_results(
 		"SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
-		        tax_rate_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
+		        tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
 		        tax_rate_compound AS compound, tax_rate_shipping AS shipping,
 		        tax_rate_order AS `order`, tax_rate_class AS class
 		 FROM {$wpdb->prefix}woocommerce_tax_rates
@@ -200,7 +200,7 @@ function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	global $wpdb;
 	$table = $wpdb->prefix . 'woocommerce_tax_rates';
 	$sql   = "SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
-		tax_rate_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
+		tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
 		tax_rate_compound AS compound, tax_rate_shipping AS shipping,
 		tax_rate_order AS `order`, tax_rate_class AS class
 		FROM `{$table}` WHERE tax_rate_id = %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
@@ -411,7 +411,7 @@ function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
 	$data  = array(
 		'tax_rate_country'  => isset( $input['country'] ) ? sanitize_text_field( (string) $input['country'] ) : '',
 		'tax_rate_state'    => isset( $input['state'] ) ? sanitize_text_field( (string) $input['state'] ) : '',
-		'tax_rate_rate'     => sanitize_text_field( (string) $input['rate'] ),
+		'tax_rate'          => sanitize_text_field( (string) $input['rate'] ),
 		'tax_rate_name'     => isset( $input['name'] ) ? sanitize_text_field( (string) $input['name'] ) : '',
 		'tax_rate_priority' => isset( $input['priority'] ) ? absint( $input['priority'] ) : 1,
 		'tax_rate_compound' => isset( $input['compound'] ) ? ( (bool) $input['compound'] ? 1 : 0 ) : 0,
@@ -521,8 +521,8 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
 	$format = array();
 
 	if ( array_key_exists( 'rate', $input ) ) {
-		$fields['tax_rate_rate'] = sanitize_text_field( (string) $input['rate'] );
-		$format[]                = '%s';
+		$fields['tax_rate'] = sanitize_text_field( (string) $input['rate'] );
+		$format[]           = '%s';
 	}
 	if ( array_key_exists( 'country', $input ) ) {
 		$fields['tax_rate_country'] = sanitize_text_field( (string) $input['country'] );
@@ -661,12 +661,17 @@ function aafm_wc_build_tax_class_list(): array {
 		return $out;
 	}
 
-	$slugs = \WC_Tax::get_tax_classes();
+	// get_tax_classes() returns display NAMES; get_tax_class_slugs() returns the matching
+	// sanitized slugs in the same order. Pair them so the exposed slug is the real lookup key
+	// (using a name as a slug made get-tax-class fail to match its own created class).
+	$names = \WC_Tax::get_tax_classes();
+	$slugs = \WC_Tax::get_tax_class_slugs();
 
-	foreach ( $slugs as $slug ) {
+	foreach ( array_values( $names ) as $i => $name ) {
+		$slug  = isset( $slugs[ $i ] ) ? (string) $slugs[ $i ] : sanitize_title( (string) $name );
 		$out[] = array(
-			'name' => ucwords( str_replace( '-', ' ', (string) $slug ) ),
-			'slug' => (string) $slug,
+			'name' => (string) $name,
+			'slug' => $slug,
 		);
 	}
 

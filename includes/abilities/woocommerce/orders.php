@@ -899,6 +899,9 @@ function aafm_exec_wc_create_order( array $input ) {
 
 	$order = new \WC_Order();
 	aafm_wc_apply_order_input( $order, $input );
+	// Recalculate line + cart totals so the order total reflects its items. Without this the order
+	// total stays at 0.00 even when line_items were added (downstream refunds depend on it).
+	$order->calculate_totals();
 	$id = (int) $order->save();
 
 	$saved = aafm_wc_get_order_object( $id );
@@ -1171,8 +1174,8 @@ function aafm_exec_wc_delete_order( array $input ) {
 function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
 	$notes = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	foreach ( $notes as $note ) {
-		// Real WC notes use comment_ID; our stub sets the same property.
-		$id = isset( $note->comment_ID ) ? (int) $note->comment_ID : 0; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- mirrors real WP comment property name.
+		// wc_get_order_notes() returns normalized objects whose id lives in ->id (not ->comment_ID).
+		$id = isset( $note->id ) ? (int) $note->id : 0;
 		if ( $id === $note_id ) {
 			return $note;
 		}
@@ -1187,8 +1190,9 @@ function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
  * @return array<string,mixed>
  */
 function aafm_wc_redact_note( object $note ): array {
-	$id            = isset( $note->comment_ID ) ? (int) $note->comment_ID : 0; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- mirrors real WP comment property name.
-	$text          = isset( $note->comment_content ) ? (string) $note->comment_content : '';
+	// wc_get_order_notes() returns normalized objects: ->id and ->content (not the raw comment fields).
+	$id            = isset( $note->id ) ? (int) $note->id : 0;
+	$text          = isset( $note->content ) ? (string) $note->content : '';
 	$date_created  = isset( $note->date_created ) ? (string) $note->date_created : '';
 	$customer_note = ! empty( $note->customer_note );
 	$added_by_user = isset( $note->added_by ) && 'user' === (string) $note->added_by;

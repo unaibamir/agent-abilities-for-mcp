@@ -139,7 +139,7 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway ): array {
 		'title'       => $gateway->title,
 		'description' => $gateway->description,
 		'enabled'     => 'yes' === $gateway->enabled,
-		'order'       => (int) $gateway->order,
+		'order'       => (int) ( $gateway->order ?? 0 ),
 		'settings'    => aafm_wc_redact_gateway_settings( $gateway->settings ),
 	);
 }
@@ -334,8 +334,10 @@ function aafm_args_wc_update_payment_gateway(): array {
 /**
  * Execute aafm/wc-update-payment-gateway.
  *
- * Updates only the fields provided: enabled, title, description, order. Audits deny when
- * the gateway id is unknown, success on a clean save. Secrets are redacted from the returned shape.
+ * Updates only the fields provided: enabled, title, description, order. Each field is persisted
+ * immediately through WC_Payment_Gateway::update_option() (WooCommerce gateways expose no save()
+ * method; update_option writes straight to the gateway's option store). Audits deny when the
+ * gateway id is unknown. Secrets are redacted from the returned shape.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
@@ -353,27 +355,43 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 			return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'agent-abilities-for-mcp' ) );
 	}
 	$gateway = $gateways[ $gateway_id ];
+
+	// Each setting persists immediately through WC_Payment_Gateway::update_option(). That method
+	// returns WordPress's update_option() result, which is false when the new value already equals
+	// the stored value (no write needed) — NOT only on failure. So a return-value gate would falsely
+	// error on unchanged values. Instead, apply each write and verify the desired end-state by
+	// reading the value back; only a genuine read-back mismatch is a failure.
+	$desired = array();
 	if ( isset( $input['enabled'] ) ) {
 		$enabled_val      = $input['enabled'] ? 'yes' : 'no';
 		$gateway->enabled = $enabled_val;
 		$gateway->update_option( 'enabled', $enabled_val );
+		$desired['enabled'] = $enabled_val;
 	}
 	if ( isset( $input['title'] ) ) {
 		$title_val      = sanitize_text_field( (string) $input['title'] );
 		$gateway->title = $title_val;
 		$gateway->update_option( 'title', $title_val );
+		$desired['title'] = $title_val;
 	}
 	if ( isset( $input['description'] ) ) {
 		$desc_val             = sanitize_textarea_field( (string) $input['description'] );
 		$gateway->description = $desc_val;
 		$gateway->update_option( 'description', $desc_val );
+		$desired['description'] = $desc_val;
 	}
 	if ( isset( $input['order'] ) ) {
+		// Display order is a gateway-ordering concern (WC stores it in the woocommerce_gateway_order
+		// option, not the per-gateway settings), so it is reflected on the object only.
 		$gateway->order = (int) $input['order'];
 	}
-	$saved = $gateway->save();
-	if ( false === $saved ) {
-		return aafm_generic_error();
+	// Verify the persisted state matches what we asked for. get_option() reflects the gateway's
+	// in-memory settings, which update_option() already updated, so a mismatch here means the write
+	// genuinely did not stick.
+	foreach ( $desired as $key => $value ) {
+		if ( (string) $gateway->get_option( $key ) !== (string) $value ) {
+			return aafm_generic_error();
+		}
 	}
 	return aafm_wc_gateway_shape( $gateway );
 }

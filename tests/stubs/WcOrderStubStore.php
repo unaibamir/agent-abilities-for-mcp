@@ -311,12 +311,13 @@ class WcOrderStubStore {
 		return array_values(
 			array_map(
 				static function ( array $row ): object {
-					$obj                  = new \stdClass();
-					$obj->comment_ID      = (int) $row['id']; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- mirrors real WP comment property name.
-					$obj->comment_content = (string) $row['note'];
-					$obj->added_by        = $row['added_by_user'] ? 'user' : '';
-					$obj->date_created    = (string) $row['date_created'];
-					$obj->customer_note   = (bool) $row['customer_note'];
+					// Mirror the normalized objects real wc_get_order_notes() returns: ->id and ->content.
+					$obj                = new \stdClass();
+					$obj->id            = (int) $row['id'];
+					$obj->content       = (string) $row['note'];
+					$obj->added_by      = $row['added_by_user'] ? 'user' : '';
+					$obj->date_created  = (string) $row['date_created'];
+					$obj->customer_note = (bool) $row['customer_note'];
 					return $obj;
 				},
 				$rows

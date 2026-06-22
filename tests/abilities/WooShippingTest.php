@@ -39,6 +39,7 @@ final class WooShippingTest extends TestCase {
 
 	public function tear_down(): void {
 		$this->reset_integration_stubs();
+		WcShippingStubStore::drop_methods_table();
 		WcShippingStubStore::reset();
 		parent::tear_down();
 	}
@@ -528,6 +529,60 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * The enabled flag and method_title persist and survive a fresh read (write -> read round-trip).
+	 *
+	 * Guards the bug where update relied on a non-existent WC_Shipping_Method::save(): the enabled
+	 * toggle must hit the is_enabled column and the title must hit the instance settings, both
+	 * reflected by a subsequent get.
+	 */
+	public function test_update_shipping_method_persists_and_round_trips(): void {
+		$this->acting_as( 'administrator' );
+
+		// Toggle off + rename.
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'enabled'      => 'no',
+				'method_title' => 'Renamed',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'no', $res['enabled'] );
+		$this->assertSame( 'Renamed', $res['method_title'] );
+
+		$read = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+			)
+		);
+		$this->assertSame( 'no', $read['enabled'], 'enabled toggle must survive a fresh read.' );
+		$this->assertSame( 'Renamed', $read['method_title'], 'title must survive a fresh read.' );
+
+		// Toggle back on.
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+				'enabled'     => 'yes',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'yes', $res['enabled'] );
+
+		$read = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+			)
+		);
+		$this->assertSame( 'yes', $read['enabled'], 'enabled re-toggle must survive a fresh read.' );
+		// Title was not re-supplied; it must survive unchanged.
+		$this->assertSame( 'Renamed', $read['method_title'] );
+	}
+
+	/**
 	 * Unknown instance id returns WP_Error.
 	 */
 	public function test_update_shipping_method_unknown_id_returns_error(): void {
@@ -543,20 +598,30 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * Store failure on update surfaces as WP_Error.
+	 * A DB failure on the enabled toggle surfaces as WP_Error.
+	 *
+	 * The production enabled toggle is a direct $wpdb->update() against the
+	 * woocommerce_shipping_zone_methods table. Dropping the temp table makes that query fail
+	 * ($wpdb->update() returns false), which must surface as a WP_Error rather than a false success.
 	 */
 	public function test_update_shipping_method_store_failure_returns_error(): void {
-		WcShippingStubStore::$force_save_failure = true;
+		global $wpdb;
+		WcShippingStubStore::drop_methods_table();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+
+		// The missing-table query is an expected failure here; suppress the wpdb error print so
+		// the deliberate failure does not mark the test risky.
+		$suppressed = $wpdb->suppress_errors( true );
+		$res        = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
 				'enabled'     => 'no',
 			)
 		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Save failure on update must not lie success.' );
-		WcShippingStubStore::$force_save_failure = false;
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A DB failure on the enabled toggle must not lie success.' );
 	}
 
 	// =========================================================================

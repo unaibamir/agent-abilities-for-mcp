@@ -369,34 +369,40 @@ function aafm_args_wc_list_coupons(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_list_coupons( array $input ) {
-	if ( ! function_exists( 'wc_get_coupons' ) ) {
+	if ( ! class_exists( 'WC_Coupon' ) ) {
 		return aafm_generic_error();
 	}
 
 	$per_page = isset( $input['per_page'] ) ? absint( $input['per_page'] ) : 10;
 	$page     = isset( $input['page'] ) ? absint( $input['page'] ) : 1;
 
-	$result = wc_get_coupons(
+	// WooCommerce has no wc_get_coupons(): coupons are the 'shop_coupon' post type. Query the ids,
+	// then hydrate each through WC_Coupon to read fields via the public getter API.
+	$query = new \WP_Query(
 		array(
-			'limit'    => $per_page,
-			'page'     => $page,
-			'paginate' => true,
+			'post_type'      => 'shop_coupon',
+			'post_status'    => 'publish',
+			'posts_per_page' => $per_page,
+			'paged'          => $page,
+			'orderby'        => 'ID',
+			'order'          => 'ASC',
+			'fields'         => 'ids',
+			'no_found_rows'  => false,
 		)
 	);
 
-	$coupons_raw = is_object( $result ) && isset( $result->coupons ) ? $result->coupons : array();
-	$total       = is_object( $result ) && isset( $result->total ) ? (int) $result->total : 0;
-
 	$rows = array();
-	foreach ( $coupons_raw as $coupon ) {
-		if ( $coupon instanceof \WC_Coupon ) {
+	foreach ( $query->posts as $coupon_id ) {
+		// fields => 'ids' yields post ids; absint() also normalises the int|WP_Post union safely.
+		$coupon = aafm_wc_get_coupon_object( is_object( $coupon_id ) ? (int) $coupon_id->ID : absint( $coupon_id ) );
+		if ( null !== $coupon ) {
 			$rows[] = aafm_redact_wc_coupon( $coupon );
 		}
 	}
 
 	return array(
 		'coupons' => $rows,
-		'total'   => $total,
+		'total'   => (int) $query->found_posts,
 	);
 }
 

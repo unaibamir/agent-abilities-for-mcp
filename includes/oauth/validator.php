@@ -121,7 +121,8 @@ function aafm_oauth_resolve_current_user( $user_id ) {
  * @return bool True only when the request is for the MCP endpoint.
  */
 function aafm_oauth_request_targets_mcp_route(): bool {
-	$mcp_route = '/agent-abilities-for-mcp/mcp';
+	// Single-sourced in bootstrap.php (leading-slash form).
+	$mcp_route = aafm_mcp_rest_route();
 
 	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp.
 	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.

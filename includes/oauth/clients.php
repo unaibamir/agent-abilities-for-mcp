@@ -130,6 +130,27 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 }
 
 /**
+ * Count active registered OAuth clients.
+ *
+ * Used by the DCR endpoint to enforce a soft cap so the public registration route cannot grow
+ * the clients table without bound. Counts only is_active = 1 rows (a revoked client no longer
+ * counts against the cap). Tolerates a not-yet-installed table by returning 0.
+ *
+ * @return int Non-negative count of active clients.
+ */
+function aafm_oauth_count_active_clients(): int {
+	global $wpdb;
+	$table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+
+	$suppressed = $wpdb->suppress_errors();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_active = 1" );
+	$wpdb->suppress_errors( $suppressed );
+
+	return max( 0, (int) $count );
+}
+
+/**
  * Validate a single redirect URI against the registration allowlist.
  *
  * Enforces: non-empty and at most 2048 bytes; no wildcard anywhere; no fragment and

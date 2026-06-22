@@ -333,11 +333,29 @@ function aafm_exec_create_user( array $input ) {
 		? (string) $input['password']
 		: wp_generate_password( 24, true );
 
-	// Role is forced to the site default — never caller-chosen, so an agent can't mint an
-	// admin. get_option()'s fallback only fires when the option is ABSENT; an empty-string
-	// default_role would slip through and create a roleless user, so floor it to subscriber.
+	// Invariant: an agent can never mint a privileged account here. The role is forced to the
+	// site default and never caller-chosen — but the default_role option is itself attacker- or
+	// misconfiguration-controlled, so trusting it blindly breaks the invariant (a site whose
+	// default_role is 'administrator' would mint admins). Resolve it against what the CURRENT
+	// user may actually hand out: it must be a real role, never 'administrator', and present in
+	// get_editable_roles() (which honors the editable_roles filter). Anything else floors to
+	// subscriber. get_option()'s fallback only fires when the option is ABSENT, and an empty
+	// string would create a roleless user, so the empty-string floor stays too.
 	$default_role = (string) get_option( 'default_role', 'subscriber' );
 	$default_role = '' !== $default_role ? $default_role : 'subscriber';
+
+	// get_editable_roles() lives in wp-admin/includes/user.php, not loaded in a REST/MCP
+	// request — pull it in (mirrors the delete path's require below).
+	if ( ! function_exists( 'get_editable_roles' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+	}
+	$editable_roles = get_editable_roles();
+	if ( 'administrator' === $default_role
+		|| null === get_role( $default_role )
+		|| empty( $editable_roles[ $default_role ] )
+	) {
+		$default_role = 'subscriber';
+	}
 
 	$userdata = array(
 		'user_login'   => $username,
@@ -518,9 +536,28 @@ function aafm_exec_update_user( array $input ) {
 
 	$demotes_admin = false;
 	if ( isset( $input['role'] ) ) {
-		// Role change is admin-only (promote_users) and must target a real role.
+		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
+		// users controller — not just the global promote_users cap. Core additionally requires
+		// the per-target promote_user meta cap (so a delegated manager can only promote users
+		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
+		// can forbid a role — e.g. block a user-manager from handing out administrator). Without
+		// both, promote_users alone would let an agent assign any existing role, including one
+		// the site has deliberately put out of reach.
 		$role = sanitize_key( (string) $input['role'] );
-		if ( ! current_user_can( 'promote_users' ) || null === get_role( $role ) ) {
+		if ( null === get_role( $role )
+			|| ! current_user_can( 'promote_users' )
+			|| ! current_user_can( 'promote_user', $id )
+		) {
+			return aafm_generic_error();
+		}
+		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
+		// REST/MCP request — pull it in (mirrors the delete path's require below and core's own
+		// guard in WP_REST_Users_Controller::check_role_update()).
+		if ( ! function_exists( 'get_editable_roles' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		$editable_roles = get_editable_roles();
+		if ( empty( $editable_roles[ $role ] ) ) {
 			return aafm_generic_error();
 		}
 		$data['role']  = $role;

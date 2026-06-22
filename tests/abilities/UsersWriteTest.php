@@ -75,6 +75,29 @@ final class UsersWriteTest extends TestCase {
 		$this->assertContains( 'subscriber', (array) $new->roles, 'an empty default_role must floor to subscriber, never roleless.' );
 	}
 
+	/**
+	 * The invariant "an agent can never mint an admin" must hold even when the site's
+	 * default_role option is itself elevated. A misconfigured (or maliciously set)
+	 * default_role of 'administrator' must NOT pass straight to wp_insert_user — the
+	 * resolved role floors to subscriber. The option change lives inside the test
+	 * transaction, which the suite rolls back.
+	 */
+	public function test_create_user_floors_administrator_default_role_to_subscriber(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'default_role', 'administrator' );
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
+			array(
+				'username' => 'admin_default',
+				'email'    => 'admin_default@example.com',
+			)
+		);
+		$this->assertIsArray( $res );
+		$new = get_user_by( 'login', 'admin_default' );
+		$this->assertInstanceOf( \WP_User::class, $new );
+		$this->assertNotContains( 'administrator', (array) $new->roles, 'an administrator default_role must never mint an admin.' );
+		$this->assertContains( 'subscriber', (array) $new->roles, 'an elevated default_role must floor to subscriber.' );
+	}
+
 	public function test_create_user_is_destructive_and_closed_schema(): void {
 		$ability = wp_get_ability( 'aafm/create-user' );
 		$ann     = $ability->get_meta_item( 'annotations' );
@@ -107,6 +130,38 @@ final class UsersWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'a non-admin must not change a role.' );
 		$this->assertContains( 'author', (array) get_userdata( $author )->roles, 'role must be untouched.' );
+	}
+
+	/**
+	 * Role escalation guard: promote_users alone is not enough. WP core (the REST users
+	 * controller and wp-admin) also requires the target role to be in get_editable_roles(),
+	 * which the editable_roles filter can prune. A capable administrator whose editable_roles
+	 * has had 'administrator' removed must be refused when assigning that role — proving the
+	 * ability honors the same delegation boundary core does, not just the global cap.
+	 */
+	public function test_update_user_rejects_role_excluded_by_editable_roles(): void {
+		$this->acting_as( 'administrator' );
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$drop_admin = static function ( array $roles ): array {
+			unset( $roles['administrator'] );
+			return $roles;
+		};
+		add_filter( 'editable_roles', $drop_admin );
+		try {
+			$res = wp_get_ability( 'aafm/update-user' )->execute(
+				array(
+					'user_id' => $author,
+					'role'    => 'administrator',
+				)
+			);
+		} finally {
+			remove_filter( 'editable_roles', $drop_admin );
+		}
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a role pruned from editable_roles must be refused even for an admin.' );
+		$this->assertContains( 'author', (array) get_userdata( $author )->roles, 'the role must be untouched.' );
+		$this->assertNotContains( 'administrator', (array) get_userdata( $author )->roles, 'the forbidden role must never be assigned.' );
 	}
 
 	public function test_update_user_is_not_destructive(): void {

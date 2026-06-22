@@ -143,14 +143,20 @@ function aafm_ajax_save_settings(): void {
 }
 
 /**
- * Every option key that holds plugin configuration.
+ * Every option key that a plugin reset clears.
  *
  * This is the single source of truth for "what a reset clears" — the enabled abilities, the
- * exposed post types and meta keys, and the four safety controls. It deliberately excludes the
+ * exposed post types and meta keys, and the safety controls. It deliberately excludes the
  * activity log (its own table) and anything outside the plugin's own option namespace, and it
- * never lists users or content. Keep it in sync when a new configuration option is introduced.
+ * never lists users or content.
  *
- * @return list<string> Option names, in a stable order.
+ * One configuration option is intentionally NOT listed here: `aafm_delete_data_on_uninstall`.
+ * That flag governs whether uninstall wipes the site's data, so a "reset to defaults" must not
+ * silently flip the operator's data-retention choice — it is preserved across a reset by design.
+ * Because of that omission this is the reset set, not literally every stored option. Keep it in
+ * sync when a new resettable configuration option is introduced.
+ *
+ * @return list<string> Option names a reset clears, in a stable order.
  */
 function aafm_config_option_names(): array {
 	return array(

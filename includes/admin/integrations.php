@@ -25,30 +25,34 @@ defined( 'ABSPATH' ) || exit;
  * @return array<string,array{label:string,icon:string,plugins:array<int,string>}>
  */
 function aafm_integration_cards(): array {
+	// One neutral glyph for every card: the integration "plug" icon. Each card already carries
+	// its own name, status pill, and ability count, so the icon only needs to read as "an
+	// integration" — not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
+	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
 		'yoast'       => array(
 			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
-			'icon'    => 'abilities',
+			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
 		'rankmath'    => array(
 			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
-			'icon'    => 'abilities',
+			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
 		'aioseo'      => array(
 			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
-			'icon'    => 'abilities',
+			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
 		'acf'         => array(
 			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
-			'icon'    => 'groups',
+			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
 		'woocommerce' => array(
 			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
-			'icon'    => 'groups',
+			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
 	);
@@ -377,6 +381,11 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	$risk = (string) ( $ability['risk'] ?? 'read' );
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
 
+	// Per-ability id on the title <h4>, used as the checkbox's accessible name via
+	// aria-labelledby — without it a screen reader announces the bare toggle as just
+	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
+	$title_id = 'aafm-int-ability-title-' . sanitize_key( $name );
+
 	printf(
 		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
 		esc_attr( $risk ),
@@ -385,15 +394,17 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// An inactive host has nothing enabled, so a disabled row never renders checked; it also
 	// carries the disabled attribute so it stays out of the submitted aafm_abilities[] list.
 	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s%3$s><span class="aafm-switch-track"></span></label>',
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s%4$s><span class="aafm-switch-track"></span></label>',
 		esc_attr( $name ),
+		esc_attr( $title_id ),
 		$disabled ? '' : checked( in_array( $name, $enabled, true ), true, false ),
 		$disabled ? ' disabled' : ''
 	);
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
-		'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
+		'<h4 id="%1$s">%2$s</h4><span class="aafm-badge aafm-badge-%3$s">%3$s</span>',
+		esc_attr( $title_id ),
 		esc_html( (string) ( $ability['label'] ?? $name ) ),
 		esc_attr( $risk )
 	);

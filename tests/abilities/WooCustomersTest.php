@@ -149,6 +149,15 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * A non-existent customer id returns a not-found WP_Error, not a raw exception from WC_Customer.
+	 */
+	public function test_get_customer_missing_id_returns_error(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
 	 * Full shape includes email AND billing phone (PII under the disclaimer).
 	 */
 	public function test_get_customer_exposes_pii_email_and_billing_phone(): void {

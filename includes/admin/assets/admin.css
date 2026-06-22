@@ -17,6 +17,9 @@
 	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
 	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
 	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
+	/* The large display figure on the dashboard/abilities stat cards. A named token
+	   instead of a bare 28px so every stat card shares one type size. */
+	--aafm-stat-value-size: 28px;
 
 	color: var(--aafm-text);
 	font-size: 14px;
@@ -350,7 +353,7 @@
 		}
 
 		.stat-value {
-			font-size: 28px;
+			font-size: var(--aafm-stat-value-size);
 			font-weight: 600;
 			letter-spacing: -0.02em;
 
@@ -552,6 +555,14 @@
 				color: var(--aafm-accent);
 				background: transparent;
 			}
+
+			/* A keyboard focus ring that is visibly distinct from the hover tint, so a
+			   keyboard user can tell which tab actually holds focus. */
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				border-radius: var(--aafm-radius-sm);
+				outline: none;
+			}
 		}
 
 		.nav-tab-active,
@@ -598,6 +609,12 @@
 			&:hover {
 				border-color: var(--aafm-accent);
 				color: var(--aafm-accent);
+			}
+
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				border-color: var(--aafm-accent);
+				outline: none;
 			}
 
 			&.current,
@@ -702,7 +719,9 @@
 
 		&.aafm-badge-write {
 			background: #fcf3d6;
-			color: #8a6d00;
+			/* #7a5f00 on #fcf3d6 clears WCAG AA (>= 4.5:1) for this 11px uppercase text;
+			   the previous #8a6d00 sat at ~4.44:1, just under the floor. */
+			color: #7a5f00;
 		}
 
 		&.aafm-badge-destructive {
@@ -1072,6 +1091,10 @@
 				border-inline-end: 5px solid transparent;
 				border-block-start: 6px solid var(--aafm-text-subtle);
 				transition: transform 0.18s ease;
+				/* The solid triangle's visual mass sits above its bounding box centre, so a
+				   plain align-items:center reads as too high next to the cap-height heading.
+				   Nudge it down to sit on the optical centre line. */
+				margin-block-start: 2px;
 			}
 		}
 
@@ -1286,11 +1309,23 @@
 			border-radius: 5px;
 			cursor: pointer;
 
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				outline: none;
+			}
+
 			&.on,
 			&.is-active {
 				background: var(--aafm-surface);
 				color: var(--aafm-text);
 				box-shadow: var(--aafm-shadow);
+			}
+
+			/* Keep the focus ring visible even on the active segment, which otherwise
+			   sets its own box-shadow. */
+			&.on:focus-visible,
+			&.is-active:focus-visible {
+				box-shadow: var(--aafm-shadow), var(--aafm-ring);
 			}
 		}
 	}
@@ -1463,10 +1498,18 @@
 		&.aafm-status-started { color: #646970; }
 	}
 
+	/* One save affordance across every form tab: whether the Save sits in the sticky
+	   .aafm-savebar (Abilities/Integrations) or on an inline <p> (Settings, the post-type
+	   and meta-key selectors), its status text reads the same — muted, with the same
+	   leading gap from the button. */
 	.aafm-save-status,
 	.aafm-user-status,
 	.aafm-test-status,
-	.aafm-clear-status {
+	.aafm-clear-status,
+	.aafm-post-types-status,
+	.aafm-meta-keys-status,
+	.aafm-user-meta-keys-status,
+	.aafm-term-meta-keys-status {
 		margin-inline-start: 8px;
 		color: var(--aafm-text-subtle);
 	}
@@ -1527,23 +1570,25 @@
 					color: var(--aafm-accent);
 				}
 
-				/* Right-aligned chevron affordance. Rotates to point down when
-				   the entry is open. CSS-only — the <details>/<summary>
-				   semantics and focus ring stay native. */
+				/* Right-aligned chevron affordance — the same solid-triangle shape used by
+				   every other disclosure in this UI (the integration cards, the abilities
+				   details, and the dashboard setup panel), so there is one chevron shape
+				   across the admin. Points up by default; rotates 180deg when open.
+				   CSS-only — the <details>/<summary> semantics and focus ring stay native. */
 				&::after {
 					content: "";
 					flex: 0 0 auto;
 					margin-inline-start: auto;
-					inline-size: 8px;
-					block-size: 8px;
-					border-inline-end: 2px solid var(--aafm-text-subtle);
-					border-block-end: 2px solid var(--aafm-text-subtle);
-					transform: rotate(-45deg);
-					transition: transform 0.15s ease;
+					inline-size: 0;
+					block-size: 0;
+					border-inline-start: 5px solid transparent;
+					border-inline-end: 5px solid transparent;
+					border-block-start: 6px solid var(--aafm-text-subtle);
+					transition: transform 0.18s ease;
 				}
 
 				&:hover::after {
-					border-color: var(--aafm-accent);
+					border-block-start-color: var(--aafm-accent);
 				}
 			}
 
@@ -1552,7 +1597,7 @@
 					border-block-end: 1px solid #f0f0f1;
 
 					&::after {
-						transform: rotate(45deg);
+						transform: rotate(180deg);
 					}
 				}
 			}
@@ -1634,7 +1679,7 @@
 
 			&:focus-visible {
 				border-color: var(--aafm-accent);
-				box-shadow: 0 0 0 1px var(--aafm-accent);
+				box-shadow: var(--aafm-ring);
 				outline: none;
 			}
 		}

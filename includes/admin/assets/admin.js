@@ -55,7 +55,6 @@
 			this.#bindSaveIntegrations();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
-			this.#bindSaveDeniedMetaKeys();
 			this.#bindSaveUserMetaKeys();
 			this.#bindSaveTermMetaKeys();
 			this.#bindSaveSettings();
@@ -104,9 +103,15 @@
 		 */
 		#applyRootKey( text, client ) {
 			const wanted = 'vscode' === client ? 'servers' : 'mcpServers';
-			// The root key is the only "servers"/"mcpServers" token in the snippet
-			// (it never appears in any value), so swap the first one we find.
-			return text.replace( /"(?:mcp)?[sS]ervers"/, `"${ wanted }"` );
+			// Rewrite only a "servers"/"mcpServers" that is acting as an OBJECT KEY — i.e.
+			// immediately followed by a colon and an opening brace (allowing whitespace).
+			// Matching the key role rather than the bare token means an arbitrary server
+			// name or value that happens to contain the word "servers" is never rewritten.
+			// The capture group preserves the original colon/brace spacing.
+			return text.replace(
+				/"(?:mcp)?[sS]ervers"(\s*:\s*\{)/,
+				`"${ wanted }"$1`
+			);
 		}
 
 		#bindClientPicker() {
@@ -186,26 +191,86 @@
 			} );
 		}
 
+		/**
+		 * Wire Arrow/Home/End keyboard navigation across one WAI-ARIA tablist.
+		 *
+		 * Implements the roving-tabindex contract: exactly one tab is in the tab
+		 * sequence (tabindex 0) at a time, the rest are -1. Left/Up selects the
+		 * previous tab, Right/Down the next (both wrap), Home/End jump to the ends.
+		 * Each keyboard move calls activate() so the matching panel shows and moves
+		 * focus to the now-current tab — automatic activation, the common pattern
+		 * for a small static tab set.
+		 *
+		 * @param {NodeListOf<HTMLElement>|Array<HTMLElement>} tabs     The tab buttons, in DOM order.
+		 * @param {(tab: HTMLElement) => void}                 activate Selects a tab (updates state + panels).
+		 */
+		#wireTablistKeys( tabs, activate ) {
+			const list = Array.from( tabs );
+			list.forEach( ( tab, index ) => {
+				tab.addEventListener( 'keydown', ( e ) => {
+					let target = null;
+					switch ( e.key ) {
+						case 'ArrowLeft':
+						case 'ArrowUp':
+							target = list[ ( index - 1 + list.length ) % list.length ];
+							break;
+						case 'ArrowRight':
+						case 'ArrowDown':
+							target = list[ ( index + 1 ) % list.length ];
+							break;
+						case 'Home':
+							target = list[ 0 ];
+							break;
+						case 'End':
+							target = list[ list.length - 1 ];
+							break;
+						default:
+							return;
+					}
+					e.preventDefault();
+					activate( target );
+					target.focus();
+				} );
+			} );
+		}
+
+		/**
+		 * Apply roving tabindex across a tablist after a selection change: the active
+		 * tab is the only one reachable with Tab (tabindex 0); the rest are -1.
+		 *
+		 * @param {Array<HTMLElement>} list   The tab buttons.
+		 * @param {HTMLElement}        active The now-selected tab.
+		 */
+		#rovingTabindex( list, active ) {
+			list.forEach( ( t ) => {
+				t.setAttribute( 'tabindex', t === active ? '0' : '-1' );
+			} );
+		}
+
 		#bindSubjectTabs() {
 			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
 			if ( ! tabs.length ) {
 				return;
 			}
-			tabs.forEach( ( tab ) => {
-				tab.addEventListener( 'click', () => {
-					const subject = tab.dataset.subject;
-					tabs.forEach( ( t ) => {
-						const active = t === tab;
-						t.classList.toggle( 'is-active', active );
-						t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
-					} );
-					document
-						.querySelectorAll( '.aafm-subject-panel[data-subject]' )
-						.forEach( ( panel ) => {
-							panel.hidden = panel.dataset.subject !== subject;
-						} );
+			const list = Array.from( tabs );
+			const activate = ( tab ) => {
+				const subject = tab.dataset.subject;
+				list.forEach( ( t ) => {
+					const active = t === tab;
+					t.classList.toggle( 'is-active', active );
+					t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
 				} );
+				this.#rovingTabindex( list, tab );
+				document
+					.querySelectorAll( '.aafm-subject-panel[data-subject]' )
+					.forEach( ( panel ) => {
+						panel.hidden = panel.dataset.subject !== subject;
+					} );
+			};
+			list.forEach( ( tab ) => {
+				tab.addEventListener( 'click', () => activate( tab ) );
 			} );
+			this.#wireTablistKeys( list, activate );
 		}
 
 		#bindOsTabs() {
@@ -217,39 +282,58 @@
 			if ( ! tabs.length ) {
 				return;
 			}
-			tabs.forEach( ( tab ) => {
-				tab.addEventListener( 'click', () => {
-					const os = tab.dataset.os;
 
-					// The closest container that holds this tab's sibling tabs and snippet
-					// blocks. The OS tabs sit inside .aafm-seg.aafm-os-tabs; the snippet
-					// blocks are siblings or cousins within the same picker wrapper.
-					// Walking up to .aafm-oauth-picker or .aafm-app-password-fallback (or
-					// the parent card as a safe fallback) keeps each group isolated.
-					// The OAuth OS tabs sit in .aafm-oauth-picker, but the OAuth snippet
-					// blocks live in the sibling .aafm-oauth-panels — both inside
-					// .aafm-oauth-card, so scope to the card to reach the snippets while
-					// staying clear of the App-Password fallback (a sibling, not nested).
-					const container =
-						tab.closest( '.aafm-oauth-card' ) ??
-						tab.closest( '.aafm-app-password-fallback' ) ??
-						tab.closest( '.aafm-card' ) ??
-						document;
+			// The closest container that holds this tab's sibling tabs and snippet blocks.
+			// The OAuth OS tabs sit in .aafm-oauth-picker, but the OAuth snippet blocks live
+			// in the sibling .aafm-oauth-panels — both inside .aafm-oauth-card, so scope to
+			// the card to reach the snippets while staying clear of the App-Password fallback
+			// (a sibling, not nested).
+			const containerOf = ( tab ) =>
+				tab.closest( '.aafm-oauth-card' ) ??
+				tab.closest( '.aafm-app-password-fallback' ) ??
+				tab.closest( '.aafm-card' ) ??
+				document;
 
-					// Update active state only for sibling tabs in the same container.
-					container.querySelectorAll( '.aafm-os-tab' ).forEach( ( t ) => {
-						const active = t === tab;
-						t.classList.toggle( 'is-active', active );
-						t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
-					} );
-
-					// Toggle snippet visibility only within this container.
-					container
-						.querySelectorAll( '.aafm-snippet[data-os]' )
-						.forEach( ( box ) => {
-							box.hidden = box.dataset.os !== os;
-						} );
+			const activate = ( tab ) => {
+				const os = tab.dataset.os;
+				const container = containerOf( tab );
+				const siblings = Array.from(
+					container.querySelectorAll( '.aafm-os-tab' )
+				);
+				// Update active state only for sibling tabs in the same container.
+				siblings.forEach( ( t ) => {
+					const active = t === tab;
+					t.classList.toggle( 'is-active', active );
+					t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
 				} );
+				// Roving tabindex: only the active tab is in the tab sequence.
+				this.#rovingTabindex( siblings, tab );
+				// Toggle snippet visibility only within this container.
+				container
+					.querySelectorAll( '.aafm-snippet[data-os]' )
+					.forEach( ( box ) => {
+						box.hidden = box.dataset.os !== os;
+					} );
+			};
+
+			// Set the initial roving tabindex per container so keyboard focus enters at the
+			// active tab, then wire click + Arrow/Home/End within each container's tab group.
+			const seen = new Set();
+			tabs.forEach( ( tab ) => {
+				tab.addEventListener( 'click', () => activate( tab ) );
+
+				const container = containerOf( tab );
+				if ( seen.has( container ) ) {
+					return;
+				}
+				seen.add( container );
+				const group = Array.from(
+					container.querySelectorAll( '.aafm-os-tab' )
+				);
+				const current =
+					group.find( ( t ) => t.classList.contains( 'is-active' ) ) ?? group[ 0 ];
+				this.#rovingTabindex( group, current );
+				this.#wireTablistKeys( group, activate );
 			} );
 		}
 
@@ -576,13 +660,20 @@
 			if ( ! btn || ! root ) {
 				return;
 			}
+			// Exposed and Deny share one Save button and are now persisted in a single request,
+			// matching the user-meta/term-meta single-handler pattern. The previous split (two
+			// actions, two handlers) let the deny-list save fail silently inside an empty
+			// catch{} while the exposed-list handler still printed "Saved" — so a dropped deny
+			// list read as success. One request + one status assignment removes that gap.
 			btn.addEventListener( 'click', async () => {
 				const status = root.querySelector( '.aafm-meta-keys-status' );
 				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
+				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
 				const body = new URLSearchParams();
 				body.append( 'action', 'aafm_save_meta_keys' );
 				body.append( 'nonce', this.#nonce );
 				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
+				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -601,34 +692,6 @@
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
 						: this.#t( 'errorSaving', 'Error saving' );
-				}
-			} );
-		}
-
-		#bindSaveDeniedMetaKeys() {
-			const btn = document.querySelector( '#aafm-meta-keys-save' );
-			const root = document.querySelector( '#aafm-meta-keys-form' );
-			if ( ! btn || ! root ) {
-				return;
-			}
-			// Exposed and Deny share one Save button. #bindSaveMetaKeys sends the Exposed list
-			// and owns the status text; this sends the Deny list (by its own name) on the same
-			// click. The chip helper writes only into the Exposed textarea, so its name selector
-			// stays Exposed-scoped.
-			btn.addEventListener( 'click', async () => {
-				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
-				const body = new URLSearchParams();
-				body.append( 'action', 'aafm_save_denied_meta_keys' );
-				body.append( 'nonce', this.#nonce );
-				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
-				try {
-					await fetch( this.#ajaxUrl, {
-						method: 'POST',
-						body,
-						credentials: 'same-origin',
-					} );
-				} catch {
-					// The shared status text is owned by #bindSaveMetaKeys.
 				}
 			} );
 		}
@@ -959,7 +1022,14 @@
 			const prev = document.querySelector( '.aafm-pager-prev' );
 			const next = document.querySelector( '.aafm-pager-next' );
 
+			// In-flight guard. Rapid Next/filter clicks fire overlapping requests whose
+			// responses can arrive out of order; a stale page would then clobber the newest.
+			// Each load() bumps a token and only the request holding the latest token is
+			// allowed to render — older responses are dropped.
+			let loadToken = 0;
+
 			const load = async ( page, filter ) => {
+				const token = ++loadToken;
 				const pagerStatus = document.querySelector( '.aafm-pager-status' );
 				if ( pagerStatus ) {
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
@@ -968,6 +1038,10 @@
 					page,
 					filter,
 				} );
+				// A newer load() started while this one was in flight: discard this result.
+				if ( token !== loadToken ) {
+					return;
+				}
 				if ( ! json?.success ) {
 					// Leave the current view in place and restore the pager label.
 					this.#updatePager(

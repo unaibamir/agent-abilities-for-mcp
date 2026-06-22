@@ -19,13 +19,17 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Derive up to two uppercase initials from a site name, for the site avatar.
  *
- * Multibyte-safe. Falls back to a neutral dot when the name yields no letters.
+ * Multibyte-safe. When the name has no whitespace-delimited words to abbreviate (for example a
+ * name made only of separators), it falls back to the first character of the trimmed name, and
+ * only when even that is empty to a neutral globe glyph (🌐) — a recognisable "a website" mark,
+ * rather than the old bare middle dot which read as a missing/placeholder character.
  *
  * @param string $site_name The site display name.
- * @return string One or two uppercase characters (already plain text; escape on output).
+ * @return string One or two characters (already plain text; escape on output).
  */
 function aafm_oauth_site_initials( string $site_name ): string {
-	$words = preg_split( '/\s+/', trim( $site_name ) );
+	$trimmed = trim( $site_name );
+	$words   = preg_split( '/\s+/', $trimmed );
 	if ( ! is_array( $words ) ) {
 		$words = array();
 	}
@@ -38,7 +42,18 @@ function aafm_oauth_site_initials( string $site_name ): string {
 	}
 	$initials = function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $initials ) : strtoupper( $initials );
 
-	return '' !== $initials ? $initials : "\xC2\xB7"; // Middle dot when there is nothing to abbreviate.
+	if ( '' !== $initials ) {
+		return $initials;
+	}
+
+	// No abbreviatable words: take the first character of the trimmed name if there is one,
+	// otherwise a neutral globe glyph so the avatar still reads as "a site".
+	if ( '' !== $trimmed ) {
+		$first = function_exists( 'mb_substr' ) ? mb_substr( $trimmed, 0, 1 ) : substr( $trimmed, 0, 1 );
+		return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $first ) : strtoupper( $first );
+	}
+
+	return "\xF0\x9F\x8C\x90"; // U+1F310 GLOBE WITH MERIDIANS — neutral "a website" mark.
 }
 
 /**
@@ -93,12 +108,16 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	);
 
 	// Static, self-contained stylesheet (no dynamic data). Pure CSS, system fonts,
-	// CSP-clean (style-src 'unsafe-inline').
+	// CSP-clean (style-src 'unsafe-inline'). The inline block itself must stay here — the
+	// consent page renders outside wp-admin, so admin.css is never enqueued — but the token
+	// VALUES below are kept in lockstep with the admin palette in includes/admin/assets/admin.css
+	// (its :root block): the amber pair matches --aafm-amber-text (#815f00) and --aafm-amber-tint
+	// (#fcf9e8), and --radius matches --aafm-radius (8px). When that palette moves, move these.
 	$styles = '
 		:root{
 			--surface:#fff; --surface-2:#f6f7f7; --text:#1d2327; --text-muted:#50575e;
 			--border:#dcdcde; --border-strong:#c3c4c7; --accent:#2271b1; --accent-hover:#135e96;
-			--accent-soft:#e7f1f9; --green:#00a32a; --amber-text:#5b4708; --amber-soft:#fcf3e3;
+			--accent-soft:#e7f1f9; --green:#00a32a; --amber-text:#815f00; --amber-soft:#fcf9e8;
 			--amber-border:#f0dcb4; --radius:8px;
 		}
 		*{box-sizing:border-box;}

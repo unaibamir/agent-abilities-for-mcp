@@ -484,7 +484,14 @@ function aafm_detected_meta_keys(): array {
 }
 
 /**
- * AJAX: save the exposed-meta-keys allowlist.
+ * AJAX: save BOTH the exposed and denied post-meta lists in one request.
+ *
+ * Mirrors aafm_ajax_save_user_meta_keys() / aafm_ajax_save_term_meta_keys(): one click, one
+ * request, one success/failure verdict for the whole post-meta selector. The exposed list and
+ * the deny list are persisted together so the UI can never report "Saved" while one of the two
+ * writes silently failed (the prior split-handler design could). The deny field is optional in
+ * the payload, so a caller that posts only aafm_meta_keys simply clears the deny list, matching
+ * the old standalone behavior.
  *
  * @return void
  */
@@ -493,14 +500,26 @@ function aafm_ajax_save_meta_keys(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
-	$keys = aafm_sanitize_allowed_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
+	$denied = aafm_sanitize_denied_meta_keys_input( $posted );
 	update_option( 'aafm_allowed_meta_keys', $keys );
+	update_option( 'aafm_denied_meta_keys', $denied );
 	delete_transient( 'aafm_detected_meta_keys' );
-	wp_send_json_success( array( 'meta_keys' => $keys ) );
+	wp_send_json_success(
+		array(
+			'meta_keys'      => $keys,
+			'deny_meta_keys' => $denied,
+		)
+	);
 }
 
 /**
- * AJAX: save the denied-post-meta list.
+ * AJAX: save the denied-post-meta list on its own.
+ *
+ * Retained for the registered aafm_save_denied_meta_keys action and any external caller; the
+ * admin UI now sends the deny list together with the exposed list through aafm_save_meta_keys
+ * (see aafm_ajax_save_meta_keys), so this handler is no longer exercised by the bundled JS.
  *
  * @return void
  */
@@ -961,14 +980,22 @@ function aafm_render_abilities_tab(): void {
 
 	// Sub-tab bar — pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
 	// toggle binds to and data-subject is the display-tab slug so panel switching keeps working.
+	// Full WAI-ARIA tabs pattern: each tab carries a stable id + aria-controls pointing at its
+	// panel, roving tabindex (only the active tab is in the tab sequence), and the JS adds
+	// Arrow/Home/End handling. Each panel below carries the matching id + aria-labelledby.
 	$first = array_key_first( $display_tabs );
-	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist">';
+	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist" aria-label="' . esc_attr__( 'Ability subjects', 'agent-abilities-for-mcp' ) . '">';
 	foreach ( $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
+		$tab_id    = 'aafm-subject-tab-' . $slug;
+		$panel_id  = 'aafm-subject-panel-' . $slug;
 		printf(
-			'<button type="button" class="aafm-subject-tab%1$s" role="tab" aria-selected="%2$s" data-subject="%3$s">%4$s <span class="count">%5$s</span></button>',
+			'<button type="button" class="aafm-subject-tab%1$s" role="tab" id="%2$s" aria-controls="%3$s" aria-selected="%4$s" tabindex="%5$s" data-subject="%6$s">%7$s <span class="count">%8$s</span></button>',
 			$is_active ? ' is-active' : '',
+			esc_attr( $tab_id ),
+			esc_attr( $panel_id ),
 			$is_active ? 'true' : 'false',
+			$is_active ? '0' : '-1',
 			esc_attr( $slug ),
 			esc_html( $tab['label'] ),
 			esc_html( (string) count( $tab['rows'] ) )
@@ -980,8 +1007,10 @@ function aafm_render_abilities_tab(): void {
 		$is_active = ( $slug === $first );
 		$tab_rows  = $tab['rows'];
 		printf(
-			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel"%2$s>',
+			'<div class="aafm-subject-panel" data-subject="%1$s" role="tabpanel" id="%2$s" aria-labelledby="%3$s" tabindex="0"%4$s>',
 			esc_attr( $slug ),
+			esc_attr( 'aafm-subject-panel-' . $slug ),
+			esc_attr( 'aafm-subject-tab-' . $slug ),
 			$is_active ? '' : ' hidden'
 		);
 
@@ -993,8 +1022,10 @@ function aafm_render_abilities_tab(): void {
 				++$subject_enabled;
 			}
 		}
+		// H2 so the document outline runs H1 (page title) → H2 (subject group) → H3 (Reads/Writes)
+		// → H4 (each ability), with no skipped level. The visible weight is unchanged in CSS.
 		printf(
-			'<p class="aafm-subject-heading"><span class="aafm-count-badge">%1$s / %2$s</span> %3$s</p>',
+			'<h2 class="aafm-subject-heading"><span class="aafm-count-badge">%1$s / %2$s</span> %3$s</h2>',
 			esc_html( (string) $subject_enabled ),
 			esc_html( (string) $subject_total ),
 			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
@@ -1098,16 +1129,23 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	$risk = (string) ( $ability['risk'] ?? 'read' );
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
 
+	// Per-ability id on the title <h4>, used as the checkbox's accessible name via
+	// aria-labelledby — otherwise a screen reader announces the bare toggle as just
+	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
+	$title_id = 'aafm-ability-title-' . sanitize_key( $name );
+
 	echo '<div class="aafm-ability-row">';
 	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label>',
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s><span class="aafm-switch-track"></span></label>',
 		esc_attr( $name ),
+		esc_attr( $title_id ),
 		checked( in_array( $name, $enabled, true ), true, false )
 	);
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
-		'<h4>%1$s</h4><span class="aafm-badge aafm-badge-%2$s">%2$s</span>',
+		'<h4 id="%1$s">%2$s</h4><span class="aafm-badge aafm-badge-%3$s">%3$s</span>',
+		esc_attr( $title_id ),
 		esc_html( (string) ( $ability['label'] ?? $name ) ),
 		esc_attr( $risk )
 	);
@@ -1256,7 +1294,7 @@ function aafm_render_post_types_selector(): void {
 		$rest   = $obj instanceof WP_Post_Type && $obj->show_in_rest;
 
 		printf(
-			'<tr><td><label class="aafm-switch"><input type="checkbox" name="aafm_post_types[]" value="%1$s" %2$s><span class="aafm-switch-track"></span></label></td><td><strong>%3$s</strong> <code>%4$s</code></td><td>%5$s</td><td>%6$s</td></tr>',
+			'<tr><td><label class="aafm-switch"><input type="checkbox" name="aafm_post_types[]" value="%1$s" aria-label="%7$s" %2$s><span class="aafm-switch-track"></span></label></td><td><strong>%3$s</strong> <code>%4$s</code></td><td>%5$s</td><td>%6$s</td></tr>',
 			esc_attr( $type ),
 			checked( in_array( $type, $allowed, true ), true, false ),
 			esc_html( (string) $label ),
@@ -1264,7 +1302,14 @@ function aafm_render_post_types_selector(): void {
 			$mapped
 				? esc_html__( 'Allowed', 'agent-abilities-for-mcp' )
 				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only — writes need map_meta_cap', 'agent-abilities-for-mcp' ) . '</span>',
-			$rest ? esc_html__( 'yes', 'agent-abilities-for-mcp' ) : esc_html__( 'no', 'agent-abilities-for-mcp' )
+			$rest ? esc_html__( 'yes', 'agent-abilities-for-mcp' ) : esc_html__( 'no', 'agent-abilities-for-mcp' ),
+			esc_attr(
+				sprintf(
+					/* translators: %s: the content type's singular label, e.g. "Product". */
+					__( 'Expose %s to agents', 'agent-abilities-for-mcp' ),
+					(string) $label
+				)
+			)
 		);
 	}
 

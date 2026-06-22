@@ -12,10 +12,44 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The MCP endpoint URL for this site.
  *
- * @return string
+ * Calls rest_url() only after confirming $wp_rewrite is available. The global $wp_rewrite
+ * is not yet instantiated when the determine_current_user filter fires on the OAuth bearer
+ * path (e.g. Query Monitor calls current_user_can() that early), and rest_url() ->
+ * get_rest_url() dereferences it, causing a fatal. When $wp_rewrite is absent the URL is
+ * reconstructed without it, mirroring the guard in validator.php:aafm_oauth_request_targets_mcp_route().
+ *
+ * Both branches MUST produce byte-identical output so the RFC 8707 audience
+ * hash_equals() check in the validator passes regardless of which branch ran at
+ * token-mint time versus token-check time. The reconstruction branch uses
+ * get_option('permalink_structure') — which never touches $wp_rewrite — to decide
+ * between the pretty-permalink (/wp-json/) and plain-permalink (?rest_route=) forms,
+ * matching exactly what rest_url() would have returned.
+ *
+ * @return string Full URL of the MCP REST endpoint.
  */
 function aafm_endpoint_url(): string {
-	return rest_url( 'agent-abilities-for-mcp/mcp' );
+	$route = 'agent-abilities-for-mcp/mcp';
+
+	if ( isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite ) {
+		return rest_url( $route );
+	}
+
+	// $wp_rewrite is not yet available. Reconstruct without touching it.
+	// get_option('permalink_structure') returns '' on plain permalinks, a non-empty
+	// template (e.g. '/%postname%/') on pretty permalinks — same information $wp_rewrite
+	// would expose, but available before $wp_rewrite is instantiated.
+	$permalink_structure = (string) get_option( 'permalink_structure', '' );
+
+	if ( '' === $permalink_structure ) {
+		// Plain-permalink form: home_url()/index.php?rest_route=/route.
+		// Matches rest_url() on a plain-permalink install.
+		return add_query_arg( 'rest_route', '/' . $route, trailingslashit( home_url() ) . 'index.php' );
+	}
+
+	// Pretty-permalink form: home_url() + REST prefix + route.
+	// home_url() and rest_get_url_prefix() never dereference $wp_rewrite.
+	$home = rtrim( home_url(), '/' );
+	return $home . '/' . trim( rest_get_url_prefix(), '/' ) . '/' . $route;
 }
 
 /**

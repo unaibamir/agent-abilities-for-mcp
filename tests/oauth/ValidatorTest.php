@@ -515,4 +515,82 @@ class ValidatorTest extends TestCase {
 			$GLOBALS['wp_rewrite'] = $saved_rewrite;
 		}
 	}
+
+	/**
+	 * Verifies that aafm_endpoint_url() returns the same string whether or not $wp_rewrite
+	 * is instantiated. When the OAuth bearer hits determine_current_user early (before
+	 * $wp_rewrite exists), the validator's audience hash_equals() compares the token's
+	 * stored resource (minted when $wp_rewrite WAS present) against the reconstructed
+	 * URL (minted when $wp_rewrite is NULL). They must be byte-identical; if they
+	 * diverge the check silently fails and every valid bearer resolves no user.
+	 *
+	 * This also verifies that aafm_endpoint_url() does not fatal when $wp_rewrite is
+	 * null — the regression that caused HTTP 500 on the first claude.ai OAuth connect.
+	 */
+	public function test_endpoint_url_is_consistent_with_null_wp_rewrite(): void {
+		// Capture the URL while $wp_rewrite IS available (mint-time path).
+		$url_with_rewrite = aafm_endpoint_url();
+
+		$saved_rewrite = $GLOBALS['wp_rewrite'] ?? null;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- deliberately simulate the early-bootstrap state where $wp_rewrite is not yet set.
+		$GLOBALS['wp_rewrite'] = null;
+
+		try {
+			// Must not fatal, and must return the same URL (check-time path).
+			$url_without_rewrite = aafm_endpoint_url();
+
+			$this->assertSame(
+				$url_with_rewrite,
+				$url_without_rewrite,
+				'aafm_endpoint_url() must return byte-identical output with and without $wp_rewrite ' .
+				'so the RFC 8707 audience hash_equals() passes on the determine_current_user path.'
+			);
+
+			$this->assertStringContainsString(
+				'agent-abilities-for-mcp/mcp',
+				$url_without_rewrite,
+				'aafm_endpoint_url() must include the MCP route even when $wp_rewrite is null.'
+			);
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restore the exact prior global so the null state never bleeds into another test.
+			$GLOBALS['wp_rewrite'] = $saved_rewrite;
+		}
+	}
+
+	/**
+	 * A full bearer-token resolve still works when $wp_rewrite is null at the time the
+	 * determine_current_user filter fires. This is the exact scenario that caused HTTP
+	 * 500 on the claude.ai OAuth connect flow: the audience check in the validator calls
+	 * aafm_endpoint_url(), which previously called rest_url() unconditionally and fataled
+	 * on a null $wp_rewrite. With the fix in place, a valid token must resolve its user.
+	 */
+	public function test_bearer_resolves_with_null_wp_rewrite(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				// Token minted while $wp_rewrite is present (the normal REST request path).
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		$saved_rewrite = $GLOBALS['wp_rewrite'] ?? null;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- simulate early determine_current_user timing.
+		$GLOBALS['wp_rewrite'] = null;
+
+		try {
+			$resolved = aafm_oauth_resolve_current_user( false );
+			$this->assertSame(
+				$uid,
+				$resolved,
+				'A valid bearer minted with $wp_rewrite present must resolve its user even when ' .
+				'$wp_rewrite is null at check-time (determine_current_user early-bootstrap scenario).'
+			);
+		} finally {
+			// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$GLOBALS['wp_rewrite'] = $saved_rewrite;
+		}
+	}
 }

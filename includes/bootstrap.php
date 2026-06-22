@@ -12,13 +12,85 @@ defined( 'ABSPATH' ) || exit;
 use WP\MCP\Core\McpAdapter;
 
 /**
- * Whether the loaded adapter version meets our floor.
+ * The MCP server's REST namespace. Single source for the four sites that need the route
+ * literal (discovery, validator, connection, server). Splitting namespace from route keeps
+ * the value byte-identical to what create_server() registers and what aafm_endpoint_url()
+ * builds — the OAuth audience binding (hash_equals on the endpoint URL) is byte-sensitive.
+ */
+if ( ! defined( 'AAFM_MCP_NAMESPACE' ) ) {
+	define( 'AAFM_MCP_NAMESPACE', 'agent-abilities-for-mcp' );
+}
+
+/**
+ * The MCP server's route segment under its namespace.
+ */
+if ( ! defined( 'AAFM_MCP_ROUTE_SEGMENT' ) ) {
+	define( 'AAFM_MCP_ROUTE_SEGMENT', 'mcp' );
+}
+
+/**
+ * The MCP REST route WITHOUT a leading slash: "agent-abilities-for-mcp/mcp".
+ *
+ * This is the exact string passed to rest_url() (in aafm_endpoint_url()) and the
+ * namespace/route create_server() registers. Keep callers that need rest_url() input
+ * on this form.
+ *
+ * @return string
+ */
+function aafm_mcp_rest_namespace_route(): string {
+	return AAFM_MCP_NAMESPACE . '/' . AAFM_MCP_ROUTE_SEGMENT;
+}
+
+/**
+ * The MCP REST route WITH a leading slash: "/agent-abilities-for-mcp/mcp".
+ *
+ * The form WP_REST_Request::get_route() returns and the routing predicates compare against.
+ *
+ * @return string
+ */
+function aafm_mcp_rest_route(): string {
+	return '/' . aafm_mcp_rest_namespace_route();
+}
+
+/**
+ * Upper bound (exclusive) for a compatible MCP adapter version.
+ *
+ * The plugin is built against the adapter's 0.5.x contract (create_server() signature,
+ * initialize-response shape, tools-list filter). A foreign plugin can ship a NEWER adapter
+ * whose copy wins the Jetpack Autoloader; without an upper bound a 0.6+ adapter with a
+ * changed API would pass a bare ">= floor" check and then break at runtime. Gate to the
+ * tested range [floor, next-minor) and warn the operator otherwise. Bump deliberately after
+ * verifying against a new adapter line.
+ */
+if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
+	define( 'AAFM_MAX_ADAPTER_VERSION', '0.6.0' );
+}
+
+/**
+ * Whether the loaded adapter version is within the tested compatibility range.
+ *
+ * Requires the version to be at or above the floor AND strictly below the upper bound, so a
+ * too-old adapter (below the floor) and a too-new one (at or above the next breaking line)
+ * are both rejected.
  *
  * @param string $loaded_version Version reported by the active adapter copy.
  * @return bool
  */
 function aafm_adapter_is_compatible( string $loaded_version ): bool {
-	return version_compare( $loaded_version, AAFM_MIN_ADAPTER_VERSION, '>=' );
+	return version_compare( $loaded_version, AAFM_MIN_ADAPTER_VERSION, '>=' )
+		&& version_compare( $loaded_version, AAFM_MAX_ADAPTER_VERSION, '<' );
+}
+
+/**
+ * Whether the loaded adapter is newer than the tested upper bound.
+ *
+ * Lets aafm_init_mcp() pick the "too new" notice apart from the "too old" one.
+ *
+ * @param string $loaded_version Version reported by the active adapter copy.
+ * @return bool
+ */
+function aafm_adapter_is_too_new( string $loaded_version ): bool {
+	return version_compare( $loaded_version, AAFM_MAX_ADAPTER_VERSION, '>=' );
 }
 
 /**
@@ -46,7 +118,11 @@ function aafm_init_mcp(): bool {
 		return false;
 	}
 	if ( ! aafm_adapter_is_compatible( $version ) ) {
-		add_action( 'admin_notices', 'aafm_notice_adapter_outdated' );
+		if ( aafm_adapter_is_too_new( $version ) ) {
+			add_action( 'admin_notices', 'aafm_notice_adapter_too_new' );
+		} else {
+			add_action( 'admin_notices', 'aafm_notice_adapter_outdated' );
+		}
 		return false;
 	}
 
@@ -106,6 +182,43 @@ function aafm_notice_adapter_outdated(): void {
 			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' ),
 			esc_html( $loaded ),
 			esc_html( AAFM_MIN_ADAPTER_VERSION )
+		);
+	}
+	echo '</p></div>';
+}
+
+/**
+ * Admin notice: another plugin loaded an adapter NEWER than our tested upper bound.
+ *
+ * A 0.6+ adapter may have changed the create_server() signature or response shape the plugin is
+ * built against, so it is disabled rather than risking a runtime break. Names the offending plugin
+ * when it can be resolved, and reports the loaded vs maximum-supported versions. All output escaped.
+ *
+ * @return void
+ */
+function aafm_notice_adapter_too_new(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'agent-abilities-for-mcp' );
+	$plugin = aafm_resolve_adapter_owner_plugin();
+
+	echo '<div class="notice notice-warning"><p>';
+	if ( '' !== $plugin ) {
+		printf(
+			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive). */
+			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html( $plugin ),
+			esc_html( $loaded ),
+			esc_html( AAFM_MAX_ADAPTER_VERSION )
+		);
+	} else {
+		printf(
+			/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
+			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html( $loaded ),
+			esc_html( AAFM_MAX_ADAPTER_VERSION )
 		);
 	}
 	echo '</p></div>';

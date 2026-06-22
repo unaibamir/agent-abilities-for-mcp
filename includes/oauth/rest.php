@@ -41,13 +41,27 @@ if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
 }
 
 /**
- * PKCE code-verifier length bounds (RFC 7636 §4.1): 43 to 128 characters.
+ * PKCE code-verifier length bounds (RFC 7636 §4.1): the spec fixes the verifier at 43-128
+ * characters, so anything outside that range cannot be a valid verifier and is rejected up front.
  */
 if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MIN' ) ) {
 	define( 'AAFM_OAUTH_PKCE_VERIFIER_MIN', 43 );
 }
 if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MAX' ) ) {
 	define( 'AAFM_OAUTH_PKCE_VERIFIER_MAX', 128 );
+}
+
+/**
+ * Soft cap on the number of ACTIVE registered OAuth clients.
+ *
+ * Dynamic Client Registration is a public route, so without a ceiling a caller could fill the
+ * clients table with registrations. The daily reaper (aafm_oauth_reap_abandoned_clients())
+ * removes never-consented, token-less rows past their TTL, and this cap bounds the live total in
+ * between reaps. The default is generous for real fleets (a site rarely connects hundreds of
+ * distinct clients) while still refusing runaway growth. Filterable via aafm_oauth_max_clients.
+ */
+if ( ! defined( 'AAFM_OAUTH_MAX_ACTIVE_CLIENTS' ) ) {
+	define( 'AAFM_OAUTH_MAX_ACTIVE_CLIENTS', 500 );
 }
 
 /**
@@ -233,6 +247,20 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 			'rate_limited',
 			__( 'Too many registration requests. Try again shortly.', 'agent-abilities-for-mcp' ),
 			429
+		);
+	}
+
+	/**
+	 * Soft cap on active clients. Filterable so a large fleet can lift it deliberately.
+	 *
+	 * @param int $max Maximum active clients. Default AAFM_OAUTH_MAX_ACTIVE_CLIENTS.
+	 */
+	$max_clients = (int) apply_filters( 'aafm_oauth_max_clients', AAFM_OAUTH_MAX_ACTIVE_CLIENTS );
+	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
+		return aafm_oauth_rest_error(
+			'temporarily_unavailable',
+			__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
+			503
 		);
 	}
 

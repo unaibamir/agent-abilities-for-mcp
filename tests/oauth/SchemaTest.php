@@ -166,13 +166,15 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
-	 * Install records the current schema version (v4 adds the access-tokens client_id index).
+	 * Install records the current schema version. Asserted against the constant so a deliberate
+	 * bump (v5 adds the GC / revoke-scan and reaper index coverage) does not require editing a
+	 * literal here, only confirming the stored option tracks the constant.
 	 */
 	public function test_install_records_schema_version(): void {
 		aafm_install_oauth_tables();
 
-		$this->assertSame( '4', get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '4', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertSame( '5', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**

@@ -391,6 +391,11 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	// Collect every id in the lineage first, then deactivate in one pass.
 	$ids = array( $seed_id );
 
+	// Track whether either walk hit the hop cap. A cap hit means the lineage was longer than
+	// AAFM_OAUTH_CHAIN_MAX_HOPS and the tail was NOT revoked — surface that rather than silently
+	// truncating the revocation, so an operator can investigate (and the cap can be raised).
+	$cap_hit = false;
+
 	// Walk UP: follow refresh_parent_id toward the root.
 	$cursor = $seed_id;
 	for ( $hop = 0; $hop < AAFM_OAUTH_CHAIN_MAX_HOPS; $hop++ ) {
@@ -410,6 +415,11 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 
 		$ids[]  = $parent_id;
 		$cursor = $parent_id;
+
+		// Reached the last allowed hop with the chain still extending upward.
+		if ( AAFM_OAUTH_CHAIN_MAX_HOPS - 1 === $hop ) {
+			$cap_hit = true;
+		}
 	}
 
 	// Walk DOWN: each id may have one child whose refresh_parent_id points to it.
@@ -436,6 +446,19 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 				$queue[] = $child_id;
 			}
 		}
+	}
+
+	// The DOWN walk stopped with descendants still queued: the cap truncated the traversal.
+	if ( ! empty( $queue ) ) {
+		$cap_hit = true;
+	}
+
+	// A cap hit means we revoked only the first AAFM_OAUTH_CHAIN_MAX_HOPS rows of a longer lineage;
+	// the remainder stays active. Fire an action so the truncation is never silent: an operator can
+	// hook it to log, alert, or schedule a follow-up sweep, or raise the cap. The seed id and the
+	// number of rows revoked are passed so the handler can investigate the pathological chain.
+	if ( $cap_hit ) {
+		do_action( 'aafm_oauth_chain_revocation_capped', $seed_id, count( $ids ) );
 	}
 
 	// Deactivate the whole lineage in a single bounded UPDATE.

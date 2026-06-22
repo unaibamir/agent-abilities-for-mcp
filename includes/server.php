@@ -415,6 +415,40 @@ function aafm_transport_permission_callback( $request ) {
 }
 
 /**
+ * Drop the unimplemented `resources` and `prompts` capabilities from the initialize response.
+ *
+ * The adapter advertises prompts/resources/tools capabilities by default, but this plugin only
+ * implements tools — every ability is a tool, and there is no resource or prompt provider. A
+ * truthful capability set keeps a client from issuing resources/list or prompts/list calls that
+ * could only error. Rebuilds the DTO from its array form with the two unimplemented keys removed,
+ * leaving `tools` intact. Defensive: any non-DTO/non-array shape is returned untouched.
+ *
+ * @param mixed $result The InitializeResult DTO from the adapter.
+ * @param mixed $server  The MCP server instance (unused).
+ * @return mixed The (possibly rebuilt) initialize result.
+ */
+function aafm_filter_initialize_capabilities( $result, $server = null ) {
+	unset( $server );
+
+	if ( ! is_object( $result ) || ! method_exists( $result, 'toArray' ) ) {
+		return $result;
+	}
+
+	$data = $result->toArray();
+	if ( ! is_array( $data ) || ! isset( $data['capabilities'] ) || ! is_array( $data['capabilities'] ) ) {
+		return $result;
+	}
+
+	unset( $data['capabilities']['resources'], $data['capabilities']['prompts'] );
+
+	if ( ! class_exists( \WP\McpSchema\Common\Protocol\DTO\InitializeResult::class ) ) {
+		return $result;
+	}
+
+	return \WP\McpSchema\Common\Protocol\DTO\InitializeResult::fromArray( $data );
+}
+
+/**
  * Register the single governed MCP server inside mcp_adapter_init.
  *
  * Phase 0.5.1 confirmed the 13-argument create_server() signature and corrected the
@@ -437,10 +471,13 @@ function aafm_register_mcp_server( $adapter ): void {
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
 	add_filter( 'mcp_adapter_tools_list', 'aafm_filter_mcp_tools_list', 5, 2 );
 
+	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
+	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
+
 	$adapter->create_server(
 		'aafm-server',
-		'agent-abilities-for-mcp',
-		'mcp',
+		AAFM_MCP_NAMESPACE,
+		AAFM_MCP_ROUTE_SEGMENT,
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
 		__( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' ),
 		AAFM_VERSION,

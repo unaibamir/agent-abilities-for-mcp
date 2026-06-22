@@ -23,6 +23,11 @@ defined( 'ABSPATH' ) || exit;
  * and treating every falsy stored form as off closes that gap: the option is on
  * only when it was never set or holds a genuinely truthy value.
  *
+ * This is the ONE fail-closed reader for every OAuth on/off toggle. Both
+ * aafm_oauth_enabled() and aafm_oauth_dcr_enabled() route through it; there is no raw
+ * get_option() boolean read of those toggles anywhere (verified), so a toggle stored in any
+ * falsy form ('0', '', 'false', 'no', 'off', false, 0) reads as off rather than failing open.
+ *
  * @param string $key The toggle option name.
  * @return bool True when the toggle is enabled, false when explicitly disabled.
  */
@@ -65,8 +70,14 @@ function aafm_oauth_dcr_enabled(): bool {
  * @return void
  */
 function aafm_oauth_seed_default_options(): void {
-	add_option( 'aafm_oauth_enabled', '1' );
-	add_option( 'aafm_oauth_dcr_enabled', '1' );
+	// Both toggles are read on EVERY request that could touch the OAuth surface:
+	// aafm_oauth_enabled() gates the CORS filters at bootstrap and the .well-known handler on
+	// parse_request, and aafm_oauth_request_targets_mcp_route() consults it on
+	// determine_current_user. They must stay autoloaded ('yes', the add_option default) so those
+	// hot-path reads never trigger a separate query — switching them to autoload 'no' would be a
+	// per-request regression, not an improvement.
+	add_option( 'aafm_oauth_enabled', '1', '', true );
+	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
 }
 
 /**
@@ -159,8 +170,8 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
-	// The MCP route the adapter registers: namespace agent-abilities-for-mcp, route mcp.
-	if ( '/agent-abilities-for-mcp/mcp' !== $route ) {
+	// The MCP route the adapter registers (single-sourced in bootstrap.php).
+	if ( aafm_mcp_rest_route() !== $route ) {
 		return $response;
 	}
 
@@ -270,7 +281,7 @@ function aafm_oauth_maybe_serve_well_known(): void {
 		: aafm_oauth_authorization_server_metadata();
 
 	header( 'Cache-Control: no-store' );
-	header( 'Content-Type: application/json' );
+	header( 'Content-Type: application/json; charset=utf-8' );
 	status_header( 200 );
 	echo wp_json_encode( $metadata );
 	exit;

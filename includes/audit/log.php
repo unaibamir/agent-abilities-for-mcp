@@ -9,6 +9,29 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
+if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
+	// v2 adds composite (status, created_at) and (ability, created_at) indexes so the filtered
+	// admin query (WHERE status/ability = ? ORDER BY created_at DESC) is index-backed instead of
+	// filesorting. Bumping this makes aafm_maybe_upgrade_activity_log() re-run dbDelta so existing
+	// installs pick the change up. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '2' );
+}
+
+/**
+ * The single source of truth for the activity-log status values.
+ *
+ * 'started' is written only as the initial pending state of an in-flight call; the resolve path
+ * (aafm_update_activity_status()) narrows a row to the terminal set. The $include_started flag
+ * lets the update path reuse this list minus 'started'.
+ *
+ * @param bool $include_started Whether to include the pending 'started' status.
+ * @return string[] The allowed status values.
+ */
+function aafm_activity_statuses( bool $include_started = true ): array {
+	$terminal = array( 'success', 'error', 'denied' );
+	return $include_started ? array_merge( array( 'started' ), $terminal ) : $terminal;
+}
+
 /**
  * The activity log table name for the current blog.
  *
@@ -20,7 +43,9 @@ function aafm_activity_log_table(): string {
 }
 
 /**
- * Create (or upgrade) the activity log table.
+ * Create (or upgrade) the activity log table, then record the schema version.
+ *
+ * Idempotent: dbDelta() only applies the diff. Mirrors aafm_install_oauth_tables().
  *
  * @return void
  */
@@ -42,12 +67,36 @@ function aafm_install_activity_log(): void {
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
-		KEY ability (ability),
-		KEY status (status)
+		KEY status_created (status, created_at),
+		KEY ability_created (ability, created_at)
 	) {$charset_collate};";
 
 	dbDelta( $sql );
+
+	update_option( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
 }
+
+/**
+ * Run the activity-log installer when the stored schema version is behind the current one.
+ *
+ * Cheap early return when the option already matches, so this is safe to hook on every admin
+ * request. dbDelta() is safe to re-run. Mirrors aafm_maybe_upgrade_oauth_tables().
+ *
+ * @return void
+ */
+function aafm_maybe_upgrade_activity_log(): void {
+	if ( get_option( 'aafm_activity_log_schema_version' ) === AAFM_ACTIVITY_LOG_SCHEMA_VERSION ) {
+		return;
+	}
+
+	aafm_install_activity_log();
+}
+
+// Keep the activity-log schema current on real upgrades. admin_init only fires on admin
+// requests, and the guard above early-returns once the version matches, so this is cheap.
+// Registered here at include time (this file is required at plugin load) to mirror the OAuth
+// upgrade wiring without touching the main plugin bootstrap.
+add_action( 'admin_init', 'aafm_maybe_upgrade_activity_log' );
 
 /**
  * Resolve the request source IP from REMOTE_ADDR only (never a spoofable header).
@@ -77,7 +126,7 @@ function aafm_source_ip(): string {
 function aafm_log_activity( array $record ): int {
 	global $wpdb;
 
-	$status   = in_array( $record['status'] ?? '', array( 'started', 'success', 'error', 'denied' ), true ) ? $record['status'] : 'error';
+	$status   = in_array( $record['status'] ?? '', aafm_activity_statuses(), true ) ? $record['status'] : 'error';
 	$arg_keys = isset( $record['arg_keys'] ) && is_array( $record['arg_keys'] )
 		? implode( ',', array_map( 'sanitize_key', $record['arg_keys'] ) )
 		: '';
@@ -147,7 +196,7 @@ function aafm_update_activity_status( int $row_id, string $status ): void {
 	if ( $row_id <= 0 ) {
 		return;
 	}
-	$status = in_array( $status, array( 'success', 'error', 'denied' ), true ) ? $status : 'error';
+	$status = in_array( $status, aafm_activity_statuses( false ), true ) ? $status : 'error';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->update( aafm_activity_log_table(), array( 'status' => $status ), array( 'id' => $row_id ), array( '%s' ), array( '%d' ) );
 }

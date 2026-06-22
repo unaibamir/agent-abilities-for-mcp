@@ -15,9 +15,14 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// to VARCHAR(2048) so a long endpoint URL is not truncated, which would break the
 	// later audience check. v4 adds a client_id index on the access-tokens table so the
 	// admin client listing and the revoke-by-client queries do not scan the whole table.
-	// Bumping the version makes aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing
-	// installs pick the change up.
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '4' );
+	// v5 adds index coverage for the GC and revoke scans: a composite (is_active,
+	// refresh_expires_at) on access-tokens for the daily token GC; a (wp_user_id,
+	// client_id) on access-tokens for the revoke-by-grant scan; an expires_at index plus
+	// a client_id and (wp_user_id, client_id) index on codes for the code GC and the
+	// revoke-by-client/grant code deletes; and a created_at index on clients for the
+	// abandoned-client reaper. Bumping the version makes aafm_maybe_upgrade_oauth_tables()
+	// re-run dbDelta so existing installs pick the change up (additive — indexes only).
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '5' );
 }
 
 /**
@@ -60,7 +65,8 @@ function aafm_install_oauth_tables(): void {
 		created_by_ip VARCHAR(45) NOT NULL DEFAULT '',
 		is_active TINYINT(1) NOT NULL DEFAULT 1,
 		PRIMARY KEY  (id),
-		UNIQUE KEY client_id (client_id)
+		UNIQUE KEY client_id (client_id),
+		KEY created_at (created_at)
 	) {$charset_collate};";
 
 	$codes = "CREATE TABLE {$prefix}aafm_oauth_codes (
@@ -74,7 +80,10 @@ function aafm_install_oauth_tables(): void {
 		expires_at DATETIME NULL,
 		used_at DATETIME NULL,
 		PRIMARY KEY  (id),
-		UNIQUE KEY code_hash (code_hash)
+		UNIQUE KEY code_hash (code_hash),
+		KEY expires_at (expires_at),
+		KEY client_id (client_id),
+		KEY user_client (wp_user_id, client_id)
 	) {$charset_collate};";
 
 	$access_tokens = "CREATE TABLE {$prefix}aafm_oauth_access_tokens (
@@ -93,7 +102,9 @@ function aafm_install_oauth_tables(): void {
 		UNIQUE KEY token_hash (token_hash),
 		UNIQUE KEY refresh_hash (refresh_hash),
 		KEY refresh_parent_id (refresh_parent_id),
-		KEY client_id (client_id)
+		KEY client_id (client_id),
+		KEY gc (is_active, refresh_expires_at),
+		KEY user_client (wp_user_id, client_id)
 	) {$charset_collate};";
 
 	$consents = "CREATE TABLE {$prefix}aafm_oauth_consents (
@@ -207,6 +218,80 @@ function aafm_oauth_cleanup(): void {
 			$token_cutoff
 		)
 	);
+
+	// Third pass: reap abandoned Dynamic Client Registration rows so the public DCR
+	// endpoint cannot grow the clients table without bound.
+	aafm_oauth_reap_abandoned_clients();
+}
+
+/**
+ * Delete Dynamic-Client-Registration rows that were never used and are past a TTL.
+ *
+ * The DCR endpoint is public (the OAuth grant is the auth), so a client row is created before
+ * any human approves it. A client that registered but no one ever consented to — and that holds
+ * no token rows of any state — is dead weight. This removes such rows once they are older than
+ * the TTL (default 7 days), keeping a generous window for a legitimate register-then-approve
+ * flow that spans a session. A client with at least one consent OR any token row is kept, so a
+ * live or revoked-but-historical client is never reaped. Deletes the matching codes too.
+ *
+ * The TTL is filterable via `aafm_oauth_client_reap_ttl` (seconds). All three tables are
+ * internal constants; the cutoff is bound.
+ *
+ * @return int Number of client rows reaped.
+ */
+function aafm_oauth_reap_abandoned_clients(): int {
+	global $wpdb;
+
+	/**
+	 * TTL (seconds) before a never-consented, token-less DCR client row is reaped.
+	 *
+	 * @param int $ttl TTL in seconds. Default 7 days.
+	 */
+	$ttl    = (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS );
+	$cutoff = gmdate( 'Y-m-d H:i:s', time() - max( 0, $ttl ) );
+
+	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );
+	$tokens_table   = esc_sql( $wpdb->prefix . 'aafm_oauth_access_tokens' );
+	$codes_table    = esc_sql( $wpdb->prefix . 'aafm_oauth_codes' );
+
+	// Find abandoned client_ids: older than the cutoff, with no consent row and no token row.
+	// All table names are internal constants; the cutoff is bound.
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$abandoned = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT cl.client_id FROM {$clients_table} cl
+			 WHERE cl.created_at < %s
+			   AND NOT EXISTS ( SELECT 1 FROM {$consents_table} co WHERE co.client_id = cl.client_id )
+			   AND NOT EXISTS ( SELECT 1 FROM {$tokens_table} t WHERE t.client_id = cl.client_id )",
+			$cutoff
+		)
+	);
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+	if ( empty( $abandoned ) || ! is_array( $abandoned ) ) {
+		return 0;
+	}
+
+	$placeholders = implode( ', ', array_fill( 0, count( $abandoned ), '%s' ) );
+
+	// Remove the abandoned clients and any stray (unredeemed, now-expired) codes they minted.
+	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+	$wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM {$codes_table} WHERE client_id IN ( {$placeholders} )",
+			$abandoned
+		)
+	);
+	$deleted = (int) $wpdb->query(
+		$wpdb->prepare(
+			"DELETE FROM {$clients_table} WHERE client_id IN ( {$placeholders} )",
+			$abandoned
+		)
+	);
+	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+	return $deleted;
 }
 
 /**

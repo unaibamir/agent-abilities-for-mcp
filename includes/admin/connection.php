@@ -28,7 +28,9 @@ defined( 'ABSPATH' ) || exit;
  * @return string Full URL of the MCP REST endpoint.
  */
 function aafm_endpoint_url(): string {
-	$route = 'agent-abilities-for-mcp/mcp';
+	// Single-sourced in bootstrap.php; byte-identical to the namespace/route create_server()
+	// registers, which the OAuth audience binding (hash_equals) depends on.
+	$route = aafm_mcp_rest_namespace_route();
 
 	if ( isset( $GLOBALS['wp_rewrite'] ) && $GLOBALS['wp_rewrite'] instanceof \WP_Rewrite ) {
 		return rest_url( $route );
@@ -117,7 +119,7 @@ function aafm_diagnostic_checks(): array {
 
 	// 2. The MCP REST route is registered.
 	$routes    = rest_get_server()->get_routes();
-	$has_route = (bool) preg_grep( '#^/agent-abilities-for-mcp/mcp#', array_keys( $routes ) );
+	$has_route = (bool) preg_grep( '#^' . preg_quote( aafm_mcp_rest_route(), '#' ) . '#', array_keys( $routes ) );
 	$checks[]  = array(
 		'id'     => 'endpoint',
 		'label'  => __( 'MCP REST endpoint registered', 'agent-abilities-for-mcp' ),
@@ -770,8 +772,11 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
 
 		echo '<div class="aafm-connect-os">';
-		echo '<div class="aafm-stat-label">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
-		echo '<div class="aafm-seg aafm-os-tabs" role="tablist">';
+		echo '<div class="aafm-stat-label" id="aafm-os-label-oauth">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+		// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
+		// many panels), so they carry no aria-controls (optional in the WAI-ARIA tabs pattern);
+		// the tablist is given an accessible name via aria-labelledby instead.
+		echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-oauth">';
 		printf(
 			'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
 			esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
@@ -946,9 +951,10 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-card-pad aafm-connect-controls">';
 
 	echo '<div class="aafm-connect-os">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-stat-label" id="aafm-os-label-bridge">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
 	// The .aafm-seg buttons double as the OS tabs admin.js binds (aafm-os-tab + data-os).
-	echo '<div class="aafm-seg aafm-os-tabs" role="tablist">';
+	// One tablist filters many snippet panels, so no aria-controls; named via aria-labelledby.
+	echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-bridge">';
 	printf(
 		'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
 		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
@@ -982,8 +988,10 @@ function aafm_render_connection_tab(): void {
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
 	echo '<div class="aafm-card-pad">';
 
-	$unix_snippet    = aafm_client_snippet( 'claude', 'mcp-agent', 'unix' );
-	$windows_snippet = aafm_client_snippet( 'claude', 'mcp-agent', 'windows' );
+	// Use the first real client slug from the grid (claude-desktop), not a non-existent 'claude'
+	// that only happened to fall through to the default root key.
+	$unix_snippet    = aafm_client_snippet( 'claude-desktop', 'mcp-agent', 'unix' );
+	$windows_snippet = aafm_client_snippet( 'claude-desktop', 'mcp-agent', 'windows' );
 
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
 	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );

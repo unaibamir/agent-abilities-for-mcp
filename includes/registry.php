@@ -2,6 +2,21 @@
 /**
  * Static ability registry — the single source of truth for the UI and the MCP server.
  *
+ * EXTENSION POINTS (the single discoverability anchor for third-party developers):
+ *
+ * - `aafm_abilities_registry` (filter): add a row to the live, host-gated catalog. Each row is
+ *   keyed by ability name (e.g. 'aafm/get-posts') and carries the UI/registration metadata plus
+ *   an 'args' builder. Rows added here register as real abilities and appear in the admin UI.
+ *   Applied in aafm_get_abilities_registry().
+ *
+ * - `aafm_abilities_registry_integrations` (filter): add integration rows UNCONDITIONALLY (no
+ *   host-active guard) so the Integrations tab and the manifest can enumerate an integration even
+ *   when its host plugin is inactive. These rows feed the full catalog view only, never the
+ *   registration walk. Applied in aafm_get_abilities_registry_full().
+ *
+ * Both filters receive an array keyed by ability name and must return the same shape. Domain and
+ * integration files in includes/abilities/ are the in-tree examples of registering against them.
+ *
  * @package AgentAbilitiesForMCP
  */
 

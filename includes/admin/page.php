@@ -120,8 +120,17 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 	if ( 'toplevel_page_agent-abilities-for-mcp' !== $hook ) {
 		return;
 	}
-	wp_enqueue_style( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.css', array(), AAFM_VERSION );
-	wp_enqueue_script( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.js', array(), AAFM_VERSION, true );
+	// Use filemtime() as the cache-buster so ?ver= changes whenever the file changes,
+	// defeating both the browser cache and any CDN/Cloudflare edge cache. A fixed
+	// AAFM_VERSION string never changes between plugin updates (we stay on 1.0.0), so
+	// old asset bytes stay cached across redeploys without this. Fall back to AAFM_VERSION
+	// when filemtime() returns false (opcache edge or path anomaly).
+	$css_path = AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.css';
+	$js_path  = AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js';
+	$css_ver  = filemtime( $css_path );
+	$js_ver   = filemtime( $js_path );
+	wp_enqueue_style( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.css', array(), (string) ( false !== $css_ver ? $css_ver : AAFM_VERSION ) );
+	wp_enqueue_script( 'aafm-admin', AAFM_PLUGIN_URL . 'includes/admin/assets/admin.js', array(), (string) ( false !== $js_ver ? $js_ver : AAFM_VERSION ), true );
 	wp_localize_script(
 		'aafm-admin',
 		'aafmAdmin',

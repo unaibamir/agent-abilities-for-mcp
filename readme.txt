@@ -1,4 +1,4 @@
-=== Agent Abilities for MCP – Secure WordPress MCP Server for Claude & AI Agents ===
+=== Agent Abilities for MCP – Secure MCP Server for Claude & AI Agents ===
 Contributors: unaibamir
 Tags: mcp, mcp-server, ai-agent, claude, woocommerce
 Requires at least: 6.9

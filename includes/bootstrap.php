@@ -56,11 +56,20 @@ function aafm_mcp_rest_route(): string {
  * Upper bound (exclusive) for a compatible MCP adapter version.
  *
  * The plugin is built against the adapter's 0.5.x contract (create_server() signature,
- * initialize-response shape, tools-list filter). A foreign plugin can ship a NEWER adapter
- * whose copy wins the Jetpack Autoloader; without an upper bound a 0.6+ adapter with a
- * changed API would pass a bare ">= floor" check and then break at runtime. Gate to the
- * tested range [floor, next-minor) and warn the operator otherwise. Bump deliberately after
- * verifying against a new adapter line.
+ * initialize-response shape, tools-list filter), so it gates the loaded copy to the tested
+ * range [floor, next-minor) and warns the operator otherwise.
+ *
+ * After the eager-load fix (see adapter-loader.php), our bundled copy is the one in use
+ * whenever we load before the conflicting sibling — and because we sort alphabetically first
+ * as "agent-abilities-for-mcp", that is the normal case. We deliberately OVERRIDE any
+ * later-loading sibling's copy of ANY version (older or newer); the trade is that a sibling
+ * bundling a newer adapter is forced onto our version, which is acceptable because the
+ * adapter's public API is additive and stable across the versions we support.
+ *
+ * Consequently this floor/upper-bound check and the "too old" / "too new" notices below now
+ * only fire in the residual case: an incompatible copy is declared by a plugin that loads
+ * BEFORE us (an alphabetically-earlier folder), so its copy wins the class declaration before
+ * our eager load runs. Bump the bound deliberately after verifying against a new adapter line.
  */
 if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
 	define( 'AAFM_MAX_ADAPTER_VERSION', '0.6.0' );

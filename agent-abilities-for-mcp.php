@@ -28,6 +28,23 @@ define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AAFM_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 
+// Win the WP\MCP\ class-declaration race. The wordpress/mcp-adapter library is bundled by many
+// plugins under the same WP\MCP\ namespace, but PHP can load only one McpAdapter per request:
+// whichever copy is declared first wins site-wide. A sibling shipping an older copy via a plain
+// Composer autoloader (confirmed: Rank Math SEO 0.4.1) can win that race and trip our floor check,
+// killing our /mcp route. We MUST run our own 0.5.0 (0.4.1 lacks the per-connection capability
+// gate). A prepended autoloader alone is not enough — later plugins' Composer autoloaders also
+// prepend and leapfrog ours — so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
+// bundle now, during the plugin-include phase. Because plugin folders load alphabetically and we
+// sort first as "agent-abilities-for-mcp", this runs before any conflicting sibling's file, so PHP
+// commits to our copy and later siblings transparently use it. The prepended autoloader (still
+// registered first) resolves interface/trait dependencies during the eager load and covers
+// no-conflict installs. The floor/notice logic in includes/bootstrap.php stays as the fallback for
+// a sibling that sorts before us and declares an incompatible copy first.
+require_once AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
+aafm_register_adapter_autoloader();
+aafm_eager_load_adapter();
+
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );

@@ -1,34 +1,35 @@
 name: Release
 
-# Publishes a tagged release to the WordPress.org plugin SVN repository and
-# attaches a production build to the GitHub Release.
+# Step 2 of the release flow. Fires when a "Release X.Y.Z" commit lands on main
+# (i.e. when the PR opened by .github/workflows/release-prepare.yml is merged).
+# It tags the version, builds a versioned production zip, creates the GitHub
+# Release with the changelog as notes, and deploys to the wordpress.org SVN repo.
 #
-# DORMANT until the plugin is approved on wordpress.org AND these repository
+# DORMANT for SVN until the plugin is approved on wordpress.org AND these repo
 # secrets are set:
 #   - SVN_USERNAME : your wordpress.org account username
 #   - SVN_PASSWORD : your wordpress.org account password
-# Until SVN_PASSWORD exists the wp.org deploy step is skipped, so cutting a
-# GitHub Release before approval still succeeds (it just builds the zip).
-#
-# Before going live, repin the 10up actions below from @stable to a commit SHA.
+# Until SVN_PASSWORD exists the wp.org deploy step is skipped, so the tag, zip,
+# and GitHub Release still happen. Before going live, repin the 10up action
+# below from @stable to a commit SHA.
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 permissions: {}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-publish
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish
+  publish:
+    name: Tag, build, and publish
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
-      contents: write # Upload the build asset to the GitHub Release.
+      contents: write   # push the tag and create the GitHub Release
     env:
       SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
       SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
@@ -36,42 +37,89 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          persist-credentials: false
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Resolve version and changelog
+        id: rel
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Publish only when this is a fresh, prepared release: no tag yet AND the
+          # changelog block for this version is already in readme.txt. This fires
+          # after the Release PR merges, regardless of the merge strategy, and never
+          # on a bare version bump (no changelog block yet) or a normal commit.
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "Tag $VERSION already exists; nothing to publish."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if ! grep -qF "= $VERSION =" readme.txt; then
+            echo "No changelog block for $VERSION in readme.txt yet; not a prepared release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          # Extract this version's block from the readme changelog for the release notes.
+          awk -v ver="= $VERSION =" '
+            $0=="== Changelog ==" {inlog=1; next}
+            inlog && /^== / {exit}
+            inlog && $0==ver {cap=1; next}
+            cap && /^= [0-9]/ {exit}
+            cap {print}
+          ' readme.txt | sed '/./,$!d' > release-notes.md
+          echo "Release notes:"; cat release-notes.md
+
+      - name: Create and push tag
+        if: steps.rel.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.rel.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin "$VERSION"
 
       - name: Set up PHP
+        if: steps.rel.outputs.skip != 'true'
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.3'
           coverage: none
           tools: composer:v2
 
-      # Production-only vendor tree — exactly what ships.
       - name: Install Composer dependencies (production)
+        if: steps.rel.outputs.skip != 'true'
         uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
         with:
           composer-options: '--no-dev --optimize-autoloader'
 
+      - name: Build versioned zip
+        if: steps.rel.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          mkdir -p build
+          # git archive honors .gitattributes export-ignore, so dev files stay out.
+          git archive --format=zip --prefix=agent-abilities-for-mcp/ \
+            "${{ steps.rel.outputs.version }}" \
+            -o "build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip"
+
       - name: Deploy to WordPress.org
-        id: deploy
-        if: ${{ env.SVN_PASSWORD != '' }}
+        if: ${{ steps.rel.outputs.skip != 'true' && env.SVN_PASSWORD != '' }}
         uses: 10up/action-wordpress-plugin-deploy@stable
         env:
           SLUG: agent-abilities-for-mcp
+          VERSION: ${{ steps.rel.outputs.version }}
         with:
-          generate-zip: true
+          generate-zip: false
 
-      - name: Build zip (when wp.org deploy is skipped)
-        if: ${{ env.SVN_PASSWORD == '' }}
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          mkdir -p build
-          # Honors .gitattributes export-ignore so dev files stay out of the zip.
-          git archive --format=zip --prefix=agent-abilities-for-mcp/ HEAD -o build/agent-abilities-for-mcp.zip
-
-      - name: Attach build to the GitHub Release
+      - name: Create the GitHub Release
+        if: steps.rel.outputs.skip != 'true'
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
-          files: |
-            ${{ steps.deploy.outputs.zip-path || 'build/agent-abilities-for-mcp.zip' }}
+          tag_name: ${{ steps.rel.outputs.version }}
+          name: ${{ steps.rel.outputs.version }}
+          body_path: release-notes.md
+          files: build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

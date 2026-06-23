@@ -1,0 +1,80 @@
+name: Prepare Release
+
+# Step 1 of the release flow. Click "Run workflow" (from the Actions tab, the
+# GitHub mobile app, or `gh workflow run`) to open a Release PR that:
+#   - syncs the readme `Stable tag` to the plugin header version, and
+#   - generates the changelog from git history into readme.txt + README.md
+#     (plus an Upgrade Notice stub).
+# Review and edit the changelog in that PR, then merge it. Merging lands a
+# "Release X.Y.Z" commit on main, which triggers .github/workflows/release.yml
+# (step 2: tag, versioned zip, GitHub Release, and — once SVN secrets exist —
+# the wordpress.org deploy).
+#
+# The plugin header `Version:` is the single source of truth. Bump it (and the
+# matching AAFM_VERSION constant) and merge that change BEFORE running this.
+
+on:
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Open release PR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write        # push the release/* branch
+      pull-requests: write   # open the PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0     # full history + tags for the changelog range
+          persist-credentials: true
+
+      - name: Sync version and generate the changelog
+        run: python3 .github/scripts/prepare_release.py
+
+      - name: Open the release PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          if [ -z "$VERSION" ]; then echo "could not read version"; exit 1; fi
+          BRANCH="release/$VERSION"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Branch $BRANCH already exists on origin. Delete it or bump the version first."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add readme.txt README.md
+          git commit -m "Release $VERSION"
+          git push -u origin "$BRANCH"
+
+          {
+            echo "Automated release prep for **v$VERSION**."
+            echo
+            echo "- readme \`Stable tag\` synced to $VERSION"
+            echo "- changelog generated into readme.txt + README.md + Upgrade Notice"
+            echo
+            echo "Review and edit the changelog below if needed, then **merge to publish**."
+            echo "Merging tags \`$VERSION\`, builds the versioned zip, creates the GitHub Release, and (once SVN secrets exist) deploys to wordpress.org."
+            echo
+            echo "### Generated changelog"
+            echo
+            cat .github/release-notes.md
+          } > /tmp/pr-body.md
+
+          gh pr create --base main --head "$BRANCH" \
+            --title "Release $VERSION" \
+            --body-file /tmp/pr-body.md

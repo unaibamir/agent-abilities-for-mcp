@@ -1,6 +1,6 @@
-=== Agent Abilities for MCP ===
+=== Agent Abilities for MCP – Secure WordPress MCP Server for Claude & AI Agents ===
 Contributors: unaibamir
-Tags: mcp, ai, claude, chatgpt, woocommerce-ai
+Tags: mcp, mcp-server, ai-agent, claude, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
@@ -8,17 +8,17 @@ Stable tag: 1.0.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-WordPress MCP server to connect Claude, ChatGPT and AI agents to your site with scoped, audited, least-privilege access. Off by default.
+Secure WordPress MCP server connecting Claude, Cursor and AI agents to your site as a scoped, least-privilege user. Off by default, fully audited.
 
 == Description ==
 
-Agent Abilities for MCP turns your site into a governed WordPress MCP server. It exposes a curated set of WordPress "abilities" (tools) to AI agents over the Model Context Protocol, so a client like Claude, Cursor, or VS Code can read and, when you allow it, write to your site as a real WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Agent Abilities for MCP is a WordPress plugin that turns your site into a secure, governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 This is the safe way to give an AI agent access to WordPress. Everything is off until you turn it on, the agent only ever acts as the scoped user you bind it to, and every call is logged and re-checked before it runs. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
-Most plugins in this space compete on how many tools they expose. This one competes on control. Nothing is on by default, the agent only ever acts as a WordPress user you pick, and you can read back every call it made. You add reach as you trust it, not all at once.
+Most plugins in this space compete on how many tools they expose. This WordPress MCP plugin competes on control. Nothing is on by default, the agent only ever acts as a WordPress user you pick, and you can read back every call it made. You add reach as you trust it, not all at once.
 
-= 🛡️ Why control beats tool count =
+= 🛡️ Least-privilege access: why control beats tool count =
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
 * **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
@@ -29,9 +29,9 @@ Most plugins in this space compete on how many tools they expose. This one compe
 * **No data leaves your site.** The plugin contacts no AI provider and no external service. This is the opposite of a bundled-AI plugin: your AI client connects in, the plugin never reaches out.
 * **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to store, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you.
 
-= 🤖 A WordPress MCP server, built on the standard =
+= 🤖 A secure WordPress MCP server, built on the standard =
 
-WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. There is no bespoke server to trust, and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log that make the Model Context Protocol on WordPress safe to run in production.
+WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. It builds on the official MCP Adapter library (wordpress/mcp-adapter), not the separate wordpress-mcp plugin or a custom server, so there is no bespoke server to trust and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log that make the Model Context Protocol on WordPress safe to run in production.
 
 = 📦 153 governed abilities =
 
@@ -53,7 +53,7 @@ Version 1.0.0 ships **153 governed abilities: 83 across WordPress core and 70 fr
 
 **Integrations (70 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
 
-* **🛒 WooCommerce (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
+* **🛒 WooCommerce MCP (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
 * **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data. Like WooCommerce, these can reach real personal data and sit behind the same clear notice.
 * **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
 * **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
@@ -61,7 +61,7 @@ Version 1.0.0 ships **153 governed abilities: 83 across WordPress core and 70 fr
 
 More integrations are planned.
 
-= 🔌 Works with your AI client =
+= 🔌 Connect Claude, Cursor and other MCP clients =
 
 Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI, some directly and some through the open-source `mcp-remote` bridge that runs on your own machine. With OAuth you paste the endpoint URL and approve once in the browser; with an Application Password you point a low-privilege user at the endpoint. Hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector that the underlying adapter does not serve natively yet.
 
@@ -80,9 +80,21 @@ Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code
 
 No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each ability also re-checks the user's capability before it runs, so a connection can never call a tool its user is not allowed to use.
 
+= Is it safe to connect an AI agent to my WordPress site? =
+
+Yes, when the connection is scoped, which is what this plugin is built around. The agent connects as a real, least-privilege WordPress user you choose, never an admin-equivalent key. Every ability is off until you enable it, each call re-checks the user's capability before it runs, and every call is logged, denied attempts included. Unlike setups that hand an agent admin-equivalent access, this plugin never holds it.
+
 = What can an agent actually do? =
 
 Only the abilities you have enabled, and only within the bound user's capabilities. The catalog is reads and guarded writes over posts, pages, terms, comments, media, post meta, and site structure, plus revision history and a search that spans every post type at once. There is no ability to change options arbitrarily, change roles, fetch a remote URL, or run code. An agent can only write post meta for keys an administrator has explicitly allowlisted, and protected, underscore-prefixed, and authentication keys can never be allowlisted. Deletes move content to Trash where the ability supports it, and the permanent ones are off by default and capability-gated.
+
+= How is this different from other WordPress MCP plugins? =
+
+Most expose a large set of tools by default and connect with an admin-equivalent key. Agent Abilities ships everything off, binds the agent to one WordPress user you pick, re-checks that user's capability on every call, and logs every call including denials. You add reach as you build trust, not all at once. It trades raw tool count for control you can audit.
+
+= Is it free? =
+
+Yes. Agent Abilities for MCP is free on WordPress.org, with no paid tier, no API key to buy, and no usage limits added by the plugin.
 
 = Does it work with my other plugins? =
 
@@ -92,9 +104,21 @@ Yes, for a set of supported plugins. When one is active, Agent Abilities adds ab
 
 It is built on both. WordPress 6.9 ships the Abilities API and the official MCP Adapter; Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. So there is no bespoke server to trust, and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log.
 
+= What's the difference between this and the WordPress REST API? =
+
+The REST API exposes raw endpoints. MCP describes your site's abilities as discoverable tools an AI agent can reason about and call, and this plugin wraps each one in a governance layer: off by default, capability-gated on every call, and logged. It is the same underlying WordPress, made safe for an agent to drive.
+
+= Which WordPress version do I need? =
+
+WordPress 6.9 or newer, which is where the Abilities API and the official MCP Adapter the plugin builds on are available. PHP 8.0 or newer is required.
+
 = Which AI clients work? =
 
 Any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL into the client and approve the connection once in the browser; clients like Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect this way, some directly and some through the mcp-remote bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth. The hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector, which the underlying adapter does not serve natively yet.
+
+= Does it work with ChatGPT? =
+
+Not the hosted ChatGPT app yet. It needs a streamable HTTP/SSE remote connector that the underlying MCP Adapter does not serve natively yet. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI all work today, some directly and some through the mcp-remote bridge that runs on your own machine.
 
 = I'm on Windows and the config won't start. =
 

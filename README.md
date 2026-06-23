@@ -1,11 +1,11 @@
 # Agent Abilities for MCP
 
-Give an AI agent scoped, audited access to your WordPress site over the Model Context Protocol. Least privilege by design, off by default.
+WordPress MCP server to connect Claude, ChatGPT and AI agents to your site with scoped, audited, least-privilege access. Off by default.
 
 | | |
 |---|---|
 | **Contributors** | unaibamir |
-| **Tags** | mcp, mcp-server, ai, claude, chatgpt |
+| **Tags** | mcp, ai, claude, chatgpt, woocommerce-ai |
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
@@ -14,24 +14,58 @@ Give an AI agent scoped, audited access to your WordPress site over the Model Co
 
 ## Description
 
-Give an AI agent access to your WordPress site without handing it the keys. Agent Abilities for MCP connects agents over the Model Context Protocol as a WordPress user you choose. Point it at a dedicated low-privilege account and it can only ever do what that account is allowed to do. Everything is off until you turn it on, and every action is logged. There is no admin-equivalent key and no custom transport to trust: it runs on the WordPress Abilities API and the official MCP Adapter.
+Agent Abilities for MCP turns your site into a governed WordPress MCP server. It exposes a curated set of WordPress "abilities" (tools) to AI agents over the Model Context Protocol, so a client like Claude, Cursor, or VS Code can read and, when you allow it, write to your site as a real WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Eighty-three core abilities cover reading and, when you allow it, writing posts, pages, terms, comments, media, post meta, and site structure, plus revision history and a search that spans every post type at once. You decide, per ability, what an agent can touch.
+This is the safe way to give an AI agent access to WordPress. Everything is off until you turn it on, the agent only ever acts as the scoped user you bind it to, and every call is logged and re-checked before it runs. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
-When you run a supported plugin, Agent Abilities adds abilities for it under the same rules: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers SEO (Yoast, Rank Math, and All in One SEO), Advanced Custom Fields, and WooCommerce, which brings the full catalog to 168 abilities. The WooCommerce and ACF abilities can read and write real customer and order data, including personal data, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
+Most plugins in this space compete on how many tools they expose. This one competes on control. Nothing is on by default, the agent only ever acts as a WordPress user you pick, and you can read back every call it made. You add reach as you trust it, not all at once.
 
-Most plugins in this space compete on how many tools they expose. This one competes on control: nothing is on by default, the agent only ever acts as a WordPress user you pick, and you can read back every call it made. You add reach as you trust it, not all at once.
+### 🛡️ Why control beats tool count
 
-### Highlights
-
-* **Least privilege by design.** The agent connects as a real, scoped WordPress user through OAuth or Application Passwords, not an admin-equivalent key.
+* **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
 * **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
-* **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks the user's capability before it runs.
-* **Honest audit log.** Every call is recorded, including denied attempts, with the principal and the argument keys (never the values).
-* **Safe by construction.** No arbitrary option or meta access, no remote URL fetch, and no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list. When an agent creates a user it gets the site's default role, never admin, and it can never remove the last administrator. Anything destructive is off by default and capability-gated.
+* **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs.
+* **Honest audit log.** Every call is recorded, denied attempts included, with the principal and the argument keys (never the values). It lives in your own database and clears from the admin.
+* **Safe by construction.** No arbitrary option or meta access, no remote URL fetch, no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list, never fetched from a URL. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
-* **Works with your stack.** Optional, auto-detected integrations for Yoast, Rank Math, All in One SEO, Advanced Custom Fields, and WooCommerce. Each appears only while its plugin is active and stays off until you enable it.
-* **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to copy or store, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you.
+* **No data leaves your site.** The plugin contacts no AI provider and no external service. This is the opposite of a bundled-AI plugin: your AI client connects in, the plugin never reaches out.
+* **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to store, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you.
+
+### 🤖 A WordPress MCP server, built on the standard
+
+WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. There is no bespoke server to trust, and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log that make the Model Context Protocol on WordPress safe to run in production.
+
+### 📦 153 governed abilities
+
+Version 1.0.0 ships **153 governed abilities: 83 across WordPress core and 70 from auto-detected integrations.** Every one is off until you enable it, scoped to the bound user, capability-gated, and logged.
+
+**WordPress core (83 abilities).** Reads plus guarded writes across your whole site:
+
+* **📝 Posts & Pages:** list, read, create, update, and delete posts and pages, with destructive actions off by default and deletes routed to Trash.
+* **🏷️ Terms & Taxonomies:** manage categories, tags, and custom taxonomy terms.
+* **💬 Comments:** read and moderate the comment queue.
+* **🖼️ Media:** list and read the media library, and add images decoded from inline data and validated by their real bytes against an image allow-list (never fetched from a URL).
+* **🗂️ Post Meta:** read and write only the meta keys an administrator has explicitly allowlisted. Protected, underscore-prefixed, and authentication keys can never be allowlisted.
+* **👥 Users:** read and manage users within capability limits. A new user gets the site default role, never admin, and the last administrator can never be removed.
+* **🧭 Site structure:** work with menus and the structural pieces that hold the site together.
+* **🕓 Revision history:** read the revision trail for content.
+* **🧱 Blocks & Templates:** work with reusable blocks, themes, and templates.
+* **⚙️ Limited settings & site health:** a tightly scoped set of settings, plus read-only site health and plugin status.
+* **🔍 Site-wide search:** one search that spans every post type at once.
+
+**Integrations (70 abilities).** Detected automatically per active plugin, off until you turn them on, capability-gated, and logged. Each appears only while its host plugin is active:
+
+* **🛒 WooCommerce (52 abilities):** read and write products, orders, and customers so an AI agent can help run your store. These touch real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear admin notice and stay off until you switch them on.
+* **🧩 Advanced Custom Fields (7 abilities):** read and write ACF field data. Like WooCommerce, these can reach real personal data and sit behind the same clear notice.
+* **📈 Rank Math SEO (5 abilities):** read and manage Rank Math SEO data.
+* **📈 Yoast SEO (3 abilities):** read and manage Yoast SEO data.
+* **📈 All in One SEO (3 abilities):** read and manage AIOSEO data.
+
+More integrations are planned.
+
+### 🔌 Works with your AI client
+
+Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI, some directly and some through the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge that runs on your own machine. With OAuth you paste the endpoint URL and approve once in the browser; with an Application Password you point a low-privilege user at the endpoint. Hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector that the underlying adapter does not serve natively yet.
 
 ## Installation
 
@@ -54,7 +88,7 @@ Only the abilities you have enabled, and only within the bound user's capabiliti
 
 ### Does it work with my other plugins?
 
-Yes, for a set of supported plugins. When one is active, Agent Abilities adds abilities for it under the same rules as the core: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers SEO (Yoast, Rank Math, and All in One SEO), Advanced Custom Fields, and WooCommerce. The WooCommerce and ACF abilities can read and write real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
+Yes, for a set of supported plugins. When one is active, Agent Abilities adds abilities for it under the same rules as the core: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers WooCommerce, Advanced Custom Fields, and SEO (Yoast, Rank Math, and All in One SEO). The WooCommerce and ACF abilities can read and write real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
 
 ### Is this the same as the WordPress Abilities API, or the official MCP adapter?
 
@@ -102,4 +136,4 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 ### 1.0.0
 
-* Initial release. 168 governed abilities: 83 across WordPress core (reads and guarded writes for posts, pages, terms, comments, media, users, post meta, revisions, and site structure, plus a search that spans every post type), and the rest from auto-detected integrations for Yoast, Rank Math, All in One SEO, Advanced Custom Fields, and WooCommerce. Built on the WordPress Abilities API and the official MCP Adapter, with no custom transport. Connect over OAuth in the browser or with a least-privilege Application Password user. Everything off by default, two-layer capability gating, per-connection tool filtering, optional safety controls (rate limit, IP allowlist, force-draft, title-length cap), an audit log that records denials, and a guided connection screen with diagnostics.
+* Initial release. 153 governed abilities: 83 across WordPress core (reads and guarded writes for posts, pages, terms, comments, media, users, post meta, revisions, blocks, templates, and site structure, plus a search that spans every post type), and 70 from auto-detected integrations for WooCommerce, Advanced Custom Fields, Yoast, Rank Math, and All in One SEO. Built on the WordPress Abilities API and the official MCP Adapter, with no custom transport. Connect over OAuth in the browser or with a least-privilege Application Password user. Everything off by default, two-layer capability gating, per-connection tool filtering, optional safety controls (rate limit, IP allowlist, force-draft, title-length cap), an audit log that records denials, and a guided connection screen with diagnostics.

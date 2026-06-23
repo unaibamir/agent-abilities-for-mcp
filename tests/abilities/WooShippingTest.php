@@ -1,9 +1,9 @@
 <?php
 /**
  * WooCommerce shipping abilities: wc-list-shipping-zones, wc-get-shipping-zone,
- * wc-create-shipping-zone, wc-update-shipping-zone, wc-delete-shipping-zone,
+ * wc-create-shipping-zone, wc-update-shipping-zone,
  * wc-list-shipping-methods, wc-get-shipping-method, wc-create-shipping-method,
- * wc-update-shipping-method, wc-delete-shipping-method.
+ * wc-update-shipping-method.
  *
  * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcShippingStubStore. The seed_wc_shipping()
@@ -60,12 +60,10 @@ final class WooShippingTest extends TestCase {
 				'aafm/wc-get-shipping-zone',
 				'aafm/wc-create-shipping-zone',
 				'aafm/wc-update-shipping-zone',
-				'aafm/wc-delete-shipping-zone',
 				'aafm/wc-list-shipping-methods',
 				'aafm/wc-get-shipping-method',
 				'aafm/wc-create-shipping-method',
 				'aafm/wc-update-shipping-method',
-				'aafm/wc-delete-shipping-method',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -110,7 +108,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * Host-inactive: all 10 shipping abilities must be absent from the registry when WooCommerce is off.
+	 * Host-inactive: all 8 shipping abilities must be absent from the registry when WooCommerce is off.
 	 */
 	public function test_list_shipping_zones_host_inactive_absent_from_registry(): void {
 		$this->reset_integration_stubs();
@@ -124,12 +122,10 @@ final class WooShippingTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/wc-get-shipping-zone', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-shipping-zone', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-shipping-zone', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-shipping-zone', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-list-shipping-methods', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-get-shipping-method', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-shipping-method', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-shipping-method', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-shipping-method', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -264,71 +260,6 @@ final class WooShippingTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Save failure on update must not lie success.' );
 		WcShippingStubStore::$force_save_failure = false;
-	}
-
-	// =========================================================================
-	// aafm/wc-delete-shipping-zone
-	// =========================================================================
-
-	/**
-	 * Happy path: valid zone id is permanently removed and returns deleted:true.
-	 */
-	public function test_delete_shipping_zone_success(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-zone' )->execute(
-			array( 'zone_id' => 2 )
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-		$this->assertFalse( WcShippingStubStore::exists( 2 ) );
-	}
-
-	/**
-	 * Rest of World zone (id 0) cannot be deleted.
-	 */
-	public function test_delete_shipping_zone_rest_of_world_rejected(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-zone' )->execute(
-			array( 'zone_id' => 0 )
-		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Rest of World zone must not be deletable.' );
-	}
-
-	/**
-	 * Store delete failure returns WP_Error.
-	 */
-	public function test_delete_shipping_zone_store_failure_returns_error(): void {
-		WcShippingStubStore::$force_delete_failure = true;
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-zone' )->execute(
-			array( 'zone_id' => 1 )
-		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Delete failure must never lie success.' );
-		WcShippingStubStore::$force_delete_failure = false;
-	}
-
-	/**
-	 * Zone id not present in the store is not in the seeded fixture set.
-	 * delete() on a missing zone returns false from the store, which the executor converts to
-	 * WP_Error — so a not-seeded zone still produces an error through the delete path.
-	 */
-	public function test_delete_shipping_zone_unknown_id_returns_error(): void {
-		$this->acting_as( 'administrator' );
-		// Zone 88888 is not seeded: the stub store returns false from delete_zone,
-		// which the executor converts to WP_Error.
-		WcShippingStubStore::seed(
-			88888,
-			array(
-				'zone_name'  => 'TempZone',
-				'zone_order' => 99,
-			)
-		);
-		WcShippingStubStore::$force_delete_failure = true;
-		$res                                       = wp_get_ability( 'aafm/wc-delete-shipping-zone' )->execute(
-			array( 'zone_id' => 88888 )
-		);
-		WcShippingStubStore::$force_delete_failure = false;
-		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	// =========================================================================
@@ -624,56 +555,6 @@ final class WooShippingTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A DB failure on the enabled toggle must not lie success.' );
 	}
 
-	// =========================================================================
-	// aafm/wc-delete-shipping-method
-	// =========================================================================
-
-	/**
-	 * Happy path: valid zone+instance removes the method and returns deleted:true.
-	 */
-	public function test_delete_shipping_method_success(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-method' )->execute(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 2,
-			)
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-		$this->assertNull( WcShippingStubStore::get_method( 1, 2 ) );
-	}
-
-	/**
-	 * Store delete failure returns WP_Error.
-	 */
-	public function test_delete_shipping_method_store_failure_returns_error(): void {
-		WcShippingStubStore::$force_delete_failure = true;
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-method' )->execute(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 1,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Delete failure must never lie success.' );
-		WcShippingStubStore::$force_delete_failure = false;
-	}
-
-	/**
-	 * Unknown instance id returns WP_Error.
-	 */
-	public function test_delete_shipping_method_unknown_id_returns_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-shipping-method' )->execute(
-			array(
-				'zone_id'     => 1,
-				'instance_id' => 99999,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
 	/**
 	 * Audit: a successful execute is recorded under the calling ability.
 	 *
@@ -707,7 +588,6 @@ final class WooShippingTest extends TestCase {
 					'zone_name' => 'Europe 2',
 				),
 			),
-			'delete-shipping-zone'   => array( 'aafm/wc-delete-shipping-zone', array( 'zone_id' => 2 ) ),
 			'create-shipping-method' => array(
 				'aafm/wc-create-shipping-method',
 				array(
@@ -721,13 +601,6 @@ final class WooShippingTest extends TestCase {
 					'zone_id'      => 1,
 					'instance_id'  => 1,
 					'method_title' => 'Standard Flat Rate',
-				),
-			),
-			'delete-shipping-method' => array(
-				'aafm/wc-delete-shipping-method',
-				array(
-					'zone_id'     => 1,
-					'instance_id' => 2,
 				),
 			),
 		);
@@ -761,7 +634,6 @@ final class WooShippingTest extends TestCase {
 			'list-shipping-zones'    => array( 'aafm/wc-list-shipping-zones', array(), 'editor' ),
 			'create-shipping-zone'   => array( 'aafm/wc-create-shipping-zone', array( 'zone_name' => 'Denied' ), 'editor' ),
 			'update-shipping-zone'   => array( 'aafm/wc-update-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
-			'delete-shipping-zone'   => array( 'aafm/wc-delete-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
 			'create-shipping-method' => array(
 				'aafm/wc-create-shipping-method',
 				array(
@@ -772,14 +644,6 @@ final class WooShippingTest extends TestCase {
 			),
 			'update-shipping-method' => array(
 				'aafm/wc-update-shipping-method',
-				array(
-					'zone_id'     => 1,
-					'instance_id' => 1,
-				),
-				'editor',
-			),
-			'delete-shipping-method' => array(
-				'aafm/wc-delete-shipping-method',
 				array(
 					'zone_id'     => 1,
 					'instance_id' => 1,

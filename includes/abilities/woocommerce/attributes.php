@@ -68,15 +68,6 @@ function aafm_wc_attributes_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_list_product_attributes',
 		),
 
-		'aafm/wc-get-product-attribute'    => array(
-			'label'        => __( 'Get WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one global WooCommerce product attribute taxonomy by id, including its name, slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'reads',
-			'risk'         => 'read',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_product_attribute',
-		),
-
 		'aafm/wc-create-product-attribute' => array(
 			'label'        => __( 'Create WooCommerce product attribute', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Creates a new global WooCommerce product attribute taxonomy from a name (required) plus optional slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -95,14 +86,6 @@ function aafm_wc_attributes_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_product_attribute',
 		),
 
-		'aafm/wc-delete-product-attribute' => array(
-			'label'        => __( 'Delete WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently removes a global WooCommerce product attribute taxonomy by id. This deletes the taxonomy and all terms within it and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_product_attribute',
-		),
 	);
 }
 
@@ -110,7 +93,7 @@ function aafm_wc_attributes_registry_definitions(): array {
 // Global product attributes (sub-slice W4-WC1c)
 // =============================================================================
 //
-// These five abilities manage GLOBAL product attribute taxonomies — the
+// These abilities manage GLOBAL product attribute taxonomies — the
 // wc_get_attribute_taxonomies() surface — not per-product attributes. Each is
 // object-independent and gates on manage_woocommerce, so none needs a server.php
 // case; all fall through to the real permission_callback at discovery.
@@ -235,62 +218,6 @@ function aafm_exec_wc_list_product_attributes(): array {
 		'attributes' => array_values( $rows ),
 		'total'      => count( $rows ),
 	);
-}
-
-// -----------------------------------------------------------------------------
-// aafm/wc-get-product-attribute (R)
-// -----------------------------------------------------------------------------
-
-/**
- * Args builder for aafm/wc-get-product-attribute.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_get_product_attribute(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-product-attribute' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-product-attribute' ),
-		'category'            => 'aafm-reads',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'attribute_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'attribute_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => aafm_wc_attribute_output_properties(),
-		),
-		'execute_callback'    => 'aafm_exec_wc_get_product_attribute',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => true,
-				'destructive' => false,
-				'idempotent'  => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-get-product-attribute.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_get_product_attribute( array $input ) {
-	$id   = (int) ( $input['attribute_id'] ?? 0 );
-	$attr = aafm_wc_get_attribute( $id );
-	if ( null === $attr ) {
-		return aafm_generic_error();
-	}
-	return aafm_redact_wc_attribute( $attr );
 }
 
 // -----------------------------------------------------------------------------
@@ -480,74 +407,4 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 		return aafm_generic_error();
 	}
 	return aafm_redact_wc_attribute( $updated );
-}
-
-// -----------------------------------------------------------------------------
-// aafm/wc-delete-product-attribute (D)
-// -----------------------------------------------------------------------------
-
-/**
- * Args builder for aafm/wc-delete-product-attribute.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_product_attribute(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-product-attribute' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-product-attribute' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'attribute_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'attribute_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_product_attribute',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-product-attribute.
- *
- * Resolve-before-mutate: unknown id returns a generic error. Deletion goes through
- * wc_delete_attribute() — WooCommerce's own taxonomy-removal function — never the
- * force-delete post primitive, so the source-scan remains clean.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_product_attribute( array $input ) {
-	$id   = (int) ( $input['attribute_id'] ?? 0 );
-	$attr = aafm_wc_get_attribute( $id );
-	if ( null === $attr ) {
-		return aafm_generic_error();
-	}
-	$result = wc_delete_attribute( $id );
-	if ( is_wp_error( $result ) || false === $result ) {
-		return aafm_generic_error();
-	}
-
-	return array(
-		'id'      => $id,
-		'deleted' => true,
-	);
 }

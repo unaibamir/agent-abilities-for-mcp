@@ -92,15 +92,6 @@ function aafm_wc_shipping_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_shipping_zone',
 		),
 
-		'aafm/wc-delete-shipping-zone'   => array(
-			'label'        => __( 'Delete WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce shipping zone by id. The Rest of World zone (id 0) cannot be deleted. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_shipping_zone',
-		),
-
 		// Shipping methods (sub-slice W4-WC5) — always scoped to a zone.
 		'aafm/wc-list-shipping-methods'  => array(
 			'label'        => __( 'List WooCommerce shipping methods', 'agent-abilities-for-mcp' ),
@@ -138,14 +129,6 @@ function aafm_wc_shipping_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_shipping_method',
 		),
 
-		'aafm/wc-delete-shipping-method' => array(
-			'label'        => __( 'Delete WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently removes a shipping method from a WooCommerce shipping zone by zone id and instance id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_shipping_method',
-		),
 	);
 }
 
@@ -512,78 +495,6 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
 	}
 
 	return aafm_rich_wc_shipping_zone( $saved );
-}
-
-// =============================================================================
-// wc-delete-shipping-zone
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-delete-shipping-zone.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_shipping_zone(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-shipping-zone' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-shipping-zone' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'zone_id' ),
-			'properties'           => array(
-				'zone_id' => array(
-					'type'    => 'integer',
-					'minimum' => 0,
-				),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_shipping_zone',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-shipping-zone.
- *
- * Zone id 0 (Rest of World) is immutable in WooCommerce and is rejected with an error.
- * All other zones are permanently removed via $zone->delete().
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_shipping_zone( array $input ) {
-	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-
-	// The Rest of World zone (id 0) cannot be deleted in WooCommerce.
-	if ( 0 === $zone_id ) {
-		return aafm_generic_error();
-	}
-
-	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
-	if ( null === $zone ) {
-		return aafm_generic_error();
-	}
-
-	$ok = $zone->delete();
-	if ( false === $ok || is_wp_error( $ok ) ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
 }
 
 // =============================================================================
@@ -989,82 +900,4 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	}
 
 	return aafm_rich_wc_shipping_method( $updated );
-}
-
-// =============================================================================
-// wc-delete-shipping-method
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-delete-shipping-method.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_shipping_method(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-shipping-method' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-shipping-method' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'zone_id', 'instance_id' ),
-			'properties'           => array(
-				'zone_id'     => array(
-					'type'    => 'integer',
-					'minimum' => 0,
-				),
-				'instance_id' => array(
-					'type'        => 'integer',
-					'minimum'     => 1,
-					'description' => 'The shipping method INSTANCE id within the zone (a method added to a zone, not the method type). Get it from wc-list-shipping-methods for the zone, or from the instance_id returned by wc-create-shipping-method.',
-				),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_shipping_method',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-shipping-method.
- *
- * Uses $zone->delete_shipping_method($instance_id) — WooCommerce's own method removal.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_shipping_method( array $input ) {
-	$zone_id     = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$instance_id = isset( $input['instance_id'] ) ? (int) $input['instance_id'] : 0;
-
-	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
-	if ( null === $zone ) {
-		return aafm_generic_error();
-	}
-
-	// Verify the method exists before attempting deletion.
-	$existing = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
-	if ( null === $existing ) {
-		return aafm_generic_error();
-	}
-
-	$ok = $zone->delete_shipping_method( $instance_id );
-	if ( false === $ok || is_wp_error( $ok ) ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
 }

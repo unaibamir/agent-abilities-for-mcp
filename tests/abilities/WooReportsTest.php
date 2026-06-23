@@ -1,13 +1,13 @@
 <?php
 /**
  * Integration tests for the W4-WC7 abilities: wc-get-sales-report, wc-get-top-sellers-report,
- * wc-count-orders, wc-count-products, wc-count-customers, wc-list-payment-gateways,
- * wc-get-payment-gateway, wc-count-coupons, wc-update-payment-gateway.
+ * wc-count-orders, wc-count-products, wc-list-payment-gateways, wc-get-payment-gateway,
+ * wc-update-payment-gateway.
  *
  * WooCommerce is not installed in the DDEV test environment. Payment gateways are backed by
- * WcGatewayStubStore through the WC_Payment_Gateway / WC_Payment_Gateways eval stubs. Order,
- * product, and coupon counts rely on wp_count_posts() against real WP post fixtures inserted
- * in set_up(). Sales / top-sellers reports exercise the executor's SQL against the real temp DB.
+ * WcGatewayStubStore through the WC_Payment_Gateway / WC_Payment_Gateways eval stubs. Order
+ * and product counts rely on wp_count_posts() against real WP post fixtures inserted in
+ * set_up(). Sales / top-sellers reports exercise the executor's SQL against the real temp DB.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -59,10 +59,8 @@ final class WooReportsTest extends TestCase {
 				'aafm/wc-get-top-sellers-report',
 				'aafm/wc-count-orders',
 				'aafm/wc-count-products',
-				'aafm/wc-count-customers',
 				'aafm/wc-list-payment-gateways',
 				'aafm/wc-get-payment-gateway',
-				'aafm/wc-count-coupons',
 				'aafm/wc-update-payment-gateway',
 			)
 		);
@@ -88,10 +86,8 @@ final class WooReportsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/wc-get-top-sellers-report', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-count-orders', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-count-products', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-count-customers', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-list-payment-gateways', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-get-payment-gateway', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-count-coupons', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-payment-gateway', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
@@ -393,43 +389,6 @@ final class WooReportsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm/wc-count-customers
-	// =========================================================================
-
-	/**
-	 * Count customers returns a registered key with an integer value.
-	 */
-	public function test_count_customers_returns_registered(): void {
-		$this->acting_as( 'administrator' );
-		$res = aafm_exec_wc_count_customers( array() );
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertArrayHasKey( 'registered', $res );
-		$this->assertIsInt( $res['registered'] );
-		$this->assertGreaterThanOrEqual( 1, $res['registered'] ); // At least the admin created during test bootstrap.
-	}
-
-	/**
-	 * Count customers returns WP_Error when WooCommerce is inactive.
-	 */
-	public function test_count_customers_inactive_wc(): void {
-		remove_all_filters( 'aafm_integration_active_woocommerce' );
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$res = aafm_exec_wc_count_customers( array() );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Count customers requires manage_woocommerce.
-	 */
-	public function test_count_customers_requires_manage_woocommerce(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-count-customers' )->check_permissions( array() )
-		);
-	}
-
-	// =========================================================================
 	// aafm/wc-list-payment-gateways
 	// =========================================================================
 
@@ -615,56 +574,6 @@ final class WooReportsTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
 			wp_get_ability( 'aafm/wc-get-payment-gateway' )->check_permissions( array() )
-		);
-	}
-
-	// =========================================================================
-	// aafm/wc-count-coupons
-	// =========================================================================
-
-	/**
-	 * Count coupons returns all expected keys.
-	 */
-	public function test_count_coupons_returns_all_statuses(): void {
-		$this->acting_as( 'administrator' );
-		$res = aafm_exec_wc_count_coupons( array() );
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		foreach ( array( 'publish', 'draft', 'private', 'pending', 'trash', 'total' ) as $key ) {
-			$this->assertArrayHasKey( $key, $res );
-			$this->assertIsInt( $res[ $key ] );
-		}
-	}
-
-	/**
-	 * Count coupons: total excludes trash.
-	 */
-	public function test_count_coupons_total_excludes_trash(): void {
-		$this->acting_as( 'administrator' );
-		$res = aafm_exec_wc_count_coupons( array() );
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$expected_total = $res['publish'] + $res['draft'] + $res['private'] + $res['pending'];
-		$this->assertSame( $expected_total, $res['total'] );
-	}
-
-	/**
-	 * Count coupons returns WP_Error when WooCommerce is inactive.
-	 */
-	public function test_count_coupons_inactive_wc(): void {
-		remove_all_filters( 'aafm_integration_active_woocommerce' );
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$res = aafm_exec_wc_count_coupons( array() );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Count coupons requires manage_woocommerce.
-	 */
-	public function test_count_coupons_requires_manage_woocommerce(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-count-coupons' )->check_permissions( array() )
 		);
 	}
 

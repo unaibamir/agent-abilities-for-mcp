@@ -179,29 +179,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// order, order-note, order-refund, and customer ability (wc-list-products, wc-get-product,
 		// wc-create-product, wc-update-product, wc-delete-product, wc-list-product-variations,
 		// wc-get-product-variation, wc-create-product-variation, wc-update-product-variation,
-		// wc-delete-product-variation, wc-list-product-attributes, wc-get-product-attribute,
-		// wc-create-product-attribute, wc-update-product-attribute, wc-delete-product-attribute,
+		// wc-delete-product-variation, wc-list-product-attributes,
+		// wc-create-product-attribute, wc-update-product-attribute,
 		// wc-list-orders, wc-get-order, wc-create-order, wc-update-order, wc-update-order-status,
-		// wc-delete-order, wc-list-order-notes, wc-get-order-note, wc-create-order-note,
-		// wc-delete-order-note, wc-list-order-refunds, wc-get-order-refund, wc-create-order-refund,
-		// wc-delete-order-refund, wc-list-customers, wc-get-customer, wc-create-customer,
+		// wc-list-order-notes, wc-create-order-note,
+		// wc-list-order-refunds, wc-get-order-refund, wc-create-order-refund,
+		// wc-list-customers, wc-get-customer, wc-create-customer,
 		// wc-update-customer, wc-list-coupons, wc-get-coupon,
-		// wc-create-coupon, wc-update-coupon, wc-delete-coupon, wc-list-shipping-zones,
+		// wc-create-coupon, wc-update-coupon, wc-list-shipping-zones,
 		// wc-get-shipping-zone, wc-create-shipping-zone, wc-update-shipping-zone,
-		// wc-delete-shipping-zone, wc-list-shipping-methods, wc-get-shipping-method,
-		// wc-create-shipping-method, wc-update-shipping-method, wc-delete-shipping-method)
+		// wc-list-shipping-methods, wc-get-shipping-method,
+		// wc-create-shipping-method, wc-update-shipping-method)
 		// gates on the object-independent manage_woocommerce capability, so NONE needs a
 		// server.php case — each falls through to its real permission_callback with empty
 		// input, the correct discovery answer. Proven in WooProductsTest / WooVariationsTest /
 		// WooAttributesTest / WooOrdersTest / WooOrderNotesRefundsTest / WooCustomersTest /
 		// WooCouponsTest / WooShippingTest (admin discovers, editor does not).
-		//
-		// wc-delete-customer is the one exception: it destroys a WP user account, so its
-		// permission_callback adds delete_users + per-object delete_user($id). delete_user is
-		// false with empty input, so without a discovery floor the tool would hide from every
-		// capable admin. Floor on the object-independent manage_woocommerce + delete_users.
-		case 'aafm/wc-delete-customer':
-			return static fn(): bool => current_user_can( 'manage_woocommerce' ) && current_user_can( 'delete_users' );
 
 		case 'aafm/get-block':
 		case 'aafm/update-block':

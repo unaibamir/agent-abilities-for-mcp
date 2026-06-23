@@ -164,20 +164,12 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-product-attribute',
-				'risk' => 'read',
-			),
-			array(
 				'name' => 'aafm/wc-create-product-attribute',
 				'risk' => 'write',
 			),
 			array(
 				'name' => 'aafm/wc-update-product-attribute',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-product-attribute',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-list-orders',
@@ -200,24 +192,12 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-order',
-				'risk' => 'destructive',
-			),
-			array(
 				'name' => 'aafm/wc-list-order-notes',
-				'risk' => 'read',
-			),
-			array(
-				'name' => 'aafm/wc-get-order-note',
 				'risk' => 'read',
 			),
 			array(
 				'name' => 'aafm/wc-create-order-note',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-order-note',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-list-order-refunds',
@@ -230,10 +210,6 @@ function aafm_integration_ability_order(): array {
 			array(
 				'name' => 'aafm/wc-create-order-refund',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-order-refund',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-list-customers',
@@ -252,10 +228,6 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-customer',
-				'risk' => 'destructive',
-			),
-			array(
 				'name' => 'aafm/wc-list-coupons',
 				'risk' => 'read',
 			),
@@ -270,10 +242,6 @@ function aafm_integration_ability_order(): array {
 			array(
 				'name' => 'aafm/wc-update-coupon',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-coupon',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-list-shipping-zones',
@@ -292,10 +260,6 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-shipping-zone',
-				'risk' => 'destructive',
-			),
-			array(
 				'name' => 'aafm/wc-list-shipping-methods',
 				'risk' => 'read',
 			),
@@ -310,10 +274,6 @@ function aafm_integration_ability_order(): array {
 			array(
 				'name' => 'aafm/wc-update-shipping-method',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-shipping-method',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-list-tax-rates',
@@ -332,24 +292,12 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-tax-rate',
-				'risk' => 'destructive',
-			),
-			array(
 				'name' => 'aafm/wc-list-tax-classes',
-				'risk' => 'read',
-			),
-			array(
-				'name' => 'aafm/wc-get-tax-class',
 				'risk' => 'read',
 			),
 			array(
 				'name' => 'aafm/wc-create-tax-class',
 				'risk' => 'write',
-			),
-			array(
-				'name' => 'aafm/wc-delete-tax-class',
-				'risk' => 'destructive',
 			),
 			array(
 				'name' => 'aafm/wc-get-sales-report',
@@ -368,19 +316,11 @@ function aafm_integration_ability_order(): array {
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-count-customers',
-				'risk' => 'read',
-			),
-			array(
 				'name' => 'aafm/wc-list-payment-gateways',
 				'risk' => 'read',
 			),
 			array(
 				'name' => 'aafm/wc-get-payment-gateway',
-				'risk' => 'read',
-			),
-			array(
-				'name' => 'aafm/wc-count-coupons',
 				'risk' => 'read',
 			),
 			array(

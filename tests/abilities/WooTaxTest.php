@@ -1,8 +1,7 @@
 <?php
 /**
  * WooCommerce tax abilities: wc-list-tax-rates, wc-get-tax-rate, wc-create-tax-rate,
- * wc-update-tax-rate, wc-delete-tax-rate, wc-list-tax-classes, wc-get-tax-class,
- * wc-create-tax-class, wc-delete-tax-class.
+ * wc-update-tax-rate, wc-list-tax-classes, wc-create-tax-class.
  *
  * WooCommerce is not installed in the DDEV test environment. Tax rates are backed by a real
  * temp table (woocommerce_tax_rates) created in the test DB by WcTaxStubStore. Tax classes
@@ -61,11 +60,8 @@ final class WooTaxTest extends TestCase {
 				'aafm/wc-get-tax-rate',
 				'aafm/wc-create-tax-rate',
 				'aafm/wc-update-tax-rate',
-				'aafm/wc-delete-tax-rate',
 				'aafm/wc-list-tax-classes',
-				'aafm/wc-get-tax-class',
 				'aafm/wc-create-tax-class',
-				'aafm/wc-delete-tax-class',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -90,11 +86,8 @@ final class WooTaxTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/wc-get-tax-rate', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-tax-rate', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-tax-rate', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-tax-rate', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-list-tax-classes', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-get-tax-class', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-tax-class', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-tax-class', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -231,36 +224,6 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm/wc-delete-tax-rate
-	// =========================================================================
-
-	/**
-	 * Delete removes the row; subsequent get returns WP_Error.
-	 */
-	public function test_delete_tax_rate_removes_row(): void {
-		$this->acting_as( 'administrator' );
-
-		$list    = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
-		$rate_id = (int) $list['rates'][0]['id'];
-
-		$res = wp_get_ability( 'aafm/wc-delete-tax-rate' )->execute( array( 'rate_id' => $rate_id ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-
-		$fetched = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => $rate_id ) );
-		$this->assertInstanceOf( WP_Error::class, $fetched );
-	}
-
-	/**
-	 * Deleting an unknown id returns WP_Error.
-	 */
-	public function test_delete_tax_rate_unknown_id_returns_wp_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-tax-rate' )->execute( array( 'rate_id' => 999999 ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	// =========================================================================
 	// aafm/wc-list-tax-classes
 	// =========================================================================
 
@@ -297,40 +260,6 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm/wc-get-tax-class
-	// =========================================================================
-
-	/**
-	 * Get by slug returns the matching class.
-	 */
-	public function test_get_tax_class_by_slug(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-tax-class' )->execute( array( 'slug' => 'reduced-rate' ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'reduced-rate', $res['slug'] );
-	}
-
-	/**
-	 * Get "standard" returns the Standard class.
-	 */
-	public function test_get_tax_class_standard_slug(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-tax-class' )->execute( array( 'slug' => 'standard' ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'standard', $res['slug'] );
-		$this->assertSame( 'Standard', $res['name'] );
-	}
-
-	/**
-	 * Unknown slug returns WP_Error.
-	 */
-	public function test_get_tax_class_unknown_slug_returns_wp_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-tax-class' )->execute( array( 'slug' => 'does-not-exist' ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	// =========================================================================
 	// aafm/wc-create-tax-class
 	// =========================================================================
 
@@ -361,42 +290,6 @@ final class WooTaxTest extends TestCase {
 		$res                                = wp_get_ability( 'aafm/wc-create-tax-class' )->execute(
 			array( 'name' => 'Failing Class' )
 		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	// =========================================================================
-	// aafm/wc-delete-tax-class
-	// =========================================================================
-
-	/**
-	 * Delete removes the class; subsequent get returns WP_Error.
-	 */
-	public function test_delete_tax_class_removes_it(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-tax-class' )->execute( array( 'slug' => 'reduced-rate' ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-
-		$fetched = wp_get_ability( 'aafm/wc-get-tax-class' )->execute( array( 'slug' => 'reduced-rate' ) );
-		$this->assertInstanceOf( WP_Error::class, $fetched );
-	}
-
-	/**
-	 * Deleting the Standard class is rejected with WP_Error.
-	 */
-	public function test_delete_standard_tax_class_is_rejected(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-tax-class' )->execute( array( 'slug' => 'standard' ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Delete store failure returns WP_Error.
-	 */
-	public function test_delete_tax_class_failure_returns_wp_error(): void {
-		$this->acting_as( 'administrator' );
-		WcTaxStubStore::$force_delete_failure = true;
-		$res                                  = wp_get_ability( 'aafm/wc-delete-tax-class' )->execute( array( 'slug' => 'reduced-rate' ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -466,38 +359,6 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
-	// Audit: delete-tax-rate
-	// =========================================================================
-
-	/**
-	 * Successful delete-tax-rate is recorded in the activity log.
-	 */
-	public function test_delete_tax_rate_audit_success(): void {
-		$this->acting_as( 'administrator' );
-
-		$list    = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
-		$rate_id = (int) $list['rates'][0]['id'];
-
-		wp_get_ability( 'aafm/wc-delete-tax-rate' )->execute( array( 'rate_id' => $rate_id ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-tax-rate', $abilities );
-	}
-
-	/**
-	 * Denied delete-tax-rate is recorded in the activity log.
-	 */
-	public function test_delete_tax_rate_audit_deny(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-tax-rate' )->check_permissions( array( 'rate_id' => 1 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-tax-rate', $abilities );
-	}
-
-	// =========================================================================
 	// Audit: create-tax-class
 	// =========================================================================
 
@@ -523,33 +384,5 @@ final class WooTaxTest extends TestCase {
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( 'aafm/wc-create-tax-class', $abilities );
-	}
-
-	// =========================================================================
-	// Audit: delete-tax-class
-	// =========================================================================
-
-	/**
-	 * Successful delete-tax-class is recorded in the activity log.
-	 */
-	public function test_delete_tax_class_audit_success(): void {
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-tax-class' )->execute( array( 'slug' => 'zero-rate' ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-tax-class', $abilities );
-	}
-
-	/**
-	 * Denied delete-tax-class is recorded in the activity log.
-	 */
-	public function test_delete_tax_class_audit_deny(): void {
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-tax-class' )->check_permissions( array( 'slug' => 'reduced-rate' ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-tax-class', $abilities );
 	}
 }

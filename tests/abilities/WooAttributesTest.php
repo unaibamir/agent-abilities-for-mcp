@@ -48,10 +48,8 @@ final class WooAttributesTest extends TestCase {
 			'aafm_enabled_abilities',
 			array(
 				'aafm/wc-list-product-attributes',
-				'aafm/wc-get-product-attribute',
 				'aafm/wc-create-product-attribute',
 				'aafm/wc-update-product-attribute',
-				'aafm/wc-delete-product-attribute',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -101,47 +99,6 @@ final class WooAttributesTest extends TestCase {
 		$this->assertNotTrue(
 			wp_get_ability( 'aafm/wc-list-product-attributes' )->check_permissions( array() )
 		);
-	}
-	public function test_get_attribute_returns_the_rich_row(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 1, $res['id'] );
-		$this->assertSame( 'Color', $res['name'] );
-		$this->assertSame( 'pa_color', $res['slug'] );
-		$this->assertSame( 'select', $res['type'] );
-		$this->assertArrayHasKey( 'order_by', $res );
-		$this->assertArrayHasKey( 'has_archives', $res );
-	}
-
-	public function test_get_attribute_unknown_id_is_graceful_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-product-attribute' )->execute( array( 'attribute_id' => 999999 ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	public function test_get_attribute_denies_a_subscriber(): void {
-		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-get-product-attribute' )->check_permissions( array( 'attribute_id' => 1 ) )
-		);
-	}
-
-	public function test_get_attribute_output_schema_declares_every_emitted_field(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-
-		$schema   = aafm_args_wc_get_product_attribute()['output_schema'];
-		$declared = array_keys( $schema['properties'] );
-
-		foreach ( array_keys( $res ) as $emitted_key ) {
-			$this->assertContains(
-				$emitted_key,
-				$declared,
-				sprintf( 'Emitted field "%s" must be declared in the get-attribute output_schema.', $emitted_key )
-			);
-		}
 	}
 	public function test_create_attribute_returns_rich_shape_and_is_recorded(): void {
 		$this->acting_as( 'administrator' );
@@ -204,13 +161,11 @@ final class WooAttributesTest extends TestCase {
 		$this->assertContains( 'aafm/wc-create-product-attribute', $abilities );
 	}
 
-	public function test_create_and_update_share_the_get_output_schema(): void {
-		$get    = aafm_args_wc_get_product_attribute()['output_schema']['properties'];
+	public function test_create_and_update_share_the_output_schema(): void {
 		$create = aafm_args_wc_create_product_attribute()['output_schema']['properties'];
 		$update = aafm_args_wc_update_product_attribute()['output_schema']['properties'];
 
-		$this->assertSame( $get, $create, 'create-attribute shares the rich get output schema.' );
-		$this->assertSame( $get, $update, 'update-attribute shares the rich get output schema.' );
+		$this->assertSame( $create, $update, 'create-attribute and update-attribute share the same rich output schema.' );
 	}
 	public function test_update_attribute_patches_by_id(): void {
 		$this->acting_as( 'administrator' );
@@ -293,61 +248,6 @@ final class WooAttributesTest extends TestCase {
 		$abilities = wp_list_pluck( $success, 'ability' );
 		$this->assertContains( 'aafm/wc-update-product-attribute', $abilities );
 	}
-	public function test_delete_attribute_removes_it_permanently(): void {
-		$this->acting_as( 'administrator' );
-		$this->assertNotNull( WcAttributeStubStore::get( 1 ) );
-
-		$res = wp_get_ability( 'aafm/wc-delete-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-		$this->assertSame( 1, $res['id'] );
-
-		// Gone from the store and from re-list.
-		$this->assertNull( WcAttributeStubStore::get( 1 ) );
-
-		$list = wp_get_ability( 'aafm/wc-list-product-attributes' )->execute( array() );
-		$ids  = wp_list_pluck( $list['attributes'], 'id' );
-		$this->assertNotContains( 1, $ids, 'Deleted attribute must no longer appear in the list.' );
-
-		$get = wp_get_ability( 'aafm/wc-get-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertInstanceOf( WP_Error::class, $get, 'A deleted attribute can no longer be read.' );
-	}
-
-	public function test_delete_attribute_is_annotated_destructive(): void {
-		$annotations = wp_get_ability( 'aafm/wc-delete-product-attribute' )->get_meta_item( 'annotations' );
-		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product-attribute must be destructive.' );
-		$this->assertFalse( $annotations['readonly'] ?? true, 'wc-delete-product-attribute is not readonly.' );
-	}
-
-	public function test_delete_attribute_unknown_id_is_graceful_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-product-attribute' )->execute( array( 'attribute_id' => 999999 ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	public function test_delete_attribute_requires_attribute_id(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-product-attribute' )->execute( array() );
-		$this->assertInstanceOf( WP_Error::class, $res, 'attribute_id is required on delete.' );
-	}
-
-	public function test_delete_attribute_denies_an_editor(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-product-attribute' )->check_permissions( array( 'attribute_id' => 1 ) )
-		);
-	}
-
-	public function test_delete_attribute_write_is_audited(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-product-attribute', $abilities );
-	}
-
 	public function test_wc_attribute_abilities_absent_when_host_inactive(): void {
 		// Mirror WooProductsTest / WooVariationsTest: pin detection OFF through the seam so the
 		// class WooCommerce marker (defined process-wide) does not falsely report WC active.
@@ -365,21 +265,6 @@ final class WooAttributesTest extends TestCase {
 
 		$this->acting_as( 'editor' );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/wc-list-product-attributes' ) );
-	}
-
-	public function test_delete_attribute_surfaces_failure_when_wc_delete_fails(): void {
-		$this->acting_as( 'administrator' );
-		// Seed confirms id 1 exists before the forced-failure attempt.
-		$this->assertNotNull( WcAttributeStubStore::get( 1 ) );
-
-		// Force the underlying store delete to return false on the next call.
-		WcAttributeStubStore::set_delete_should_fail( true );
-
-		$res = wp_get_ability( 'aafm/wc-delete-product-attribute' )->execute( array( 'attribute_id' => 1 ) );
-		$this->assertInstanceOf( WP_Error::class, $res, 'A failed wc_delete_attribute must surface as WP_Error, not {deleted:true}.' );
-
-		// The attribute must still be in the store (the failure left it untouched).
-		$this->assertNotNull( WcAttributeStubStore::get( 1 ), 'Failed delete must leave the attribute intact in the store.' );
 	}
 
 	public function test_update_attribute_surfaces_error_when_wc_update_fails(): void {
@@ -423,7 +308,6 @@ final class WooAttributesTest extends TestCase {
 		return array(
 			'create-product-attribute' => array( 'aafm/wc-create-product-attribute', array( 'name' => 'Color' ), 'editor' ),
 			'update-product-attribute' => array( 'aafm/wc-update-product-attribute', array( 'attribute_id' => 1 ), 'editor' ),
-			'delete-product-attribute' => array( 'aafm/wc-delete-product-attribute', array( 'attribute_id' => 1 ), 'editor' ),
 		);
 	}
 

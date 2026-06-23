@@ -107,16 +107,6 @@ function aafm_wc_orders_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_order_status',
 		),
 
-		// Order delete (sub-slice W4-WC2.3 Group A).
-		'aafm/wc-delete-order'        => array(
-			'label'        => __( 'Delete WooCommerce order', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce order by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_order',
-		),
-
 		// Order notes (sub-slice W4-WC2.3 Group B).
 		'aafm/wc-list-order-notes'    => array(
 			'label'        => __( 'List WooCommerce order notes', 'agent-abilities-for-mcp' ),
@@ -127,15 +117,6 @@ function aafm_wc_orders_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_list_order_notes',
 		),
 
-		'aafm/wc-get-order-note'      => array(
-			'label'        => __( 'Get WooCommerce order note', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads a single note on a WooCommerce order by order id and note id. Returns the note text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'reads',
-			'risk'         => 'read',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_order_note',
-		),
-
 		'aafm/wc-create-order-note'   => array(
 			'label'        => __( 'Create WooCommerce order note', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing so it appears in the customer\'s account. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -143,15 +124,6 @@ function aafm_wc_orders_registry_definitions(): array {
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
 			'args_builder' => 'aafm_args_wc_create_order_note',
-		),
-
-		'aafm/wc-delete-order-note'   => array(
-			'label'        => __( 'Delete WooCommerce order note', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce order note by note id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_order_note',
 		),
 
 		// Order refunds (sub-slice W4-WC2.3 Group C).
@@ -182,14 +154,6 @@ function aafm_wc_orders_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_create_order_refund',
 		),
 
-		'aafm/wc-delete-order-refund' => array(
-			'label'        => __( 'Delete WooCommerce order refund', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce order refund by refund id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_order_refund',
-		),
 	);
 }
 
@@ -1075,90 +1039,17 @@ function aafm_exec_wc_update_order_status( array $input ) {
 
 /*
  * --------------------------------------------------------------------------
- * Order delete + notes + refunds (sub-slice W4-WC2.3)
+ * Order notes + refunds (sub-slice W4-WC2.3)
  *
- * Group A: wc-delete-order (D)
- * Group B: wc-list-order-notes (R), wc-get-order-note (R),
- *          wc-create-order-note (W), wc-delete-order-note (D)
+ * Group B: wc-list-order-notes (R), wc-create-order-note (W)
  * Group C: wc-list-order-refunds (R), wc-get-order-refund (R),
- *          wc-create-order-refund (W), wc-delete-order-refund (D)
+ *          wc-create-order-refund (W)
  *
- * All nine gate on aafm_wc_perm() (manage_woocommerce). Every delete uses the
+ * All gate on aafm_wc_perm() (manage_woocommerce). Every delete uses the
  * WooCommerce object's own ->delete() or wc_delete_order_note() — none is a
  * wp_delete_post/wp_delete_comment literal so the SecurityRegressionTest stays green.
  * --------------------------------------------------------------------------
  */
-
-// ============================================================================
-// Group A — aafm/wc-delete-order
-// ============================================================================
-
-/**
- * Args builder for aafm/wc-delete-order.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_order(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-order' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-order' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'order_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_order',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-order.
- *
- * Permanent removal through WooCommerce's own data store: $order->delete( true ).
- * The return value of delete() is surfaced — a false return becomes WP_Error so the
- * caller is never told deleted:true when the underlying operation failed.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_order( array $input ) {
-	$order = aafm_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
-	if ( null === $order ) {
-		return aafm_generic_error();
-	}
-
-	$id = $order->get_id();
-	$ok = $order->delete( true );
-	if ( ! $ok ) {
-		return aafm_generic_error();
-	}
-
-	return array(
-		'id'      => $id,
-		'deleted' => true,
-	);
-}
 
 // ============================================================================
 // Group B — order notes
@@ -1312,72 +1203,6 @@ function aafm_exec_wc_list_order_notes( array $input ) {
 	return array( 'notes' => $notes );
 }
 
-// aafm/wc-get-order-note (R).
-
-/**
- * Args builder for aafm/wc-get-order-note.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_get_order_note(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-order-note' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-order-note' ),
-		'category'            => 'aafm-reads',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-				'note_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'order_id', 'note_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => aafm_wc_note_output_properties(),
-		),
-		'execute_callback'    => 'aafm_exec_wc_get_order_note',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => true,
-				'destructive' => false,
-				'idempotent'  => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-get-order-note.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_get_order_note( array $input ) {
-	$order_id = (int) ( $input['order_id'] ?? 0 );
-	$note_id  = (int) ( $input['note_id'] ?? 0 );
-
-	$order = aafm_wc_get_order_object( $order_id );
-	if ( null === $order ) {
-		return aafm_generic_error();
-	}
-
-	$note = aafm_wc_get_order_note( $order_id, $note_id );
-	if ( null === $note ) {
-		return aafm_generic_error();
-	}
-
-	return aafm_wc_redact_note( $note );
-}
-
 // aafm/wc-create-order-note (W).
 
 /**
@@ -1464,81 +1289,6 @@ function aafm_exec_wc_create_order_note( array $input ) {
 		'added_by_user' => true,
 		'customer_note' => $customer_note,
 		'date_created'  => '',
-	);
-}
-
-// aafm/wc-delete-order-note (D).
-
-/**
- * Args builder for aafm/wc-delete-order-note.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_order_note(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-order-note' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-order-note' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-				'note_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'order_id', 'note_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_order_note',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-order-note.
- *
- * Permanent removal through wc_delete_order_note() — WooCommerce's own function,
- * not wp_delete_comment(), so the SecurityRegressionTest grep stays green.
- * The return value is surfaced: false becomes WP_Error.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_order_note( array $input ) {
-	$order_id = (int) ( $input['order_id'] ?? 0 );
-	$note_id  = (int) ( $input['note_id'] ?? 0 );
-
-	$order = aafm_wc_get_order_object( $order_id );
-	if ( null === $order ) {
-		return aafm_generic_error();
-	}
-
-	$ok = wc_delete_order_note( $note_id );
-	if ( ! $ok ) {
-		return aafm_generic_error();
-	}
-
-	return array(
-		'id'      => $note_id,
-		'deleted' => true,
 	);
 }
 
@@ -1818,74 +1568,4 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	}
 
 	return aafm_wc_redact_refund( $refund );
-}
-
-// aafm/wc-delete-order-refund (D).
-
-/**
- * Args builder for aafm/wc-delete-order-refund.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_order_refund(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-order-refund' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-order-refund' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'refund_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'refund_id' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'id'      => array( 'type' => 'integer' ),
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_order_refund',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-order-refund.
- *
- * Permanent removal through the refund object's own ->delete( true ) — this is
- * WooCommerce's own data-store method, not wp_delete_post(), so the
- * SecurityRegressionTest grep stays green. The return value is surfaced: false
- * becomes WP_Error.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_order_refund( array $input ) {
-	$refund_id = (int) ( $input['refund_id'] ?? 0 );
-	$refund    = aafm_wc_get_refund_object( $refund_id );
-	if ( null === $refund ) {
-		return aafm_generic_error();
-	}
-
-	$ok = $refund->delete( true );
-	if ( ! $ok ) {
-		return aafm_generic_error();
-	}
-
-	return array(
-		'id'      => $refund_id,
-		'deleted' => true,
-	);
 }

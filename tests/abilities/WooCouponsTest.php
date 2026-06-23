@@ -1,7 +1,7 @@
 <?php
 /**
  * WooCommerce coupon abilities: wc-list-coupons, wc-get-coupon, wc-create-coupon,
- * wc-update-coupon, wc-delete-coupon.
+ * wc-update-coupon.
  *
  * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcCouponStubStore. The seed_wc_coupons()
@@ -57,7 +57,6 @@ final class WooCouponsTest extends TestCase {
 				'aafm/wc-get-coupon',
 				'aafm/wc-create-coupon',
 				'aafm/wc-update-coupon',
-				'aafm/wc-delete-coupon',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -146,7 +145,6 @@ final class WooCouponsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/wc-get-coupon', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-coupon', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-coupon', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-coupon', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -400,61 +398,6 @@ final class WooCouponsTest extends TestCase {
 		$this->assertSame( '99.00', $fetched['amount'] );
 	}
 
-	// =========================================================================
-	// aafm/wc-delete-coupon
-	// =========================================================================
-
-	/**
-	 * Editor (no manage_woocommerce) must be denied.
-	 */
-	public function test_delete_coupon_requires_manage_woocommerce(): void {
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-coupon' )->check_permissions(
-				array( 'coupon_id' => 5001 )
-			)
-		);
-	}
-
-	/**
-	 * Happy path: valid coupon id permanently removes the coupon and returns deleted:true.
-	 */
-	public function test_delete_coupon_valid_delete_succeeds(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-coupon' )->execute(
-			array( 'coupon_id' => 5001 )
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-
-		// Coupon must be gone from the store.
-		$this->assertFalse( WcCouponStubStore::exists( 5001 ) );
-	}
-
-	/**
-	 * Unknown coupon id returns WP_Error.
-	 */
-	public function test_delete_coupon_unknown_id_returns_error(): void {
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-coupon' )->execute(
-			array( 'coupon_id' => 99999 )
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Store delete failure returns WP_Error — never lies success.
-	 */
-	public function test_delete_coupon_store_failure_returns_error(): void {
-		WcCouponStubStore::$force_delete_failure = true;
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-coupon' )->execute(
-			array( 'coupon_id' => 5001 )
-		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Delete failure must never lie success.' );
-		WcCouponStubStore::$force_delete_failure = false;
-	}
-
 	/**
 	 * Closed schema: an unknown field injected on top of valid args is rejected by execute().
 	 *
@@ -482,7 +425,6 @@ final class WooCouponsTest extends TestCase {
 			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
 			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'EVIL' ) ),
 			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ) ),
-			'delete-coupon' => array( 'aafm/wc-delete-coupon', array( 'coupon_id' => 5001 ) ),
 		);
 	}
 
@@ -520,7 +462,6 @@ final class WooCouponsTest extends TestCase {
 					'amount'    => '11.00',
 				),
 			),
-			'delete-coupon' => array( 'aafm/wc-delete-coupon', array( 'coupon_id' => 5001 ) ),
 		);
 	}
 
@@ -553,7 +494,6 @@ final class WooCouponsTest extends TestCase {
 			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
 			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'DENIED' ), 'editor' ),
 			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
-			'delete-coupon' => array( 'aafm/wc-delete-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
 		);
 	}
 }

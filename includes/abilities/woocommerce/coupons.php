@@ -92,19 +92,11 @@ function aafm_wc_coupons_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_coupon',
 		),
 
-		'aafm/wc-delete-coupon' => array(
-			'label'        => __( 'Delete WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce coupon by id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_coupon',
-		),
 	);
 }
 
 // =============================================================================
-// WC4 -- Coupons: list, get, create, update, delete
+// WC4 -- Coupons: list, get, create, update
 // =============================================================================
 
 /**
@@ -597,69 +589,4 @@ function aafm_exec_wc_update_coupon( array $input ) {
 	}
 
 	return aafm_rich_wc_coupon( $saved );
-}
-
-// =============================================================================
-// wc-delete-coupon
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-delete-coupon.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_coupon(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-coupon' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-coupon' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'coupon_id' ),
-			'properties'           => array(
-				'coupon_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_coupon',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-coupon.
- *
- * Uses $coupon->delete(true) — WooCommerce's own object delete — to permanently remove the
- * coupon. Surfaces the return value and converts false to WP_Error so we never lie success.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_coupon( array $input ) {
-	$coupon = aafm_wc_get_coupon_object( absint( $input['coupon_id'] ?? 0 ) );
-	if ( null === $coupon ) {
-		return aafm_generic_error();
-	}
-
-	$ok = $coupon->delete( true );
-	if ( false === $ok || is_wp_error( $ok ) ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
 }

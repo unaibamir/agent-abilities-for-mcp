@@ -92,15 +92,6 @@ function aafm_wc_tax_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_tax_rate',
 		),
 
-		'aafm/wc-delete-tax-rate'  => array(
-			'label'        => __( 'Delete WooCommerce tax rate', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently removes a WooCommerce tax rate by id. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_tax_rate',
-		),
-
 		// Tax classes (W4-WC6).
 		'aafm/wc-list-tax-classes' => array(
 			'label'        => __( 'List WooCommerce tax classes', 'agent-abilities-for-mcp' ),
@@ -109,15 +100,6 @@ function aafm_wc_tax_registry_definitions(): array {
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
 			'args_builder' => 'aafm_args_wc_list_tax_classes',
-		),
-
-		'aafm/wc-get-tax-class'    => array(
-			'label'        => __( 'Get WooCommerce tax class', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce tax class by slug, returning name and slug. Use slug "standard" for the built-in Standard class. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'reads',
-			'risk'         => 'read',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_tax_class',
 		),
 
 		'aafm/wc-create-tax-class' => array(
@@ -129,14 +111,6 @@ function aafm_wc_tax_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_create_tax_class',
 		),
 
-		'aafm/wc-delete-tax-class' => array(
-			'label'        => __( 'Delete WooCommerce tax class', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently removes a WooCommerce tax class by slug. This cannot be undone. The Standard class cannot be deleted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_tax_class',
-		),
 	);
 }
 
@@ -600,75 +574,6 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
 }
 
 // =============================================================================
-// wc-delete-tax-rate
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-delete-tax-rate.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_tax_rate(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-tax-rate' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-tax-rate' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'rate_id' ),
-			'properties'           => array(
-				'rate_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_tax_rate',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-tax-rate.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-
-	$rate_id  = isset( $input['rate_id'] ) ? (int) $input['rate_id'] : 0;
-	$existing = aafm_wc_get_tax_rate_by_id( $rate_id );
-	if ( null === $existing ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'agent-abilities-for-mcp' ) );
-	}
-
-	global $wpdb;
-	$table = $wpdb->prefix . 'woocommerce_tax_rates';
-	$ok    = $wpdb->delete( $table, array( 'tax_rate_id' => $rate_id ), array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct write to WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
-	if ( false === $ok ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
-}
-
-// =============================================================================
 // Tax class helpers
 // =============================================================================
 
@@ -772,68 +677,6 @@ function aafm_exec_wc_list_tax_classes( array $input ): array|\WP_Error { // php
 }
 
 // =============================================================================
-// wc-get-tax-class
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-get-tax-class.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_get_tax_class(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-tax-class' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-tax-class' ),
-		'category'            => 'aafm-reads',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'slug' ),
-			'properties'           => array(
-				'slug' => array( 'type' => 'string' ),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'name' => array( 'type' => 'string' ),
-				'slug' => array( 'type' => 'string' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_get_tax_class',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => true,
-				'destructive' => false,
-				'idempotent'  => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-get-tax-class.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_get_tax_class( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-
-	$slug    = sanitize_title( (string) ( $input['slug'] ?? '' ) );
-	$classes = aafm_wc_build_tax_class_list();
-	foreach ( $classes as $class ) {
-		if ( $class['slug'] === $slug ) {
-			return $class;
-		}
-	}
-	return new \WP_Error( 'aafm_not_found', __( 'Tax class not found.', 'agent-abilities-for-mcp' ) );
-}
-
-// =============================================================================
 // wc-create-tax-class
 // =============================================================================
 
@@ -911,74 +754,4 @@ function aafm_exec_wc_create_tax_class( array $input ): array|\WP_Error {
 		'name' => (string) ( $result['name'] ?? $name ),
 		'slug' => $stored_slug,
 	);
-}
-
-// =============================================================================
-// wc-delete-tax-class
-// =============================================================================
-
-/**
- * Args builder for aafm/wc-delete-tax-class.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_tax_class(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-tax-class' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-tax-class' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'additionalProperties' => false,
-			'required'             => array( 'slug' ),
-			'properties'           => array(
-				'slug' => array( 'type' => 'string' ),
-			),
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_tax_class',
-		'permission_callback' => 'aafm_wc_perm',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Execute aafm/wc-delete-tax-class.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_tax_class( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
-	}
-
-	if ( ! class_exists( 'WC_Tax' ) ) {
-		return aafm_generic_error();
-	}
-
-	$slug = sanitize_title( (string) ( $input['slug'] ?? '' ) );
-	if ( 'standard' === $slug || '' === $slug ) {
-		return new \WP_Error( 'aafm_invalid', __( 'The Standard tax class cannot be deleted.', 'agent-abilities-for-mcp' ) );
-	}
-
-	$result = \WC_Tax::delete_tax_class_by( 'slug', $slug );
-	if ( is_wp_error( $result ) ) {
-		return $result;
-	}
-	if ( false === $result ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
 }

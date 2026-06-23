@@ -1,14 +1,11 @@
 <?php
 /**
  * WooCommerce customer abilities: wc-list-customers, wc-get-customer, wc-create-customer,
- * wc-update-customer, wc-delete-customer.
+ * wc-update-customer.
  *
  * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcCustomerStubStore. The seed_wc_customers()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
- *
- * The delete ability exercises REAL WordPress user creation (wp_insert_user) because
- * wc-delete-customer ultimately calls wp_delete_user(), which only works on real WP users.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -59,7 +56,6 @@ final class WooCustomersTest extends TestCase {
 				'aafm/wc-get-customer',
 				'aafm/wc-create-customer',
 				'aafm/wc-update-customer',
-				'aafm/wc-delete-customer',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -125,7 +121,6 @@ final class WooCustomersTest extends TestCase {
 		$this->assertArrayNotHasKey( 'aafm/wc-get-customer', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-customer', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-update-customer', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-customer', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -456,9 +451,6 @@ final class WooCustomersTest extends TestCase {
 	/**
 	 * Closed schema: an unknown field injected on top of valid args is rejected by execute().
 	 *
-	 * The delete-customer ability is checked separately because its args need user
-	 * fixtures created at runtime, which a static data provider cannot build.
-	 *
 	 * @dataProvider provide_closed_schema_cases
 	 *
 	 * @param string               $ability        Ability name.
@@ -507,303 +499,6 @@ final class WooCustomersTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $fetched );
 		$this->assertSame( $new_id, $fetched['id'] );
 		$this->assertSame( 'Round', $fetched['first_name'] );
-	}
-
-	// =========================================================================
-	// aafm/wc-delete-customer
-	// =========================================================================
-
-	/**
-	 * Editor (no manage_woocommerce) must be denied.
-	 */
-	public function test_delete_customer_requires_manage_woocommerce(): void {
-		// Create a real WP user so the permission check does not fail on missing user first.
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-customer' )->check_permissions(
-				array(
-					'customer_id' => $victim_id,
-					'reassign_to' => $reassign_id,
-				)
-			)
-		);
-	}
-
-	/**
-	 * A principal with manage_woocommerce but WITHOUT delete_users must be denied at the
-	 * permission gate — store management must not expand into account destruction.
-	 *
-	 * Models a shop-manager-style custom role: it holds manage_woocommerce (so the rest of
-	 * the WC surface is usable) but does not hold the primitive delete_users cap.
-	 */
-	public function test_delete_customer_requires_delete_users_capability(): void {
-		add_role(
-			'aafm_shop_manager_test',
-			'AAFM Shop Manager Test',
-			array(
-				'read'               => true,
-				'manage_woocommerce' => true,
-			)
-		);
-
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$manager_id  = $this->factory->user->create( array( 'role' => 'aafm_shop_manager_test' ) );
-		wp_set_current_user( $manager_id );
-
-		$this->assertTrue(
-			current_user_can( 'manage_woocommerce' ),
-			'Fixture sanity: the shop-manager role must hold manage_woocommerce.'
-		);
-		$this->assertFalse(
-			current_user_can( 'delete_users' ),
-			'Fixture sanity: the shop-manager role must NOT hold delete_users.'
-		);
-
-		$denied = wp_get_ability( 'aafm/wc-delete-customer' )->check_permissions(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-		$this->assertNotTrue(
-			$denied,
-			'manage_woocommerce alone must not authorize deleting a WP user account.'
-		);
-
-		// The denial must be audited.
-		$audited   = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $audited, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-customer', $abilities );
-
-		remove_role( 'aafm_shop_manager_test' );
-	}
-
-	/**
-	 * Guard 1: non-existent customer id returns WP_Error.
-	 */
-	public function test_delete_customer_unknown_victim_returns_error(): void {
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => 99999,
-				'reassign_to' => $reassign_id,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Guard 2: the current user cannot delete their own account.
-	 */
-	public function test_delete_customer_cannot_delete_self(): void {
-		$admin_id    = $this->factory->user->create( array( 'role' => 'administrator' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		wp_set_current_user( $admin_id );
-		$res = wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => $admin_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Guard 3a: reassign_to missing / zero returns WP_Error.
-	 */
-	public function test_delete_customer_missing_reassign_returns_error(): void {
-		$victim_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->acting_as( 'administrator' );
-		// The schema requires reassign_to, but exercise the executor guard via a direct call
-		// by bypassing the ability gateway and calling the executor directly.
-		$res = aafm_exec_wc_delete_customer(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => 0,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Guard 3b: reassign_to same as victim returns WP_Error.
-	 */
-	public function test_delete_customer_reassign_equals_victim_returns_error(): void {
-		$victim_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->acting_as( 'administrator' );
-		$res = aafm_exec_wc_delete_customer(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $victim_id,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Guard 3c: reassign_to refers to a non-existent user.
-	 */
-	public function test_delete_customer_nonexistent_reassign_returns_error(): void {
-		$victim_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$this->acting_as( 'administrator' );
-		$res = aafm_exec_wc_delete_customer(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => 99999,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Guard 4: cannot remove the last administrator.
-	 */
-	public function test_delete_customer_last_admin_is_protected(): void {
-		// The test suite always has the main admin user. If there is only one admin, the guard fires.
-		$admins = get_users(
-			array(
-				'role'   => 'administrator',
-				'fields' => 'ID',
-			)
-		);
-		if ( count( $admins ) !== 1 ) {
-			$this->markTestSkipped( 'Last-admin guard requires exactly one administrator in the test DB.' );
-		}
-
-		$victim_id   = (int) $admins[0];
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		// Become a different admin so guard 2 (self-delete) doesn't fire first.
-		$other_admin = $this->factory->user->create( array( 'role' => 'administrator' ) );
-		wp_set_current_user( $other_admin );
-
-		// Now we have two admins; delete $other_admin so $victim_id becomes the last one.
-		wp_delete_user( $other_admin, $victim_id );
-
-		// Re-act as main admin (victim) would fail self-check; use the reassign user instead.
-		// Set current user to reassign_id (subscriber with manage_woocommerce granted by stub).
-		$subscriber = $reassign_id;
-		wp_set_current_user( $subscriber );
-		$res = aafm_exec_wc_delete_customer(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $subscriber,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Happy path: valid victim + reassign deletes the user and returns deleted:true.
-	 */
-	public function test_delete_customer_valid_delete_succeeds(): void {
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-
-		// Verify the user no longer exists in WordPress.
-		$this->assertFalse( get_userdata( $victim_id ) );
-	}
-
-	/**
-	 * Audit: successful delete is recorded.
-	 */
-	public function test_delete_customer_success_is_audited(): void {
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-customer', $abilities );
-	}
-
-	/**
-	 * Audit: denied permission check is recorded.
-	 */
-	public function test_delete_customer_denied_is_audited(): void {
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-customer' )->check_permissions(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-customer', $abilities );
-	}
-
-	/**
-	 * Closed schema rejects an unknown field.
-	 */
-	public function test_delete_customer_closed_schema_rejects_unknown_field(): void {
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-				'evil_field'  => 'x',
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	// =========================================================================
-	// FIX-4: delete reassign actually moves content.
-	// =========================================================================
-
-	/**
-	 * A valid delete with reassign_to must transfer the victim's posts to the new owner.
-	 */
-	public function test_delete_customer_valid_delete_reassigns_content(): void {
-		$victim_id   = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-		$reassign_id = $this->factory->user->create( array( 'role' => 'subscriber' ) );
-
-		// Create a post authored by the victim so we can verify reassignment.
-		$post_id = self::factory()->post->create( array( 'post_author' => $victim_id ) );
-		$this->assertSame( $victim_id, (int) get_post( $post_id )->post_author );
-
-		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-delete-customer' )->execute(
-			array(
-				'customer_id' => $victim_id,
-				'reassign_to' => $reassign_id,
-			)
-		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertTrue( $res['deleted'] );
-
-		// Post must now be owned by the reassign user, not the deleted victim.
-		$this->assertSame( $reassign_id, (int) get_post( $post_id )->post_author, 'wp_delete_user reassign must transfer post authorship.' );
 	}
 
 	// =========================================================================
@@ -1031,9 +726,6 @@ final class WooCustomersTest extends TestCase {
 
 	/**
 	 * Audit: a successful execute is recorded under the calling ability.
-	 *
-	 * The delete-customer ability is audited separately because its args need user
-	 * fixtures created at runtime, which a static data provider cannot build.
 	 *
 	 * @dataProvider provide_success_audit_cases
 	 *

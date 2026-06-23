@@ -20,17 +20,17 @@ final class IntegrationManifestTest extends TestCase {
 
 	public function test_manifest_reports_woocommerce_totals_without_the_host_active(): void {
 		// WooCommerce is NOT installed on the test site, yet the static manifest still reports
-		// its totals (that is the whole point — the card can show "0 / 67" while inactive).
+		// its totals (that is the whole point — the card can show "0 / 52" while inactive).
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
 
 		$manifest = aafm_integration_manifest();
 		$this->assertArrayHasKey( 'woocommerce', $manifest );
 
 		$wc = $manifest['woocommerce'];
-		$this->assertSame( 67, $wc['total'] );
-		$this->assertSame( 32, $wc['read'] );
+		$this->assertSame( 52, $wc['total'] );
+		$this->assertSame( 27, $wc['read'] );
 		$this->assertSame( 23, $wc['write'] );
-		$this->assertSame( 12, $wc['destructive'] );
+		$this->assertSame( 2, $wc['destructive'] );
 		// read + write + destructive must reconcile to the slug total.
 		$this->assertSame( $wc['total'], $wc['read'] + $wc['write'] + $wc['destructive'] );
 	}
@@ -81,7 +81,7 @@ final class IntegrationManifestTest extends TestCase {
 			$core + $manifest_total,
 			'Manifest integration totals plus the core count must equal the live catalog total — drift detected.'
 		);
-		$this->assertSame( 168, $core + $manifest_total );
+		$this->assertSame( 153, $core + $manifest_total );
 
 		aafm_registry_cache_should_flush( true );
 	}
@@ -90,7 +90,7 @@ final class IntegrationManifestTest extends TestCase {
 		// The Dashboard and Abilities "available/total" both read this one function, so they
 		// can never disagree. It equals core + every integration manifest total.
 		$available = aafm_available_ability_count();
-		$this->assertSame( 168, $available );
+		$this->assertSame( 153, $available );
 	}
 
 	public function test_descriptor_counts_drive_the_manifest(): void {

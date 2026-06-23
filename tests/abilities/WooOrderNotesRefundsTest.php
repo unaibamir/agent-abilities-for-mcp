@@ -1,11 +1,10 @@
 <?php
 /**
- * WooCommerce order delete, order notes, and order refunds abilities (W4-WC2.3).
+ * WooCommerce order notes and order refunds abilities (W4-WC2.3).
  *
  * Covers:
- *   Group A — wc-delete-order (1 destructive)
- *   Group B — wc-list-order-notes / wc-get-order-note / wc-create-order-note / wc-delete-order-note
- *   Group C — wc-list-order-refunds / wc-get-order-refund / wc-create-order-refund / wc-delete-order-refund
+ *   Group B — wc-list-order-notes / wc-create-order-note
+ *   Group C — wc-list-order-refunds / wc-get-order-refund / wc-create-order-refund
  *
  * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcOrderStubStore and the per-test note/refund stores
@@ -48,22 +47,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Enable + register the Group A (delete order) ability set.
-	 */
-	private function register_group_a(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option(
-			'aafm_enabled_abilities',
-			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
-				'aafm/wc-delete-order',
-			)
-		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
-	}
-
-	/**
 	 * Enable + register the Group B (order notes) ability set.
 	 */
 	private function register_group_b(): void {
@@ -74,9 +57,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 				'aafm/wc-list-orders',
 				'aafm/wc-get-order',
 				'aafm/wc-list-order-notes',
-				'aafm/wc-get-order-note',
 				'aafm/wc-create-order-note',
-				'aafm/wc-delete-order-note',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -95,92 +76,10 @@ final class WooOrderNotesRefundsTest extends TestCase {
 				'aafm/wc-list-order-refunds',
 				'aafm/wc-get-order-refund',
 				'aafm/wc-create-order-refund',
-				'aafm/wc-delete-order-refund',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
-
-	// =========================================================================
-	// GROUP A — aafm/wc-delete-order
-	// =========================================================================
-
-	/**
-	 * Successful delete removes the order from the store and returns {id, deleted:true}.
-	 */
-	public function test_delete_order_removes_the_order(): void {
-		$this->register_group_a();
-		$this->acting_as( 'administrator' );
-
-		$this->assertTrue( WcOrderStubStore::exists( 5001 ), 'Order 5001 must exist before delete.' );
-
-		$res = wp_get_ability( 'aafm/wc-delete-order' )->execute( array( 'order_id' => 5001 ) );
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 5001, $res['id'] );
-		$this->assertTrue( $res['deleted'], 'deleted must be true on success.' );
-		$this->assertFalse( WcOrderStubStore::exists( 5001 ), 'Order must be gone from the store after delete.' );
-	}
-
-	/**
-	 * Delete on a non-existent order must return a generic error, not lie success.
-	 */
-	public function test_delete_order_unknown_id_returns_error(): void {
-		$this->register_group_a();
-		$this->acting_as( 'administrator' );
-
-		$res = wp_get_ability( 'aafm/wc-delete-order' )->execute( array( 'order_id' => 999999 ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Surfaced delete-failure: when the stub signals a failed delete, we must not report deleted:true.
-	 */
-	public function test_delete_order_surfaces_failed_delete(): void {
-		$this->register_group_a();
-		$this->acting_as( 'administrator' );
-
-		// Flag that the stub's delete() should return false.
-		WcOrderStubStore::$delete_should_fail = true;
-
-		$res = wp_get_ability( 'aafm/wc-delete-order' )->execute( array( 'order_id' => 5001 ) );
-
-		WcOrderStubStore::$delete_should_fail = false;
-
-		$this->assertInstanceOf( WP_Error::class, $res, 'A failed delete must not return deleted:true.' );
-	}
-
-	/**
-	 * Editor (no manage_woocommerce) must be denied.
-	 */
-	public function test_delete_order_requires_manage_woocommerce(): void {
-		$this->register_group_a();
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-order' )->check_permissions( array( 'order_id' => 5001 ) )
-		);
-	}
-
-	public function test_delete_order_success_is_audited(): void {
-		$this->register_group_a();
-		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-delete-order' )->execute( array( 'order_id' => 5001 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order', $abilities );
-	}
-
-	public function test_delete_order_denied_is_audited(): void {
-		$this->register_group_a();
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-order' )->check_permissions( array( 'order_id' => 5001 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order', $abilities );
-	}
-
 
 	// =========================================================================
 	// GROUP B — order notes
@@ -267,86 +166,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( 'aafm/wc-list-order-notes', $abilities );
-	}
-
-
-	// -------------------------------------------------------------------------
-	// aafm/wc-get-order-note
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Fetching a note by id returns the correct note with all expected fields.
-	 */
-	public function test_get_order_note_returns_single_note(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_notes(
-			5001,
-			array(
-				array(
-					'id'            => 10,
-					'note'          => 'Order confirmed by staff.',
-					'added_by_user' => true,
-					'date_created'  => '2024-06-01T11:00:00',
-					'customer_note' => false,
-				),
-			)
-		);
-
-		$res = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 10,
-			)
-		);
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 10, $res['id'] );
-		$this->assertSame( 'Order confirmed by staff.', $res['note'] );
-		$this->assertArrayHasKey( 'added_by_user', $res );
-		$this->assertArrayHasKey( 'date_created', $res );
-		$this->assertArrayHasKey( 'customer_note', $res );
-	}
-
-	public function test_get_order_note_unknown_note_returns_error(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-		WcOrderStubStore::seed_notes( 5001, array() );
-
-		$res = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 9999,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	public function test_get_order_note_unknown_order_returns_error(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		$res = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
-			array(
-				'order_id' => 999999,
-				'note_id'  => 1,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	public function test_get_order_note_requires_manage_woocommerce(): void {
-		$this->register_group_b();
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-get-order-note' )->check_permissions(
-				array(
-					'order_id' => 5001,
-					'note_id'  => 1,
-				)
-			)
-		);
 	}
 
 
@@ -456,158 +275,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $res, 'A failed add_order_note() must not return {id:0,...} as success.' );
 	}
-
-	// -------------------------------------------------------------------------
-	// aafm/wc-delete-order-note
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Deleting a note removes it from the store and returns {id, deleted:true}.
-	 */
-	public function test_delete_order_note_removes_the_note(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_notes(
-			5001,
-			array(
-				array(
-					'id'            => 20,
-					'note'          => 'Note to delete.',
-					'added_by_user' => false,
-					'date_created'  => '2024-06-01T12:00:00',
-					'customer_note' => false,
-				),
-			)
-		);
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 20,
-			)
-		);
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 20, $res['id'] );
-		$this->assertTrue( $res['deleted'] );
-	}
-
-	public function test_delete_order_note_unknown_order_returns_error(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
-			array(
-				'order_id' => 99998,
-				'note_id'  => 20,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res, 'Unknown order_id must return WP_Error.' );
-	}
-
-	public function test_delete_order_note_unknown_note_returns_error(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 99999,
-			)
-		);
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Surfaced delete-note failure: when the stub signals failure we must not report deleted:true.
-	 */
-	public function test_delete_order_note_surfaces_failed_delete(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_notes(
-			5001,
-			array(
-				array(
-					'id'            => 21,
-					'note'          => 'Note whose delete fails.',
-					'added_by_user' => false,
-					'date_created'  => '2024-06-01T12:00:00',
-					'customer_note' => false,
-				),
-			)
-		);
-		WcOrderStubStore::$delete_note_should_fail = true;
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 21,
-			)
-		);
-
-		WcOrderStubStore::$delete_note_should_fail = false;
-
-		$this->assertInstanceOf( WP_Error::class, $res, 'A failed note delete must not report deleted:true.' );
-	}
-
-	public function test_delete_order_note_requires_manage_woocommerce(): void {
-		$this->register_group_b();
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions(
-				array(
-					'order_id' => 5001,
-					'note_id'  => 20,
-				)
-			)
-		);
-	}
-
-	public function test_delete_order_note_success_is_audited(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_notes(
-			5001,
-			array(
-				array(
-					'id'            => 30,
-					'note'          => 'Audit note.',
-					'added_by_user' => false,
-					'date_created'  => '2024-06-01T12:00:00',
-					'customer_note' => false,
-				),
-			)
-		);
-		wp_get_ability( 'aafm/wc-delete-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 30,
-			)
-		);
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order-note', $abilities );
-	}
-
-	public function test_delete_order_note_denied_is_audited(): void {
-		$this->register_group_b();
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-order-note' )->check_permissions(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 20,
-			)
-		);
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order-note', $abilities );
-	}
-
 
 	// =========================================================================
 	// GROUP C — order refunds
@@ -877,111 +544,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		);
 	}
 
-	// -------------------------------------------------------------------------
-	// aafm/wc-delete-order-refund
-	// -------------------------------------------------------------------------
-
-	/**
-	 * Deleting a refund removes it from the store and returns {id, deleted:true}.
-	 */
-	public function test_delete_order_refund_removes_the_refund(): void {
-		$this->register_group_c();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_refunds(
-			5001,
-			array(
-				array(
-					'id'           => 300,
-					'amount'       => '4.99',
-					'reason'       => 'Test refund to delete.',
-					'date_created' => '2024-06-01T13:00:00',
-				),
-			)
-		);
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-refund' )->execute( array( 'refund_id' => 300 ) );
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 300, $res['id'] );
-		$this->assertTrue( $res['deleted'] );
-	}
-
-	public function test_delete_order_refund_unknown_refund_returns_error(): void {
-		$this->register_group_c();
-		$this->acting_as( 'administrator' );
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-refund' )->execute( array( 'refund_id' => 99999 ) );
-		$this->assertInstanceOf( WP_Error::class, $res );
-	}
-
-	/**
-	 * Surfaced refund-delete failure: when the stub signals failure we must not report deleted:true.
-	 */
-	public function test_delete_order_refund_surfaces_failed_delete(): void {
-		$this->register_group_c();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_refunds(
-			5001,
-			array(
-				array(
-					'id'           => 301,
-					'amount'       => '2.00',
-					'reason'       => 'Will fail to delete.',
-					'date_created' => '2024-06-01T13:00:00',
-				),
-			)
-		);
-		WcOrderStubStore::$delete_refund_should_fail = true;
-
-		$res = wp_get_ability( 'aafm/wc-delete-order-refund' )->execute( array( 'refund_id' => 301 ) );
-
-		WcOrderStubStore::$delete_refund_should_fail = false;
-
-		$this->assertInstanceOf( WP_Error::class, $res, 'A failed refund delete must not report deleted:true.' );
-	}
-
-	public function test_delete_order_refund_requires_manage_woocommerce(): void {
-		$this->register_group_c();
-		$this->acting_as( 'editor' );
-		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-delete-order-refund' )->check_permissions( array( 'refund_id' => 300 ) )
-		);
-	}
-
-	public function test_delete_order_refund_success_is_audited(): void {
-		$this->register_group_c();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_refunds(
-			5001,
-			array(
-				array(
-					'id'           => 310,
-					'amount'       => '3.00',
-					'reason'       => 'Audit refund.',
-					'date_created' => '2024-06-01T13:00:00',
-				),
-			)
-		);
-		wp_get_ability( 'aafm/wc-delete-order-refund' )->execute( array( 'refund_id' => 310 ) );
-
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
-		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order-refund', $abilities );
-	}
-
-	public function test_delete_order_refund_denied_is_audited(): void {
-		$this->register_group_c();
-		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-delete-order-refund' )->check_permissions( array( 'refund_id' => 300 ) );
-
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
-		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-delete-order-refund', $abilities );
-	}
-
 	/**
 	 * Closed schema: an unknown field injected on top of valid args is rejected by execute().
 	 *
@@ -990,15 +552,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 *
 	 * @dataProvider provide_closed_schema_cases
 	 *
-	 * @param string               $group          Registration group: 'a', 'b', or 'c'.
+	 * @param string               $group          Registration group: 'b' or 'c'.
 	 * @param string               $ability        Ability name.
 	 * @param array<string, mixed> $valid_min_args Minimal valid args for the ability.
 	 */
 	public function test_closed_schema_rejects_unknown_field( string $group, string $ability, array $valid_min_args ): void {
 		switch ( $group ) {
-			case 'a':
-				$this->register_group_a();
-				break;
 			case 'b':
 				$this->register_group_b();
 				break;
@@ -1021,30 +580,13 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 */
 	public function provide_closed_schema_cases(): array {
 		return array(
-			'delete-order'        => array( 'a', 'aafm/wc-delete-order', array( 'order_id' => 5001 ) ),
 			'list-order-notes'    => array( 'b', 'aafm/wc-list-order-notes', array( 'order_id' => 5001 ) ),
-			'get-order-note'      => array(
-				'b',
-				'aafm/wc-get-order-note',
-				array(
-					'order_id' => 5001,
-					'note_id'  => 1,
-				),
-			),
 			'create-order-note'   => array(
 				'b',
 				'aafm/wc-create-order-note',
 				array(
 					'order_id' => 5001,
 					'note'     => 'Test.',
-				),
-			),
-			'delete-order-note'   => array(
-				'b',
-				'aafm/wc-delete-order-note',
-				array(
-					'order_id' => 5001,
-					'note_id'  => 1,
 				),
 			),
 			'list-order-refunds'  => array( 'c', 'aafm/wc-list-order-refunds', array( 'order_id' => 5001 ) ),
@@ -1057,7 +599,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 					'amount'   => '5.00',
 				),
 			),
-			'delete-order-refund' => array( 'c', 'aafm/wc-delete-order-refund', array( 'refund_id' => 300 ) ),
 		);
 	}
 
@@ -1076,15 +617,11 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		aafm_registry_cache_should_flush( true );
 
 		$registry = aafm_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-order', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-list-order-notes', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-get-order-note', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-order-note', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-order-note', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-list-order-refunds', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-get-order-refund', $registry );
 		$this->assertArrayNotHasKey( 'aafm/wc-create-order-refund', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-delete-order-refund', $registry );
 
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
@@ -1134,7 +671,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * A note created via wc-create-order-note is retrievable by id with the same content.
+	 * A note created via wc-create-order-note shows up in wc-list-order-notes.
 	 */
 	public function test_create_order_note_round_trip(): void {
 		$this->register_group_b();
@@ -1151,16 +688,11 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 		$this->assertArrayHasKey( 'id', $created );
 
-		$fetched = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => $created['id'],
-			)
-		);
+		$list = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
 
-		$this->assertNotInstanceOf( WP_Error::class, $fetched );
-		$this->assertSame( $created['id'], $fetched['id'] );
-		$this->assertSame( 'Round-trip note text.', $fetched['note'] );
+		$this->assertNotInstanceOf( WP_Error::class, $list );
+		$ids = array_column( $list['notes'], 'id' );
+		$this->assertContains( $created['id'], $ids );
 	}
 
 	/**
@@ -1192,45 +724,6 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// -------------------------------------------------------------------------
 	// Id-fidelity: second of two items is correctly distinguishable
 	// -------------------------------------------------------------------------
-
-	/**
-	 * Fetching the second of two notes by id returns that note's text, not the first's.
-	 */
-	public function test_get_order_note_id_fidelity(): void {
-		$this->register_group_b();
-		$this->acting_as( 'administrator' );
-
-		WcOrderStubStore::seed_notes(
-			5001,
-			array(
-				array(
-					'id'            => 701,
-					'note'          => 'First note alpha.',
-					'added_by_user' => false,
-					'date_created'  => '2024-07-01T08:00:00',
-					'customer_note' => false,
-				),
-				array(
-					'id'            => 702,
-					'note'          => 'Second note beta.',
-					'added_by_user' => true,
-					'date_created'  => '2024-07-01T09:00:00',
-					'customer_note' => true,
-				),
-			)
-		);
-
-		$res = wp_get_ability( 'aafm/wc-get-order-note' )->execute(
-			array(
-				'order_id' => 5001,
-				'note_id'  => 702,
-			)
-		);
-
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 702, $res['id'] );
-		$this->assertSame( 'Second note beta.', $res['note'] );
-	}
 
 	/**
 	 * Fetching the second of two refunds by id returns that refund's amount and reason.

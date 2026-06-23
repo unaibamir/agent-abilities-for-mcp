@@ -92,20 +92,12 @@ function aafm_wc_customers_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_customer',
 		),
 
-		'aafm/wc-delete-customer' => array(
-			'label'        => __( 'Delete WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce customer (WordPress user) by id and reassigns their content to another user. This cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
-			'group'        => 'writes',
-			'risk'         => 'destructive',
-			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_customer',
-		),
 	);
 }
 
 // =============================================================================
-// WC3 -- Customers: list, get, create, update, delete
-// All five abilities gate on the flat, object-independent manage_woocommerce cap
+// WC3 -- Customers: list, get, create, update
+// All abilities gate on the flat, object-independent manage_woocommerce cap
 // (aafm_wc_perm). None needs a server.php case — they fall through at discovery.
 // Customer PII (email, billing phone, billing/shipping addresses) is returned in
 // full under the Integrations security disclaimer (aafm_woocommerce_disclaimer).
@@ -683,121 +675,4 @@ function aafm_exec_wc_update_customer( array $input ) {
 		return aafm_generic_error();
 	}
 	return aafm_rich_wc_customer( $saved );
-}
-
-// aafm/wc-delete-customer (W/destructive).
-
-/**
- * Args builder for aafm/wc-delete-customer.
- *
- * @return array<string,mixed>
- */
-function aafm_args_wc_delete_customer(): array {
-	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-customer' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-customer' ),
-		'category'            => 'aafm-writes',
-		'input_schema'        => array(
-			'type'                 => 'object',
-			'properties'           => array(
-				'customer_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-				'reassign_to' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-			),
-			'required'             => array( 'customer_id', 'reassign_to' ),
-			'additionalProperties' => false,
-		),
-		'output_schema'       => array(
-			'type'       => 'object',
-			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
-			),
-		),
-		'execute_callback'    => 'aafm_exec_wc_delete_customer',
-		'permission_callback' => 'aafm_wc_perm_delete_customer',
-		'meta'                => array(
-			'annotations' => array(
-				'readonly'    => false,
-				'destructive' => true,
-			),
-		),
-	);
-}
-
-/**
- * Permission for aafm/wc-delete-customer.
- *
- * Deleting a customer destroys a WordPress user account, so store-management rights are not
- * enough on their own: the caller must hold manage_woocommerce AND the primitive delete_users
- * cap AND the per-object delete_user on the target id. This mirrors aafm/delete-user's gate so a
- * manage_woocommerce-only principal (e.g. a shop manager) can never escalate into account
- * destruction.
- *
- * Returns false with empty input (no id) so discovery falls through to the object-independent
- * caps; the per-object check still runs at execute time.
- *
- * @param array<string,mixed> $input Validated input.
- * @return bool
- */
-function aafm_wc_perm_delete_customer( array $input ): bool {
-	$id = isset( $input['customer_id'] ) ? absint( $input['customer_id'] ) : 0;
-	return current_user_can( 'manage_woocommerce' )
-		&& current_user_can( 'delete_users' )
-		&& $id > 0
-		&& current_user_can( 'delete_user', $id );
-}
-
-/**
- * Execute aafm/wc-delete-customer.
- *
- * Mirrors the delete-user invariants exactly (same guards, same order):
- *   1. Victim exists (valid WP_User).
- *   2. Cannot delete the current user.
- *   3. Reassign id is provided, differs from victim, and refers to a valid WP_User.
- *   4. Cannot remove the last administrator.
- * Then calls wp_delete_user() — WooCommerce's own customer delete path — with the
- * reassign id. Returns WP_Error on any failure.
- *
- * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>|\WP_Error
- */
-function aafm_exec_wc_delete_customer( array $input ) {
-	$id       = isset( $input['customer_id'] ) ? absint( $input['customer_id'] ) : 0;
-	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
-	$victim   = $id ? get_userdata( $id ) : false;
-
-	if ( ! $victim instanceof \WP_User ) {
-		return aafm_generic_error();
-	}
-	if ( get_current_user_id() === $id ) {
-		return aafm_generic_error();
-	}
-	if ( ! $reassign || $reassign === $id || ! get_userdata( $reassign ) instanceof \WP_User ) {
-		return aafm_generic_error();
-	}
-	if ( in_array( 'administrator', (array) $victim->roles, true ) ) {
-		$admins = get_users(
-			array(
-				'role'   => 'administrator',
-				'fields' => 'ID',
-				'number' => 2,
-			)
-		);
-		if ( count( $admins ) <= 1 ) {
-			return aafm_generic_error();
-		}
-	}
-
-	require_once ABSPATH . 'wp-admin/includes/user.php';
-	$ok = wp_delete_user( $id, $reassign );
-	if ( ! $ok ) {
-		return aafm_generic_error();
-	}
-
-	return array( 'deleted' => true );
 }

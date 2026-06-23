@@ -69,7 +69,7 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// The inactive WooCommerce card shows its manifest count so the operator sees what
-		// activating the plugin would unlock (32 read + 23 write of 67).
+		// activating the plugin would unlock (27 read + 23 write of 52).
 		$wc = aafm_integration_manifest()['woocommerce'];
 		$this->assertStringContainsString( 'aafm-integration-count', $html );
 		$this->assertStringContainsString(

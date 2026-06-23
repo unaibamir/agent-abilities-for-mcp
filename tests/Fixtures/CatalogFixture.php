@@ -79,11 +79,9 @@ final class CatalogFixture {
 		'aafm/wc-list-product-variations',
 		'aafm/wc-get-product-variation',
 		'aafm/wc-list-product-attributes',
-		'aafm/wc-get-product-attribute',
 		'aafm/wc-list-orders',
 		'aafm/wc-get-order',
 		'aafm/wc-list-order-notes',
-		'aafm/wc-get-order-note',
 		'aafm/wc-list-order-refunds',
 		'aafm/wc-get-order-refund',
 		'aafm/wc-list-customers',
@@ -97,15 +95,12 @@ final class CatalogFixture {
 		'aafm/wc-list-tax-rates',
 		'aafm/wc-get-tax-rate',
 		'aafm/wc-list-tax-classes',
-		'aafm/wc-get-tax-class',
 		'aafm/wc-get-sales-report',
 		'aafm/wc-get-top-sellers-report',
 		'aafm/wc-count-orders',
 		'aafm/wc-count-products',
-		'aafm/wc-count-customers',
 		'aafm/wc-list-payment-gateways',
 		'aafm/wc-get-payment-gateway',
-		'aafm/wc-count-coupons',
 	);
 
 	/**
@@ -174,32 +169,22 @@ final class CatalogFixture {
 		'aafm/wc-delete-product-variation',
 		'aafm/wc-create-product-attribute',
 		'aafm/wc-update-product-attribute',
-		'aafm/wc-delete-product-attribute',
 		'aafm/wc-create-order',
 		'aafm/wc-update-order',
 		'aafm/wc-update-order-status',
-		'aafm/wc-delete-order',
 		'aafm/wc-create-order-note',
-		'aafm/wc-delete-order-note',
 		'aafm/wc-create-order-refund',
-		'aafm/wc-delete-order-refund',
 		'aafm/wc-create-customer',
 		'aafm/wc-update-customer',
-		'aafm/wc-delete-customer',
 		'aafm/wc-create-coupon',
 		'aafm/wc-update-coupon',
-		'aafm/wc-delete-coupon',
 		'aafm/wc-create-shipping-zone',
 		'aafm/wc-update-shipping-zone',
-		'aafm/wc-delete-shipping-zone',
 		'aafm/wc-create-shipping-method',
 		'aafm/wc-update-shipping-method',
-		'aafm/wc-delete-shipping-method',
 		'aafm/wc-create-tax-rate',
 		'aafm/wc-update-tax-rate',
-		'aafm/wc-delete-tax-rate',
 		'aafm/wc-create-tax-class',
-		'aafm/wc-delete-tax-class',
 		'aafm/wc-update-payment-gateway',
 	);
 
@@ -229,8 +214,7 @@ final class CatalogFixture {
 	 * wc-delete-product is permanent: it removes a WooCommerce product through the WC data store
 	 * (bypassing the Trash), so the agent is told the removal cannot be undone. wc-delete-product-
 	 * variation is permanent on the same basis — it removes a single product variation through the WC
-	 * data store with no recoverable Trash. wc-delete-product-attribute is permanent on the same
-	 * basis — it removes a global product attribute taxonomy, which also cannot be undone.
+	 * data store with no recoverable Trash.
 	 *
 	 * @var string[]
 	 */
@@ -254,15 +238,5 @@ final class CatalogFixture {
 		'aafm/delete-menu-item',
 		'aafm/wc-delete-product',
 		'aafm/wc-delete-product-variation',
-		'aafm/wc-delete-product-attribute',
-		'aafm/wc-delete-order',
-		'aafm/wc-delete-order-note',
-		'aafm/wc-delete-order-refund',
-		'aafm/wc-delete-customer',
-		'aafm/wc-delete-coupon',
-		'aafm/wc-delete-shipping-zone',
-		'aafm/wc-delete-shipping-method',
-		'aafm/wc-delete-tax-rate',
-		'aafm/wc-delete-tax-class',
 	);
 }

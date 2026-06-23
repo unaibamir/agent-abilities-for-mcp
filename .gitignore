@@ -37,3 +37,7 @@ Thumbs.db
 
 # QA evidence screenshots — scratch, never part of the plugin
 /public/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

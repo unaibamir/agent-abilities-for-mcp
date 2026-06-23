@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Agent Abilities for MCP – Secure WordPress MCP Server for Claude & AI Agents
  * Plugin URI:        https://github.com/unaibamir/agent-abilities-for-mcp
- * Description:       Give an AI agent scoped, audited access to your WordPress site over the Model Context Protocol. Least privilege by design, off by default.
+ * Description:       Secure WordPress MCP server: give Claude, Cursor and AI agents scoped, audited, least-privilege access over the Model Context Protocol. Off by default.
  * Version:           1.0.0
  * Requires at least: 6.9
  * Requires PHP:      8.0

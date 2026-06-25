@@ -5,7 +5,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | | |
 |---|---|
 | **Contributors** | unaibamir |
-| **Tags** | mcp, mcp-server, ai-agent, woocommerce |
+| **Tags** | mcp, chatgpt, ai-agent, woocommerce, content-management |
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |

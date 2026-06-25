@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Oversio Agent Abilities
+ * Plugin Name:       Oversio Agent Abilities — MCP Server for AI Agents
  * Plugin URI:        https://github.com/unaibamir/oversio-agent-abilities
  * Description:       WordPress MCP server that gives Claude, Cursor and AI agents scoped, audited, least-privilege access over the Model Context Protocol. Off by default.
  * Version:           1.0.0

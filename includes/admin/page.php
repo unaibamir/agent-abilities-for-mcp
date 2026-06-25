@@ -18,7 +18,7 @@ function oversio_register_admin_menu(): void {
 	$icon = 'dashicons-superhero';
 
 	add_menu_page(
-		__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ),
+		__( 'Oversio Agent Abilities', 'oversio-agent-abilities' ),
 		__( 'Agent Abilities', 'oversio-agent-abilities' ),
 		'manage_options',
 		'oversio-agent-abilities',
@@ -589,9 +589,9 @@ function oversio_register_privacy_policy_content(): void {
 		return;
 	}
 	$content = wp_kses_post(
-		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'oversio-agent-abilities' ) . '</p>'
+		'<p>' . __( 'When an administrator exposes a content type to AI agents through Oversio Agent Abilities, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'oversio-agent-abilities' ) . '</p>'
 	);
-	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'oversio-agent-abilities' ), $content );
+	wp_add_privacy_policy_content( __( 'Oversio Agent Abilities', 'oversio-agent-abilities' ), $content );
 }
 
 /**
@@ -739,7 +739,7 @@ function oversio_render_admin_page(): void {
 
 	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
 	echo '<div class="oversio-page-head"><div class="title-wrap">';
-	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ) . '</h1>';
+	echo '<h1>' . esc_html__( 'Oversio Agent Abilities', 'oversio-agent-abilities' ) . '</h1>';
 	echo '<p class="oversio-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div>';
 	printf(

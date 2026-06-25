@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall cleanup for Agent Abilities for MCP — multisite-aware.
+ * Uninstall cleanup for Oversio Agent Abilities — multisite-aware.
  *
  * Removes only this plugin's own data: every configuration option, the detected-meta-keys
  * transient, the per-site activity log table, and the OAuth tables. On multisite it loops

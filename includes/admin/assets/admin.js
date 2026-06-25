@@ -1,6 +1,6 @@
 /* global oversioAdmin */
 /**
- * Admin UI for Agent Abilities for MCP.
+ * Admin UI for Oversio Agent Abilities.
  *
  * Every value that comes back from an AJAX response is treated as untrusted and reaches
  * the DOM through textContent only — this file never assigns innerHTML, so there is no

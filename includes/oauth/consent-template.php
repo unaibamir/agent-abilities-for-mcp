@@ -115,7 +115,7 @@ function oversio_oauth_render_consent_page( array $view ): void {
 	// values in that file stay in lockstep with includes/admin/assets/admin.css (:root).
 
 	// Static inline SVGs (no dynamic data). The hub mark is the plugin logo.
-	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ) . '">'
+	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Oversio Agent Abilities', 'oversio-agent-abilities' ) . '">'
 		. '<defs>'
 		. '<radialGradient id="aGlow" cx="50%" cy="42%" r="55%"><stop offset="0%" stop-color="#9BC4FF"/><stop offset="55%" stop-color="#4F9DFF"/><stop offset="100%" stop-color="#2E6FD6"/></radialGradient>'
 		. '<linearGradient id="aLine" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6AA9FF"/><stop offset="100%" stop-color="#4F9DFF"/></linearGradient>'
@@ -208,7 +208,7 @@ function oversio_oauth_render_consent_page( array $view ): void {
 
 	echo '</div>'; // .card
 
-	echo '<p class="foot">' . $shield_svg . esc_html__( 'Secured by Agent Abilities for MCP', 'oversio-agent-abilities' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
+	echo '<p class="foot">' . $shield_svg . esc_html__( 'Secured by Oversio Agent Abilities', 'oversio-agent-abilities' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
 
 	echo '</main>';
 	echo '</body>';

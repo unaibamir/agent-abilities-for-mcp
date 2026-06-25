@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<ruleset name="Agent Abilities for MCP">
+<ruleset name="Oversio Agent Abilities">
 	<description>WordPress Coding Standards for oversio-agent-abilities.</description>
 
 	<file>.</file>

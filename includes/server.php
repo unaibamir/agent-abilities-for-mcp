@@ -471,7 +471,7 @@ function oversio_register_mcp_server( $adapter ): void {
 		'oversio-server',
 		OVERSIO_MCP_NAMESPACE,
 		OVERSIO_MCP_ROUTE_SEGMENT,
-		__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ),
+		__( 'Oversio Agent Abilities', 'oversio-agent-abilities' ),
 		__( 'Curated, governed WordPress abilities for AI agents.', 'oversio-agent-abilities' ),
 		OVERSIO_VERSION,
 		array( \WP\MCP\Transport\HttpTransport::class ),

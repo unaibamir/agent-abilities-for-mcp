@@ -154,7 +154,7 @@ function oversio_notice_adapter_missing(): void {
 		return;
 	}
 	echo '<div class="notice notice-error"><p>';
-	echo esc_html__( 'Agent Abilities for MCP could not load the MCP adapter. Please reinstall the plugin.', 'oversio-agent-abilities' );
+	echo esc_html__( 'Oversio Agent Abilities could not load the MCP adapter. Please reinstall the plugin.', 'oversio-agent-abilities' );
 	echo '</p></div>';
 }
 
@@ -180,7 +180,7 @@ function oversio_notice_adapter_outdated(): void {
 	if ( '' !== $plugin ) {
 		printf(
 			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'oversio-agent-abilities' ),
+			esc_html__( 'Oversio Agent Abilities is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Oversio Agent Abilities requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
 			esc_html( OVERSIO_MIN_ADAPTER_VERSION )
@@ -188,7 +188,7 @@ function oversio_notice_adapter_outdated(): void {
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'oversio-agent-abilities' ),
+			esc_html__( 'Oversio Agent Abilities is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
 			esc_html( OVERSIO_MIN_ADAPTER_VERSION )
 		);
@@ -217,7 +217,7 @@ function oversio_notice_adapter_too_new(): void {
 	if ( '' !== $plugin ) {
 		printf(
 			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'oversio-agent-abilities' ),
+			esc_html__( 'Oversio Agent Abilities is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Oversio Agent Abilities, or deactivate %1$s, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
 			esc_html( OVERSIO_MAX_ADAPTER_VERSION )
@@ -225,7 +225,7 @@ function oversio_notice_adapter_too_new(): void {
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'oversio-agent-abilities' ),
+			esc_html__( 'Oversio Agent Abilities is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Oversio Agent Abilities, or deactivate that plugin, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
 			esc_html( OVERSIO_MAX_ADAPTER_VERSION )
 		);

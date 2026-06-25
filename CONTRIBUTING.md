@@ -1,4 +1,4 @@
-# Contributing to Agent Abilities for MCP
+# Contributing to Oversio Agent Abilities
 
 This is the developer guide for the plugin's internals: how an ability flows from a PHP definition to a tool an agent can call, where each piece of metadata lives, and what you have to touch to add or change an ability. It does not ship to wordpress.org (it's excluded from the build) — it's here for whoever works on the code.
 

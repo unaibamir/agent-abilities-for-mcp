@@ -1,4 +1,4 @@
-/* Agent Abilities for MCP — admin settings page (Direction A).
+/* Oversio Agent Abilities — admin settings page (Direction A).
    Tokens live on :root; every component is scoped under .oversio-wrap so it
    never leaks into core admin chrome. WP-native neutrals, single accent. */
 

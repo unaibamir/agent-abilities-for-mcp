@@ -132,7 +132,7 @@ final class PostTypesSaveTest extends TestCase {
 		oversio_register_privacy_policy_content();
 
 		$entries = WP_Privacy_Policy_Content::get_suggested_policy_text();
-		$ours    = wp_list_filter( $entries, array( 'plugin_name' => 'Agent Abilities for MCP' ) );
+		$ours    = wp_list_filter( $entries, array( 'plugin_name' => 'Oversio Agent Abilities' ) );
 		$this->assertNotEmpty( $ours, 'Our plugin must contribute a suggested privacy-policy entry.' );
 
 		$entry = reset( $ours );

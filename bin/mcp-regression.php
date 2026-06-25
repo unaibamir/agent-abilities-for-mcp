@@ -1,6 +1,6 @@
 <?php
 /**
- * MCP regression harness for the Agent Abilities for MCP plugin.
+ * MCP regression harness for the Oversio Agent Abilities plugin.
  *
  * Drives the live MCP endpoint over HTTP exactly the way a real agent would
  * (initialize -> tools/list -> tools/call), exercising every enabled tool against
@@ -1351,7 +1351,7 @@ final class OVERSIO_Mcp_Regression {
 		foreach ( $plugins as $p ) {
 			$file = (string) ( $p['plugin'] ?? '' );
 			$name = (string) ( $p['name'] ?? '' );
-			if ( false !== stripos( $file, 'oversio-agent-abilities' ) || false !== stripos( $name, 'Agent Abilities for MCP' ) ) {
+			if ( false !== stripos( $file, 'oversio-agent-abilities' ) || false !== stripos( $name, 'Oversio Agent Abilities' ) ) {
 				$self = true;
 				break;
 			}

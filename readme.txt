@@ -1,4 +1,4 @@
-=== Agent Abilities for MCP – Secure MCP Server for Claude & AI Agents ===
+=== Oversio Agent Abilities — MCP Server for AI Agents ===
 Contributors: unaibamir
 Tags: mcp, mcp-server, ai-agent, claude, woocommerce
 Requires at least: 6.9
@@ -12,7 +12,7 @@ Secure WordPress MCP server connecting Claude, Cursor and AI agents to your site
 
 == Description ==
 
-Agent Abilities for MCP is a WordPress plugin that turns your site into a secure, governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Oversio Agent Abilities is a WordPress plugin that turns your site into a secure, governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 This is the safe way to give an AI agent access to WordPress. Everything is off until you turn it on, the agent only ever acts as the scoped user you bind it to, and every call is logged and re-checked before it runs. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
@@ -94,7 +94,7 @@ Most expose a large set of tools by default and connect with an admin-equivalent
 
 = Is it free? =
 
-Yes. Agent Abilities for MCP is free on WordPress.org, with no paid tier, no API key to buy, and no usage limits added by the plugin.
+Yes. Oversio Agent Abilities is free on WordPress.org, with no paid tier, no API key to buy, and no usage limits added by the plugin.
 
 = Does it work with my other plugins? =
 

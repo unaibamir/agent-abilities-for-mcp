@@ -201,7 +201,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/yoast.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/rankmath.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/aioseo.php';
-	require_once AAFM_PLUGIN_DIR . 'includes/abilities/acf.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/abilities/acf-integration.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/_shared.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/products.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/variations.php';

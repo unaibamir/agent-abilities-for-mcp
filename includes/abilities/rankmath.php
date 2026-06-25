@@ -403,7 +403,7 @@ function aafm_exec_rankmath_get_schema( array $input ) {
 		'post_id' => $id,
 		'type'    => $type,
 		// (object) so an empty/never-set schema JSON-encodes to "{}" per the output_schema's
-		// type:object, never "[]" (mirrors the acf.php / meta.php empty-map convention).
+		// type:object, never "[]" (mirrors the acf-integration.php / meta.php empty-map convention).
 		'schema'  => (object) ( is_array( $stored ) ? $stored : array() ),
 	);
 }

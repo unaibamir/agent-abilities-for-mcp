@@ -6,9 +6,41 @@ $vendorDir = dirname(__DIR__);
 $baseDir   = dirname($vendorDir);
 
 return array(
+	'AAFM\\Tests\\Abilities\\AbilityEdgeCasesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/AbilityEdgeCasesTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\AcfTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/AcfTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\ActivityLogTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/ActivityLogTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\AddPostTermsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/AddPostTermsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\AioseoTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/AioseoTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\BlocksTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/BlocksTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\CapabilityMatrixTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/CapabilityMatrixTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\CatalogTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/CatalogTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\CommentsCrudTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/CommentsCrudTest.php'
 	),
 	'AAFM\\Tests\\Abilities\\CommentsReadTest' => array(
 		'version' => 'dev-main',
@@ -18,6 +50,34 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/CommentsWriteTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\CountPostsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/CountPostsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\CptGovernanceTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/CptGovernanceTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\CptWritesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/CptWritesTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\GetAllPostMetaTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/GetAllPostMetaTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\GetTermTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/GetTermTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\IntegrationDetectionTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/IntegrationDetectionTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\IntegrationManifestTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/IntegrationManifestTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\MediaReadTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/MediaReadTest.php'
@@ -25,6 +85,10 @@ return array(
 	'AAFM\\Tests\\Abilities\\MediaWriteTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/MediaWriteTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\MenusTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/MenusTest.php'
 	),
 	'AAFM\\Tests\\Abilities\\PagesReadTest' => array(
 		'version' => 'dev-main',
@@ -34,6 +98,18 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/PagesWriteTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\PermanentDeleteTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/PermanentDeleteTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\PluginsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/PluginsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\PostMetaTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/PostMetaTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\PostsReadTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/PostsReadTest.php'
@@ -42,25 +118,69 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/PostsWriteTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\RankMathTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/RankMathTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\ReadGettersEnrichmentTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/ReadGettersEnrichmentTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\ReadsCatalogTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/ReadsCatalogTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\RedactionProofsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/RedactionProofsTest.php'
 	),
 	'AAFM\\Tests\\Abilities\\RegisterWrapperTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/RegisterWrapperTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\ReplaceInPostTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/ReplaceInPostTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\RevisionsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/RevisionsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\RichPostTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/RichPostTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\SafetyEnforcementTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/SafetyEnforcementTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\SearchTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/SearchTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\SecurityRegressionTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/SecurityRegressionTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\ServerDiscoveryTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/ServerDiscoveryTest.php'
 	),
 	'AAFM\\Tests\\Abilities\\ServerToolsTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/ServerToolsTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\SiteSettingsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/SiteSettingsTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\StructureReadTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/StructureReadTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\TermMetaTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/TermMetaTest.php'
 	),
 	'AAFM\\Tests\\Abilities\\TermsReadTest' => array(
 		'version' => 'dev-main',
@@ -70,9 +190,77 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/TermsWriteTest.php'
 	),
+	'AAFM\\Tests\\Abilities\\ThemesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/ThemesTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\TrashDisabledTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/TrashDisabledTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\UserMetaTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/UserMetaTest.php'
+	),
 	'AAFM\\Tests\\Abilities\\UsersReadTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/abilities/UsersReadTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\UsersWriteTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/UsersWriteTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooAttributesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooAttributesTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooCouponsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooCouponsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooCustomersTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooCustomersTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooOrderNotesRefundsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooOrderNotesRefundsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooOrdersTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooOrdersTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooProductsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooProductsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooReportsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooReportsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooShippingTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooShippingTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooTaxTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooTaxTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\WooVariationsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/WooVariationsTest.php'
+	),
+	'AAFM\\Tests\\Abilities\\YoastTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/abilities/YoastTest.php'
+	),
+	'AAFM\\Tests\\AcfStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/AcfStubStore.php'
+	),
+	'AAFM\\Tests\\Admin\\AbilitiesDisclosureTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/AbilitiesDisclosureTest.php'
 	),
 	'AAFM\\Tests\\Admin\\AbilitiesSaveTest' => array(
 		'version' => 'dev-main',
@@ -82,9 +270,97 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/admin/ActivityTabTest.php'
 	),
+	'AAFM\\Tests\\Admin\\ClientSnippetTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/ClientSnippetTest.php'
+	),
+	'AAFM\\Tests\\Admin\\ComponentsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/ComponentsTest.php'
+	),
 	'AAFM\\Tests\\Admin\\ConnectionTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/admin/ConnectionTest.php'
+	),
+	'AAFM\\Tests\\Admin\\CopyToneTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/CopyToneTest.php'
+	),
+	'AAFM\\Tests\\Admin\\DashboardTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/DashboardTest.php'
+	),
+	'AAFM\\Tests\\Admin\\HelpTabTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/HelpTabTest.php'
+	),
+	'AAFM\\Tests\\Admin\\IconsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/IconsTest.php'
+	),
+	'AAFM\\Tests\\Admin\\IntegrationsTabTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/IntegrationsTabTest.php'
+	),
+	'AAFM\\Tests\\Admin\\MenuStructureTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/MenuStructureTest.php'
+	),
+	'AAFM\\Tests\\Admin\\MetaKeySanitizerTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/MetaKeySanitizerTest.php'
+	),
+	'AAFM\\Tests\\Admin\\MetaKeysSaveTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/MetaKeysSaveTest.php'
+	),
+	'AAFM\\Tests\\Admin\\NoticesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/NoticesTest.php'
+	),
+	'AAFM\\Tests\\Admin\\OauthRevokeAjaxTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/OauthRevokeAjaxTest.php'
+	),
+	'AAFM\\Tests\\Admin\\PluginActionLinksTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/PluginActionLinksTest.php'
+	),
+	'AAFM\\Tests\\Admin\\PostTypesSaveTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/PostTypesSaveTest.php'
+	),
+	'AAFM\\Tests\\Admin\\ResetPluginTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/ResetPluginTest.php'
+	),
+	'AAFM\\Tests\\Admin\\SectionToggleTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/SectionToggleTest.php'
+	),
+	'AAFM\\Tests\\Admin\\SettingsSaveTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/SettingsSaveTest.php'
+	),
+	'AAFM\\Tests\\Admin\\ShellTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/ShellTest.php'
+	),
+	'AAFM\\Tests\\Admin\\SubmenuHighlightTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/admin/SubmenuHighlightTest.php'
+	),
+	'AAFM\\Tests\\AioseoStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/AioseoStubStore.php'
+	),
+	'AAFM\\Tests\\Audit\\LogInternalsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/audit/LogInternalsTest.php'
+	),
+	'AAFM\\Tests\\Audit\\LogPruneTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/audit/LogPruneTest.php'
 	),
 	'AAFM\\Tests\\Audit\\LogTest' => array(
 		'version' => 'dev-main',
@@ -94,6 +370,10 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/audit/UninstallTest.php'
 	),
+	'AAFM\\Tests\\Coexistence\\AdapterEagerLoadTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/coexistence/AdapterEagerLoadTest.php'
+	),
 	'AAFM\\Tests\\Coexistence\\AdapterLoadTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/coexistence/AdapterLoadTest.php'
@@ -101,6 +381,90 @@ return array(
 	'AAFM\\Tests\\Coexistence\\CoexistenceTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/coexistence/CoexistenceTest.php'
+	),
+	'AAFM\\Tests\\Fixtures\\CatalogFixture' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/Fixtures/CatalogFixture.php'
+	),
+	'AAFM\\Tests\\IntegrationStubs' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/IntegrationStubs.php'
+	),
+	'AAFM\\Tests\\OAuth\\AuthorizeTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/AuthorizeTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\ChallengeTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/ChallengeTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\CleanupTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/CleanupTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\ClientListTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/ClientListTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\ClientsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/ClientsTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\CodesTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/CodesTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\ConnectionRenderTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/ConnectionRenderTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\CorsHeadersTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/CorsHeadersTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\DiscoveryTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/DiscoveryTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\HandshakeTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/HandshakeTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\HttpTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/HttpTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\PkceTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/PkceTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\RestEndpointsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/RestEndpointsTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\RevokeAdminTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/RevokeAdminTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\SchemaTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/SchemaTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\SettingsTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/SettingsTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\SplitUrlOriginTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/SplitUrlOriginTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\TokensTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/TokensTest.php'
+	),
+	'AAFM\\Tests\\OAuth\\ValidatorTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/oauth/ValidatorTest.php'
 	),
 	'AAFM\\Tests\\TestCase' => array(
 		'version' => 'dev-main',
@@ -114,6 +478,10 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/unit/HelpersTest.php'
 	),
+	'AAFM\\Tests\\Unit\\MetaPrecedenceTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/unit/MetaPrecedenceTest.php'
+	),
 	'AAFM\\Tests\\Unit\\MetadataTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/unit/MetadataTest.php'
@@ -122,85 +490,181 @@ return array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/unit/RegistryTest.php'
 	),
+	'AAFM\\Tests\\Unit\\SafetyTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/unit/SafetyTest.php'
+	),
+	'AAFM\\Tests\\Unit\\TermMetaPrecedenceTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/unit/TermMetaPrecedenceTest.php'
+	),
 	'AAFM\\Tests\\Unit\\ToolNameTest' => array(
 		'version' => 'dev-main',
 		'path'    => $baseDir . '/tests/unit/ToolNameTest.php'
 	),
+	'AAFM\\Tests\\Unit\\UserMetaPrecedenceTest' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/unit/UserMetaPrecedenceTest.php'
+	),
+	'AAFM\\Tests\\WcAttributeStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcAttributeStubStore.php'
+	),
+	'AAFM\\Tests\\WcCouponStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcCouponStubStore.php'
+	),
+	'AAFM\\Tests\\WcCustomerStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcCustomerStubStore.php'
+	),
+	'AAFM\\Tests\\WcGatewayStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcGatewayStubStore.php'
+	),
+	'AAFM\\Tests\\WcOrderStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcOrderStubStore.php'
+	),
+	'AAFM\\Tests\\WcShippingStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcShippingStubStore.php'
+	),
+	'AAFM\\Tests\\WcStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcStubStore.php'
+	),
+	'AAFM\\Tests\\WcTaxStubStore' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/stubs/WcTaxStubStore.php'
+	),
+	'Aafm_Phpstan_Aioseo_Post_Model' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
 	'Autoloader' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-autoloader.php'
 	),
 	'Autoloader_Handler' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-autoloader-handler.php'
 	),
 	'Autoloader_Locator' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-autoloader-locator.php'
 	),
 	'Automattic\\Jetpack\\Autoloader\\AutoloadFileWriter' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadFileWriter.php'
 	),
 	'Automattic\\Jetpack\\Autoloader\\AutoloadGenerator' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadGenerator.php'
 	),
 	'Automattic\\Jetpack\\Autoloader\\AutoloadProcessor' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/AutoloadProcessor.php'
 	),
 	'Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/CustomAutoloaderPlugin.php'
 	),
 	'Automattic\\Jetpack\\Autoloader\\ManifestGenerator' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/ManifestGenerator.php'
 	),
 	'Container' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-container.php'
 	),
 	'Hook_Manager' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-hook-manager.php'
 	),
 	'Latest_Autoloader_Guard' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-latest-autoloader-guard.php'
 	),
 	'Manifest_Reader' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-manifest-reader.php'
 	),
 	'PHP_Autoloader' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-php-autoloader.php'
 	),
 	'Path_Processor' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-path-processor.php'
 	),
 	'Plugin_Locator' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-plugin-locator.php'
 	),
 	'Plugins_Handler' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-plugins-handler.php'
 	),
 	'Shutdown_Handler' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-shutdown-handler.php'
 	),
 	'Version_Loader' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-version-loader.php'
 	),
 	'Version_Selector' => array(
-		'version' => '5.0.19',
+		'version' => '5.0.20',
 		'path'    => $vendorDir . '/automattic/jetpack-autoloader/src/class-version-selector.php'
+	),
+	'WC_Coupon' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Customer' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Order' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Order_Refund' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Payment_Gateway' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Payment_Gateways' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Product' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Product_Variation' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Shipping_Method' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Shipping_Zone' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Shipping_Zones' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
+	),
+	'WC_Tax' => array(
+		'version' => 'dev-main',
+		'path'    => $baseDir . '/tests/phpstan-stubs.php'
 	),
 	'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility' => array(
 		'version' => '0.5.0.0',

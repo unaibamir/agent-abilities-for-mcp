@@ -2,24 +2,24 @@
 /**
  * Replace-in-post: literal find/replace in post_content, kses'd, per-object gated.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class ReplaceInPostTest extends TestCase {
 
 	public function test_in_registry_as_a_non_destructive_write(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/replace-in-post', $registry );
-		$this->assertSame( 'writes', $registry['oversio/replace-in-post']['group'] );
-		$this->assertSame( 'write', $registry['oversio/replace-in-post']['risk'] );
-		$this->assertSame( 'content', $registry['oversio/replace-in-post']['subject'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/replace-in-post', $registry );
+		$this->assertSame( 'writes', $registry['aafm/replace-in-post']['group'] );
+		$this->assertSame( 'write', $registry['aafm/replace-in-post']['risk'] );
+		$this->assertSame( 'content', $registry['aafm/replace-in-post']['subject'] );
 	}
 
 	public function test_replaces_and_returns_count(): void {
@@ -32,7 +32,7 @@ final class ReplaceInPostTest extends TestCase {
 			)
 		);
 
-		$out = oversio_exec_replace_in_post(
+		$out = aafm_exec_replace_in_post(
 			array(
 				'post_id' => $id,
 				'search'  => 'red',
@@ -56,7 +56,7 @@ final class ReplaceInPostTest extends TestCase {
 			)
 		);
 
-		$out = oversio_exec_replace_in_post(
+		$out = aafm_exec_replace_in_post(
 			array(
 				'post_id' => $id,
 				'search'  => 'missing',
@@ -75,7 +75,7 @@ final class ReplaceInPostTest extends TestCase {
 		$id    = self::factory()->post->create( array( 'post_author' => $owner ) );
 		wp_set_current_user( $other );
 		$this->assertFalse(
-			oversio_perm_replace_in_post(
+			aafm_perm_replace_in_post(
 				array(
 					'post_id' => $id,
 					'search'  => 'a',
@@ -96,7 +96,7 @@ final class ReplaceInPostTest extends TestCase {
 		);
 
 		// Even if the replacement injects a script tag, wp_kses_post strips it.
-		oversio_exec_replace_in_post(
+		aafm_exec_replace_in_post(
 			array(
 				'post_id' => $id,
 				'search'  => 'MARKER',
@@ -119,7 +119,7 @@ final class ReplaceInPostTest extends TestCase {
 			)
 		);
 
-		oversio_exec_replace_in_post(
+		aafm_exec_replace_in_post(
 			array(
 				'post_id' => $id,
 				'search'  => 'alpha',
@@ -134,7 +134,7 @@ final class ReplaceInPostTest extends TestCase {
 
 	public function test_missing_post_is_generic_error(): void {
 		$this->acting_as( 'editor' );
-		$out = oversio_exec_replace_in_post(
+		$out = aafm_exec_replace_in_post(
 			array(
 				'post_id' => 999999,
 				'search'  => 'a',
@@ -145,6 +145,6 @@ final class ReplaceInPostTest extends TestCase {
 	}
 
 	public function test_perm_callback_returns_false_on_empty_input(): void {
-		$this->assertFalse( oversio_perm_replace_in_post( array() ) );
+		$this->assertFalse( aafm_perm_replace_in_post( array() ) );
 	}
 }

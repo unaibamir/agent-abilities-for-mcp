@@ -1,6 +1,6 @@
 <?php
 /**
- * Uninstall cleanup for Oversio Agent Abilities — multisite-aware.
+ * Uninstall cleanup for Agent Abilities for MCP — multisite-aware.
  *
  * Removes only this plugin's own data: every configuration option, the detected-meta-keys
  * transient, the per-site activity log table, and the OAuth tables. On multisite it loops
@@ -12,7 +12,7 @@
  * its credentials) on uninstall would be destructive and surprising. Removing the account is
  * the operator's call, made from the Users screen.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -34,23 +34,23 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/oauth/schema.php';
  *
  * @return void
  */
-function oversio_run_uninstall(): void {
+function aafm_run_uninstall(): void {
 	if ( ! is_multisite() ) {
-		oversio_uninstall_site_data();
+		aafm_uninstall_site_data();
 		return;
 	}
 
-	$oversio_site_ids = get_sites(
+	$aafm_site_ids = get_sites(
 		array(
 			'fields' => 'ids',
 			'number' => 0,
 		)
 	);
-	foreach ( $oversio_site_ids as $oversio_site_id ) {
-		switch_to_blog( (int) $oversio_site_id );
-		oversio_uninstall_site_data();
+	foreach ( $aafm_site_ids as $aafm_site_id ) {
+		switch_to_blog( (int) $aafm_site_id );
+		aafm_uninstall_site_data();
 		restore_current_blog();
 	}
 }
 
-oversio_run_uninstall();
+aafm_run_uninstall();

@@ -11,12 +11,12 @@
  * backed by a plain static array — WC_Tax::get_tax_classes() / create / delete are intercepted
  * by the WC_Tax eval stub.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests;
+namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce tax rate and class stubs.
@@ -76,7 +76,7 @@ class WcTaxStubStore {
 	 * Create the woocommerce_tax_rates temp table in the test DB.
 	 *
 	 * Called from WooTaxTest::set_up() so $wpdb direct queries in the production
-	 * helper functions (oversio_wc_get_all_tax_rates etc.) resolve to this table.
+	 * helper functions (aafm_wc_get_all_tax_rates etc.) resolve to this table.
 	 *
 	 * @return void
 	 */

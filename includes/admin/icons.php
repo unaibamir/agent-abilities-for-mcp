@@ -8,7 +8,7 @@
  * a constant — there is no dynamic data in it — so callers echo it through the
  * existing phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped pattern.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -26,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * @param string $name Icon key (see the switch below for the full set).
  * @return string Inline SVG markup, or '' for an unknown name.
  */
-function oversio_icon( string $name ): string {
+function aafm_icon( string $name ): string {
 	$icons = array(
 		// Tab icons (dashboard-a.html lines 44-49).
 		'dashboard'             => '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
@@ -93,7 +93,7 @@ function oversio_icon( string $name ): string {
 	$width = $stroke[ $name ] ?? '1.7';
 
 	return sprintf(
-		'<svg class="oversio-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="%1$s" aria-hidden="true" focusable="false">%2$s</svg>',
+		'<svg class="aafm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="%1$s" aria-hidden="true" focusable="false">%2$s</svg>',
 		$width,
 		$inner
 	);

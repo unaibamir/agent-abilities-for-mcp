@@ -2,14 +2,14 @@
 /**
  * Media read ability: capability gating + inventory shape + path/PII redaction.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class MediaReadTest extends TestCase {
 
@@ -17,30 +17,30 @@ final class MediaReadTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array( 'oversio/get-media', 'oversio/get-media-item', 'oversio/count-media' ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-media', 'aafm/get-media-item', 'aafm/count-media' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_get_media_is_in_registry(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/get-media', $registry );
-		$this->assertSame( 'reads', $registry['oversio/get-media']['group'] );
-		$this->assertSame( 'read', $registry['oversio/get-media']['risk'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/get-media', $registry );
+		$this->assertSame( 'reads', $registry['aafm/get-media']['group'] );
+		$this->assertSame( 'read', $registry['aafm/get-media']['risk'] );
 	}
 
 	public function test_get_media_requires_upload_or_edit_cap(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'oversio/get-media' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/get-media' )->check_permissions( array() ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( wp_get_ability( 'oversio/get-media' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/get-media' )->check_permissions( array() ) );
 	}
 
 	public function test_get_media_returns_inventory_shape(): void {
@@ -54,7 +54,7 @@ final class MediaReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/get-media' )->execute( array() );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
 		$ids = wp_list_pluck( $out['media'], 'id' );
 		$this->assertContains( $att, $ids );
 
@@ -84,7 +84,7 @@ final class MediaReadTest extends TestCase {
 		);
 		update_post_meta( $att, '_wp_attached_file', '2026/06/secret-report.pdf' );
 
-		$out  = wp_get_ability( 'oversio/get-media' )->execute( array() );
+		$out  = wp_get_ability( 'aafm/get-media' )->execute( array() );
 		$json = (string) wp_json_encode( $out );
 
 		// The absolute filesystem path (uploads basedir) must not leak.
@@ -124,7 +124,7 @@ final class MediaReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/get-media' )->execute( array( 'search' => 'UniqueNeedleTitle' ) );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array( 'search' => 'UniqueNeedleTitle' ) );
 		$ids = wp_list_pluck( $out['media'], 'id' );
 
 		$this->assertContains( $needle, $ids );
@@ -132,19 +132,19 @@ final class MediaReadTest extends TestCase {
 	}
 
 	public function test_get_media_item_is_in_registry_as_read(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/get-media-item', $registry );
-		$this->assertSame( 'reads', $registry['oversio/get-media-item']['group'] );
-		$this->assertSame( 'read', $registry['oversio/get-media-item']['risk'] );
-		$this->assertSame( 'media', $registry['oversio/get-media-item']['subject'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/get-media-item', $registry );
+		$this->assertSame( 'reads', $registry['aafm/get-media-item']['group'] );
+		$this->assertSame( 'read', $registry['aafm/get-media-item']['risk'] );
+		$this->assertSame( 'media', $registry['aafm/get-media-item']['subject'] );
 	}
 
 	public function test_get_media_item_requires_upload_or_edit_cap(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'oversio/get-media-item' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array() ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( wp_get_ability( 'oversio/get-media-item' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array() ) );
 	}
 
 	public function test_get_media_item_returns_rich_shape(): void {
@@ -170,7 +170,7 @@ final class MediaReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/get-media-item' )->execute( array( 'attachment_id' => $att ) );
+		$out = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => $att ) );
 
 		$this->assertSame(
 			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height', 'caption', 'description', 'date_gmt', 'filesize', 'parent', 'sizes' ),
@@ -188,7 +188,7 @@ final class MediaReadTest extends TestCase {
 	public function test_get_media_item_unknown_id_errors(): void {
 		$this->acting_as( 'author' );
 		$post = self::factory()->post->create(); // A NON-attachment id.
-		$out  = wp_get_ability( 'oversio/get-media-item' )->execute( array( 'attachment_id' => $post ) );
+		$out  = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => $post ) );
 		$this->assertInstanceOf( \WP_Error::class, $out );
 	}
 
@@ -205,7 +205,7 @@ final class MediaReadTest extends TestCase {
 		);
 		update_post_meta( $att, '_wp_attached_file', '2026/06/rich-secret.jpg' );
 
-		$out  = wp_get_ability( 'oversio/get-media-item' )->execute( array( 'attachment_id' => $att ) );
+		$out  = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => $att ) );
 		$json = (string) wp_json_encode( $out );
 
 		$uploads = wp_get_upload_dir();
@@ -229,7 +229,7 @@ final class MediaReadTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		$out = wp_get_ability( 'oversio/get-media' )->execute( array() );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
 		$this->assertSame(
 			array( 'id', 'title', 'mime_type', 'url', 'alt', 'width', 'height' ),
 			array_keys( $out['media'][0] )
@@ -237,18 +237,18 @@ final class MediaReadTest extends TestCase {
 	}
 
 	public function test_count_media_is_in_registry_as_read(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/count-media', $registry );
-		$this->assertSame( 'reads', $registry['oversio/count-media']['group'] );
-		$this->assertSame( 'read', $registry['oversio/count-media']['risk'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/count-media', $registry );
+		$this->assertSame( 'reads', $registry['aafm/count-media']['group'] );
+		$this->assertSame( 'read', $registry['aafm/count-media']['risk'] );
 	}
 
 	public function test_count_media_requires_upload_or_edit_cap(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'oversio/count-media' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/count-media' )->check_permissions( array() ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( wp_get_ability( 'oversio/count-media' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/count-media' )->check_permissions( array() ) );
 	}
 
 	public function test_count_media_totals_and_breaks_down_by_mime(): void {
@@ -270,7 +270,7 @@ final class MediaReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/count-media' )->execute( array() );
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array() );
 		$this->assertGreaterThanOrEqual( 2, $out['total'] );
 		// by_mime is an object (schema fidelity); inspect as an array.
 		$this->assertIsObject( $out['by_mime'] );
@@ -290,7 +290,7 @@ final class MediaReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/count-media' )->execute( array( 'mime_type' => 'image/png' ) );
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array( 'mime_type' => 'image/png' ) );
 		$this->assertGreaterThanOrEqual( 1, $out['total'] );
 		$this->assertSame( array( 'image/png' ), array_keys( (array) $out['by_mime'] ) );
 	}
@@ -299,7 +299,7 @@ final class MediaReadTest extends TestCase {
 		$this->acting_as( 'author' );
 
 		// A mime filter that matches zero attachments yields an empty breakdown.
-		$out = wp_get_ability( 'oversio/count-media' )->execute( array( 'mime_type' => 'application/x-nonexistent' ) );
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array( 'mime_type' => 'application/x-nonexistent' ) );
 
 		$this->assertSame( 0, $out['total'] );
 		// The schema declares by_mime as an object; an empty PHP array would JSON-encode
@@ -313,19 +313,19 @@ final class MediaReadTest extends TestCase {
 		// discovery override — like get-media itself, they fall through to their real,
 		// object-independent permission_callback, which already answers correctly here.
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/get-media-item' ) );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/count-media' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/count-media' ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/get-media-item' ) );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/count-media' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-media' ) );
 		// Writes: object-independent authoring floor — author can upload/edit, so discoverable.
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/update-media' ) );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/delete-media' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-media' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
 
 		// A subscriber cannot discover the writes either.
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/update-media' ) );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/delete-media' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-media' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
 	}
 }

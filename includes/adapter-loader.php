@@ -16,16 +16,16 @@
  *
  * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace, resolving from our bundled
  * copy, at the plugin file's top level. Because plugin folders load alphabetically and we sort
- * first as "oversio-agent-abilities", this runs before any sibling's autoloader is even loaded;
+ * first as "agent-abilities-for-mcp", this runs before any sibling's autoloader is even loaded;
  * McpAdapter is a final class with no declaration-time dependencies, so eager resolution is clean.
  *
  * MAINTENANCE: when the bundled wordpress/mcp-adapter is updated, re-verify
- * oversio_adapter_namespace_map() against each bundled package's composer.json PSR-4 map (the adapter
+ * aafm_adapter_namespace_map() against each bundled package's composer.json PSR-4 map (the adapter
  * AND the php-mcp-schema package it depends on), and re-check the /includes/Cli/ skip in
- * oversio_eager_load_adapter() — confirm it still covers the WP-CLI-only classes, and whether any new
+ * aafm_eager_load_adapter() — confirm it still covers the WP-CLI-only classes, and whether any new
  * runtime-only directory needs the same skip treatment.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -43,10 +43,10 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return array<string, string> Map of namespace prefix (with trailing separators) to base dir.
  */
-function oversio_adapter_namespace_map(): array {
+function aafm_adapter_namespace_map(): array {
 	return array(
-		'WP\\MCP\\'       => OVERSIO_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/',
-		'WP\\McpSchema\\' => OVERSIO_PLUGIN_DIR . 'vendor/wordpress/php-mcp-schema/src/',
+		'WP\\MCP\\'       => AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/',
+		'WP\\McpSchema\\' => AAFM_PLUGIN_DIR . 'vendor/wordpress/php-mcp-schema/src/',
 	);
 }
 
@@ -54,7 +54,7 @@ function oversio_adapter_namespace_map(): array {
  * Map a bundled-namespace class name to the absolute file path inside our copy.
  *
  * Pure helper (no I/O side effects beyond filesystem existence checks) so the path mapping can
- * be asserted in isolation. Handles every prefix in oversio_adapter_namespace_map() (the adapter and
+ * be asserted in isolation. Handles every prefix in aafm_adapter_namespace_map() (the adapter and
  * the schema package it depends on). Returns null for any class outside those namespaces, for any
  * name that would traverse outside its base directory, and for a class whose file does not exist
  * in our bundle (so other autoloaders can still resolve it).
@@ -62,8 +62,8 @@ function oversio_adapter_namespace_map(): array {
  * @param string $class_name Fully-qualified class name to resolve.
  * @return string|null Absolute path to the class file in our bundle, or null when not resolvable.
  */
-function oversio_adapter_class_to_path( string $class_name ): ?string {
-	foreach ( oversio_adapter_namespace_map() as $prefix => $base ) {
+function aafm_adapter_class_to_path( string $class_name ): ?string {
+	foreach ( aafm_adapter_namespace_map() as $prefix => $base ) {
 		if ( 0 !== strncmp( $class_name, $prefix, strlen( $prefix ) ) ) {
 			continue;
 		}
@@ -109,14 +109,14 @@ function oversio_adapter_class_to_path( string $class_name ): ?string {
  * On its own this autoloader cannot guarantee the win: every later-loading plugin's Composer
  * autoloader also registers with prepend=true and leapfrogs ours, so by the time WP\MCP\Core\
  * McpAdapter is first referenced a sibling's copy may resolve first. The race is settled
- * deterministically by oversio_eager_load_adapter() (below), which declares our classes outright.
+ * deterministically by aafm_eager_load_adapter() (below), which declares our classes outright.
  * This autoloader's real job is to (a) satisfy declaration-time interface/trait dependencies
  * pulled in during that eager load — it is the only WP\MCP\ autoloader registered that early, so
  * no foreign copy can answer those — and (b) cover installs with no conflicting sibling at all.
  *
  * @return void
  */
-function oversio_register_adapter_autoloader(): void {
+function aafm_register_adapter_autoloader(): void {
 	static $registered = false;
 
 	if ( $registered ) {
@@ -127,7 +127,7 @@ function oversio_register_adapter_autoloader(): void {
 
 	spl_autoload_register(
 		static function ( string $class_name ): void {
-			$path = oversio_adapter_class_to_path( $class_name );
+			$path = aafm_adapter_class_to_path( $class_name );
 
 			// On a miss, do nothing and let the next autoloader try. Never error.
 			if ( null === $path ) {
@@ -149,7 +149,7 @@ function oversio_register_adapter_autoloader(): void {
  * first reference to WP\MCP\Core\McpAdapter can resolve to a sibling's older copy (confirmed:
  * Rank Math SEO bundles 0.4.1). PHP, however, allows only ONE declaration of a class per
  * request. Because plugin folders load alphabetically and we sort first as
- * "oversio-agent-abilities", our main file runs before any conflicting sibling's file. Declaring
+ * "agent-abilities-for-mcp", our main file runs before any conflicting sibling's file. Declaring
  * all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase, makes PHP commit to our
  * copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is identical across 0.4.1 and 0.5.0 (0.5.0 is an additive superset), so a
@@ -164,7 +164,7 @@ function oversio_register_adapter_autoloader(): void {
  * exist outside a WP-CLI request, so declaring it here would fatal. Those classes are never used
  * by the REST /mcp path.
  *
- * Cost is negligible: oversio_init_mcp() already calls McpAdapter::instance() on every request, which
+ * Cost is negligible: aafm_init_mcp() already calls McpAdapter::instance() on every request, which
  * loads the adapter anyway — eager-loading the remaining sibling classes in the same phase adds
  * only a handful of require_once calls on already-bundled files.
  *
@@ -177,7 +177,7 @@ function oversio_register_adapter_autoloader(): void {
  *
  * @return void
  */
-function oversio_eager_load_adapter(): void {
+function aafm_eager_load_adapter(): void {
 	static $loaded = false;
 
 	if ( $loaded ) {
@@ -186,7 +186,7 @@ function oversio_eager_load_adapter(): void {
 
 	$loaded = true;
 
-	$base = OVERSIO_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/';
+	$base = AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/';
 
 	if ( ! is_dir( $base ) ) {
 		return;

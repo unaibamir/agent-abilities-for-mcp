@@ -7,16 +7,16 @@
  * provided by the IntegrationStubs trait backed by WcCouponStubStore. The seed_wc_coupons()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
-use Oversio\Tests\WcCouponStubStore;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcCouponStubStore;
 use WP_Error;
 
 final class WooCouponsTest extends TestCase {
@@ -25,13 +25,13 @@ final class WooCouponsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->stub_wc_coupons();
 		$this->seed_wc_coupons();
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_wc_coupons();
 	}
 
@@ -49,21 +49,21 @@ final class WooCouponsTest extends TestCase {
 	 * Enable and register the full WooCommerce coupon ability set.
 	 */
 	private function register_wc_coupons(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/wc-list-coupons',
-				'oversio/wc-get-coupon',
-				'oversio/wc-create-coupon',
-				'oversio/wc-update-coupon',
+				'aafm/wc-list-coupons',
+				'aafm/wc-get-coupon',
+				'aafm/wc-create-coupon',
+				'aafm/wc-update-coupon',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	// =========================================================================
-	// oversio/wc-list-coupons
+	// aafm/wc-list-coupons
 	// =========================================================================
 
 	/**
@@ -72,11 +72,11 @@ final class WooCouponsTest extends TestCase {
 	public function test_list_coupons_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-list-coupons' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-list-coupons' )->check_permissions( array() )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-coupons' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-coupons' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'coupons', $res );
 		$this->assertArrayHasKey( 'total', $res );
@@ -87,7 +87,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_list_coupons_lean_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-coupons' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-coupons' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertNotEmpty( $res['coupons'] );
 
@@ -110,7 +110,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_list_coupons_grand_total(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-coupons' )->execute( array( 'per_page' => 1 ) );
+		$res = wp_get_ability( 'aafm/wc-list-coupons' )->execute( array( 'per_page' => 1 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		// Two coupons seeded; total must reflect all, not just the page.
 		$this->assertSame( 2, $res['total'] );
@@ -123,7 +123,7 @@ final class WooCouponsTest extends TestCase {
 	public function test_list_coupons_empty_store_returns_empty_array(): void {
 		WcCouponStubStore::reset();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-coupons' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-coupons' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertIsArray( $res['coupons'], 'Empty coupons list must be an array, not an object.' );
 		$this->assertCount( 0, $res['coupons'] );
@@ -135,22 +135,22 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_list_coupons_host_inactive_absent_from_registry(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
-		oversio_registry_cache_should_flush( true );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
+		aafm_registry_cache_should_flush( true );
 
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'oversio/wc-list-coupons', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-coupon', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-create-coupon', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-update-coupon', $registry );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'aafm/wc-list-coupons', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-coupon', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-create-coupon', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-update-coupon', $registry );
 
-		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// oversio/wc-get-coupon
+	// aafm/wc-get-coupon
 	// =========================================================================
 
 	/**
@@ -159,11 +159,11 @@ final class WooCouponsTest extends TestCase {
 	public function test_get_coupon_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-get-coupon' )->check_permissions( array( 'coupon_id' => 5001 ) )
+			wp_get_ability( 'aafm/wc-get-coupon' )->check_permissions( array( 'coupon_id' => 5001 ) )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 	}
 
@@ -172,7 +172,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_get_coupon_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		$this->assertSame( 5001, $res['id'] );
@@ -198,24 +198,24 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_get_coupon_exposes_email_restrictions(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-coupon' )->execute( array( 'coupon_id' => 5002 ) );
+		$res = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5002 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertIsArray( $res['email_restrictions'] );
 		$this->assertContains( 'vip@example.com', $res['email_restrictions'] );
 	}
 
 	/**
-	 * Unknown coupon id returns a WP_Error with the canonical oversio_error code.
+	 * Unknown coupon id returns a WP_Error with the canonical aafm_error code.
 	 */
 	public function test_get_coupon_unknown_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-coupon' )->execute( array( 'coupon_id' => 99999 ) );
+		$res = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 99999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'oversio_error', $res->get_error_code() );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
 	}
 
 	// =========================================================================
-	// oversio/wc-create-coupon
+	// aafm/wc-create-coupon
 	// =========================================================================
 
 	/**
@@ -224,7 +224,7 @@ final class WooCouponsTest extends TestCase {
 	public function test_create_coupon_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-create-coupon' )->check_permissions(
+			wp_get_ability( 'aafm/wc-create-coupon' )->check_permissions(
 				array( 'code' => 'NEW10' )
 			)
 		);
@@ -235,7 +235,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_create_coupon_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
 			array(
 				'code'          => 'NEWCOUPON',
 				'amount'        => '15.00',
@@ -255,7 +255,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_create_coupon_with_optional_fields(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
 			array(
 				'code'               => 'OPTVIP',
 				'amount'             => '5.00',
@@ -277,7 +277,7 @@ final class WooCouponsTest extends TestCase {
 	public function test_create_coupon_store_failure_returns_error(): void {
 		WcCouponStubStore::$force_save_failure = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
 			array( 'code' => 'WILLFAIL' )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Store failure must not lie success.' );
@@ -285,7 +285,7 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-update-coupon
+	// aafm/wc-update-coupon
 	// =========================================================================
 
 	/**
@@ -294,7 +294,7 @@ final class WooCouponsTest extends TestCase {
 	public function test_update_coupon_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-update-coupon' )->check_permissions(
+			wp_get_ability( 'aafm/wc-update-coupon' )->check_permissions(
 				array( 'coupon_id' => 5001 )
 			)
 		);
@@ -305,7 +305,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_update_coupon_empty_patch_is_noop(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
 			array( 'coupon_id' => 5001 )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
@@ -319,7 +319,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_update_coupon_field_isolation(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
 			array(
 				'coupon_id' => 5001,
 				'amount'    => '12.00',
@@ -336,7 +336,7 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function test_update_coupon_unknown_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-coupon' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
 			array(
 				'coupon_id' => 99999,
 				'amount'    => '5.00',
@@ -351,12 +351,12 @@ final class WooCouponsTest extends TestCase {
 	public function test_update_coupon_store_failure_returns_error(): void {
 		$this->acting_as( 'administrator' );
 		// Seed a real coupon so we get past the "unknown id" guard.
-		$created = wp_get_ability( 'oversio/wc-create-coupon' )->execute( array( 'code' => 'UPDATEFAIL' ) );
+		$created = wp_get_ability( 'aafm/wc-create-coupon' )->execute( array( 'code' => 'UPDATEFAIL' ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $created );
 		$new_id = $created['id'];
 
 		WcCouponStubStore::$force_save_failure = true;
-		$res                                   = wp_get_ability( 'oversio/wc-update-coupon' )->execute(
+		$res                                   = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
 			array(
 				'coupon_id' => $new_id,
 				'amount'    => '9.99',
@@ -373,7 +373,7 @@ final class WooCouponsTest extends TestCase {
 	public function test_create_update_get_round_trip(): void {
 		$this->acting_as( 'administrator' );
 
-		$created = wp_get_ability( 'oversio/wc-create-coupon' )->execute(
+		$created = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
 			array(
 				'code'   => 'ROUNDTRIP',
 				'amount' => '5.00',
@@ -382,7 +382,7 @@ final class WooCouponsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 		$new_id = $created['id'];
 
-		$updated = wp_get_ability( 'oversio/wc-update-coupon' )->execute(
+		$updated = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
 			array(
 				'coupon_id' => $new_id,
 				'amount'    => '99.00',
@@ -391,7 +391,7 @@ final class WooCouponsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $updated );
 		$this->assertSame( '99.00', $updated['amount'] );
 
-		$fetched = wp_get_ability( 'oversio/wc-get-coupon' )->execute(
+		$fetched = wp_get_ability( 'aafm/wc-get-coupon' )->execute(
 			array( 'coupon_id' => $new_id )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $fetched );
@@ -421,10 +421,10 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function provide_closed_schema_cases(): array {
 		return array(
-			'list-coupons'  => array( 'oversio/wc-list-coupons', array() ),
-			'get-coupon'    => array( 'oversio/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
-			'create-coupon' => array( 'oversio/wc-create-coupon', array( 'code' => 'EVIL' ) ),
-			'update-coupon' => array( 'oversio/wc-update-coupon', array( 'coupon_id' => 5001 ) ),
+			'list-coupons'  => array( 'aafm/wc-list-coupons', array() ),
+			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
+			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'EVIL' ) ),
+			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ) ),
 		);
 	}
 
@@ -440,7 +440,7 @@ final class WooCouponsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		wp_get_ability( $ability )->execute( $args );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -452,11 +452,11 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function provide_success_audit_cases(): array {
 		return array(
-			'list-coupons'  => array( 'oversio/wc-list-coupons', array() ),
-			'get-coupon'    => array( 'oversio/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
-			'create-coupon' => array( 'oversio/wc-create-coupon', array( 'code' => 'AUDITME' ) ),
+			'list-coupons'  => array( 'aafm/wc-list-coupons', array() ),
+			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ) ),
+			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'AUDITME' ) ),
 			'update-coupon' => array(
-				'oversio/wc-update-coupon',
+				'aafm/wc-update-coupon',
 				array(
 					'coupon_id' => 5001,
 					'amount'    => '11.00',
@@ -478,7 +478,7 @@ final class WooCouponsTest extends TestCase {
 		$this->acting_as( $low_role );
 		wp_get_ability( $ability )->check_permissions( $args );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -490,10 +490,10 @@ final class WooCouponsTest extends TestCase {
 	 */
 	public function provide_denied_audit_cases(): array {
 		return array(
-			'list-coupons'  => array( 'oversio/wc-list-coupons', array(), 'editor' ),
-			'get-coupon'    => array( 'oversio/wc-get-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
-			'create-coupon' => array( 'oversio/wc-create-coupon', array( 'code' => 'DENIED' ), 'editor' ),
-			'update-coupon' => array( 'oversio/wc-update-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
+			'list-coupons'  => array( 'aafm/wc-list-coupons', array(), 'editor' ),
+			'get-coupon'    => array( 'aafm/wc-get-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
+			'create-coupon' => array( 'aafm/wc-create-coupon', array( 'code' => 'DENIED' ), 'editor' ),
+			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
 		);
 	}
 }

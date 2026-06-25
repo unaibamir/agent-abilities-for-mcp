@@ -2,48 +2,48 @@
 /**
  * Activity tab renders rows including denials, escaped.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Admin;
+namespace AAFM\Tests\Admin;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class ActivityTabTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 	}
 
 	public function test_tab_lists_a_denied_row(): void {
 		$this->acting_as( 'administrator' );
-		oversio_log_activity(
+		aafm_log_activity(
 			array(
-				'ability'  => 'oversio/trash-post',
+				'ability'  => 'aafm/trash-post',
 				'status'   => 'denied',
 				'arg_keys' => array( 'post_id' ),
 			)
 		);
 
 		ob_start();
-		oversio_render_activity_tab();
+		aafm_render_activity_tab();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'oversio/trash-post', $html );
+		$this->assertStringContainsString( 'aafm/trash-post', $html );
 		$this->assertStringContainsString( 'denied', $html );
 		$this->assertStringContainsString( 'post_id', $html );
 		// Status renders inside a pill, and the presentational filter control is present.
-		$this->assertStringContainsString( 'oversio-pill', $html );
-		$this->assertStringContainsString( 'oversio-seg', $html );
+		$this->assertStringContainsString( 'aafm-pill', $html );
+		$this->assertStringContainsString( 'aafm-seg', $html );
 	}
 
 	public function test_tab_escapes_ability_names(): void {
 		$this->acting_as( 'administrator' );
-		oversio_log_activity(
+		aafm_log_activity(
 			array(
 				'ability' => '<script>x</script>',
 				'status'  => 'error',
@@ -51,7 +51,7 @@ final class ActivityTabTest extends TestCase {
 		);
 
 		ob_start();
-		oversio_render_activity_tab();
+		aafm_render_activity_tab();
 		$html = (string) ob_get_clean();
 
 		$this->assertStringNotContainsString( '<script>x</script>', $html );
@@ -62,11 +62,11 @@ final class ActivityTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_activity_tab();
+		aafm_render_activity_tab();
 		$html = (string) ob_get_clean();
 
 		// A clear-log control is always present; the empty state renders without fataling.
-		$this->assertStringContainsString( 'oversio-clear-log', $html );
-		$this->assertStringContainsString( 'oversio-log-table', $html );
+		$this->assertStringContainsString( 'aafm-clear-log', $html );
+		$this->assertStringContainsString( 'aafm-log-table', $html );
 	}
 }

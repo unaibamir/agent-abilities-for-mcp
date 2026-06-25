@@ -9,46 +9,46 @@
  * caps (edit_post, edit_comment) are covered in the per-ability write tests; this
  * file pins the coarse capability floor that decides who can reach an ability at all.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class CapabilityMatrixTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
 				// reads.
-				'oversio/get-posts',
-				'oversio/get-pages',
-				'oversio/get-terms',
-				'oversio/get-taxonomies',
-				'oversio/get-post-types',
-				'oversio/get-site-info',
-				'oversio/get-comments',
-				'oversio/get-pending-comments',
-				'oversio/get-media',
-				'oversio/get-users',
+				'aafm/get-posts',
+				'aafm/get-pages',
+				'aafm/get-terms',
+				'aafm/get-taxonomies',
+				'aafm/get-post-types',
+				'aafm/get-site-info',
+				'aafm/get-comments',
+				'aafm/get-pending-comments',
+				'aafm/get-media',
+				'aafm/get-users',
 				// writes (site-wide-cap gated).
-				'oversio/create-draft',
-				'oversio/create-post',
-				'oversio/create-page',
-				'oversio/create-term',
-				'oversio/upload-media',
+				'aafm/create-draft',
+				'aafm/create-post',
+				'aafm/create-page',
+				'aafm/create-term',
+				'aafm/upload-media',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	/**
@@ -70,17 +70,17 @@ final class CapabilityMatrixTest extends TestCase {
 
 		// get-pending-comments / get-media / get-users / writes step up.
 		return array(
-			'oversio/get-posts'            => $reads_open,
-			'oversio/get-pages'            => $reads_open,
-			'oversio/get-terms'            => $reads_open,
-			'oversio/get-taxonomies'       => $reads_open,
-			'oversio/get-post-types'       => $reads_open,
-			'oversio/get-site-info'        => $reads_open,
+			'aafm/get-posts'            => $reads_open,
+			'aafm/get-pages'            => $reads_open,
+			'aafm/get-terms'            => $reads_open,
+			'aafm/get-taxonomies'       => $reads_open,
+			'aafm/get-post-types'       => $reads_open,
+			'aafm/get-site-info'        => $reads_open,
 			// get-comments with no post_id is the whole-site approved listing → 'read'.
-			'oversio/get-comments'         => $reads_open,
+			'aafm/get-comments'         => $reads_open,
 
 			// moderate_comments: editor + admin only.
-			'oversio/get-pending-comments' => array(
+			'aafm/get-pending-comments' => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => false,
@@ -89,7 +89,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// upload_files OR edit_posts: contributor has edit_posts; subscriber neither.
-			'oversio/get-media'            => array(
+			'aafm/get-media'            => array(
 				'subscriber'    => false,
 				'contributor'   => true,
 				'author'        => true,
@@ -98,7 +98,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// list_users: admin only by default.
-			'oversio/get-users'            => array(
+			'aafm/get-users'            => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => false,
@@ -107,7 +107,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// edit_posts: contributor and up.
-			'oversio/create-draft'         => array(
+			'aafm/create-draft'         => array(
 				'subscriber'    => false,
 				'contributor'   => true,
 				'author'        => true,
@@ -116,7 +116,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// publish_posts: author and up.
-			'oversio/create-post'          => array(
+			'aafm/create-post'          => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => true,
@@ -125,7 +125,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// publish_pages: editor and up (authors cannot touch pages).
-			'oversio/create-page'          => array(
+			'aafm/create-page'          => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => false,
@@ -134,7 +134,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// manage_categories (manage_terms for category): editor and up.
-			'oversio/create-term'          => array(
+			'aafm/create-term'          => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => false,
@@ -143,7 +143,7 @@ final class CapabilityMatrixTest extends TestCase {
 			),
 
 			// upload_files: author and up (contributor lacks it).
-			'oversio/upload-media'         => array(
+			'aafm/upload-media'         => array(
 				'subscriber'    => false,
 				'contributor'   => false,
 				'author'        => true,
@@ -168,7 +168,7 @@ final class CapabilityMatrixTest extends TestCase {
 	}
 
 	public function test_every_deny_cell_writes_a_denied_audit_row(): void {
-		oversio_clear_activity_log();
+		aafm_clear_activity_log();
 
 		$expected_denials = array();
 		foreach ( $this->matrix() as $ability => $by_role ) {
@@ -181,7 +181,7 @@ final class CapabilityMatrixTest extends TestCase {
 			}
 		}
 
-		$denied    = oversio_query_activity(
+		$denied    = aafm_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 200,
@@ -199,7 +199,7 @@ final class CapabilityMatrixTest extends TestCase {
 	}
 
 	public function test_allow_cell_does_not_write_a_denied_row(): void {
-		oversio_clear_activity_log();
+		aafm_clear_activity_log();
 		// An admin passing every gate must produce zero denial rows from the
 		// permission checks alone (check_permissions does not log success).
 		$this->acting_as( 'administrator' );
@@ -208,7 +208,7 @@ final class CapabilityMatrixTest extends TestCase {
 		}
 		$this->assertCount(
 			0,
-			oversio_query_activity(
+			aafm_query_activity(
 				array(
 					'status'   => 'denied',
 					'per_page' => 200,

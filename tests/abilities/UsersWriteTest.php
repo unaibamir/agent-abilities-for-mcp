@@ -7,43 +7,43 @@
  * role change behind promote_users (with a last-admin demotion floor), and delete
  * requires a reassign target while refusing self-deletion and last-admin removal.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class UsersWriteTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
-		oversio_register_categories();
+		aafm_register_categories();
 		array_pop( $wp_current_filter );
-		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
 		$wp_current_filter[] = 'wp_abilities_api_init';
-		oversio_register_enabled_abilities();
+		aafm_register_enabled_abilities();
 		array_pop( $wp_current_filter );
 	}
 
 	public function test_create_user_requires_create_users_cap(): void {
 		$this->acting_as( 'editor' ); // editor lacks create_users on single-site.
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/create-user' )->check_permissions( array() ),
+			wp_get_ability( 'aafm/create-user' )->check_permissions( array() ),
 			'create-user must require create_users.'
 		);
 	}
 
 	public function test_create_user_creates_a_subscriber_by_default(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/create-user' )->execute(
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
 			array(
 				'username' => 'agent_new',
 				'email'    => 'agent_new@example.com',
@@ -63,7 +63,7 @@ final class UsersWriteTest extends TestCase {
 	public function test_create_user_floors_empty_default_role_to_subscriber(): void {
 		$this->acting_as( 'administrator' );
 		update_option( 'default_role', '' );
-		$res = wp_get_ability( 'oversio/create-user' )->execute(
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
 			array(
 				'username' => 'empty_default',
 				'email'    => 'empty_default@example.com',
@@ -85,7 +85,7 @@ final class UsersWriteTest extends TestCase {
 	public function test_create_user_floors_administrator_default_role_to_subscriber(): void {
 		$this->acting_as( 'administrator' );
 		update_option( 'default_role', 'administrator' );
-		$res = wp_get_ability( 'oversio/create-user' )->execute(
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
 			array(
 				'username' => 'admin_default',
 				'email'    => 'admin_default@example.com',
@@ -99,7 +99,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	public function test_create_user_is_destructive_and_closed_schema(): void {
-		$ability = wp_get_ability( 'oversio/create-user' );
+		$ability = wp_get_ability( 'aafm/create-user' );
 		$ann     = $ability->get_meta_item( 'annotations' );
 		$this->assertTrue( $ann['destructive'] );
 		$this->assertFalse( $ability->get_input_schema()['additionalProperties'] );
@@ -108,7 +108,7 @@ final class UsersWriteTest extends TestCase {
 	public function test_update_user_edits_profile_fields(): void {
 		$this->acting_as( 'administrator' );
 		$uid = self::factory()->user->create( array( 'role' => 'author' ) );
-		$res = wp_get_ability( 'oversio/update-user' )->execute(
+		$res = wp_get_ability( 'aafm/update-user' )->execute(
 			array(
 				'user_id'      => $uid,
 				'display_name' => 'Renamed',
@@ -122,7 +122,7 @@ final class UsersWriteTest extends TestCase {
 		// An editor can edit_user on lower users but must NOT promote roles (promote_users is admin).
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/update-user' )->execute(
+		$res = wp_get_ability( 'aafm/update-user' )->execute(
 			array(
 				'user_id' => $author,
 				'role'    => 'administrator',
@@ -149,7 +149,7 @@ final class UsersWriteTest extends TestCase {
 		};
 		add_filter( 'editable_roles', $drop_admin );
 		try {
-			$res = wp_get_ability( 'oversio/update-user' )->execute(
+			$res = wp_get_ability( 'aafm/update-user' )->execute(
 				array(
 					'user_id' => $author,
 					'role'    => 'administrator',
@@ -165,7 +165,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	public function test_update_user_is_not_destructive(): void {
-		$ann = wp_get_ability( 'oversio/update-user' )->get_meta_item( 'annotations' );
+		$ann = wp_get_ability( 'aafm/update-user' )->get_meta_item( 'annotations' );
 		$this->assertFalse( $ann['destructive'], 'update-user is a recoverable edit, not destructive.' );
 	}
 
@@ -206,7 +206,7 @@ final class UsersWriteTest extends TestCase {
 		);
 
 		// Demoting the sole remaining admin to editor would leave the site with no admin — refuse it.
-		$res = wp_get_ability( 'oversio/update-user' )->execute(
+		$res = wp_get_ability( 'aafm/update-user' )->execute(
 			array(
 				'user_id' => $admin,
 				'role'    => 'editor',
@@ -223,9 +223,9 @@ final class UsersWriteTest extends TestCase {
 	public function test_update_user_demote_allowed_when_other_admins_remain(): void {
 		$this->acting_as( 'administrator' );
 		$victim = $this->factory->user->create( array( 'role' => 'administrator' ) );
-		$this->assertGreaterThanOrEqual( 2, oversio_count_administrators(), 'fixture needs two or more admins.' );
+		$this->assertGreaterThanOrEqual( 2, aafm_count_administrators(), 'fixture needs two or more admins.' );
 
-		$res = wp_get_ability( 'oversio/update-user' )->execute(
+		$res = wp_get_ability( 'aafm/update-user' )->execute(
 			array(
 				'user_id' => $victim,
 				'role'    => 'editor',
@@ -242,7 +242,7 @@ final class UsersWriteTest extends TestCase {
 	 */
 	public function test_named_lock_runs_callback_and_releases(): void {
 		$ran = false;
-		$out = oversio_with_named_lock(
+		$out = aafm_with_named_lock(
 			'last_admin',
 			static function () use ( &$ran ) {
 				$ran = true;
@@ -253,7 +253,7 @@ final class UsersWriteTest extends TestCase {
 		$this->assertSame( 'done', $out, 'the helper must return the callback value.' );
 
 		// A second acquisition must still succeed (the first lock was released).
-		$out2 = oversio_with_named_lock( 'last_admin', static fn() => 'again' );
+		$out2 = aafm_with_named_lock( 'last_admin', static fn() => 'again' );
 		$this->assertSame( 'again', $out2 );
 	}
 
@@ -263,12 +263,12 @@ final class UsersWriteTest extends TestCase {
 		$reassign = self::factory()->user->create( array( 'role' => 'editor' ) );
 
 		// Missing reassign target → refused (orphaned-content guard), NOT a schema rejection.
-		$res = wp_get_ability( 'oversio/delete-user' )->execute( array( 'user_id' => $victim ) );
+		$res = wp_get_ability( 'aafm/delete-user' )->execute( array( 'user_id' => $victim ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'delete-user must require a reassign target.' );
 		$this->assertInstanceOf( \WP_User::class, get_userdata( $victim ), 'victim must survive the missing-reassign refusal.' );
 
 		// With a reassign target → deleted.
-		$res = wp_get_ability( 'oversio/delete-user' )->execute(
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
 			array(
 				'user_id'     => $victim,
 				'reassign_to' => $reassign,
@@ -281,7 +281,7 @@ final class UsersWriteTest extends TestCase {
 	public function test_delete_user_cannot_delete_self(): void {
 		$admin = $this->acting_as( 'administrator' );
 		$other = self::factory()->user->create( array( 'role' => 'editor' ) );
-		$res   = wp_get_ability( 'oversio/delete-user' )->execute(
+		$res   = wp_get_ability( 'aafm/delete-user' )->execute(
 			array(
 				'user_id'     => $admin,
 				'reassign_to' => $other,
@@ -292,7 +292,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	public function test_delete_user_is_destructive(): void {
-		$ann = wp_get_ability( 'oversio/delete-user' )->get_meta_item( 'annotations' );
+		$ann = wp_get_ability( 'aafm/delete-user' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $ann['destructive'], 'delete-user is a permanent removal.' );
 	}
 
@@ -342,7 +342,7 @@ final class UsersWriteTest extends TestCase {
 		);
 		$this->assertNotSame( $actor, $victim_admin, 'actor must differ from the victim (isolate the last-admin branch).' );
 
-		$res = wp_get_ability( 'oversio/delete-user' )->execute(
+		$res = wp_get_ability( 'aafm/delete-user' )->execute(
 			array(
 				'user_id'     => $victim_admin,
 				'reassign_to' => $reassign,
@@ -361,10 +361,10 @@ final class UsersWriteTest extends TestCase {
 	public function test_user_writes_denial_is_audited(): void {
 		$target = self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'subscriber' );
-		oversio_clear_activity_log();
+		aafm_clear_activity_log();
 
 		$this->assertFalse(
-			wp_get_ability( 'oversio/create-user' )->check_permissions(
+			wp_get_ability( 'aafm/create-user' )->check_permissions(
 				array(
 					'username' => 'denied_user',
 					'email'    => 'denied_user@example.com',
@@ -372,7 +372,7 @@ final class UsersWriteTest extends TestCase {
 			)
 		);
 		$this->assertFalse(
-			wp_get_ability( 'oversio/update-user' )->check_permissions(
+			wp_get_ability( 'aafm/update-user' )->check_permissions(
 				array(
 					'user_id'      => $target,
 					'display_name' => 'Nope',
@@ -380,7 +380,7 @@ final class UsersWriteTest extends TestCase {
 			)
 		);
 		$this->assertFalse(
-			wp_get_ability( 'oversio/delete-user' )->check_permissions(
+			wp_get_ability( 'aafm/delete-user' )->check_permissions(
 				array(
 					'user_id'     => $target,
 					'reassign_to' => 1,
@@ -388,16 +388,16 @@ final class UsersWriteTest extends TestCase {
 			)
 		);
 
-		$denied    = oversio_query_activity(
+		$denied    = aafm_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 200,
 			)
 		);
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/create-user', $abilities, 'a denied create-user must write a denied audit row.' );
-		$this->assertContains( 'oversio/update-user', $abilities, 'a denied update-user must write a denied audit row.' );
-		$this->assertContains( 'oversio/delete-user', $abilities, 'a denied delete-user must write a denied audit row.' );
+		$this->assertContains( 'aafm/create-user', $abilities, 'a denied create-user must write a denied audit row.' );
+		$this->assertContains( 'aafm/update-user', $abilities, 'a denied update-user must write a denied audit row.' );
+		$this->assertContains( 'aafm/delete-user', $abilities, 'a denied delete-user must write a denied audit row.' );
 	}
 
 	/**
@@ -408,7 +408,7 @@ final class UsersWriteTest extends TestCase {
 	 */
 	public function test_create_user_cannot_mint_an_administrator_via_smuggled_role(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/create-user' )->execute(
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
 			array(
 				'username' => 'smuggle_attempt',
 				'email'    => 'smuggle_attempt@example.com',
@@ -431,13 +431,13 @@ final class UsersWriteTest extends TestCase {
 
 	public function test_user_writes_discoverable_by_capable_admin_only(): void {
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/create-user' ) );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/update-user' ) );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/delete-user' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-user' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-user' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-user' ) );
 
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/create-user' ) );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/update-user' ) );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/delete-user' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-user' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-user' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-user' ) );
 	}
 }

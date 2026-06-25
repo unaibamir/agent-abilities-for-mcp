@@ -1,4 +1,4 @@
-<!-- Thanks for contributing to Oversio Agent Abilities. Please fill in the sections below. -->
+<!-- Thanks for contributing to Agent Abilities for MCP. Please fill in the sections below. -->
 
 ## What?
 <!-- Link the issue this closes (e.g. "Closes #12") and describe what the PR does in a sentence or two. -->

@@ -9,15 +9,15 @@
  * annotation, this test fails loudly here rather than letting the gap reach the
  * MCP server. It is the proof that the reads + writes catalog holds with no drift.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\Fixtures\CatalogFixture;
-use Oversio\Tests\TestCase;
+use AAFM\Tests\Fixtures\CatalogFixture;
+use AAFM\Tests\TestCase;
 
 final class CatalogTest extends TestCase {
 
@@ -46,8 +46,8 @@ final class CatalogTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is registered/invoked.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active, and the host plugins are not installed on the test site. Force
@@ -55,36 +55,36 @@ final class CatalogTest extends TestCase {
 		// registry is memoized (includes/registry.php static $cache), so the flush is
 		// MANDATORY — a force filter added without it is a no-op against the cached
 		// host-inactive registry. After the Wave 5 Slice D WooCommerce cut (15 abilities removed), the count is 153.
-		add_filter( 'oversio_integration_active_yoast', '__return_true' );
-		add_filter( 'oversio_integration_active_rankmath', '__return_true' );
-		add_filter( 'oversio_integration_active_aioseo', '__return_true' );
-		add_filter( 'oversio_integration_active_acf', '__return_true' );
-		add_filter( 'oversio_integration_active_woocommerce', '__return_true' );
-		oversio_registry_cache_should_flush( true );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
 	 * Enable the entire catalog (all 153) and register categories + abilities.
 	 */
 	private function register_whole_catalog(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_integrations_are_forced_active_in_this_suite(): void {
 		// Documents the W4-0.3 convention: the catalog-lock suite forces all three
 		// integrations active (+ flushes the registry memo) so later slices' integration
 		// abilities are counted here instead of vanishing when the host plugin is absent.
-		$this->assertTrue( oversio_integration_active( 'yoast' ) );
-		$this->assertTrue( oversio_integration_active( 'rankmath' ) );
-		$this->assertTrue( oversio_integration_active( 'aioseo' ) );
-		$this->assertTrue( oversio_integration_active( 'acf' ) );
-		$this->assertTrue( oversio_integration_active( 'woocommerce' ) );
+		$this->assertTrue( aafm_integration_active( 'yoast' ) );
+		$this->assertTrue( aafm_integration_active( 'rankmath' ) );
+		$this->assertTrue( aafm_integration_active( 'aioseo' ) );
+		$this->assertTrue( aafm_integration_active( 'acf' ) );
+		$this->assertTrue( aafm_integration_active( 'woocommerce' ) );
 	}
 
 	public function test_registry_has_the_exact_expected_count(): void {
-		$registry = oversio_get_abilities_registry();
+		$registry = aafm_get_abilities_registry();
 		$this->assertCount(
 			153,
 			$registry,
@@ -95,7 +95,7 @@ final class CatalogTest extends TestCase {
 	public function test_reads_are_exactly_the_expected_reads(): void {
 		$reads = array_keys(
 			array_filter(
-				oversio_get_abilities_registry(),
+				aafm_get_abilities_registry(),
 				static fn( array $entry ): bool => isset( $entry['group'] ) && 'reads' === $entry['group']
 			)
 		);
@@ -110,7 +110,7 @@ final class CatalogTest extends TestCase {
 	public function test_writes_are_exactly_the_expected_writes(): void {
 		$writes = array_keys(
 			array_filter(
-				oversio_get_abilities_registry(),
+				aafm_get_abilities_registry(),
 				static fn( array $entry ): bool => isset( $entry['group'] ) && 'writes' === $entry['group']
 			)
 		);
@@ -123,7 +123,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
-		$registry = oversio_get_abilities_registry();
+		$registry = aafm_get_abilities_registry();
 
 		// Every catalog key is one of the known names — no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
@@ -149,7 +149,7 @@ final class CatalogTest extends TestCase {
 	}
 
 	public function test_each_write_is_in_the_registry_as_a_write(): void {
-		$registry = oversio_get_abilities_registry();
+		$registry = aafm_get_abilities_registry();
 
 		foreach ( self::WRITES as $name ) {
 			$this->assertArrayHasKey( $name, $registry, $name . ' missing from registry' );
@@ -175,10 +175,10 @@ final class CatalogTest extends TestCase {
 			$this->assertNotNull( $ability, $name . ' could not be resolved' );
 
 			// Maps to a legal, hyphenated MCP tool name (round-trips the McpNameSanitizer rule).
-			$this->assertSame( str_replace( '/', '-', $name ), oversio_mcp_tool_name( $name ) );
+			$this->assertSame( str_replace( '/', '-', $name ), aafm_mcp_tool_name( $name ) );
 			$this->assertMatchesRegularExpression(
 				'/^[A-Za-z0-9_.-]+$/',
-				oversio_mcp_tool_name( $name ),
+				aafm_mcp_tool_name( $name ),
 				$name . ' does not map to a legal MCP tool name'
 			);
 
@@ -241,6 +241,6 @@ final class CatalogTest extends TestCase {
 
 	public function test_nothing_is_enabled_by_default(): void {
 		// Opt-in by construction: a clean install exposes zero abilities to any agent.
-		$this->assertSame( array(), oversio_get_enabled_abilities() );
+		$this->assertSame( array(), aafm_get_enabled_abilities() );
 	}
 }

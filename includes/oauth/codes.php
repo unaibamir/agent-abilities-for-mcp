@@ -7,7 +7,7 @@
  * to the caller once and never stored in clear. Redemption is an atomic UPDATE
  * that marks the row used, so replay is safe under concurrency.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -17,8 +17,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The lifetime of an authorization code, in seconds.
  */
-if ( ! defined( 'OVERSIO_OAUTH_CODE_TTL' ) ) {
-	define( 'OVERSIO_OAUTH_CODE_TTL', 60 );
+if ( ! defined( 'AAFM_OAUTH_CODE_TTL' ) ) {
+	define( 'AAFM_OAUTH_CODE_TTL', 60 );
 }
 
 /**
@@ -40,17 +40,17 @@ if ( ! defined( 'OVERSIO_OAUTH_CODE_TTL' ) ) {
  * @return string|\WP_Error The raw authorization code (64 hex characters), or a WP_Error when the
  *                          row could not be persisted (so callers never hand out a phantom code).
  */
-function oversio_oauth_mint_code( array $ctx ) {
+function aafm_oauth_mint_code( array $ctx ) {
 	$raw  = bin2hex( random_bytes( 32 ) );
 	$hash = hash( 'sha256', $raw );
 
 	$now        = time();
-	$expires_at = gmdate( 'Y-m-d H:i:s', $now + OVERSIO_OAUTH_CODE_TTL );
+	$expires_at = gmdate( 'Y-m-d H:i:s', $now + AAFM_OAUTH_CODE_TTL );
 
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$inserted = $wpdb->insert(
-		$wpdb->prefix . 'oversio_oauth_codes',
+		$wpdb->prefix . 'aafm_oauth_codes',
 		array(
 			'code_hash'      => $hash,
 			'client_id'      => isset( $ctx['client_id'] ) ? (string) $ctx['client_id'] : '',
@@ -66,7 +66,7 @@ function oversio_oauth_mint_code( array $ctx ) {
 	// A failed insert means there is no persisted grant — never return a code for it, or the
 	// client redirects with a code that can never be redeemed.
 	if ( false === $inserted ) {
-		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'oversio-agent-abilities' ) );
+		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'agent-abilities-for-mcp' ) );
 	}
 
 	return $raw;
@@ -87,13 +87,13 @@ function oversio_oauth_mint_code( array $ctx ) {
  * @param string $redirect_uri The redirect_uri presented at the token endpoint.
  * @return array<string,mixed>|\WP_Error The redeemed row, or WP_Error on failure.
  */
-function oversio_oauth_redeem_code( string $raw, string $client_id, string $redirect_uri ) {
+function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirect_uri ) {
 	$hash    = hash( 'sha256', $raw );
 	$now     = gmdate( 'Y-m-d H:i:s', time() );
 	$used_at = $now;
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_codes';
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
@@ -117,7 +117,7 @@ function oversio_oauth_redeem_code( string $raw, string $client_id, string $redi
 	if ( 0 === (int) $wpdb->rows_affected ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The authorization code is invalid, expired, or already used.', 'oversio-agent-abilities' )
+			__( 'The authorization code is invalid, expired, or already used.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -134,7 +134,7 @@ function oversio_oauth_redeem_code( string $raw, string $client_id, string $redi
 	if ( ! is_array( $row ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The authorization code could not be read back after redemption.', 'oversio-agent-abilities' )
+			__( 'The authorization code could not be read back after redemption.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -151,9 +151,9 @@ function oversio_oauth_redeem_code( string $raw, string $client_id, string $redi
  * @param string $client_id The public client identifier.
  * @return int Rows deleted.
  */
-function oversio_oauth_revoke_client_codes( string $client_id ): int {
+function aafm_oauth_revoke_client_codes( string $client_id ): int {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_codes';
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	return (int) $wpdb->query(
@@ -175,9 +175,9 @@ function oversio_oauth_revoke_client_codes( string $client_id ): int {
  * @param string $client_id The public client identifier.
  * @return int Rows deleted.
  */
-function oversio_oauth_revoke_user_client_codes( int $user_id, string $client_id ): int {
+function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ): int {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_codes';
+	$table = $wpdb->prefix . 'aafm_oauth_codes';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	return (int) $wpdb->query(

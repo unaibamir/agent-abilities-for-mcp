@@ -9,16 +9,16 @@
  * provided by the IntegrationStubs trait backed by WcShippingStubStore. The seed_wc_shipping()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
-use Oversio\Tests\WcShippingStubStore;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcShippingStubStore;
 use WP_Error;
 
 final class WooShippingTest extends TestCase {
@@ -27,13 +27,13 @@ final class WooShippingTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->stub_wc_shipping();
 		$this->seed_wc_shipping();
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_wc_shipping();
 	}
 
@@ -52,25 +52,25 @@ final class WooShippingTest extends TestCase {
 	 * Enable and register the full WooCommerce shipping ability set.
 	 */
 	private function register_wc_shipping(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/wc-list-shipping-zones',
-				'oversio/wc-get-shipping-zone',
-				'oversio/wc-create-shipping-zone',
-				'oversio/wc-update-shipping-zone',
-				'oversio/wc-list-shipping-methods',
-				'oversio/wc-get-shipping-method',
-				'oversio/wc-create-shipping-method',
-				'oversio/wc-update-shipping-method',
+				'aafm/wc-list-shipping-zones',
+				'aafm/wc-get-shipping-zone',
+				'aafm/wc-create-shipping-zone',
+				'aafm/wc-update-shipping-zone',
+				'aafm/wc-list-shipping-methods',
+				'aafm/wc-get-shipping-method',
+				'aafm/wc-create-shipping-method',
+				'aafm/wc-update-shipping-method',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	// =========================================================================
-	// oversio/wc-list-shipping-zones
+	// aafm/wc-list-shipping-zones
 	// =========================================================================
 
 	/**
@@ -79,11 +79,11 @@ final class WooShippingTest extends TestCase {
 	public function test_list_shipping_zones_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-list-shipping-zones' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-list-shipping-zones' )->check_permissions( array() )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-shipping-zones' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-shipping-zones' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'zones', $res );
 		$this->assertArrayHasKey( 'total', $res );
@@ -94,7 +94,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_list_shipping_zones_lean_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-shipping-zones' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-shipping-zones' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertNotEmpty( $res['zones'] );
 
@@ -112,26 +112,26 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_list_shipping_zones_host_inactive_absent_from_registry(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
-		oversio_registry_cache_should_flush( true );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
+		aafm_registry_cache_should_flush( true );
 
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'oversio/wc-list-shipping-zones', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-shipping-zone', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-create-shipping-zone', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-update-shipping-zone', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-list-shipping-methods', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-shipping-method', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-create-shipping-method', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-update-shipping-method', $registry );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'aafm/wc-list-shipping-zones', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-shipping-zone', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-create-shipping-zone', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-update-shipping-zone', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-list-shipping-methods', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-shipping-method', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-create-shipping-method', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-update-shipping-method', $registry );
 
-		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// oversio/wc-get-shipping-zone
+	// aafm/wc-get-shipping-zone
 	// =========================================================================
 
 	/**
@@ -139,7 +139,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_get_shipping_zone_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
+		$res = wp_get_ability( 'aafm/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		$this->assertSame( 1, $res['id'] );
@@ -153,7 +153,7 @@ final class WooShippingTest extends TestCase {
 	/**
 	 * A zone id that is not in the store is treated as empty by the stub validator
 	 * (the WC_Shipping_Zone constructor fills defaults using the requested id, so the
-	 * id-match check in oversio_wc_get_shipping_zone_object passes). Verify the store
+	 * id-match check in aafm_wc_get_shipping_zone_object passes). Verify the store
 	 * truly has no such zone so this test documents the stub's boundary behaviour.
 	 */
 	public function test_get_shipping_zone_unknown_id_not_in_store(): void {
@@ -164,7 +164,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-create-shipping-zone
+	// aafm/wc-create-shipping-zone
 	// =========================================================================
 
 	/**
@@ -173,7 +173,7 @@ final class WooShippingTest extends TestCase {
 	public function test_create_shipping_zone_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-create-shipping-zone' )->check_permissions(
+			wp_get_ability( 'aafm/wc-create-shipping-zone' )->check_permissions(
 				array( 'zone_name' => 'Asia' )
 			)
 		);
@@ -184,7 +184,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_create_shipping_zone_success(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-shipping-zone' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute(
 			array(
 				'zone_name'  => 'Asia',
 				'zone_order' => 3,
@@ -203,7 +203,7 @@ final class WooShippingTest extends TestCase {
 	public function test_create_shipping_zone_store_failure_returns_error(): void {
 		WcShippingStubStore::$force_save_failure = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-shipping-zone' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-shipping-zone' )->execute(
 			array( 'zone_name' => 'WillFail' )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Store failure must not lie success.' );
@@ -211,7 +211,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-update-shipping-zone
+	// aafm/wc-update-shipping-zone
 	// =========================================================================
 
 	/**
@@ -219,10 +219,10 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_update_shipping_zone_field_isolation(): void {
 		$this->acting_as( 'administrator' );
-		$original       = wp_get_ability( 'oversio/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
+		$original       = wp_get_ability( 'aafm/wc-get-shipping-zone' )->execute( array( 'zone_id' => 1 ) );
 		$original_order = $original['zone_order'];
 
-		$res = wp_get_ability( 'oversio/wc-update-shipping-zone' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
 			array(
 				'zone_id'   => 1,
 				'zone_name' => 'Europe (Updated)',
@@ -252,7 +252,7 @@ final class WooShippingTest extends TestCase {
 	public function test_update_shipping_zone_store_failure_returns_error(): void {
 		WcShippingStubStore::$force_save_failure = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-shipping-zone' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
 			array(
 				'zone_id'   => 1,
 				'zone_name' => 'WillFail',
@@ -263,7 +263,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-list-shipping-methods
+	// aafm/wc-list-shipping-methods
 	// =========================================================================
 
 	/**
@@ -272,13 +272,13 @@ final class WooShippingTest extends TestCase {
 	public function test_list_shipping_methods_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-list-shipping-methods' )->check_permissions(
+			wp_get_ability( 'aafm/wc-list-shipping-methods' )->check_permissions(
 				array( 'zone_id' => 1 )
 			)
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-shipping-methods' )->execute(
+		$res = wp_get_ability( 'aafm/wc-list-shipping-methods' )->execute(
 			array( 'zone_id' => 1 )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
@@ -290,7 +290,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_list_shipping_methods_for_zone(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-shipping-methods' )->execute(
+		$res = wp_get_ability( 'aafm/wc-list-shipping-methods' )->execute(
 			array( 'zone_id' => 1 )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
@@ -299,7 +299,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-get-shipping-method
+	// aafm/wc-get-shipping-method
 	// =========================================================================
 
 	/**
@@ -307,7 +307,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_get_shipping_method_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -326,7 +326,7 @@ final class WooShippingTest extends TestCase {
 	 * sub-array and secrets under an unconventional key name.
 	 */
 	public function test_get_shipping_method_redacts_secrets(): void {
-		\Oversio\Tests\WcShippingStubStore::seed_method(
+		\AAFM\Tests\WcShippingStubStore::seed_method(
 			1,
 			1,
 			array(
@@ -346,7 +346,7 @@ final class WooShippingTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -368,7 +368,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_get_shipping_method_unknown_instance_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 99999,
@@ -378,7 +378,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-create-shipping-method
+	// aafm/wc-create-shipping-method
 	// =========================================================================
 
 	/**
@@ -387,7 +387,7 @@ final class WooShippingTest extends TestCase {
 	public function test_create_shipping_method_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-create-shipping-method' )->check_permissions(
+			wp_get_ability( 'aafm/wc-create-shipping-method' )->check_permissions(
 				array(
 					'zone_id'     => 1,
 					'method_type' => 'flat_rate',
@@ -401,7 +401,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_create_shipping_method_success(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'method_type' => 'free_shipping',
@@ -419,7 +419,7 @@ final class WooShippingTest extends TestCase {
 	public function test_create_shipping_method_store_failure_returns_error(): void {
 		WcShippingStubStore::$force_save_failure = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'method_type' => 'flat_rate',
@@ -430,7 +430,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-update-shipping-method
+	// aafm/wc-update-shipping-method
 	// =========================================================================
 
 	/**
@@ -438,7 +438,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_update_shipping_method_field_isolation(): void {
 		$this->acting_as( 'administrator' );
-		$original      = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$original      = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -446,7 +446,7 @@ final class WooShippingTest extends TestCase {
 		);
 		$original_type = $original['id'];
 
-		$res = wp_get_ability( 'oversio/wc-update-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -470,7 +470,7 @@ final class WooShippingTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		// Toggle off + rename.
-		$res = wp_get_ability( 'oversio/wc-update-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'      => 1,
 				'instance_id'  => 1,
@@ -482,7 +482,7 @@ final class WooShippingTest extends TestCase {
 		$this->assertSame( 'no', $res['enabled'] );
 		$this->assertSame( 'Renamed', $res['method_title'] );
 
-		$read = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$read = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -492,7 +492,7 @@ final class WooShippingTest extends TestCase {
 		$this->assertSame( 'Renamed', $read['method_title'], 'title must survive a fresh read.' );
 
 		// Toggle back on.
-		$res = wp_get_ability( 'oversio/wc-update-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -502,7 +502,7 @@ final class WooShippingTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'yes', $res['enabled'] );
 
-		$read = wp_get_ability( 'oversio/wc-get-shipping-method' )->execute(
+		$read = wp_get_ability( 'aafm/wc-get-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -518,7 +518,7 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function test_update_shipping_method_unknown_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-shipping-method' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 99999,
@@ -543,7 +543,7 @@ final class WooShippingTest extends TestCase {
 		// The missing-table query is an expected failure here; suppress the wpdb error print so
 		// the deliberate failure does not mark the test risky.
 		$suppressed = $wpdb->suppress_errors( true );
-		$res        = wp_get_ability( 'oversio/wc-update-shipping-method' )->execute(
+		$res        = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
 			array(
 				'zone_id'     => 1,
 				'instance_id' => 1,
@@ -567,7 +567,7 @@ final class WooShippingTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		wp_get_ability( $ability )->execute( $args );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -579,24 +579,24 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function provide_success_audit_cases(): array {
 		return array(
-			'list-shipping-zones'    => array( 'oversio/wc-list-shipping-zones', array() ),
-			'create-shipping-zone'   => array( 'oversio/wc-create-shipping-zone', array( 'zone_name' => 'AuditZone' ) ),
+			'list-shipping-zones'    => array( 'aafm/wc-list-shipping-zones', array() ),
+			'create-shipping-zone'   => array( 'aafm/wc-create-shipping-zone', array( 'zone_name' => 'AuditZone' ) ),
 			'update-shipping-zone'   => array(
-				'oversio/wc-update-shipping-zone',
+				'aafm/wc-update-shipping-zone',
 				array(
 					'zone_id'   => 1,
 					'zone_name' => 'Europe 2',
 				),
 			),
 			'create-shipping-method' => array(
-				'oversio/wc-create-shipping-method',
+				'aafm/wc-create-shipping-method',
 				array(
 					'zone_id'     => 1,
 					'method_type' => 'local_pickup',
 				),
 			),
 			'update-shipping-method' => array(
-				'oversio/wc-update-shipping-method',
+				'aafm/wc-update-shipping-method',
 				array(
 					'zone_id'      => 1,
 					'instance_id'  => 1,
@@ -619,7 +619,7 @@ final class WooShippingTest extends TestCase {
 		$this->acting_as( $low_role );
 		wp_get_ability( $ability )->check_permissions( $args );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -631,11 +631,11 @@ final class WooShippingTest extends TestCase {
 	 */
 	public function provide_denied_audit_cases(): array {
 		return array(
-			'list-shipping-zones'    => array( 'oversio/wc-list-shipping-zones', array(), 'editor' ),
-			'create-shipping-zone'   => array( 'oversio/wc-create-shipping-zone', array( 'zone_name' => 'Denied' ), 'editor' ),
-			'update-shipping-zone'   => array( 'oversio/wc-update-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
+			'list-shipping-zones'    => array( 'aafm/wc-list-shipping-zones', array(), 'editor' ),
+			'create-shipping-zone'   => array( 'aafm/wc-create-shipping-zone', array( 'zone_name' => 'Denied' ), 'editor' ),
+			'update-shipping-zone'   => array( 'aafm/wc-update-shipping-zone', array( 'zone_id' => 1 ), 'editor' ),
 			'create-shipping-method' => array(
-				'oversio/wc-create-shipping-method',
+				'aafm/wc-create-shipping-method',
 				array(
 					'zone_id'     => 1,
 					'method_type' => 'flat_rate',
@@ -643,7 +643,7 @@ final class WooShippingTest extends TestCase {
 				'editor',
 			),
 			'update-shipping-method' => array(
-				'oversio/wc-update-shipping-method',
+				'aafm/wc-update-shipping-method',
 				array(
 					'zone_id'     => 1,
 					'instance_id' => 1,

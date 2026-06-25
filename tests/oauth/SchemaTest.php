@@ -2,14 +2,14 @@
 /**
  * Tests for the OAuth storage schema installer.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 /**
  * Verifies the four OAuth tables install idempotently and record their schema version.
@@ -25,7 +25,7 @@ class SchemaTest extends TestCase {
 	 * trivial select instead, which sees the temporary table the same way the
 	 * plugin's own queries do.
 	 *
-	 * @param string $suffix Unprefixed table suffix (e.g. 'oversio_oauth_clients').
+	 * @param string $suffix Unprefixed table suffix (e.g. 'aafm_oauth_clients').
 	 * @return bool
 	 */
 	private function table_exists( string $suffix ): bool {
@@ -95,16 +95,16 @@ class SchemaTest extends TestCase {
 	 * audience match never fails on a truncated value.
 	 */
 	public function test_resource_column_holds_long_urls(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'oversio_oauth_codes', 'resource' ), 'codes.resource must not truncate long URLs.' );
-		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'oversio_oauth_access_tokens', 'resource' ), 'access_tokens.resource must not truncate long URLs.' );
+		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'aafm_oauth_codes', 'resource' ), 'codes.resource must not truncate long URLs.' );
+		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'aafm_oauth_access_tokens', 'resource' ), 'access_tokens.resource must not truncate long URLs.' );
 
 		// Round-trip a long resource through the token mint and read it back intact.
-		$long_resource = 'https://' . str_repeat( 'sub.', 60 ) . 'example.com/wp-json/oversio-agent-abilities/mcp';
+		$long_resource = 'https://' . str_repeat( 'sub.', 60 ) . 'example.com/wp-json/agent-abilities-for-mcp/mcp';
 		$this->assertGreaterThan( 191, strlen( $long_resource ), 'fixture: the resource must exceed the old 191 cap.' );
 
-		$tokens = oversio_oauth_mint_tokens(
+		$tokens = aafm_oauth_mint_tokens(
 			array(
 				'wp_user_id' => 7,
 				'client_id'  => 'c',
@@ -113,7 +113,7 @@ class SchemaTest extends TestCase {
 		);
 		$this->assertIsArray( $tokens );
 
-		$row = oversio_oauth_get_access_token_row( $tokens['access_token'] );
+		$row = aafm_oauth_get_access_token_row( $tokens['access_token'] );
 		$this->assertIsArray( $row );
 		$this->assertSame( $long_resource, $row['resource'], 'A long resource must round-trip without truncation.' );
 	}
@@ -122,14 +122,14 @@ class SchemaTest extends TestCase {
 	 * Installing creates all four OAuth tables and records the schema version.
 	 */
 	public function test_install_creates_all_four_tables(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_clients' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_codes' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_access_tokens' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_consents' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_clients' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_codes' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_access_tokens' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_consents' ) );
 
-		$this->assertNotEmpty( get_option( 'oversio_oauth_schema_version' ) );
+		$this->assertNotEmpty( get_option( 'aafm_oauth_schema_version' ) );
 	}
 
 	/**
@@ -141,10 +141,10 @@ class SchemaTest extends TestCase {
 	 * re-run for existing v1 installs once the schema version bumps to '2'.
 	 */
 	public function test_access_tokens_indexes_refresh_parent_id(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
 		$this->assertTrue(
-			$this->index_exists( 'oversio_oauth_access_tokens', 'refresh_parent_id' ),
+			$this->index_exists( 'aafm_oauth_access_tokens', 'refresh_parent_id' ),
 			'Expected a refresh_parent_id index on the access-tokens table.'
 		);
 	}
@@ -157,10 +157,10 @@ class SchemaTest extends TestCase {
 	 * on a fresh install and on re-run for existing installs once the schema version bumps to '4'.
 	 */
 	public function test_access_tokens_indexes_client_id(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
 		$this->assertTrue(
-			$this->index_exists( 'oversio_oauth_access_tokens', 'client_id' ),
+			$this->index_exists( 'aafm_oauth_access_tokens', 'client_id' ),
 			'Expected a client_id index on the access-tokens table.'
 		);
 	}
@@ -171,37 +171,37 @@ class SchemaTest extends TestCase {
 	 * literal here, only confirming the stored option tracks the constant.
 	 */
 	public function test_install_records_schema_version(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$this->assertSame( OVERSIO_OAUTH_SCHEMA_VERSION, get_option( 'oversio_oauth_schema_version' ) );
-		$this->assertSame( '5', OVERSIO_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertSame( '5', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**
 	 * Installing twice is a no-op the second time (no error, tables still present).
 	 */
 	public function test_install_is_idempotent(): void {
-		oversio_install_oauth_tables();
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_clients' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_codes' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_access_tokens' ) );
-		$this->assertTrue( $this->table_exists( 'oversio_oauth_consents' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_clients' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_codes' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_access_tokens' ) );
+		$this->assertTrue( $this->table_exists( 'aafm_oauth_consents' ) );
 	}
 
 	/**
 	 * The upgrade runs the installer when the recorded schema version is missing.
 	 */
 	public function test_upgrade_runs_when_version_missing(): void {
-		oversio_install_oauth_tables();
-		delete_option( 'oversio_oauth_schema_version' );
+		aafm_install_oauth_tables();
+		delete_option( 'aafm_oauth_schema_version' );
 
-		oversio_maybe_upgrade_oauth_tables();
+		aafm_maybe_upgrade_oauth_tables();
 
 		$this->assertSame(
-			OVERSIO_OAUTH_SCHEMA_VERSION,
-			get_option( 'oversio_oauth_schema_version' )
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' )
 		);
 	}
 
@@ -209,13 +209,13 @@ class SchemaTest extends TestCase {
 	 * The upgrade is a no-op when the recorded version already matches.
 	 */
 	public function test_upgrade_is_noop_when_current(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		oversio_maybe_upgrade_oauth_tables();
+		aafm_maybe_upgrade_oauth_tables();
 
 		$this->assertSame(
-			OVERSIO_OAUTH_SCHEMA_VERSION,
-			get_option( 'oversio_oauth_schema_version' )
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' )
 		);
 	}
 }

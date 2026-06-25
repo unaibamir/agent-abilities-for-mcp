@@ -2,7 +2,7 @@
 /**
  * MCP server registration and tool-name helpers.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -13,15 +13,15 @@ defined( 'ABSPATH' ) || exit;
  * Mirror the adapter's McpNameSanitizer for display purposes (connect wizard, diagnostics).
  *
  * CONFIRMED against the vendored 0.5.0 source (Phase 0.5.2): the adapter converts '/' -> '-'
- * and keeps hyphens, producing names in the charset ^[A-Za-z0-9_.-]+$. So `oversio/get-posts`
- * becomes `oversio-get-posts`. Removing the slash is the hard blocker we care about; the few
+ * and keeps hyphens, producing names in the charset ^[A-Za-z0-9_.-]+$. So `aafm/get-posts`
+ * becomes `aafm-get-posts`. Removing the slash is the hard blocker we care about; the few
  * client surfaces that also dislike hyphens (some ChatGPT Apps) are a v1.x follow-up — Claude,
  * Cursor, and Windsurf (our v1 targets) accept hyphenated tool names.
  *
- * @param string $ability_name Ability name, e.g. "oversio/get-posts".
- * @return string Sanitized MCP tool name, e.g. "oversio-get-posts".
+ * @param string $ability_name Ability name, e.g. "aafm/get-posts".
+ * @return string Sanitized MCP tool name, e.g. "aafm-get-posts".
  */
-function oversio_mcp_tool_name( string $ability_name ): string {
+function aafm_mcp_tool_name( string $ability_name ): string {
 	return str_replace( '/', '-', trim( $ability_name ) );
 }
 
@@ -33,14 +33,14 @@ function oversio_mcp_tool_name( string $ability_name ): string {
  * transport the Application Password user is NOT resolved yet at that point — the request
  * is still anonymous. So this list can only decide WHICH abilities exist, not which the
  * connection may call. Per-connection capability filtering happens later, at request time,
- * in oversio_filter_mcp_tools_list() on the adapter's `mcp_adapter_tools_list` hook, where the
+ * in aafm_filter_mcp_tools_list() on the adapter's `mcp_adapter_tools_list` hook, where the
  * agent user IS resolved. The hard gate remains each ability's own permission_callback at
  * execute time. (See ROADMAP "Carried issues" for the timing correction to Phase 0.5 #2.)
  *
  * @param array<int,string> $enabled Enabled ability names.
  * @return list<string>
  */
-function oversio_build_server_tools( array $enabled ): array {
+function aafm_build_server_tools( array $enabled ): array {
 	$tools = array();
 	foreach ( $enabled as $name ) {
 		$ability = wp_get_ability( $name );
@@ -52,7 +52,7 @@ function oversio_build_server_tools( array $enabled ): array {
 		// the user is anonymous here, so this is a no-op and the request-time filter does the
 		// real work — belt and suspenders, never advertising more than the catalog.
 		if ( is_user_logged_in() ) {
-			if ( ! oversio_user_can_discover_ability( $name ) ) {
+			if ( ! aafm_user_can_discover_ability( $name ) ) {
 				continue;
 			}
 		}
@@ -64,16 +64,16 @@ function oversio_build_server_tools( array $enabled ): array {
 /**
  * Whether the current user passes an ability's UNDECORATED permission callback.
  *
- * Uses the raw callback stashed at registration (oversio_remember_raw_permission) so a
+ * Uses the raw callback stashed at registration (aafm_remember_raw_permission) so a
  * list-time visibility check never writes a denied audit row. Unknown abilities (no
  * stashed callback) are treated as not-callable — fail closed.
  *
- * @param string              $ability_name Ability name, e.g. "oversio/trash-post".
+ * @param string              $ability_name Ability name, e.g. "aafm/trash-post".
  * @param array<string,mixed> $input        Input to pass to the permission callback.
  * @return bool
  */
-function oversio_user_can_call_ability( string $ability_name, array $input = array() ): bool {
-	$permission = oversio_remember_raw_permission( $ability_name );
+function aafm_user_can_call_ability( string $ability_name, array $input = array() ): bool {
+	$permission = aafm_remember_raw_permission( $ability_name );
 	if ( ! is_callable( $permission ) ) {
 		return false;
 	}
@@ -98,28 +98,28 @@ function oversio_user_can_call_ability( string $ability_name, array $input = arr
  * Page caps are derived from the 'page' post-type object so the mapping stays correct
  * if the page caps are ever remapped, rather than hardcoding 'edit_pages'/'delete_pages'.
  *
- * @param string $name Ability name, e.g. "oversio/update-post".
+ * @param string $name Ability name, e.g. "aafm/update-post".
  * @return callable():bool|null Discovery predicate, or null when no override is needed.
  */
-function oversio_ability_list_permission( string $name ): ?callable {
+function aafm_ability_list_permission( string $name ): ?callable {
 	switch ( $name ) {
 		// Single-item reads: as discoverable as their list siblings get-posts/get-pages,
 		// which gate on the generic 'read' capability.
-		case 'oversio/get-post':
-		case 'oversio/get-page':
+		case 'aafm/get-post':
+		case 'aafm/get-page':
 			return static fn(): bool => current_user_can( 'read' );
 
-		// oversio/get-user gates on list_users (object-independent), so it needs no case
+		// aafm/get-user gates on list_users (object-independent), so it needs no case
 		// here — it falls through to its real permission_callback with empty input,
 		// which is the correct answer (same as the get-users list sibling).
 
-		// oversio/get-site-settings and oversio/update-site-settings both gate on manage_options
+		// aafm/get-site-settings and aafm/update-site-settings both gate on manage_options
 		// (object-independent, no per-object branch), so neither needs a case — each falls
 		// through to its real permission_callback with empty input, which is the correct
 		// answer. Discovery is proven in SiteSettingsTest (an admin sees them, an editor
 		// does not). Documented here so a future maintainer doesn't add a redundant case.
 
-		// oversio/get-activity-log gates on manage_options (object-independent, no per-object
+		// aafm/get-activity-log gates on manage_options (object-independent, no per-object
 		// branch), so it needs no case — it falls through to its real permission_callback
 		// with empty input, the correct answer. Proven in ActivityLogTest.
 
@@ -142,7 +142,7 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// input at discovery — so use the object-independent edit_posts/delete_posts floor;
 		// the per-object permission_callback refines at execute. list-blocks and create-block
 		// gate on the object-independent edit_posts floor directly, so they need no case here
-		// (they fall through to oversio_perm_blocks_floor, the correct answer).
+		// (they fall through to aafm_perm_blocks_floor, the correct answer).
 		//
 		// Per-plugin SEO integrations (Yoast / Rank Math / AIOSEO): every *-get-post / *-update-post
 		// / *-get-schema / *-update-schema gates per-object on edit_post($id) (SEO data is post
@@ -150,14 +150,14 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// floor, refined per-object at execute. The *-get-head abilities have their own
 		// edit_posts-floor permission_callback, so they need no case here: each falls through to that
 		// callback with empty input (the per-object edit_post refinement runs inside its execute).
-		case 'oversio/yoast-get-post':
-		case 'oversio/yoast-update-post':
-		case 'oversio/rankmath-get-post':
-		case 'oversio/rankmath-update-post':
-		case 'oversio/rankmath-get-schema':
-		case 'oversio/rankmath-update-schema':
-		case 'oversio/aioseo-get-post':
-		case 'oversio/aioseo-update-post':
+		case 'aafm/yoast-get-post':
+		case 'aafm/yoast-update-post':
+		case 'aafm/rankmath-get-post':
+		case 'aafm/rankmath-update-post':
+		case 'aafm/rankmath-get-schema':
+		case 'aafm/rankmath-update-schema':
+		case 'aafm/aioseo-get-post':
+		case 'aafm/aioseo-update-post':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// ACF integration: the post/term field abilities gate per-object on edit_post($id) /
@@ -165,15 +165,15 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// floor, refined per-object at execute (term meta is gated like post meta in this catalog).
 		// The user field abilities gate per-object on edit_user($id), so discovery uses the
 		// edit_users floor. acf-list-field-groups gates on the object-independent edit_posts floor
-		// directly, so it needs no case here: it falls through to oversio_perm_acf_list_field_groups
+		// directly, so it needs no case here: it falls through to aafm_perm_acf_list_field_groups
 		// with empty input, the correct discovery answer.
-		case 'oversio/acf-get-post-fields':
-		case 'oversio/acf-update-post-fields':
-		case 'oversio/acf-get-term-fields':
-		case 'oversio/acf-update-term-fields':
+		case 'aafm/acf-get-post-fields':
+		case 'aafm/acf-update-post-fields':
+		case 'aafm/acf-get-term-fields':
+		case 'aafm/acf-update-term-fields':
 			return static fn(): bool => current_user_can( 'edit_posts' );
-		case 'oversio/acf-get-user-fields':
-		case 'oversio/acf-update-user-fields':
+		case 'aafm/acf-get-user-fields':
+		case 'aafm/acf-update-user-fields':
 			return static fn(): bool => current_user_can( 'edit_users' );
 		// WooCommerce integration: every product, product-variation, global product-attribute,
 		// order, order-note, order-refund, and customer ability (wc-list-products, wc-get-product,
@@ -196,10 +196,10 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// WooAttributesTest / WooOrdersTest / WooOrderNotesRefundsTest / WooCustomersTest /
 		// WooCouponsTest / WooShippingTest (admin discovers, editor does not).
 
-		case 'oversio/get-block':
-		case 'oversio/update-block':
+		case 'aafm/get-block':
+		case 'aafm/update-block':
 			return static fn(): bool => current_user_can( 'edit_posts' );
-		case 'oversio/delete-block':
+		case 'aafm/delete-block':
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
@@ -209,53 +209,53 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// per-object permission_callback still re-checks the specific user at execute time.
 		// create-user gates on create_users (object-independent), so it needs no case and
 		// correctly falls through to its real permission_callback with empty input.
-		case 'oversio/update-user':
+		case 'aafm/update-user':
 			return static fn(): bool => current_user_can( 'edit_users' );
-		case 'oversio/delete-user':
+		case 'aafm/delete-user':
 			return static fn(): bool => current_user_can( 'delete_users' );
 
 		// Post writes: the floor cap that the per-object edit_post()/delete_post() refine.
-		case 'oversio/update-post':
-		case 'oversio/replace-in-post':
-		case 'oversio/set-featured-image':
+		case 'aafm/update-post':
+		case 'aafm/replace-in-post':
+		case 'aafm/set-featured-image':
 			return static fn(): bool => current_user_can( 'edit_posts' );
-		case 'oversio/trash-post':
-		case 'oversio/delete-post':
+		case 'aafm/trash-post':
+		case 'aafm/delete-post':
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
 		// CPT writes: the type isn't known at discovery time (empty input), so use the
 		// object-independent authoring floor. The execute-time permission_callback still
 		// enforces the exact type's caps + allowlist + per-object edit.
-		case 'oversio/create-cpt-item':
-		case 'oversio/update-cpt-item':
+		case 'aafm/create-cpt-item':
+		case 'aafm/update-cpt-item':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Governed post-meta (get/update/delete + bulk read): all gate on per-object
 		// edit_post (reads included — meta can hold private data), so discovery uses the
 		// same edit_posts floor as update-post, refined per-object at execute time.
-		case 'oversio/get-post-meta':
-		case 'oversio/get-all-post-meta':
-		case 'oversio/update-post-meta':
-		case 'oversio/delete-post-meta':
+		case 'aafm/get-post-meta':
+		case 'aafm/get-all-post-meta':
+		case 'aafm/update-post-meta':
+		case 'aafm/delete-post-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) —
 		// reads included, since user meta can hold private data. The user id is unknown at
 		// discovery (empty input), so use the object-independent edit_users floor, refined
 		// per-object at execute time. Mirrors the post-meta family.
-		case 'oversio/get-user-meta':
-		case 'oversio/update-user-meta':
-		case 'oversio/delete-user-meta':
+		case 'aafm/get-user-meta':
+		case 'aafm/update-user-meta':
+		case 'aafm/delete-user-meta':
 			return static fn(): bool => current_user_can( 'edit_users' );
 
 		// Page writes: derive edit_pages/delete_pages from the page post-type object.
-		case 'oversio/update-page':
+		case 'aafm/update-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->edit_posts );
 			};
-		case 'oversio/trash-page':
-		case 'oversio/delete-page':
+		case 'aafm/trash-page':
+		case 'aafm/delete-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
 				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->delete_posts );
@@ -264,19 +264,19 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// Comment writes: the site-wide moderate_comments floor the per-object
 		// edit_comment() refines at execute time. The comment id is unknown at
 		// discovery (empty input), so discovery uses the object-independent floor.
-		case 'oversio/moderate-comment':
-		case 'oversio/create-comment':
-		case 'oversio/update-comment':
-		case 'oversio/delete-comment':
+		case 'aafm/moderate-comment':
+		case 'aafm/create-comment':
+		case 'aafm/update-comment':
+		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
 		// Revisions: list/get/restore all gate per-object on edit_post on the parent — reads
 		// included, since a revision can hold content from when the post was private. Discovery
 		// uses the same edit_posts floor as update-post, refined per-object at execute.
-		case 'oversio/list-revisions':
-		case 'oversio/get-revision':
-		case 'oversio/restore-revision':
-		case 'oversio/delete-revision':
+		case 'aafm/list-revisions':
+		case 'aafm/get-revision':
+		case 'aafm/restore-revision':
+		case 'aafm/delete-revision':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Media writes: the attachment id is unknown at discovery (empty input), so use an
@@ -284,22 +284,22 @@ function oversio_ability_list_permission( string $name ): ?callable {
 		// case — like get-media they fall through to their object-independent permission_callback.
 		// The execute-time permission_callback still enforces per-object edit_post/delete_post
 		// on the specific attachment.
-		case 'oversio/update-media':
-		case 'oversio/delete-media':
+		case 'aafm/update-media':
+		case 'aafm/delete-media':
 			return static fn(): bool => current_user_can( 'upload_files' ) || current_user_can( 'edit_posts' );
 
 		// add-post-terms gates per-object on edit_post on the target post; the post id is
 		// unknown at discovery (empty input), so use the object-independent authoring floor.
-		case 'oversio/add-post-terms':
+		case 'aafm/add-post-terms':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Term-meta read/write/delete gate per-object on the term (edit_term — the read
 		// included, since term meta can hold private data) — the term id is unknown at
 		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.
 		// Mirrors the post-meta family (get/update/delete-post-meta).
-		case 'oversio/get-term-meta':
-		case 'oversio/update-term-meta':
-		case 'oversio/delete-term-meta':
+		case 'aafm/get-term-meta':
+		case 'aafm/update-term-meta':
+		case 'aafm/delete-term-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		default:
@@ -312,22 +312,22 @@ function oversio_ability_list_permission( string $name ): ?callable {
  *
  * Discovery is deliberately decoupled from per-object EXECUTE authorization. For abilities
  * with a per-object permission branch this uses the coarse, id-free predicate from
- * oversio_ability_list_permission() so a capable user can actually see the tool. For every
+ * aafm_ability_list_permission() so a capable user can actually see the tool. For every
  * other ability it falls back to the real callback with empty input, which is the correct
  * object-independent check for the general-cap abilities (create-post, get-posts, …).
  *
  * Discovery never grants execution: each ability's permission_callback still runs at
  * execute time and still denies (and audits) on any specific object the user can't touch.
  *
- * @param string $ability_name Ability name, e.g. "oversio/update-post".
+ * @param string $ability_name Ability name, e.g. "aafm/update-post".
  * @return bool
  */
-function oversio_user_can_discover_ability( string $ability_name ): bool {
-	$list_permission = oversio_ability_list_permission( $ability_name );
+function aafm_user_can_discover_ability( string $ability_name ): bool {
+	$list_permission = aafm_ability_list_permission( $ability_name );
 	if ( null !== $list_permission ) {
 		return true === $list_permission();
 	}
-	return oversio_user_can_call_ability( $ability_name, array() );
+	return aafm_user_can_call_ability( $ability_name, array() );
 }
 
 /**
@@ -338,14 +338,14 @@ function oversio_user_can_discover_ability( string $ability_name ): bool {
  * dispatched — by then the Application Password user IS resolved. We drop any Tool DTO whose
  * backing ability the current user cannot DISCOVER (an object-independent check), so a
  * connection only sees tools it could plausibly use, while the per-object permission_callback
- * still re-checks the specific object at execute time. Non-OVERSIO tools (no matching enabled
+ * still re-checks the specific object at execute time. Non-AAFM tools (no matching enabled
  * ability) are left untouched.
  *
  * @param mixed $tools  Array of Tool DTOs from the adapter.
  * @param mixed $server Adapter server instance (unused).
  * @return mixed Filtered Tool DTOs.
  */
-function oversio_filter_mcp_tools_list( $tools, $server = null ) {
+function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 	unset( $server );
 	if ( ! is_array( $tools ) ) {
 		return $tools;
@@ -353,8 +353,8 @@ function oversio_filter_mcp_tools_list( $tools, $server = null ) {
 
 	// Map our enabled abilities to their sanitized MCP tool names once.
 	$enabled_by_tool_name = array();
-	foreach ( oversio_get_enabled_abilities() as $ability_name ) {
-		$enabled_by_tool_name[ oversio_mcp_tool_name( $ability_name ) ] = $ability_name;
+	foreach ( aafm_get_enabled_abilities() as $ability_name ) {
+		$enabled_by_tool_name[ aafm_mcp_tool_name( $ability_name ) ] = $ability_name;
 	}
 
 	$visible = array();
@@ -362,11 +362,11 @@ function oversio_filter_mcp_tools_list( $tools, $server = null ) {
 		$tool_name = is_object( $tool ) && method_exists( $tool, 'getName' ) ? (string) $tool->getName() : '';
 
 		// Only gate tools that belong to one of our enabled abilities. Discovery is
-		// decoupled from per-object execute authorization (see oversio_user_can_discover_ability):
+		// decoupled from per-object execute authorization (see aafm_user_can_discover_ability):
 		// a capable user must SEE per-object tools (update-post, trash-post, …) even though the
 		// real permission_callback still re-checks the specific object at execute time.
 		if ( isset( $enabled_by_tool_name[ $tool_name ] ) ) {
-			if ( ! oversio_user_can_discover_ability( $enabled_by_tool_name[ $tool_name ] ) ) {
+			if ( ! aafm_user_can_discover_ability( $enabled_by_tool_name[ $tool_name ] ) ) {
 				continue;
 			}
 		}
@@ -384,16 +384,16 @@ function oversio_filter_mcp_tools_list( $tools, $server = null ) {
  * @param \WP_REST_Request<array<string,mixed>> $request Incoming request (unused; auth already resolved).
  * @return bool|WP_Error
  */
-function oversio_transport_permission_callback( $request ) {
+function aafm_transport_permission_callback( $request ) {
 	unset( $request );
 
 	if ( ! is_user_logged_in() ) {
-		return new WP_Error( 'oversio_unauthenticated', __( 'Authentication required.', 'oversio-agent-abilities' ), array( 'status' => 401 ) );
+		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
 	}
 
-	if ( ! oversio_ip_is_allowed( oversio_source_ip() ) ) {
+	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {
 		$user = wp_get_current_user();
-		oversio_log_activity(
+		aafm_log_activity(
 			array(
 				'ability'           => '(transport)',
 				'status'            => 'denied',
@@ -401,7 +401,7 @@ function oversio_transport_permission_callback( $request ) {
 				'principal_login'   => (string) $user->user_login,
 			)
 		);
-		return new WP_Error( 'oversio_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'oversio-agent-abilities' ), array( 'status' => 403 ) );
+		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 	}
 
 	return true;
@@ -420,7 +420,7 @@ function oversio_transport_permission_callback( $request ) {
  * @param mixed $server  The MCP server instance (unused).
  * @return mixed The (possibly rebuilt) initialize result.
  */
-function oversio_filter_initialize_capabilities( $result, $server = null ) {
+function aafm_filter_initialize_capabilities( $result, $server = null ) {
 	unset( $server );
 
 	if ( ! is_object( $result ) || ! method_exists( $result, 'toArray' ) ) {
@@ -450,36 +450,36 @@ function oversio_filter_initialize_capabilities( $result, $server = null ) {
  * @param \WP\MCP\Core\McpAdapter $adapter Adapter instance.
  * @return void
  */
-function oversio_register_mcp_server( $adapter ): void {
+function aafm_register_mcp_server( $adapter ): void {
 	// Idempotent: the adapter keeps one server per ID and emits an incorrect-usage notice
 	// if asked to create a duplicate. Bail if ours already exists so a re-entrant init
 	// (or a diagnostics route lookup that re-fires rest_api_init) never trips that notice.
-	if ( null !== $adapter->get_server( 'oversio-server' ) ) {
+	if ( null !== $adapter->get_server( 'aafm-server' ) ) {
 		return;
 	}
 
-	$tools = oversio_build_server_tools( oversio_get_enabled_abilities() );
+	$tools = aafm_build_server_tools( aafm_get_enabled_abilities() );
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
-	// oversio_build_server_tools()). Priority 5 so it runs before any consumer reordering.
-	add_filter( 'mcp_adapter_tools_list', 'oversio_filter_mcp_tools_list', 5, 2 );
+	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.
+	add_filter( 'mcp_adapter_tools_list', 'aafm_filter_mcp_tools_list', 5, 2 );
 
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
-	add_filter( 'mcp_adapter_initialize_response', 'oversio_filter_initialize_capabilities', 10, 2 );
+	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
 
 	$adapter->create_server(
-		'oversio-server',
-		OVERSIO_MCP_NAMESPACE,
-		OVERSIO_MCP_ROUTE_SEGMENT,
-		__( 'Oversio Agent Abilities', 'oversio-agent-abilities' ),
-		__( 'Curated, governed WordPress abilities for AI agents.', 'oversio-agent-abilities' ),
-		OVERSIO_VERSION,
+		'aafm-server',
+		AAFM_MCP_NAMESPACE,
+		AAFM_MCP_ROUTE_SEGMENT,
+		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
+		__( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' ),
+		AAFM_VERSION,
 		array( \WP\MCP\Transport\HttpTransport::class ),
 		\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,
 		\WP\MCP\Infrastructure\Observability\NullMcpObservabilityHandler::class,
 		$tools,
 		array(),
 		array(),
-		'oversio_transport_permission_callback'
+		'aafm_transport_permission_callback'
 	);
 }

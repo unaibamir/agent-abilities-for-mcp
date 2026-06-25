@@ -2,7 +2,7 @@
 /**
  * PHPUnit bootstrap: loads the WordPress test suite and our plugin.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -14,7 +14,7 @@ require_once $_tests_dir . '/includes/functions.php';
 tests_add_filter(
 	'muplugins_loaded',
 	static function (): void {
-		require dirname( __DIR__ ) . '/oversio-agent-abilities.php';
+		require dirname( __DIR__ ) . '/agent-abilities-for-mcp.php';
 	}
 );
 

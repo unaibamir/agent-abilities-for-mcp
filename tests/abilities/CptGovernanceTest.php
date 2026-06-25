@@ -2,14 +2,14 @@
 /**
  * CPT governance: read/write routing through the post-type allowlist gates.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class CptGovernanceTest extends TestCase {
@@ -23,20 +23,20 @@ final class CptGovernanceTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
-			array( 'oversio/create-draft', 'oversio/create-post', 'oversio/update-post', 'oversio/trash-post' )
+			'aafm_enabled_abilities',
+			array( 'aafm/create-draft', 'aafm/create-post', 'aafm/update-post', 'aafm/trash-post' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_get_post_denies_cpt_object_until_allowlisted(): void {
 		register_post_type(
-			'oversio_book',
+			'aafm_book',
 			array(
 				'public'          => true,
 				'map_meta_cap'    => true,
@@ -47,22 +47,22 @@ final class CptGovernanceTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$id = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_book',
+				'post_type'   => 'aafm_book',
 				'post_status' => 'publish',
 			)
 		);
 
-		delete_option( 'oversio_allowed_post_types' );
-		$this->assertFalse( oversio_perm_get_post( array( 'post_id' => $id ) ), 'CPT read must be denied before opt-in.' );
+		delete_option( 'aafm_allowed_post_types' );
+		$this->assertFalse( aafm_perm_get_post( array( 'post_id' => $id ) ), 'CPT read must be denied before opt-in.' );
 
-		update_option( 'oversio_allowed_post_types', array( 'oversio_book' ) );
-		$this->assertTrue( oversio_perm_get_post( array( 'post_id' => $id ) ), 'CPT read allowed after opt-in.' );
+		update_option( 'aafm_allowed_post_types', array( 'aafm_book' ) );
+		$this->assertTrue( aafm_perm_get_post( array( 'post_id' => $id ) ), 'CPT read allowed after opt-in.' );
 	}
 
 	public function test_get_post_denies_attachment_object(): void {
 		$this->acting_as( 'administrator' );
 		$att = self::factory()->attachment->create();
-		$this->assertFalse( oversio_perm_get_post( array( 'post_id' => $att ) ), 'Attachment must not be readable via get-post.' );
+		$this->assertFalse( aafm_perm_get_post( array( 'post_id' => $att ) ), 'Attachment must not be readable via get-post.' );
 	}
 
 	public function test_post_and_page_behaviour_is_unchanged(): void {
@@ -74,15 +74,15 @@ final class CptGovernanceTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
-		$this->assertTrue( oversio_perm_get_post( array( 'post_id' => $post ) ) );
-		$this->assertTrue( oversio_perm_update_post( array( 'post_id' => $post ) ) );
-		$this->assertTrue( oversio_perm_trash_post( array( 'post_id' => $post ) ) );
-		$this->assertTrue( oversio_perm_get_post( array( 'post_id' => $page ) ) );
+		$this->assertTrue( aafm_perm_get_post( array( 'post_id' => $post ) ) );
+		$this->assertTrue( aafm_perm_update_post( array( 'post_id' => $post ) ) );
+		$this->assertTrue( aafm_perm_trash_post( array( 'post_id' => $post ) ) );
+		$this->assertTrue( aafm_perm_get_post( array( 'post_id' => $page ) ) );
 	}
 
 	public function test_redaction_returns_exactly_ten_keys_for_a_cpt(): void {
 		register_post_type(
-			'oversio_book',
+			'aafm_book',
 			array(
 				'public'          => true,
 				'map_meta_cap'    => true,
@@ -92,7 +92,7 @@ final class CptGovernanceTest extends TestCase {
 		);
 		$id = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_book',
+				'post_type'   => 'aafm_book',
 				'post_status' => 'publish',
 				'post_title'  => 'A Book',
 			)
@@ -100,7 +100,7 @@ final class CptGovernanceTest extends TestCase {
 		update_post_meta( $id, '_price', '9999' );
 		update_post_meta( $id, 'isbn', '123-secret' );
 
-		$out  = oversio_redact_post( get_post( $id ) );
+		$out  = aafm_redact_post( get_post( $id ) );
 		$keys = array_keys( $out );
 		sort( $keys );
 		$this->assertSame(
@@ -114,7 +114,7 @@ final class CptGovernanceTest extends TestCase {
 
 	public function test_non_allowlisted_cpt_read_is_denied(): void {
 		register_post_type(
-			'oversio_book',
+			'aafm_book',
 			array(
 				'public' => true,
 				'label'  => 'Books',
@@ -123,51 +123,51 @@ final class CptGovernanceTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$id = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_book',
+				'post_type'   => 'aafm_book',
 				'post_status' => 'publish',
 			)
 		);
-		delete_option( 'oversio_allowed_post_types' );
-		$this->assertFalse( oversio_perm_get_post( array( 'post_id' => $id ) ) );
+		delete_option( 'aafm_allowed_post_types' );
+		$this->assertFalse( aafm_perm_get_post( array( 'post_id' => $id ) ) );
 	}
 
 	public function test_floor_rejects_internal_types_forced_into_the_option(): void {
-		update_option( 'oversio_allowed_post_types', array( 'attachment', 'revision', 'nav_menu_item', 'wp_block', 'wp_template' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'attachment' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'revision' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'nav_menu_item' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'wp_block' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'wp_template' ) );
+		update_option( 'aafm_allowed_post_types', array( 'attachment', 'revision', 'nav_menu_item', 'wp_block', 'wp_template' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'attachment' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'revision' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'nav_menu_item' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'wp_block' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'wp_template' ) );
 	}
 
 	public function test_private_cpt_forced_into_the_option_is_still_denied(): void {
 		register_post_type(
-			'oversio_priv',
+			'aafm_priv',
 			array(
 				'public' => false,
 				'label'  => 'Priv',
 			)
 		);
-		update_option( 'oversio_allowed_post_types', array( 'oversio_priv' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_post_type( 'oversio_priv' ) );
+		update_option( 'aafm_allowed_post_types', array( 'aafm_priv' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'aafm_priv' ) );
 	}
 
 	public function test_map_meta_cap_false_write_is_refused_even_with_singular_caps(): void {
 		register_post_type(
-			'oversio_unmapped',
+			'aafm_unmapped',
 			array(
 				'public'          => true,
 				'map_meta_cap'    => false,
-				'capability_type' => array( 'oversio_unmapped', 'oversio_unmappeds' ),
+				'capability_type' => array( 'aafm_unmapped', 'aafm_unmappeds' ),
 				'label'           => 'Unmapped',
 			)
 		);
-		update_option( 'oversio_allowed_post_types', array( 'oversio_unmapped' ) );
+		update_option( 'aafm_allowed_post_types', array( 'aafm_unmapped' ) );
 
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
 		$obj   = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_unmapped',
+				'post_type'   => 'aafm_unmapped',
 				'post_status' => 'draft',
 				'post_author' => $owner,
 			)
@@ -175,21 +175,21 @@ final class CptGovernanceTest extends TestCase {
 
 		$agent = self::factory()->user->create( array( 'role' => 'author' ) );
 		$role  = get_role( 'author' );
-		$role->add_cap( 'edit_oversio_unmapped' );
-		$role->add_cap( 'delete_oversio_unmapped' );
+		$role->add_cap( 'edit_aafm_unmapped' );
+		$role->add_cap( 'delete_aafm_unmapped' );
 		wp_set_current_user( $agent );
 
 		// The footgun: bare singular caps would let the agent edit ANOTHER author's draft.
-		$this->assertFalse( oversio_perm_update_post( array( 'post_id' => $obj ) ), 'Non-mapped CPT edit must be refused.' );
-		$this->assertFalse( oversio_perm_trash_post( array( 'post_id' => $obj ) ), 'Non-mapped CPT trash must be refused.' );
+		$this->assertFalse( aafm_perm_update_post( array( 'post_id' => $obj ) ), 'Non-mapped CPT edit must be refused.' );
+		$this->assertFalse( aafm_perm_trash_post( array( 'post_id' => $obj ) ), 'Non-mapped CPT trash must be refused.' );
 
-		$role->remove_cap( 'edit_oversio_unmapped' );
-		$role->remove_cap( 'delete_oversio_unmapped' );
+		$role->remove_cap( 'edit_aafm_unmapped' );
+		$role->remove_cap( 'delete_aafm_unmapped' );
 	}
 
 	public function test_set_featured_image_denied_on_non_allowlisted_cpt(): void {
 		register_post_type(
-			'oversio_book',
+			'aafm_book',
 			array(
 				'public'          => true,
 				'map_meta_cap'    => true,
@@ -200,36 +200,36 @@ final class CptGovernanceTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$id = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_book',
+				'post_type'   => 'aafm_book',
 				'post_status' => 'publish',
 			)
 		);
 
 		// Not opted in: even an administrator (who can edit_post) must be refused,
 		// because the type is not exposed to agents.
-		delete_option( 'oversio_allowed_post_types' );
+		delete_option( 'aafm_allowed_post_types' );
 		$this->assertFalse(
-			oversio_perm_set_featured_image( array( 'post_id' => $id ) ),
+			aafm_perm_set_featured_image( array( 'post_id' => $id ) ),
 			'Featured-image write must be denied on a non-allowlisted CPT.'
 		);
 	}
 
 	public function test_set_featured_image_refuses_map_meta_cap_false_footgun(): void {
 		register_post_type(
-			'oversio_unmapped',
+			'aafm_unmapped',
 			array(
 				'public'          => true,
 				'map_meta_cap'    => false,
-				'capability_type' => array( 'oversio_unmapped', 'oversio_unmappeds' ),
+				'capability_type' => array( 'aafm_unmapped', 'aafm_unmappeds' ),
 				'label'           => 'Unmapped',
 			)
 		);
-		update_option( 'oversio_allowed_post_types', array( 'oversio_unmapped' ) );
+		update_option( 'aafm_allowed_post_types', array( 'aafm_unmapped' ) );
 
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
 		$obj   = self::factory()->post->create(
 			array(
-				'post_type'   => 'oversio_unmapped',
+				'post_type'   => 'aafm_unmapped',
 				'post_status' => 'draft',
 				'post_author' => $owner,
 			)
@@ -237,24 +237,24 @@ final class CptGovernanceTest extends TestCase {
 
 		$agent = self::factory()->user->create( array( 'role' => 'author' ) );
 		$role  = get_role( 'author' );
-		$role->add_cap( 'edit_oversio_unmapped' );
+		$role->add_cap( 'edit_aafm_unmapped' );
 		wp_set_current_user( $agent );
 
 		// The footgun: bare edit_post on a non-mapped type degrades to the singular
-		// edit_oversio_unmapped, which would let the agent re-thumbnail ANOTHER author's draft.
+		// edit_aafm_unmapped, which would let the agent re-thumbnail ANOTHER author's draft.
 		$this->assertFalse(
-			oversio_perm_set_featured_image( array( 'post_id' => $obj ) ),
+			aafm_perm_set_featured_image( array( 'post_id' => $obj ) ),
 			'Featured-image write on a map_meta_cap=false CPT must be refused.'
 		);
 
-		$role->remove_cap( 'edit_oversio_unmapped' );
+		$role->remove_cap( 'edit_aafm_unmapped' );
 	}
 
 	public function test_set_featured_image_still_works_for_a_normal_post(): void {
 		$this->acting_as( 'administrator' );
 		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		$this->assertTrue(
-			oversio_perm_set_featured_image( array( 'post_id' => $post ) ),
+			aafm_perm_set_featured_image( array( 'post_id' => $post ) ),
 			'Featured-image write on a normal post must still be allowed (no regression).'
 		);
 	}
@@ -262,7 +262,7 @@ final class CptGovernanceTest extends TestCase {
 	public function test_closed_schema_rejects_smuggled_fields(): void {
 		// Part 1 — the static shape: the write schema is additionalProperties:false, so
 		// post_type / post_author / meta_input are not declared.
-		$schema = oversio_write_content_schema( true );
+		$schema = aafm_write_content_schema( true );
 		$this->assertFalse( $schema['additionalProperties'] );
 		$this->assertArrayNotHasKey( 'post_type', $schema['properties'] );
 		$this->assertArrayNotHasKey( 'post_author', $schema['properties'] );
@@ -281,7 +281,7 @@ final class CptGovernanceTest extends TestCase {
 		);
 		$victim = self::factory()->user->create( array( 'role' => 'author' ) );
 
-		$rejected = wp_get_ability( 'oversio/update-post' )->execute(
+		$rejected = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
 				'post_id'     => $id,
 				'title'       => 'x',
@@ -299,7 +299,7 @@ final class CptGovernanceTest extends TestCase {
 	}
 
 	public function test_allowlist_empty_by_default_is_post_and_page_only(): void {
-		delete_option( 'oversio_allowed_post_types' );
-		$this->assertSame( array( 'post', 'page' ), oversio_allowed_post_types() );
+		delete_option( 'aafm_allowed_post_types' );
+		$this->assertSame( array( 'post', 'page' ), aafm_allowed_post_types() );
 	}
 }

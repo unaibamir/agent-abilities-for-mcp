@@ -5,17 +5,17 @@
  * Mirrors MetaPrecedenceTest for the user-meta surface, where a leaked key is an
  * account-takeover primitive. Cases 1/2 use a user auth/capability key to prove the
  * hard-block stays absolute under both allow-`*` and an explicit allow. Also pins the
- * option/filter UNION: the legacy oversio_allowed_user_meta_keys filter can only ADD to the
+ * option/filter UNION: the legacy aafm_allowed_user_meta_keys filter can only ADD to the
  * option-backed exposed list, never shrink it, and can never re-admit a hard-blocked key.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Unit;
+namespace AAFM\Tests\Unit;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class UserMetaPrecedenceTest extends TestCase {
@@ -29,8 +29,8 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 * @return void
 	 */
 	private function set_user_meta_options( array $exposed, array $deny ): void {
-		update_option( 'oversio_exposed_user_meta_keys', $exposed );
-		update_option( 'oversio_denied_user_meta_keys', $deny );
+		update_option( 'aafm_exposed_user_meta_keys', $exposed );
+		update_option( 'aafm_denied_user_meta_keys', $deny );
 	}
 
 	/**
@@ -38,7 +38,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_hard_block_beats_allow_star(): void {
 		$this->set_user_meta_options( array( '*' ), array() );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'session_tokens' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'session_tokens' ) );
 	}
 
 	/**
@@ -46,7 +46,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_hard_block_beats_explicit_allow(): void {
 		$this->set_user_meta_options( array( 'wp_capabilities' ), array() );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'wp_capabilities' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'wp_capabilities' ) );
 	}
 
 	/**
@@ -54,7 +54,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_beats_explicit_allow(): void {
 		$this->set_user_meta_options( array( 'foo' ), array( 'foo' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -62,8 +62,8 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_beats_allow_star(): void {
 		$this->set_user_meta_options( array( '*' ), array( 'foo' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'foo' ) );
-		$this->assertSame( 'bar', oversio_validate_user_meta_key( 'bar' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'foo' ) );
+		$this->assertSame( 'bar', aafm_validate_user_meta_key( 'bar' ) );
 	}
 
 	/**
@@ -71,7 +71,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_star_wins_even_with_allow_star(): void {
 		$this->set_user_meta_options( array( '*' ), array( '*' ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -79,7 +79,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_default_empty_is_default_deny(): void {
 		$this->set_user_meta_options( array(), array() );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -87,7 +87,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_allow_star_exposes_normal_key(): void {
 		$this->set_user_meta_options( array( '*' ), array() );
-		$this->assertSame( 'foo', oversio_validate_user_meta_key( 'foo' ) );
+		$this->assertSame( 'foo', aafm_validate_user_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -96,8 +96,8 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_trailing_whitespace_cannot_smuggle_blocked_and_trims_normal(): void {
 		$this->set_user_meta_options( array( '*' ), array() );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( ' session_tokens ' ) );
-		$this->assertSame( 'foo', oversio_validate_user_meta_key( 'foo ' ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( ' session_tokens ' ) );
+		$this->assertSame( 'foo', aafm_validate_user_meta_key( 'foo ' ) );
 	}
 
 	/**
@@ -106,9 +106,9 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_wildcard_sentinel_is_not_an_addressable_key(): void {
 		$this->set_user_meta_options( array( '*' ), array() );
-		$result = oversio_validate_user_meta_key( '*' );
+		$result = aafm_validate_user_meta_key( '*' );
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'oversio_user_meta_key_not_allowed', $result->get_error_code() );
+		$this->assertSame( 'aafm_user_meta_key_not_allowed', $result->get_error_code() );
 	}
 
 	/**
@@ -116,19 +116,19 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 * hard-block / deny-all are indistinguishable to a caller.
 	 */
 	public function test_all_reject_modes_share_one_error_code(): void {
-		$code = 'oversio_user_meta_key_not_allowed';
+		$code = 'aafm_user_meta_key_not_allowed';
 
 		$this->set_user_meta_options( array( '*' ), array() );
-		$hard_block = oversio_validate_user_meta_key( 'session_tokens' );
+		$hard_block = aafm_validate_user_meta_key( 'session_tokens' );
 
 		$this->set_user_meta_options( array( 'foo' ), array( 'foo' ) );
-		$deny = oversio_validate_user_meta_key( 'foo' );
+		$deny = aafm_validate_user_meta_key( 'foo' );
 
 		$this->set_user_meta_options( array( '*' ), array( '*' ) );
-		$deny_all = oversio_validate_user_meta_key( 'foo' );
+		$deny_all = aafm_validate_user_meta_key( 'foo' );
 
 		$this->set_user_meta_options( array(), array() );
-		$not_allowed = oversio_validate_user_meta_key( 'foo' );
+		$not_allowed = aafm_validate_user_meta_key( 'foo' );
 
 		$this->assertSame( $code, $hard_block->get_error_code() );
 		$this->assertSame( $code, $deny->get_error_code() );
@@ -142,8 +142,8 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_filter_returning_empty_cannot_shrink_option_exposure(): void {
 		$this->set_user_meta_options( array( 'foo' ), array() );
-		add_filter( 'oversio_allowed_user_meta_keys', static fn() => array() );
-		$this->assertSame( 'foo', oversio_validate_user_meta_key( 'foo' ) );
+		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array() );
+		$this->assertSame( 'foo', aafm_validate_user_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -152,9 +152,9 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_filter_unions_with_option_base(): void {
 		$this->set_user_meta_options( array( 'foo' ), array() );
-		add_filter( 'oversio_allowed_user_meta_keys', static fn( $keys ) => array_merge( (array) $keys, array( 'bar' ) ) );
-		$this->assertSame( 'foo', oversio_validate_user_meta_key( 'foo' ) );
-		$this->assertSame( 'bar', oversio_validate_user_meta_key( 'bar' ) );
+		add_filter( 'aafm_allowed_user_meta_keys', static fn( $keys ) => array_merge( (array) $keys, array( 'bar' ) ) );
+		$this->assertSame( 'foo', aafm_validate_user_meta_key( 'foo' ) );
+		$this->assertSame( 'bar', aafm_validate_user_meta_key( 'bar' ) );
 	}
 
 	/**
@@ -163,7 +163,7 @@ final class UserMetaPrecedenceTest extends TestCase {
 	 */
 	public function test_filter_cannot_re_admit_hard_blocked_key(): void {
 		$this->set_user_meta_options( array(), array() );
-		add_filter( 'oversio_allowed_user_meta_keys', static fn( $keys ) => array_merge( (array) $keys, array( 'session_tokens' ) ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_user_meta_key( 'session_tokens' ) );
+		add_filter( 'aafm_allowed_user_meta_keys', static fn( $keys ) => array_merge( (array) $keys, array( 'session_tokens' ) ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_user_meta_key( 'session_tokens' ) );
 	}
 }

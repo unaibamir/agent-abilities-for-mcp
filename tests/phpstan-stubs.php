@@ -9,7 +9,7 @@
  * This file is loaded ONLY by PHPStan (a bootstrapFile) and is excluded from analysis; WordPress
  * never loads it, and at runtime the real host plugin (or the test stub) supplies these symbols.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -918,7 +918,7 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 	 * plugin (or the test stub) supplies it at runtime. Mirrors the static getPost() factory, the
 	 * save() persister, and the public props the aioseo ability touches.
 	 */
-	class Oversio_Phpstan_Aioseo_Post_Model {
+	class Aafm_Phpstan_Aioseo_Post_Model {
 		/** @var int */
 		public $post_id = 0;
 		/** @var string */
@@ -957,6 +957,6 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 			return true;
 		}
 	}
-	class_alias( 'Oversio_Phpstan_Aioseo_Post_Model', 'AIOSEO\\Plugin\\Common\\Models\\Post' );
+	class_alias( 'Aafm_Phpstan_Aioseo_Post_Model', 'AIOSEO\\Plugin\\Common\\Models\\Post' );
 }
 // phpcs:enable

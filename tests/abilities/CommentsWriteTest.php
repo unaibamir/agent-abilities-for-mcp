@@ -3,14 +3,14 @@
  * Comment moderation write: capability gate, closed action allowlist, and
  * trash-not-delete semantics.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Comment;
 use WP_Error;
 
@@ -20,26 +20,26 @@ final class CommentsWriteTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is invoked.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
 		// simulated by pushing the action name onto $wp_current_filter — the idiom WP
 		// core's own ability test trait uses. do_action() on the core hook trips the
 		// WPCS non-prefixed-hookname sniff (Phase 1 carried issue).
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array( 'oversio/moderate-comment' ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/moderate-comment' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_moderate_comment_is_in_registry_as_a_destructive_write(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/moderate-comment', $registry );
-		$this->assertSame( 'writes', $registry['oversio/moderate-comment']['group'] );
-		$this->assertSame( 'write', $registry['oversio/moderate-comment']['risk'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/moderate-comment', $registry );
+		$this->assertSame( 'writes', $registry['aafm/moderate-comment']['group'] );
+		$this->assertSame( 'write', $registry['aafm/moderate-comment']['risk'] );
 
 		// The annotation must advertise the destructive nature honestly.
-		$args = oversio_args_moderate_comment();
+		$args = aafm_args_moderate_comment();
 		$this->assertFalse( $args['meta']['annotations']['readonly'] );
 		$this->assertTrue( $args['meta']['annotations']['destructive'] );
 	}
@@ -54,7 +54,7 @@ final class CommentsWriteTest extends TestCase {
 
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'oversio/moderate-comment' )->check_permissions(
+			wp_get_ability( 'aafm/moderate-comment' )->check_permissions(
 				array(
 					'comment_id' => $comment,
 					'action'     => 'approve',
@@ -62,9 +62,9 @@ final class CommentsWriteTest extends TestCase {
 			)
 		);
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/moderate-comment', $abilities );
+		$this->assertContains( 'aafm/moderate-comment', $abilities );
 	}
 
 	public function test_editor_with_moderate_comments_is_allowed(): void {
@@ -73,7 +73,7 @@ final class CommentsWriteTest extends TestCase {
 
 		$this->acting_as( 'editor' );
 		$this->assertTrue(
-			wp_get_ability( 'oversio/moderate-comment' )->check_permissions(
+			wp_get_ability( 'aafm/moderate-comment' )->check_permissions(
 				array(
 					'comment_id' => $comment,
 					'action'     => 'approve',
@@ -94,7 +94,7 @@ final class CommentsWriteTest extends TestCase {
 
 		$this->assertSame( 'unapproved', wp_get_comment_status( $comment ) );
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'action'     => 'approve',
@@ -115,7 +115,7 @@ final class CommentsWriteTest extends TestCase {
 			)
 		);
 
-		wp_get_ability( 'oversio/moderate-comment' )->execute(
+		wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'action'     => 'unapprove',
@@ -140,7 +140,7 @@ final class CommentsWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'action'     => 'delete_forever',
@@ -167,7 +167,7 @@ final class CommentsWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'action'     => 'trash',
@@ -195,7 +195,7 @@ final class CommentsWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'action'     => 'spam',
@@ -211,7 +211,7 @@ final class CommentsWriteTest extends TestCase {
 	 */
 	public function test_missing_comment_returns_error(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => 999999,
 				'action'     => 'approve',

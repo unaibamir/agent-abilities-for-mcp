@@ -8,7 +8,7 @@
  * raw user data as `body`, `control`, or `pill`: those args are echoed verbatim.
  * Dynamic plain-text args (title/description/label/opt/help) ARE escaped here.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -18,18 +18,18 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Echo a settings section wrapper.
  *
- * Non-collapsible (default) renders a `<section class="oversio-section oversio-card">`
- * with a `.oversio-card-head` (icon/title/description/pill) and a
- * `.oversio-card-pad oversio-section-body` body. Collapsible renders a
- * `<details class="oversio-section oversio-section--collapsible">` with a `<summary>`
- * (title + optional badge) and a `.oversio-section-body` body, honoring `open` only
+ * Non-collapsible (default) renders a `<section class="aafm-section aafm-card">`
+ * with a `.aafm-card-head` (icon/title/description/pill) and a
+ * `.aafm-card-pad aafm-section-body` body. Collapsible renders a
+ * `<details class="aafm-section aafm-section--collapsible">` with a `<summary>`
+ * (title + optional badge) and a `.aafm-section-body` body, honoring `open` only
  * when `collapsible` is true.
  *
  * STRUCTURAL ONLY: `body`/`pill` are echoed verbatim — the caller must have
  * escaped them. `title`/`description` are escaped here with esc_html.
  *
  * Recognised $args keys: `id` (wrapper id attribute), `title` (heading, escaped),
- * `icon` (oversio_icon() key for the head glyph), `description` (sub-heading, escaped),
+ * `icon` (aafm_icon() key for the head glyph), `description` (sub-heading, escaped),
  * `pill` (pre-built pill HTML, echoed verbatim), `collapsible` (bool, default false),
  * `open` (bool, default true, honored only when collapsible), `badge` (count-badge
  * text for the summary, escaped), and `body` (pre-escaped inner HTML, echoed verbatim).
@@ -37,7 +37,7 @@ defined( 'ABSPATH' ) || exit;
  * @param array<string,mixed> $args Section args (see the recognised keys above).
  * @return void
  */
-function oversio_render_section( array $args ): void {
+function aafm_render_section( array $args ): void {
 	$id          = isset( $args['id'] ) ? (string) $args['id'] : '';
 	$title       = isset( $args['title'] ) ? (string) $args['title'] : '';
 	$icon        = isset( $args['icon'] ) ? (string) $args['icon'] : '';
@@ -54,10 +54,10 @@ function oversio_render_section( array $args ): void {
 		$open_attr  = $open ? ' open' : '';
 		$badge_html = '' === $badge
 			? ''
-			: sprintf( ' <span class="oversio-count-badge">%s</span>', esc_html( $badge ) );
+			: sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) );
 
 		printf(
-			'<details class="oversio-section oversio-section--collapsible"%1$s%2$s><summary>%3$s%4$s</summary><div class="oversio-section-body">%5$s</div></details>',
+			'<details class="aafm-section aafm-section--collapsible"%1$s%2$s><summary>%3$s%4$s</summary><div class="aafm-section-body">%5$s</div></details>',
 			$id_attr, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr'd above.
 			esc_attr( $open_attr ),
 			esc_html( $title ),
@@ -69,15 +69,15 @@ function oversio_render_section( array $args ): void {
 
 	$icon_html = '' === $icon
 		? ''
-		: sprintf( '<span class="oversio-card-head-ic">%s</span>', oversio_icon( $icon ) );
+		: sprintf( '<span class="aafm-card-head-ic">%s</span>', aafm_icon( $icon ) );
 	$desc_html = '' === $description
 		? ''
-		: sprintf( '<p class="oversio-card-head-desc">%s</p>', esc_html( $description ) );
+		: sprintf( '<p class="aafm-card-head-desc">%s</p>', esc_html( $description ) );
 
 	printf(
-		'<section class="oversio-section oversio-card"%1$s><div class="oversio-card-head">%2$s<div class="oversio-card-head-text"><h3 class="oversio-card-head-title">%3$s</h3>%4$s</div>%5$s</div><div class="oversio-card-pad oversio-section-body">%6$s</div></section>',
+		'<section class="aafm-section aafm-card"%1$s><div class="aafm-card-head">%2$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%3$s</h3>%4$s</div>%5$s</div><div class="aafm-card-pad aafm-section-body">%6$s</div></section>',
 		$id_attr, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr'd above.
-		$icon_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG from oversio_icon().
+		$icon_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG from aafm_icon().
 		esc_html( $title ),
 		$desc_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
 		$pill, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-built pill HTML, escaped by the caller.
@@ -86,8 +86,8 @@ function oversio_render_section( array $args ): void {
 }
 
 /**
- * Echo a labelled set-row: a `.oversio-set-label` (label text + optional `.opt`
- * sub-label) beside a `.oversio-set-control` (the pre-built control markup), with an
+ * Echo a labelled set-row: a `.aafm-set-label` (label text + optional `.opt`
+ * sub-label) beside a `.aafm-set-control` (the pre-built control markup), with an
  * optional `.help` element below.
  *
  * STRUCTURAL ONLY: `control` is echoed verbatim — the caller owns its escaping.
@@ -100,7 +100,7 @@ function oversio_render_section( array $args ): void {
  * @param array<string,mixed> $args Row args (see the recognised keys above).
  * @return void
  */
-function oversio_render_set_row( array $args ): void {
+function aafm_render_set_row( array $args ): void {
 	$label   = isset( $args['label'] ) ? (string) $args['label'] : '';
 	$opt     = isset( $args['opt'] ) ? (string) $args['opt'] : '';
 	$control = isset( $args['control'] ) ? (string) $args['control'] : '';
@@ -114,7 +114,7 @@ function oversio_render_set_row( array $args ): void {
 		: sprintf( '<p class="help">%s</p>', esc_html( $help ) );
 
 	printf(
-		'<div class="oversio-set-row"><div class="oversio-set-label">%1$s%2$s</div><div class="oversio-set-control">%3$s%4$s</div></div>',
+		'<div class="aafm-set-row"><div class="aafm-set-label">%1$s%2$s</div><div class="aafm-set-control">%3$s%4$s</div></div>',
 		esc_html( $label ),
 		$opt_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
 		$control, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-built control HTML, escaped by the caller.

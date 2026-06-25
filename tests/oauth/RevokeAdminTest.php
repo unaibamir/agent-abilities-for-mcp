@@ -3,21 +3,21 @@
  * Tests for the admin revoke helpers: deactivating a client, bulk-revoking a
  * client's tokens, deleting a consent, and bulk-revoking a user+client's tokens.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class RevokeAdminTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_oauth_tables();
-		oversio_truncate_oauth_tables();
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
 	}
 
 	/**
@@ -31,7 +31,7 @@ final class RevokeAdminTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_clients',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			array(
 				'client_id'   => $client_id,
 				'client_name' => 'Test',
@@ -52,7 +52,7 @@ final class RevokeAdminTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_access_tokens',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
 			array(
 				'token_hash'   => hash( 'sha256', $client_id . $user_id . wp_rand() ),
 				'refresh_hash' => hash( 'sha256', 'r' . $client_id . $user_id . wp_rand() ),
@@ -77,7 +77,7 @@ final class RevokeAdminTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE client_id = %s AND is_active = 1",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE client_id = %s AND is_active = 1",
 				$client_id
 			)
 		);
@@ -88,14 +88,14 @@ final class RevokeAdminTest extends TestCase {
 		$this->seed_token( 'client_abc', 7 );
 		$this->seed_token( 'client_abc', 8 );
 
-		$this->assertTrue( oversio_oauth_deactivate_client( 'client_abc' ) );
-		$this->assertTrue( oversio_oauth_client_is_deactivated( 'client_abc' ) );
+		$this->assertTrue( aafm_oauth_deactivate_client( 'client_abc' ) );
+		$this->assertTrue( aafm_oauth_client_is_deactivated( 'client_abc' ) );
 
-		$this->assertSame( 2, oversio_oauth_revoke_client_tokens( 'client_abc' ) );
+		$this->assertSame( 2, aafm_oauth_revoke_client_tokens( 'client_abc' ) );
 		$this->assertSame( 0, $this->active_tokens( 'client_abc' ) );
 
 		// Idempotent: a second pass revokes nothing.
-		$this->assertSame( 0, oversio_oauth_revoke_client_tokens( 'client_abc' ) );
+		$this->assertSame( 0, aafm_oauth_revoke_client_tokens( 'client_abc' ) );
 	}
 
 	public function test_delete_consent_and_revoke_user_client_tokens_is_scoped(): void {
@@ -107,7 +107,7 @@ final class RevokeAdminTest extends TestCase {
 		$this->seed_token( 'client_abc', 8 );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_consents',
+			$wpdb->prefix . 'aafm_oauth_consents',
 			array(
 				'wp_user_id' => 7,
 				'client_id'  => 'client_abc',
@@ -115,12 +115,12 @@ final class RevokeAdminTest extends TestCase {
 			array( '%d', '%s' )
 		);
 
-		$this->assertTrue( oversio_oauth_delete_consent( 7, 'client_abc' ) );
+		$this->assertTrue( aafm_oauth_delete_consent( 7, 'client_abc' ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$remaining = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
 				7,
 				'client_abc'
 			)
@@ -128,7 +128,7 @@ final class RevokeAdminTest extends TestCase {
 		$this->assertSame( 0, $remaining );
 
 		// Only user 7's tokens go inactive; user 8 keeps its session.
-		$this->assertSame( 1, oversio_oauth_revoke_user_client_tokens( 7, 'client_abc' ) );
+		$this->assertSame( 1, aafm_oauth_revoke_user_client_tokens( 7, 'client_abc' ) );
 		$this->assertSame( 1, $this->active_tokens( 'client_abc' ) );
 	}
 
@@ -143,7 +143,7 @@ final class RevokeAdminTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_codes',
+			$wpdb->prefix . 'aafm_oauth_codes',
 			array(
 				'code_hash'  => hash( 'sha256', $client_id . $user_id . wp_rand() ),
 				'client_id'  => $client_id,
@@ -168,7 +168,7 @@ final class RevokeAdminTest extends TestCase {
 			return (int) $wpdb->get_var(
 				$wpdb->prepare(
 					// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-					"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_codes WHERE client_id = %s",
+					"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s",
 					$client_id
 				)
 			);
@@ -177,7 +177,7 @@ final class RevokeAdminTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
 				$client_id,
 				$user_id
 			)
@@ -189,7 +189,7 @@ final class RevokeAdminTest extends TestCase {
 		$this->seed_code( 'client_abc', 8 );
 		$this->seed_code( 'client_other', 7 );
 
-		$this->assertSame( 2, oversio_oauth_revoke_client_codes( 'client_abc' ) );
+		$this->assertSame( 2, aafm_oauth_revoke_client_codes( 'client_abc' ) );
 		$this->assertSame( 0, $this->codes( 'client_abc' ) );
 		// A different client's pending code is untouched.
 		$this->assertSame( 1, $this->codes( 'client_other' ) );
@@ -199,7 +199,7 @@ final class RevokeAdminTest extends TestCase {
 		$this->seed_code( 'client_abc', 7 );
 		$this->seed_code( 'client_abc', 8 );
 
-		$this->assertSame( 1, oversio_oauth_revoke_user_client_codes( 7, 'client_abc' ) );
+		$this->assertSame( 1, aafm_oauth_revoke_user_client_codes( 7, 'client_abc' ) );
 		$this->assertSame( 0, $this->codes( 'client_abc', 7 ) );
 		// User 8's pending code for the same client survives.
 		$this->assertSame( 1, $this->codes( 'client_abc', 8 ) );

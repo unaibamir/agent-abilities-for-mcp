@@ -8,17 +8,17 @@
  * runtime, so they are declared here for analysis only. This file is never loaded by
  * WordPress.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-if ( ! defined( 'OVERSIO_PLUGIN_URL' ) ) {
-	define( 'OVERSIO_PLUGIN_URL', 'https://example.com/wp-content/plugins/oversio-agent-abilities/' );
+if ( ! defined( 'AAFM_PLUGIN_URL' ) ) {
+	define( 'AAFM_PLUGIN_URL', 'https://example.com/wp-content/plugins/agent-abilities-for-mcp/' );
 }
-if ( ! defined( 'OVERSIO_PLUGIN_DIR' ) ) {
-	define( 'OVERSIO_PLUGIN_DIR', '/var/www/html/wp-content/plugins/oversio-agent-abilities/' );
+if ( ! defined( 'AAFM_PLUGIN_DIR' ) ) {
+	define( 'AAFM_PLUGIN_DIR', '/var/www/html/wp-content/plugins/agent-abilities-for-mcp/' );
 }
-if ( ! defined( 'OVERSIO_PLUGIN_BASENAME' ) ) {
-	define( 'OVERSIO_PLUGIN_BASENAME', 'oversio-agent-abilities/oversio-agent-abilities.php' );
+if ( ! defined( 'AAFM_PLUGIN_BASENAME' ) ) {
+	define( 'AAFM_PLUGIN_BASENAME', 'agent-abilities-for-mcp/agent-abilities-for-mcp.php' );
 }

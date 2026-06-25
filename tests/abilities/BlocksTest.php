@@ -7,14 +7,14 @@
  * author plus closed-schema smuggle rejection, the per-object edit_block/delete_block gates,
  * and the trash-only delete-block with its trash-disabled refusal.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class BlocksTest extends TestCase {
 
@@ -31,41 +31,41 @@ final class BlocksTest extends TestCase {
 
 	public function test_lean_redactor_has_no_content_and_rich_adds_markup(): void {
 		$id   = $this->make_block();
-		$lean = oversio_redact_block( get_post( $id ) );
+		$lean = aafm_redact_block( get_post( $id ) );
 		$this->assertSame( array( 'id', 'title', 'slug', 'status', 'modified' ), array_keys( $lean ) );
 		$this->assertArrayNotHasKey( 'content', $lean, 'the list redactor must not carry block markup.' );
 
-		$rich = oversio_rich_block( get_post( $id ) );
+		$rich = aafm_rich_block( get_post( $id ) );
 		$this->assertArrayHasKey( 'content', $rich );
 		$this->assertStringContainsString( 'wp:paragraph', $rich['content'], 'rich block must expose the raw block markup.' );
 	}
 
 	public function test_block_object_resolver_rejects_a_non_block_post(): void {
 		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );
-		$this->assertNull( oversio_get_block_object( $post_id ), 'a normal post is not a wp_block.' );
+		$this->assertNull( aafm_get_block_object( $post_id ), 'a normal post is not a wp_block.' );
 		$block_id = $this->make_block();
-		$this->assertInstanceOf( \WP_Post::class, oversio_get_block_object( $block_id ) );
+		$this->assertInstanceOf( \WP_Post::class, aafm_get_block_object( $block_id ) );
 	}
 
 	private function register_blocks(): void {
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
-			array( 'oversio/list-blocks', 'oversio/get-block', 'oversio/create-block', 'oversio/update-block', 'oversio/delete-block' )
+			'aafm_enabled_abilities',
+			array( 'aafm/list-blocks', 'aafm/get-block', 'aafm/create-block', 'aafm/update-block', 'aafm/delete-block' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_list_blocks_requires_edit_posts_and_returns_lean_rows(): void {
 		$this->register_blocks();
 		$this->make_block( 'Alpha' );
 		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/list-blocks' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/list-blocks' )->check_permissions( array() ) );
 
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/list-blocks' )->execute( array() );
+		$res = wp_get_ability( 'aafm/list-blocks' )->execute( array() );
 		$this->assertArrayHasKey( 'blocks', $res );
 		$this->assertArrayHasKey( 'total', $res );
 		$this->assertArrayNotHasKey( 'content', $res['blocks'][0], 'list rows must be lean (no markup).' );
@@ -99,7 +99,7 @@ final class BlocksTest extends TestCase {
 		);
 		wp_set_current_user( $contributor );
 
-		$res = wp_get_ability( 'oversio/list-blocks' )->execute( array() );
+		$res = wp_get_ability( 'aafm/list-blocks' )->execute( array() );
 		$ids = wp_list_pluck( $res['blocks'], 'id' );
 		$this->assertContains( $mine, $ids, 'the contributor must see a block they own and can edit.' );
 		$this->assertNotContains( $theirs, $ids, "the contributor must NOT enumerate another author's draft block they cannot edit." );
@@ -110,17 +110,17 @@ final class BlocksTest extends TestCase {
 		$this->register_blocks();
 		$id = $this->make_block( 'Beta', '<!-- wp:heading --><h2>Hi</h2><!-- /wp:heading -->' );
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/get-block' )->execute( array( 'block_id' => $id ) );
+		$res = wp_get_ability( 'aafm/get-block' )->execute( array( 'block_id' => $id ) );
 		$this->assertStringContainsString( 'wp:heading', $res['content'] );
 
 		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );
-		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'oversio/get-block' )->execute( array( 'block_id' => $post_id ) ) );
+		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'aafm/get-block' )->execute( array( 'block_id' => $post_id ) ) );
 	}
 
 	public function test_create_block_stores_kses_hardened_markup_and_forces_type(): void {
 		$this->register_blocks();
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/create-block' )->execute(
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
 			array(
 				'title'   => 'Hero',
 				'content' => '<!-- wp:paragraph --><p>Hi<script>alert(1)</script></p><!-- /wp:paragraph -->',
@@ -137,7 +137,7 @@ final class BlocksTest extends TestCase {
 	public function test_create_block_rejects_smuggled_post_type(): void {
 		$this->register_blocks();
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/create-block' )->execute(
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
 			array(
 				'title'     => 'x',
 				'content'   => 'y',
@@ -151,7 +151,7 @@ final class BlocksTest extends TestCase {
 		$this->register_blocks();
 		$id = $this->make_block( 'Old' );
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/update-block' )->execute(
+		$res = wp_get_ability( 'aafm/update-block' )->execute(
 			array(
 				'block_id' => $id,
 				'content'  => '<!-- wp:list --><ul><li>a</li></ul><!-- /wp:list -->',
@@ -161,7 +161,7 @@ final class BlocksTest extends TestCase {
 
 		// A subscriber cannot update (per-object edit_post denies).
 		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/update-block' )->check_permissions( array( 'block_id' => $id ) ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/update-block' )->check_permissions( array( 'block_id' => $id ) ) );
 	}
 
 	/**
@@ -180,7 +180,7 @@ final class BlocksTest extends TestCase {
 			'a contributor must clear the object-independent edit_posts floor.'
 		);
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/update-block' )->check_permissions( array( 'block_id' => $id ) ),
+			wp_get_ability( 'aafm/update-block' )->check_permissions( array( 'block_id' => $id ) ),
 			'a user who clears the edit_posts floor but lacks edit_block on this id must be denied at execute.'
 		);
 	}
@@ -189,7 +189,7 @@ final class BlocksTest extends TestCase {
 		$this->register_blocks();
 		$id = $this->make_block( 'Trashme' );
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/delete-block' )->execute( array( 'block_id' => $id ) );
+		$res = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $id ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $res );
 		$this->assertSame( 'trash', get_post( $id )->post_status, 'block goes to trash, not permanent delete.' );
 		$this->assertNotFalse( wp_untrash_post( $id ), 'trashed block is recoverable.' );
@@ -199,16 +199,16 @@ final class BlocksTest extends TestCase {
 		$this->register_blocks();
 		$post_id = (int) self::factory()->post->create( array( 'post_type' => 'post' ) );
 		$this->acting_as( 'editor' );
-		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'oversio/delete-block' )->execute( array( 'block_id' => $post_id ) ) );
+		$this->assertInstanceOf( \WP_Error::class, wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $post_id ) ) );
 	}
 
 	public function test_delete_block_refuses_when_trash_is_disabled(): void {
 		$this->register_blocks();
 		$id = $this->make_block();
-		add_filter( 'oversio_trash_is_enabled', '__return_false' );
+		add_filter( 'aafm_trash_is_enabled', '__return_false' );
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/delete-block' )->execute( array( 'block_id' => $id ) );
-		remove_filter( 'oversio_trash_is_enabled', '__return_false' );
+		$res = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $id ) );
+		remove_filter( 'aafm_trash_is_enabled', '__return_false' );
 		$this->assertInstanceOf( \WP_Error::class, $res, 'must refuse to "trash" when trash is disabled (it would force-delete).' );
 		$this->assertNotSame( 'trash', get_post( $id )->post_status );
 	}

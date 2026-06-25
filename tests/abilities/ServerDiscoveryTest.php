@@ -9,14 +9,14 @@
  * predicate so a capable user SEES the tool, while the real permission_callback still
  * runs at execute time and still denies on objects the user can't act on.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class ServerDiscoveryTest extends TestCase {
 
@@ -26,25 +26,25 @@ final class ServerDiscoveryTest extends TestCase {
 	 * @var string[]
 	 */
 	private const PER_OBJECT_ABILITIES = array(
-		'oversio/get-post',
-		'oversio/get-page',
-		'oversio/update-post',
-		'oversio/trash-post',
-		'oversio/update-page',
-		'oversio/trash-page',
-		'oversio/set-featured-image',
-		'oversio/moderate-comment',
-		'oversio/get-post-meta',
-		'oversio/update-post-meta',
-		'oversio/delete-post-meta',
+		'aafm/get-post',
+		'aafm/get-page',
+		'aafm/update-post',
+		'aafm/trash-post',
+		'aafm/update-page',
+		'aafm/trash-page',
+		'aafm/set-featured-image',
+		'aafm/moderate-comment',
+		'aafm/get-post-meta',
+		'aafm/update-post-meta',
+		'aafm/delete-post-meta',
 	);
 
 	public function set_up(): void {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check + execute to the
 		// custom table, so it must exist before any ability registers or runs.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->register_whole_catalog();
 	}
 
@@ -52,9 +52,9 @@ final class ServerDiscoveryTest extends TestCase {
 	 * Enable and register the real 24-ability catalog (the same way CatalogTest does).
 	 */
 	private function register_whole_catalog(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	/**
@@ -85,10 +85,10 @@ final class ServerDiscoveryTest extends TestCase {
 	 */
 	private function visible_tool_names(): array {
 		$tools = array();
-		foreach ( oversio_get_enabled_abilities() as $ability_name ) {
-			$tools[] = $this->tool_dto( oversio_mcp_tool_name( $ability_name ) );
+		foreach ( aafm_get_enabled_abilities() as $ability_name ) {
+			$tools[] = $this->tool_dto( aafm_mcp_tool_name( $ability_name ) );
 		}
-		$visible = oversio_filter_mcp_tools_list( $tools );
+		$visible = aafm_filter_mcp_tools_list( $tools );
 
 		$names = array();
 		foreach ( (array) $visible as $tool ) {
@@ -107,7 +107,7 @@ final class ServerDiscoveryTest extends TestCase {
 
 		foreach ( self::PER_OBJECT_ABILITIES as $ability ) {
 			$this->assertContains(
-				oversio_mcp_tool_name( $ability ),
+				aafm_mcp_tool_name( $ability ),
 				$names,
 				$ability . ' should be discoverable for a capable user (editor)'
 			);
@@ -122,9 +122,9 @@ final class ServerDiscoveryTest extends TestCase {
 
 		$names = $this->visible_tool_names();
 
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/get-post-meta' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/update-post-meta' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/delete-post-meta' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/get-post-meta' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/update-post-meta' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/delete-post-meta' ), $names );
 	}
 
 	public function test_author_discovers_update_and_trash_and_get_post(): void {
@@ -135,11 +135,11 @@ final class ServerDiscoveryTest extends TestCase {
 
 		$names = $this->visible_tool_names();
 
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/update-post' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/trash-post' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/get-post' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/get-page' ), $names );
-		$this->assertContains( oversio_mcp_tool_name( 'oversio/set-featured-image' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/update-post' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/trash-post' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/get-post' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/get-page' ), $names );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/set-featured-image' ), $names );
 	}
 
 	public function test_discovery_is_not_execute_authorization_for_contributor(): void {
@@ -156,7 +156,7 @@ final class ServerDiscoveryTest extends TestCase {
 
 		// Discovery: the contributor SEES update-post.
 		$this->assertContains(
-			oversio_mcp_tool_name( 'oversio/update-post' ),
+			aafm_mcp_tool_name( 'aafm/update-post' ),
 			$this->visible_tool_names(),
 			'A contributor with edit_posts should discover update-post'
 		);
@@ -168,7 +168,7 @@ final class ServerDiscoveryTest extends TestCase {
 			'sanity: a contributor cannot edit another author\'s post'
 		);
 		$this->assertFalse(
-			oversio_perm_update_post( array( 'post_id' => $other_post_id ) ),
+			aafm_perm_update_post( array( 'post_id' => $other_post_id ) ),
 			'the EXECUTE-time per-object permission must still deny on a post the user cannot edit'
 		);
 
@@ -182,31 +182,31 @@ final class ServerDiscoveryTest extends TestCase {
 
 		$names = $this->visible_tool_names();
 
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/update-post' ), $names );
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/trash-post' ), $names );
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/update-page' ), $names );
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/trash-page' ), $names );
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/set-featured-image' ), $names );
-		$this->assertNotContains( oversio_mcp_tool_name( 'oversio/moderate-comment' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/update-post' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/trash-post' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/update-page' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/trash-page' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/set-featured-image' ), $names );
+		$this->assertNotContains( aafm_mcp_tool_name( 'aafm/moderate-comment' ), $names );
 	}
 
 	public function test_discover_helper_falls_back_for_general_cap_abilities(): void {
 		// For abilities with no per-object branch, discovery is the plain empty-input check —
 		// behavior is unchanged. create-post gates on publish_posts: editor yes, subscriber no.
 		$this->acting_as( 'editor' );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/create-post' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-post' ) );
 
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/create-post' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-post' ) );
 		// A subscriber can still discover the generic read (get-posts gates on 'read').
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/get-posts' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-posts' ) );
 	}
 
 	public function test_unknown_ability_is_not_discoverable(): void {
 		// No stashed callback and no list-permission override → fail closed.
 		$this->acting_as( 'administrator' );
-		$this->assertNull( oversio_ability_list_permission( 'oversio/does-not-exist' ) );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/does-not-exist' ) );
+		$this->assertNull( aafm_ability_list_permission( 'aafm/does-not-exist' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/does-not-exist' ) );
 	}
 
 	public function test_discovery_check_does_not_log_denials(): void {
@@ -214,28 +214,28 @@ final class ServerDiscoveryTest extends TestCase {
 		$this->acting_as( 'subscriber' );
 		$this->visible_tool_names();
 
-		$denied = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied = aafm_query_activity( array( 'status' => 'denied' ) );
 		$this->assertCount( 0, (array) $denied, 'tools/list discovery must not audit denials' );
 	}
 
 	public function test_replace_in_post_discoverable_at_edit_posts_floor(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/replace-in-post' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/replace-in-post' ) );
 
 		$this->acting_as( 'author' ); // has edit_posts.
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/replace-in-post' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/replace-in-post' ) );
 	}
 
 	public function test_get_all_post_meta_discoverable_at_edit_posts_floor(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/get-all-post-meta' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-all-post-meta' ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/get-all-post-meta' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-all-post-meta' ) );
 	}
 
 	public function test_count_posts_discoverable_at_read_floor(): void {
 		$this->acting_as( 'subscriber' ); // subscriber has 'read'.
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/count-posts' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-posts' ) );
 	}
 }

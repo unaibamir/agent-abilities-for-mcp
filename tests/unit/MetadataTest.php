@@ -2,19 +2,19 @@
 /**
  * Asserts the plugin headers declare the correct minimum environment.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Unit;
+namespace AAFM\Tests\Unit;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class MetadataTest extends TestCase {
 
 	private function plugin_headers(): array {
-		return get_plugin_data( OVERSIO_PLUGIN_FILE, false, false );
+		return get_plugin_data( AAFM_PLUGIN_FILE, false, false );
 	}
 
 	public function test_requires_at_least_wp_69(): void {
@@ -29,27 +29,27 @@ final class MetadataTest extends TestCase {
 
 	public function test_version_constant_matches_header(): void {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		$this->assertSame( $this->plugin_headers()['Version'], OVERSIO_VERSION );
+		$this->assertSame( $this->plugin_headers()['Version'], AAFM_VERSION );
 	}
 
 	public function test_release_version_is_one_zero_zero(): void {
-		$this->assertSame( '1.0.0', OVERSIO_VERSION );
+		$this->assertSame( '1.0.0', AAFM_VERSION );
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {
 		// Reading our own bundled readme from a local path — not a remote fetch.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$readme = (string) file_get_contents( OVERSIO_PLUGIN_DIR . 'readme.txt' );
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/^Stable tag:\s*(.+)$/m', $readme, $matches ) );
-		$this->assertSame( OVERSIO_VERSION, trim( $matches[1] ) );
+		$this->assertSame( AAFM_VERSION, trim( $matches[1] ) );
 	}
 
 	public function test_readme_core_ability_count_is_not_drifted(): void {
 		// The changelog advertises the core-ability count in digits ("NN across WordPress core").
 		// Assert it against the live count so the readme can never silently fall out of sync again.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
-		$readme = (string) file_get_contents( OVERSIO_PLUGIN_DIR . 'readme.txt' );
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/(\d+) across WordPress core/', $readme, $matches ) );
-		$this->assertSame( oversio_core_ability_count(), (int) $matches[1] );
+		$this->assertSame( aafm_core_ability_count(), (int) $matches[1] );
 	}
 }

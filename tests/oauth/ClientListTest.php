@@ -4,21 +4,21 @@
  * Grants management tables: shape, active-token counts, redirect-URI decoding,
  * and the consent-to-client/user join.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class ClientListTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_oauth_tables();
-		oversio_truncate_oauth_tables();
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
 	}
 
 	/**
@@ -34,7 +34,7 @@ final class ClientListTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_clients',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			array(
 				'client_id'     => $client_id,
 				'client_name'   => $client_name,
@@ -58,7 +58,7 @@ final class ClientListTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_access_tokens',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
 			array(
 				'token_hash'   => hash( 'sha256', $client_id . $user_id . wp_rand() ),
 				'refresh_hash' => hash( 'sha256', 'r' . $client_id . $user_id . wp_rand() ),
@@ -82,7 +82,7 @@ final class ClientListTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_consents',
+			$wpdb->prefix . 'aafm_oauth_consents',
 			array(
 				'wp_user_id' => $user_id,
 				'client_id'  => $client_id,
@@ -99,7 +99,7 @@ final class ClientListTest extends TestCase {
 		$this->seed_token( 'client_abc', 7, 1, gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS ) );
 		$this->seed_token( 'client_abc', 7, 0, gmdate( 'Y-m-d H:i:s', time() + HOUR_IN_SECONDS ) );
 
-		$clients = oversio_oauth_list_clients();
+		$clients = aafm_oauth_list_clients();
 		$this->assertCount( 1, $clients );
 
 		$client = $clients[0];
@@ -114,7 +114,7 @@ final class ClientListTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_clients',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			array(
 				'client_id'     => 'client_bad',
 				'client_name'   => 'Broken',
@@ -124,7 +124,7 @@ final class ClientListTest extends TestCase {
 			array( '%s', '%s', '%s', '%d' )
 		);
 
-		$clients = oversio_oauth_list_clients();
+		$clients = aafm_oauth_list_clients();
 		$this->assertCount( 1, $clients );
 		$this->assertSame( array(), $clients[0]['redirect_uris'] );
 		$this->assertFalse( $clients[0]['is_active'] );
@@ -141,7 +141,7 @@ final class ClientListTest extends TestCase {
 		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
 		$this->seed_consent( $user_id, 'client_abc' );
 
-		$grants = oversio_oauth_list_grants();
+		$grants = aafm_oauth_list_grants();
 		$this->assertCount( 1, $grants );
 
 		$grant = $grants[0];
@@ -156,6 +156,6 @@ final class ClientListTest extends TestCase {
 		$this->seed_client( 'client_abc', 'Claude', array( 'https://claude.ai/cb' ) );
 		$this->seed_consent( 999999, 'client_abc' ); // No such user.
 
-		$this->assertSame( array(), oversio_oauth_list_grants() );
+		$this->assertSame( array(), aafm_oauth_list_grants() );
 	}
 }

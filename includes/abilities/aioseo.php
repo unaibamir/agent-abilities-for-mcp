@@ -2,7 +2,7 @@
 /**
  * AIOSEO / All in One SEO abilities (Wave 5): aioseo-get-post, aioseo-update-post, aioseo-get-head.
  *
- * Registers ONLY when AIOSEO is active (oversio_integration_active('aioseo')). AIOSEO v4+ keeps post
+ * Registers ONLY when AIOSEO is active (aafm_integration_active('aioseo')). AIOSEO v4+ keeps post
  * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta — the _aioseo_* meta keys are WPML-compat
  * shadow copies that AIOSEO does not honor on write. So reads and writes go through AIOSEO's own
  * Post model: AIOSEO\Plugin\Common\Models\Post::getPost($id) returns the row, set the public props,
@@ -11,17 +11,17 @@
  * a generic error rather than fataling. Schema is OMITTED (AIOSEO's schema column is internal,
  * undocumented JSON). SEO data is post content, so every per-object ability gates on edit_post($id).
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-const OVERSIO_AIOSEO_MODEL = 'AIOSEO\\Plugin\\Common\\Models\\Post';
+const AAFM_AIOSEO_MODEL = 'AIOSEO\\Plugin\\Common\\Models\\Post';
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_aioseo_definitions' );
-add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_aioseo_full_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_aioseo_definitions' );
+add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_aioseo_full_definitions' );
 
 // Production rendered-head seam. Registered unconditionally because host plugins may load after us
 // on plugins_loaded (so a load-time activity check could miss AIOSEO); the callback's own
@@ -29,7 +29,7 @@ add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_aioseo_
 // present. Under the PHPUnit stubs aioseo() returns a bare stdClass with no ->head, so this passes
 // through and the test stub's own filter supplies the canned head — production and test wiring
 // never collide.
-add_filter( 'oversio_seo_rendered_head', 'oversio_aioseo_rendered_head', 10, 3 );
+add_filter( 'aafm_seo_rendered_head', 'aafm_aioseo_rendered_head', 10, 3 );
 
 /**
  * Produce AIOSEO's rendered SEO head markup for a post.
@@ -47,7 +47,7 @@ add_filter( 'oversio_seo_rendered_head', 'oversio_aioseo_rendered_head', 10, 3 )
  * @param string $source Integration slug the caller is asking for.
  * @return string
  */
-function oversio_aioseo_rendered_head( string $head, int $post_id, string $source ): string {
+function aafm_aioseo_rendered_head( string $head, int $post_id, string $source ): string {
 	if ( 'aioseo' !== $source || ! function_exists( 'aioseo' ) ) {
 		return $head;
 	}
@@ -121,12 +121,12 @@ function oversio_aioseo_rendered_head( string $head, int $post_id, string $sourc
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_aioseo_definitions( array $registry ): array {
-	if ( ! oversio_integration_active( 'aioseo' ) ) {
+function aafm_register_aioseo_definitions( array $registry ): array {
+	if ( ! aafm_integration_active( 'aioseo' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, oversio_aioseo_registry_definitions() );
+	return array_merge( $registry, aafm_aioseo_registry_definitions() );
 }
 
 /**
@@ -139,8 +139,8 @@ function oversio_register_aioseo_definitions( array $registry ): array {
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_aioseo_full_definitions( array $registry ): array {
-	return array_merge( $registry, oversio_aioseo_registry_definitions() );
+function aafm_register_aioseo_full_definitions( array $registry ): array {
+	return array_merge( $registry, aafm_aioseo_registry_definitions() );
 }
 
 /**
@@ -150,31 +150,31 @@ function oversio_register_aioseo_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_aioseo_registry_definitions(): array {
+function aafm_aioseo_registry_definitions(): array {
 	return array(
-		'oversio/aioseo-get-post'    => array(
-			'label'        => __( 'Get post SEO (All in One SEO)', 'oversio-agent-abilities' ),
-			'description'  => __( "Reads a post's SEO fields (title, description, canonical, social, and robots) from All in One SEO's own data store, not post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
+		'aafm/aioseo-get-post'    => array(
+			'label'        => __( 'Get post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads a post's SEO fields (title, description, canonical, social, and robots) from All in One SEO's own data store, not post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'aioseo',
-			'args_builder' => 'oversio_args_aioseo_get_post',
+			'args_builder' => 'aafm_args_aioseo_get_post',
 		),
-		'oversio/aioseo-update-post' => array(
-			'label'        => __( 'Update post SEO (All in One SEO)', 'oversio-agent-abilities' ),
-			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Requires edit access to that post.", 'oversio-agent-abilities' ),
+		'aafm/aioseo-update-post' => array(
+			'label'        => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'aioseo',
-			'args_builder' => 'oversio_args_aioseo_update_post',
+			'args_builder' => 'aafm_args_aioseo_update_post',
 		),
-		'oversio/aioseo-get-head'    => array(
-			'label'        => __( 'Get post SEO head (All in One SEO)', 'oversio-agent-abilities' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post. Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
+		'aafm/aioseo-get-head'    => array(
+			'label'        => __( 'Get post SEO head (All in One SEO)', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'aioseo',
-			'args_builder' => 'oversio_args_aioseo_get_head',
+			'args_builder' => 'aafm_args_aioseo_get_head',
 		),
 	);
 }
@@ -185,7 +185,7 @@ function oversio_aioseo_registry_definitions(): array {
  *
  * @return array<string,array{prop:string,url:bool}>
  */
-function oversio_aioseo_fields(): array {
+function aafm_aioseo_fields(): array {
 	return array(
 		'title'               => array(
 			'prop' => 'title',
@@ -231,7 +231,7 @@ function oversio_aioseo_fields(): array {
  *
  * @return array<string,string>
  */
-function oversio_aioseo_robots_fields(): array {
+function aafm_aioseo_robots_fields(): array {
 	return array(
 		'robots_noindex'  => 'robots_noindex',
 		'robots_nofollow' => 'robots_nofollow',
@@ -244,11 +244,11 @@ function oversio_aioseo_robots_fields(): array {
  *
  * @return bool
  */
-function oversio_aioseo_model_available(): bool {
+function aafm_aioseo_model_available(): bool {
 	// The PHPStan stub guarantees these methods, but the real AIOSEO model documents its props and
 	// methods as "subject to change," so the runtime guard is intentional defensive code.
 	// @phpstan-ignore-next-line function.alreadyNarrowedType (the stub narrows, the real model may not).
-	return class_exists( OVERSIO_AIOSEO_MODEL ) && method_exists( OVERSIO_AIOSEO_MODEL, 'save' ) && method_exists( OVERSIO_AIOSEO_MODEL, 'getPost' );
+	return class_exists( AAFM_AIOSEO_MODEL ) && method_exists( AAFM_AIOSEO_MODEL, 'save' ) && method_exists( AAFM_AIOSEO_MODEL, 'getPost' );
 }
 
 /**
@@ -258,19 +258,19 @@ function oversio_aioseo_model_available(): bool {
  * @param int $id Post id.
  * @return array<string,mixed>
  */
-function oversio_aioseo_read_fields( int $id ): array {
-	$class = OVERSIO_AIOSEO_MODEL;
+function aafm_aioseo_read_fields( int $id ): array {
+	$class = AAFM_AIOSEO_MODEL;
 	$model = $class::getPost( $id );
 	$out   = array(
 		'plugin'  => 'aioseo',
 		'post_id' => $id,
 	);
-	foreach ( oversio_aioseo_fields() as $field => $spec ) {
+	foreach ( aafm_aioseo_fields() as $field => $spec ) {
 		$prop          = $spec['prop'];
 		$val           = ( is_object( $model ) && isset( $model->$prop ) && is_scalar( $model->$prop ) ) ? $model->$prop : '';
 		$out[ $field ] = (string) $val;
 	}
-	foreach ( oversio_aioseo_robots_fields() as $field => $prop ) {
+	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {
 		$out[ $field ] = ( is_object( $model ) && isset( $model->$prop ) ) ? (bool) $model->$prop : false;
 	}
 	return $out;
@@ -281,30 +281,30 @@ function oversio_aioseo_read_fields( int $id ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_aioseo_output_properties(): array {
+function aafm_aioseo_output_properties(): array {
 	$props = array(
 		'plugin'  => array( 'type' => 'string' ),
 		'post_id' => array( 'type' => 'integer' ),
 	);
-	foreach ( array_keys( oversio_aioseo_fields() ) as $field ) {
+	foreach ( array_keys( aafm_aioseo_fields() ) as $field ) {
 		$props[ $field ] = array( 'type' => 'string' );
 	}
-	foreach ( array_keys( oversio_aioseo_robots_fields() ) as $field ) {
+	foreach ( array_keys( aafm_aioseo_robots_fields() ) as $field ) {
 		$props[ $field ] = array( 'type' => 'boolean' );
 	}
 	return $props;
 }
 
 /**
- * Args for oversio/aioseo-get-post.
+ * Args for aafm/aioseo-get-post.
  *
  * @return array<string,mixed>
  */
-function oversio_args_aioseo_get_post(): array {
+function aafm_args_aioseo_get_post(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/aioseo-get-post' ),
-		'description'         => oversio_ability_description( 'oversio/aioseo-get-post' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/aioseo-get-post' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-get-post' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -318,10 +318,10 @@ function oversio_args_aioseo_get_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_aioseo_output_properties(),
+			'properties' => aafm_aioseo_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_aioseo_get_post',
-		'permission_callback' => 'oversio_perm_seo_post_object',
+		'execute_callback'    => 'aafm_exec_aioseo_get_post',
+		'permission_callback' => 'aafm_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -333,42 +333,42 @@ function oversio_args_aioseo_get_post(): array {
 }
 
 /**
- * Execute oversio/aioseo-get-post.
+ * Execute aafm/aioseo-get-post.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_aioseo_get_post( array $input ) {
+function aafm_exec_aioseo_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! oversio_aioseo_model_available() ) {
-		return oversio_generic_error();
+	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+		return aafm_generic_error();
 	}
-	return oversio_aioseo_read_fields( $id );
+	return aafm_aioseo_read_fields( $id );
 }
 
 /**
- * Args for oversio/aioseo-update-post.
+ * Args for aafm/aioseo-update-post.
  *
  * @return array<string,mixed>
  */
-function oversio_args_aioseo_update_post(): array {
+function aafm_args_aioseo_update_post(): array {
 	$properties = array(
 		'post_id' => array(
 			'type'    => 'integer',
 			'minimum' => 1,
 		),
 	);
-	foreach ( array_keys( oversio_aioseo_fields() ) as $field ) {
+	foreach ( array_keys( aafm_aioseo_fields() ) as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
-	foreach ( array_keys( oversio_aioseo_robots_fields() ) as $field ) {
+	foreach ( array_keys( aafm_aioseo_robots_fields() ) as $field ) {
 		$properties[ $field ] = array( 'type' => 'boolean' );
 	}
 
 	return array(
-		'label'               => oversio_ability_label( 'oversio/aioseo-update-post' ),
-		'description'         => oversio_ability_description( 'oversio/aioseo-update-post' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/aioseo-update-post' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-update-post' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -377,10 +377,10 @@ function oversio_args_aioseo_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_aioseo_output_properties(),
+			'properties' => aafm_aioseo_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_aioseo_update_post',
-		'permission_callback' => 'oversio_perm_seo_post_object',
+		'execute_callback'    => 'aafm_exec_aioseo_update_post',
+		'permission_callback' => 'aafm_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -391,7 +391,7 @@ function oversio_args_aioseo_update_post(): array {
 }
 
 /**
- * Execute oversio/aioseo-update-post.
+ * Execute aafm/aioseo-update-post.
  *
  * Loads the model for the post, sets the allowlisted props (esc_url_raw on URL props,
  * sanitize_text_field on text, bool on robots), then ->save() — AIOSEO's own ORM writes the
@@ -401,19 +401,19 @@ function oversio_args_aioseo_update_post(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_aioseo_update_post( array $input ) {
+function aafm_exec_aioseo_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! oversio_aioseo_model_available() ) {
-		return oversio_generic_error();
+	if ( ! get_post( $id ) instanceof WP_Post || ! aafm_aioseo_model_available() ) {
+		return aafm_generic_error();
 	}
 
-	$class = OVERSIO_AIOSEO_MODEL;
+	$class = AAFM_AIOSEO_MODEL;
 	$model = $class::getPost( $id );
 	if ( ! is_object( $model ) ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
-	foreach ( oversio_aioseo_fields() as $field => $spec ) {
+	foreach ( aafm_aioseo_fields() as $field => $spec ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
@@ -425,7 +425,7 @@ function oversio_exec_aioseo_update_post( array $input ) {
 		$model->$prop = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
 	}
 	$robots_touched = false;
-	foreach ( oversio_aioseo_robots_fields() as $field => $prop ) {
+	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {
 		if ( ! array_key_exists( $field, $input ) || ! property_exists( $model, $prop ) ) {
 			continue;
 		}
@@ -445,22 +445,22 @@ function oversio_exec_aioseo_update_post( array $input ) {
 	// AIOSEO's model save() returns false on a custom-table write failure. Surface it rather
 	// than reporting a stale read as a success.
 	if ( false === $model->save() ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
-	return oversio_aioseo_read_fields( $id );
+	return aafm_aioseo_read_fields( $id );
 }
 
 /**
- * Args for oversio/aioseo-get-head.
+ * Args for aafm/aioseo-get-head.
  *
  * @return array<string,mixed>
  */
-function oversio_args_aioseo_get_head(): array {
+function aafm_args_aioseo_get_head(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/aioseo-get-head' ),
-		'description'         => oversio_ability_description( 'oversio/aioseo-get-head' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/aioseo-get-head' ),
+		'description'         => aafm_ability_description( 'aafm/aioseo-get-head' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -480,8 +480,8 @@ function oversio_args_aioseo_get_head(): array {
 				'head'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_aioseo_get_head',
-		'permission_callback' => 'oversio_perm_seo_get_head_floor',
+		'execute_callback'    => 'aafm_exec_aioseo_get_head',
+		'permission_callback' => 'aafm_perm_seo_get_head_floor',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -493,19 +493,19 @@ function oversio_args_aioseo_get_head(): array {
 }
 
 /**
- * Execute oversio/aioseo-get-head.
+ * Execute aafm/aioseo-get-head.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_aioseo_get_head( array $input ) {
+function aafm_exec_aioseo_get_head( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post || ! current_user_can( 'edit_post', $id ) ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
-	$head = (string) apply_filters( 'oversio_seo_rendered_head', '', $id, 'aioseo' );
+	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'aioseo' );
 
 	return array(
 		'post_id' => $id,

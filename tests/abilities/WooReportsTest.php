@@ -9,16 +9,16 @@
  * and product counts rely on wp_count_posts() against real WP post fixtures inserted in
  * set_up(). Sales / top-sellers reports exercise the executor's SQL against the real temp DB.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
-use Oversio\Tests\WcGatewayStubStore;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcGatewayStubStore;
 use WP_Error;
 
 final class WooReportsTest extends TestCase {
@@ -27,13 +27,13 @@ final class WooReportsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->stub_wc_gateways();
 		$this->seed_wc_gateways();
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_wc_reports();
 	}
 
@@ -51,20 +51,20 @@ final class WooReportsTest extends TestCase {
 	 * Enable and register the full WC7 ability set.
 	 */
 	private function register_wc_reports(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/wc-get-sales-report',
-				'oversio/wc-get-top-sellers-report',
-				'oversio/wc-count-orders',
-				'oversio/wc-count-products',
-				'oversio/wc-list-payment-gateways',
-				'oversio/wc-get-payment-gateway',
-				'oversio/wc-update-payment-gateway',
+				'aafm/wc-get-sales-report',
+				'aafm/wc-get-top-sellers-report',
+				'aafm/wc-count-orders',
+				'aafm/wc-count-products',
+				'aafm/wc-list-payment-gateways',
+				'aafm/wc-get-payment-gateway',
+				'aafm/wc-update-payment-gateway',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	// =========================================================================
@@ -76,25 +76,25 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_abilities_hidden_when_woocommerce_inactive(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
-		oversio_registry_cache_should_flush( true );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
+		aafm_registry_cache_should_flush( true );
 
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'oversio/wc-get-sales-report', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-top-sellers-report', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-count-orders', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-count-products', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-list-payment-gateways', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-payment-gateway', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-update-payment-gateway', $registry );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'aafm/wc-get-sales-report', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-top-sellers-report', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-count-orders', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-count-products', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-list-payment-gateways', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-payment-gateway', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-update-payment-gateway', $registry );
 
-		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// oversio/wc-get-sales-report
+	// aafm/wc-get-sales-report
 	// =========================================================================
 
 	/**
@@ -102,7 +102,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_sales_report_returns_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_sales_report( array() );
+		$res = aafm_exec_wc_get_sales_report( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'total_sales', $res );
@@ -118,7 +118,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_sales_report_accepts_date_params(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_sales_report(
+		$res = aafm_exec_wc_get_sales_report(
 			array(
 				'start_date' => '2020-01-01',
 				'end_date'   => '2020-12-31',
@@ -132,9 +132,9 @@ final class WooReportsTest extends TestCase {
 	 * Sales report returns WP_Error when WooCommerce integration is inactive.
 	 */
 	public function test_get_sales_report_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_get_sales_report( array() );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_get_sales_report( array() );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -144,12 +144,12 @@ final class WooReportsTest extends TestCase {
 	public function test_get_sales_report_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-get-sales-report' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-get-sales-report' )->check_permissions( array() )
 		);
 	}
 
 	// =========================================================================
-	// oversio/wc-get-top-sellers-report
+	// aafm/wc-get-top-sellers-report
 	// =========================================================================
 
 	/**
@@ -157,7 +157,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_top_sellers_returns_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_top_sellers_report( array() );
+		$res = aafm_exec_wc_get_top_sellers_report( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'items', $res );
@@ -169,12 +169,12 @@ final class WooReportsTest extends TestCase {
 	 * row — product ids come from order ITEM data, not shop_order post meta.
 	 */
 	public function test_get_top_sellers_aggregates_order_line_items(): void {
-		\Oversio\Tests\WcOrderStubStore::reset();
+		\AAFM\Tests\WcOrderStubStore::reset();
 		// Product 101 is seeded by stub_woocommerce(); add a second product to rank below it.
-		\Oversio\Tests\WcStubStore::seed( 202, array( 'name' => 'Runner Up' ) );
+		\AAFM\Tests\WcStubStore::seed( 202, array( 'name' => 'Runner Up' ) );
 
 		$today = gmdate( 'Y-m-d\TH:i:s' );
-		\Oversio\Tests\WcOrderStubStore::seed(
+		\AAFM\Tests\WcOrderStubStore::seed(
 			6001,
 			array(
 				'status'       => 'completed',
@@ -191,7 +191,7 @@ final class WooReportsTest extends TestCase {
 				),
 			)
 		);
-		\Oversio\Tests\WcOrderStubStore::seed(
+		\AAFM\Tests\WcOrderStubStore::seed(
 			6002,
 			array(
 				'status'       => 'processing',
@@ -206,7 +206,7 @@ final class WooReportsTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
+		$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertNotEmpty( $res['items'], 'A seeded order with line items must produce rows.' );
 
@@ -224,14 +224,14 @@ final class WooReportsTest extends TestCase {
 	 * carry the date window rather than an unbounded limit => -1 full table scan.
 	 */
 	public function test_get_top_sellers_constrains_query_to_window(): void {
-		\Oversio\Tests\WcOrderStubStore::reset();
-		\Oversio\Tests\WcStubStore::seed( 303, array( 'name' => 'Stale Product' ) );
+		\AAFM\Tests\WcOrderStubStore::reset();
+		\AAFM\Tests\WcStubStore::seed( 303, array( 'name' => 'Stale Product' ) );
 
 		$in_window  = gmdate( 'Y-m-d\TH:i:s' );
 		$out_window = gmdate( 'Y-m-d\TH:i:s', strtotime( '-2 years' ) );
 
 		// In-window order: product 101, qty 4.
-		\Oversio\Tests\WcOrderStubStore::seed(
+		\AAFM\Tests\WcOrderStubStore::seed(
 			7001,
 			array(
 				'status'       => 'completed',
@@ -245,7 +245,7 @@ final class WooReportsTest extends TestCase {
 			)
 		);
 		// Out-of-window order, two years ago: must never be aggregated.
-		\Oversio\Tests\WcOrderStubStore::seed(
+		\AAFM\Tests\WcOrderStubStore::seed(
 			7002,
 			array(
 				'status'       => 'completed',
@@ -260,7 +260,7 @@ final class WooReportsTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
+		$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => 'month' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// Only the in-window product is aggregated; the two-year-old order is excluded.
@@ -269,7 +269,7 @@ final class WooReportsTest extends TestCase {
 		$this->assertNotContains( 303, $product_ids, 'A product sold only outside the window must not be aggregated.' );
 
 		// The query itself was constrained to the window, not an unbounded full-table scan.
-		$args = \Oversio\Tests\WcOrderStubStore::$last_query_args;
+		$args = \AAFM\Tests\WcOrderStubStore::$last_query_args;
 		$this->assertArrayHasKey( 'date_created', $args, 'The date window must be pushed into the wc_get_orders() query.' );
 		$this->assertStringStartsWith( '>=', (string) $args['date_created'], 'The window must constrain date_created as a lower bound.' );
 		$this->assertNotSame( -1, $args['limit'] ?? null, 'The query must not load every order with limit => -1.' );
@@ -281,7 +281,7 @@ final class WooReportsTest extends TestCase {
 	public function test_get_top_sellers_accepts_all_periods(): void {
 		$this->acting_as( 'administrator' );
 		foreach ( array( 'week', 'month', 'year' ) as $period ) {
-			$res = oversio_exec_wc_get_top_sellers_report( array( 'period' => $period ) );
+			$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => $period ) );
 			$this->assertNotInstanceOf( WP_Error::class, $res, "Period $period failed." );
 			$this->assertArrayHasKey( 'items', $res );
 		}
@@ -291,14 +291,14 @@ final class WooReportsTest extends TestCase {
 	 * Top sellers returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_get_top_sellers_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_get_top_sellers_report( array() );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_get_top_sellers_report( array() );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	// =========================================================================
-	// oversio/wc-count-orders
+	// aafm/wc-count-orders
 	// =========================================================================
 
 	/**
@@ -306,7 +306,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_count_orders_returns_all_statuses(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_count_orders( array() );
+		$res = aafm_exec_wc_count_orders( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		foreach ( array( 'pending', 'processing', 'on_hold', 'completed', 'cancelled', 'refunded', 'failed', 'total' ) as $key ) {
@@ -320,7 +320,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_count_orders_total_equals_sum(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_count_orders( array() );
+		$res = aafm_exec_wc_count_orders( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$expected_total = $res['pending'] + $res['processing'] + $res['on_hold']
@@ -332,9 +332,9 @@ final class WooReportsTest extends TestCase {
 	 * Count orders returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_count_orders_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_count_orders( array() );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_count_orders( array() );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -344,12 +344,12 @@ final class WooReportsTest extends TestCase {
 	public function test_count_orders_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-count-orders' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-count-orders' )->check_permissions( array() )
 		);
 	}
 
 	// =========================================================================
-	// oversio/wc-count-products
+	// aafm/wc-count-products
 	// =========================================================================
 
 	/**
@@ -357,7 +357,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_count_products_returns_all_statuses(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_count_products( array() );
+		$res = aafm_exec_wc_count_products( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		foreach ( array( 'publish', 'draft', 'private', 'pending', 'trash', 'total' ) as $key ) {
@@ -371,7 +371,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_count_products_total_excludes_trash(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_count_products( array() );
+		$res = aafm_exec_wc_count_products( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$expected_total = $res['publish'] + $res['draft'] + $res['private'] + $res['pending'];
@@ -382,14 +382,14 @@ final class WooReportsTest extends TestCase {
 	 * Count products returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_count_products_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_count_products( array() );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_count_products( array() );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	// =========================================================================
-	// oversio/wc-list-payment-gateways
+	// aafm/wc-list-payment-gateways
 	// =========================================================================
 
 	/**
@@ -397,7 +397,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_list_payment_gateways_returns_seeded(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_list_payment_gateways( array() );
+		$res = aafm_exec_wc_list_payment_gateways( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'gateways', $res );
@@ -420,7 +420,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_list_payment_gateways_enabled_state(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_list_payment_gateways( array() );
+		$res = aafm_exec_wc_list_payment_gateways( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$by_id = array_column( $res['gateways'], null, 'id' );
@@ -432,9 +432,9 @@ final class WooReportsTest extends TestCase {
 	 * List gateways returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_list_payment_gateways_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_list_payment_gateways( array() );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_list_payment_gateways( array() );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -444,12 +444,12 @@ final class WooReportsTest extends TestCase {
 	public function test_list_payment_gateways_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-list-payment-gateways' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-list-payment-gateways' )->check_permissions( array() )
 		);
 	}
 
 	// =========================================================================
-	// oversio/wc-get-payment-gateway
+	// aafm/wc-get-payment-gateway
 	// =========================================================================
 
 	/**
@@ -457,7 +457,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_payment_gateway_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'id', $res );
@@ -476,7 +476,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_payment_gateway_redacts_secrets(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		// The seeded paypal gateway has an 'api_secret' key which must be stripped.
@@ -488,7 +488,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_payment_gateway_redacts_stripe_secret(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'stripe' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'stripe' ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayNotHasKey( 'stripe_secret', $res['settings'] );
@@ -499,7 +499,7 @@ final class WooReportsTest extends TestCase {
 	 * top-level-only redaction leaks credentials stored inside a sub-array.
 	 */
 	public function test_get_payment_gateway_redacts_nested_secret(): void {
-		\Oversio\Tests\WcGatewayStubStore::save_gateway(
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
 			'paypal',
 			array(
 				'settings' => array(
@@ -513,7 +513,7 @@ final class WooReportsTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		$json = wp_json_encode( $res['settings'] );
@@ -527,7 +527,7 @@ final class WooReportsTest extends TestCase {
 	 * key/secret/token/password/api/private list) must still be redacted.
 	 */
 	public function test_get_payment_gateway_redacts_unconventional_secret_key(): void {
-		\Oversio\Tests\WcGatewayStubStore::save_gateway(
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
 			'paypal',
 			array(
 				'settings' => array(
@@ -539,7 +539,7 @@ final class WooReportsTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		$this->assertArrayNotHasKey( 'credential', $res['settings'], 'A "credential" key must be redacted.' );
@@ -551,19 +551,19 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_get_payment_gateway_not_found(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'nonexistent_gw' ) );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'nonexistent_gw' ) );
 
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'oversio_not_found', $res->get_error_code() );
+		$this->assertSame( 'aafm_not_found', $res->get_error_code() );
 	}
 
 	/**
 	 * Get gateway returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_get_payment_gateway_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -573,12 +573,12 @@ final class WooReportsTest extends TestCase {
 	public function test_get_payment_gateway_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-get-payment-gateway' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-get-payment-gateway' )->check_permissions( array() )
 		);
 	}
 
 	// =========================================================================
-	// oversio/wc-update-payment-gateway
+	// aafm/wc-update-payment-gateway
 	// =========================================================================
 
 	/**
@@ -587,7 +587,7 @@ final class WooReportsTest extends TestCase {
 	public function test_update_payment_gateway_enable(): void {
 		$this->acting_as( 'administrator' );
 		// Stripe starts disabled.
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'stripe',
 				'enabled'    => true,
@@ -606,7 +606,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_disable(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'enabled'    => false,
@@ -623,7 +623,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_title(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'title'      => 'Pay with PayPal',
@@ -640,7 +640,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_persists_display_order(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'order'      => 4,
@@ -658,17 +658,17 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_logs_success(): void {
 		$this->acting_as( 'administrator' );
-		oversio_clear_activity_log();
-		wp_get_ability( 'oversio/wc-update-payment-gateway' )->execute(
+		aafm_clear_activity_log();
+		wp_get_ability( 'aafm/wc-update-payment-gateway' )->execute(
 			array(
 				'gateway_id' => 'paypal',
 				'title'      => 'PayPal Updated',
 			)
 		);
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/wc-update-payment-gateway', $abilities );
+		$this->assertContains( 'aafm/wc-update-payment-gateway', $abilities );
 	}
 
 	/**
@@ -676,12 +676,12 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_not_found_logs_deny(): void {
 		$this->acting_as( 'editor' );
-		oversio_clear_activity_log();
-		wp_get_ability( 'oversio/wc-update-payment-gateway' )->check_permissions( array( 'gateway_id' => 'bogus_gw' ) );
+		aafm_clear_activity_log();
+		wp_get_ability( 'aafm/wc-update-payment-gateway' )->check_permissions( array( 'gateway_id' => 'bogus_gw' ) );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/wc-update-payment-gateway', $abilities );
+		$this->assertContains( 'aafm/wc-update-payment-gateway', $abilities );
 	}
 
 	/**
@@ -692,7 +692,7 @@ final class WooReportsTest extends TestCase {
 	public function test_update_payment_gateway_save_failure(): void {
 		$this->acting_as( 'administrator' );
 		WcGatewayStubStore::$force_save_failure = true;
-		$res                                    = oversio_exec_wc_update_payment_gateway(
+		$res                                    = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'title'      => 'Should Fail',
@@ -713,7 +713,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_unchanged_value_succeeds(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'enabled'    => true,
@@ -729,9 +729,9 @@ final class WooReportsTest extends TestCase {
 	 * Update gateway returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_update_payment_gateway_inactive_wc(): void {
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$res = oversio_exec_wc_update_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$res = aafm_exec_wc_update_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -741,7 +741,7 @@ final class WooReportsTest extends TestCase {
 	public function test_update_payment_gateway_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-update-payment-gateway' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-update-payment-gateway' )->check_permissions( array() )
 		);
 	}
 
@@ -750,7 +750,7 @@ final class WooReportsTest extends TestCase {
 	 */
 	public function test_update_payment_gateway_redacts_secrets_in_response(): void {
 		$this->acting_as( 'administrator' );
-		$res = oversio_exec_wc_update_payment_gateway(
+		$res = aafm_exec_wc_update_payment_gateway(
 			array(
 				'gateway_id' => 'paypal',
 				'title'      => 'PayPal Safe',

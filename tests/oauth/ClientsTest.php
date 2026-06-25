@@ -2,14 +2,14 @@
 /**
  * Tests for the OAuth dynamic client registry.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 /**
@@ -21,7 +21,7 @@ class ClientsTest extends TestCase {
 	 * Read a client row back by its public client_id.
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
-	 * form, so each DB test must call oversio_install_oauth_tables() first and then
+	 * form, so each DB test must call aafm_install_oauth_tables() first and then
 	 * select the row back — the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $client_id The public client identifier.
@@ -33,7 +33,7 @@ class ClientsTest extends TestCase {
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT * FROM {$wpdb->prefix}oversio_oauth_clients WHERE client_id = %s",
+				"SELECT * FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s",
 				$client_id
 			),
 			ARRAY_A
@@ -45,9 +45,9 @@ class ClientsTest extends TestCase {
 	 * A valid https redirect registers and persists a row with a 32-hex client_id.
 	 */
 	public function test_registers_valid_client(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array(
 				'redirect_uris' => array( 'https://app.example/cb' ),
 				'client_name'   => 'Test',
@@ -67,9 +67,9 @@ class ClientsTest extends TestCase {
 	 * A plain http non-localhost redirect is rejected.
 	 */
 	public function test_rejects_insecure_redirect(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'http://app.example/cb' ) )
 		);
 
@@ -80,9 +80,9 @@ class ClientsTest extends TestCase {
 	 * The http://localhost host is accepted under the loopback exception.
 	 */
 	public function test_accepts_http_localhost_redirect(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'http://localhost/cb' ) )
 		);
 
@@ -94,9 +94,9 @@ class ClientsTest extends TestCase {
 	 * The http://127.0.0.1 host is accepted under the loopback exception.
 	 */
 	public function test_accepts_http_loopback_ip_redirect(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'http://127.0.0.1/cb' ) )
 		);
 
@@ -108,9 +108,9 @@ class ClientsTest extends TestCase {
 	 * A javascript: scheme redirect is rejected.
 	 */
 	public function test_rejects_javascript_scheme(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'javascript:alert(1)' ) )
 		);
 
@@ -121,14 +121,14 @@ class ClientsTest extends TestCase {
 	 * The data: and file: scheme redirects are rejected.
 	 */
 	public function test_rejects_data_and_file_schemes(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$data = oversio_oauth_register_client(
+		$data = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'data:text/html,<h1>x</h1>' ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $data );
 
-		$file = oversio_oauth_register_client(
+		$file = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'file:///etc/passwd' ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $file );
@@ -138,9 +138,9 @@ class ClientsTest extends TestCase {
 	 * A redirect URI carrying a fragment is rejected.
 	 */
 	public function test_rejects_fragment(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'https://app.example/cb#section' ) )
 		);
 
@@ -151,9 +151,9 @@ class ClientsTest extends TestCase {
 	 * A redirect URI carrying userinfo is rejected.
 	 */
 	public function test_rejects_userinfo(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'https://user:pass@app.example/cb' ) )
 		);
 
@@ -168,9 +168,9 @@ class ClientsTest extends TestCase {
 	 * a header-splitting / open-redirect seed. Registration must reject it outright.
 	 */
 	public function test_rejects_crlf_in_redirect_uri(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( "https://app.example/cb\r\nLocation: https://evil.com" ) )
 		);
 
@@ -181,14 +181,14 @@ class ClientsTest extends TestCase {
 	 * A redirect URI carrying a bare tab or newline control char is rejected.
 	 */
 	public function test_rejects_bare_control_chars_in_redirect_uri(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$tab = oversio_oauth_register_client(
+		$tab = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( "https://app.example/cb\tpath" ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $tab );
 
-		$newline = oversio_oauth_register_client(
+		$newline = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( "https://app.example/cb\npath" ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $newline );
@@ -198,9 +198,9 @@ class ClientsTest extends TestCase {
 	 * A redirect URI containing a wildcard is rejected.
 	 */
 	public function test_rejects_wildcard(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$res = oversio_oauth_register_client(
+		$res = aafm_oauth_register_client(
 			array( 'redirect_uris' => array( 'https://*.app.example/cb' ) )
 		);
 
@@ -211,14 +211,14 @@ class ClientsTest extends TestCase {
 	 * More than ten redirect URIs is rejected.
 	 */
 	public function test_rejects_too_many_redirect_uris(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
 		$uris = array();
 		for ( $i = 0; $i < 11; $i++ ) {
 			$uris[] = 'https://app.example/cb' . $i;
 		}
 
-		$res = oversio_oauth_register_client( array( 'redirect_uris' => $uris ) );
+		$res = aafm_oauth_register_client( array( 'redirect_uris' => $uris ) );
 
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
@@ -227,12 +227,12 @@ class ClientsTest extends TestCase {
 	 * A missing or empty redirect_uris list is rejected.
 	 */
 	public function test_rejects_empty_redirect_uris(): void {
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
-		$missing = oversio_oauth_register_client( array( 'client_name' => 'No URIs' ) );
+		$missing = aafm_oauth_register_client( array( 'client_name' => 'No URIs' ) );
 		$this->assertInstanceOf( WP_Error::class, $missing );
 
-		$empty = oversio_oauth_register_client( array( 'redirect_uris' => array() ) );
+		$empty = aafm_oauth_register_client( array( 'redirect_uris' => array() ) );
 		$this->assertInstanceOf( WP_Error::class, $empty );
 	}
 }

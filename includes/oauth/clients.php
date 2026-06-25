@@ -5,7 +5,7 @@
  * Registers public OAuth clients (token_endpoint_auth_method "none", no secret) and
  * validates their redirect URIs against the strict allowlist the spec requires.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -29,7 +29,7 @@ defined( 'ABSPATH' ) || exit;
  * }
  * @return array{client_id:string,client_name:string,redirect_uris:string[]}|\WP_Error
  */
-function oversio_oauth_register_client( array $req ) {
+function aafm_oauth_register_client( array $req ) {
 	$redirect_uris = isset( $req['redirect_uris'] ) && is_array( $req['redirect_uris'] )
 		? array_values( $req['redirect_uris'] )
 		: array();
@@ -37,22 +37,22 @@ function oversio_oauth_register_client( array $req ) {
 	if ( empty( $redirect_uris ) ) {
 		return new WP_Error(
 			'invalid_redirect_uri',
-			__( 'At least one redirect URI is required.', 'oversio-agent-abilities' )
+			__( 'At least one redirect URI is required.', 'agent-abilities-for-mcp' )
 		);
 	}
 
 	if ( count( $redirect_uris ) > 10 ) {
 		return new WP_Error(
 			'invalid_redirect_uri',
-			__( 'A client may register at most 10 redirect URIs.', 'oversio-agent-abilities' )
+			__( 'A client may register at most 10 redirect URIs.', 'agent-abilities-for-mcp' )
 		);
 	}
 
 	foreach ( $redirect_uris as $uri ) {
-		if ( ! is_string( $uri ) || ! oversio_oauth_validate_redirect_uri( $uri ) ) {
+		if ( ! is_string( $uri ) || ! aafm_oauth_validate_redirect_uri( $uri ) ) {
 			return new WP_Error(
 				'invalid_redirect_uri',
-				__( 'A redirect URI is not allowed.', 'oversio-agent-abilities' )
+				__( 'A redirect URI is not allowed.', 'agent-abilities-for-mcp' )
 			);
 		}
 	}
@@ -70,14 +70,14 @@ function oversio_oauth_register_client( array $req ) {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$inserted = $wpdb->insert(
-		$wpdb->prefix . 'oversio_oauth_clients',
+		$wpdb->prefix . 'aafm_oauth_clients',
 		array(
 			'client_id'      => $client_id,
 			'client_name'    => $client_name,
 			'redirect_uris'  => wp_json_encode( $redirect_uris ),
 			'grant_types'    => wp_json_encode( $grant_types ),
 			'response_types' => wp_json_encode( $response_types ),
-			'created_by_ip'  => oversio_source_ip(),
+			'created_by_ip'  => aafm_source_ip(),
 			'is_active'      => 1,
 		),
 		array( '%s', '%s', '%s', '%s', '%s', '%s', '%d' )
@@ -86,7 +86,7 @@ function oversio_oauth_register_client( array $req ) {
 	if ( false === $inserted ) {
 		return new WP_Error(
 			'registration_failed',
-			__( 'Could not store the client registration.', 'oversio-agent-abilities' )
+			__( 'Could not store the client registration.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -109,7 +109,7 @@ function oversio_oauth_register_client( array $req ) {
  * @param string $client_id The client identifier carried by a code/token row.
  * @return bool True only when a client row exists AND is inactive.
  */
-function oversio_oauth_client_is_deactivated( string $client_id ): bool {
+function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 	if ( '' === $client_id ) {
 		return false;
 	}
@@ -119,7 +119,7 @@ function oversio_oauth_client_is_deactivated( string $client_id ): bool {
 	$is_active = $wpdb->get_var(
 		$wpdb->prepare(
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT is_active FROM {$wpdb->prefix}oversio_oauth_clients WHERE client_id = %s",
+			"SELECT is_active FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s",
 			$client_id
 		)
 	);
@@ -138,9 +138,9 @@ function oversio_oauth_client_is_deactivated( string $client_id ): bool {
  *
  * @return int Non-negative count of active clients.
  */
-function oversio_oauth_count_active_clients(): int {
+function aafm_oauth_count_active_clients(): int {
 	global $wpdb;
-	$table = esc_sql( $wpdb->prefix . 'oversio_oauth_clients' );
+	$table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
 
 	$suppressed = $wpdb->suppress_errors();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
@@ -162,7 +162,7 @@ function oversio_oauth_count_active_clients(): int {
  * @param string $uri Candidate redirect URI.
  * @return bool True when the URI is allowed.
  */
-function oversio_oauth_validate_redirect_uri( string $uri ): bool {
+function aafm_oauth_validate_redirect_uri( string $uri ): bool {
 	if ( '' === $uri || strlen( $uri ) > 2048 ) {
 		return false;
 	}
@@ -220,10 +220,10 @@ function oversio_oauth_validate_redirect_uri( string $uri ): bool {
  *
  * @return array<int,array{client_id:string,client_name:string,redirect_uris:string[],created_at:string,is_active:bool,active_tokens:int}>
  */
-function oversio_oauth_list_clients(): array {
+function aafm_oauth_list_clients(): array {
 	global $wpdb;
-	$clients_table = esc_sql( $wpdb->prefix . 'oversio_oauth_clients' );
-	$tokens_table  = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$clients_table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$tokens_table  = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$now           = gmdate( 'Y-m-d H:i:s', time() );
 
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
@@ -287,11 +287,11 @@ function oversio_oauth_list_clients(): array {
  *
  * @return array<int,array{user_id:int,user_display:string,user_login:string,client_id:string,client_name:string,granted_at:string}>
  */
-function oversio_oauth_list_grants(): array {
+function aafm_oauth_list_grants(): array {
 	global $wpdb;
 	// Internal constant table names; esc_sql() makes the safety explicit for analyzers.
-	$consents_table = esc_sql( $wpdb->prefix . 'oversio_oauth_consents' );
-	$clients_table  = esc_sql( $wpdb->prefix . 'oversio_oauth_clients' );
+	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );
+	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
 
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
 	// by returning an empty list instead of surfacing a DB error. Table names are
@@ -338,18 +338,18 @@ function oversio_oauth_list_grants(): array {
  *
  * Locks the client out immediately: deactivation is re-enforced at code redemption,
  * refresh rotation, and bearer validation. Revoking the client's live tokens is the
- * caller's separate step (oversio_oauth_revoke_client_tokens()).
+ * caller's separate step (aafm_oauth_revoke_client_tokens()).
  *
  * @param string $client_id The public client identifier.
  * @return bool True when a client row was updated.
  */
-function oversio_oauth_deactivate_client( string $client_id ): bool {
+function aafm_oauth_deactivate_client( string $client_id ): bool {
 	if ( '' === $client_id ) {
 		return false;
 	}
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_clients';
+	$table = $wpdb->prefix . 'aafm_oauth_clients';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$updated = $wpdb->query(
@@ -367,19 +367,19 @@ function oversio_oauth_deactivate_client( string $client_id ): bool {
  * Delete a single user's consent (grant) for one client.
  *
  * After this, the user must re-approve the client to reconnect. Revoking the
- * matching tokens is the caller's separate step (oversio_oauth_revoke_user_client_tokens()).
+ * matching tokens is the caller's separate step (aafm_oauth_revoke_user_client_tokens()).
  *
  * @param int    $user_id   The WordPress user id whose grant is removed.
  * @param string $client_id The client the grant is for.
  * @return bool True when a consent row was deleted.
  */
-function oversio_oauth_delete_consent( int $user_id, string $client_id ): bool {
+function aafm_oauth_delete_consent( int $user_id, string $client_id ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return false;
 	}
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_consents';
+	$table = $wpdb->prefix . 'aafm_oauth_consents';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$deleted = $wpdb->delete(

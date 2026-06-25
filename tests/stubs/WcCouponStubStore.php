@@ -6,12 +6,12 @@
  * trait), satisfying Generic.Files.OneObjectStructurePerFile. Required directly from the test
  * bootstrap, never shipped.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests;
+namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce coupon stubs.

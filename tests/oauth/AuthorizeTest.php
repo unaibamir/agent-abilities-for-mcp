@@ -5,17 +5,17 @@
  *
  * The init handler reads superglobals and calls auth_redirect()/status_header()/exit,
  * which cannot run in-process, so the testable logic lives in pure helpers exercised
- * here: oversio_oauth_validate_authorize_params(), the consent-row reader/writer, and the
+ * here: aafm_oauth_validate_authorize_params(), the consent-row reader/writer, and the
  * consent-page renderer.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 /**
@@ -28,7 +28,7 @@ class AuthorizeTest extends TestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 	}
 
 	/**
@@ -38,7 +38,7 @@ class AuthorizeTest extends TestCase {
 	 * @return string
 	 */
 	private function register_client( string $redirect = 'https://app.example/cb' ): string {
-		$result = oversio_oauth_register_client(
+		$result = aafm_oauth_register_client(
 			array(
 				'redirect_uris' => array( $redirect ),
 				'client_name'   => 'Test Client',
@@ -76,7 +76,7 @@ class AuthorizeTest extends TestCase {
 		$params = $this->valid_params( $client );
 		unset( $params['code_challenge'] );
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 
@@ -88,7 +88,7 @@ class AuthorizeTest extends TestCase {
 		$params                          = $this->valid_params( $client );
 		$params['code_challenge_method'] = 'plain';
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
 	}
 
@@ -100,9 +100,9 @@ class AuthorizeTest extends TestCase {
 		$params                  = $this->valid_params( $client );
 		$params['response_type'] = 'token';
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertTrue( oversio_oauth_error_is_redirectable( $result ) );
+		$this->assertTrue( aafm_oauth_error_is_redirectable( $result ) );
 	}
 
 	/**
@@ -112,9 +112,9 @@ class AuthorizeTest extends TestCase {
 		$params              = $this->valid_params( 'does_not_exist' );
 		$params['client_id'] = 'does_not_exist';
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertFalse( oversio_oauth_error_is_redirectable( $result ) );
+		$this->assertFalse( aafm_oauth_error_is_redirectable( $result ) );
 	}
 
 	/**
@@ -125,9 +125,9 @@ class AuthorizeTest extends TestCase {
 		$params                 = $this->valid_params( $client );
 		$params['redirect_uri'] = 'https://evil.example/cb';
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertFalse( oversio_oauth_error_is_redirectable( $result ) );
+		$this->assertFalse( aafm_oauth_error_is_redirectable( $result ) );
 	}
 
 	/**
@@ -137,9 +137,9 @@ class AuthorizeTest extends TestCase {
 		$client = $this->register_client();
 		$params = $this->valid_params( $client );
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertIsArray( $result );
-		$this->assertSame( oversio_endpoint_url(), $result['resource'] );
+		$this->assertSame( aafm_endpoint_url(), $result['resource'] );
 	}
 
 	/**
@@ -148,11 +148,11 @@ class AuthorizeTest extends TestCase {
 	public function test_matching_resource_is_accepted(): void {
 		$client             = $this->register_client();
 		$params             = $this->valid_params( $client );
-		$params['resource'] = oversio_endpoint_url();
+		$params['resource'] = aafm_endpoint_url();
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertIsArray( $result );
-		$this->assertSame( oversio_endpoint_url(), $result['resource'] );
+		$this->assertSame( aafm_endpoint_url(), $result['resource'] );
 	}
 
 	/**
@@ -163,10 +163,10 @@ class AuthorizeTest extends TestCase {
 		$params             = $this->valid_params( $client );
 		$params['resource'] = 'https://other.example/mcp';
 
-		$result = oversio_oauth_validate_authorize_params( $params );
+		$result = aafm_oauth_validate_authorize_params( $params );
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'invalid_target', $result->get_error_code() );
-		$this->assertTrue( oversio_oauth_error_is_redirectable( $result ) );
+		$this->assertTrue( aafm_oauth_error_is_redirectable( $result ) );
 	}
 
 	/**
@@ -176,12 +176,12 @@ class AuthorizeTest extends TestCase {
 		$client = $this->register_client();
 		$user   = self::factory()->user->create();
 
-		$this->assertFalse( oversio_oauth_has_consent( $user, $client ) );
+		$this->assertFalse( aafm_oauth_has_consent( $user, $client ) );
 
-		oversio_oauth_record_consent( $user, $client );
+		aafm_oauth_record_consent( $user, $client );
 
-		$this->assertTrue( oversio_oauth_has_consent( $user, $client ) );
-		$this->assertFalse( oversio_oauth_has_consent( $user, 'some_other_client' ) );
+		$this->assertTrue( aafm_oauth_has_consent( $user, $client ) );
+		$this->assertFalse( aafm_oauth_has_consent( $user, 'some_other_client' ) );
 	}
 
 	/**
@@ -191,15 +191,15 @@ class AuthorizeTest extends TestCase {
 		$client = $this->register_client();
 		$user   = self::factory()->user->create();
 
-		oversio_oauth_record_consent( $user, $client );
-		oversio_oauth_record_consent( $user, $client );
+		aafm_oauth_record_consent( $user, $client );
+		aafm_oauth_record_consent( $user, $client );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$count = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
 				$user,
 				$client
 			)
@@ -210,7 +210,7 @@ class AuthorizeTest extends TestCase {
 	/**
 	 * A code minted with the forced endpoint resource persists that exact string.
 	 *
-	 * The authorize flow forces resource => oversio_endpoint_url() at the mint call, and
+	 * The authorize flow forces resource => aafm_endpoint_url() at the mint call, and
 	 * the D1 token validator later audience-checks that exact string. This locks the
 	 * audience carry-forward contract at the storage boundary: read the stored row
 	 * back by the code's SHA-256 hash and assert the persisted resource is the
@@ -219,9 +219,9 @@ class AuthorizeTest extends TestCase {
 	public function test_minted_code_persists_endpoint_resource(): void {
 		$client   = $this->register_client();
 		$user     = self::factory()->user->create();
-		$endpoint = oversio_endpoint_url();
+		$endpoint = aafm_endpoint_url();
 
-		$raw = oversio_oauth_mint_code(
+		$raw = aafm_oauth_mint_code(
 			array(
 				'client_id'      => $client,
 				'wp_user_id'     => $user,
@@ -239,7 +239,7 @@ class AuthorizeTest extends TestCase {
 		$stored_resource = $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT resource FROM {$wpdb->prefix}oversio_oauth_codes WHERE code_hash = %s",
+				"SELECT resource FROM {$wpdb->prefix}aafm_oauth_codes WHERE code_hash = %s",
 				$hash
 			)
 		);
@@ -276,17 +276,17 @@ class AuthorizeTest extends TestCase {
 
 		$catch_redirect = static function ( $location ) use ( &$captured ) {
 			$captured['redirect'] = (string) $location;
-			throw new \RuntimeException( 'oversio_test_redirect' );
+			throw new \RuntimeException( 'aafm_test_redirect' );
 		};
 		$catch_status   = static function ( $header, $code ) use ( &$captured ) {
 			$captured['status'] = (int) $code;
-			throw new \RuntimeException( 'oversio_test_status' );
+			throw new \RuntimeException( 'aafm_test_status' );
 		};
 		add_filter( 'wp_redirect', $catch_redirect, 1 );
 		add_filter( 'status_header', $catch_status, 1, 2 );
 
 		// The route marker selects this handler; valid_params() omits it by design.
-		$params['oversio_oauth'] = 'authorize';
+		$params['aafm_oauth'] = 'authorize';
 
 		// Snapshot the request superglobals so unrelated tests that run after this one
 		// keep the harness-seeded REQUEST_URI etc. (restored byte-for-byte below).
@@ -319,7 +319,7 @@ class AuthorizeTest extends TestCase {
 
 		ob_start();
 		try {
-			oversio_oauth_handle_authorize();
+			aafm_oauth_handle_authorize();
 		} catch ( \RuntimeException $e ) {
 			// Expected: a capture filter threw to unwind before the handler's exit.
 			unset( $e );
@@ -359,7 +359,7 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( 'wp-login.php', (string) $result['redirect'] );
 		$this->assertStringContainsString( 'redirect_to=', (string) $result['redirect'] );
 		// The return target is the authorize URL, so sign-in lands back on this flow.
-		$this->assertStringContainsString( rawurlencode( 'oversio_oauth=authorize' ), (string) $result['redirect'] );
+		$this->assertStringContainsString( rawurlencode( 'aafm_oauth=authorize' ), (string) $result['redirect'] );
 	}
 
 	/**
@@ -391,7 +391,7 @@ class AuthorizeTest extends TestCase {
 			'client_name'   => '<script>alert(1)</script>',
 			'user_login'    => 'mcp-agent',
 			'site_name'     => 'Example Site',
-			'action_url'    => 'https://site.example/?oversio_oauth=authorize',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
 			'nonce_field'   => '<input type="hidden" name="_wpnonce" value="abc123" />',
 			'hidden_inputs' => array(
 				'<input type="hidden" name="response_type" value="code" />',
@@ -400,7 +400,7 @@ class AuthorizeTest extends TestCase {
 		);
 
 		ob_start();
-		oversio_oauth_render_consent_page( $view );
+		aafm_oauth_render_consent_page( $view );
 		$html = (string) ob_get_clean();
 
 		// Document shell and form.
@@ -417,8 +417,8 @@ class AuthorizeTest extends TestCase {
 		// :focus-visible. The admin ring token is not enqueued on this standalone page,
 		// so the consent stylesheet carries its own focus rule.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
-		$consent_css = (string) file_get_contents( OVERSIO_PLUGIN_DIR . 'assets/consent.css' );
-		$this->assertStringContainsString( '.oversio-btn:focus-visible', $consent_css );
+		$consent_css = (string) file_get_contents( AAFM_PLUGIN_DIR . 'assets/consent.css' );
+		$this->assertStringContainsString( '.aafm-btn:focus-visible', $consent_css );
 
 		// The agent user login is shown in the "acting as" note.
 		$this->assertStringContainsString( 'mcp-agent', $html );
@@ -447,15 +447,15 @@ class AuthorizeTest extends TestCase {
 	public function test_redirect_uri_origin_strips_path_and_query(): void {
 		$this->assertSame(
 			'https://app.example',
-			oversio_oauth_redirect_uri_origin( 'https://app.example/cb?foo=bar#frag' )
+			aafm_oauth_redirect_uri_origin( 'https://app.example/cb?foo=bar#frag' )
 		);
 		// An explicit non-default port is preserved; the path is still dropped.
 		$this->assertSame(
 			'https://app.example:8443',
-			oversio_oauth_redirect_uri_origin( 'https://app.example:8443/callback' )
+			aafm_oauth_redirect_uri_origin( 'https://app.example:8443/callback' )
 		);
 		// A URI with no scheme/host yields '', which keeps form-action at 'self' only.
-		$this->assertSame( '', oversio_oauth_redirect_uri_origin( '/relative/only' ) );
+		$this->assertSame( '', aafm_oauth_redirect_uri_origin( '/relative/only' ) );
 	}
 
 	/**
@@ -465,8 +465,8 @@ class AuthorizeTest extends TestCase {
 	 * the browser aborts the 302 to the client and the code never arrives.
 	 */
 	public function test_consent_csp_form_action_includes_validated_client_origin(): void {
-		$origin = oversio_oauth_redirect_uri_origin( 'https://app.example/cb' );
-		$csp    = oversio_oauth_consent_csp( $origin );
+		$origin = aafm_oauth_redirect_uri_origin( 'https://app.example/cb' );
+		$csp    = aafm_oauth_consent_csp( $origin );
 
 		$this->assertStringContainsString( "form-action 'self' https://app.example;", $csp );
 		// The path of the redirect_uri must never leak into the policy.
@@ -488,10 +488,10 @@ class AuthorizeTest extends TestCase {
 	 */
 	public function test_consent_csp_allows_offloaded_stylesheet_origin(): void {
 		$cdn = static function () {
-			return 'https://cdn.example.net/wp-content/plugins/oversio-agent-abilities/assets/consent.css';
+			return 'https://cdn.example.net/wp-content/plugins/agent-abilities-for-mcp/assets/consent.css';
 		};
 		add_filter( 'plugins_url', $cdn, 10, 0 );
-		$csp = oversio_oauth_consent_csp();
+		$csp = aafm_oauth_consent_csp();
 		remove_filter( 'plugins_url', $cdn, 10 );
 
 		// The offloaded origin is whitelisted alongside 'self' so the stylesheet can load.
@@ -506,7 +506,7 @@ class AuthorizeTest extends TestCase {
 	 * 'self' alone with no client origin appended.
 	 */
 	public function test_local_error_csp_keeps_form_action_self_only(): void {
-		$csp = oversio_oauth_consent_csp();
+		$csp = aafm_oauth_consent_csp();
 
 		$this->assertStringContainsString( "form-action 'self';", $csp );
 		$this->assertStringNotContainsString( 'app.example', $csp );

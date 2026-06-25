@@ -2,14 +2,14 @@
 /**
  * Site-structure read abilities: public taxonomies, public post types, redacted site info.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_structure_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_structure_definitions' );
 
 /**
  * Contribute structure ability definitions to the registry.
@@ -17,30 +17,30 @@ add_filter( 'oversio_abilities_registry', 'oversio_register_structure_definition
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_structure_definitions( array $registry ): array {
-	$registry['oversio/get-taxonomies'] = array(
-		'label'        => __( 'Get taxonomies', 'oversio-agent-abilities' ),
-		'description'  => __( 'List public taxonomies registered on the site.', 'oversio-agent-abilities' ),
+function aafm_register_structure_definitions( array $registry ): array {
+	$registry['aafm/get-taxonomies'] = array(
+		'label'        => __( 'Get taxonomies', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List public taxonomies registered on the site.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_get_taxonomies',
+		'args_builder' => 'aafm_args_get_taxonomies',
 	);
-	$registry['oversio/get-post-types'] = array(
-		'label'        => __( 'Get post types', 'oversio-agent-abilities' ),
-		'description'  => __( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type.', 'oversio-agent-abilities' ),
+	$registry['aafm/get-post-types'] = array(
+		'label'        => __( 'Get post types', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_get_post_types',
+		'args_builder' => 'aafm_args_get_post_types',
 	);
-	$registry['oversio/get-site-info']  = array(
-		'label'        => __( 'Get site info', 'oversio-agent-abilities' ),
-		'description'  => __( 'Retrieve the site name, tagline, URL, and language.', 'oversio-agent-abilities' ),
+	$registry['aafm/get-site-info']  = array(
+		'label'        => __( 'Get site info', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Retrieve the site name, tagline, URL, and language.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_get_site_info',
+		'args_builder' => 'aafm_args_get_site_info',
 	);
 	return $registry;
 }
@@ -54,11 +54,11 @@ function oversio_register_structure_definitions( array $registry ): array {
  * @param string $out_key Output property key (the array of objects returned).
  * @return array<string,mixed>
  */
-function oversio_args_structure_read( string $label, string $desc, string $execute, string $out_key ): array {
+function aafm_args_structure_read( string $label, string $desc, string $execute, string $out_key ): array {
 	return array(
 		'label'               => $label,
 		'description'         => $desc,
-		'category'            => 'oversio-reads',
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -74,7 +74,7 @@ function oversio_args_structure_read( string $label, string $desc, string $execu
 			),
 		),
 		'execute_callback'    => $execute,
-		'permission_callback' => 'oversio_perm_read',
+		'permission_callback' => 'aafm_perm_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -86,15 +86,15 @@ function oversio_args_structure_read( string $label, string $desc, string $execu
 }
 
 /**
- * Args for oversio/get-taxonomies.
+ * Args for aafm/get-taxonomies.
  *
  * @return array<string,mixed>
  */
-function oversio_args_get_taxonomies(): array {
-	$args = oversio_args_structure_read(
-		oversio_ability_label( 'oversio/get-taxonomies' ),
-		oversio_ability_description( 'oversio/get-taxonomies' ),
-		'oversio_exec_get_taxonomies',
+function aafm_args_get_taxonomies(): array {
+	$args = aafm_args_structure_read(
+		aafm_ability_label( 'aafm/get-taxonomies' ),
+		aafm_ability_description( 'aafm/get-taxonomies' ),
+		'aafm_exec_get_taxonomies',
 		'taxonomies'
 	);
 	// Declare the per-taxonomy item shape so the published schema documents each field (A3).
@@ -115,14 +115,14 @@ function oversio_args_get_taxonomies(): array {
 }
 
 /**
- * Execute oversio/get-taxonomies.
+ * Execute aafm/get-taxonomies.
  *
  * Returns PUBLIC taxonomies only — private/internal object types (e.g. nav_menu,
  * link_category) are never exposed.
  *
  * @return array<string,mixed>
  */
-function oversio_exec_get_taxonomies(): array {
+function aafm_exec_get_taxonomies(): array {
 	$out = array();
 	foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax ) {
 		$out[] = array(
@@ -137,15 +137,15 @@ function oversio_exec_get_taxonomies(): array {
 }
 
 /**
- * Args for oversio/get-post-types.
+ * Args for aafm/get-post-types.
  *
  * @return array<string,mixed>
  */
-function oversio_args_get_post_types(): array {
-	$args = oversio_args_structure_read(
-		oversio_ability_label( 'oversio/get-post-types' ),
-		oversio_ability_description( 'oversio/get-post-types' ),
-		'oversio_exec_get_post_types',
+function aafm_args_get_post_types(): array {
+	$args = aafm_args_structure_read(
+		aafm_ability_label( 'aafm/get-post-types' ),
+		aafm_ability_description( 'aafm/get-post-types' ),
+		'aafm_exec_get_post_types',
 		'post_types'
 	);
 	// Declare the per-type item shape so the writable boolean is part of the published schema.
@@ -163,15 +163,15 @@ function oversio_args_get_post_types(): array {
 }
 
 /**
- * Execute oversio/get-post-types.
+ * Execute aafm/get-post-types.
  *
  * Returns PUBLIC post types only — internal types (revision, nav_menu_item, etc.)
  * are never exposed.
  *
  * @return array<string,mixed>
  */
-function oversio_exec_get_post_types(): array {
-	$writable = oversio_allowed_post_types();
+function aafm_exec_get_post_types(): array {
+	$writable = aafm_allowed_post_types();
 	$out      = array();
 	foreach ( get_post_types( array( 'public' => true ), 'objects' ) as $type ) {
 		$out[] = array(
@@ -190,15 +190,15 @@ function oversio_exec_get_post_types(): array {
 }
 
 /**
- * Args for oversio/get-site-info.
+ * Args for aafm/get-site-info.
  *
  * @return array<string,mixed>
  */
-function oversio_args_get_site_info(): array {
+function aafm_args_get_site_info(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/get-site-info' ),
-		'description'         => oversio_ability_description( 'oversio/get-site-info' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/get-site-info' ),
+		'description'         => aafm_ability_description( 'aafm/get-site-info' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -218,8 +218,8 @@ function oversio_args_get_site_info(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_get_site_info',
-		'permission_callback' => 'oversio_perm_read',
+		'execute_callback'    => 'aafm_exec_get_site_info',
+		'permission_callback' => 'aafm_perm_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -231,7 +231,7 @@ function oversio_args_get_site_info(): array {
 }
 
 /**
- * Execute oversio/get-site-info.
+ * Execute aafm/get-site-info.
  *
  * SECURITY-CRITICAL redaction. Returns ONLY the whitelisted, non-sensitive
  * descriptor below. It deliberately NEVER discloses: the WordPress version, PHP
@@ -240,7 +240,7 @@ function oversio_args_get_site_info(): array {
  *
  * @return array<string,mixed>
  */
-function oversio_exec_get_site_info(): array {
+function aafm_exec_get_site_info(): array {
 	return array(
 		'site' => array(
 			'name'     => get_bloginfo( 'name' ),

@@ -2,14 +2,14 @@
 /**
  * Tests for the OAuth REST endpoints: register, token, and revoke.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_REST_Request;
 
 /**
@@ -29,12 +29,12 @@ class RestEndpointsTest extends TestCase {
 		// HTTPS requirement the way a local agent-dev operator would — this is the
 		// documented override, exercised here so the handlers run over the test's
 		// plain-HTTP request instead of short-circuiting with a 400.
-		if ( ! defined( 'OVERSIO_OAUTH_ALLOW_HTTP' ) ) {
-			define( 'OVERSIO_OAUTH_ALLOW_HTTP', true );
+		if ( ! defined( 'AAFM_OAUTH_ALLOW_HTTP' ) ) {
+			define( 'AAFM_OAUTH_ALLOW_HTTP', true );
 		}
 
 		// The endpoints read and write the OAuth storage tables.
-		oversio_install_oauth_tables();
+		aafm_install_oauth_tables();
 
 		// Register the routes against the REST server for this test run.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook fired to populate the REST server in the test.
@@ -60,7 +60,7 @@ class RestEndpointsTest extends TestCase {
 	 * @return string The minted client_id.
 	 */
 	private function register_client( string $redirect_uri ): string {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -89,13 +89,13 @@ class RestEndpointsTest extends TestCase {
 	private function mint_code( string $client_id, string $redirect, string $challenge ): string {
 		$user_id = self::factory()->user->create();
 
-		return oversio_oauth_mint_code(
+		return aafm_oauth_mint_code(
 			array(
 				'client_id'      => $client_id,
 				'wp_user_id'     => $user_id,
 				'redirect_uri'   => $redirect,
 				'code_challenge' => $challenge,
-				'resource'       => oversio_endpoint_url(),
+				'resource'       => aafm_endpoint_url(),
 			)
 		);
 	}
@@ -110,7 +110,7 @@ class RestEndpointsTest extends TestCase {
 	 * @return \WP_REST_Response
 	 */
 	private function token_code_request( string $client_id, string $code, string $redirect, string $verifier ) {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_body_params(
 			array(
 				'grant_type'    => 'authorization_code',
@@ -128,7 +128,7 @@ class RestEndpointsTest extends TestCase {
 	 * Registration returns 201 with a 32-hex client_id.
 	 */
 	public function test_register_returns_client_id(): void {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -168,7 +168,7 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
 
 		$data = $response->get_data();
-		$this->assertStringStartsWith( 'oversio_oat_', (string) $data['access_token'] );
+		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'] );
 		$this->assertSame( 'Bearer', $data['token_type'] );
 		$this->assertNotEmpty( $data['refresh_token'] );
 	}
@@ -222,7 +222,7 @@ class RestEndpointsTest extends TestCase {
 		$first_data    = $first->get_data();
 		$refresh_token = (string) $first_data['refresh_token'];
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_body_params(
 			array(
 				'grant_type'    => 'refresh_token',
@@ -236,7 +236,7 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertStringStartsWith( 'oversio_oat_', (string) $data['access_token'] );
+		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'] );
 		$this->assertNotSame( (string) $first_data['access_token'], (string) $data['access_token'] );
 	}
 
@@ -255,9 +255,9 @@ class RestEndpointsTest extends TestCase {
 		$access_token   = (string) $token_response->get_data()['access_token'];
 
 		// The token is live before revocation.
-		$this->assertNotFalse( oversio_oauth_validate_access_token( $access_token ) );
+		$this->assertNotFalse( aafm_oauth_validate_access_token( $access_token ) );
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/revoke' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/revoke' );
 		$request->set_body_params( array( 'token' => $access_token ) );
 
 		$response = rest_do_request( $request );
@@ -266,7 +266,7 @@ class RestEndpointsTest extends TestCase {
 
 		// Revocation must genuinely kill the token, not just return 200: validating
 		// the same token afterwards now reports it as dead.
-		$this->assertFalse( oversio_oauth_validate_access_token( $access_token ) );
+		$this->assertFalse( aafm_oauth_validate_access_token( $access_token ) );
 	}
 
 	/**
@@ -276,7 +276,7 @@ class RestEndpointsTest extends TestCase {
 	 * the redirect_uris[] and client_name from the form body, not only get_json_params().
 	 */
 	public function test_register_accepts_form_encoded_body(): void {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/x-www-form-urlencoded' );
 		$request->set_body(
 			http_build_query(
@@ -310,7 +310,7 @@ class RestEndpointsTest extends TestCase {
 		$client_id = $this->register_client( $redirect );
 		$code      = $this->mint_code( $client_id, $redirect, $challenge );
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_header( 'Content-Type', 'application/x-www-form-urlencoded' );
 		$request->set_body(
 			http_build_query(
@@ -329,7 +329,7 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 200, $response->get_status() );
 
 		$data = $response->get_data();
-		$this->assertStringStartsWith( 'oversio_oat_', (string) $data['access_token'] );
+		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'] );
 		$this->assertSame( 'Bearer', $data['token_type'] );
 	}
 
@@ -382,7 +382,7 @@ class RestEndpointsTest extends TestCase {
 	 * An over-long client_name on registration is rejected with 400.
 	 */
 	public function test_register_rejects_overlong_client_name(): void {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -402,7 +402,7 @@ class RestEndpointsTest extends TestCase {
 	 * An over-long refresh_token is rejected with 400 before any DB lookup.
 	 */
 	public function test_token_rejects_overlong_refresh_token(): void {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_body_params(
 			array(
 				'grant_type'    => 'refresh_token',
@@ -422,11 +422,11 @@ class RestEndpointsTest extends TestCase {
 	public function test_register_is_404_when_dcr_disabled(): void {
 		// Store '0' rather than the boolean false: get_option() with a truthy
 		// default returns that default when the stored value is boolean false (a
-		// WordPress quirk), so the C1 reader oversio_oauth_dcr_enabled() would still
+		// WordPress quirk), so the C1 reader aafm_oauth_dcr_enabled() would still
 		// see the option as enabled. The string '0' casts to a clean false.
-		update_option( 'oversio_oauth_dcr_enabled', '0' );
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -454,9 +454,9 @@ class RestEndpointsTest extends TestCase {
 		$falsy = array( 'false', 'no', 'off', '0', '' );
 
 		foreach ( $falsy as $value ) {
-			update_option( 'oversio_oauth_dcr_enabled', $value );
+			update_option( 'aafm_oauth_dcr_enabled', $value );
 
-			$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+			$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 			$request->set_header( 'Content-Type', 'application/json' );
 			$request->set_body(
 				wp_json_encode(
@@ -477,10 +477,10 @@ class RestEndpointsTest extends TestCase {
 
 		// Persisted literal boolean false: seed the row on, then toggle it off —
 		// WordPress only stores a literal false when the option already exists.
-		add_option( 'oversio_oauth_dcr_enabled', '1' );
-		update_option( 'oversio_oauth_dcr_enabled', false );
+		add_option( 'aafm_oauth_dcr_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', false );
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body( wp_json_encode( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) ) );
 
@@ -497,9 +497,9 @@ class RestEndpointsTest extends TestCase {
 		$falsy = array( 'false', 'no', 'off', '0', '' );
 
 		foreach ( $falsy as $value ) {
-			update_option( 'oversio_oauth_enabled', $value );
+			update_option( 'aafm_oauth_enabled', $value );
 
-			$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+			$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 			$request->set_body_params(
 				array(
 					'grant_type' => 'authorization_code',
@@ -517,10 +517,10 @@ class RestEndpointsTest extends TestCase {
 		}
 
 		// Persisted literal boolean false (see the DCR sibling above).
-		add_option( 'oversio_oauth_enabled', '1' );
-		update_option( 'oversio_oauth_enabled', false );
+		add_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_enabled', false );
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_body_params(
 			array(
 				'grant_type' => 'authorization_code',

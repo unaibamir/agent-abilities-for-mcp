@@ -1,6 +1,6 @@
-/* global oversioAdmin */
+/* global aafmAdmin */
 /**
- * Admin UI for Oversio Agent Abilities.
+ * Admin UI for Agent Abilities for MCP.
  *
  * Every value that comes back from an AJAX response is treated as untrusted and reaches
  * the DOM through textContent only — this file never assigns innerHTML, so there is no
@@ -9,20 +9,20 @@
 ( () => {
 	'use strict';
 
-	class OversioAdmin {
-		#ajaxUrl = oversioAdmin.ajaxUrl;
-		#nonce = oversioAdmin.nonce;
+	class AafmAdmin {
+		#ajaxUrl = aafmAdmin.ajaxUrl;
+		#nonce = aafmAdmin.nonce;
 
 		/**
 		 * Read a localized string, falling back to its English source when the
 		 * bag is missing (keeps the UI legible even if wp_localize_script fails).
 		 *
-		 * @param {string} key      Key in the oversioAdmin.i18n bag.
+		 * @param {string} key      Key in the aafmAdmin.i18n bag.
 		 * @param {string} fallback English source string.
 		 * @return {string} The localized string, or the fallback.
 		 */
 		#t( key, fallback ) {
-			return oversioAdmin?.i18n?.[ key ] ?? fallback;
+			return aafmAdmin?.i18n?.[ key ] ?? fallback;
 		}
 
 		/**
@@ -69,8 +69,8 @@
 		}
 
 		#bindQuickstarts() {
-			const toggle = document.querySelector( '.oversio-quickstart-toggle' );
-			const grid = document.querySelector( '#oversio-quickstart-grid' );
+			const toggle = document.querySelector( '.aafm-quickstart-toggle' );
+			const grid = document.querySelector( '#aafm-quickstart-grid' );
 			if ( ! toggle || ! grid ) {
 				return;
 			}
@@ -78,7 +78,7 @@
 				const open = grid.hidden;
 				grid.hidden = ! open;
 				toggle.setAttribute( 'aria-expanded', open ? 'true' : 'false' );
-				const i18n = oversioAdmin?.i18n;
+				const i18n = aafmAdmin?.i18n;
 				toggle.textContent = open
 					? i18n?.quickstartsHide ?? 'Hide client configs'
 					: i18n?.quickstartsShow ?? 'Show config for a specific client';
@@ -86,11 +86,11 @@
 		}
 
 		/**
-		 * Wire the client picker (the .oversio-client cards in #oversio-clients).
+		 * Wire the client picker (the .aafm-client cards in #aafm-clients).
 		 *
 		 * Clicking a card marks it .on (clearing its siblings) and swaps the primary
 		 * config blocks to that client's snippet. The per-client unix payload already
-		 * lives on the matching .oversio-quickstart-card's data-config, so the unix block
+		 * lives on the matching .aafm-quickstart-card's data-config, so the unix block
 		 * is taken verbatim from there. Clients differ only by the JSON root key
 		 * (VS Code uses "servers"; everyone else uses "mcpServers"), so the windows
 		 * block — which has no per-client payload in the markup — is reconciled by
@@ -117,10 +117,10 @@
 		#bindClientPicker() {
 			// Scope strictly to the App-Password fallback subtree. The OAuth picker has
 			// its own #bindOauthClientPicker and must never be touched here.
-			const root = document.querySelector( '.oversio-app-password-fallback' );
+			const root = document.querySelector( '.aafm-app-password-fallback' );
 			const cards = root
-				? root.querySelectorAll( '#oversio-clients .oversio-client' )
-				: document.querySelectorAll( '#oversio-clients .oversio-client' );
+				? root.querySelectorAll( '#aafm-clients .aafm-client' )
+				: document.querySelectorAll( '#aafm-clients .aafm-client' );
 			if ( ! cards.length ) {
 				return;
 			}
@@ -133,17 +133,17 @@
 					// Search within the fallback root only — never touch OAuth elements.
 					const searchRoot = root ?? document;
 					const source = searchRoot.querySelector(
-						`.oversio-quickstart-card[data-client="${ client }"]`
+						`.aafm-quickstart-card[data-client="${ client }"]`
 					);
 					const unixCfg = source?.dataset.config ?? '';
 
 					// Update only snippet blocks within the App-Password fallback, never
-					// the OAuth card's .oversio-snippet elements.
+					// the OAuth card's .aafm-snippet elements.
 					searchRoot
-						.querySelectorAll( '.oversio-snippet[data-os]' )
+						.querySelectorAll( '.aafm-snippet[data-os]' )
 						.forEach( ( block ) => {
 							const pre = block.querySelector( 'pre' );
-							const copy = block.querySelector( '.oversio-copy' );
+							const copy = block.querySelector( '.aafm-copy' );
 							if ( ! pre ) {
 								return;
 							}
@@ -165,15 +165,15 @@
 		}
 
 		/**
-		 * Wire the OAuth client picker (the .oversio-client cards in #oversio-oauth-clients).
+		 * Wire the OAuth client picker (the .aafm-client cards in #aafm-oauth-clients).
 		 *
 		 * Clicking a card marks it .on (clearing its siblings) and shows the matching
-		 * .oversio-oauth-panel[data-client] while hiding all others. The panels already
+		 * .aafm-oauth-panel[data-client] while hiding all others. The panels already
 		 * contain the correct pre-rendered snippet for each client, so no DOM rewriting
 		 * is needed beyond the visibility toggle.
 		 */
 		#bindOauthClientPicker() {
-			const cards = document.querySelectorAll( '#oversio-oauth-clients .oversio-client' );
+			const cards = document.querySelectorAll( '#aafm-oauth-clients .aafm-client' );
 			if ( ! cards.length ) {
 				return;
 			}
@@ -183,7 +183,7 @@
 
 					const client = card.dataset.client ?? '';
 					document
-						.querySelectorAll( '.oversio-oauth-panel[data-client]' )
+						.querySelectorAll( '.aafm-oauth-panel[data-client]' )
 						.forEach( ( panel ) => {
 							panel.hidden = panel.dataset.client !== client;
 						} );
@@ -248,7 +248,7 @@
 		}
 
 		#bindSubjectTabs() {
-			const tabs = document.querySelectorAll( '.oversio-subject-tab' );
+			const tabs = document.querySelectorAll( '.aafm-subject-tab' );
 			if ( ! tabs.length ) {
 				return;
 			}
@@ -262,7 +262,7 @@
 				} );
 				this.#rovingTabindex( list, tab );
 				document
-					.querySelectorAll( '.oversio-subject-panel[data-subject]' )
+					.querySelectorAll( '.aafm-subject-panel[data-subject]' )
 					.forEach( ( panel ) => {
 						panel.hidden = panel.dataset.subject !== subject;
 					} );
@@ -275,30 +275,30 @@
 
 		#bindOsTabs() {
 			// There are two independent OS-tab groups on the Connection tab: one inside
-			// .oversio-oauth-picker and one inside .oversio-app-password-fallback. Each click
+			// .aafm-oauth-picker and one inside .aafm-app-password-fallback. Each click
 			// must only affect the tabs and snippet blocks within its own group's container
 			// so the two pickers operate independently of one another.
-			const tabs = document.querySelectorAll( '.oversio-os-tab' );
+			const tabs = document.querySelectorAll( '.aafm-os-tab' );
 			if ( ! tabs.length ) {
 				return;
 			}
 
 			// The closest container that holds this tab's sibling tabs and snippet blocks.
-			// The OAuth OS tabs sit in .oversio-oauth-picker, but the OAuth snippet blocks live
-			// in the sibling .oversio-oauth-panels — both inside .oversio-oauth-card, so scope to
+			// The OAuth OS tabs sit in .aafm-oauth-picker, but the OAuth snippet blocks live
+			// in the sibling .aafm-oauth-panels — both inside .aafm-oauth-card, so scope to
 			// the card to reach the snippets while staying clear of the App-Password fallback
 			// (a sibling, not nested).
 			const containerOf = ( tab ) =>
-				tab.closest( '.oversio-oauth-card' ) ??
-				tab.closest( '.oversio-app-password-fallback' ) ??
-				tab.closest( '.oversio-card' ) ??
+				tab.closest( '.aafm-oauth-card' ) ??
+				tab.closest( '.aafm-app-password-fallback' ) ??
+				tab.closest( '.aafm-card' ) ??
 				document;
 
 			const activate = ( tab ) => {
 				const os = tab.dataset.os;
 				const container = containerOf( tab );
 				const siblings = Array.from(
-					container.querySelectorAll( '.oversio-os-tab' )
+					container.querySelectorAll( '.aafm-os-tab' )
 				);
 				// Update active state only for sibling tabs in the same container.
 				siblings.forEach( ( t ) => {
@@ -310,7 +310,7 @@
 				this.#rovingTabindex( siblings, tab );
 				// Toggle snippet visibility only within this container.
 				container
-					.querySelectorAll( '.oversio-snippet[data-os]' )
+					.querySelectorAll( '.aafm-snippet[data-os]' )
 					.forEach( ( box ) => {
 						box.hidden = box.dataset.os !== os;
 					} );
@@ -328,7 +328,7 @@
 				}
 				seen.add( container );
 				const group = Array.from(
-					container.querySelectorAll( '.oversio-os-tab' )
+					container.querySelectorAll( '.aafm-os-tab' )
 				);
 				const current =
 					group.find( ( t ) => t.classList.contains( 'is-active' ) ) ?? group[ 0 ];
@@ -363,10 +363,10 @@
 		}
 
 		#bindCopy() {
-			document.querySelectorAll( '.oversio-copy' ).forEach( ( btn ) => {
+			document.querySelectorAll( '.aafm-copy' ).forEach( ( btn ) => {
 				// Swap only the label so a leading SVG icon is preserved across the
 				// "Copied" flash; fall back to the button itself for icon-less buttons.
-				const label = btn.querySelector( '.oversio-copy-label' ) ?? btn;
+				const label = btn.querySelector( '.aafm-copy-label' ) ?? btn;
 				const original = label.textContent;
 				let revertTimer = null;
 				btn.addEventListener( 'click', async () => {
@@ -394,18 +394,18 @@
 		 * action would enable a section that holds a destructive ability, confirm first.
 		 */
 		#bindSectionToggles() {
-			const buttons = document.querySelectorAll( '.oversio-section-toggle-all' );
+			const buttons = document.querySelectorAll( '.aafm-section-toggle-all' );
 			buttons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
 					const subject = btn.dataset.subject;
 					const panel = document.querySelector(
-						`.oversio-subject-panel[data-subject="${ subject }"]`
+						`.aafm-subject-panel[data-subject="${ subject }"]`
 					);
 					if ( ! panel ) {
 						return;
 					}
 					const boxes = panel.querySelectorAll(
-						'input[type="checkbox"][name="oversio_abilities[]"]'
+						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
 					const enabling = Array.from( boxes ).some( ( b ) => ! b.checked );
 					if ( enabling && btn.dataset.hasDestructive === '1' ) {
@@ -431,19 +431,19 @@
 		 */
 		#bindIntegrationToggles() {
 			const buttons = document.querySelectorAll(
-				'.oversio-integration-toggle-all'
+				'.aafm-integration-toggle-all'
 			);
 			buttons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
 					const subject = btn.dataset.subject;
 					const card = document.querySelector(
-						`.oversio-integration-${ subject }`
+						`.aafm-integration-${ subject }`
 					);
 					if ( ! card ) {
 						return;
 					}
 					const boxes = card.querySelectorAll(
-						'input[type="checkbox"][name="oversio_abilities[]"]'
+						'input[type="checkbox"][name="aafm_abilities[]"]'
 					);
 					const enabling = Array.from( boxes ).some(
 						( b ) => ! b.checked
@@ -466,7 +466,7 @@
 
 		/**
 		 * Per-card "Search abilities" + All/Read Only/Write filter on the Integrations tab.
-		 * Scoped to each .oversio-integration-card: the search query and the chosen risk are
+		 * Scoped to each .aafm-integration-card: the search query and the chosen risk are
 		 * ANDed, and matching is done against each row's data-risk plus its textContent (label,
 		 * name, and hint are all server-rendered text, so reading textContent is safe). Hiding
 		 * is via the `hidden` attribute only — no markup is built from data, so there is no
@@ -474,15 +474,15 @@
 		 * still in the DOM). Filter controls never touch the form submit.
 		 */
 		#bindIntegrationFilters() {
-			const filters = document.querySelectorAll( '.oversio-integration-filter' );
+			const filters = document.querySelectorAll( '.aafm-integration-filter' );
 			filters.forEach( ( filter ) => {
-				const card = filter.closest( '.oversio-integration-card' );
+				const card = filter.closest( '.aafm-integration-card' );
 				if ( ! card ) {
 					return;
 				}
-				const search = filter.querySelector( '.oversio-integration-search' );
-				const riskButtons = filter.querySelectorAll( '.oversio-filter-btn' );
-				const rows = card.querySelectorAll( '.oversio-ability-row' );
+				const search = filter.querySelector( '.aafm-integration-search' );
+				const riskButtons = filter.querySelectorAll( '.aafm-filter-btn' );
+				const rows = card.querySelectorAll( '.aafm-ability-row' );
 
 				let query = '';
 				let risk = 'all';
@@ -525,35 +525,35 @@
 
 		/**
 		 * Save the Integrations tab's per-ability toggles. Reuses the same
-		 * oversio_save_abilities action and flat oversio_abilities[] contract as the
+		 * aafm_save_abilities action and flat aafm_abilities[] contract as the
 		 * Abilities tab; the stored option is one shared enabled-ability list.
 		 */
 		#bindSaveIntegrations() {
-			const form = document.querySelector( '#oversio-integrations-form' );
+			const form = document.querySelector( '#aafm-integrations-form' );
 			if ( ! form ) {
 				return;
 			}
 			form.addEventListener( 'submit', async ( e ) => {
 				e.preventDefault();
-				const status = form.querySelector( '.oversio-save-status' );
+				const status = form.querySelector( '.aafm-save-status' );
 				const enabled = [
 					...form.querySelectorAll(
-						'input[name="oversio_abilities[]"]:checked'
+						'input[name="aafm_abilities[]"]:checked'
 					),
 				].map( ( i ) => i.value );
 
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_abilities' );
+				body.append( 'action', 'aafm_save_abilities' );
 				body.append( 'nonce', this.#nonce );
 				enabled.forEach( ( v ) =>
-					body.append( 'oversio_abilities[]', v )
+					body.append( 'aafm_abilities[]', v )
 				);
 				// Send the tab's scope (the integration subjects it owns) so the
 				// server merges only these and preserves every off-tab ability from
 				// the persisted option — no off-tab state is trusted from the client.
 				[
-					...form.querySelectorAll( 'input[name="oversio_scope[]"]' ),
-				].forEach( ( i ) => body.append( 'oversio_scope[]', i.value ) );
+					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
+				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
@@ -578,21 +578,21 @@
 		}
 
 		#bindSaveAbilities() {
-			const form = document.querySelector( '#oversio-abilities-form' );
+			const form = document.querySelector( '#aafm-abilities-form' );
 			if ( ! form ) {
 				return;
 			}
 			form.addEventListener( 'submit', async ( e ) => {
 				e.preventDefault();
-				const status = form.querySelector( '.oversio-save-status' );
+				const status = form.querySelector( '.aafm-save-status' );
 				const enabled = [
-					...form.querySelectorAll( 'input[name="oversio_abilities[]"]:checked' ),
+					...form.querySelectorAll( 'input[name="aafm_abilities[]"]:checked' ),
 				].map( ( i ) => i.value );
 
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_abilities' );
+				body.append( 'action', 'aafm_save_abilities' );
 				body.append( 'nonce', this.#nonce );
-				enabled.forEach( ( v ) => body.append( 'oversio_abilities[]', v ) );
+				enabled.forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
@@ -617,21 +617,21 @@
 		}
 
 		#bindSavePostTypes() {
-			const btn = document.querySelector( '#oversio-post-types-save' );
-			const root = document.querySelector( '#oversio-post-types-form' );
+			const btn = document.querySelector( '#aafm-post-types-save' );
+			const root = document.querySelector( '#aafm-post-types-form' );
 			if ( ! btn || ! root ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.oversio-post-types-status' );
+				const status = root.querySelector( '.aafm-post-types-status' );
 				const types = [
-					...root.querySelectorAll( 'input[name="oversio_post_types[]"]:checked' ),
+					...root.querySelectorAll( 'input[name="aafm_post_types[]"]:checked' ),
 				].map( ( i ) => i.value );
 
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_post_types' );
+				body.append( 'action', 'aafm_save_post_types' );
 				body.append( 'nonce', this.#nonce );
-				types.forEach( ( v ) => body.append( 'oversio_post_types[]', v ) );
+				types.forEach( ( v ) => body.append( 'aafm_post_types[]', v ) );
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
@@ -655,8 +655,8 @@
 			} );
 		}
 		#bindSaveMetaKeys() {
-			const btn = document.querySelector( '#oversio-meta-keys-save' );
-			const root = document.querySelector( '#oversio-meta-keys-form' );
+			const btn = document.querySelector( '#aafm-meta-keys-save' );
+			const root = document.querySelector( '#aafm-meta-keys-form' );
 			if ( ! btn || ! root ) {
 				return;
 			}
@@ -666,14 +666,14 @@
 			// catch{} while the exposed-list handler still printed "Saved" — so a dropped deny
 			// list read as success. One request + one status assignment removes that gap.
 			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.oversio-meta-keys-status' );
-				const textarea = root.querySelector( 'textarea[name="oversio_meta_keys"]' );
-				const deny = root.querySelector( 'textarea[name="oversio_deny_meta_keys"]' );
+				const status = root.querySelector( '.aafm-meta-keys-status' );
+				const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
+				const deny = root.querySelector( 'textarea[name="aafm_deny_meta_keys"]' );
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_meta_keys' );
+				body.append( 'action', 'aafm_save_meta_keys' );
 				body.append( 'nonce', this.#nonce );
-				body.append( 'oversio_meta_keys', textarea?.value ?? '' );
-				body.append( 'oversio_deny_meta_keys', deny?.value ?? '' );
+				body.append( 'aafm_meta_keys', textarea?.value ?? '' );
+				body.append( 'aafm_deny_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -697,24 +697,24 @@
 		}
 
 		#bindSaveUserMetaKeys() {
-			const btn = document.querySelector( '#oversio-user-meta-keys-save' );
-			const root = document.querySelector( '#oversio-user-meta-keys-form' );
+			const btn = document.querySelector( '#aafm-user-meta-keys-save' );
+			const root = document.querySelector( '#aafm-user-meta-keys-form' );
 			if ( ! btn || ! root ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.oversio-user-meta-keys-status' );
+				const status = root.querySelector( '.aafm-user-meta-keys-status' );
 				const exposed = root.querySelector(
-					'textarea[name="oversio_exposed_user_meta_keys"]'
+					'textarea[name="aafm_exposed_user_meta_keys"]'
 				);
 				const deny = root.querySelector(
-					'textarea[name="oversio_denied_user_meta_keys"]'
+					'textarea[name="aafm_denied_user_meta_keys"]'
 				);
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_user_meta_keys' );
+				body.append( 'action', 'aafm_save_user_meta_keys' );
 				body.append( 'nonce', this.#nonce );
-				body.append( 'oversio_exposed_user_meta_keys', exposed?.value ?? '' );
-				body.append( 'oversio_denied_user_meta_keys', deny?.value ?? '' );
+				body.append( 'aafm_exposed_user_meta_keys', exposed?.value ?? '' );
+				body.append( 'aafm_denied_user_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -738,24 +738,24 @@
 		}
 
 		#bindSaveTermMetaKeys() {
-			const btn = document.querySelector( '#oversio-term-meta-keys-save' );
-			const root = document.querySelector( '#oversio-term-meta-keys-form' );
+			const btn = document.querySelector( '#aafm-term-meta-keys-save' );
+			const root = document.querySelector( '#aafm-term-meta-keys-form' );
 			if ( ! btn || ! root ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const status = root.querySelector( '.oversio-term-meta-keys-status' );
+				const status = root.querySelector( '.aafm-term-meta-keys-status' );
 				const exposed = root.querySelector(
-					'textarea[name="oversio_exposed_term_meta_keys"]'
+					'textarea[name="aafm_exposed_term_meta_keys"]'
 				);
 				const deny = root.querySelector(
-					'textarea[name="oversio_denied_term_meta_keys"]'
+					'textarea[name="aafm_denied_term_meta_keys"]'
 				);
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_term_meta_keys' );
+				body.append( 'action', 'aafm_save_term_meta_keys' );
 				body.append( 'nonce', this.#nonce );
-				body.append( 'oversio_exposed_term_meta_keys', exposed?.value ?? '' );
-				body.append( 'oversio_denied_term_meta_keys', deny?.value ?? '' );
+				body.append( 'aafm_exposed_term_meta_keys', exposed?.value ?? '' );
+				body.append( 'aafm_denied_term_meta_keys', deny?.value ?? '' );
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
 				}
@@ -779,37 +779,37 @@
 		}
 
 		#bindSaveSettings() {
-			const form = document.querySelector( '#oversio-settings-form' );
+			const form = document.querySelector( '#aafm-settings-form' );
 			if ( ! form ) {
 				return;
 			}
 			form.addEventListener( 'submit', async ( e ) => {
 				e.preventDefault();
-				const status = form.querySelector( '.oversio-save-status' );
-				const rate = form.querySelector( 'input[name="oversio_rate_limit_per_min"]' );
-				const title = form.querySelector( 'input[name="oversio_max_title_len"]' );
+				const status = form.querySelector( '.aafm-save-status' );
+				const rate = form.querySelector( 'input[name="aafm_rate_limit_per_min"]' );
+				const title = form.querySelector( 'input[name="aafm_max_title_len"]' );
 				const retention = form.querySelector(
-					'input[name="oversio_log_retention_days"]'
+					'input[name="aafm_log_retention_days"]'
 				);
-				const draft = form.querySelector( 'input[name="oversio_force_draft"]' );
+				const draft = form.querySelector( 'input[name="aafm_force_draft"]' );
 				const deleteOnUninstall = form.querySelector(
-					'input[name="oversio_delete_data_on_uninstall"]'
+					'input[name="aafm_delete_data_on_uninstall"]'
 				);
-				const allowlist = form.querySelector( 'textarea[name="oversio_ip_allowlist"]' );
+				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 
 				const body = new URLSearchParams();
-				body.append( 'action', 'oversio_save_settings' );
+				body.append( 'action', 'aafm_save_settings' );
 				body.append( 'nonce', this.#nonce );
-				body.append( 'oversio_rate_limit_per_min', rate?.value ?? '0' );
-				body.append( 'oversio_max_title_len', title?.value ?? '0' );
-				body.append( 'oversio_log_retention_days', retention?.value ?? '30' );
+				body.append( 'aafm_rate_limit_per_min', rate?.value ?? '0' );
+				body.append( 'aafm_max_title_len', title?.value ?? '0' );
+				body.append( 'aafm_log_retention_days', retention?.value ?? '30' );
 				if ( draft?.checked ) {
-					body.append( 'oversio_force_draft', '1' );
+					body.append( 'aafm_force_draft', '1' );
 				}
 				if ( deleteOnUninstall?.checked ) {
-					body.append( 'oversio_delete_data_on_uninstall', '1' );
+					body.append( 'aafm_delete_data_on_uninstall', '1' );
 				}
-				body.append( 'oversio_ip_allowlist', allowlist?.value ?? '' );
+				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );
@@ -833,9 +833,9 @@
 							'Could not save — your previous settings are still in effect.'
 						);
 					} else {
-						const dropped = Number( json.data?.oversio_ip_dropped ?? 0 );
-						const kept = Array.isArray( json.data?.oversio_ip_allowlist )
-							? json.data.oversio_ip_allowlist.length
+						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
+						const kept = Array.isArray( json.data?.aafm_ip_allowlist )
+							? json.data.aafm_ip_allowlist.length
 							: 0;
 						if ( dropped > 0 && kept === 0 ) {
 							// Every line was invalid: the list is now empty, which means allow-all.
@@ -858,19 +858,19 @@
 				}
 				// Reflect the cleaned allowlist so any dropped (invalid) lines visibly disappear.
 				// Assigned via .value (never innerHTML), so the server echo is never an HTML sink.
-				if ( json?.success && allowlist && typeof json.data?.oversio_ip_allowlist_text === 'string' ) {
-					allowlist.value = json.data.oversio_ip_allowlist_text;
+				if ( json?.success && allowlist && typeof json.data?.aafm_ip_allowlist_text === 'string' ) {
+					allowlist.value = json.data.aafm_ip_allowlist_text;
 				}
 			} );
 		}
 
 		#bindMetaChips() {
-			const root = document.querySelector( '#oversio-meta-keys-form' );
+			const root = document.querySelector( '#aafm-meta-keys-form' );
 			if ( ! root ) {
 				return;
 			}
-			const textarea = root.querySelector( 'textarea[name="oversio_meta_keys"]' );
-			root.querySelectorAll( '.oversio-meta-chip' ).forEach( ( chip ) => {
+			const textarea = root.querySelector( 'textarea[name="aafm_meta_keys"]' );
+			root.querySelectorAll( '.aafm-meta-chip' ).forEach( ( chip ) => {
 				chip.addEventListener( 'click', () => {
 					const key = chip.dataset.key ?? '';
 					if ( ! key || ! textarea ) {
@@ -892,17 +892,17 @@
 		}
 
 		#bindCreateUser() {
-			const btn = document.querySelector( '#oversio-create-user' );
+			const btn = document.querySelector( '#aafm-create-user' );
 			if ( ! btn ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const login = document.querySelector( '#oversio-agent-login' )?.value ?? '';
-				const status = document.querySelector( '.oversio-user-status' );
+				const login = document.querySelector( '#aafm-agent-login' )?.value ?? '';
+				const status = document.querySelector( '.aafm-user-status' );
 				if ( status ) {
 					status.textContent = this.#t( 'creating', 'Creating…' );
 				}
-				const json = await this.#post( 'oversio_create_agent_user', { login } );
+				const json = await this.#post( 'aafm_create_agent_user', { login } );
 				if ( ! status ) {
 					return;
 				}
@@ -933,16 +933,16 @@
 		}
 
 		#bindTestConnection() {
-			const btn = document.querySelector( '#oversio-test-connection' );
+			const btn = document.querySelector( '#aafm-test-connection' );
 			if ( ! btn ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const status = document.querySelector( '.oversio-test-status' );
+				const status = document.querySelector( '.aafm-test-status' );
 				if ( status ) {
 					status.textContent = this.#t( 'checking', 'Checking…' );
 				}
-				const json = await this.#post( 'oversio_test_connection' );
+				const json = await this.#post( 'aafm_test_connection' );
 				if ( ! status ) {
 					return;
 				}
@@ -973,13 +973,13 @@
 		}
 
 		#bindClearLog() {
-			const btn = document.querySelector( '#oversio-clear-log' );
+			const btn = document.querySelector( '#aafm-clear-log' );
 			if ( ! btn ) {
 				return;
 			}
 			btn.addEventListener( 'click', async () => {
-				const status = document.querySelector( '.oversio-clear-status' );
-				const json = await this.#post( 'oversio_clear_log' );
+				const status = document.querySelector( '.aafm-clear-status' );
+				const json = await this.#post( 'aafm_clear_log' );
 				if ( status ) {
 					status.textContent = json?.success
 						? this.#t( 'cleared', 'Cleared' )
@@ -988,11 +988,11 @@
 				if ( json?.success ) {
 					// Empty the table, reset the count, and collapse the pager to page 1 of 1.
 					this.#renderLogRows( [] );
-					const num = document.querySelector( '.oversio-count-num' );
+					const num = document.querySelector( '.aafm-count-num' );
 					if ( num ) {
 						num.textContent = '0';
 					}
-					const wrap = document.querySelector( '#oversio-log-table-wrap' );
+					const wrap = document.querySelector( '#aafm-log-table-wrap' );
 					if ( wrap ) {
 						wrap.dataset.page = '1';
 						wrap.dataset.totalPages = '1';
@@ -1006,21 +1006,21 @@
 		 * Wire the activity log's status filter (segmented buttons) and Prev/Next pager.
 		 *
 		 * Both are server-side: only one page of rows is ever in the DOM, so a filter or a
-		 * page change re-queries the oversio_get_log_page action and re-renders the tbody. The
-		 * table wrapper (#oversio-log-table-wrap) holds the current page/filter/total-pages as
+		 * page change re-queries the aafm_get_log_page action and re-renders the tbody. The
+		 * table wrapper (#aafm-log-table-wrap) holds the current page/filter/total-pages as
 		 * data-* state so this stays the single source of truth. Rows are built with the DOM
 		 * (textContent only), never innerHTML, so the response is never an HTML sink.
 		 */
 		#bindLogPaginationAndFilters() {
-			const wrap = document.querySelector( '#oversio-log-table-wrap' );
+			const wrap = document.querySelector( '#aafm-log-table-wrap' );
 			if ( ! wrap ) {
 				return;
 			}
 			const segButtons = document.querySelectorAll(
-				'.oversio-activity .oversio-seg-btn[data-filter]'
+				'.aafm-activity .aafm-seg-btn[data-filter]'
 			);
-			const prev = document.querySelector( '.oversio-pager-prev' );
-			const next = document.querySelector( '.oversio-pager-next' );
+			const prev = document.querySelector( '.aafm-pager-prev' );
+			const next = document.querySelector( '.aafm-pager-next' );
 
 			// In-flight guard. Rapid Next/filter clicks fire overlapping requests whose
 			// responses can arrive out of order; a stale page would then clobber the newest.
@@ -1030,11 +1030,11 @@
 
 			const load = async ( page, filter ) => {
 				const token = ++loadToken;
-				const pagerStatus = document.querySelector( '.oversio-pager-status' );
+				const pagerStatus = document.querySelector( '.aafm-pager-status' );
 				if ( pagerStatus ) {
 					pagerStatus.textContent = this.#t( 'loadingPage', 'Loading…' );
 				}
-				const json = await this.#post( 'oversio_get_log_page', {
+				const json = await this.#post( 'aafm_get_log_page', {
 					page,
 					filter,
 				} );
@@ -1059,7 +1059,7 @@
 					Number( data.page ) || 1,
 					Number( data.total_pages ) || 1
 				);
-				const num = document.querySelector( '.oversio-count-num' );
+				const num = document.querySelector( '.aafm-count-num' );
 				if ( num && typeof data.total === 'number' ) {
 					num.textContent = new Intl.NumberFormat().format( data.total );
 				}
@@ -1102,10 +1102,10 @@
 		 * Replace the activity table body with a page of rows, built cell-by-cell with
 		 * textContent (never innerHTML). An empty set renders a single "no activity" row.
 		 *
-		 * @param {Array<Object>} rows Row objects from the oversio_get_log_page response.
+		 * @param {Array<Object>} rows Row objects from the aafm_get_log_page response.
 		 */
 		#renderLogRows( rows ) {
-			const tbody = document.querySelector( '.oversio-log-table tbody' );
+			const tbody = document.querySelector( '.aafm-log-table tbody' );
 			if ( ! tbody ) {
 				return;
 			}
@@ -1138,7 +1138,7 @@
 				const pill = document.createElement( 'span' );
 				const variant = String( row.variant ?? 'neutral' );
 				const status = String( row.status ?? '' );
-				pill.className = `oversio-pill oversio-pill-${ variant } oversio-status oversio-status-${ status }`;
+				pill.className = `aafm-pill aafm-pill-${ variant } aafm-status aafm-status-${ status }`;
 				pill.textContent = status;
 				statusTd.append( pill );
 				tr.append( statusTd );
@@ -1155,7 +1155,7 @@
 		 * @param {number} totalPages Total number of pages (at least 1).
 		 */
 		#updatePager( page, totalPages ) {
-			const label = document.querySelector( '.oversio-pager-status' );
+			const label = document.querySelector( '.aafm-pager-status' );
 			if ( label ) {
 				const fmt = new Intl.NumberFormat();
 				label.textContent = this.#format(
@@ -1164,8 +1164,8 @@
 					fmt.format( totalPages )
 				);
 			}
-			const prev = document.querySelector( '.oversio-pager-prev' );
-			const next = document.querySelector( '.oversio-pager-next' );
+			const prev = document.querySelector( '.aafm-pager-prev' );
+			const next = document.querySelector( '.aafm-pager-next' );
 			if ( prev ) {
 				prev.disabled = page <= 1;
 			}
@@ -1176,7 +1176,7 @@
 
 		/**
 		 * Wire the OAuth management tables' Revoke buttons (Registered clients +
-		 * Active grants). Clicks are delegated off the .oversio-oauth-manage container so
+		 * Active grants). Clicks are delegated off the .aafm-oauth-manage container so
 		 * a single listener covers both tables. Each revoke confirms first, then POSTs
 		 * the nonce-checked AJAX action; on success the row is updated in place — the
 		 * client's Status pill flips to Revoked and its button is removed, and a grant
@@ -1184,13 +1184,13 @@
 		 * only, never innerHTML, so the response is never an HTML sink.
 		 */
 		#bindOauthRevoke() {
-			const root = document.querySelector( '.oversio-oauth-manage' );
+			const root = document.querySelector( '.aafm-oauth-manage' );
 			if ( ! root ) {
 				return;
 			}
 			root.addEventListener( 'click', async ( e ) => {
-				const clientBtn = e.target.closest( '.oversio-revoke-client' );
-				const grantBtn = e.target.closest( '.oversio-revoke-grant' );
+				const clientBtn = e.target.closest( '.aafm-revoke-client' );
+				const grantBtn = e.target.closest( '.aafm-revoke-grant' );
 				const btn = clientBtn ?? grantBtn;
 				if ( ! btn || ! root.contains( btn ) ) {
 					return;
@@ -1215,12 +1215,12 @@
 
 				let json;
 				if ( isGrant ) {
-					json = await this.#post( 'oversio_oauth_revoke_grant', {
+					json = await this.#post( 'aafm_oauth_revoke_grant', {
 						user_id: btn.dataset.userId ?? '',
 						client_id: clientId,
 					} );
 				} else {
-					json = await this.#post( 'oversio_oauth_revoke_client', {
+					json = await this.#post( 'aafm_oauth_revoke_client', {
 						client_id: clientId,
 					} );
 				}
@@ -1246,22 +1246,22 @@
 					row.remove();
 				} else {
 					// The client and all its tokens are revoked: its active-token count is now 0.
-					const tokensCell = row.querySelector( '.oversio-client-tokens' );
+					const tokensCell = row.querySelector( '.aafm-client-tokens' );
 					if ( tokensCell ) {
 						tokensCell.textContent = '0';
 					}
 					// Flip the Status pill to Revoked and replace the button with plain text.
-					const pill = row.querySelector( '.oversio-status-cell .oversio-pill' );
+					const pill = row.querySelector( '.aafm-status-cell .aafm-pill' );
 					if ( pill ) {
-						pill.classList.remove( 'oversio-pill-success' );
-						pill.classList.add( 'oversio-pill-neutral' );
+						pill.classList.remove( 'aafm-pill-success' );
+						pill.classList.add( 'aafm-pill-neutral' );
 						pill.textContent = this.#t( 'statusRevoked', 'Revoked' );
 					}
 					const cell = btn.parentElement;
 					btn.remove();
 					if ( cell ) {
 						const note = document.createElement( 'span' );
-						note.className = 'oversio-muted';
+						note.className = 'aafm-muted';
 						note.textContent = this.#t( 'statusRevoked', 'Revoked' );
 						cell.append( note );
 					}
@@ -1278,7 +1278,7 @@
 			const clientRow = Array.from(
 				root.querySelectorAll( '[data-client-row]' )
 			).find( ( el ) => el.dataset.clientRow === clientId );
-			const cell = clientRow?.querySelector( '.oversio-client-tokens' );
+			const cell = clientRow?.querySelector( '.aafm-client-tokens' );
 			if ( ! cell ) {
 				return;
 			}
@@ -1288,11 +1288,11 @@
 		}
 
 		#bindResetPlugin() {
-			const btn = document.querySelector( '#oversio-reset-plugin' );
+			const btn = document.querySelector( '#aafm-reset-plugin' );
 			if ( ! btn ) {
 				return;
 			}
-			const status = document.querySelector( '.oversio-reset-status' );
+			const status = document.querySelector( '.aafm-reset-status' );
 			btn.addEventListener( 'click', async () => {
 				// Destructive + irreversible: require an explicit confirmation first.
 				if ( ! window.confirm( this.#t( 'resetConfirm', 'Reset the plugin to defaults? This cannot be undone.' ) ) ) {
@@ -1302,7 +1302,7 @@
 				if ( status ) {
 					status.textContent = this.#t( 'resetWorking', 'Resetting…' );
 				}
-				const json = await this.#post( 'oversio_reset_plugin' );
+				const json = await this.#post( 'aafm_reset_plugin' );
 				if ( json?.success ) {
 					if ( status ) {
 						status.textContent = this.#t( 'resetDone', 'Reset. Reloading…' );
@@ -1319,5 +1319,5 @@
 		}
 	}
 
-	document.addEventListener( 'DOMContentLoaded', () => new OversioAdmin() );
+	document.addEventListener( 'DOMContentLoaded', () => new AafmAdmin() );
 } )();

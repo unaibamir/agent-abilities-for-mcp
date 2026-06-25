@@ -19,14 +19,14 @@
  * trash-bypass flag in our source — wp_delete_post() is called with no second argument, which
  * deletes the trash-less nav_menu_item directly without matching the banned ,true pattern.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_menus_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_menus_definitions' );
 
 /**
  * Contribute the nav-menu read definitions to the registry.
@@ -34,78 +34,78 @@ add_filter( 'oversio_abilities_registry', 'oversio_register_menus_definitions' )
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_menus_definitions( array $registry ): array {
-	$registry['oversio/list-menus']       = array(
-		'label'        => __( 'List menus', 'oversio-agent-abilities' ),
-		'description'  => __( 'Lists the navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+function aafm_register_menus_definitions( array $registry ): array {
+	$registry['aafm/list-menus']       = array(
+		'label'        => __( 'List menus', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists the navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_list_menus',
+		'args_builder' => 'aafm_args_list_menus',
 	);
-	$registry['oversio/get-menu']         = array(
-		'label'        => __( 'Get menu', 'oversio-agent-abilities' ),
-		'description'  => __( 'Reads one navigation menu by id: its name, slug, and item count. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/get-menu']         = array(
+		'label'        => __( 'Get menu', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reads one navigation menu by id: its name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_get_menu',
+		'args_builder' => 'aafm_args_get_menu',
 	);
-	$registry['oversio/list-menu-items']  = array(
-		'label'        => __( 'List menu items', 'oversio-agent-abilities' ),
-		'description'  => __( 'Lists the items in a navigation menu by id: each item id, title, URL, what it links to, and its place in the order. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/list-menu-items']  = array(
+		'label'        => __( 'List menu items', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists the items in a navigation menu by id: each item id, title, URL, what it links to, and its place in the order. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_list_menu_items',
+		'args_builder' => 'aafm_args_list_menu_items',
 	);
-	$registry['oversio/create-menu']      = array(
-		'label'        => __( 'Create menu', 'oversio-agent-abilities' ),
-		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/create-menu']      = array(
+		'label'        => __( 'Create menu', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_create_menu',
+		'args_builder' => 'aafm_args_create_menu',
 	);
-	$registry['oversio/update-menu']      = array(
-		'label'        => __( 'Update menu', 'oversio-agent-abilities' ),
-		'description'  => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/update-menu']      = array(
+		'label'        => __( 'Update menu', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_update_menu',
+		'args_builder' => 'aafm_args_update_menu',
 	);
-	$registry['oversio/delete-menu']      = array(
-		'label'        => __( 'Delete menu', 'oversio-agent-abilities' ),
-		'description'  => __( 'Permanently deletes a navigation menu and all of its items. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/delete-menu']      = array(
+		'label'        => __( 'Delete menu', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently deletes a navigation menu and all of its items. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_delete_menu',
+		'args_builder' => 'aafm_args_delete_menu',
 	);
-	$registry['oversio/create-menu-item'] = array(
-		'label'        => __( 'Create menu item', 'oversio-agent-abilities' ),
-		'description'  => __( 'Adds an item (link) to a navigation menu. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/create-menu-item'] = array(
+		'label'        => __( 'Create menu item', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Adds an item (link) to a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_create_menu_item',
+		'args_builder' => 'aafm_args_create_menu_item',
 	);
-	$registry['oversio/update-menu-item'] = array(
-		'label'        => __( 'Update menu item', 'oversio-agent-abilities' ),
-		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'oversio-agent-abilities' ),
+	$registry['aafm/update-menu-item'] = array(
+		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_update_menu_item',
+		'args_builder' => 'aafm_args_update_menu_item',
 	);
-	$registry['oversio/delete-menu-item'] = array(
-		'label'        => __( 'Delete menu item', 'oversio-agent-abilities' ),
-		'description'  => __( 'Permanently removes one item from a navigation menu. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/delete-menu-item'] = array(
+		'label'        => __( 'Delete menu item', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently removes one item from a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_delete_menu_item',
+		'args_builder' => 'aafm_args_delete_menu_item',
 	);
 	return $registry;
 }
@@ -120,20 +120,20 @@ function oversio_register_menus_definitions( array $registry ): array {
  *
  * @return bool
  */
-function oversio_perm_edit_theme_options(): bool {
+function aafm_perm_edit_theme_options(): bool {
 	return current_user_can( 'edit_theme_options' );
 }
 
 /**
- * Args for oversio/list-menus.
+ * Args for aafm/list-menus.
  *
  * @return array<string,mixed>
  */
-function oversio_args_list_menus(): array {
+function aafm_args_list_menus(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/list-menus' ),
-		'description'         => oversio_ability_description( 'oversio/list-menus' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/list-menus' ),
+		'description'         => aafm_ability_description( 'aafm/list-menus' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -146,13 +146,13 @@ function oversio_args_list_menus(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => oversio_menu_output_properties(),
+						'properties' => aafm_menu_output_properties(),
 					),
 				),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_list_menus',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_list_menus',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -164,30 +164,30 @@ function oversio_args_list_menus(): array {
 }
 
 /**
- * Execute oversio/list-menus.
+ * Execute aafm/list-menus.
  *
  * Returns every registered nav menu, redacted to id/name/slug/count.
  *
  * @return array<string,mixed>
  */
-function oversio_exec_list_menus(): array {
+function aafm_exec_list_menus(): array {
 	$menus = array();
 	foreach ( wp_get_nav_menus() as $menu ) {
-		$menus[] = oversio_redact_menu( $menu );
+		$menus[] = aafm_redact_menu( $menu );
 	}
 	return array( 'menus' => $menus );
 }
 
 /**
- * Args for oversio/get-menu.
+ * Args for aafm/get-menu.
  *
  * @return array<string,mixed>
  */
-function oversio_args_get_menu(): array {
+function aafm_args_get_menu(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/get-menu' ),
-		'description'         => oversio_ability_description( 'oversio/get-menu' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/get-menu' ),
+		'description'         => aafm_ability_description( 'aafm/get-menu' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -205,8 +205,8 @@ function oversio_args_get_menu(): array {
 				'count' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_get_menu',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_get_menu',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -218,7 +218,7 @@ function oversio_args_get_menu(): array {
 }
 
 /**
- * Execute oversio/get-menu.
+ * Execute aafm/get-menu.
  *
  * Resolves the menu by id; an unknown id (or a term that is not a nav menu) returns a
  * generic error rather than leaking which ids exist.
@@ -226,24 +226,24 @@ function oversio_args_get_menu(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_get_menu( array $input ) {
+function aafm_exec_get_menu( array $input ) {
 	$menu = wp_get_nav_menu_object( (int) $input['menu_id'] );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_redact_menu( $menu );
+	return aafm_redact_menu( $menu );
 }
 
 /**
- * Args for oversio/list-menu-items.
+ * Args for aafm/list-menu-items.
  *
  * @return array<string,mixed>
  */
-function oversio_args_list_menu_items(): array {
+function aafm_args_list_menu_items(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/list-menu-items' ),
-		'description'         => oversio_ability_description( 'oversio/list-menu-items' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/list-menu-items' ),
+		'description'         => aafm_ability_description( 'aafm/list-menu-items' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -259,13 +259,13 @@ function oversio_args_list_menu_items(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => oversio_menu_item_output_properties(),
+						'properties' => aafm_menu_item_output_properties(),
 					),
 				),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_list_menu_items',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_list_menu_items',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -277,7 +277,7 @@ function oversio_args_list_menu_items(): array {
 }
 
 /**
- * Execute oversio/list-menu-items.
+ * Execute aafm/list-menu-items.
  *
  * Returns the items in the menu, each redacted to the menu-relevant fields. An unknown or
  * empty menu yields an empty items list — wp_get_nav_menu_items() returns false for a bad id,
@@ -286,31 +286,31 @@ function oversio_args_list_menu_items(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function oversio_exec_list_menu_items( array $input ): array {
+function aafm_exec_list_menu_items( array $input ): array {
 	$raw = wp_get_nav_menu_items( (int) $input['menu_id'] );
 	if ( ! is_array( $raw ) ) {
 		$raw = array();
 	}
 	$items = array();
 	foreach ( $raw as $item ) {
-		$items[] = oversio_redact_menu_item( $item );
+		$items[] = aafm_redact_menu_item( $item );
 	}
 	return array( 'items' => $items );
 }
 
 /**
- * Args for oversio/create-menu.
+ * Args for aafm/create-menu.
  *
  * Closed schema: the only input is the menu name. There is no taxonomy/term/parent field, so a
  * smuggled key (e.g. taxonomy) is rejected before execute ever runs.
  *
  * @return array<string,mixed>
  */
-function oversio_args_create_menu(): array {
+function aafm_args_create_menu(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/create-menu' ),
-		'description'         => oversio_ability_description( 'oversio/create-menu' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/create-menu' ),
+		'description'         => aafm_ability_description( 'aafm/create-menu' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -321,10 +321,10 @@ function oversio_args_create_menu(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_menu_output_properties(),
+			'properties' => aafm_menu_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_create_menu',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_create_menu',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -335,7 +335,7 @@ function oversio_args_create_menu(): array {
 }
 
 /**
- * Execute oversio/create-menu.
+ * Execute aafm/create-menu.
  *
  * Creates a new nav menu via the core nav-menu API (id 0 means "create"). The name is
  * sanitized; a duplicate name or other failure returns a generic error. The created menu is
@@ -344,31 +344,31 @@ function oversio_args_create_menu(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_create_menu( array $input ) {
+function aafm_exec_create_menu( array $input ) {
 	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
 	$id   = wp_update_nav_menu_object( 0, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$menu = wp_get_nav_menu_object( (int) $id );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_redact_menu( $menu );
+	return aafm_redact_menu( $menu );
 }
 
 /**
- * Args for oversio/update-menu.
+ * Args for aafm/update-menu.
  *
  * Closed schema: a menu id plus the new name. No other menu field is writable here.
  *
  * @return array<string,mixed>
  */
-function oversio_args_update_menu(): array {
+function aafm_args_update_menu(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/update-menu' ),
-		'description'         => oversio_ability_description( 'oversio/update-menu' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/update-menu' ),
+		'description'         => aafm_ability_description( 'aafm/update-menu' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -380,10 +380,10 @@ function oversio_args_update_menu(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_menu_output_properties(),
+			'properties' => aafm_menu_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_update_menu',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_update_menu',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -394,7 +394,7 @@ function oversio_args_update_menu(): array {
 }
 
 /**
- * Execute oversio/update-menu.
+ * Execute aafm/update-menu.
  *
  * Resolves the menu by id first (an unknown id, or a term that is not a nav menu, returns a
  * generic error rather than leaking which ids exist), then renames it. The renamed menu is
@@ -403,37 +403,37 @@ function oversio_args_update_menu(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_update_menu( array $input ) {
+function aafm_exec_update_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$menu    = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$name   = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
 	$result = wp_update_nav_menu_object( $menu_id, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$updated = wp_get_nav_menu_object( $menu_id );
 	if ( ! $updated instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_redact_menu( $updated );
+	return aafm_redact_menu( $updated );
 }
 
 /**
- * Args for oversio/delete-menu.
+ * Args for aafm/delete-menu.
  *
  * Closed schema: just the menu id. This is the disclosed destructive menu ability — deleting a
  * menu permanently removes it AND every item inside it (nav menus have no Trash).
  *
  * @return array<string,mixed>
  */
-function oversio_args_delete_menu(): array {
+function aafm_args_delete_menu(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/delete-menu' ),
-		'description'         => oversio_ability_description( 'oversio/delete-menu' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/delete-menu' ),
+		'description'         => aafm_ability_description( 'aafm/delete-menu' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -449,8 +449,8 @@ function oversio_args_delete_menu(): array {
 				'deleted' => array( 'type' => 'boolean' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_delete_menu',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_delete_menu',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -461,7 +461,7 @@ function oversio_args_delete_menu(): array {
 }
 
 /**
- * Execute oversio/delete-menu.
+ * Execute aafm/delete-menu.
  *
  * Resolves the menu by id (unknown id → generic error), then permanently deletes it with the
  * core nav-menu wrapper, which removes the menu term and all of its items. Returns the id and a
@@ -471,15 +471,15 @@ function oversio_args_delete_menu(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_delete_menu( array $input ) {
+function aafm_exec_delete_menu( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$menu    = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$result = wp_delete_nav_menu( $menu_id );
 	if ( is_wp_error( $result ) || true !== $result ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	return array(
 		'id'      => $menu_id,
@@ -488,7 +488,7 @@ function oversio_exec_delete_menu( array $input ) {
 }
 
 /**
- * Args for oversio/create-menu-item.
+ * Args for aafm/create-menu-item.
  *
  * Closed schema: a menu id and a title (both required), plus optional url/parent/object_id/type
  * for a link or an object reference. The title is sanitized as plain text and the url through
@@ -496,11 +496,11 @@ function oversio_exec_delete_menu( array $input ) {
  *
  * @return array<string,mixed>
  */
-function oversio_args_create_menu_item(): array {
+function aafm_args_create_menu_item(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/create-menu-item' ),
-		'description'         => oversio_ability_description( 'oversio/create-menu-item' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/create-menu-item' ),
+		'description'         => aafm_ability_description( 'aafm/create-menu-item' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -516,10 +516,10 @@ function oversio_args_create_menu_item(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_menu_item_output_properties(),
+			'properties' => aafm_menu_item_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_create_menu_item',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_create_menu_item',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -530,7 +530,7 @@ function oversio_args_create_menu_item(): array {
 }
 
 /**
- * Execute oversio/create-menu-item.
+ * Execute aafm/create-menu-item.
  *
  * Resolves the target menu first (unknown id → generic error), then adds a published item to it
  * via the core nav-menu API (item id 0 means "create"). The title is sanitized as plain text and
@@ -539,11 +539,11 @@ function oversio_args_create_menu_item(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_create_menu_item( array $input ) {
+function aafm_exec_create_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$menu    = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
 	$args = array(
@@ -565,30 +565,30 @@ function oversio_exec_create_menu_item( array $input ) {
 
 	$item_id = wp_update_nav_menu_item( $menu_id, 0, $args );
 	if ( is_wp_error( $item_id ) || 0 === (int) $item_id ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	// Re-read the saved item to return the canonical redacted shape. If the re-fetch comes back
 	// null (a hook deleted it, or a cache race), surface a generic error rather than redacting
 	// null into an empty object that would violate the menu-item output schema (B9).
-	$saved = oversio_menu_item_by_id( $menu_id, (int) $item_id );
+	$saved = aafm_menu_item_by_id( $menu_id, (int) $item_id );
 	if ( null === $saved ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_redact_menu_item( $saved );
+	return aafm_redact_menu_item( $saved );
 }
 
 /**
- * Args for oversio/update-menu-item.
+ * Args for aafm/update-menu-item.
  *
  * Closed schema: the menu id and item id (both required) plus optional title/url to change.
  *
  * @return array<string,mixed>
  */
-function oversio_args_update_menu_item(): array {
+function aafm_args_update_menu_item(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/update-menu-item' ),
-		'description'         => oversio_ability_description( 'oversio/update-menu-item' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/update-menu-item' ),
+		'description'         => aafm_ability_description( 'aafm/update-menu-item' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -602,10 +602,10 @@ function oversio_args_update_menu_item(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_menu_item_output_properties(),
+			'properties' => aafm_menu_item_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_update_menu_item',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_update_menu_item',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -616,7 +616,7 @@ function oversio_args_update_menu_item(): array {
 }
 
 /**
- * Execute oversio/update-menu-item.
+ * Execute aafm/update-menu-item.
  *
  * Resolves both the menu and the item by id (an unknown menu, or an item that is not in that
  * menu, returns a generic error), then applies the title/url edit through the core API. The
@@ -626,17 +626,17 @@ function oversio_args_update_menu_item(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_update_menu_item( array $input ) {
+function aafm_exec_update_menu_item( array $input ) {
 	$menu_id = (int) ( $input['menu_id'] ?? 0 );
 	$item_id = (int) ( $input['item_id'] ?? 0 );
 
 	$menu = wp_get_nav_menu_object( $menu_id );
 	if ( ! $menu instanceof WP_Term ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	$existing = oversio_menu_item_by_id( $menu_id, $item_id );
+	$existing = aafm_menu_item_by_id( $menu_id, $item_id );
 	if ( null === $existing ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
 	$args = array();
@@ -649,30 +649,30 @@ function oversio_exec_update_menu_item( array $input ) {
 
 	$result = wp_update_nav_menu_item( $menu_id, $item_id, $args );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	// Same B9 guard as create-menu-item: a null re-fetch must not be redacted into an empty
 	// object that violates the output schema.
-	$saved = oversio_menu_item_by_id( $menu_id, $item_id );
+	$saved = aafm_menu_item_by_id( $menu_id, $item_id );
 	if ( null === $saved ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_redact_menu_item( $saved );
+	return aafm_redact_menu_item( $saved );
 }
 
 /**
- * Args for oversio/delete-menu-item.
+ * Args for aafm/delete-menu-item.
  *
  * Closed schema: just the item id. This is a disclosed destructive write — a menu item has no
  * Trash, so removing it is permanent.
  *
  * @return array<string,mixed>
  */
-function oversio_args_delete_menu_item(): array {
+function aafm_args_delete_menu_item(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/delete-menu-item' ),
-		'description'         => oversio_ability_description( 'oversio/delete-menu-item' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/delete-menu-item' ),
+		'description'         => aafm_ability_description( 'aafm/delete-menu-item' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -688,8 +688,8 @@ function oversio_args_delete_menu_item(): array {
 				'deleted' => array( 'type' => 'boolean' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_delete_menu_item',
-		'permission_callback' => 'oversio_perm_edit_theme_options',
+		'execute_callback'    => 'aafm_exec_delete_menu_item',
+		'permission_callback' => 'aafm_perm_edit_theme_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -700,7 +700,7 @@ function oversio_args_delete_menu_item(): array {
 }
 
 /**
- * Execute oversio/delete-menu-item.
+ * Execute aafm/delete-menu-item.
  *
  * Confirms the id is a nav_menu_item post (so this cannot be steered into deleting an arbitrary
  * post type), then removes it. A nav_menu_item has no Trash, so a plain wp_delete_post() call
@@ -711,15 +711,15 @@ function oversio_args_delete_menu_item(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_delete_menu_item( array $input ) {
+function aafm_exec_delete_menu_item( array $input ) {
 	$item_id = (int) ( $input['item_id'] ?? 0 );
 	$post    = get_post( $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	wp_delete_post( $item_id );
 	if ( null !== get_post( $item_id ) ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	return array(
 		'id'      => $item_id,
@@ -739,7 +739,7 @@ function oversio_exec_delete_menu_item( array $input ) {
  * @param int $item_id Menu item (nav_menu_item post) id.
  * @return object|null The decorated nav menu item object, or null.
  */
-function oversio_menu_item_by_id( int $menu_id, int $item_id ) {
+function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
 	$items = wp_get_nav_menu_items( $menu_id );
 	if ( ! is_array( $items ) ) {
 		return null;

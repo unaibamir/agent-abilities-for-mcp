@@ -44,7 +44,7 @@ jobs:
         id: rel
         run: |
           set -euo pipefail
-          VERSION="$(grep -E '^\s*\*\s*Version:' oversio-agent-abilities.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          VERSION="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           # Publish only when this is a fresh, prepared release: no tag yet AND the
           # changelog block for this version is already in readme.txt. This fires
@@ -100,15 +100,15 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           mkdir -p build
           # git archive honors .gitattributes export-ignore, so dev files stay out.
-          git archive --format=zip --prefix=oversio-agent-abilities/ \
+          git archive --format=zip --prefix=agent-abilities-for-mcp/ \
             "${{ steps.rel.outputs.version }}" \
-            -o "build/oversio-agent-abilities-${{ steps.rel.outputs.version }}.zip"
+            -o "build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip"
 
       - name: Deploy to WordPress.org
         if: ${{ steps.rel.outputs.skip != 'true' && env.SVN_PASSWORD != '' }}
         uses: 10up/action-wordpress-plugin-deploy@stable
         env:
-          SLUG: oversio-agent-abilities
+          SLUG: agent-abilities-for-mcp
           VERSION: ${{ steps.rel.outputs.version }}
         with:
           generate-zip: false
@@ -120,6 +120,6 @@ jobs:
           tag_name: ${{ steps.rel.outputs.version }}
           name: ${{ steps.rel.outputs.version }}
           body_path: release-notes.md
-          files: build/oversio-agent-abilities-${{ steps.rel.outputs.version }}.zip
+          files: build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

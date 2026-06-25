@@ -2,7 +2,7 @@
 /**
  * OAuth 2.1 authorization endpoint and consent flow.
  *
- * Served off `init` at ?oversio_oauth=authorize. The handler enforces HTTPS, rate
+ * Served off `init` at ?aafm_oauth=authorize. The handler enforces HTTPS, rate
  * limiting, login, and a capability gate, then validates the request. On GET it
  * either mints a code immediately (prior consent) or renders the consent screen; on
  * POST it verifies the nonce, re-validates everything, and records consent before
@@ -14,7 +14,7 @@
  * client_id/redirect_uri (or a local authorization failure such as a capability or
  * nonce error) renders a local error page instead of redirecting anywhere.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -25,17 +25,17 @@ defined( 'ABSPATH' ) || exit;
  * Whether a validation WP_Error may be handed back to the client's redirect_uri.
  *
  * "Local" errors (unknown client, unregistered redirect_uri) must never redirect —
- * the redirect target is itself untrusted. They carry the 'oversio_local' error-data
+ * the redirect target is itself untrusted. They carry the 'aafm_local' error-data
  * flag and render a local page. Every other validation error is a proper OAuth error
  * that is safe to return to the (already-validated) redirect_uri.
  *
  * @param \WP_Error $error The validation error.
  * @return bool True when the error may be redirected back to the client.
  */
-function oversio_oauth_error_is_redirectable( WP_Error $error ): bool {
+function aafm_oauth_error_is_redirectable( WP_Error $error ): bool {
 	$data = $error->get_error_data();
 
-	if ( is_array( $data ) && ! empty( $data['oversio_local'] ) ) {
+	if ( is_array( $data ) && ! empty( $data['aafm_local'] ) ) {
 		return false;
 	}
 
@@ -49,8 +49,8 @@ function oversio_oauth_error_is_redirectable( WP_Error $error ): bool {
  * @param string $message Human-readable message.
  * @return \WP_Error
  */
-function oversio_oauth_local_error( string $code, string $message ): WP_Error {
-	return new WP_Error( $code, $message, array( 'oversio_local' => true ) );
+function aafm_oauth_local_error( string $code, string $message ): WP_Error {
+	return new WP_Error( $code, $message, array( 'aafm_local' => true ) );
 }
 
 /**
@@ -59,7 +59,7 @@ function oversio_oauth_local_error( string $code, string $message ): WP_Error {
  * @param string $client_id The public client identifier.
  * @return array<string,mixed>|null The client row, or null when missing/inactive.
  */
-function oversio_oauth_get_active_client( string $client_id ): ?array {
+function aafm_oauth_get_active_client( string $client_id ): ?array {
 	if ( '' === $client_id ) {
 		return null;
 	}
@@ -69,7 +69,7 @@ function oversio_oauth_get_active_client( string $client_id ): ?array {
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT * FROM {$wpdb->prefix}oversio_oauth_clients WHERE client_id = %s AND is_active = 1",
+			"SELECT * FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s AND is_active = 1",
 			$client_id
 		),
 		ARRAY_A
@@ -83,14 +83,14 @@ function oversio_oauth_get_active_client( string $client_id ): ?array {
  *
  * Returns a normalized param set (with `resource` defaulted to the MCP endpoint) on
  * success, or a WP_Error on failure. Local errors (bad client / unregistered
- * redirect_uri) are flagged non-redirectable via oversio_oauth_local_error(); every
+ * redirect_uri) are flagged non-redirectable via aafm_oauth_local_error(); every
  * other failure is a redirectable OAuth error. The order matters: client_id and
  * redirect_uri are resolved FIRST so an open-redirect can never seed a later error.
  *
  * @param array<string,mixed> $params Raw, already-sanitized request parameters.
  * @return array<string,string>|\WP_Error Normalized params, or a validation error.
  */
-function oversio_oauth_validate_authorize_params( array $params ) {
+function aafm_oauth_validate_authorize_params( array $params ) {
 	$response_type = isset( $params['response_type'] ) ? (string) $params['response_type'] : '';
 	$client_id     = isset( $params['client_id'] ) ? (string) $params['client_id'] : '';
 	$redirect_uri  = isset( $params['redirect_uri'] ) ? (string) $params['redirect_uri'] : '';
@@ -101,11 +101,11 @@ function oversio_oauth_validate_authorize_params( array $params ) {
 	$scope         = isset( $params['scope'] ) ? (string) $params['scope'] : '';
 
 	// 1. Resolve the client. Unknown/inactive => local error (never redirect).
-	$client = oversio_oauth_get_active_client( $client_id );
+	$client = aafm_oauth_get_active_client( $client_id );
 	if ( null === $client ) {
-		return oversio_oauth_local_error(
+		return aafm_oauth_local_error(
 			'invalid_client',
-			__( 'Unknown or inactive client.', 'oversio-agent-abilities' )
+			__( 'Unknown or inactive client.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -113,9 +113,9 @@ function oversio_oauth_validate_authorize_params( array $params ) {
 	// local error: we must not bounce to an unvalidated URI (open-redirect guard).
 	$registered = json_decode( isset( $client['redirect_uris'] ) ? (string) $client['redirect_uris'] : '[]', true );
 	if ( ! is_array( $registered ) || '' === $redirect_uri || ! in_array( $redirect_uri, $registered, true ) ) {
-		return oversio_oauth_local_error(
+		return aafm_oauth_local_error(
 			'invalid_redirect_uri',
-			__( 'The redirect URI does not match the client registration.', 'oversio-agent-abilities' )
+			__( 'The redirect URI does not match the client registration.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -125,7 +125,7 @@ function oversio_oauth_validate_authorize_params( array $params ) {
 	if ( 'code' !== $response_type ) {
 		return new WP_Error(
 			'unsupported_response_type',
-			__( 'Only the authorization code response type is supported.', 'oversio-agent-abilities' )
+			__( 'Only the authorization code response type is supported.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -133,25 +133,25 @@ function oversio_oauth_validate_authorize_params( array $params ) {
 	if ( 'S256' !== $method ) {
 		return new WP_Error(
 			'invalid_request',
-			__( 'PKCE with the S256 method is required.', 'oversio-agent-abilities' )
+			__( 'PKCE with the S256 method is required.', 'agent-abilities-for-mcp' )
 		);
 	}
-	if ( '' === $challenge || ! oversio_pkce_is_valid_challenge( $challenge ) ) {
+	if ( '' === $challenge || ! aafm_pkce_is_valid_challenge( $challenge ) ) {
 		return new WP_Error(
 			'invalid_request',
-			__( 'A valid PKCE code challenge is required.', 'oversio-agent-abilities' )
+			__( 'A valid PKCE code challenge is required.', 'agent-abilities-for-mcp' )
 		);
 	}
 
 	// 5. Resource indicator: absent => default to the endpoint; present => must equal
 	// the endpoint exactly so the minted code audience-matches the bearer validator.
-	$endpoint = oversio_endpoint_url();
+	$endpoint = aafm_endpoint_url();
 	if ( '' === $resource ) {
 		$resource = $endpoint;
 	} elseif ( ! hash_equals( $endpoint, $resource ) ) {
 		return new WP_Error(
 			'invalid_target',
-			__( 'The requested resource is not served by this server.', 'oversio-agent-abilities' )
+			__( 'The requested resource is not served by this server.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -175,7 +175,7 @@ function oversio_oauth_validate_authorize_params( array $params ) {
  * @param string $client_id The public client identifier.
  * @return bool
  */
-function oversio_oauth_has_consent( int $user_id, string $client_id ): bool {
+function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return false;
 	}
@@ -185,7 +185,7 @@ function oversio_oauth_has_consent( int $user_id, string $client_id ): bool {
 	$found = $wpdb->get_var(
 		$wpdb->prepare(
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT id FROM {$wpdb->prefix}oversio_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
+			"SELECT id FROM {$wpdb->prefix}aafm_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
 			$user_id,
 			$client_id
 		)
@@ -205,7 +205,7 @@ function oversio_oauth_has_consent( int $user_id, string $client_id ): bool {
  * @param string $client_id The public client identifier.
  * @return void
  */
-function oversio_oauth_record_consent( int $user_id, string $client_id ): void {
+function aafm_oauth_record_consent( int $user_id, string $client_id ): void {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return;
 	}
@@ -213,7 +213,7 @@ function oversio_oauth_record_consent( int $user_id, string $client_id ): void {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->replace(
-		$wpdb->prefix . 'oversio_oauth_consents',
+		$wpdb->prefix . 'aafm_oauth_consents',
 		array(
 			'wp_user_id' => $user_id,
 			'client_id'  => $client_id,
@@ -232,7 +232,7 @@ function oversio_oauth_record_consent( int $user_id, string $client_id ): void {
  *
  * @return array<string,string>
  */
-function oversio_oauth_read_authorize_params(): array {
+function aafm_oauth_read_authorize_params(): array {
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.NonceVerification.Recommended -- nonce is verified in the handler before any state change.
 	$source = ( isset( $_SERVER['REQUEST_METHOD'] ) && 'POST' === $_SERVER['REQUEST_METHOD'] ) ? $_POST : $_GET;
 
@@ -261,7 +261,7 @@ function oversio_oauth_read_authorize_params(): array {
  * @param string $redirect_uri The allowlist-validated client redirect URI.
  * @return string The origin, or '' when the URI lacks a scheme/host.
  */
-function oversio_oauth_redirect_uri_origin( string $redirect_uri ): string {
+function aafm_oauth_redirect_uri_origin( string $redirect_uri ): string {
 	$scheme = wp_parse_url( $redirect_uri, PHP_URL_SCHEME );
 	$host   = wp_parse_url( $redirect_uri, PHP_URL_HOST );
 
@@ -294,7 +294,7 @@ function oversio_oauth_redirect_uri_origin( string $redirect_uri ): string {
  *                                 allow in form-action, or '' for 'self' only.
  * @return string The CSP header value.
  */
-function oversio_oauth_consent_csp( string $redirect_origin = '' ): string {
+function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
 	$form_action = "form-action 'self'";
 	if ( '' !== $redirect_origin ) {
 		$form_action .= ' ' . $redirect_origin;
@@ -306,8 +306,8 @@ function oversio_oauth_consent_csp( string $redirect_origin = '' ): string {
 	// unstyled, so add exactly that one asset origin (never a wildcard) when it differs from
 	// the page origin; on a default install the two match and the directive stays 'self'.
 	$style_src    = "style-src 'self'";
-	$asset_origin = oversio_oauth_redirect_uri_origin( plugins_url( 'assets/consent.css', OVERSIO_PLUGIN_FILE ) );
-	$page_origin  = oversio_oauth_redirect_uri_origin( home_url() );
+	$asset_origin = aafm_oauth_redirect_uri_origin( plugins_url( 'assets/consent.css', AAFM_PLUGIN_FILE ) );
+	$page_origin  = aafm_oauth_redirect_uri_origin( home_url() );
 	if ( '' !== $asset_origin && $page_origin !== $asset_origin ) {
 		$style_src .= ' ' . $asset_origin;
 	}
@@ -320,15 +320,15 @@ function oversio_oauth_consent_csp( string $redirect_origin = '' ): string {
  *
  * No external scripts or styles, framing denied, and no referrer leakage of the
  * authorize URL (which carries the PKCE challenge and state). The form-action source
- * list is built by oversio_oauth_consent_csp(); see it for why the validated client origin
+ * list is built by aafm_oauth_consent_csp(); see it for why the validated client origin
  * is allowed there on the consent page but not on local error pages.
  *
  * @param string $redirect_origin Validated client origin to allow in form-action, or
  *                                 '' for 'self' only.
  * @return void
  */
-function oversio_oauth_send_consent_headers( string $redirect_origin = '' ): void {
-	header( 'Content-Security-Policy: ' . oversio_oauth_consent_csp( $redirect_origin ) );
+function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
+	header( 'Content-Security-Policy: ' . aafm_oauth_consent_csp( $redirect_origin ) );
 	header( 'X-Frame-Options: DENY' );
 	header( 'Referrer-Policy: no-referrer' );
 }
@@ -344,12 +344,12 @@ function oversio_oauth_send_consent_headers( string $redirect_origin = '' ): voi
  * @param string $message Human-readable message (will be escaped).
  * @return never
  */
-function oversio_oauth_render_local_error( int $status, string $message ): void {
-	oversio_oauth_send_consent_headers();
+function aafm_oauth_render_local_error( int $status, string $message ): void {
+	aafm_oauth_send_consent_headers();
 	status_header( $status );
 	header( 'Content-Type: text/html; charset=utf-8' );
 	echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
-		. esc_html__( 'Authorization error', 'oversio-agent-abilities' )
+		. esc_html__( 'Authorization error', 'agent-abilities-for-mcp' )
 		. '</title></head><body><p>'
 		. esc_html( $message )
 		. '</p></body></html>';
@@ -368,7 +368,7 @@ function oversio_oauth_render_local_error( int $status, string $message ): void 
  * @param string $state        The opaque state to echo back (may be empty).
  * @return void
  */
-function oversio_oauth_redirect_error( string $redirect_uri, string $error, string $state ): void {
+function aafm_oauth_redirect_error( string $redirect_uri, string $error, string $state ): void {
 	$args = array( 'error' => $error );
 	if ( '' !== $state ) {
 		$args['state'] = $state;
@@ -386,23 +386,23 @@ function oversio_oauth_redirect_error( string $redirect_uri, string $error, stri
  * @param int                  $user_id The approving user.
  * @return void
  */
-function oversio_oauth_issue_code_and_redirect( array $valid, int $user_id ): void {
-	$code = oversio_oauth_mint_code(
+function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void {
+	$code = aafm_oauth_mint_code(
 		array(
 			'client_id'      => $valid['client_id'],
 			'wp_user_id'     => $user_id,
 			'redirect_uri'   => $valid['redirect_uri'],
 			'code_challenge' => $valid['code_challenge'],
-			'resource'       => oversio_endpoint_url(),
+			'resource'       => aafm_endpoint_url(),
 		)
 	);
 
 	// A WP_Error (or empty) code means the mint/insert failed; do not redirect with a code that
 	// was never persisted.
 	if ( is_wp_error( $code ) || '' === $code ) {
-		oversio_oauth_render_local_error(
+		aafm_oauth_render_local_error(
 			500,
-			__( 'Could not issue an authorization code. Please try again.', 'oversio-agent-abilities' )
+			__( 'Could not issue an authorization code. Please try again.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -425,7 +425,7 @@ function oversio_oauth_issue_code_and_redirect( array $valid, int $user_id ): vo
  * @param array<string,string> $valid The normalized, validated authorize params.
  * @return void
  */
-function oversio_oauth_show_consent( array $valid ): void {
+function aafm_oauth_show_consent( array $valid ): void {
 	$user = wp_get_current_user();
 
 	$hidden_keys   = array( 'response_type', 'client_id', 'redirect_uri', 'code_challenge', 'code_challenge_method', 'state', 'scope', 'resource' );
@@ -442,8 +442,8 @@ function oversio_oauth_show_consent( array $valid ): void {
 		'client_name'   => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
 		'user_login'    => $user->user_login,
 		'site_name'     => get_bloginfo( 'name' ),
-		'action_url'    => add_query_arg( 'oversio_oauth', 'authorize', home_url( '/' ) ),
-		'nonce_field'   => wp_nonce_field( 'oversio_oauth_consent', '_wpnonce', true, false ),
+		'action_url'    => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
+		'nonce_field'   => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
 		'hidden_inputs' => $hidden_inputs,
 	);
 
@@ -451,33 +451,33 @@ function oversio_oauth_show_consent( array $valid ): void {
 	// so it must be permitted in form-action or the browser blocks the cross-origin
 	// redirect and the client never receives the code. The redirect_uri here came
 	// straight from the allowlist-validated $valid set, never raw request input.
-	$redirect_origin = oversio_oauth_redirect_uri_origin( $valid['redirect_uri'] );
+	$redirect_origin = aafm_oauth_redirect_uri_origin( $valid['redirect_uri'] );
 
-	oversio_oauth_send_consent_headers( $redirect_origin );
+	aafm_oauth_send_consent_headers( $redirect_origin );
 	status_header( 200 );
 	header( 'Content-Type: text/html; charset=utf-8' );
-	oversio_oauth_render_consent_page( $view );
+	aafm_oauth_render_consent_page( $view );
 	exit;
 }
 
 /**
  * Handle the authorization endpoint, hooked on `init`.
  *
- * Runs only for ?oversio_oauth=authorize. Enforces the surface toggle, HTTPS, rate
+ * Runs only for ?aafm_oauth=authorize. Enforces the surface toggle, HTTPS, rate
  * limiting, login (logged-out users go to wp-login and return to this exact URL), and
  * a capability gate, then validates and acts on the request per HTTP method.
  *
  * @return void
  */
-function oversio_oauth_handle_authorize(): void {
+function aafm_oauth_handle_authorize(): void {
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- route selector only; no state change here.
-	$marker = isset( $_GET['oversio_oauth'] ) ? sanitize_text_field( wp_unslash( $_GET['oversio_oauth'] ) ) : '';
+	$marker = isset( $_GET['aafm_oauth'] ) ? sanitize_text_field( wp_unslash( $_GET['aafm_oauth'] ) ) : '';
 	if ( 'authorize' !== $marker ) {
 		return;
 	}
 
 	// Surface disabled: behave as if the endpoint does not exist.
-	if ( ! oversio_oauth_enabled() ) {
+	if ( ! aafm_oauth_enabled() ) {
 		status_header( 404 );
 		header( 'Content-Type: text/plain; charset=utf-8' );
 		echo 'Not found';
@@ -485,19 +485,19 @@ function oversio_oauth_handle_authorize(): void {
 	}
 
 	// HTTPS is mandatory in production.
-	if ( oversio_oauth_https_required() && ! is_ssl() ) {
-		oversio_oauth_render_local_error( 400, __( 'HTTPS is required for authorization.', 'oversio-agent-abilities' ) );
+	if ( aafm_oauth_https_required() && ! is_ssl() ) {
+		aafm_oauth_render_local_error( 400, __( 'HTTPS is required for authorization.', 'agent-abilities-for-mcp' ) );
 	}
 
 	// Rate limit the authorize surface.
-	if ( ! oversio_oauth_rate_ok( 'authorize', 30, 300 ) ) {
+	if ( ! aafm_oauth_rate_ok( 'authorize', 30, 300 ) ) {
 		status_header( 429 );
 		header( 'Content-Type: text/plain; charset=utf-8' );
 		echo 'Too many requests';
 		exit;
 	}
 
-	// Require login. The authorize URL is a FRONT-END path (?oversio_oauth=authorize on
+	// Require login. The authorize URL is a FRONT-END path (?aafm_oauth=authorize on
 	// home_url(), not under /wp-admin), so we must NOT call auth_redirect() here: it
 	// validates the secure_auth cookie scheme whenever is_ssl() || force_ssl_admin(),
 	// and that cookie is scoped to /wp-admin (+ /wp-content/plugins), never to "/".
@@ -526,11 +526,11 @@ function oversio_oauth_handle_authorize(): void {
 
 	// Capability gate. A failure here is a LOCAL authorization failure, not an OAuth
 	// error to hand back to the client, so render a local 403 (never redirect).
-	$min_cap = apply_filters( 'oversio_oauth_min_capability', 'read' );
+	$min_cap = apply_filters( 'aafm_oauth_min_capability', 'read' );
 	if ( ! current_user_can( $min_cap ) ) {
-		oversio_oauth_render_local_error(
+		aafm_oauth_render_local_error(
 			403,
-			__( 'Your account does not have permission to authorize access.', 'oversio-agent-abilities' )
+			__( 'Your account does not have permission to authorize access.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -541,17 +541,17 @@ function oversio_oauth_handle_authorize(): void {
 	if ( $is_post ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- explicit verification on the next line.
 		$nonce = isset( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
-		if ( ! wp_verify_nonce( $nonce, 'oversio_oauth_consent' ) ) {
-			oversio_oauth_render_local_error(
+		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent' ) ) {
+			aafm_oauth_render_local_error(
 				403,
-				__( 'Your authorization session expired. Please start again.', 'oversio-agent-abilities' )
+				__( 'Your authorization session expired. Please start again.', 'agent-abilities-for-mcp' )
 			);
 		}
 	}
 
 	// Re-validate ALL params on every request (never trust hidden fields).
-	$params = oversio_oauth_read_authorize_params();
-	$valid  = oversio_oauth_validate_authorize_params( $params );
+	$params = aafm_oauth_read_authorize_params();
+	$valid  = aafm_oauth_validate_authorize_params( $params );
 
 	if ( $valid instanceof WP_Error ) {
 		// Local errors render a page; redirectable OAuth errors bounce back to the
@@ -559,13 +559,13 @@ function oversio_oauth_handle_authorize(): void {
 		// validator resolved client + redirect BEFORE producing any redirectable error.
 		// Both branches below exit internally; the trailing return makes that terminal
 		// to static analysis so $valid narrows to the array shape past this block.
-		if ( ! oversio_oauth_error_is_redirectable( $valid ) ) {
-			oversio_oauth_render_local_error( 400, $valid->get_error_message() );
+		if ( ! aafm_oauth_error_is_redirectable( $valid ) ) {
+			aafm_oauth_render_local_error( 400, $valid->get_error_message() );
 		}
 
 		$redirect_uri = isset( $params['redirect_uri'] ) ? (string) $params['redirect_uri'] : '';
 		$state        = isset( $params['state'] ) ? (string) $params['state'] : '';
-		oversio_oauth_redirect_error( $redirect_uri, (string) $valid->get_error_code(), $state );
+		aafm_oauth_redirect_error( $redirect_uri, (string) $valid->get_error_code(), $state );
 		return;
 	}
 
@@ -574,20 +574,20 @@ function oversio_oauth_handle_authorize(): void {
 	if ( $is_post ) {
 		// Deny: hand access_denied back to the client.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-		$decision = isset( $_POST['oversio_oauth_decision'] ) ? sanitize_text_field( wp_unslash( $_POST['oversio_oauth_decision'] ) ) : '';
+		$decision = isset( $_POST['aafm_oauth_decision'] ) ? sanitize_text_field( wp_unslash( $_POST['aafm_oauth_decision'] ) ) : '';
 		if ( 'deny' === $decision ) {
-			oversio_oauth_redirect_error( $valid['redirect_uri'], 'access_denied', $valid['state'] );
+			aafm_oauth_redirect_error( $valid['redirect_uri'], 'access_denied', $valid['state'] );
 		}
 
 		// Approve: persist consent, then issue the code.
-		oversio_oauth_record_consent( $user_id, $valid['client_id'] );
-		oversio_oauth_issue_code_and_redirect( $valid, $user_id );
+		aafm_oauth_record_consent( $user_id, $valid['client_id'] );
+		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
 	// GET: a prior consent issues a code immediately; otherwise show the screen.
-	if ( oversio_oauth_has_consent( $user_id, $valid['client_id'] ) ) {
-		oversio_oauth_issue_code_and_redirect( $valid, $user_id );
+	if ( aafm_oauth_has_consent( $user_id, $valid['client_id'] ) ) {
+		aafm_oauth_issue_code_and_redirect( $valid, $user_id );
 	}
 
-	oversio_oauth_show_consent( $valid );
+	aafm_oauth_show_consent( $valid );
 }

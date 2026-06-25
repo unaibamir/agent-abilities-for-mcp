@@ -2,20 +2,20 @@
 /**
  * WooCommerce integration abilities — sales reports and entity counts (sub-slice W4-WC7).
  *
- * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_wc_reports_definitions' );
-add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_reports_full_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_wc_reports_definitions' );
+add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_reports_full_definitions' );
 
 /**
  * Contribute the WooCommerce reports definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_repo
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_wc_reports_definitions( array $registry ): array {
-	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+function aafm_register_wc_reports_definitions( array $registry ): array {
+	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, oversio_wc_reports_registry_definitions() );
+	return array_merge( $registry, aafm_wc_reports_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce reports definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_wc_reports_full_definitions( array $registry ): array {
-	return array_merge( $registry, oversio_wc_reports_registry_definitions() );
+function aafm_register_wc_reports_full_definitions( array $registry ): array {
+	return array_merge( $registry, aafm_wc_reports_registry_definitions() );
 }
 
 /**
@@ -53,43 +53,43 @@ function oversio_register_wc_reports_full_definitions( array $registry ): array 
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_wc_reports_registry_definitions(): array {
+function aafm_wc_reports_registry_definitions(): array {
 	return array(
 		// Reports, counts, and payment gateways (sub-slice W4-WC7).
-		'oversio/wc-get-sales-report'       => array(
-			'label'        => __( 'Get WooCommerce sales report', 'oversio-agent-abilities' ),
-			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
+		'aafm/wc-get-sales-report'       => array(
+			'label'        => __( 'Get WooCommerce sales report', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'oversio_args_wc_get_sales_report',
+			'args_builder' => 'aafm_args_wc_get_sales_report',
 		),
 
-		'oversio/wc-get-top-sellers-report' => array(
-			'label'        => __( 'Get WooCommerce top sellers report', 'oversio-agent-abilities' ),
-			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
+		'aafm/wc-get-top-sellers-report' => array(
+			'label'        => __( 'Get WooCommerce top sellers report', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'oversio_args_wc_get_top_sellers_report',
+			'args_builder' => 'aafm_args_wc_get_top_sellers_report',
 		),
 
-		'oversio/wc-count-orders'           => array(
-			'label'        => __( 'Count WooCommerce orders', 'oversio-agent-abilities' ),
-			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
+		'aafm/wc-count-orders'           => array(
+			'label'        => __( 'Count WooCommerce orders', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'oversio_args_wc_count_orders',
+			'args_builder' => 'aafm_args_wc_count_orders',
 		),
 
-		'oversio/wc-count-products'         => array(
-			'label'        => __( 'Count WooCommerce products', 'oversio-agent-abilities' ),
-			'description'  => __( 'Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
+		'aafm/wc-count-products'         => array(
+			'label'        => __( 'Count WooCommerce products', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'oversio_args_wc_count_products',
+			'args_builder' => 'aafm_args_wc_count_products',
 		),
 
 	);
@@ -100,15 +100,15 @@ function oversio_wc_reports_registry_definitions(): array {
 // =============================================================================
 
 /**
- * Args builder for oversio/wc-get-sales-report.
+ * Args builder for aafm/wc-get-sales-report.
  *
  * @return array<string,mixed>
  */
-function oversio_args_wc_get_sales_report(): array {
+function aafm_args_wc_get_sales_report(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/wc-get-sales-report' ),
-		'description'         => oversio_ability_description( 'oversio/wc-get-sales-report' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/wc-get-sales-report' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-sales-report' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -132,8 +132,8 @@ function oversio_args_wc_get_sales_report(): array {
 				'average_sales' => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_wc_get_sales_report',
-		'permission_callback' => 'oversio_wc_perm',
+		'execute_callback'    => 'aafm_exec_wc_get_sales_report',
+		'permission_callback' => 'aafm_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -145,7 +145,7 @@ function oversio_args_wc_get_sales_report(): array {
 }
 
 /**
- * Execute oversio/wc-get-sales-report.
+ * Execute aafm/wc-get-sales-report.
  *
  * Queries shop_order posts with completed/processing statuses in the given date window and
  * sums the _order_total post-meta value. Uses $wpdb->prepare() with positional placeholders
@@ -154,9 +154,9 @@ function oversio_args_wc_get_sales_report(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function oversio_exec_wc_get_sales_report( array $input ): array|\WP_Error {
-	if ( ! oversio_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
-		return oversio_generic_error();
+function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
+		return aafm_generic_error();
 	}
 	$start = sanitize_text_field( (string) ( $input['start_date'] ?? gmdate( 'Y-m-01' ) ) );
 	$end   = sanitize_text_field( (string) ( $input['end_date'] ?? gmdate( 'Y-m-d' ) ) );
@@ -221,15 +221,15 @@ function oversio_exec_wc_get_sales_report( array $input ): array|\WP_Error {
 // =============================================================================
 
 /**
- * Args builder for oversio/wc-get-top-sellers-report.
+ * Args builder for aafm/wc-get-top-sellers-report.
  *
  * @return array<string,mixed>
  */
-function oversio_args_wc_get_top_sellers_report(): array {
+function aafm_args_wc_get_top_sellers_report(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/wc-get-top-sellers-report' ),
-		'description'         => oversio_ability_description( 'oversio/wc-get-top-sellers-report' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/wc-get-top-sellers-report' ),
+		'description'         => aafm_ability_description( 'aafm/wc-get-top-sellers-report' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -263,8 +263,8 @@ function oversio_args_wc_get_top_sellers_report(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_wc_get_top_sellers_report',
-		'permission_callback' => 'oversio_wc_perm',
+		'execute_callback'    => 'aafm_exec_wc_get_top_sellers_report',
+		'permission_callback' => 'aafm_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -276,14 +276,14 @@ function oversio_args_wc_get_top_sellers_report(): array {
 }
 
 /**
- * Execute oversio/wc-get-top-sellers-report.
+ * Execute aafm/wc-get-top-sellers-report.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function oversio_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
-	if ( ! oversio_integration_active( 'woocommerce' ) ) {
-		return oversio_generic_error();
+function aafm_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
+	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+		return aafm_generic_error();
 	}
 	$period = sanitize_text_field( (string) ( $input['period'] ?? 'month' ) );
 	$limit  = max( 1, min( 100, (int) ( $input['limit'] ?? 10 ) ) );
@@ -295,7 +295,7 @@ function oversio_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error
 	};
 
 	if ( ! function_exists( 'wc_get_orders' ) ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
 	// Product ids live in ORDER ITEM meta, not shop_order post meta, so aggregate quantities
@@ -362,7 +362,7 @@ function oversio_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error
 
 	$items = array();
 	foreach ( $qty_by_product as $product_id => $quantity ) {
-		$product = oversio_wc_get_product( (int) $product_id );
+		$product = aafm_wc_get_product( (int) $product_id );
 		$items[] = array(
 			'product_id' => (int) $product_id,
 			'name'       => null !== $product ? (string) $product->get_name() : '',
@@ -378,15 +378,15 @@ function oversio_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error
 // =============================================================================
 
 /**
- * Args builder for oversio/wc-count-orders.
+ * Args builder for aafm/wc-count-orders.
  *
  * @return array<string,mixed>
  */
-function oversio_args_wc_count_orders(): array {
+function aafm_args_wc_count_orders(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/wc-count-orders' ),
-		'description'         => oversio_ability_description( 'oversio/wc-count-orders' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/wc-count-orders' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-orders' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -405,8 +405,8 @@ function oversio_args_wc_count_orders(): array {
 				'total'      => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_wc_count_orders',
-		'permission_callback' => 'oversio_wc_perm',
+		'execute_callback'    => 'aafm_exec_wc_count_orders',
+		'permission_callback' => 'aafm_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -418,14 +418,14 @@ function oversio_args_wc_count_orders(): array {
 }
 
 /**
- * Execute oversio/wc-count-orders.
+ * Execute aafm/wc-count-orders.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function oversio_exec_wc_count_orders( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! oversio_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
-		return oversio_generic_error();
+function aafm_exec_wc_count_orders( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
+		return aafm_generic_error();
 	}
 
 	// HPOS-aware: count per status through wc_get_orders() (which targets the custom order tables
@@ -434,7 +434,7 @@ function oversio_exec_wc_count_orders( array $input ): array|\WP_Error { // phpc
 	// a paginated 1-row probe so only the storage-side total is read, not the order rows.
 	$by_status = array();
 	foreach ( array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ) as $status ) {
-		$by_status[ $status ] = oversio_wc_count_orders_by_status( $status );
+		$by_status[ $status ] = aafm_wc_count_orders_by_status( $status );
 	}
 
 	// total sums these active order statuses; trashed orders are deliberately excluded, matching
@@ -463,7 +463,7 @@ function oversio_exec_wc_count_orders( array $input ): array|\WP_Error { // phpc
  * @param string $status WooCommerce order status slug, without the wc- prefix (e.g. 'completed').
  * @return int
  */
-function oversio_wc_count_orders_by_status( string $status ): int {
+function aafm_wc_count_orders_by_status( string $status ): int {
 	$result = wc_get_orders(
 		array(
 			'status'   => $status,
@@ -480,15 +480,15 @@ function oversio_wc_count_orders_by_status( string $status ): int {
 // =============================================================================
 
 /**
- * Args builder for oversio/wc-count-products.
+ * Args builder for aafm/wc-count-products.
  *
  * @return array<string,mixed>
  */
-function oversio_args_wc_count_products(): array {
+function aafm_args_wc_count_products(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/wc-count-products' ),
-		'description'         => oversio_ability_description( 'oversio/wc-count-products' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/wc-count-products' ),
+		'description'         => aafm_ability_description( 'aafm/wc-count-products' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -505,8 +505,8 @@ function oversio_args_wc_count_products(): array {
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_wc_count_products',
-		'permission_callback' => 'oversio_wc_perm',
+		'execute_callback'    => 'aafm_exec_wc_count_products',
+		'permission_callback' => 'aafm_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -518,14 +518,14 @@ function oversio_args_wc_count_products(): array {
 }
 
 /**
- * Execute oversio/wc-count-products.
+ * Execute aafm/wc-count-products.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function oversio_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! oversio_integration_active( 'woocommerce' ) ) {
-		return oversio_generic_error();
+function aafm_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+		return aafm_generic_error();
 	}
 	$counts  = wp_count_posts( 'product' );
 	$publish = (int) ( $counts->publish ?? 0 );

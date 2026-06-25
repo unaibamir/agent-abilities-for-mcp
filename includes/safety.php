@@ -2,7 +2,7 @@
 /**
  * Safety option getters: filterable, bounded, default off/neutral.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -14,15 +14,15 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return int Clamped to >= 0.
  */
-function oversio_rate_limit_per_min(): int {
-	$stored = max( 0, (int) get_option( 'oversio_rate_limit_per_min', 0 ) );
+function aafm_rate_limit_per_min(): int {
+	$stored = max( 0, (int) get_option( 'aafm_rate_limit_per_min', 0 ) );
 
 	/**
 	 * Filters the requests-per-minute rate limit. 0 means no limit.
 	 *
 	 * @param int $limit Stored limit, clamped to >= 0.
 	 */
-	$filtered = (int) apply_filters( 'oversio_rate_limit_per_min', $stored );
+	$filtered = (int) apply_filters( 'aafm_rate_limit_per_min', $stored );
 
 	// Re-clamp the post-filter value so a buggy filter returning a negative number can't
 	// disable the limiter. A filter returning <= 0 when a positive limit is stored keeps the
@@ -60,12 +60,12 @@ function oversio_rate_limit_per_min(): int {
  * @param int $user_id Authenticated principal user id. <= 0 is never limited.
  * @return bool True if the request is allowed; false once the limit is exceeded.
  */
-function oversio_rate_limit_consume( int $user_id ): bool {
-	$limit = oversio_rate_limit_per_min();
+function aafm_rate_limit_consume( int $user_id ): bool {
+	$limit = aafm_rate_limit_per_min();
 	if ( $limit <= 0 || $user_id <= 0 ) {
 		return true; // Off, or no authenticated principal to limit.
 	}
-	$key   = 'oversio_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
+	$key   = 'aafm_rl_' . $user_id . '_' . gmdate( 'YmdHi' );
 	$count = (int) get_transient( $key );
 	if ( $count >= $limit ) {
 		return false;
@@ -79,21 +79,21 @@ function oversio_rate_limit_consume( int $user_id ): bool {
  *
  * @return array<int, string> Trimmed, non-empty entries.
  */
-function oversio_ip_allowlist(): array {
+function aafm_ip_allowlist(): array {
 	$normalize = static fn( $entries ): array => array_values(
 		array_filter(
 			array_map( 'trim', array_filter( (array) $entries, 'is_string' ) )
 		)
 	);
 
-	$stored = $normalize( get_option( 'oversio_ip_allowlist', array() ) );
+	$stored = $normalize( get_option( 'aafm_ip_allowlist', array() ) );
 
 	/**
 	 * Filters the IP/CIDR allowlist for the MCP endpoint.
 	 *
 	 * @param array<int, string> $stored Trimmed, non-empty entries.
 	 */
-	$filtered = $normalize( apply_filters( 'oversio_ip_allowlist', $stored ) );
+	$filtered = $normalize( apply_filters( 'aafm_ip_allowlist', $stored ) );
 
 	// Fail closed at the filter seam: a filter must not EMPTY an operator-configured non-empty
 	// allowlist, which would widen the endpoint to allow-all. When the filter returns nothing
@@ -117,7 +117,7 @@ function oversio_ip_allowlist(): array {
  * @param string $cidr Subnet in `network/prefix` form, or a bare IP.
  * @return bool True only on a confirmed match.
  */
-function oversio_cidr_match( string $ip, string $cidr ): bool {
+function aafm_cidr_match( string $ip, string $cidr ): bool {
 	if ( '' === $ip || '' === $cidr ) {
 		return false;
 	}
@@ -190,7 +190,7 @@ function oversio_cidr_match( string $ip, string $cidr ): bool {
  * @param string $line One trimmed allowlist entry.
  * @return bool True only for a well-formed IP or CIDR.
  */
-function oversio_is_valid_ip_or_cidr( string $line ): bool {
+function aafm_is_valid_ip_or_cidr( string $line ): bool {
 	if ( '' === $line ) {
 		return false;
 	}
@@ -221,20 +221,20 @@ function oversio_is_valid_ip_or_cidr( string $line ): bool {
  *
  * An empty allowlist is the neutral default and permits everyone. A non-empty
  * allowlist restricts access to matching entries only — and because every entry
- * is checked through {@see oversio_cidr_match()}, a list made up entirely of
+ * is checked through {@see aafm_cidr_match()}, a list made up entirely of
  * invalid entries matches nothing and therefore blocks (fail-closed).
  *
  * @param string $ip Candidate IP address.
  * @return bool True if allowed.
  */
-function oversio_ip_is_allowed( string $ip ): bool {
-	$list = oversio_ip_allowlist();
+function aafm_ip_is_allowed( string $ip ): bool {
+	$list = aafm_ip_allowlist();
 	if ( empty( $list ) ) {
 		return true;
 	}
 
 	foreach ( $list as $entry ) {
-		if ( oversio_cidr_match( $ip, $entry ) ) {
+		if ( aafm_cidr_match( $ip, $entry ) ) {
 			return true;
 		}
 	}
@@ -247,13 +247,13 @@ function oversio_ip_is_allowed( string $ip ): bool {
  *
  * @return bool
  */
-function oversio_force_draft(): bool {
+function aafm_force_draft(): bool {
 	/**
 	 * Filters whether agent-created content is forced to draft.
 	 *
 	 * @param bool $force True to force draft status.
 	 */
-	return (bool) apply_filters( 'oversio_force_draft', (bool) get_option( 'oversio_force_draft', false ) );
+	return (bool) apply_filters( 'aafm_force_draft', (bool) get_option( 'aafm_force_draft', false ) );
 }
 
 /**
@@ -261,13 +261,13 @@ function oversio_force_draft(): bool {
  *
  * @return int Clamped to >= 0.
  */
-function oversio_max_title_len(): int {
+function aafm_max_title_len(): int {
 	/**
 	 * Filters the maximum allowed title length. 0 means no cap.
 	 *
 	 * @param int $len Stored cap, clamped to >= 0.
 	 */
-	return (int) apply_filters( 'oversio_max_title_len', max( 0, (int) get_option( 'oversio_max_title_len', 0 ) ) );
+	return (int) apply_filters( 'aafm_max_title_len', max( 0, (int) get_option( 'aafm_max_title_len', 0 ) ) );
 }
 
 /**
@@ -279,8 +279,8 @@ function oversio_max_title_len(): int {
  *
  * @return int Retention window in days, clamped to [0, 3650]. Default 30.
  */
-function oversio_log_retention_days(): int {
-	$raw = (int) get_option( 'oversio_log_retention_days', 30 );
+function aafm_log_retention_days(): int {
+	$raw = (int) get_option( 'aafm_log_retention_days', 30 );
 	return max( 0, min( 3650, $raw ) );
 }
 
@@ -293,7 +293,7 @@ function oversio_log_retention_days(): int {
  * @param string $title Sanitized title to measure.
  * @return bool True when within the cap (or the cap is off).
  */
-function oversio_title_within_limit( string $title ): bool {
-	$max = oversio_max_title_len();
+function aafm_title_within_limit( string $title ): bool {
+	$max = aafm_max_title_len();
 	return $max <= 0 || mb_strlen( $title ) <= $max;
 }

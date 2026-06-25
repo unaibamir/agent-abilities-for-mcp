@@ -9,12 +9,12 @@
  * following getPost($id) inside one test. Lives in its own file so the IntegrationStubs trait file
  * holds a single object structure. Required from the test bootstrap, never shipped.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests;
+namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the AIOSEO Post-model stub.

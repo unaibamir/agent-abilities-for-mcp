@@ -6,7 +6,7 @@
  * these from the authorization and token endpoints to enforce the S256 challenge
  * method (the only method this plugin supports).
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * @param string $challenge The code challenge captured at the authorization request.
  * @return bool True when the verifier hashes to the challenge.
  */
-function oversio_pkce_verify( string $verifier, string $challenge ): bool {
+function aafm_pkce_verify( string $verifier, string $challenge ): bool {
 	if ( '' === $verifier || '' === $challenge ) {
 		return false;
 	}
@@ -45,6 +45,6 @@ function oversio_pkce_verify( string $verifier, string $challenge ): bool {
  * @param string $c The candidate code challenge.
  * @return bool True when the challenge matches the RFC 7636 shape.
  */
-function oversio_pkce_is_valid_challenge( string $c ): bool {
+function aafm_pkce_is_valid_challenge( string $c ): bool {
 	return (bool) preg_match( '/^[A-Za-z0-9\-._~]{43,128}\z/', $c );
 }

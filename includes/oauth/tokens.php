@@ -14,7 +14,7 @@
  * Every secret is matched by a DB lookup on an indexed SHA-256 hex column
  * (WHERE token_hash = %s), never by an in-PHP comparison of raw values.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -23,18 +23,18 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Default access-token lifetime, in seconds. The live value is the
- * oversio_oauth_access_ttl option; this is only its fallback.
+ * aafm_oauth_access_ttl option; this is only its fallback.
  */
-if ( ! defined( 'OVERSIO_OAUTH_ACCESS_TTL' ) ) {
-	define( 'OVERSIO_OAUTH_ACCESS_TTL', 3600 );
+if ( ! defined( 'AAFM_OAUTH_ACCESS_TTL' ) ) {
+	define( 'AAFM_OAUTH_ACCESS_TTL', 3600 );
 }
 
 /**
  * Default refresh-token lifetime, in seconds (30 days). The live value is the
- * oversio_oauth_refresh_ttl option; this is only its fallback.
+ * aafm_oauth_refresh_ttl option; this is only its fallback.
  */
-if ( ! defined( 'OVERSIO_OAUTH_REFRESH_TTL' ) ) {
-	define( 'OVERSIO_OAUTH_REFRESH_TTL', 2592000 );
+if ( ! defined( 'AAFM_OAUTH_REFRESH_TTL' ) ) {
+	define( 'AAFM_OAUTH_REFRESH_TTL', 2592000 );
 }
 
 /**
@@ -42,14 +42,14 @@ if ( ! defined( 'OVERSIO_OAUTH_REFRESH_TTL' ) ) {
  * loop in the parent/child links. It also bounds the maximum lineage length that
  * a single reuse-detection pass will revoke, not just the anti-infinite-loop guard.
  */
-if ( ! defined( 'OVERSIO_OAUTH_CHAIN_MAX_HOPS' ) ) {
-	define( 'OVERSIO_OAUTH_CHAIN_MAX_HOPS', 1000 );
+if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
+	define( 'AAFM_OAUTH_CHAIN_MAX_HOPS', 1000 );
 }
 
 /**
  * Mint an access/refresh token pair and store only their hashes.
  *
- * Access token is prefixed `oversio_oat_`; the refresh token has no prefix. Both
+ * Access token is prefixed `aafm_oat_`; the refresh token has no prefix. Both
  * raw values are returned to the caller once and never stored in clear — only
  * their SHA-256 hashes are persisted, alongside the binding context.
  *
@@ -64,20 +64,20 @@ if ( ! defined( 'OVERSIO_OAUTH_CHAIN_MAX_HOPS' ) ) {
  * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error The token pair,
  *         or a WP_Error when the row could not be persisted (so callers never hand out phantom tokens).
  */
-function oversio_oauth_mint_tokens( array $ctx ) {
-	// keep in sync with oversio_oauth_resolve_current_user()'s prefix (OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).
-	$access_raw  = 'oversio_oat_' . bin2hex( random_bytes( 32 ) );
+function aafm_oauth_mint_tokens( array $ctx ) {
+	// keep in sync with aafm_oauth_resolve_current_user()'s prefix (AAFM_OAUTH_ACCESS_TOKEN_PREFIX in validator.php, which loads after this file).
+	$access_raw  = 'aafm_oat_' . bin2hex( random_bytes( 32 ) );
 	$refresh_raw = bin2hex( random_bytes( 32 ) );
 
-	$access_ttl  = (int) get_option( 'oversio_oauth_access_ttl', OVERSIO_OAUTH_ACCESS_TTL );
-	$refresh_ttl = (int) get_option( 'oversio_oauth_refresh_ttl', OVERSIO_OAUTH_REFRESH_TTL );
+	$access_ttl  = (int) get_option( 'aafm_oauth_access_ttl', AAFM_OAUTH_ACCESS_TTL );
+	$refresh_ttl = (int) get_option( 'aafm_oauth_refresh_ttl', AAFM_OAUTH_REFRESH_TTL );
 
 	$now = time();
 
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$inserted = $wpdb->insert(
-		$wpdb->prefix . 'oversio_oauth_access_tokens',
+		$wpdb->prefix . 'aafm_oauth_access_tokens',
 		array(
 			'token_hash'         => hash( 'sha256', $access_raw ),
 			'refresh_hash'       => hash( 'sha256', $refresh_raw ),
@@ -95,7 +95,7 @@ function oversio_oauth_mint_tokens( array $ctx ) {
 	// A failed insert means there is no persisted token row — never return a token pair for it,
 	// or the client gets a successful token response it can never use.
 	if ( false === $inserted ) {
-		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'oversio-agent-abilities' ) );
+		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
 	}
 
 	return array(
@@ -114,15 +114,15 @@ function oversio_oauth_mint_tokens( array $ctx ) {
  * @param string $raw The raw access token presented by the client.
  * @return int|false The wp_user_id on success, or false when expired, inactive, or unknown.
  */
-function oversio_oauth_validate_access_token( string $raw ) {
+function aafm_oauth_validate_access_token( string $raw ) {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$now   = gmdate( 'Y-m-d H:i:s', time() );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$user_id = $wpdb->get_var(
 		$wpdb->prepare(
-			// Keep this WHERE clause in sync with oversio_oauth_get_access_token_row() in validator.php — the two must never disagree on the active/unexpired predicate.
+			// Keep this WHERE clause in sync with aafm_oauth_get_access_token_row() in validator.php — the two must never disagree on the active/unexpired predicate.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
 			"SELECT wp_user_id FROM {$table}
 			 WHERE token_hash = %s
@@ -149,7 +149,7 @@ function oversio_oauth_validate_access_token( string $raw ) {
  * refresh_parent_id chained to the old row's id.
  *
  * On replay of an already-consumed (inactive) refresh token, reuse detection
- * fires: the whole lineage is revoked (see oversio_oauth_revoke_chain()) and a
+ * fires: the whole lineage is revoked (see aafm_oauth_revoke_chain()) and a
  * WP_Error is returned. Expired, unknown, or wrong-client tokens also return a
  * WP_Error without touching other rows.
  *
@@ -157,9 +157,9 @@ function oversio_oauth_validate_access_token( string $raw ) {
  * @param string $client_id The client_id presented at the token endpoint.
  * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error
  */
-function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
+function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
@@ -175,7 +175,7 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( ! is_array( $row ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token is invalid.', 'oversio-agent-abilities' )
+			__( 'The refresh token is invalid.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -183,11 +183,11 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// was consumed by an earlier rotation and is now being replayed. Treat the
 	// replay as a compromise signal and revoke the entire lineage.
 	if ( 0 === (int) $row['is_active'] ) {
-		oversio_oauth_revoke_chain( (int) $row['id'] );
+		aafm_oauth_revoke_chain( (int) $row['id'] );
 
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token has already been used; the token chain has been revoked.', 'oversio-agent-abilities' )
+			__( 'The refresh token has already been used; the token chain has been revoked.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -195,16 +195,16 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( (string) $row['client_id'] !== $client_id ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token was issued to a different client.', 'oversio-agent-abilities' )
+			__( 'The refresh token was issued to a different client.', 'agent-abilities-for-mcp' )
 		);
 	}
 
 	// Deactivated client: refuse rotation so disabling a compromised client stops it from
 	// rolling its tokens forward. is_active is otherwise only checked at authorize-time.
-	if ( oversio_oauth_client_is_deactivated( $client_id ) ) {
+	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The client is no longer active.', 'oversio-agent-abilities' )
+			__( 'The client is no longer active.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -214,7 +214,7 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( gmdate( 'Y-m-d H:i:s', time() ) >= (string) $row['refresh_expires_at'] ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token has expired.', 'oversio-agent-abilities' )
+			__( 'The refresh token has expired.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -253,11 +253,11 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token is invalid.', 'oversio-agent-abilities' )
+			__( 'The refresh token is invalid.', 'agent-abilities-for-mcp' )
 		);
 	}
 
-	$new = oversio_oauth_mint_tokens(
+	$new = aafm_oauth_mint_tokens(
 		array(
 			'client_id'         => (string) $row['client_id'],
 			'wp_user_id'        => (int) $row['wp_user_id'],
@@ -283,16 +283,16 @@ function oversio_oauth_rotate_refresh( string $raw, string $client_id ) {
 /**
  * Revoke an access or refresh token (RFC 7009 style).
  *
- * Accepts either an access token (prefixed `oversio_oat_`) or a refresh token (no
+ * Accepts either an access token (prefixed `aafm_oat_`) or a refresh token (no
  * prefix). The value is hashed and matched against token_hash OR refresh_hash;
  * the matching row is marked inactive.
  *
  * @param string $raw The raw token presented for revocation.
  * @return bool True when a row was found and revoked, false otherwise.
  */
-function oversio_oauth_revoke_token( string $raw ): bool {
+function aafm_oauth_revoke_token( string $raw ): bool {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$hash  = hash( 'sha256', $raw );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -320,13 +320,13 @@ function oversio_oauth_revoke_token( string $raw ): bool {
  * @param string $client_id The public client identifier.
  * @return int Number of token rows deactivated.
  */
-function oversio_oauth_revoke_client_tokens( string $client_id ): int {
+function aafm_oauth_revoke_client_tokens( string $client_id ): int {
 	if ( '' === $client_id ) {
 		return 0;
 	}
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
@@ -350,13 +350,13 @@ function oversio_oauth_revoke_client_tokens( string $client_id ): int {
  * @param string $client_id The client the tokens belong to.
  * @return int Number of token rows deactivated.
  */
-function oversio_oauth_revoke_user_client_tokens( int $user_id, string $client_id ): int {
+function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id ): int {
 	if ( $user_id <= 0 || '' === $client_id ) {
 		return 0;
 	}
 
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
@@ -377,28 +377,28 @@ function oversio_oauth_revoke_user_client_tokens( int $user_id, string $client_i
  * Each rotation links child.refresh_parent_id = parent.id, so the lineage is a
  * simple chain. From the seed row we walk UP the parent links to the root and
  * DOWN the child links to every descendant, deactivating each row we touch.
- * Both walks are bounded by OVERSIO_OAUTH_CHAIN_MAX_HOPS so a corrupt link can
+ * Both walks are bounded by AAFM_OAUTH_CHAIN_MAX_HOPS so a corrupt link can
  * never spin forever. After this runs, no token anywhere in the lineage
  * validates — which is the whole point of reuse detection.
  *
  * @param int $seed_id Any row id belonging to the lineage to revoke.
  * @return void
  */
-function oversio_oauth_revoke_chain( int $seed_id ): void {
+function aafm_oauth_revoke_chain( int $seed_id ): void {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 
 	// Collect every id in the lineage first, then deactivate in one pass.
 	$ids = array( $seed_id );
 
 	// Track whether either walk hit the hop cap. A cap hit means the lineage was longer than
-	// OVERSIO_OAUTH_CHAIN_MAX_HOPS and the tail was NOT revoked — surface that rather than silently
+	// AAFM_OAUTH_CHAIN_MAX_HOPS and the tail was NOT revoked — surface that rather than silently
 	// truncating the revocation, so an operator can investigate (and the cap can be raised).
 	$cap_hit = false;
 
 	// Walk UP: follow refresh_parent_id toward the root.
 	$cursor = $seed_id;
-	for ( $hop = 0; $hop < OVERSIO_OAUTH_CHAIN_MAX_HOPS; $hop++ ) {
+	for ( $hop = 0; $hop < AAFM_OAUTH_CHAIN_MAX_HOPS; $hop++ ) {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$parent_id = $wpdb->get_var(
 			$wpdb->prepare(
@@ -417,7 +417,7 @@ function oversio_oauth_revoke_chain( int $seed_id ): void {
 		$cursor = $parent_id;
 
 		// Reached the last allowed hop with the chain still extending upward.
-		if ( OVERSIO_OAUTH_CHAIN_MAX_HOPS - 1 === $hop ) {
+		if ( AAFM_OAUTH_CHAIN_MAX_HOPS - 1 === $hop ) {
 			$cap_hit = true;
 		}
 	}
@@ -426,7 +426,7 @@ function oversio_oauth_revoke_chain( int $seed_id ): void {
 	// Use a queue so the cap counts total descendants discovered, not just depth.
 	$queue = $ids;
 	$hops  = 0;
-	while ( ! empty( $queue ) && $hops < OVERSIO_OAUTH_CHAIN_MAX_HOPS ) {
+	while ( ! empty( $queue ) && $hops < AAFM_OAUTH_CHAIN_MAX_HOPS ) {
 		++$hops;
 		$current = array_shift( $queue );
 
@@ -453,12 +453,12 @@ function oversio_oauth_revoke_chain( int $seed_id ): void {
 		$cap_hit = true;
 	}
 
-	// A cap hit means we revoked only the first OVERSIO_OAUTH_CHAIN_MAX_HOPS rows of a longer lineage;
+	// A cap hit means we revoked only the first AAFM_OAUTH_CHAIN_MAX_HOPS rows of a longer lineage;
 	// the remainder stays active. Fire an action so the truncation is never silent: an operator can
 	// hook it to log, alert, or schedule a follow-up sweep, or raise the cap. The seed id and the
 	// number of rows revoked are passed so the handler can investigate the pathological chain.
 	if ( $cap_hit ) {
-		do_action( 'oversio_oauth_chain_revocation_capped', $seed_id, count( $ids ) );
+		do_action( 'aafm_oauth_chain_revocation_capped', $seed_id, count( $ids ) );
 	}
 
 	// Deactivate the whole lineage in a single bounded UPDATE.

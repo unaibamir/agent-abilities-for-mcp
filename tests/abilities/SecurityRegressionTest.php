@@ -17,14 +17,14 @@
  *   - PII / user enumeration      → get-users requires list_users; redactors strip PII
  *   - Unauthenticated / over-broad → every ability has a real permission_callback; opt-in default
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class SecurityRegressionTest extends TestCase {
@@ -35,45 +35,45 @@ final class SecurityRegressionTest extends TestCase {
 	 * @var string[]
 	 */
 	private const WRITES = array(
-		'oversio/create-draft',
-		'oversio/create-post',
-		'oversio/update-post',
-		'oversio/trash-post',
-		'oversio/create-page',
-		'oversio/update-page',
-		'oversio/trash-page',
-		'oversio/create-term',
-		'oversio/update-term',
-		'oversio/moderate-comment',
-		'oversio/set-featured-image',
-		'oversio/upload-media',
+		'aafm/create-draft',
+		'aafm/create-post',
+		'aafm/update-post',
+		'aafm/trash-post',
+		'aafm/create-page',
+		'aafm/update-page',
+		'aafm/trash-page',
+		'aafm/create-term',
+		'aafm/update-term',
+		'aafm/moderate-comment',
+		'aafm/set-featured-image',
+		'aafm/upload-media',
 	);
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Wave 4: force all three integrations active (+ the mandatory registry-memo flush)
 		// so test_no_arbitrary_option_or_meta_ability_exists scans a registry that INCLUDES
 		// the integration names once the SEO/ACF/WC slices land. Without this, those names
 		// never appear and their needle/sanction checks would be dead code (HIGH-3). No
 		// integration ability exists yet, so nothing new is scanned in this slice.
-		add_filter( 'oversio_integration_active_yoast', '__return_true' );
-		add_filter( 'oversio_integration_active_rankmath', '__return_true' );
-		add_filter( 'oversio_integration_active_aioseo', '__return_true' );
-		add_filter( 'oversio_integration_active_acf', '__return_true' );
-		add_filter( 'oversio_integration_active_woocommerce', '__return_true' );
-		oversio_registry_cache_should_flush( true );
+		add_filter( 'aafm_integration_active_yoast', '__return_true' );
+		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
+		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
+		add_filter( 'aafm_integration_active_acf', '__return_true' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
 	}
 
 	/**
 	 * Enable + register the whole catalog so abilities can be invoked.
 	 */
 	private function register_whole_catalog(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	/**
@@ -101,7 +101,7 @@ final class SecurityRegressionTest extends TestCase {
 		}
 
 		// The denials were recorded (auditing-with-denials is the product guarantee).
-		$denied = oversio_query_activity(
+		$denied = aafm_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 100,
@@ -119,7 +119,7 @@ final class SecurityRegressionTest extends TestCase {
 
 		// Contributor has edit_posts but NOT publish_posts/delete_posts on others' content.
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/create-post' )->check_permissions( array() ),
+			wp_get_ability( 'aafm/create-post' )->check_permissions( array() ),
 			'create-post (publish) must require publish capability a contributor lacks.'
 		);
 	}
@@ -134,7 +134,7 @@ final class SecurityRegressionTest extends TestCase {
 		$this->register_whole_catalog();
 		$editor_id = $this->acting_as( 'editor' );
 
-		$spoof_targets = array( 'oversio/create-draft', 'oversio/create-post', 'oversio/create-page' );
+		$spoof_targets = array( 'aafm/create-draft', 'aafm/create-post', 'aafm/create-page' );
 
 		foreach ( $spoof_targets as $name ) {
 			// Smuggle a foreign author + a privileged post type.
@@ -159,7 +159,7 @@ final class SecurityRegressionTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
-		$result  = wp_get_ability( 'oversio/update-post' )->execute(
+		$result  = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
 				'post_id'     => $post_id,
 				'post_author' => 999999,
@@ -180,7 +180,7 @@ final class SecurityRegressionTest extends TestCase {
 	public function test_ssrf_upload_media_has_no_url_input(): void {
 		$this->register_whole_catalog();
 
-		$input = wp_get_ability( 'oversio/upload-media' )->get_input_schema();
+		$input = wp_get_ability( 'aafm/upload-media' )->get_input_schema();
 		$props = array_keys( $input['properties'] ?? array() );
 
 		// The ONLY image source is inline base64. No URL/src/source/remote field.
@@ -220,7 +220,7 @@ final class SecurityRegressionTest extends TestCase {
 	 * No ability writes arbitrary options or freeform meta; no such tool name exists.
 	 */
 	public function test_no_arbitrary_option_or_meta_ability_exists(): void {
-		$registry = oversio_get_abilities_registry();
+		$registry = aafm_get_abilities_registry();
 
 		// No ability name hints at a generic option/meta/role/user/code/file surface.
 		$banned = array(
@@ -253,13 +253,13 @@ final class SecurityRegressionTest extends TestCase {
 		// hard-block + default-deny allowlist) and is sanctioned on the same basis. A *generic*
 		// option/meta surface remains banned.
 		$sanctioned = array(
-			'oversio/get-post-meta',
-			'oversio/get-all-post-meta',
-			'oversio/update-post-meta',
-			'oversio/delete-post-meta',
-			'oversio/get-term-meta',
-			'oversio/update-term-meta',
-			'oversio/delete-term-meta',
+			'aafm/get-post-meta',
+			'aafm/get-all-post-meta',
+			'aafm/update-post-meta',
+			'aafm/delete-post-meta',
+			'aafm/get-term-meta',
+			'aafm/update-term-meta',
+			'aafm/delete-term-meta',
 		);
 		// User CRUD is the sanctioned exception to the create-user/update-user/delete-user
 		// needles: each is capability-gated (create_users/edit_users/delete_users), default-OFF,
@@ -271,10 +271,10 @@ final class SecurityRegressionTest extends TestCase {
 		$sanctioned = array_merge(
 			$sanctioned,
 			array(
-				'oversio/get-user',
-				'oversio/create-user',
-				'oversio/update-user',
-				'oversio/delete-user',
+				'aafm/get-user',
+				'aafm/create-user',
+				'aafm/update-user',
+				'aafm/delete-user',
 			)
 		);
 		// The governed user-meta abilities are sanctioned on a COMBINED basis: each trips BOTH
@@ -289,9 +289,9 @@ final class SecurityRegressionTest extends TestCase {
 		$sanctioned = array_merge(
 			$sanctioned,
 			array(
-				'oversio/get-user-meta',
-				'oversio/update-user-meta',
-				'oversio/delete-user-meta',
+				'aafm/get-user-meta',
+				'aafm/update-user-meta',
+				'aafm/delete-user-meta',
 			)
 		);
 		// The site-settings abilities are the sanctioned exception to the generic 'setting'
@@ -301,13 +301,13 @@ final class SecurityRegressionTest extends TestCase {
 		// date/time formats, week start, posts per page), fail-closed on any other key, and
 		// the takeover-class keys (siteurl, home, admin_email, default_role,
 		// users_can_register) are excluded and re-stripped even from a rogue filter. A
-		// *generic* option/setting write (e.g. oversio/update-option, oversio/set-option) stays
+		// *generic* option/setting write (e.g. aafm/update-option, aafm/set-option) stays
 		// banned by the needle.
 		$sanctioned = array_merge(
 			$sanctioned,
 			array(
-				'oversio/get-site-settings',
-				'oversio/update-site-settings',
+				'aafm/get-site-settings',
+				'aafm/update-site-settings',
 			)
 		);
 		// list-plugins is the sanctioned exception to the 'plugin' needle. It is a READ-ONLY
@@ -315,26 +315,26 @@ final class SecurityRegressionTest extends TestCase {
 		// the capability WordPress puts on the Plugins screen — default-OFF, audited, and
 		// closed-schema. There is deliberately NO activate/deactivate ability in the catalog, so
 		// the 'plugin' needle still bans a generic plugin-management surface (e.g.
-		// oversio/activate-plugin, oversio/manage-plugins). list-plugins never changes a plugin.
-		$sanctioned = array_merge( $sanctioned, array( 'oversio/list-plugins' ) );
+		// aafm/activate-plugin, aafm/manage-plugins). list-plugins never changes a plugin.
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/list-plugins' ) );
 		// get-active-theme and list-themes are the sanctioned exception to the 'theme' needle.
 		// Both are READS gated on edit_theme_options (the Appearance-screen capability),
 		// default-OFF, audited, and closed-schema, and neither returns a filesystem path. There is
 		// deliberately NO theme switch/install/delete ability in the catalog, so the 'theme' needle
-		// still bans a generic theme-management surface (e.g. oversio/switch-theme, oversio/delete-theme).
+		// still bans a generic theme-management surface (e.g. aafm/switch-theme, aafm/delete-theme).
 		// The other FSE abilities (list-templates, get-template, update-template, get-global-styles)
 		// trip no needle, so they need no sanction.
-		$sanctioned = array_merge( $sanctioned, array( 'oversio/get-active-theme', 'oversio/list-themes' ) );
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/get-active-theme', 'aafm/list-themes' ) );
 		// acf-update-user-fields trips the update-user needle but is an ACF custom-field write
 		// gated per-object on edit_user($id), default-OFF, audited, closed-schema — it never
 		// touches the role/account surface the needle bans. The closed top-level schema accepts
 		// only user_id + a fields object, so a smuggled role/login/capabilities key is rejected
 		// before execute, and the field map values are type-sanitized. A generic user-write surface
-		// (oversio/update-user, oversio/create-user, oversio/delete-user) stays banned. The other ACF names
+		// (aafm/update-user, aafm/create-user, aafm/delete-user) stays banned. The other ACF names
 		// trip no needle: acf-list-field-groups / acf-get-*-fields / acf-update-post-fields /
 		// acf-update-term-fields contain none of meta/option/role/setting/plugin/theme/create-user/
 		// update-user/delete-user.
-		$sanctioned = array_merge( $sanctioned, array( 'oversio/acf-update-user-fields' ) );
+		$sanctioned = array_merge( $sanctioned, array( 'aafm/acf-update-user-fields' ) );
 		foreach ( array_keys( $registry ) as $name ) {
 			if ( in_array( $name, $sanctioned, true ) ) {
 				continue;
@@ -358,7 +358,7 @@ final class SecurityRegressionTest extends TestCase {
 
 		// A clean payload with a smuggled freeform field (e.g. meta_input / option) must be
 		// rejected by the closed schema before execute — nothing arbitrary reaches the DB.
-		$result = wp_get_ability( 'oversio/create-draft' )->execute(
+		$result = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'      => 'ok',
 				'meta_input' => array( 'evil' => 'x' ),
@@ -424,23 +424,23 @@ final class SecurityRegressionTest extends TestCase {
 	 *   - wp_delete_comment(...,true)    → allowed ONLY in includes/abilities/comments.php.
 	 *   - wp_delete_attachment(...,true) → allowed ONLY in includes/abilities/media.php.
 	 *
-	 * Posts/pages are the newest sanctioned exception. oversio/delete-post is an explicit,
+	 * Posts/pages are the newest sanctioned exception. aafm/delete-post is an explicit,
 	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
 	 * filed under "Destructive (permanent)") that force-deletes through the single
-	 * oversio_force_delete_post() executor in posts.php. oversio/delete-page does NOT call
+	 * aafm_force_delete_post() executor in posts.php. aafm/delete-page does NOT call
 	 * the primitive itself — it delegates to that same executor with the page type
 	 * pinned — so pages.php never force-deletes directly and there is exactly one
 	 * wp_delete_post(...,true) call site in the whole abilities layer. The recoverable
 	 * trash-post/trash-page abilities remain for the undoable path.
 	 *
-	 * Comments are another sanctioned exception. oversio/delete-comment is an explicit,
+	 * Comments are another sanctioned exception. aafm/delete-comment is an explicit,
 	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
 	 * filed under "Destructive (permanent)") that uses wp_delete_comment(...,true) by
-	 * design — moderators routinely purge spam permanently, and oversio/moderate-comment
+	 * design — moderators routinely purge spam permanently, and aafm/moderate-comment
 	 * still offers the recoverable 'trash' path. That single call is allowed only in
 	 * includes/abilities/comments.php.
 	 *
-	 * Media is the last. oversio/delete-media is the disclosed destructive media ability
+	 * Media is the last. aafm/delete-media is the disclosed destructive media ability
 	 * (risk=destructive) that uses wp_delete_attachment(...,true) by design — an
 	 * attachment has no Trash path, so removing a media file is inherently permanent.
 	 * That single call is allowed only in includes/abilities/media.php.
@@ -499,7 +499,7 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
-	 * Trash-disabled safety: the trash abilities consult oversio_trash_is_enabled()
+	 * Trash-disabled safety: the trash abilities consult aafm_trash_is_enabled()
 	 * and refuse on Trash-disabled sites, where wp_trash_post()/wp_trash_comment()
 	 * would otherwise force a permanent delete. Asserts the guard is present on
 	 * every trash execute path (behavioral coverage lives in TrashDisabledTest).
@@ -518,7 +518,7 @@ final class SecurityRegressionTest extends TestCase {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src = (string) file_get_contents( $path );
 			$this->assertStringContainsString(
-				'oversio_trash_is_enabled()',
+				'aafm_trash_is_enabled()',
 				$src,
 				'Missing Trash-disabled guard in ' . basename( $path )
 			);
@@ -533,7 +533,7 @@ final class SecurityRegressionTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$result  = wp_get_ability( 'oversio/trash-post' )->execute( array( 'post_id' => $post_id ) );
+		$result  = wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $result, 'trash-post failed for an admin.' );
 
 		// Recoverable: the post still exists, in the trash, and can be untrashed.
@@ -555,20 +555,20 @@ final class SecurityRegressionTest extends TestCase {
 		// Subscriber and author are both denied (author lacks list_users).
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/get-users' )->check_permissions( array() ),
+			wp_get_ability( 'aafm/get-users' )->check_permissions( array() ),
 			'get-users must deny a subscriber (no list_users).'
 		);
 
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/get-users' )->check_permissions( array() ),
+			wp_get_ability( 'aafm/get-users' )->check_permissions( array() ),
 			'get-users must deny an author (no list_users).'
 		);
 
 		// Administrator (has list_users) is allowed.
 		$this->acting_as( 'administrator' );
 		$this->assertTrue(
-			wp_get_ability( 'oversio/get-users' )->check_permissions( array() ),
+			wp_get_ability( 'aafm/get-users' )->check_permissions( array() ),
 			'get-users must allow a list_users-capable admin.'
 		);
 	}
@@ -589,7 +589,7 @@ final class SecurityRegressionTest extends TestCase {
 			)
 		);
 		$user      = get_userdata( $user_id );
-		$user_json = (string) wp_json_encode( oversio_redact_user( $user ) );
+		$user_json = (string) wp_json_encode( aafm_redact_user( $user ) );
 		$this->assertStringContainsString( 'leak@example.com', $user_json, 'User email must be exposed (locked reversal).' );
 		$this->assertStringNotContainsString( 'leaklogin', $user_json, 'User login must stay stripped.' );
 		$this->assertStringNotContainsString( $user->user_pass, $user_json, 'Password hash must stay stripped.' );
@@ -603,7 +603,7 @@ final class SecurityRegressionTest extends TestCase {
 				'comment_content'      => 'hi',
 			)
 		);
-		$comment_json = (string) wp_json_encode( oversio_redact_comment( get_comment( $comment_id ) ) );
+		$comment_json = (string) wp_json_encode( aafm_redact_comment( get_comment( $comment_id ) ) );
 		$this->assertStringNotContainsString( 'jane@example.com', $comment_json, 'Comment email leaked.' );
 		$this->assertStringNotContainsString( '203.0.113.9', $comment_json, 'Comment IP leaked.' );
 	}
@@ -615,7 +615,7 @@ final class SecurityRegressionTest extends TestCase {
 		$this->register_whole_catalog();
 		$this->acting_as( 'subscriber' );
 
-		$result = wp_get_ability( 'oversio/get-site-info' )->execute( array() );
+		$result = wp_get_ability( 'aafm/get-site-info' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $result, 'get-site-info should be readable.' );
 
 		$json = (string) wp_json_encode( $result );
@@ -633,13 +633,13 @@ final class SecurityRegressionTest extends TestCase {
 	 */
 	public function test_every_ability_has_a_permission_callback_and_is_opt_in(): void {
 		// Default install: nothing exposed.
-		$this->assertSame( array(), oversio_get_enabled_abilities(), 'Abilities must default to OFF.' );
+		$this->assertSame( array(), aafm_get_enabled_abilities(), 'Abilities must default to OFF.' );
 
 		$this->register_whole_catalog();
 		wp_set_current_user( 0 );
 
 		// Anonymous caller: no ability returns true (none is publicly callable without a cap).
-		foreach ( array_keys( oversio_get_abilities_registry() ) as $name ) {
+		foreach ( array_keys( aafm_get_abilities_registry() ) as $name ) {
 			$ability = wp_get_ability( $name );
 			$this->assertNotNull( $ability, $name . ' is not registered' );
 			$result = $ability->check_permissions( array() );

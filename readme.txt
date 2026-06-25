@@ -1,4 +1,4 @@
-=== Oversio Agent Abilities — MCP Server for AI Agents ===
+=== Agent Abilities for MCP — MCP Server for AI Agents ===
 Contributors: unaibamir
 Tags: mcp, mcp-server, ai-agent, woocommerce
 Requires at least: 6.9
@@ -12,7 +12,7 @@ Connect Claude, Cursor and AI agents to your WordPress site as a scoped, least-p
 
 == Description ==
 
-Oversio Agent Abilities is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
+Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 Everything is off until you turn it on, the agent only ever acts as the scoped user you bind it to, and every call is logged and re-checked before it runs. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
@@ -31,7 +31,7 @@ Nothing is on by default, the agent only ever acts as a WordPress user you pick,
 
 = 🤖 Built on the WordPress Abilities API and MCP Adapter =
 
-WordPress 6.9 ships the Abilities API and the official MCP Adapter. Oversio Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. It builds on the official MCP Adapter library (wordpress/mcp-adapter) rather than a custom server, so there is no bespoke server to trust and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log for running the Model Context Protocol on WordPress.
+WordPress 6.9 ships the Abilities API and the official MCP Adapter. Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. It builds on the official MCP Adapter library (wordpress/mcp-adapter) rather than a custom server, so there is no bespoke server to trust and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log for running the Model Context Protocol on WordPress.
 
 = 📦 153 governed abilities =
 
@@ -67,9 +67,9 @@ Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code
 
 == Installation ==
 
-1. Upload the plugin to the `/wp-content/plugins/oversio-agent-abilities` directory, or install it from the WordPress plugins screen.
+1. Upload the plugin to the `/wp-content/plugins/agent-abilities-for-mcp` directory, or install it from the WordPress plugins screen.
 2. Activate it from the Plugins screen.
-3. Open the Oversio Agent Abilities menu in your admin sidebar. On the Abilities tab, turn on only the abilities you want the agent to have. Everything starts off.
+3. Open the Agent Abilities for MCP menu in your admin sidebar. On the Abilities tab, turn on only the abilities you want the agent to have. Everything starts off.
 4. On the Connection tab, copy your site's MCP endpoint. The simplest path is OAuth: paste the endpoint into your MCP client and approve the connection once in the browser, where the agent acts as your own account.
 5. Prefer not to use OAuth, or on a client that can't? Create the dedicated low-privilege agent user the Connection tab offers, generate an Application Password for it, and connect with that instead.
 6. Use the connection check on the Connection tab to confirm the endpoint is reachable from your server.
@@ -90,19 +90,19 @@ Only the abilities you have enabled, and only within the bound user's capabiliti
 
 = How does the plugin handle tools and access? =
 
-Oversio Agent Abilities ships everything off, binds the agent to one WordPress user you pick, re-checks that user's capability on every call, and logs every call including denials. You add reach as you build trust, not all at once. It trades raw tool count for control you can audit.
+Agent Abilities for MCP ships everything off, binds the agent to one WordPress user you pick, re-checks that user's capability on every call, and logs every call including denials. You add reach as you build trust, not all at once. It trades raw tool count for control you can audit.
 
 = Is it free? =
 
-Yes. Oversio Agent Abilities is free on WordPress.org, with no paid tier, no API key to buy, and no usage limits added by the plugin.
+Yes. Agent Abilities for MCP is free on WordPress.org, with no paid tier, no API key to buy, and no usage limits added by the plugin.
 
 = Does it work with my other plugins? =
 
-Yes, for a set of supported plugins. When one is active, Oversio Agent Abilities adds abilities for it under the same rules as the core: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers WooCommerce, Advanced Custom Fields, and SEO (Yoast, Rank Math, and All in One SEO). The WooCommerce and ACF abilities can read and write real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
+Yes, for a set of supported plugins. When one is active, Agent Abilities for MCP adds abilities for it under the same rules as the core: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers WooCommerce, Advanced Custom Fields, and SEO (Yoast, Rank Math, and All in One SEO). The WooCommerce and ACF abilities can read and write real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
 
 = Is this the same as the WordPress Abilities API, or the official MCP adapter? =
 
-It is built on both. WordPress 6.9 ships the Abilities API and the official MCP Adapter; Oversio Agent Abilities registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. So there is no bespoke server to trust, and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log.
+It is built on both. WordPress 6.9 ships the Abilities API and the official MCP Adapter; Agent Abilities for MCP registers a curated, governed set of abilities on top of them rather than inventing its own protocol or transport. So there is no bespoke server to trust, and the plugin inherits the standard's behavior. What it adds is the governance layer: the off-by-default catalog, the capability gating, the safety controls, and the audit log.
 
 = What's the difference between this and the WordPress REST API? =
 

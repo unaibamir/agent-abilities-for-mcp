@@ -8,13 +8,13 @@
  * checks is_user_logged_in()) lets the request through under that identity.
  *
  * The resolver is deliberately narrow: it only ever acts on a bearer credential
- * that carries the `oversio_oat_` access-token prefix, and only when no earlier
+ * that carries the `aafm_oat_` access-token prefix, and only when no earlier
  * filter has already resolved a user. Every other auth path — App Passwords,
  * cookies, foreign bearer schemes, no auth at all — is returned untouched. A
  * present-but-invalid OAuth token never hard-fails the request; it simply fails
  * to resolve a user, and the transport gate issues its own 401 downstream.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -24,8 +24,8 @@ defined( 'ABSPATH' ) || exit;
 /**
  * The literal prefix every minted OAuth access token carries.
  */
-if ( ! defined( 'OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
-	define( 'OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX', 'oversio_oat_' );
+if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
+	define( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX', 'aafm_oat_' );
 }
 
 /**
@@ -41,7 +41,7 @@ if ( ! defined( 'OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  *                           would coerce that false to 0.
  * @return int|false The approving wp_user_id, or the incoming value unchanged.
  */
-function oversio_oauth_resolve_current_user( $user_id ) {
+function aafm_oauth_resolve_current_user( $user_id ) {
 	// 1. Never preempt a user some earlier filter already resolved (App Password,
 	// cookie, another plugin). This early return is what makes the filter
 	// priority non-load-bearing for the frozen invariant.
@@ -50,36 +50,36 @@ function oversio_oauth_resolve_current_user( $user_id ) {
 	}
 
 	// 2. Respect the operator's OAuth kill switch.
-	if ( ! oversio_oauth_enabled() ) {
+	if ( ! aafm_oauth_enabled() ) {
 		return $user_id;
 	}
 
-	// 3. Scope strictly to the MCP REST route. An oversio_oat_ token is a credential
+	// 3. Scope strictly to the MCP REST route. An aafm_oat_ token is a credential
 	// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
 	// other route would turn an MCP token into a general credential for every route
 	// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
 	// current_user untouched, exactly as Application Passwords are. determine_current_user
 	// fires before REST routing, so the target is read from the request URI.
-	if ( ! oversio_oauth_request_targets_mcp_route() ) {
+	if ( ! aafm_oauth_request_targets_mcp_route() ) {
 		return $user_id;
 	}
 
 	// 4. Enforce the HTTPS policy. Where HTTPS is required, a bearer presented over
 	// plain http never resolves a user (the other OAuth paths already refuse http).
-	if ( oversio_oauth_https_required() && ! is_ssl() ) {
+	if ( aafm_oauth_https_required() && ! is_ssl() ) {
 		return $user_id;
 	}
 
 	// 5. Read the bearer credential from the Authorization header. Some FastCGI
 	// setups only expose it under REDIRECT_HTTP_AUTHORIZATION.
-	$credential = oversio_oauth_read_bearer_token();
+	$credential = aafm_oauth_read_bearer_token();
 	if ( null === $credential ) {
 		return $user_id;
 	}
 
 	// 6. Scope strictly to our own access tokens. A bearer that is not ours
 	// (App Password, any other scheme) is left for its own resolver.
-	if ( 0 !== strncmp( $credential, OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX, strlen( OVERSIO_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
+	if ( 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
 		return $user_id;
 	}
 
@@ -88,21 +88,21 @@ function oversio_oauth_resolve_current_user( $user_id ) {
 	// every present-but-invalid case — unknown, inactive, expired — and a
 	// present-but-invalid OAuth token simply fails to resolve a user rather
 	// than hard-failing the request.
-	$row = oversio_oauth_get_access_token_row( $credential );
+	$row = aafm_oauth_get_access_token_row( $credential );
 	if ( null === $row ) {
 		return $user_id;
 	}
 
 	// 8. Audience binding (RFC 8707): the token must have been minted for THIS
 	// endpoint. A token scoped to a different audience resolves no user here.
-	if ( ! hash_equals( oversio_endpoint_url(), (string) $row['resource'] ) ) {
+	if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
 		return $user_id;
 	}
 
 	// 9. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
 	// already in a client's hands keeps working unless its owning client is re-checked here —
 	// so disabling a compromised client invalidates its live access tokens immediately.
-	if ( oversio_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
+	if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
 		return $user_id;
 	}
 
@@ -114,17 +114,17 @@ function oversio_oauth_resolve_current_user( $user_id ) {
  *
  * The determine_current_user filter runs before REST routing resolves $request->get_route(),
  * so the target is derived from the raw request: the URI path (pretty permalinks give
- * /wp-json/oversio-agent-abilities/mcp) and the rest_route query var (plain permalinks give
- * ?rest_route=/oversio-agent-abilities/mcp). The MCP rest path is taken from the registered
+ * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route query var (plain permalinks give
+ * ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
  * endpoint so it tracks any future rename.
  *
  * @return bool True only when the request is for the MCP endpoint.
  */
-function oversio_oauth_request_targets_mcp_route(): bool {
+function aafm_oauth_request_targets_mcp_route(): bool {
 	// Single-sourced in bootstrap.php (leading-slash form).
-	$mcp_route = oversio_mcp_rest_route();
+	$mcp_route = aafm_mcp_rest_route();
 
-	// Plain-permalink form: ?rest_route=/oversio-agent-abilities/mcp.
+	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp.
 	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
 		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( rtrim( $rest_route, '/' ) === $mcp_route ) {
@@ -184,7 +184,7 @@ function oversio_oauth_request_targets_mcp_route(): bool {
  *
  * @return string|null The raw credential, or null when no bearer is present.
  */
-function oversio_oauth_read_bearer_token(): ?string {
+function aafm_oauth_read_bearer_token(): ?string {
 	$header = '';
 	if ( isset( $_SERVER['HTTP_AUTHORIZATION'] ) ) {
 		$header = trim( sanitize_text_field( wp_unslash( $_SERVER['HTTP_AUTHORIZATION'] ) ) );
@@ -209,7 +209,7 @@ function oversio_oauth_read_bearer_token(): ?string {
 /**
  * Fetch a full access-token row by the SHA-256 hash of the raw token.
  *
- * Returns the same row that {@see oversio_oauth_validate_access_token()} matches —
+ * Returns the same row that {@see aafm_oauth_validate_access_token()} matches —
  * active and unexpired — so the two functions always agree: a token that
  * validates also returns a row here, and one that does not validate returns
  * null. The row carries at least `resource` (the audience) and `wp_user_id`.
@@ -217,15 +217,15 @@ function oversio_oauth_read_bearer_token(): ?string {
  * @param string $raw The raw access token presented by the client.
  * @return array<string,mixed>|null The row as ARRAY_A, or null when not found / inactive / expired.
  */
-function oversio_oauth_get_access_token_row( string $raw ): ?array {
+function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	global $wpdb;
-	$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$now   = gmdate( 'Y-m-d H:i:s', time() );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
-			// Keep this WHERE clause in sync with oversio_oauth_validate_access_token() in tokens.php — the two must never disagree on the active/unexpired predicate.
+			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php — the two must never disagree on the active/unexpired predicate.
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
 			"SELECT * FROM {$table}
 			 WHERE token_hash = %s
@@ -243,7 +243,7 @@ function oversio_oauth_get_access_token_row( string $raw ): ?array {
 /**
  * Defensive pass-through for the rest_authentication_errors filter.
  *
- * Registered so a present-but-invalid `oversio_oat_` token can never let some other
+ * Registered so a present-but-invalid `aafm_oat_` token can never let some other
  * code path convert "we didn't resolve a user" into a hard failure on unrelated
  * routes. It returns the incoming value verbatim — null stays null, a WP_Error
  * comes back untouched.
@@ -251,6 +251,6 @@ function oversio_oauth_get_access_token_row( string $raw ): ?array {
  * @param WP_Error|true|null $errors The current authentication error state.
  * @return WP_Error|true|null The same value, unchanged.
  */
-function oversio_oauth_rest_authentication_errors( $errors ) {
+function aafm_oauth_rest_authentication_errors( $errors ) {
 	return $errors;
 }

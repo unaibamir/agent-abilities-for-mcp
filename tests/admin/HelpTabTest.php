@@ -2,31 +2,31 @@
 /**
  * Help tab: renders the troubleshooting sections, and the tab router accepts ?tab=help.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Admin;
+namespace AAFM\Tests\Admin;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class HelpTabTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 	}
 
 	public function test_help_tab_renders_section_headings(): void {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'oversio-help', $html );
+		$this->assertStringContainsString( 'aafm-help', $html );
 		$this->assertStringContainsString( 'Connecting', $html );
 		$this->assertStringContainsString( 'Authentication', $html );
 		$this->assertStringContainsString( 'Abilities &amp; permissions', $html );
@@ -37,14 +37,14 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
 		// One <details> accordion per documented issue (19 total).
-		$this->assertSame( 19, substr_count( $html, '<details class="oversio-help-entry">' ) );
+		$this->assertSame( 19, substr_count( $html, '<details class="aafm-help-entry">' ) );
 
 		// Spot-check the load-bearing technical fixes are present and accurate.
-		$this->assertStringContainsString( 'rest_route=/oversio-agent-abilities/mcp', $html );
+		$this->assertStringContainsString( 'rest_route=/agent-abilities-for-mcp/mcp', $html );
 		$this->assertStringContainsString( 'SetEnvIf Authorization', $html );
 		$this->assertStringContainsString( 'fastcgi_param HTTP_AUTHORIZATION', $html );
 		$this->assertStringContainsString( 'NODE_TLS_REJECT_UNAUTHORIZED', $html );
@@ -62,7 +62,7 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
 		// The #1 support cluster: the request never reaches WordPress (WAF / CDN / cache / redirect).
@@ -72,7 +72,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Zero Trust', $html );
 		// Page/edge cache exclusion and the wildcard allow path for the MCP route.
 		$this->assertStringContainsString( 'edge cache', $html );
-		$this->assertStringContainsString( '/wp-json/oversio-agent-abilities/*', $html );
+		$this->assertStringContainsString( '/wp-json/agent-abilities-for-mcp/*', $html );
 		// Trailing-slash / http->https redirect entry.
 		$this->assertStringContainsString( 'trailing slash', $html );
 	}
@@ -81,7 +81,7 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
 		// The copyable curl initialize probe, with its load-bearing flags and body.
@@ -100,7 +100,7 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
 		// Per-client guidance beyond Claude.
@@ -117,7 +117,7 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
 		// The plain-language security model accordion (the differentiator).
@@ -132,17 +132,17 @@ final class HelpTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		oversio_render_help_tab();
+		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		// Copyable snippets must carry the shared .oversio-copy class + data-copy payload.
-		$this->assertStringContainsString( 'oversio-copy', $html );
+		// Copyable snippets must carry the shared .aafm-copy class + data-copy payload.
+		$this->assertStringContainsString( 'aafm-copy', $html );
 		$this->assertStringContainsString( 'data-copy="SetEnvIf Authorization', $html );
 	}
 
 	public function test_help_entry_escapes_summary_and_filters_body(): void {
 		ob_start();
-		oversio_render_help_entry( '<script>x</script>', '<p>ok</p><iframe src="x"></iframe>' );
+		aafm_render_help_entry( '<script>x</script>', '<p>ok</p><iframe src="x"></iframe>' );
 		$html = (string) ob_get_clean();
 
 		// Summary is esc_html'd.
@@ -158,13 +158,13 @@ final class HelpTabTest extends TestCase {
 		$_GET['tab'] = 'help';
 
 		ob_start();
-		oversio_render_admin_page();
+		aafm_render_admin_page();
 		$html = (string) ob_get_clean();
 
 		unset( $_GET['tab'] );
 
 		// The Help nav tab is rendered active, and the help body renders.
-		$this->assertStringContainsString( 'oversio-help', $html );
+		$this->assertStringContainsString( 'aafm-help', $html );
 		$this->assertStringContainsString( 'nav-tab-active', $html );
 		$this->assertStringContainsString( 'tab=help', $html );
 	}
@@ -174,13 +174,13 @@ final class HelpTabTest extends TestCase {
 		$_GET['tab'] = 'bogus';
 
 		ob_start();
-		oversio_render_admin_page();
+		aafm_render_admin_page();
 		$html = (string) ob_get_clean();
 
 		unset( $_GET['tab'] );
 
 		// Unknown tab routes to the Dashboard tab, not Help.
-		$this->assertStringContainsString( 'oversio-dashboard', $html );
-		$this->assertStringNotContainsString( 'oversio-help-entry', $html );
+		$this->assertStringContainsString( 'aafm-dashboard', $html );
+		$this->assertStringNotContainsString( 'aafm-help-entry', $html );
 	}
 }

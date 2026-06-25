@@ -2,40 +2,40 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Oversio Agent Abilities — MCP Server for AI Agents 1.0.0\n"
-"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/oversio-agent-abilities\n"
+"Project-Id-Version: Agent Abilities for MCP — MCP Server for AI Agents 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/html\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-25T19:14:47+05:00\n"
+"POT-Creation-Date: 2026-06-25T23:27:37+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
-"X-Domain: oversio-agent-abilities\n"
+"X-Domain: agent-abilities-for-mcp\n"
 
 #. Plugin Name of the plugin
-#: oversio-agent-abilities.php
-msgid "Oversio Agent Abilities — MCP Server for AI Agents"
+#: agent-abilities-for-mcp.php
+msgid "Agent Abilities for MCP — MCP Server for AI Agents"
 msgstr ""
 
 #. Plugin URI of the plugin
-#: oversio-agent-abilities.php
-msgid "https://github.com/unaibamir/oversio-agent-abilities"
+#: agent-abilities-for-mcp.php
+msgid "https://github.com/unaibamir/agent-abilities-for-mcp"
 msgstr ""
 
 #. Description of the plugin
-#: oversio-agent-abilities.php
+#: agent-abilities-for-mcp.php
 msgid "WordPress MCP server that gives Claude, Cursor and AI agents scoped, audited, least-privilege access over the Model Context Protocol. Off by default."
 msgstr ""
 
 #. Author of the plugin
-#: oversio-agent-abilities.php
+#: agent-abilities-for-mcp.php
 msgid "Unaib Amir"
 msgstr ""
 
 #. Author URI of the plugin
-#: oversio-agent-abilities.php
+#: agent-abilities-for-mcp.php
 msgid "https://unaib.com"
 msgstr ""
 
@@ -570,7 +570,7 @@ msgid "Permanently delete a post, bypassing the Trash. This cannot be undone —
 msgstr ""
 
 #: includes/abilities/posts.php:503
-msgid "Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call oversio/get-post-types and use the writable flag to find valid slugs."
+msgid "Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs."
 msgstr ""
 
 #: includes/abilities/posts.php:578
@@ -2551,7 +2551,7 @@ msgstr ""
 #: includes/admin/page.php:742
 #: includes/oauth/consent-template.php:118
 #: includes/server.php:474
-msgid "Oversio Agent Abilities"
+msgid "Agent Abilities for MCP"
 msgstr ""
 
 #: includes/admin/page.php:63
@@ -2714,7 +2714,7 @@ msgid "Could not revoke. Please try again."
 msgstr ""
 
 #: includes/admin/page.php:592
-msgid "When an administrator exposes a content type to AI agents through Oversio Agent Abilities, an authenticated agent can read that type's title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data."
+msgid "When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type's title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data."
 msgstr ""
 
 #: includes/admin/page.php:702
@@ -3609,31 +3609,31 @@ msgid "Clears every plugin setting — enabled abilities, exposed content types 
 msgstr ""
 
 #: includes/bootstrap.php:157
-msgid "Oversio Agent Abilities could not load the MCP adapter. Please reinstall the plugin."
+msgid "Agent Abilities for MCP could not load the MCP adapter. Please reinstall the plugin."
 msgstr ""
 
 #. translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version.
 #: includes/bootstrap.php:183
 #, php-format
-msgid "Oversio Agent Abilities is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Oversio Agent Abilities requires %3$s or newer. Update or deactivate %1$s to enable agent tools."
+msgid "Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools."
 msgstr ""
 
 #. translators: 1: loaded adapter version, 2: minimum required adapter version.
 #: includes/bootstrap.php:191
 #, php-format
-msgid "Oversio Agent Abilities is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools."
+msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools."
 msgstr ""
 
 #. translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive).
 #: includes/bootstrap.php:220
 #, php-format
-msgid "Oversio Agent Abilities is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Oversio Agent Abilities, or deactivate %1$s, to enable agent tools."
+msgid "Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools."
 msgstr ""
 
 #. translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive).
 #: includes/bootstrap.php:228
 #, php-format
-msgid "Oversio Agent Abilities is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Oversio Agent Abilities, or deactivate that plugin, to enable agent tools."
+msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools."
 msgstr ""
 
 #: includes/helpers.php:24
@@ -3838,7 +3838,7 @@ msgid "Deny"
 msgstr ""
 
 #: includes/oauth/consent-template.php:211
-msgid "Secured by Oversio Agent Abilities"
+msgid "Secured by Agent Abilities for MCP"
 msgstr ""
 
 #: includes/oauth/rest.php:213

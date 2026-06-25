@@ -12,14 +12,14 @@
  * and the frozen-invariant assertions confirm a present-but-invalid token never
  * hard-fails an unrelated route.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_REST_Request;
 
 /**
@@ -59,45 +59,45 @@ class HandshakeTest extends TestCase {
 		// requirement the documented agent-dev way so the token handler runs over the
 		// test's plain-HTTP request instead of short-circuiting with a 400 — the same
 		// documented override RestEndpointsTest uses.
-		if ( ! defined( 'OVERSIO_OAUTH_ALLOW_HTTP' ) ) {
-			define( 'OVERSIO_OAUTH_ALLOW_HTTP', true );
+		if ( ! defined( 'AAFM_OAUTH_ALLOW_HTTP' ) ) {
+			define( 'AAFM_OAUTH_ALLOW_HTTP', true );
 		}
 
 		// OAuth storage + audit log the registration wrapper writes to.
-		oversio_install_oauth_tables();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_oauth_tables();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Register the OAuth (and MCP) routes against the REST server for this run.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook fired to populate the REST server in the test.
 		do_action( 'rest_api_init' );
 
-		// Contribute the two fixtures to the static registry so oversio_get_enabled_abilities()
+		// Contribute the two fixtures to the static registry so aafm_get_enabled_abilities()
 		// and the tools/list filter can map tool names back to abilities. The registry
 		// catalog is memoized, and parent::set_up() flushed it BEFORE this filter was
 		// attached, so flush once more now that the filter is in place — otherwise the
 		// next read returns the production catalog without our fixtures and the
 		// enabled-abilities intersection drops them.
-		add_filter( 'oversio_abilities_registry', array( $this, 'register_fixture_registry' ) );
-		oversio_flush_registry_cache();
+		add_filter( 'aafm_abilities_registry', array( $this, 'register_fixture_registry' ) );
+		aafm_flush_registry_cache();
 
 		// Categories first, inside their gated init action (idempotent).
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 
-		// Two fixtures spanning a cap the editor HAS and a cap it LACKS. oversio/pub-read has
-		// permission __return_true, so any logged-in user can discover it; oversio/admin-write
+		// Two fixtures spanning a cap the editor HAS and a cap it LACKS. aafm/pub-read has
+		// permission __return_true, so any logged-in user can discover it; aafm/admin-write
 		// is gated on manage_options, which an editor lacks, so the editor cannot. The
 		// Abilities registry is a process-singleton, so guard re-registration across tests.
 		$this->in_action(
 			'wp_abilities_api_init',
 			static function (): void {
-				if ( ! wp_has_ability( 'oversio/pub-read' ) ) {
-					oversio_register_ability_with_log(
-						'oversio/pub-read',
+				if ( ! wp_has_ability( 'aafm/pub-read' ) ) {
+					aafm_register_ability_with_log(
+						'aafm/pub-read',
 						array(
 							'label'               => 'Pub Read',
 							'description'         => 'Anyone may read.',
-							'category'            => 'oversio-reads',
+							'category'            => 'aafm-reads',
 							'input_schema'        => array(
 								'type'       => 'object',
 								'properties' => array(),
@@ -108,13 +108,13 @@ class HandshakeTest extends TestCase {
 						)
 					);
 				}
-				if ( ! wp_has_ability( 'oversio/admin-write' ) ) {
-					oversio_register_ability_with_log(
-						'oversio/admin-write',
+				if ( ! wp_has_ability( 'aafm/admin-write' ) ) {
+					aafm_register_ability_with_log(
+						'aafm/admin-write',
 						array(
 							'label'               => 'Admin Write',
 							'description'         => 'Admin only.',
-							'category'            => 'oversio-writes',
+							'category'            => 'aafm-writes',
 							'input_schema'        => array(
 								'type'       => 'object',
 								'properties' => array(),
@@ -128,7 +128,7 @@ class HandshakeTest extends TestCase {
 			}
 		);
 
-		update_option( 'oversio_enabled_abilities', array( 'oversio/pub-read', 'oversio/admin-write' ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/pub-read', 'aafm/admin-write' ) );
 	}
 
 	/**
@@ -146,14 +146,14 @@ class HandshakeTest extends TestCase {
 	 * @return array<string,array<string,mixed>>
 	 */
 	public function register_fixture_registry( array $registry ): array {
-		$registry['oversio/pub-read']    = array(
+		$registry['aafm/pub-read']    = array(
 			'label'        => 'Pub Read',
 			'description'  => 'Anyone may read.',
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'args_builder' => '__return_empty_array',
 		);
-		$registry['oversio/admin-write'] = array(
+		$registry['aafm/admin-write'] = array(
 			'label'        => 'Admin Write',
 			'description'  => 'Admin only.',
 			'group'        => 'writes',
@@ -182,7 +182,7 @@ class HandshakeTest extends TestCase {
 	 * @return string The minted client_id.
 	 */
 	private function register_client( array $redirect_uris ): string {
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -201,7 +201,7 @@ class HandshakeTest extends TestCase {
 	}
 
 	/**
-	 * Mint an authorization code exactly the way oversio_oauth_issue_code_and_redirect()
+	 * Mint an authorization code exactly the way aafm_oauth_issue_code_and_redirect()
 	 * does on an approved authorize POST: bound to the client, redirect URI, PKCE
 	 * challenge, and the MCP endpoint as the forced resource/audience.
 	 *
@@ -212,13 +212,13 @@ class HandshakeTest extends TestCase {
 	 * @return string The raw authorization code.
 	 */
 	private function mint_code( string $client_id, int $user_id, string $redirect, string $challenge ): string {
-		return oversio_oauth_mint_code(
+		return aafm_oauth_mint_code(
 			array(
 				'client_id'      => $client_id,
 				'wp_user_id'     => $user_id,
 				'redirect_uri'   => $redirect,
 				'code_challenge' => $challenge,
-				'resource'       => oversio_endpoint_url(),
+				'resource'       => aafm_endpoint_url(),
 			)
 		);
 	}
@@ -246,7 +246,7 @@ class HandshakeTest extends TestCase {
 			$params['code_verifier'] = $verifier;
 		}
 
-		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
 		$request->set_body_params( $params );
 
 		return rest_do_request( $request );
@@ -259,9 +259,9 @@ class HandshakeTest extends TestCase {
 	 * (Mcp-Session-Id, an initialize handshake) before it will answer tools/list, so
 	 * driving it through rest_do_request() in-process is out of scope here. The
 	 * per-user filtering itself, however, is a pure function of the current user:
-	 * oversio_filter_mcp_tools_list() is the exact callback the adapter fires on the
+	 * aafm_filter_mcp_tools_list() is the exact callback the adapter fires on the
 	 * mcp_adapter_tools_list hook at request time, and it decides visibility solely
-	 * from the resolved current user (via oversio_user_can_discover_ability). We invoke
+	 * from the resolved current user (via aafm_user_can_discover_ability). We invoke
 	 * that same callback directly against Tool DTO stubs — the canonical harness used
 	 * by ServerToolsTest — so the assertion exercises the real visibility logic the
 	 * live route would, for whatever user wp_set_current_user() has established.
@@ -270,12 +270,12 @@ class HandshakeTest extends TestCase {
 	 */
 	private function visible_tool_names(): array {
 		$tools = array(
-			$this->tool_dto( oversio_mcp_tool_name( 'oversio/pub-read' ) ),
-			$this->tool_dto( oversio_mcp_tool_name( 'oversio/admin-write' ) ),
+			$this->tool_dto( aafm_mcp_tool_name( 'aafm/pub-read' ) ),
+			$this->tool_dto( aafm_mcp_tool_name( 'aafm/admin-write' ) ),
 		);
 
 		$names = array();
-		foreach ( (array) oversio_filter_mcp_tools_list( $tools ) as $tool ) {
+		foreach ( (array) aafm_filter_mcp_tools_list( $tools ) as $tool ) {
 			$names[] = $tool->getName();
 		}
 
@@ -309,7 +309,7 @@ class HandshakeTest extends TestCase {
 	 * Proves the OAuth-resolved identity drives per-user MCP tool visibility, the
 	 * same as an Application Password. The editor is chosen deliberately: its
 	 * discoverable set is a STRICT SUBSET of the enabled abilities — it can discover
-	 * oversio/pub-read (permission __return_true) but NOT oversio/admin-write (manage_options,
+	 * aafm/pub-read (permission __return_true) but NOT aafm/admin-write (manage_options,
 	 * which an editor lacks) — so the subset assertion is meaningful.
 	 *
 	 * Note on the tools/list leg: the adapter's tools/list filter resolves visibility
@@ -317,7 +317,7 @@ class HandshakeTest extends TestCase {
 	 * separate determine_current_user resolver), and the live MCP route needs a full
 	 * streamable-HTTP session before it answers tools/list. So this asserts the chain
 	 * as two linked facts: (5) the bearer resolves to $uid via
-	 * oversio_oauth_resolve_current_user, and (6) running the real tools/list filter AS
+	 * aafm_oauth_resolve_current_user, and (6) running the real tools/list filter AS
 	 * $uid (see visible_tool_names()) yields exactly the editor's bounded set.
 	 * Together they prove the OAuth-resolved uid produces the correct per-user tool set
 	 * — which is the integration guarantee under test.
@@ -338,7 +338,7 @@ class HandshakeTest extends TestCase {
 		$this->assertSame( 200, $response->get_status(), 'token exchange should succeed' );
 
 		$data = $response->get_data();
-		$this->assertStringStartsWith( 'oversio_oat_', (string) $data['access_token'], 'access token must carry the OAuth prefix' );
+		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'], 'access token must carry the OAuth prefix' );
 		$this->assertNotEmpty( $data['refresh_token'], 'a refresh token must be issued' );
 		$this->assertSame( 'Bearer', $data['token_type'], 'the token_type a client reads must be exactly Bearer' );
 		$this->assertIsInt( $data['expires_in'], 'expires_in must be an integer the client can schedule a refresh from' );
@@ -350,8 +350,8 @@ class HandshakeTest extends TestCase {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot of a server superglobal, restored verbatim after the assertion.
 		$prev_uri                      = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token;
-		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/oversio-agent-abilities/mcp';
-		$this->assertSame( $uid, oversio_oauth_resolve_current_user( false ), 'the OAuth bearer must resolve to the approving user' );
+		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ), 'the OAuth bearer must resolve to the approving user' );
 		if ( null === $prev_uri ) {
 			unset( $_SERVER['REQUEST_URI'] );
 		} else {
@@ -363,12 +363,12 @@ class HandshakeTest extends TestCase {
 		$names = $this->visible_tool_names();
 
 		$this->assertContains(
-			'oversio-pub-read',
+			'aafm-pub-read',
 			$names,
 			'editor CAN discover an enabled ability gated on a cap it holds'
 		);
 		$this->assertNotContains(
-			'oversio-admin-write',
+			'aafm-admin-write',
 			$names,
 			'editor CANNOT discover an enabled ability gated on manage_options'
 		);
@@ -412,7 +412,7 @@ class HandshakeTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'oversio_oauth_clients',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			array( 'is_active' => 0 ),
 			array( 'client_id' => $client_id ),
 			array( '%d' ),
@@ -455,7 +455,7 @@ class HandshakeTest extends TestCase {
 		$past = gmdate( 'Y-m-d H:i:s', time() - HOUR_IN_SECONDS );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'oversio_oauth_codes',
+			$wpdb->prefix . 'aafm_oauth_codes',
 			array( 'expires_at' => $past ),
 			array( 'code_hash' => hash( 'sha256', $code ) ),
 			array( '%s' ),
@@ -490,8 +490,8 @@ class HandshakeTest extends TestCase {
 	 * resolving a user, so a disabled install behaves as if OAuth were never wired.
 	 */
 	public function test_disabled_oauth_makes_token_endpoint_404(): void {
-		$prior = get_option( 'oversio_oauth_enabled', null );
-		update_option( 'oversio_oauth_enabled', '0' );
+		$prior = get_option( 'aafm_oauth_enabled', null );
+		update_option( 'aafm_oauth_enabled', '0' );
 
 		try {
 			$uid       = self::factory()->user->create( array( 'role' => 'editor' ) );
@@ -499,33 +499,33 @@ class HandshakeTest extends TestCase {
 
 			// Register + mint must run while the surface is still reachable, so flip the
 			// toggle AFTER the code exists, then attempt the exchange with it off.
-			update_option( 'oversio_oauth_enabled', '1' );
+			update_option( 'aafm_oauth_enabled', '1' );
 			$client_id = $this->register_client( array( self::REDIRECT ) );
 			$code      = $this->mint_code( $client_id, $uid, self::REDIRECT, $challenge );
-			update_option( 'oversio_oauth_enabled', '0' );
+			update_option( 'aafm_oauth_enabled', '0' );
 
 			$response = $this->exchange( $client_id, $code, self::REDIRECT, self::VERIFIER );
 			$this->assertSame( 404, $response->get_status(), 'the token route is gone when OAuth is disabled' );
 
 			// Even a syntactically valid bearer resolves nothing while OAuth is off: the
 			// resolver returns the incoming value untouched.
-			$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer oversio_oat_' . str_repeat( 'a', 64 );
+			$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer aafm_oat_' . str_repeat( 'a', 64 );
 			$this->assertFalse(
-				oversio_oauth_resolve_current_user( false ),
+				aafm_oauth_resolve_current_user( false ),
 				'a disabled OAuth surface resolves no user from a bearer'
 			);
 		} finally {
 			// Be explicit even though TestCase isolation rolls options back.
 			if ( null === $prior ) {
-				delete_option( 'oversio_oauth_enabled' );
+				delete_option( 'aafm_oauth_enabled' );
 			} else {
-				update_option( 'oversio_oauth_enabled', $prior );
+				update_option( 'aafm_oauth_enabled', $prior );
 			}
 		}
 	}
 
 	/**
-	 * Frozen invariant (a): a NON-oversio_oat_ bearer is returned untouched.
+	 * Frozen invariant (a): a NON-aafm_oat_ bearer is returned untouched.
 	 *
 	 * Canonically covered in ValidatorTest; re-asserted here in the handshake context
 	 * because the resolver's "leave foreign bearers for their own resolver" guarantee
@@ -534,20 +534,20 @@ class HandshakeTest extends TestCase {
 	public function test_non_oauth_bearer_passes_through_untouched(): void {
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer not-one-of-ours';
 		$this->assertFalse(
-			oversio_oauth_resolve_current_user( false ),
+			aafm_oauth_resolve_current_user( false ),
 			'a foreign bearer leaves the incoming value untouched'
 		);
 
 		// And an already-resolved user (e.g. App Password resolved earlier) is never preempted.
 		$this->assertSame(
 			42,
-			oversio_oauth_resolve_current_user( 42 ),
+			aafm_oauth_resolve_current_user( 42 ),
 			'an identity resolved by an earlier filter is left intact'
 		);
 	}
 
 	/**
-	 * Frozen invariant (b): a garbage oversio_oat_ bearer must not break an unrelated route.
+	 * Frozen invariant (b): a garbage aafm_oat_ bearer must not break an unrelated route.
 	 *
 	 * This is the integration concern the unit tests can't fully cover: with a bogus but
 	 * well-formed OAuth bearer on the request, an ordinary public REST route must still
@@ -556,17 +556,17 @@ class HandshakeTest extends TestCase {
 	 * resolve a user; it never hard-fails the request.
 	 */
 	public function test_invalid_oauth_token_does_not_break_unrelated_route(): void {
-		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer oversio_oat_deadbeef';
+		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer aafm_oat_deadbeef';
 
 		// Our resolver must not invent a user from an unknown token.
 		$this->assertFalse(
-			oversio_oauth_resolve_current_user( false ),
+			aafm_oauth_resolve_current_user( false ),
 			'an unknown OAuth token resolves no user'
 		);
 
 		// rest_authentication_errors must not become a WP_Error on our account. Core may
 		// legitimately resolve the chain to true ("auth ok, no error") or null ("no
-		// opinion"); what our oversio_oauth_rest_authentication_errors pass-through must
+		// opinion"); what our aafm_oauth_rest_authentication_errors pass-through must
 		// never do is convert "no user resolved" into a hard failure (a WP_Error).
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core REST filter, applied to assert our pass-through hook never forces an error.
 		$auth_errors = apply_filters( 'rest_authentication_errors', null );

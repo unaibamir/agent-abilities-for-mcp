@@ -7,15 +7,15 @@
  * IntegrationStubs trait). The abilities list/read/create/update/delete through the WC CRUD layer
  * (wc_get_products / wc_get_product / WC_Product), all served by the WcStubStore.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
 use WP_Error;
 
 final class WooProductsTest extends TestCase {
@@ -24,11 +24,11 @@ final class WooProductsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_wc_products();
 	}
 
@@ -41,26 +41,26 @@ final class WooProductsTest extends TestCase {
 	 * Enable + register the WooCommerce product set so the abilities can be invoked.
 	 */
 	private function register_wc_products(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/wc-list-products',
-				'oversio/wc-get-product',
-				'oversio/wc-create-product',
-				'oversio/wc-update-product',
-				'oversio/wc-delete-product',
+				'aafm/wc-list-products',
+				'aafm/wc-get-product',
+				'aafm/wc-create-product',
+				'aafm/wc-update-product',
+				'aafm/wc-delete-product',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_list_products_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/wc-list-products' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/wc-list-products' )->check_permissions( array() ) );
 
 		$this->acting_as( 'administrator' ); // admin has manage_woocommerce.
-		$res = wp_get_ability( 'oversio/wc-list-products' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-products' )->execute( array() );
 		$this->assertArrayHasKey( 'products', $res );
 		$this->assertArrayHasKey( 'total', $res );
 		$this->assertSame( 1, $res['total'] );
@@ -72,7 +72,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_list_products_denies_a_subscriber(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/wc-list-products' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/wc-list-products' )->check_permissions( array() ) );
 	}
 
 	public function test_list_products_total_is_the_grand_total_not_the_page_count(): void {
@@ -81,7 +81,7 @@ final class WooProductsTest extends TestCase {
 		$this->stub_woocommerce( $this->seed_many_products( 25 ) );
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-products' )->execute( array( 'per_page' => 5 ) );
+		$res = wp_get_ability( 'aafm/wc-list-products' )->execute( array( 'per_page' => 5 ) );
 
 		$this->assertCount( 5, $res['products'], 'A page holds at most per_page rows.' );
 		$this->assertSame( 25, $res['total'], 'total is the grand total, not the page size.' );
@@ -107,7 +107,7 @@ final class WooProductsTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-products' )->execute( array( 'status' => 'draft' ) );
+		$res = wp_get_ability( 'aafm/wc-list-products' )->execute( array( 'status' => 'draft' ) );
 
 		$this->assertCount( 1, $res['products'] );
 		$this->assertSame( 202, $res['products'][0]['id'] );
@@ -131,13 +131,13 @@ final class WooProductsTest extends TestCase {
 
 		$this->acting_as( 'administrator' );
 
-		$page1 = wp_get_ability( 'oversio/wc-list-products' )->execute(
+		$page1 = wp_get_ability( 'aafm/wc-list-products' )->execute(
 			array(
 				'per_page' => 1,
 				'page'     => 1,
 			)
 		);
-		$page2 = wp_get_ability( 'oversio/wc-list-products' )->execute(
+		$page2 = wp_get_ability( 'aafm/wc-list-products' )->execute(
 			array(
 				'per_page' => 1,
 				'page'     => 2,
@@ -172,7 +172,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_get_product_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 101, $res['id'] );
 		$this->assertSame( 'Test Widget', $res['name'] );
@@ -185,14 +185,14 @@ final class WooProductsTest extends TestCase {
 
 	public function test_get_product_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 999999 ) );
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	public function test_get_product_denies_a_subscriber(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-get-product' )->check_permissions( array( 'product_id' => 101 ) )
+			wp_get_ability( 'aafm/wc-get-product' )->check_permissions( array( 'product_id' => 101 ) )
 		);
 	}
 
@@ -200,7 +200,7 @@ final class WooProductsTest extends TestCase {
 		// The attributes map is type:object; an empty one must JSON-encode to "{}" (object), never
 		// "[]" (list), per the get-all-post-meta / ACF empty-map lesson.
 		$this->acting_as( 'administrator' );
-		$res  = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$res  = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$json = (string) wp_json_encode( $res['attributes'] );
 		$this->assertSame( '{}', $json, 'Empty product attributes must encode as {}.' );
 	}
@@ -209,10 +209,10 @@ final class WooProductsTest extends TestCase {
 		// The output_schema must match the full rich shape the executor returns, not a subset. Every
 		// key in the emitted result must be a declared property (get/create/update share one builder).
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$schema   = oversio_args_wc_get_product()['output_schema'];
+		$schema   = aafm_args_wc_get_product()['output_schema'];
 		$declared = array_keys( $schema['properties'] );
 
 		foreach ( array_keys( $res ) as $emitted_key ) {
@@ -231,26 +231,26 @@ final class WooProductsTest extends TestCase {
 
 	public function test_create_and_update_share_the_get_output_schema(): void {
 		// All three product-returning abilities expose the same rich output shape.
-		$get    = oversio_args_wc_get_product()['output_schema']['properties'];
-		$create = oversio_args_wc_create_product()['output_schema']['properties'];
-		$update = oversio_args_wc_update_product()['output_schema']['properties'];
+		$get    = aafm_args_wc_get_product()['output_schema']['properties'];
+		$create = aafm_args_wc_create_product()['output_schema']['properties'];
+		$update = aafm_args_wc_update_product()['output_schema']['properties'];
 
 		$this->assertSame( $get, $create, 'create-product shares the rich get output schema.' );
 		$this->assertSame( $get, $update, 'update-product shares the rich get output schema.' );
 	}
 
 	public function test_wc_abilities_absent_when_host_inactive(): void {
-		// HIGH-2: assert at the REGISTRY level (not via oversio_user_can_discover_ability, which leaks
+		// HIGH-2: assert at the REGISTRY level (not via aafm_user_can_discover_ability, which leaks
 		// through the process-wide raw-permission $store once any test registered the set). The
 		// stub_woocommerce() helper defines class WooCommerce process-wide, so real detection still
-		// reports WC active after removing the force filter — pin it off through oversio_woocommerce_active.
+		// reports WC active after removing the force filter — pin it off through aafm_woocommerce_active.
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
-		oversio_registry_cache_should_flush( true );
-		$this->assertArrayNotHasKey( 'oversio/wc-list-products', oversio_get_abilities_registry() );
-		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
+		aafm_registry_cache_should_flush( true );
+		$this->assertArrayNotHasKey( 'aafm/wc-list-products', aafm_get_abilities_registry() );
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
 	public function test_list_products_discovery_admin_yes_editor_no(): void {
@@ -258,10 +258,10 @@ final class WooProductsTest extends TestCase {
 		// to their real permission_callback at discovery (no server.php case). An admin discovers them;
 		// an editor (no manage_woocommerce) does not.
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/wc-list-products' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/wc-list-products' ) );
 
 		$this->acting_as( 'editor' );
-		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/wc-list-products' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/wc-list-products' ) );
 	}
 
 	/**
@@ -269,7 +269,7 @@ final class WooProductsTest extends TestCase {
 	 */
 	public function test_create_product_persists_and_returns_the_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'          => 'New Gadget',
 				'type'          => 'simple',
@@ -287,12 +287,12 @@ final class WooProductsTest extends TestCase {
 		$this->assertGreaterThan( 0, $res['id'] );
 
 		// The product is now readable through the store.
-		$this->assertTrue( \Oversio\Tests\WcStubStore::exists( (int) $res['id'] ) );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( (int) $res['id'] ) );
 	}
 
 	public function test_create_product_sanitizes_description_and_name(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'        => '<script>alert(1)</script>Clean Name',
 				'description' => '<script>alert(2)</script><strong>bold</strong>',
@@ -306,7 +306,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_create_product_requires_name(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute( array( 'sku' => 'NO-NAME' ) );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'sku' => 'NO-NAME' ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'name is required on create.' );
 	}
 
@@ -319,7 +319,7 @@ final class WooProductsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		foreach ( array( 'variable', 'grouped', 'external' ) as $type ) {
-			$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+			$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 				array(
 					'name' => 'Typed Product',
 					'type' => $type,
@@ -329,7 +329,7 @@ final class WooProductsTest extends TestCase {
 		}
 
 		// An explicit 'simple' type, and the omitted-type default, both still succeed.
-		$simple = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$simple = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name' => 'Simple Product',
 				'type' => 'simple',
@@ -341,7 +341,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_create_product_rejects_a_smuggled_top_level_field(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'        => 'Sneaky',
 				'post_author' => 999999,
@@ -354,7 +354,7 @@ final class WooProductsTest extends TestCase {
 		// MEDIUM-4: every nested object in a write schema is itself additionalProperties:false. A
 		// smuggled key INSIDE an attributes item must be rejected, not just a top-level smuggle.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'       => 'Has Attributes',
 				'attributes' => array(
@@ -375,7 +375,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_create_product_accepts_a_clean_nested_attribute(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'       => 'Clean Attributes',
 				'attributes' => array(
@@ -393,7 +393,7 @@ final class WooProductsTest extends TestCase {
 		// A populated attributes map (not just the empty {} case) must round-trip: create with a
 		// Size attribute, then get-product and find Size / S,M,L back in the re-keyed object.
 		$this->acting_as( 'administrator' );
-		$created = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'       => 'Sized Product',
 				'attributes' => array(
@@ -406,10 +406,10 @@ final class WooProductsTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 
-		$read = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
 		$this->assertNotInstanceOf( WP_Error::class, $read );
 
-		// oversio_rich_wc_product re-keys attributes by index into an object, each entry {name, options}.
+		// aafm_rich_wc_product re-keys attributes by index into an object, each entry {name, options}.
 		$attributes = (array) $read['attributes'];
 		$this->assertNotEmpty( $attributes, 'A populated attribute must survive the create→get round-trip.' );
 
@@ -421,10 +421,10 @@ final class WooProductsTest extends TestCase {
 	}
 
 	public function test_create_then_get_round_trips_the_regular_price(): void {
-		// regular_price runs through oversio_wc_sanitize_price; assert the clean decimal reads back, and
+		// regular_price runs through aafm_wc_sanitize_price; assert the clean decimal reads back, and
 		// that the stub mirrors it into price (regular only — sale price is left alone).
 		$this->acting_as( 'administrator' );
-		$created = wp_get_ability( 'oversio/wc-create-product' )->execute(
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
 				'name'          => 'Priced Product',
 				'regular_price' => '9.50',
@@ -434,20 +434,20 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( '9.50', $created['regular_price'], 'The sanitized regular price reads back.' );
 		$this->assertSame( '9.50', $created['price'], 'price tracks the regular price in the stub.' );
 
-		$read = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
 		$this->assertSame( '9.50', $read['regular_price'], 'The price round-trips on a following read.' );
 	}
 
 	public function test_create_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-create-product' )->check_permissions( array( 'name' => 'X' ) )
+			wp_get_ability( 'aafm/wc-create-product' )->check_permissions( array( 'name' => 'X' ) )
 		);
 	}
 
 	public function test_update_product_patches_by_id(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
 			array(
 				'product_id' => 101,
 				'name'       => 'Renamed Widget',
@@ -458,19 +458,19 @@ final class WooProductsTest extends TestCase {
 		// Untouched fields survive the PATCH.
 		$this->assertSame( 'WIDGET-101', $res['sku'], 'A PATCH leaves unsent fields intact.' );
 
-		$read = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertSame( 'Renamed Widget', $read['name'], 'The update must round-trip.' );
 	}
 
 	public function test_update_product_requires_product_id(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-product' )->execute( array( 'name' => 'No id' ) );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute( array( 'name' => 'No id' ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'product_id is required on update.' );
 	}
 
 	public function test_update_product_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
 			array(
 				'product_id' => 999999,
 				'name'       => 'Ghost',
@@ -482,7 +482,7 @@ final class WooProductsTest extends TestCase {
 	public function test_update_product_rejects_a_smuggled_nested_attribute_field(): void {
 		// MEDIUM-4 on the update schema too.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
 			array(
 				'product_id' => 101,
 				'attributes' => array(
@@ -500,24 +500,24 @@ final class WooProductsTest extends TestCase {
 	public function test_update_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-update-product' )->check_permissions( array( 'product_id' => 101 ) )
+			wp_get_ability( 'aafm/wc-update-product' )->check_permissions( array( 'product_id' => 101 ) )
 		);
 	}
 
 	public function test_create_product_write_is_audited(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-product' )->execute( array( 'name' => 'Audited Create' ) );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Audited Create' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/wc-create-product', $abilities );
+		$this->assertContains( 'aafm/wc-create-product', $abilities );
 	}
 
 
 	public function test_update_product_write_is_audited(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-product' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
 			array(
 				'product_id' => 101,
 				'name'       => 'Audited Update',
@@ -525,9 +525,9 @@ final class WooProductsTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/wc-update-product', $abilities );
+		$this->assertContains( 'aafm/wc-update-product', $abilities );
 	}
 
 
@@ -536,16 +536,16 @@ final class WooProductsTest extends TestCase {
 	 */
 	public function test_delete_product_removes_it_permanently(): void {
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( \Oversio\Tests\WcStubStore::exists( 101 ) );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ) );
 
-		$res = wp_get_ability( 'oversio/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertTrue( $res['deleted'] );
 		$this->assertSame( 101, $res['id'] );
 
 		// Gone — a following read finds nothing.
-		$this->assertFalse( \Oversio\Tests\WcStubStore::exists( 101 ) );
-		$read = wp_get_ability( 'oversio/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$this->assertFalse( \AAFM\Tests\WcStubStore::exists( 101 ) );
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertInstanceOf( WP_Error::class, $read, 'A deleted product can no longer be read.' );
 	}
 
@@ -556,47 +556,47 @@ final class WooProductsTest extends TestCase {
 	public function test_delete_product_store_failure_returns_error(): void {
 		$this->acting_as( 'administrator' );
 
-		\Oversio\Tests\WcStubStore::$delete_should_fail = true;
-		$res = wp_get_ability( 'oversio/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
-		\Oversio\Tests\WcStubStore::$delete_should_fail = false;
+		\AAFM\Tests\WcStubStore::$delete_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		\AAFM\Tests\WcStubStore::$delete_should_fail = false;
 
 		$this->assertInstanceOf( WP_Error::class, $res, 'A failed delete must not report deleted:true.' );
-		$this->assertTrue( \Oversio\Tests\WcStubStore::exists( 101 ), 'The product must still exist after a failed delete.' );
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ), 'The product must still exist after a failed delete.' );
 	}
 
 	public function test_delete_product_is_annotated_destructive(): void {
-		$annotations = wp_get_ability( 'oversio/wc-delete-product' )->get_meta_item( 'annotations' );
+		$annotations = wp_get_ability( 'aafm/wc-delete-product' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product must be destructive.' );
 		$this->assertFalse( $annotations['readonly'] ?? true, 'wc-delete-product is not readonly.' );
 	}
 
 	public function test_delete_product_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-delete-product' )->execute( array( 'product_id' => 999999 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	public function test_delete_product_requires_product_id(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-delete-product' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array() );
 		$this->assertInstanceOf( WP_Error::class, $res, 'product_id is required on delete.' );
 	}
 
 	public function test_delete_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-delete-product' )->check_permissions( array( 'product_id' => 101 ) )
+			wp_get_ability( 'aafm/wc-delete-product' )->check_permissions( array( 'product_id' => 101 ) )
 		);
 	}
 
 	public function test_delete_product_write_is_audited(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/wc-delete-product', $abilities );
+		$this->assertContains( 'aafm/wc-delete-product', $abilities );
 	}
 
 	/**
@@ -612,7 +612,7 @@ final class WooProductsTest extends TestCase {
 		$this->acting_as( $low_role );
 		$this->assertNotTrue( wp_get_ability( $ability )->check_permissions( $args ) );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -624,9 +624,9 @@ final class WooProductsTest extends TestCase {
 	 */
 	public function provide_denied_audit_cases(): array {
 		return array(
-			'create-product' => array( 'oversio/wc-create-product', array( 'name' => 'X' ), 'editor' ),
-			'update-product' => array( 'oversio/wc-update-product', array( 'product_id' => 101 ), 'editor' ),
-			'delete-product' => array( 'oversio/wc-delete-product', array( 'product_id' => 101 ), 'editor' ),
+			'create-product' => array( 'aafm/wc-create-product', array( 'name' => 'X' ), 'editor' ),
+			'update-product' => array( 'aafm/wc-update-product', array( 'product_id' => 101 ), 'editor' ),
+			'delete-product' => array( 'aafm/wc-delete-product', array( 'product_id' => 101 ), 'editor' ),
 		);
 	}
 }

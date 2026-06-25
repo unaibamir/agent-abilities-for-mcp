@@ -7,16 +7,16 @@
  * provided by the IntegrationStubs trait backed by WcCustomerStubStore. The seed_wc_customers()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
-use Oversio\Tests\WcCustomerStubStore;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcCustomerStubStore;
 use WP_Error;
 
 final class WooCustomersTest extends TestCase {
@@ -25,12 +25,12 @@ final class WooCustomersTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->seed_wc_customers();
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_wc_customers();
 	}
 
@@ -48,21 +48,21 @@ final class WooCustomersTest extends TestCase {
 	 * Enable and register the full WooCommerce customer ability set.
 	 */
 	private function register_wc_customers(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/wc-list-customers',
-				'oversio/wc-get-customer',
-				'oversio/wc-create-customer',
-				'oversio/wc-update-customer',
+				'aafm/wc-list-customers',
+				'aafm/wc-get-customer',
+				'aafm/wc-create-customer',
+				'aafm/wc-update-customer',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	// =========================================================================
-	// oversio/wc-list-customers
+	// aafm/wc-list-customers
 	// =========================================================================
 
 	/**
@@ -71,11 +71,11 @@ final class WooCustomersTest extends TestCase {
 	public function test_list_customers_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-list-customers' )->check_permissions( array() )
+			wp_get_ability( 'aafm/wc-list-customers' )->check_permissions( array() )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-customers' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'customers', $res );
 		$this->assertArrayHasKey( 'total', $res );
@@ -86,7 +86,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_list_customers_exposes_email_not_address_block(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-customers' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertNotEmpty( $res['customers'] );
 
@@ -111,22 +111,22 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_list_customers_host_inactive_absent_from_registry(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_woocommerce' );
-		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
-		oversio_registry_cache_should_flush( true );
+		remove_all_filters( 'aafm_integration_active_woocommerce' );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
+		aafm_registry_cache_should_flush( true );
 
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'oversio/wc-list-customers', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-get-customer', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-create-customer', $registry );
-		$this->assertArrayNotHasKey( 'oversio/wc-update-customer', $registry );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'aafm/wc-list-customers', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-get-customer', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-create-customer', $registry );
+		$this->assertArrayNotHasKey( 'aafm/wc-update-customer', $registry );
 
-		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// oversio/wc-get-customer
+	// aafm/wc-get-customer
 	// =========================================================================
 
 	/**
@@ -135,11 +135,11 @@ final class WooCustomersTest extends TestCase {
 	public function test_get_customer_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-get-customer' )->check_permissions( array( 'customer_id' => 7001 ) )
+			wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => 7001 ) )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 	}
 
@@ -148,7 +148,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_missing_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -157,7 +157,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_exposes_pii_email_and_billing_phone(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// Top-level PII.
@@ -179,7 +179,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		$this->assertSame( 7001, $res['id'] );
@@ -196,7 +196,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_unknown_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -206,7 +206,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_get_customer_empty_billing_shipping_are_objects(): void {
 		WcCustomerStubStore::seed( 7090, array( 'email' => 'empty@example.com' ) );
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 7090 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7090 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// When all billing fields are empty strings the assembler must return (object)array()
@@ -217,7 +217,7 @@ final class WooCustomersTest extends TestCase {
 
 
 	// =========================================================================
-	// oversio/wc-create-customer
+	// aafm/wc-create-customer
 	// =========================================================================
 
 	/**
@@ -226,7 +226,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_create_customer_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-create-customer' )->check_permissions(
+			wp_get_ability( 'aafm/wc-create-customer' )->check_permissions(
 				array( 'email' => 'new@example.com' )
 			)
 		);
@@ -237,7 +237,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_create_customer_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'      => 'newcustomer@example.com',
 				'username'   => 'newcustomer',
@@ -261,7 +261,7 @@ final class WooCustomersTest extends TestCase {
 		WcCustomerStubStore::reset();
 		$this->acting_as( 'administrator' );
 
-		$first = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$first = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'      => 'intreturn@example.com',
 				'first_name' => 'Int',
@@ -275,7 +275,7 @@ final class WooCustomersTest extends TestCase {
 
 		// Exactly one customer exists after a single create — no duplicate spawned on the
 		// success path (the inverted check used to create then return an error).
-		$after_one = wp_get_ability( 'oversio/wc-list-customers' )->execute( array() );
+		$after_one = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $after_one );
 		$this->assertSame( 1, $after_one['total'], 'A single create must leave exactly one customer.' );
 	}
@@ -285,7 +285,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_create_customer_with_billing_fields(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'   => 'billing@example.com',
 				'billing' => array(
@@ -308,7 +308,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_create_customer_nested_smuggle_billing_role_is_rejected(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'   => 'smuggle@example.com',
 				'billing' => array(
@@ -325,7 +325,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_create_customer_nested_smuggle_shipping_role_is_rejected(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'    => 'smuggle2@example.com',
 				'shipping' => array(
@@ -345,7 +345,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_create_customer_store_failure_returns_error(): void {
 		WcCustomerStubStore::$create_should_fail = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array( 'email' => 'fail@example.com' )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Store failure must not lie success.' );
@@ -353,7 +353,7 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	// =========================================================================
-	// oversio/wc-update-customer
+	// aafm/wc-update-customer
 	// =========================================================================
 
 	/**
@@ -362,7 +362,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_update_customer_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/wc-update-customer' )->check_permissions(
+			wp_get_ability( 'aafm/wc-update-customer' )->check_permissions(
 				array( 'customer_id' => 7001 )
 			)
 		);
@@ -373,7 +373,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_empty_patch_is_noop(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array( 'customer_id' => 7001 )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
@@ -387,7 +387,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_field_isolation(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7001,
 				'first_name'  => 'Janet',
@@ -404,7 +404,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_billing_fields(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7001,
 				'billing'     => array(
@@ -423,7 +423,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_nested_smuggle_billing_role_is_rejected(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7001,
 				'billing'     => array(
@@ -439,7 +439,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_unknown_id_returns_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 99999,
 				'first_name'  => 'Ghost',
@@ -471,10 +471,10 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function provide_closed_schema_cases(): array {
 		return array(
-			'list-customers'  => array( 'oversio/wc-list-customers', array() ),
-			'get-customer'    => array( 'oversio/wc-get-customer', array( 'customer_id' => 7001 ) ),
-			'create-customer' => array( 'oversio/wc-create-customer', array( 'email' => 'x@example.com' ) ),
-			'update-customer' => array( 'oversio/wc-update-customer', array( 'customer_id' => 7001 ) ),
+			'list-customers'  => array( 'aafm/wc-list-customers', array() ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ) ),
+			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'x@example.com' ) ),
+			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => 7001 ) ),
 		);
 	}
 
@@ -483,7 +483,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_create_then_get_round_trip(): void {
 		$this->acting_as( 'administrator' );
-		$created = wp_get_ability( 'oversio/wc-create-customer' )->execute(
+		$created = wp_get_ability( 'aafm/wc-create-customer' )->execute(
 			array(
 				'email'      => 'roundtrip@example.com',
 				'first_name' => 'Round',
@@ -493,7 +493,7 @@ final class WooCustomersTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 		$new_id = $created['id'];
 
-		$fetched = wp_get_ability( 'oversio/wc-get-customer' )->execute(
+		$fetched = wp_get_ability( 'aafm/wc-get-customer' )->execute(
 			array( 'customer_id' => $new_id )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $fetched );
@@ -511,7 +511,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_update_customer_store_failure_returns_error(): void {
 		WcCustomerStubStore::$update_should_fail = true;
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7001,
 				'first_name'  => 'ShouldFail',
@@ -532,7 +532,7 @@ final class WooCustomersTest extends TestCase {
 		WcCustomerStubStore::reset();
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-list-customers' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( array(), $res['customers'], 'customers must be an empty array when the store is empty.' );
 		$this->assertSame( 0, $res['total'], 'total must be 0 when the store is empty.' );
@@ -557,7 +557,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		// Full list: both ids present, total == 2.
-		$res = wp_get_ability( 'oversio/wc-list-customers' )->execute( array() );
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$ids = wp_list_pluck( $res['customers'], 'id' );
 		$this->assertContains( 7001, $ids );
@@ -565,7 +565,7 @@ final class WooCustomersTest extends TestCase {
 		$this->assertSame( 2, $res['total'] );
 
 		// Page 2 of per_page=1: only 1 row in page, but total is still the grand count (2).
-		$paged = wp_get_ability( 'oversio/wc-list-customers' )->execute(
+		$paged = wp_get_ability( 'aafm/wc-list-customers' )->execute(
 			array(
 				'per_page' => 1,
 				'page'     => 2,
@@ -581,28 +581,28 @@ final class WooCustomersTest extends TestCase {
 	// =========================================================================
 
 	/**
-	 * Unknown customer id on get must return a WP_Error with code oversio_error.
+	 * Unknown customer id on get must return a WP_Error with code aafm_error.
 	 */
-	public function test_get_customer_unknown_id_returns_oversio_error_code(): void {
+	public function test_get_customer_unknown_id_returns_aafm_error_code(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 99999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'oversio_error', $res->get_error_code() );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
 	}
 
 	/**
-	 * Unknown customer id on update must return a WP_Error with code oversio_error.
+	 * Unknown customer id on update must return a WP_Error with code aafm_error.
 	 */
-	public function test_update_customer_unknown_id_returns_oversio_error_code(): void {
+	public function test_update_customer_unknown_id_returns_aafm_error_code(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 99999,
 				'first_name'  => 'Ghost',
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'oversio_error', $res->get_error_code() );
+		$this->assertSame( 'aafm_error', $res->get_error_code() );
 	}
 
 	// =========================================================================
@@ -614,7 +614,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_update_customer_nested_smuggle_shipping_role_is_rejected(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7001,
 				'shipping'    => array(
@@ -662,7 +662,7 @@ final class WooCustomersTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7050,
 				'billing'     => array( 'city' => 'NewCity' ),
@@ -711,7 +711,7 @@ final class WooCustomersTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/wc-update-customer' )->execute(
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
 				'customer_id' => 7051,
 				'shipping'    => array( 'city' => 'NewShipCity' ),
@@ -736,7 +736,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		wp_get_ability( $ability )->execute( $args );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -748,11 +748,11 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function provide_success_audit_cases(): array {
 		return array(
-			'list-customers'  => array( 'oversio/wc-list-customers', array() ),
-			'get-customer'    => array( 'oversio/wc-get-customer', array( 'customer_id' => 7001 ) ),
-			'create-customer' => array( 'oversio/wc-create-customer', array( 'email' => 'audit@example.com' ) ),
+			'list-customers'  => array( 'aafm/wc-list-customers', array() ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ) ),
+			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'audit@example.com' ) ),
 			'update-customer' => array(
-				'oversio/wc-update-customer',
+				'aafm/wc-update-customer',
 				array(
 					'customer_id' => 7001,
 					'first_name'  => 'Audited',
@@ -774,7 +774,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( $low_role );
 		wp_get_ability( $ability )->check_permissions( $args );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -786,10 +786,10 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function provide_denied_audit_cases(): array {
 		return array(
-			'list-customers'  => array( 'oversio/wc-list-customers', array(), 'editor' ),
-			'get-customer'    => array( 'oversio/wc-get-customer', array( 'customer_id' => 7001 ), 'editor' ),
-			'create-customer' => array( 'oversio/wc-create-customer', array( 'email' => 'denied@example.com' ), 'editor' ),
-			'update-customer' => array( 'oversio/wc-update-customer', array( 'customer_id' => 7001 ), 'editor' ),
+			'list-customers'  => array( 'aafm/wc-list-customers', array(), 'editor' ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ), 'editor' ),
+			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'denied@example.com' ), 'editor' ),
+			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => 7001 ), 'editor' ),
 		);
 	}
 }

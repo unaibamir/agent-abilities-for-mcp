@@ -2,7 +2,7 @@
 /**
  * Ability category registration + the audited registration wrapper.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -14,25 +14,25 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return void
  */
-function oversio_register_categories(): void {
+function aafm_register_categories(): void {
 	if ( ! function_exists( 'wp_register_ability_category' ) ) {
 		return;
 	}
-	if ( ! wp_has_ability_category( 'oversio-reads' ) ) {
+	if ( ! wp_has_ability_category( 'aafm-reads' ) ) {
 		wp_register_ability_category(
-			'oversio-reads',
+			'aafm-reads',
 			array(
-				'label'       => __( 'Agent reads', 'oversio-agent-abilities' ),
-				'description' => __( 'Read-only abilities exposed to AI agents.', 'oversio-agent-abilities' ),
+				'label'       => __( 'Agent reads', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Read-only abilities exposed to AI agents.', 'agent-abilities-for-mcp' ),
 			)
 		);
 	}
-	if ( ! wp_has_ability_category( 'oversio-writes' ) ) {
+	if ( ! wp_has_ability_category( 'aafm-writes' ) ) {
 		wp_register_ability_category(
-			'oversio-writes',
+			'aafm-writes',
 			array(
-				'label'       => __( 'Agent writes', 'oversio-agent-abilities' ),
-				'description' => __( 'Guarded write abilities exposed to AI agents.', 'oversio-agent-abilities' ),
+				'label'       => __( 'Agent writes', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Guarded write abilities exposed to AI agents.', 'agent-abilities-for-mcp' ),
 			)
 		);
 	}
@@ -50,7 +50,7 @@ function oversio_register_categories(): void {
  * @param callable|null $callback Callback to store, or null to read.
  * @return callable|null Stored callback when reading; null otherwise.
  */
-function oversio_remember_raw_permission( string $name, ?callable $callback = null ): ?callable {
+function aafm_remember_raw_permission( string $name, ?callable $callback = null ): ?callable {
 	static $store = array();
 
 	if ( null !== $callback ) {
@@ -71,14 +71,14 @@ function oversio_remember_raw_permission( string $name, ?callable $callback = nu
  * @param array<string,mixed> $args Ability args (per the Abilities API).
  * @return WP_Ability|null
  */
-function oversio_register_ability_with_log( string $name, array $args ) {
+function aafm_register_ability_with_log( string $name, array $args ) {
 	if ( empty( $args['permission_callback'] ) || ! is_callable( $args['permission_callback'] ) ) {
 		_doing_it_wrong(
 			__FUNCTION__,
 			esc_html(
 				sprintf(
 					/* translators: %s: ability name */
-					__( 'Ability "%s" was not registered: a permission_callback is required.', 'oversio-agent-abilities' ),
+					__( 'Ability "%s" was not registered: a permission_callback is required.', 'agent-abilities-for-mcp' ),
 					$name
 				)
 			),
@@ -93,7 +93,7 @@ function oversio_register_ability_with_log( string $name, array $args ) {
 	// Stash the undecorated permission callback so list-time capability checks
 	// (e.g. the MCP tools/list filter) can test visibility WITHOUT writing a
 	// denied audit row for every tool a connection happens not to be able to call.
-	oversio_remember_raw_permission( $name, $original_permission );
+	aafm_remember_raw_permission( $name, $original_permission );
 
 	$principal = static function (): array {
 		$user = wp_get_current_user();
@@ -106,11 +106,11 @@ function oversio_register_ability_with_log( string $name, array $args ) {
 	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal ) {
 		// Per-principal rate gate. Discovery (tools/list) is exempt automatically: it
 		// uses the raw permission stored above, which never enters this decorated closure
-		// and so never consumes a token. With the limit off (default) oversio_rate_limit_consume()
+		// and so never consumes a token. With the limit off (default) aafm_rate_limit_consume()
 		// returns true, making this block a no-op — the path stays identical to today.
 		$p = $principal();
-		if ( $p['principal_user_id'] > 0 && ! oversio_rate_limit_consume( $p['principal_user_id'] ) ) {
-			oversio_log_activity(
+		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume( $p['principal_user_id'] ) ) {
+			aafm_log_activity(
 				array_merge(
 					$p,
 					array(
@@ -128,7 +128,7 @@ function oversio_register_ability_with_log( string $name, array $args ) {
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.
 		if ( true !== $allowed ) {
-			oversio_log_activity(
+			aafm_log_activity(
 				array_merge(
 					$p,
 					array(
@@ -147,7 +147,7 @@ function oversio_register_ability_with_log( string $name, array $args ) {
 
 		// One row at 'started' (intent), then updated in place with the real outcome —
 		// one row per call, not two. A crash mid-execute leaves a visible 'started' row.
-		$row_id = oversio_log_activity(
+		$row_id = aafm_log_activity(
 			array_merge(
 				$principal(),
 				array(
@@ -160,7 +160,7 @@ function oversio_register_ability_with_log( string $name, array $args ) {
 
 		$result = $original_execute( $input );
 
-		oversio_update_activity_status( $row_id, is_wp_error( $result ) ? 'error' : 'success' );
+		aafm_update_activity_status( $row_id, is_wp_error( $result ) ? 'error' : 'success' );
 
 		return $result;
 	};
@@ -173,9 +173,9 @@ function oversio_register_ability_with_log( string $name, array $args ) {
  *
  * @return void
  */
-function oversio_register_enabled_abilities(): void {
-	$registry = oversio_get_abilities_registry();
-	foreach ( oversio_get_enabled_abilities() as $name ) {
+function aafm_register_enabled_abilities(): void {
+	$registry = aafm_get_abilities_registry();
+	foreach ( aafm_get_enabled_abilities() as $name ) {
 		// Idempotent: re-firing wp_abilities_api_init (in tests, or if another consumer
 		// triggers the action) must not re-register and emit "already registered".
 		if ( function_exists( 'wp_has_ability' ) && wp_has_ability( $name ) ) {
@@ -185,6 +185,6 @@ function oversio_register_enabled_abilities(): void {
 			continue;
 		}
 		$args = call_user_func( $registry[ $name ]['args_builder'] );
-		oversio_register_ability_with_log( $name, $args );
+		aafm_register_ability_with_log( $name, $args );
 	}
 }

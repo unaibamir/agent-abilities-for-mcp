@@ -5,51 +5,51 @@
  *
  * WP core's wp_trash_post()/wp_trash_comment() force a permanent delete when the
  * Trash is disabled. These abilities must refuse instead of silently destroying
- * content. The check lives behind oversio_trash_is_enabled(), which is filterable so
+ * content. The check lives behind aafm_trash_is_enabled(), which is filterable so
  * both branches are testable without redefining a PHP constant mid-suite.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class TrashDisabledTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/trash-post',
-				'oversio/trash-page',
-				'oversio/moderate-comment',
+				'aafm/trash-post',
+				'aafm/trash-page',
+				'aafm/moderate-comment',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	/**
 	 * Force the Trash-disabled condition without touching the PHP constant.
 	 */
 	private function disable_trash(): void {
-		add_filter( 'oversio_trash_is_enabled', '__return_false' );
+		add_filter( 'aafm_trash_is_enabled', '__return_false' );
 	}
 
 	public function test_helper_reflects_filter_override(): void {
 		// Default test env defines EMPTY_TRASH_DAYS truthy → enabled.
-		$this->assertTrue( oversio_trash_is_enabled() );
+		$this->assertTrue( aafm_trash_is_enabled() );
 
 		$this->disable_trash();
-		$this->assertFalse( oversio_trash_is_enabled() );
+		$this->assertFalse( aafm_trash_is_enabled() );
 	}
 
 	public function test_trash_post_refuses_and_keeps_post_when_trash_disabled(): void {
@@ -57,10 +57,10 @@ final class TrashDisabledTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 
-		$out = wp_get_ability( 'oversio/trash-post' )->execute( array( 'post_id' => $post_id ) );
+		$out = wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post_id ) );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'oversio_trash_disabled', $out->get_error_code() );
+		$this->assertSame( 'aafm_trash_disabled', $out->get_error_code() );
 
 		// Critical: the post must still exist (NOT force-deleted).
 		$post = get_post( $post_id );
@@ -78,10 +78,10 @@ final class TrashDisabledTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/trash-page' )->execute( array( 'page_id' => $page_id ) );
+		$out = wp_get_ability( 'aafm/trash-page' )->execute( array( 'page_id' => $page_id ) );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'oversio_trash_disabled', $out->get_error_code() );
+		$this->assertSame( 'aafm_trash_disabled', $out->get_error_code() );
 
 		$page = get_post( $page_id );
 		$this->assertNotNull( $page, 'trash-page permanently deleted the page when Trash was disabled.' );
@@ -99,7 +99,7 @@ final class TrashDisabledTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment_id,
 				'action'     => 'trash',
@@ -107,7 +107,7 @@ final class TrashDisabledTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'oversio_trash_disabled', $out->get_error_code() );
+		$this->assertSame( 'aafm_trash_disabled', $out->get_error_code() );
 
 		// Comment must still exist and stay approved (NOT force-deleted).
 		$comment = get_comment( $comment_id );
@@ -127,7 +127,7 @@ final class TrashDisabledTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
+		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
 			array(
 				'comment_id' => $comment_id,
 				'action'     => 'approve',
@@ -143,7 +143,7 @@ final class TrashDisabledTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 
-		$out = wp_get_ability( 'oversio/trash-post' )->execute( array( 'post_id' => $post_id ) );
+		$out = wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post_id ) );
 
 		$this->assertIsArray( $out );
 		$this->assertTrue( $out['trashed'] );

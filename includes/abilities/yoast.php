@@ -2,30 +2,30 @@
 /**
  * Yoast SEO abilities (Wave 5): yoast-get-post, yoast-update-post, yoast-get-head.
  *
- * Registers ONLY when Yoast is active (oversio_integration_active('yoast')). Yoast stores post SEO in
+ * Registers ONLY when Yoast is active (aafm_integration_active('yoast')). Yoast stores post SEO in
  * standard _yoast_wpseo_* post meta, so reads/writes use core get_post_meta/update_post_meta. SEO
  * meta is post content, so every per-object ability gates on edit_post($id) via the shared
- * oversio_perm_seo_post_object(); the head ability uses the edit_posts floor at discovery, refined
+ * aafm_perm_seo_post_object(); the head ability uses the edit_posts floor at discovery, refined
  * per-object at execute. Yoast splits robots across THREE keys (noindex enum 0/1/2, nofollow enum
  * 0/1, adv a CSV of advanced directives), exposed distinctly here. Yoast persists no JSON-LD schema
  * object in meta, so there is no yoast schema ability.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_yoast_definitions' );
-add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_yoast_full_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_yoast_definitions' );
+add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_yoast_full_definitions' );
 
 // Production rendered-head seam. Registered unconditionally because host plugins may load after us
 // on plugins_loaded (so a load-time activity check could miss Yoast); the callback's own
 // function_exists('YoastSEO') guard makes it inert until Yoast is genuinely present. Under the
 // PHPUnit stubs YoastSEO() is undefined, so this passes through and the test stub's own filter
 // supplies the canned head — production and test wiring never collide.
-add_filter( 'oversio_seo_rendered_head', 'oversio_yoast_rendered_head', 10, 3 );
+add_filter( 'aafm_seo_rendered_head', 'aafm_yoast_rendered_head', 10, 3 );
 
 /**
  * Produce Yoast's rendered SEO head markup for a post via its public meta surface.
@@ -40,7 +40,7 @@ add_filter( 'oversio_seo_rendered_head', 'oversio_yoast_rendered_head', 10, 3 );
  * @param string $source Integration slug the caller is asking for.
  * @return string
  */
-function oversio_yoast_rendered_head( string $head, int $post_id, string $source ): string {
+function aafm_yoast_rendered_head( string $head, int $post_id, string $source ): string {
 	if ( 'yoast' !== $source || ! function_exists( 'YoastSEO' ) ) {
 		return $head;
 	}
@@ -72,26 +72,26 @@ function oversio_yoast_rendered_head( string $head, int $post_id, string $source
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_yoast_definitions( array $registry ): array {
-	if ( ! oversio_integration_active( 'yoast' ) ) {
+function aafm_register_yoast_definitions( array $registry ): array {
+	if ( ! aafm_integration_active( 'yoast' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, oversio_yoast_registry_definitions() );
+	return array_merge( $registry, aafm_yoast_registry_definitions() );
 }
 
 /**
  * Contribute the Yoast definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every Yoast
+ * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every Yoast
  * ability even when Yoast is inactive, for the Integrations tab and the manifest. The live
  * registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_yoast_full_definitions( array $registry ): array {
-	return array_merge( $registry, oversio_yoast_registry_definitions() );
+function aafm_register_yoast_full_definitions( array $registry ): array {
+	return array_merge( $registry, aafm_yoast_registry_definitions() );
 }
 
 /**
@@ -101,42 +101,42 @@ function oversio_register_yoast_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_yoast_registry_definitions(): array {
+function aafm_yoast_registry_definitions(): array {
 	return array(
-		'oversio/yoast-get-post'    => array(
-			'label'        => __( 'Get post SEO (Yoast)', 'oversio-agent-abilities' ),
-			'description'  => __( "Reads a post's Yoast SEO fields (title, description, focus keyword, canonical, social, and the three robots directives) from its _yoast_wpseo_* post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
+		'aafm/yoast-get-post'    => array(
+			'label'        => __( 'Get post SEO (Yoast)', 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads a post's Yoast SEO fields (title, description, focus keyword, canonical, social, and the three robots directives) from its _yoast_wpseo_* post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
-			'args_builder' => 'oversio_args_yoast_get_post',
+			'args_builder' => 'aafm_args_yoast_get_post',
 		),
-		'oversio/yoast-update-post' => array(
-			'label'        => __( 'Update post SEO (Yoast)', 'oversio-agent-abilities' ),
-			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'oversio-agent-abilities' ),
+		'aafm/yoast-update-post' => array(
+			'label'        => __( 'Update post SEO (Yoast)', 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'yoast',
-			'args_builder' => 'oversio_args_yoast_update_post',
+			'args_builder' => 'aafm_args_yoast_update_post',
 		),
-		'oversio/yoast-get-head'    => array(
-			'label'        => __( 'Get post SEO head (Yoast)', 'oversio-agent-abilities' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
+		'aafm/yoast-get-head'    => array(
+			'label'        => __( 'Get post SEO head (Yoast)', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
-			'args_builder' => 'oversio_args_yoast_get_head',
+			'args_builder' => 'aafm_args_yoast_get_head',
 		),
 	);
 }
 
 /**
  * The Yoast text-and-URL field set: unified field => meta key. Robots is handled separately because
- * it spans three keys with their own enums/allowlist (see oversio_yoast_robots_keys).
+ * it spans three keys with their own enums/allowlist (see aafm_yoast_robots_keys).
  *
  * @return array<string,string>
  */
-function oversio_yoast_fields(): array {
+function aafm_yoast_fields(): array {
 	return array(
 		'title'               => '_yoast_wpseo_title',
 		'description'         => '_yoast_wpseo_metadesc',
@@ -156,7 +156,7 @@ function oversio_yoast_fields(): array {
  *
  * @return string[]
  */
-function oversio_yoast_url_fields(): array {
+function aafm_yoast_url_fields(): array {
 	return array( 'canonical', 'og_image', 'twitter_image' );
 }
 
@@ -166,7 +166,7 @@ function oversio_yoast_url_fields(): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_yoast_robots_keys(): array {
+function aafm_yoast_robots_keys(): array {
 	return array(
 		'robots_noindex'  => array(
 			'key'  => '_yoast_wpseo_meta-robots-noindex',
@@ -189,16 +189,16 @@ function oversio_yoast_robots_keys(): array {
  * @param int $id Post id.
  * @return array<string,mixed>
  */
-function oversio_yoast_read_fields( int $id ): array {
+function aafm_yoast_read_fields( int $id ): array {
 	$out = array(
 		'plugin'  => 'yoast',
 		'post_id' => $id,
 	);
-	foreach ( oversio_yoast_fields() as $field => $key ) {
+	foreach ( aafm_yoast_fields() as $field => $key ) {
 		$val           = get_post_meta( $id, $key, true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
-	foreach ( oversio_yoast_robots_keys() as $field => $spec ) {
+	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
 		$val           = get_post_meta( $id, $spec['key'], true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
@@ -210,30 +210,30 @@ function oversio_yoast_read_fields( int $id ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function oversio_yoast_output_properties(): array {
+function aafm_yoast_output_properties(): array {
 	$props = array(
 		'plugin'  => array( 'type' => 'string' ),
 		'post_id' => array( 'type' => 'integer' ),
 	);
-	foreach ( array_keys( oversio_yoast_fields() ) as $field ) {
+	foreach ( array_keys( aafm_yoast_fields() ) as $field ) {
 		$props[ $field ] = array( 'type' => 'string' );
 	}
-	foreach ( array_keys( oversio_yoast_robots_keys() ) as $field ) {
+	foreach ( array_keys( aafm_yoast_robots_keys() ) as $field ) {
 		$props[ $field ] = array( 'type' => 'string' );
 	}
 	return $props;
 }
 
 /**
- * Args for oversio/yoast-get-post.
+ * Args for aafm/yoast-get-post.
  *
  * @return array<string,mixed>
  */
-function oversio_args_yoast_get_post(): array {
+function aafm_args_yoast_get_post(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/yoast-get-post' ),
-		'description'         => oversio_ability_description( 'oversio/yoast-get-post' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/yoast-get-post' ),
+		'description'         => aafm_ability_description( 'aafm/yoast-get-post' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -247,10 +247,10 @@ function oversio_args_yoast_get_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_yoast_output_properties(),
+			'properties' => aafm_yoast_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_yoast_get_post',
-		'permission_callback' => 'oversio_perm_seo_post_object',
+		'execute_callback'    => 'aafm_exec_yoast_get_post',
+		'permission_callback' => 'aafm_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -262,56 +262,56 @@ function oversio_args_yoast_get_post(): array {
 }
 
 /**
- * Execute oversio/yoast-get-post.
+ * Execute aafm/yoast-get-post.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_yoast_get_post( array $input ) {
+function aafm_exec_yoast_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_yoast_read_fields( $id );
+	return aafm_yoast_read_fields( $id );
 }
 
 /**
- * Args for oversio/yoast-update-post.
+ * Args for aafm/yoast-update-post.
  *
  * The closed schema enumerates every writable field explicitly (MEDIUM-3): additionalProperties:false
  * means an unlisted field can never be written.
  *
  * @return array<string,mixed>
  */
-function oversio_args_yoast_update_post(): array {
+function aafm_args_yoast_update_post(): array {
 	$properties = array(
 		'post_id' => array(
 			'type'    => 'integer',
 			'minimum' => 1,
 		),
 	);
-	foreach ( array_keys( oversio_yoast_fields() ) as $field ) {
+	foreach ( array_keys( aafm_yoast_fields() ) as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
 	$properties['robots_noindex']  = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1', '2' ),
-		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'oversio-agent-abilities' ),
+		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'agent-abilities-for-mcp' ),
 	);
 	$properties['robots_nofollow'] = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1' ),
-		'description' => __( 'Yoast nofollow directive: 0 = follow, 1 = nofollow.', 'oversio-agent-abilities' ),
+		'description' => __( 'Yoast nofollow directive: 0 = follow, 1 = nofollow.', 'agent-abilities-for-mcp' ),
 	);
 	$properties['robots_adv']      = array(
 		'type'        => 'string',
-		'description' => __( 'Advanced robots directives as a comma-separated list. Accepted tokens: noarchive, nosnippet, noimageindex. Unknown tokens are dropped.', 'oversio-agent-abilities' ),
+		'description' => __( 'Advanced robots directives as a comma-separated list. Accepted tokens: noarchive, nosnippet, noimageindex. Unknown tokens are dropped.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
-		'label'               => oversio_ability_label( 'oversio/yoast-update-post' ),
-		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'oversio-agent-abilities' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/yoast-update-post' ),
+		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -320,10 +320,10 @@ function oversio_args_yoast_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_yoast_output_properties(),
+			'properties' => aafm_yoast_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_yoast_update_post',
-		'permission_callback' => 'oversio_perm_seo_post_object',
+		'execute_callback'    => 'aafm_exec_yoast_update_post',
+		'permission_callback' => 'aafm_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -334,7 +334,7 @@ function oversio_args_yoast_update_post(): array {
 }
 
 /**
- * Execute oversio/yoast-update-post.
+ * Execute aafm/yoast-update-post.
  *
  * Writes the text/URL fields (esc_url_raw for URLs, sanitize_text_field otherwise) and the three
  * robots keys (noindex/nofollow validated against their enums, adv filtered against the directive
@@ -343,14 +343,14 @@ function oversio_args_yoast_update_post(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_yoast_update_post( array $input ) {
+function aafm_exec_yoast_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
-	$url_fields = oversio_yoast_url_fields();
-	foreach ( oversio_yoast_fields() as $field => $key ) {
+	$url_fields = aafm_yoast_url_fields();
+	foreach ( aafm_yoast_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
@@ -359,7 +359,7 @@ function oversio_exec_yoast_update_post( array $input ) {
 		update_post_meta( $id, $key, $clean );
 	}
 
-	foreach ( oversio_yoast_robots_keys() as $field => $spec ) {
+	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
@@ -382,19 +382,19 @@ function oversio_exec_yoast_update_post( array $input ) {
 		update_post_meta( $id, $spec['key'], implode( ',', $kept ) );
 	}
 
-	return oversio_yoast_read_fields( $id );
+	return aafm_yoast_read_fields( $id );
 }
 
 /**
- * Args for oversio/yoast-get-head.
+ * Args for aafm/yoast-get-head.
  *
  * @return array<string,mixed>
  */
-function oversio_args_yoast_get_head(): array {
+function aafm_args_yoast_get_head(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/yoast-get-head' ),
-		'description'         => oversio_ability_description( 'oversio/yoast-get-head' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/yoast-get-head' ),
+		'description'         => aafm_ability_description( 'aafm/yoast-get-head' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -414,8 +414,8 @@ function oversio_args_yoast_get_head(): array {
 				'head'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_yoast_get_head',
-		'permission_callback' => 'oversio_perm_seo_get_head_floor',
+		'execute_callback'    => 'aafm_exec_yoast_get_head',
+		'permission_callback' => 'aafm_perm_seo_get_head_floor',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -427,22 +427,22 @@ function oversio_args_yoast_get_head(): array {
 }
 
 /**
- * Execute oversio/yoast-get-head.
+ * Execute aafm/yoast-get-head.
  *
  * Best-effort: resolve the post, refine to per-object edit_post, then read Yoast's rendered head
- * through the shared oversio_seo_rendered_head seam (empty when no head API is wired). Never fatal.
+ * through the shared aafm_seo_rendered_head seam (empty when no head API is wired). Never fatal.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_yoast_get_head( array $input ) {
+function aafm_exec_yoast_get_head( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post || ! current_user_can( 'edit_post', $id ) ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
-	$head = (string) apply_filters( 'oversio_seo_rendered_head', '', $id, 'yoast' );
+	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'yoast' );
 
 	return array(
 		'post_id' => $id,

@@ -7,44 +7,44 @@
  * a per-plugin inventory of relative basename, name, version, and active state — never an
  * absolute filesystem path. The no-path-leak assertion is the load-bearing guarantee.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class PluginsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
-		oversio_register_categories();
+		aafm_register_categories();
 		array_pop( $wp_current_filter );
-		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
+		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
 		$wp_current_filter[] = 'wp_abilities_api_init';
-		oversio_register_enabled_abilities();
+		aafm_register_enabled_abilities();
 		array_pop( $wp_current_filter );
 	}
 
 	public function test_list_plugins_requires_activate_plugins(): void {
 		$this->acting_as( 'editor' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/list-plugins' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/list-plugins' )->check_permissions( array() ) );
 	}
 
 	public function test_list_plugins_allows_a_capable_admin(): void {
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( wp_get_ability( 'oversio/list-plugins' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/list-plugins' )->check_permissions( array() ) );
 	}
 
 	public function test_list_plugins_returns_inventory_without_paths(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/list-plugins' )->execute( array() );
+		$res = wp_get_ability( 'aafm/list-plugins' )->execute( array() );
 		$this->assertArrayHasKey( 'plugins', $res );
 		$this->assertNotEmpty( $res['plugins'] );
 		$first = $res['plugins'][0];
@@ -61,8 +61,8 @@ final class PluginsTest extends TestCase {
 
 	public function test_list_plugins_denial_is_audited(): void {
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'oversio/list-plugins' )->check_permissions( array() );
-		$denied = oversio_query_activity(
+		wp_get_ability( 'aafm/list-plugins' )->check_permissions( array() );
+		$denied = aafm_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 100,

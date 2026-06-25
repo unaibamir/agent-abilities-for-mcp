@@ -10,14 +10,14 @@
  * adapter's Mcp-Session-Id / MCP-Protocol-Version to both sets, so the handshake
  * and every follow-up request survive the CORS round trip.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\OAuth;
+namespace AAFM\Tests\OAuth;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 /**
  * Verifies the rest_exposed_cors_headers and rest_allowed_cors_headers filters add
@@ -39,7 +39,7 @@ final class CorsHeadersTest extends TestCase {
 	 * headers so a browser client can read them off the response.
 	 */
 	public function test_exposed_headers_include_oauth_and_session_headers(): void {
-		$headers = oversio_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
+		$headers = aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
 
 		$this->assertContains( 'WWW-Authenticate', $headers );
 		$this->assertContains( 'Mcp-Session-Id', $headers );
@@ -50,7 +50,7 @@ final class CorsHeadersTest extends TestCase {
 	 * The core defaults survive — the filter is additive, never a replacement.
 	 */
 	public function test_exposed_headers_preserve_core_defaults(): void {
-		$headers = oversio_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
+		$headers = aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
 
 		$this->assertContains( 'X-WP-Total', $headers );
 		$this->assertContains( 'X-WP-TotalPages', $headers );
@@ -62,7 +62,7 @@ final class CorsHeadersTest extends TestCase {
 	 * client can send them back on follow-up requests.
 	 */
 	public function test_allowed_headers_include_session_headers(): void {
-		$headers = oversio_oauth_filter_allowed_cors_headers( array( 'Authorization', 'Content-Type' ) );
+		$headers = aafm_oauth_filter_allowed_cors_headers( array( 'Authorization', 'Content-Type' ) );
 
 		$this->assertContains( 'Mcp-Session-Id', $headers );
 		$this->assertContains( 'MCP-Protocol-Version', $headers );
@@ -74,14 +74,14 @@ final class CorsHeadersTest extends TestCase {
 	 * Neither filter introduces duplicates, even when the header is already present.
 	 */
 	public function test_no_duplicate_headers(): void {
-		$exposed = oversio_oauth_filter_exposed_cors_headers(
+		$exposed = aafm_oauth_filter_exposed_cors_headers(
 			array( 'Mcp-Session-Id', 'WWW-Authenticate', 'X-WP-Total' )
 		);
 		$this->assertSame( array_values( array_unique( $exposed ) ), $exposed );
 		$this->assertSame( 1, count( array_keys( $exposed, 'Mcp-Session-Id', true ) ) );
 		$this->assertSame( 1, count( array_keys( $exposed, 'WWW-Authenticate', true ) ) );
 
-		$allowed = oversio_oauth_filter_allowed_cors_headers(
+		$allowed = aafm_oauth_filter_allowed_cors_headers(
 			array( 'Mcp-Session-Id', 'Authorization' )
 		);
 		$this->assertSame( array_values( array_unique( $allowed ) ), $allowed );
@@ -93,10 +93,10 @@ final class CorsHeadersTest extends TestCase {
 	 * implode the values, but a clean integer-indexed list is the contract.
 	 */
 	public function test_filters_return_reindexed_lists(): void {
-		$exposed = oversio_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
+		$exposed = aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
 		$this->assertSame( array_values( $exposed ), $exposed );
 
-		$allowed = oversio_oauth_filter_allowed_cors_headers( array( 'Authorization' ) );
+		$allowed = aafm_oauth_filter_allowed_cors_headers( array( 'Authorization' ) );
 		$this->assertSame( array_values( $allowed ), $allowed );
 	}
 
@@ -106,10 +106,10 @@ final class CorsHeadersTest extends TestCase {
 	 */
 	public function test_filters_are_registered_when_oauth_enabled(): void {
 		$this->assertNotFalse(
-			has_filter( 'rest_exposed_cors_headers', 'oversio_oauth_filter_exposed_cors_headers' )
+			has_filter( 'rest_exposed_cors_headers', 'aafm_oauth_filter_exposed_cors_headers' )
 		);
 		$this->assertNotFalse(
-			has_filter( 'rest_allowed_cors_headers', 'oversio_oauth_filter_allowed_cors_headers' )
+			has_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers' )
 		);
 	}
 }

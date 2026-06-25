@@ -12,14 +12,14 @@
  * delete-block uses the Trash (wp_trash_post), guarded against trash-disabled sites, so no
  * force-delete primitive is added.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_blocks_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
 
 /**
  * Register the reusable-block ability definitions.
@@ -27,46 +27,46 @@ add_filter( 'oversio_abilities_registry', 'oversio_register_blocks_definitions' 
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_blocks_definitions( array $registry ): array {
-	$registry['oversio/list-blocks']  = array(
-		'label'        => __( 'List blocks', 'oversio-agent-abilities' ),
-		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'oversio-agent-abilities' ),
+function aafm_register_blocks_definitions( array $registry ): array {
+	$registry['aafm/list-blocks']  = array(
+		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_list_blocks',
+		'args_builder' => 'aafm_args_list_blocks',
 	);
-	$registry['oversio/get-block']    = array(
-		'label'        => __( 'Get block', 'oversio-agent-abilities' ),
-		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'oversio-agent-abilities' ),
+	$registry['aafm/get-block']    = array(
+		'label'        => __( 'Get block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_get_block',
+		'args_builder' => 'aafm_args_get_block',
 	);
-	$registry['oversio/create-block'] = array(
-		'label'        => __( 'Create block', 'oversio-agent-abilities' ),
-		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'oversio-agent-abilities' ),
+	$registry['aafm/create-block'] = array(
+		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_create_block',
+		'args_builder' => 'aafm_args_create_block',
 	);
-	$registry['oversio/update-block'] = array(
-		'label'        => __( 'Update block', 'oversio-agent-abilities' ),
-		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'oversio-agent-abilities' ),
+	$registry['aafm/update-block'] = array(
+		'label'        => __( 'Update block', 'agent-abilities-for-mcp' ),
+		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_update_block',
+		'args_builder' => 'aafm_args_update_block',
 	);
-	$registry['oversio/delete-block'] = array(
-		'label'        => __( 'Delete block', 'oversio-agent-abilities' ),
-		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'oversio-agent-abilities' ),
+	$registry['aafm/delete-block'] = array(
+		'label'        => __( 'Delete block', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
-		'args_builder' => 'oversio_args_delete_block',
+		'args_builder' => 'aafm_args_delete_block',
 	);
 	return $registry;
 }
@@ -76,7 +76,7 @@ function oversio_register_blocks_definitions( array $registry ): array {
  *
  * @return bool
  */
-function oversio_perm_blocks_floor(): bool {
+function aafm_perm_blocks_floor(): bool {
 	return current_user_can( 'edit_posts' );
 }
 
@@ -86,9 +86,9 @@ function oversio_perm_blocks_floor(): bool {
  * @param array<string,mixed> $input Input carrying block_id.
  * @return bool
  */
-function oversio_perm_block_object( array $input ): bool {
+function aafm_perm_block_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
-	$block = oversio_get_block_object( $id );
+	$block = aafm_get_block_object( $id );
 	return null !== $block && current_user_can( 'edit_post', $id );
 }
 
@@ -98,9 +98,9 @@ function oversio_perm_block_object( array $input ): bool {
  * @param array<string,mixed> $input Input carrying block_id.
  * @return bool
  */
-function oversio_perm_block_delete_object( array $input ): bool {
+function aafm_perm_block_delete_object( array $input ): bool {
 	$id    = absint( $input['block_id'] ?? 0 );
-	$block = oversio_get_block_object( $id );
+	$block = aafm_get_block_object( $id );
 	return null !== $block && current_user_can( 'delete_post', $id );
 }
 
@@ -109,18 +109,18 @@ function oversio_perm_block_delete_object( array $input ): bool {
  *
  * @return array<string,mixed>
  */
-function oversio_args_list_blocks(): array {
+function aafm_args_list_blocks(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/list-blocks' ),
-		'description'         => oversio_ability_description( 'oversio/list-blocks' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/list-blocks' ),
+		'description'         => aafm_ability_description( 'aafm/list-blocks' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => OVERSIO_LIST_PAGE_MAX,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page' => array(
 					'type'    => 'integer',
@@ -138,8 +138,8 @@ function oversio_args_list_blocks(): array {
 				'total'  => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_list_blocks',
-		'permission_callback' => 'oversio_perm_blocks_floor',
+		'execute_callback'    => 'aafm_exec_list_blocks',
+		'permission_callback' => 'aafm_perm_blocks_floor',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -156,7 +156,7 @@ function oversio_args_list_blocks(): array {
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>
  */
-function oversio_exec_list_blocks( array $input ): array {
+function aafm_exec_list_blocks( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
 
 	$query_args = array(
@@ -181,7 +181,7 @@ function oversio_exec_list_blocks( array $input ): array {
 		// authors' blocks they lack edit_post on. Filtering here keeps the lean rows aligned
 		// with the per-object get/update gates.
 		if ( $block instanceof WP_Post && current_user_can( 'edit_post', $block->ID ) ) {
-			$blocks[] = oversio_redact_block( $block );
+			$blocks[] = aafm_redact_block( $block );
 		}
 	}
 	return array(
@@ -200,11 +200,11 @@ function oversio_exec_list_blocks( array $input ): array {
  *
  * @return array<string,mixed>
  */
-function oversio_args_get_block(): array {
+function aafm_args_get_block(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/get-block' ),
-		'description'         => oversio_ability_description( 'oversio/get-block' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/get-block' ),
+		'description'         => aafm_ability_description( 'aafm/get-block' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array( 'block_id' => array( 'type' => 'integer' ) ),
@@ -213,10 +213,10 @@ function oversio_args_get_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_rich_block_output_properties(),
+			'properties' => aafm_rich_block_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_get_block',
-		'permission_callback' => 'oversio_perm_block_object',
+		'execute_callback'    => 'aafm_exec_get_block',
+		'permission_callback' => 'aafm_perm_block_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -233,12 +233,12 @@ function oversio_args_get_block(): array {
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_get_block( array $input ) {
-	$block = oversio_get_block_object( absint( $input['block_id'] ?? 0 ) );
+function aafm_exec_get_block( array $input ) {
+	$block = aafm_get_block_object( absint( $input['block_id'] ?? 0 ) );
 	if ( null === $block ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_rich_block( $block );
+	return aafm_rich_block( $block );
 }
 
 /**
@@ -249,11 +249,11 @@ function oversio_exec_get_block( array $input ) {
  *
  * @return array<string,mixed>
  */
-function oversio_args_create_block(): array {
+function aafm_args_create_block(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/create-block' ),
-		'description'         => oversio_ability_description( 'oversio/create-block' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/create-block' ),
+		'description'         => aafm_ability_description( 'aafm/create-block' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -265,10 +265,10 @@ function oversio_args_create_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_rich_block_output_properties(),
+			'properties' => aafm_rich_block_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_create_block',
-		'permission_callback' => 'oversio_perm_blocks_floor',
+		'execute_callback'    => 'aafm_exec_create_block',
+		'permission_callback' => 'aafm_perm_blocks_floor',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -289,7 +289,7 @@ function oversio_args_create_block(): array {
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_create_block( array $input ) {
+function aafm_exec_create_block( array $input ) {
 	$title   = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 	$id      = wp_insert_post(
@@ -304,9 +304,9 @@ function oversio_exec_create_block( array $input ) {
 		true
 	);
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_rich_block( get_post( (int) $id ) );
+	return aafm_rich_block( get_post( (int) $id ) );
 }
 
 /**
@@ -317,11 +317,11 @@ function oversio_exec_create_block( array $input ) {
  *
  * @return array<string,mixed>
  */
-function oversio_args_update_block(): array {
+function aafm_args_update_block(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/update-block' ),
-		'description'         => oversio_ability_description( 'oversio/update-block' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/update-block' ),
+		'description'         => aafm_ability_description( 'aafm/update-block' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -334,10 +334,10 @@ function oversio_args_update_block(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => oversio_rich_block_output_properties(),
+			'properties' => aafm_rich_block_output_properties(),
 		),
-		'execute_callback'    => 'oversio_exec_update_block',
-		'permission_callback' => 'oversio_perm_block_object',
+		'execute_callback'    => 'aafm_exec_update_block',
+		'permission_callback' => 'aafm_perm_block_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -353,11 +353,11 @@ function oversio_args_update_block(): array {
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_update_block( array $input ) {
+function aafm_exec_update_block( array $input ) {
 	$id    = absint( $input['block_id'] ?? 0 );
-	$block = oversio_get_block_object( $id );
+	$block = aafm_get_block_object( $id );
 	if ( null === $block ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$update = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
@@ -368,9 +368,9 @@ function oversio_exec_update_block( array $input ) {
 	}
 	$result = wp_update_post( wp_slash( $update ), true );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	return oversio_rich_block( get_post( (int) $result ) );
+	return aafm_rich_block( get_post( (int) $result ) );
 }
 
 /**
@@ -378,11 +378,11 @@ function oversio_exec_update_block( array $input ) {
  *
  * @return array<string,mixed>
  */
-function oversio_args_delete_block(): array {
+function aafm_args_delete_block(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/delete-block' ),
-		'description'         => oversio_ability_description( 'oversio/delete-block' ),
-		'category'            => 'oversio-writes',
+		'label'               => aafm_ability_label( 'aafm/delete-block' ),
+		'description'         => aafm_ability_description( 'aafm/delete-block' ),
+		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array( 'block_id' => array( 'type' => 'integer' ) ),
@@ -396,8 +396,8 @@ function oversio_args_delete_block(): array {
 				'status' => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_delete_block',
-		'permission_callback' => 'oversio_perm_block_delete_object',
+		'execute_callback'    => 'aafm_exec_delete_block',
+		'permission_callback' => 'aafm_perm_block_delete_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -417,18 +417,18 @@ function oversio_args_delete_block(): array {
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_delete_block( array $input ) {
+function aafm_exec_delete_block( array $input ) {
 	$id    = absint( $input['block_id'] ?? 0 );
-	$block = oversio_get_block_object( $id );
+	$block = aafm_get_block_object( $id );
 	if ( null === $block ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
-	if ( ! oversio_trash_is_enabled() ) {
-		return oversio_generic_error();
+	if ( ! aafm_trash_is_enabled() ) {
+		return aafm_generic_error();
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	return array(
 		'id'     => $id,

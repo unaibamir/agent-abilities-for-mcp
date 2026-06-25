@@ -2,14 +2,14 @@
 /**
  * Confirms the bundled adapter autoloads.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Coexistence;
+namespace AAFM\Tests\Coexistence;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class AdapterLoadTest extends TestCase {
 
@@ -18,6 +18,6 @@ final class AdapterLoadTest extends TestCase {
 	}
 
 	public function test_min_adapter_version_constant_defined(): void {
-		$this->assertSame( '0.5.0', OVERSIO_MIN_ADAPTER_VERSION );
+		$this->assertSame( '0.5.0', AAFM_MIN_ADAPTER_VERSION );
 	}
 }

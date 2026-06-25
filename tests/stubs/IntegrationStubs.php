@@ -13,12 +13,12 @@
  * This file lives under tests/ and never ships; the source-scan security rails only
  * walk includes/, so nothing here is in their scope.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests;
+namespace AAFM\Tests;
 
 /**
  * Host-API stub helpers, mixed into an integration slice's test case.
@@ -30,7 +30,7 @@ trait IntegrationStubs {
 	 *
 	 * @var array<int,string>
 	 */
-	private array $oversio_forced_integrations = array();
+	private array $aafm_forced_integrations = array();
 
 	/**
 	 * Force an integration active for the current test via its per-slug filter.
@@ -39,8 +39,8 @@ trait IntegrationStubs {
 	 * @return void
 	 */
 	protected function force_integration( string $slug ): void {
-		add_filter( 'oversio_integration_active_' . $slug, '__return_true' );
-		$this->oversio_forced_integrations[] = $slug;
+		add_filter( 'aafm_integration_active_' . $slug, '__return_true' );
+		$this->aafm_forced_integrations[] = $slug;
 	}
 
 	/**
@@ -55,7 +55,7 @@ trait IntegrationStubs {
 			define( 'WPSEO_VERSION', 'stub-test' );
 		}
 		add_filter(
-			'oversio_seo_rendered_head',
+			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'yoast' === $plugin ? '<title>Yoast head ' . $id . '</title>' : $head,
 			10,
 			3
@@ -75,7 +75,7 @@ trait IntegrationStubs {
 			eval( 'class RankMath {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
 		}
 		add_filter(
-			'oversio_seo_rendered_head',
+			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'rankmath' === $plugin ? '<title>Rank Math head ' . $id . '</title>' : $head,
 			10,
 			3
@@ -97,10 +97,10 @@ trait IntegrationStubs {
 		}
 		if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_aioseo_post_model_source() );
+			eval( $this->aafm_aioseo_post_model_source() );
 		}
 		add_filter(
-			'oversio_seo_rendered_head',
+			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'aioseo' === $plugin ? '<title>AIOSEO head ' . $id . '</title>' : $head,
 			10,
 			3
@@ -117,7 +117,7 @@ trait IntegrationStubs {
 	 *
 	 * @return string
 	 */
-	private function oversio_aioseo_post_model_source(): string {
+	private function aafm_aioseo_post_model_source(): string {
 		return <<<'PHP'
 namespace AIOSEO\Plugin\Common\Models;
 class Post {
@@ -135,7 +135,7 @@ class Post {
 	public $robots_nofollow = false;
 	public $robots_default = true;
 	public static function getPost( $post_id ) {
-		$row = \Oversio\Tests\AioseoStubStore::get( (int) $post_id );
+		$row = \AAFM\Tests\AioseoStubStore::get( (int) $post_id );
 		$model = new self();
 		foreach ( $row as $k => $v ) {
 			if ( property_exists( $model, $k ) ) {
@@ -146,10 +146,10 @@ class Post {
 		return $model;
 	}
 	public function save() {
-		if ( \Oversio\Tests\AioseoStubStore::$save_should_fail ) {
+		if ( \AAFM\Tests\AioseoStubStore::$save_should_fail ) {
 			return false;
 		}
-		\Oversio\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
+		\AAFM\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
 		return true;
 	}
 }
@@ -173,7 +173,7 @@ PHP;
 	 *   )
 	 *
 	 * Defining get_field() makes real ACF detection true; the slice still forces the integration
-	 * filter explicitly, and the host-inactive test drives the oversio_acf_active seam to false.
+	 * filter explicitly, and the host-inactive test drives the aafm_acf_active seam to false.
 	 *
 	 * @param array<string,mixed> $config Group + value seed.
 	 * @return void
@@ -199,27 +199,27 @@ PHP;
 
 		if ( ! function_exists( 'acf_get_field_groups' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function acf_get_field_groups( $args = array() ) { return \Oversio\Tests\AcfStubStore::groups_without_fields(); }' );
+			eval( 'function acf_get_field_groups( $args = array() ) { return \AAFM\Tests\AcfStubStore::groups_without_fields(); }' );
 		}
 		if ( ! function_exists( 'acf_get_fields' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function acf_get_fields( $group ) { return \Oversio\Tests\AcfStubStore::fields_for_group( $group ); }' );
+			eval( 'function acf_get_fields( $group ) { return \AAFM\Tests\AcfStubStore::fields_for_group( $group ); }' );
 		}
 		if ( ! function_exists( 'acf_get_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function acf_get_field( $key ) { return \Oversio\Tests\AcfStubStore::field_def( $key ); }' );
+			eval( 'function acf_get_field( $key ) { return \AAFM\Tests\AcfStubStore::field_def( $key ); }' );
 		}
 		if ( ! function_exists( 'get_fields' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function get_fields( $selector = false ) { return \Oversio\Tests\AcfStubStore::all_values( $selector ); }' );
+			eval( 'function get_fields( $selector = false ) { return \AAFM\Tests\AcfStubStore::all_values( $selector ); }' );
 		}
 		if ( ! function_exists( 'get_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function get_field( $selector, $post_id = false, $format = true ) { return $format ? \Oversio\Tests\AcfStubStore::value_formatted( $selector, $post_id ) : \Oversio\Tests\AcfStubStore::value( $selector, $post_id ); }' );
+			eval( 'function get_field( $selector, $post_id = false, $format = true ) { return $format ? \AAFM\Tests\AcfStubStore::value_formatted( $selector, $post_id ) : \AAFM\Tests\AcfStubStore::value( $selector, $post_id ); }' );
 		}
 		if ( ! function_exists( 'update_field' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only marker stub for tests; never shipped.
-			eval( 'function update_field( $selector, $value, $post_id = false ) { return \Oversio\Tests\AcfStubStore::record( $selector, $value, $post_id ); }' );
+			eval( 'function update_field( $selector, $value, $post_id = false ) { return \AAFM\Tests\AcfStubStore::record( $selector, $value, $post_id ); }' );
 		}
 	}
 
@@ -265,7 +265,7 @@ PHP;
 	 * wc_get_product()/wc_get_products(), and ->delete(true) removes it.
 	 *
 	 * Defining the WooCommerce marker class makes real WC detection true; the slice still forces the
-	 * integration filter explicitly, and the host-inactive test drives the oversio_woocommerce_active
+	 * integration filter explicitly, and the host-inactive test drives the aafm_woocommerce_active
 	 * seam to false.
 	 *
 	 * @param array<int,array<string,mixed>> $products Seed products (each an id => data array, or a
@@ -310,25 +310,25 @@ PHP;
 			// A minimal WC_Product backed by WcStubStore: getters read the stored data, setters stage
 			// changes on the instance, save() persists, delete() removes. Only the methods the product
 			// abilities call are implemented. A test-only stub, never shipped.
-			eval( $this->oversio_wc_product_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_product_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
 		if ( ! class_exists( 'WC_Product_Variation' ) ) {
 			// A minimal WC_Product_Variation backed by the same WcStubStore (a variation is a product
 			// row carrying type='variation' and a parent_id). Its get_attributes() returns the flat
 			// name=>value map a real variation exposes (NOT the WC_Product_Attribute objects a variable
 			// parent returns). Defined after WC_Product so the parent class exists. A test-only stub.
-			eval( $this->oversio_wc_variation_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( $this->aafm_wc_variation_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			// Fix Code MED-1: return a WC_Product_Variation when the stored row is a variation
 			// (type=variation), else a base WC_Product — mirroring real WooCommerce, so
-			// oversio_wc_get_variation()'s instanceof WC_Product_Variation branch is the exercised path.
+			// aafm_wc_get_variation()'s instanceof WC_Product_Variation branch is the exercised path.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_product( $id = false ) { $id = (int) $id; if ( ! \Oversio\Tests\WcStubStore::exists( $id ) ) { return false; } $row = \Oversio\Tests\WcStubStore::get( $id ); return ( "variation" === ( $row["type"] ?? "" ) ) ? new \WC_Product_Variation( $id ) : new \WC_Product( $id ); }' );
+			eval( 'function wc_get_product( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcStubStore::exists( $id ) ) { return false; } $row = \AAFM\Tests\WcStubStore::get( $id ); return ( "variation" === ( $row["type"] ?? "" ) ) ? new \WC_Product_Variation( $id ) : new \WC_Product( $id ); }' );
 		}
 		if ( ! function_exists( 'wc_get_products' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_products( $args = array() ) { return \Oversio\Tests\WcStubStore::query( $args ); }' );
+			eval( 'function wc_get_products( $args = array() ) { return \AAFM\Tests\WcStubStore::query( $args ); }' );
 		}
 
 		// Global product attribute (taxonomy) stubs (W4-WC1c). Each mirrors the real WC function's
@@ -336,19 +336,19 @@ PHP;
 		// using the real WC field names (attribute_id / attribute_name / attribute_label / etc.).
 		if ( ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_attribute_taxonomies() { return \Oversio\Tests\WcAttributeStubStore::all(); }' );
+			eval( 'function wc_get_attribute_taxonomies() { return \AAFM\Tests\WcAttributeStubStore::all(); }' );
 		}
 		if ( ! function_exists( 'wc_create_attribute' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_attribute( $args ) { $id = \Oversio\Tests\WcAttributeStubStore::create( (array) $args ); return ( $id > 0 ) ? $id : new \WP_Error( "wc_attribute_create_failed", "Create failed." ); }' );
+			eval( 'function wc_create_attribute( $args ) { $id = \AAFM\Tests\WcAttributeStubStore::create( (array) $args ); return ( $id > 0 ) ? $id : new \WP_Error( "wc_attribute_create_failed", "Create failed." ); }' );
 		}
 		if ( ! function_exists( 'wc_update_attribute' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_update_attribute( $id, $args ) { $ok = \Oversio\Tests\WcAttributeStubStore::update( (int) $id, (array) $args ); return $ok ? (int) $id : new \WP_Error( "wc_attribute_update_failed", "Update failed." ); }' );
+			eval( 'function wc_update_attribute( $id, $args ) { $ok = \AAFM\Tests\WcAttributeStubStore::update( (int) $id, (array) $args ); return $ok ? (int) $id : new \WP_Error( "wc_attribute_update_failed", "Update failed." ); }' );
 		}
 		if ( ! function_exists( 'wc_delete_attribute' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_delete_attribute( $id ) { return \Oversio\Tests\WcAttributeStubStore::delete( (int) $id ); }' );
+			eval( 'function wc_delete_attribute( $id ) { return \AAFM\Tests\WcAttributeStubStore::delete( (int) $id ); }' );
 		}
 		if ( ! function_exists( 'wc_attribute_taxonomy_name' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -364,11 +364,11 @@ PHP;
 		// class is defined via eval so the class_exists guard prevents double-define across tests.
 		if ( ! class_exists( 'WC_Order' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_order_class_source() );
+			eval( $this->aafm_wc_order_class_source() );
 		}
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_orders( $args = array() ) { return \Oversio\Tests\WcOrderStubStore::query( $args ); }' );
+			eval( 'function wc_get_orders( $args = array() ) { return \AAFM\Tests\WcOrderStubStore::query( $args ); }' );
 		}
 		// NOTE: wc_get_order() is also defined above for products (returns WC_Product). WooCommerce
 		// uses the same function name for both — in real WC, wc_get_order() returns a WC_Order when
@@ -381,7 +381,7 @@ PHP;
 			// regular order, or false when the id is unknown. Mirrors real WooCommerce behaviour
 			// where shop_order_refund posts return WC_Order_Refund from wc_get_order().
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \Oversio\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \Oversio\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
+			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
 		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
@@ -392,19 +392,19 @@ PHP;
 		// can seed notes/refunds per test and assert round-trip reads/creates/deletes without WC.
 		if ( ! class_exists( 'WC_Order_Refund' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_order_refund_class_source() );
+			eval( $this->aafm_wc_order_refund_class_source() );
 		}
 		if ( ! function_exists( 'wc_get_order_notes' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order_notes( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; return \Oversio\Tests\WcOrderStubStore::get_notes( $order_id ); }' );
+			eval( 'function wc_get_order_notes( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; return \AAFM\Tests\WcOrderStubStore::get_notes( $order_id ); }' );
 		}
 		if ( ! function_exists( 'wc_delete_order_note' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_delete_order_note( $note_id ) { return \Oversio\Tests\WcOrderStubStore::delete_note( (int) $note_id ); }' );
+			eval( 'function wc_delete_order_note( $note_id ) { return \AAFM\Tests\WcOrderStubStore::delete_note( (int) $note_id ); }' );
 		}
 		if ( ! function_exists( 'wc_create_refund' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_refund( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \Oversio\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \Oversio\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
+			eval( 'function wc_create_refund( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
 		}
 
 		// Customer stubs (W4-WC3). WC_Customer is defined via eval so class_exists prevents
@@ -415,7 +415,7 @@ PHP;
 		// a real WP user (same as the delete-user ability), so delete tests create real WP users.
 		if ( ! class_exists( 'WC_Customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_customer_class_source() );
+			eval( $this->aafm_wc_customer_class_source() );
 		}
 		if ( ! function_exists( 'wc_create_new_customer' ) ) {
 			// Mirrors the real WooCommerce wc_create_new_customer() signature.
@@ -424,12 +424,12 @@ PHP;
 		}
 		if ( ! function_exists( 'wc_update_customer' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_update_customer( $id, $args = array() ) { $id = (int) $id; if ( ! \Oversio\Tests\WcCustomerStubStore::exists( $id ) ) { return new \WP_Error( "wc_update_customer_failed", "Customer not found." ); } $c = new \WC_Customer( $id ); if ( isset( $args["email"] ) ) { $c->set_email( $args["email"] ); } if ( isset( $args["first_name"] ) ) { $c->set_first_name( $args["first_name"] ); } if ( isset( $args["last_name"] ) ) { $c->set_last_name( $args["last_name"] ); } $c->save( false ); return new \WC_Customer( $id ); }' );
+			eval( 'function wc_update_customer( $id, $args = array() ) { $id = (int) $id; if ( ! \AAFM\Tests\WcCustomerStubStore::exists( $id ) ) { return new \WP_Error( "wc_update_customer_failed", "Customer not found." ); } $c = new \WC_Customer( $id ); if ( isset( $args["email"] ) ) { $c->set_email( $args["email"] ); } if ( isset( $args["first_name"] ) ) { $c->set_first_name( $args["first_name"] ); } if ( isset( $args["last_name"] ) ) { $c->set_last_name( $args["last_name"] ); } $c->save( false ); return new \WC_Customer( $id ); }' );
 		}
 		if ( ! function_exists( 'wc_get_customers' ) ) {
 			// Returns WC_Customer objects from the stub store, honoring limit/paged args.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_customers( $args = array() ) { return \Oversio\Tests\WcCustomerStubStore::query( $args ); }' );
+			eval( 'function wc_get_customers( $args = array() ) { return \AAFM\Tests\WcCustomerStubStore::query( $args ); }' );
 		}
 	}
 
@@ -507,13 +507,13 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_order_class_source(): string {
+	private function aafm_wc_order_class_source(): string {
 		return <<<'PHP'
 class WC_Order {
 	private $data = array();
 	public function __construct( $id = 0 ) {
 		$id = (int) $id;
-		$stored = \Oversio\Tests\WcOrderStubStore::get( $id );
+		$stored = \AAFM\Tests\WcOrderStubStore::get( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
@@ -591,10 +591,10 @@ class WC_Order {
 		$this->data['total']    = number_format( $subtotal + (float) ( $this->data['shipping_total'] ?? 0 ) + (float) ( $this->data['total_tax'] ?? 0 ), 2, '.', '' );
 		return $this->data['total'];
 	}
-	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \Oversio\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
-	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \Oversio\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
-	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \Oversio\Tests\WcOrderStubStore::delete_order( $id ); }
-	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \Oversio\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
+	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
+	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
+	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }
 PHP;
 	}
@@ -605,13 +605,13 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_product_class_source(): string {
+	private function aafm_wc_product_class_source(): string {
 		return <<<'PHP'
 class WC_Product {
 	private $data = array();
 	public function __construct( $id = 0 ) {
 		$id = (int) $id;
-		$stored = \Oversio\Tests\WcStubStore::get( $id );
+		$stored = \AAFM\Tests\WcStubStore::get( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
@@ -651,8 +651,8 @@ class WC_Product {
 	public function set_gallery_image_ids( $v ) { $this->data['gallery_image_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
-	public function save() { $id = \Oversio\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { return \Oversio\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	public function save() { $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -666,13 +666,13 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_variation_class_source(): string {
+	private function aafm_wc_variation_class_source(): string {
 		return <<<'PHP'
 class WC_Product_Variation {
 	private $data = array();
 	public function __construct( $id = 0 ) {
 		$id = (int) $id;
-		$stored = \Oversio\Tests\WcStubStore::get( $id );
+		$stored = \AAFM\Tests\WcStubStore::get( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'type' => 'variation' );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
@@ -701,8 +701,8 @@ class WC_Product_Variation {
 	public function set_manage_stock( $v ) { $this->data['manage_stock'] = (bool) $v; }
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
-	public function save() { $this->data['type'] = 'variation'; $id = \Oversio\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { return \Oversio\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -717,20 +717,20 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_order_refund_class_source(): string {
+	private function aafm_wc_order_refund_class_source(): string {
 		return <<<'PHP'
 class WC_Order_Refund {
 	private $data = array();
 	public function __construct( $id = 0 ) {
 		$id = (int) $id;
-		$stored = \Oversio\Tests\WcOrderStubStore::get_refund_by_id( $id );
+		$stored = \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id );
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0, 'amount' => '0.00', 'reason' => '', 'date_created' => '' );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
 	public function get_amount() { return (string) ( $this->data['amount'] ?? '0.00' ); }
 	public function get_reason() { return (string) ( $this->data['reason'] ?? '' ); }
 	public function get_date_created() { return $this->data['date_created'] ?? null; }
-	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \Oversio\Tests\WcOrderStubStore::delete_refund( $id ); }
+	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_refund( $id ); }
 }
 PHP;
 	}
@@ -794,7 +794,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_customer_class_source(): string {
+	private function aafm_wc_customer_class_source(): string {
 		return <<<'PHP'
 class WC_Customer {
 	private $data = array();
@@ -802,7 +802,7 @@ class WC_Customer {
 	public function __construct( $id = 0 ) {
 		$id = (int) $id;
 		if ( $id > 0 ) {
-			$stored = \Oversio\Tests\WcCustomerStubStore::get( $id );
+			$stored = \AAFM\Tests\WcCustomerStubStore::get( $id );
 			$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 			$this->is_new = false;
 		} else {
@@ -863,7 +863,7 @@ class WC_Customer {
 	public function set_shipping_country( $v ) { $this->data['shipping']['country'] = (string) $v; }
 	public function save( $is_new = null ) {
 		$new = ( null === $is_new ) ? $this->is_new : (bool) $is_new;
-		$id = \Oversio\Tests\WcCustomerStubStore::save( $this->data, $new );
+		$id = \AAFM\Tests\WcCustomerStubStore::save( $this->data, $new );
 		if ( $id > 0 ) {
 			$this->data['id'] = $id;
 			$this->is_new = false;
@@ -940,11 +940,11 @@ PHP;
 		}
 		if ( ! class_exists( 'WC_Coupon' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_coupon_class_source() );
+			eval( $this->aafm_wc_coupon_class_source() );
 		}
 		if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_coupon_id_by_code( $code ) { return \Oversio\Tests\WcCouponStubStore::get_id_by_code( (string) $code ); }' );
+			eval( 'function wc_get_coupon_id_by_code( $code ) { return \AAFM\Tests\WcCouponStubStore::get_id_by_code( (string) $code ); }' );
 		}
 	}
 
@@ -959,7 +959,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_coupon_class_source(): string {
+	private function aafm_wc_coupon_class_source(): string {
 		return <<<'PHP'
 class WC_Coupon {
 	private $data = array();
@@ -968,10 +968,10 @@ class WC_Coupon {
 		if ( is_int( $code_or_id ) || ( is_string( $code_or_id ) && ctype_digit( (string) $code_or_id ) ) ) {
 			$id = (int) $code_or_id;
 		} elseif ( is_string( $code_or_id ) && '' !== $code_or_id ) {
-			$id = \Oversio\Tests\WcCouponStubStore::get_id_by_code( $code_or_id );
+			$id = \AAFM\Tests\WcCouponStubStore::get_id_by_code( $code_or_id );
 		}
 		if ( $id > 0 ) {
-			$stored = \Oversio\Tests\WcCouponStubStore::get( $id );
+			$stored = \AAFM\Tests\WcCouponStubStore::get( $id );
 			$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 		} else {
 			$this->data = array( 'id' => 0 );
@@ -1007,8 +1007,8 @@ class WC_Coupon {
 	public function set_product_ids( $v ) { $this->data['product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_excluded_product_ids( $v ) { $this->data['excluded_product_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_email_restrictions( $v ) { $this->data['email_restrictions'] = array_map( 'strval', (array) $v ); }
-	public function save() { $id = \Oversio\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { return \Oversio\Tests\WcCouponStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	public function save() { $id = \AAFM\Tests\WcCouponStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
+	public function delete( $force = false ) { return \AAFM\Tests\WcCouponStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }
 PHP;
 	}
@@ -1115,15 +1115,15 @@ PHP;
 	protected function stub_wc_shipping(): void {
 		if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_shipping_zone_class_source() );
+			eval( $this->aafm_wc_shipping_zone_class_source() );
 		}
 		if ( ! class_exists( 'WC_Shipping_Method' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_shipping_method_class_source() );
+			eval( $this->aafm_wc_shipping_method_class_source() );
 		}
 		if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Shipping_Zones { public static function get_zones( $args = array() ) { $rows = \Oversio\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); $z = new \WC_Shipping_Zone( $zone_id ); $out[$zone_id] = array_merge( $row, array( "zone_object" => $z ) ); } return $out; } }' );
+			eval( 'class WC_Shipping_Zones { public static function get_zones( $args = array() ) { $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); $z = new \WC_Shipping_Zone( $zone_id ); $out[$zone_id] = array_merge( $row, array( "zone_object" => $z ) ); } return $out; } }' );
 		}
 	}
 
@@ -1133,13 +1133,13 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_shipping_zone_class_source(): string {
+	private function aafm_wc_shipping_zone_class_source(): string {
 		return <<<'PHP'
 class WC_Shipping_Zone {
 	private $data = array();
 	public function __construct( $zone_id = 0 ) {
 		$zone_id = (int) $zone_id;
-		$stored = \Oversio\Tests\WcShippingStubStore::get( $zone_id );
+		$stored = \AAFM\Tests\WcShippingStubStore::get( $zone_id );
 		$this->data = is_array( $stored ) ? $stored : array( 'zone_id' => $zone_id, 'zone_name' => '', 'zone_order' => 0, 'zone_locations' => array() );
 	}
 	public function get_id() { return (int) ( $this->data['zone_id'] ?? 0 ); }
@@ -1156,17 +1156,17 @@ class WC_Shipping_Zone {
 	public function set_zone_name( $v ) { $this->data['zone_name'] = (string) $v; }
 	public function set_zone_order( $v ) { $this->data['zone_order'] = (int) $v; }
 	public function save() {
-		$id = \Oversio\Tests\WcShippingStubStore::save_zone( $this->data );
+		$id = \AAFM\Tests\WcShippingStubStore::save_zone( $this->data );
 		if ( $id > 0 ) { $this->data['zone_id'] = $id; }
 		return $id;
 	}
 	public function delete( $force = false ) {
 		$id = (int) ( $this->data['zone_id'] ?? 0 );
-		return \Oversio\Tests\WcShippingStubStore::delete_zone( $id );
+		return \AAFM\Tests\WcShippingStubStore::delete_zone( $id );
 	}
 	public function get_shipping_methods( $enabled_only = false ) {
 		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
-		$methods_data = \Oversio\Tests\WcShippingStubStore::methods_for_zone( $zone_id );
+		$methods_data = \AAFM\Tests\WcShippingStubStore::methods_for_zone( $zone_id );
 		$out = array();
 		foreach ( $methods_data as $m ) {
 			if ( $enabled_only && 'yes' !== ( $m['enabled'] ?? 'yes' ) ) { continue; }
@@ -1178,11 +1178,11 @@ class WC_Shipping_Zone {
 	}
 	public function add_shipping_method( $type ) {
 		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
-		return \Oversio\Tests\WcShippingStubStore::add_method( $zone_id, (string) $type );
+		return \AAFM\Tests\WcShippingStubStore::add_method( $zone_id, (string) $type );
 	}
 	public function delete_shipping_method( $instance_id ) {
 		$zone_id = (int) ( $this->data['zone_id'] ?? 0 );
-		return \Oversio\Tests\WcShippingStubStore::delete_method( $zone_id, (int) $instance_id );
+		return \AAFM\Tests\WcShippingStubStore::delete_method( $zone_id, (int) $instance_id );
 	}
 }
 PHP;
@@ -1194,7 +1194,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_shipping_method_class_source(): string {
+	private function aafm_wc_shipping_method_class_source(): string {
 		return <<<'PHP'
 class WC_Shipping_Method {
 	public $instance_id = 0;
@@ -1208,7 +1208,7 @@ class WC_Shipping_Method {
 	public function __construct( $instance_id = 0, $zone_id = 0 ) {
 		$this->instance_id = (int) $instance_id;
 		$this->zone_id     = (int) $zone_id;
-		$stored = \Oversio\Tests\WcShippingStubStore::get_method( $this->zone_id, $this->instance_id );
+		$stored = \AAFM\Tests\WcShippingStubStore::get_method( $this->zone_id, $this->instance_id );
 		if ( is_array( $stored ) ) {
 			$this->id           = (string) ( $stored['id'] ?? 'flat_rate' );
 			$this->method_title = (string) ( $stored['method_title'] ?? '' );
@@ -1227,7 +1227,7 @@ class WC_Shipping_Method {
 			// is_enabled lives in the woocommerce_shipping_zone_methods table, which the
 			// production toggle writes via $wpdb->update(). Read it back from the table when
 			// a row exists, falling back to the in-memory store flag.
-			$is_enabled = \Oversio\Tests\WcShippingStubStore::read_is_enabled( $this->instance_id );
+			$is_enabled = \AAFM\Tests\WcShippingStubStore::read_is_enabled( $this->instance_id );
 			if ( null !== $is_enabled ) {
 				$this->enabled = ( 1 === $is_enabled ) ? 'yes' : 'no';
 			} else {
@@ -1258,10 +1258,10 @@ PHP;
 	 * @return void
 	 */
 	protected function reset_integration_stubs(): void {
-		foreach ( $this->oversio_forced_integrations as $slug ) {
-			remove_filter( 'oversio_integration_active_' . $slug, '__return_true' );
+		foreach ( $this->aafm_forced_integrations as $slug ) {
+			remove_filter( 'aafm_integration_active_' . $slug, '__return_true' );
 		}
-		$this->oversio_forced_integrations = array();
+		$this->aafm_forced_integrations = array();
 		AcfStubStore::reset();
 		AioseoStubStore::reset();
 		WcStubStore::reset();
@@ -1302,7 +1302,7 @@ PHP;
 	protected function stub_wc_tax(): void {
 		if ( ! class_exists( 'WC_Tax' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_tax_class_source() );
+			eval( $this->aafm_wc_tax_class_source() );
 		}
 	}
 
@@ -1312,7 +1312,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_tax_class_source(): string {
+	private function aafm_wc_tax_class_source(): string {
 		return <<<'PHP'
 class WC_Tax {
 	/**
@@ -1321,7 +1321,7 @@ class WC_Tax {
 	 * @return string[]
 	 */
 	public static function get_tax_classes(): array {
-		return array_values( \Oversio\Tests\WcTaxStubStore::$classes );
+		return array_values( \AAFM\Tests\WcTaxStubStore::$classes );
 	}
 
 	/**
@@ -1330,7 +1330,7 @@ class WC_Tax {
 	 * @return string[]
 	 */
 	public static function get_tax_class_slugs(): array {
-		return array_keys( \Oversio\Tests\WcTaxStubStore::$classes );
+		return array_keys( \AAFM\Tests\WcTaxStubStore::$classes );
 	}
 
 	/**
@@ -1341,14 +1341,14 @@ class WC_Tax {
 	 * @return array<string,string>|\WP_Error
 	 */
 	public static function create_tax_class( string $name, string $slug = '' ): array|\WP_Error {
-		if ( \Oversio\Tests\WcTaxStubStore::$force_save_failure ) {
+		if ( \AAFM\Tests\WcTaxStubStore::$force_save_failure ) {
 			return new \WP_Error( 'wc_tax', 'Tax class save failed.' );
 		}
 		$slug = $slug ? $slug : sanitize_title( $name );
-		if ( isset( \Oversio\Tests\WcTaxStubStore::$classes[ $slug ] ) ) {
+		if ( isset( \AAFM\Tests\WcTaxStubStore::$classes[ $slug ] ) ) {
 			return new \WP_Error( 'wc_tax', 'Tax class already exists.' );
 		}
-		\Oversio\Tests\WcTaxStubStore::$classes[ $slug ] = $name;
+		\AAFM\Tests\WcTaxStubStore::$classes[ $slug ] = $name;
 		return array( 'name' => $name, 'slug' => $slug );
 	}
 
@@ -1360,12 +1360,12 @@ class WC_Tax {
 	 * @return bool|\WP_Error
 	 */
 	public static function delete_tax_class_by( string $field, string $value ): bool|\WP_Error {
-		if ( \Oversio\Tests\WcTaxStubStore::$force_delete_failure ) {
+		if ( \AAFM\Tests\WcTaxStubStore::$force_delete_failure ) {
 			return new \WP_Error( 'wc_tax', 'Tax class delete failed.' );
 		}
 		if ( 'slug' === $field ) {
-			if ( isset( \Oversio\Tests\WcTaxStubStore::$classes[ $value ] ) ) {
-				unset( \Oversio\Tests\WcTaxStubStore::$classes[ $value ] );
+			if ( isset( \AAFM\Tests\WcTaxStubStore::$classes[ $value ] ) ) {
+				unset( \AAFM\Tests\WcTaxStubStore::$classes[ $value ] );
 				return true;
 			}
 			return new \WP_Error( 'wc_tax', 'Tax class not found.' );
@@ -1384,11 +1384,11 @@ PHP;
 	protected function stub_wc_gateways(): void {
 		if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_payment_gateway_class_source() );
+			eval( $this->aafm_wc_payment_gateway_class_source() );
 		}
 		if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( $this->oversio_wc_payment_gateways_class_source() );
+			eval( $this->aafm_wc_payment_gateways_class_source() );
 		}
 	}
 
@@ -1398,7 +1398,7 @@ PHP;
 	 * @return void
 	 */
 	protected function seed_wc_gateways(): void {
-		\Oversio\Tests\WcGatewayStubStore::seed();
+		\AAFM\Tests\WcGatewayStubStore::seed();
 	}
 
 	/**
@@ -1406,7 +1406,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_payment_gateway_class_source(): string {
+	private function aafm_wc_payment_gateway_class_source(): string {
 		return <<<'PHP'
 class WC_Payment_Gateway {
 	/** @var string */
@@ -1442,10 +1442,10 @@ class WC_Payment_Gateway {
 	 */
 	public function update_option( $key, $value ) {
 		$key = (string) $key;
-		$changed = \Oversio\Tests\WcGatewayStubStore::update_option( $this->id, $key, $value );
+		$changed = \AAFM\Tests\WcGatewayStubStore::update_option( $this->id, $key, $value );
 		// Keep the in-memory settings in sync with what the store accepted so get_option() reflects
 		// the persisted state (matching how real WC_Settings_API caches $this->settings).
-		$stored = \Oversio\Tests\WcGatewayStubStore::get( $this->id );
+		$stored = \AAFM\Tests\WcGatewayStubStore::get( $this->id );
 		if ( is_array( $stored ) ) {
 			$this->settings = $stored['settings'] ?? array();
 		}
@@ -1475,7 +1475,7 @@ PHP;
 	 *
 	 * @return string
 	 */
-	private function oversio_wc_payment_gateways_class_source(): string {
+	private function aafm_wc_payment_gateways_class_source(): string {
 		return <<<'PHP'
 class WC_Payment_Gateways {
 	/** @return static */
@@ -1486,7 +1486,7 @@ class WC_Payment_Gateways {
 	/** @return array<string,\WC_Payment_Gateway> */
 	public function payment_gateways() {
 		$out = array();
-		foreach ( \Oversio\Tests\WcGatewayStubStore::all() as $id => $data ) {
+		foreach ( \AAFM\Tests\WcGatewayStubStore::all() as $id => $data ) {
 			$gw              = new \WC_Payment_Gateway( $data );
 			$gw->settings    = $data['settings'] ?? array();
 			$out[ (string) $id ] = $gw;

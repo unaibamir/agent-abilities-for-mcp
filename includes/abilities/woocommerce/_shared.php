@@ -7,7 +7,7 @@
  * orders, customers, coupons, tax, and the rest: the manage_woocommerce permission floor, the
  * price sanitiser, and the date-to-string formatter. Registers no abilities and adds no filter.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return bool
  */
-function oversio_wc_perm(): bool {
+function aafm_wc_perm(): bool {
 	return current_user_can( 'manage_woocommerce' );
 }
 
@@ -35,7 +35,7 @@ function oversio_wc_perm(): bool {
  * @param mixed $value Raw price.
  * @return string
  */
-function oversio_wc_sanitize_price( $value ): string {
+function aafm_wc_sanitize_price( $value ): string {
 	$clean = preg_replace( '/[^0-9.]/', '', (string) $value );
 	return is_string( $clean ) ? $clean : '';
 }
@@ -51,7 +51,7 @@ function oversio_wc_sanitize_price( $value ): string {
  * @param string|object|null $date Raw date value from a WC_Order getter.
  * @return string|null
  */
-function oversio_wc_date_string( $date ): ?string {
+function aafm_wc_date_string( $date ): ?string {
 	if ( null === $date ) {
 		return null;
 	}

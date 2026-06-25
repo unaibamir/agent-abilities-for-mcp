@@ -4,14 +4,14 @@
  * trash, and the anti-escalation guards (author-forcing, type/status pinning,
  * content sanitization).
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 use WP_Post;
 
@@ -21,35 +21,35 @@ final class PostsWriteTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is invoked.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
 		// simulated by pushing the action name onto $wp_current_filter — the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
-			array( 'oversio/create-draft', 'oversio/create-post', 'oversio/update-post', 'oversio/trash-post' )
+			'aafm_enabled_abilities',
+			array( 'aafm/create-draft', 'aafm/create-post', 'aafm/update-post', 'aafm/trash-post' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_writes_are_in_registry_as_writes(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertSame( 'writes', $registry['oversio/create-draft']['group'] );
-		$this->assertSame( 'write', $registry['oversio/create-draft']['risk'] );
-		$this->assertSame( 'writes', $registry['oversio/create-post']['group'] );
-		$this->assertSame( 'writes', $registry['oversio/update-post']['group'] );
-		$this->assertSame( 'destructive', $registry['oversio/trash-post']['risk'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertSame( 'writes', $registry['aafm/create-draft']['group'] );
+		$this->assertSame( 'write', $registry['aafm/create-draft']['risk'] );
+		$this->assertSame( 'writes', $registry['aafm/create-post']['group'] );
+		$this->assertSame( 'writes', $registry['aafm/update-post']['group'] );
+		$this->assertSame( 'destructive', $registry['aafm/trash-post']['risk'] );
 	}
 
 	public function test_create_draft_forces_draft_status(): void {
 		$this->acting_as( 'author' );
 		// Even if the agent asks to publish, create-draft must produce a draft.
-		$out = wp_get_ability( 'oversio/create-draft' )->execute(
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'   => 'Agent draft',
 				'content' => 'Body',
@@ -62,13 +62,13 @@ final class PostsWriteTest extends TestCase {
 	public function test_create_draft_needs_only_edit_posts_not_publish(): void {
 		// A contributor can edit_posts but not publish_posts.
 		$this->acting_as( 'contributor' );
-		$this->assertTrue( wp_get_ability( 'oversio/create-draft' )->check_permissions( array() ) );
-		$this->assertFalse( wp_get_ability( 'oversio/create-post' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-post' )->check_permissions( array() ) );
 	}
 
 	public function test_create_post_requires_publish_cap_and_publishes(): void {
 		$this->acting_as( 'author' );
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'   => 'Live post',
 				'content' => 'Body',
@@ -79,11 +79,11 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_subscriber_denied_create_draft_is_audited(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'oversio/create-draft' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/create-draft', $abilities );
+		$this->assertContains( 'aafm/create-draft', $abilities );
 	}
 
 	public function test_create_post_rejects_smuggled_author_and_forces_current_user(): void {
@@ -95,7 +95,7 @@ final class PostsWriteTest extends TestCase {
 		// 1) A caller-supplied post_author is an undeclared field. The closed input
 		// schema (additionalProperties:false) rejects the whole call before execute,
 		// so the spoof can never reach wp_insert_post.
-		$rejected = wp_get_ability( 'oversio/create-post' )->execute(
+		$rejected = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'       => 'Whose post is this',
 				'content'     => 'Body',
@@ -106,7 +106,7 @@ final class PostsWriteTest extends TestCase {
 
 		// 2) On a clean call, authorship is forced to the current (agent) user —
 		// wp_insert_post defaults post_author to the current user; we never thread it.
-		$out     = wp_get_ability( 'oversio/create-post' )->execute(
+		$out     = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'   => 'My own post',
 				'content' => 'Body',
@@ -122,7 +122,7 @@ final class PostsWriteTest extends TestCase {
 		$this->acting_as( 'editor' );
 
 		// 1) post_type is undeclared in the closed schema → the call is rejected.
-		$rejected = wp_get_ability( 'oversio/create-post' )->execute(
+		$rejected = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'     => 'Not a nav item',
 				'content'   => 'Body',
@@ -132,7 +132,7 @@ final class PostsWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
 		// 2) A clean create pins the type to 'post' regardless — the agent has no say.
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'   => 'Ordinary post',
 				'content' => 'Body',
@@ -143,7 +143,7 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_create_draft_sanitizes_script_in_content(): void {
 		$this->acting_as( 'editor' );
-		$out    = wp_get_ability( 'oversio/create-draft' )->execute(
+		$out    = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'   => 'XSS attempt',
 				'content' => 'Hello<script>alert(1)</script> world',
@@ -157,7 +157,7 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_create_draft_strips_script_tags_from_title(): void {
 		$this->acting_as( 'editor' );
-		$out    = wp_get_ability( 'oversio/create-draft' )->execute(
+		$out    = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'   => 'Clean<script>alert(1)</script>Title',
 				'content' => 'Body',
@@ -179,7 +179,7 @@ final class PostsWriteTest extends TestCase {
 		// A different author may not edit someone else's post.
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'oversio/update-post' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'aafm/update-post' )->check_permissions( array( 'post_id' => $post ) )
 		);
 	}
 
@@ -195,11 +195,11 @@ final class PostsWriteTest extends TestCase {
 
 		// Editing without a status change is allowed for the owner-contributor.
 		$this->assertTrue(
-			wp_get_ability( 'oversio/update-post' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'aafm/update-post' )->check_permissions( array( 'post_id' => $post ) )
 		);
 		// Attempting to flip to publish is gated by publish_posts, which a contributor lacks.
 		$this->assertFalse(
-			wp_get_ability( 'oversio/update-post' )->check_permissions(
+			wp_get_ability( 'aafm/update-post' )->check_permissions(
 				array(
 					'post_id' => $post,
 					'status'  => 'publish',
@@ -220,14 +220,14 @@ final class PostsWriteTest extends TestCase {
 		// A different author cannot delete someone else's post.
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'oversio/trash-post' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'aafm/trash-post' )->check_permissions( array( 'post_id' => $post ) )
 		);
 	}
 
 	public function test_trash_post_is_recoverable_not_permanent(): void {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		wp_get_ability( 'oversio/trash-post' )->execute( array( 'post_id' => $post ) );
+		wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post ) );
 
 		$this->assertSame( 'trash', get_post_status( $post ) );
 		// Still recoverable — not permanently deleted.
@@ -235,7 +235,7 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	public function test_write_schema_exposes_optional_enrichment_fields(): void {
-		$props = oversio_write_content_schema( true )['properties'];
+		$props = aafm_write_content_schema( true )['properties'];
 
 		// terms: object whose values are arrays of integers.
 		$this->assertSame( 'object', $props['terms']['type'] );
@@ -257,20 +257,20 @@ final class PostsWriteTest extends TestCase {
 		);
 
 		// Schema stays closed — the first anti-escalation layer.
-		$this->assertFalse( oversio_write_content_schema( true )['additionalProperties'] );
+		$this->assertFalse( aafm_write_content_schema( true )['additionalProperties'] );
 	}
 
 	public function test_term_validator_accepts_real_terms_in_allowed_taxonomy(): void {
 		$this->acting_as( 'editor' );
 		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
-		$ids = oversio_validate_term_ids_for_taxonomy( 'category', array( $term ) );
+		$ids = aafm_validate_term_ids_for_taxonomy( 'category', array( $term ) );
 		$this->assertSame( array( $term ), $ids );
 	}
 
 	public function test_term_validator_rejects_nonexistent_term_id(): void {
 		$this->acting_as( 'editor' );
-		$err = oversio_validate_term_ids_for_taxonomy( 'category', array( 99999999 ) );
+		$err = aafm_validate_term_ids_for_taxonomy( 'category', array( 99999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
@@ -278,13 +278,13 @@ final class PostsWriteTest extends TestCase {
 		$this->acting_as( 'editor' );
 		// A tag term id must be rejected when offered as a category id.
 		$tag = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
-		$err = oversio_validate_term_ids_for_taxonomy( 'category', array( $tag ) );
+		$err = aafm_validate_term_ids_for_taxonomy( 'category', array( $tag ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
 	public function test_term_validator_rejects_non_public_or_unknown_taxonomy(): void {
 		$this->acting_as( 'editor' );
-		$err = oversio_validate_term_ids_for_taxonomy( 'totally_made_up_tax', array( 1 ) );
+		$err = aafm_validate_term_ids_for_taxonomy( 'totally_made_up_tax', array( 1 ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
@@ -292,7 +292,7 @@ final class PostsWriteTest extends TestCase {
 		// A subscriber has no assign_terms capability on the category taxonomy.
 		$this->acting_as( 'subscriber' );
 		$term = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
-		$err  = oversio_validate_term_ids_for_taxonomy( 'category', array( $term ) );
+		$err  = aafm_validate_term_ids_for_taxonomy( 'category', array( $term ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
@@ -306,51 +306,51 @@ final class PostsWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		$this->assertSame( $att, oversio_validate_featured_attachment_id( $att ) );
+		$this->assertSame( $att, aafm_validate_featured_attachment_id( $att ) );
 	}
 
 	public function test_featured_validator_rejects_plain_post_id(): void {
 		$this->acting_as( 'editor' );
 		$plain = self::factory()->post->create();
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_featured_attachment_id( $plain ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( $plain ) );
 	}
 
 	public function test_featured_validator_rejects_zero_and_missing(): void {
 		$this->acting_as( 'editor' );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_featured_attachment_id( 0 ) );
-		$this->assertInstanceOf( WP_Error::class, oversio_validate_featured_attachment_id( 88888888 ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 0 ) );
+		$this->assertInstanceOf( WP_Error::class, aafm_validate_featured_attachment_id( 88888888 ) );
 	}
 
 	public function test_meta_validator_accepts_allowlisted_scalar(): void {
 		$this->acting_as( 'editor' );
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = oversio_validate_meta_payload( array( 'subtitle' => 'Hello' ) );
+		$out = aafm_validate_meta_payload( array( 'subtitle' => 'Hello' ) );
 		$this->assertSame( array( 'subtitle' => 'Hello' ), $out );
 	}
 
 	public function test_meta_validator_rejects_non_allowlisted_key(): void {
 		$this->acting_as( 'editor' );
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$err = oversio_validate_meta_payload( array( 'not_allowed' => 'x' ) );
+		$err = aafm_validate_meta_payload( array( 'not_allowed' => 'x' ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
 	public function test_meta_validator_rejects_hard_blocked_key(): void {
 		$this->acting_as( 'editor' );
 		// Even if an operator mistakenly allowlists a capabilities key, the hard floor wins.
-		update_option( 'oversio_allowed_meta_keys', array( 'wp_capabilities' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'wp_capabilities' ) );
 
-		$err = oversio_validate_meta_payload( array( 'wp_capabilities' => 'administrator' ) );
+		$err = aafm_validate_meta_payload( array( 'wp_capabilities' => 'administrator' ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
 	public function test_meta_validator_rejects_non_scalar_value(): void {
 		$this->acting_as( 'editor' );
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$err = oversio_validate_meta_payload( array( 'subtitle' => array( 'nested' => 1 ) ) );
+		$err = aafm_validate_meta_payload( array( 'subtitle' => array( 'nested' => 1 ) ) );
 		$this->assertInstanceOf( WP_Error::class, $err );
 	}
 
@@ -365,9 +365,9 @@ final class PostsWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$bundle = oversio_validate_write_enrichment(
+		$bundle = aafm_validate_write_enrichment(
 			array(
 				'terms'          => array( 'category' => array( $term ) ),
 				'featured_media' => $att,
@@ -382,7 +382,7 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_validate_enrichment_rejects_bad_taxonomy_before_apply(): void {
 		$this->acting_as( 'editor' );
-		$err = oversio_validate_write_enrichment(
+		$err = aafm_validate_write_enrichment(
 			array( 'terms' => array( 'bogus_tax' => array( 1 ) ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $err );
@@ -400,14 +400,14 @@ final class PostsWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
 		$bundle = array(
 			'terms'          => array( 'category' => array( $term ) ),
 			'featured_media' => $att,
 			'meta'           => array( 'subtitle' => 'Applied' ),
 		);
-		$this->assertNull( oversio_apply_write_enrichment( $post, $bundle ) );
+		$this->assertNull( aafm_apply_write_enrichment( $post, $bundle ) );
 
 		$this->assertContains( $term, wp_get_post_terms( $post, 'category', array( 'fields' => 'ids' ) ) );
 		$this->assertSame( $att, get_post_thumbnail_id( $post ) );
@@ -425,9 +425,9 @@ final class PostsWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'          => 'Enriched',
 				'content'        => 'Body',
@@ -449,7 +449,7 @@ final class PostsWriteTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$before = (int) wp_count_posts( 'post' )->publish;
 
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title' => 'Should not persist',
 				'terms' => array( 'category' => array( 99999999 ) ), // Nonexistent term.
@@ -472,9 +472,9 @@ final class PostsWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = wp_get_ability( 'oversio/update-post' )->execute(
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
 				'post_id'        => $post,
 				'slug'           => 'Renamed Slug',
@@ -495,7 +495,7 @@ final class PostsWriteTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create( array( 'post_title' => 'Original' ) );
 
-		$out = wp_get_ability( 'oversio/update-post' )->execute(
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
 				'post_id' => $post,
 				'title'   => 'Changed Title',
@@ -509,7 +509,7 @@ final class PostsWriteTest extends TestCase {
 	}
 
 	public function test_write_descriptions_mention_optional_fields(): void {
-		$desc = oversio_args_create_draft()['description'];
+		$desc = aafm_args_create_draft()['description'];
 		$this->assertStringContainsString( 'terms', $desc );
 		$this->assertStringContainsString( 'featured_media', $desc );
 		$this->assertStringContainsString( 'slug', $desc );
@@ -522,46 +522,46 @@ final class PostsWriteTest extends TestCase {
 		// every editor/contributor holds, so a custom public taxonomy whose assign_terms is
 		// a primitive cap no standard role owns isolates the gate cleanly.
 		register_taxonomy(
-			'oversio_gated_tax',
+			'aafm_gated_tax',
 			'post',
 			array(
 				'public'       => true,
 				'hierarchical' => true,
 				'capabilities' => array(
-					'assign_terms' => 'oversio_assign_gated_terms',
+					'assign_terms' => 'aafm_assign_gated_terms',
 				),
 			)
 		);
 
 		$this->acting_as( 'editor' );
-		$term = self::factory()->term->create( array( 'taxonomy' => 'oversio_gated_tax' ) );
+		$term = self::factory()->term->create( array( 'taxonomy' => 'aafm_gated_tax' ) );
 
-		$out = wp_get_ability( 'oversio/create-draft' )->execute(
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title' => 'Draft with terms',
-				'terms' => array( 'oversio_gated_tax' => array( $term ) ),
+				'terms' => array( 'aafm_gated_tax' => array( $term ) ),
 			)
 		);
 
-		unregister_taxonomy( 'oversio_gated_tax' );
+		unregister_taxonomy( 'aafm_gated_tax' );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
 	public function test_update_denies_term_assign_without_assign_terms_cap(): void {
 		// Symmetric to the create-path gate: the update path shares the same
-		// oversio_validate_write_enrichment()->oversio_validate_term_ids_for_taxonomy() gate, so a
+		// aafm_validate_write_enrichment()->aafm_validate_term_ids_for_taxonomy() gate, so a
 		// user lacking the taxonomy's primitive assign_terms cap must be denied before any
 		// write. A custom public taxonomy whose assign_terms is a cap no standard role holds
 		// isolates the gate; this test locks the update path against a refactor that drops it.
 		register_taxonomy(
-			'oversio_gated_tax',
+			'aafm_gated_tax',
 			'post',
 			array(
 				'public'       => true,
 				'hierarchical' => true,
 				'capabilities' => array(
-					'assign_terms' => 'oversio_assign_gated_terms',
+					'assign_terms' => 'aafm_assign_gated_terms',
 				),
 			)
 		);
@@ -569,18 +569,18 @@ final class PostsWriteTest extends TestCase {
 		// The acting editor CAN edit this post but lacks the gated assign_terms cap.
 		$editor = $this->acting_as( 'editor' );
 		$post   = self::factory()->post->create( array( 'post_author' => $editor ) );
-		$term   = self::factory()->term->create( array( 'taxonomy' => 'oversio_gated_tax' ) );
+		$term   = self::factory()->term->create( array( 'taxonomy' => 'aafm_gated_tax' ) );
 
-		$out = wp_get_ability( 'oversio/update-post' )->execute(
+		$out = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
 				'post_id' => $post,
-				'terms'   => array( 'oversio_gated_tax' => array( $term ) ),
+				'terms'   => array( 'aafm_gated_tax' => array( $term ) ),
 			)
 		);
 
-		$assigned = wp_get_post_terms( $post, 'oversio_gated_tax', array( 'fields' => 'ids' ) );
+		$assigned = wp_get_post_terms( $post, 'aafm_gated_tax', array( 'fields' => 'ids' ) );
 
-		unregister_taxonomy( 'oversio_gated_tax' );
+		unregister_taxonomy( 'aafm_gated_tax' );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
 		// The gate denied before the write — the post's terms in that taxonomy are unchanged.
@@ -589,9 +589,9 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_create_rejects_non_allowlisted_meta_at_ability_level(): void {
 		$this->acting_as( 'editor' );
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title' => 'Bad meta',
 				'meta'  => array( 'arbitrary_unlisted' => 'x' ),
@@ -604,9 +604,9 @@ final class PostsWriteTest extends TestCase {
 	public function test_enrichment_does_not_weaken_author_forcing(): void {
 		// Anti-escalation: even with enrichment present, post_author is the agent, never spoofed.
 		$me = $this->acting_as( 'editor' );
-		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = wp_get_ability( 'oversio/create-post' )->execute(
+		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title' => 'Authored',
 				'meta'  => array( 'subtitle' => 'x' ),

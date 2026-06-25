@@ -2,14 +2,14 @@
 /**
  * Page read abilities: redaction, status guard, per-object gating.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 use WP_Error;
 
 final class PagesReadTest extends TestCase {
@@ -18,22 +18,22 @@ final class PagesReadTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
-		update_option( 'oversio_enabled_abilities', array( 'oversio/get-pages', 'oversio/get-page' ) );
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-pages', 'aafm/get-page' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_get_pages_is_in_registry_as_a_read(): void {
-		$registry = oversio_get_abilities_registry();
-		$this->assertArrayHasKey( 'oversio/get-pages', $registry );
-		$this->assertSame( 'reads', $registry['oversio/get-pages']['group'] );
-		$this->assertSame( 'read', $registry['oversio/get-pages']['risk'] );
+		$registry = aafm_get_abilities_registry();
+		$this->assertArrayHasKey( 'aafm/get-pages', $registry );
+		$this->assertSame( 'reads', $registry['aafm/get-pages']['group'] );
+		$this->assertSame( 'read', $registry['aafm/get-pages']['risk'] );
 	}
 
 	public function test_get_pages_lists_published_pages(): void {
@@ -46,7 +46,7 @@ final class PagesReadTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'oversio/get-pages' )->execute( array( 'status' => 'publish' ) );
+		$out = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'publish' ) );
 
 		$this->assertArrayHasKey( 'posts', $out );
 		$this->assertContains( 'About', wp_list_pluck( $out['posts'], 'title' ) );
@@ -69,7 +69,7 @@ final class PagesReadTest extends TestCase {
 			)
 		);
 
-		$out    = wp_get_ability( 'oversio/get-pages' )->execute( array( 'status' => 'publish' ) );
+		$out    = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'publish' ) );
 		$titles = wp_list_pluck( $out['posts'], 'title' );
 
 		$this->assertContains( 'Live Page', $titles );
@@ -78,7 +78,7 @@ final class PagesReadTest extends TestCase {
 
 	public function test_get_pages_rejects_status_any(): void {
 		$this->acting_as( 'subscriber' );
-		$out = wp_get_ability( 'oversio/get-pages' )->execute( array( 'status' => 'any' ) );
+		$out = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'any' ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
@@ -90,13 +90,13 @@ final class PagesReadTest extends TestCase {
 		$may_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_userdata( $may_id )->add_cap( 'read_private_pages' );
 		wp_set_current_user( $may_id );
-		$allowed = wp_get_ability( 'oversio/get-pages' )->execute( array( 'status' => 'private' ) );
+		$allowed = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'private' ) );
 		$this->assertArrayHasKey( 'posts', $allowed );
 
 		$may_not_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		get_userdata( $may_not_id )->add_cap( 'read_private_posts' );
 		wp_set_current_user( $may_not_id );
-		$denied = wp_get_ability( 'oversio/get-pages' )->execute( array( 'status' => 'private' ) );
+		$denied = wp_get_ability( 'aafm/get-pages' )->execute( array( 'status' => 'private' ) );
 		$this->assertInstanceOf( WP_Error::class, $denied );
 	}
 
@@ -108,7 +108,7 @@ final class PagesReadTest extends TestCase {
 				'post_status' => 'private',
 			)
 		);
-		$out  = wp_get_ability( 'oversio/get-page' )->check_permissions( array( 'page_id' => $priv ) );
+		$out  = wp_get_ability( 'aafm/get-page' )->check_permissions( array( 'page_id' => $priv ) );
 		$this->assertFalse( $out );
 	}
 
@@ -120,7 +120,7 @@ final class PagesReadTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
-		$out = wp_get_ability( 'oversio/get-page' )->execute( array( 'page_id' => $id ) );
+		$out = wp_get_ability( 'aafm/get-page' )->execute( array( 'page_id' => $id ) );
 		$this->assertSame( $id, $out['post']['id'] );
 		$this->assertArrayNotHasKey( 'post_password', $out['post'] );
 	}

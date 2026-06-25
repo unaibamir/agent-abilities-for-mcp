@@ -6,12 +6,12 @@
  * trait), satisfying Generic.Files.OneObjectStructurePerFile. Required directly from the test
  * bootstrap, never shipped.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests;
+namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce shipping zone and method stubs.
@@ -114,7 +114,7 @@ class WcShippingStubStore {
 	/**
 	 * Create the woocommerce_shipping_zone_methods temp table in the test DB.
 	 *
-	 * The production enabled toggle in oversio_exec_wc_update_shipping_method() runs a direct
+	 * The production enabled toggle in aafm_exec_wc_update_shipping_method() runs a direct
 	 * $wpdb->update() against this table (no core API exists for the is_enabled column), so a
 	 * real table is created here — mirroring how WcTaxStubStore backs the tax-rate queries — and
 	 * the stub WC_Shipping_Method constructor reads is_enabled back from it. Call from the

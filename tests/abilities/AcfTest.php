@@ -7,15 +7,15 @@
  * trait). The abilities walk acf_get_field_groups()/acf_get_fields() for discovery and read/write
  * hydrated values through get_fields()/get_field()/update_field(), all served by the stub store.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Abilities;
+namespace AAFM\Tests\Abilities;
 
-use Oversio\Tests\TestCase;
-use Oversio\Tests\IntegrationStubs;
+use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
 use WP_Error;
 
 final class AcfTest extends TestCase {
@@ -24,8 +24,8 @@ final class AcfTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_activity_log();
-		oversio_clear_activity_log();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 		$this->force_integration( 'acf' );
 		$this->stub_acf(
 			array(
@@ -45,7 +45,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_1' => 'Hello' ),
 			)
 		);
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_acf();
 	}
 
@@ -58,28 +58,28 @@ final class AcfTest extends TestCase {
 	 * Enable + register the ACF set so the abilities can be invoked.
 	 */
 	private function register_acf(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
-			'oversio_enabled_abilities',
+			'aafm_enabled_abilities',
 			array(
-				'oversio/acf-list-field-groups',
-				'oversio/acf-get-post-fields',
-				'oversio/acf-update-post-fields',
-				'oversio/acf-get-term-fields',
-				'oversio/acf-update-term-fields',
-				'oversio/acf-get-user-fields',
-				'oversio/acf-update-user-fields',
+				'aafm/acf-list-field-groups',
+				'aafm/acf-get-post-fields',
+				'aafm/acf-update-post-fields',
+				'aafm/acf-get-term-fields',
+				'aafm/acf-update-term-fields',
+				'aafm/acf-get-user-fields',
+				'aafm/acf-update-user-fields',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
 	public function test_list_field_groups_requires_edit_posts_and_returns_discovery_shape(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue( wp_get_ability( 'oversio/acf-list-field-groups' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'aafm/acf-list-field-groups' )->check_permissions( array() ) );
 
 		$this->acting_as( 'editor' );
-		$res = wp_get_ability( 'oversio/acf-list-field-groups' )->execute( array() );
+		$res = wp_get_ability( 'aafm/acf-list-field-groups' )->execute( array() );
 		$this->assertArrayHasKey( 'field_groups', $res );
 		$this->assertSame( 'group_1', $res['field_groups'][0]['key'] );
 		$this->assertSame( 'Hero', $res['field_groups'][0]['title'] );
@@ -92,17 +92,17 @@ final class AcfTest extends TestCase {
 	}
 
 	public function test_acf_abilities_absent_when_host_inactive(): void {
-		// HIGH-2: assert at the REGISTRY level (not via oversio_user_can_discover_ability, which leaks
+		// HIGH-2: assert at the REGISTRY level (not via aafm_user_can_discover_ability, which leaks
 		// through the process-wide raw-permission $store once any test registered the set). The
 		// stub_acf() helper defines get_field() process-wide, so real detection still reports ACF
-		// active after removing the force filter — pin it off through the oversio_acf_active seam.
+		// active after removing the force filter — pin it off through the aafm_acf_active seam.
 		$this->reset_integration_stubs();
-		remove_all_filters( 'oversio_integration_active_acf' );
-		add_filter( 'oversio_acf_active', '__return_false', 99 );
-		$this->assertFalse( oversio_integration_active( 'acf' ) );
-		oversio_registry_cache_should_flush( true );
-		$this->assertArrayNotHasKey( 'oversio/acf-list-field-groups', oversio_get_abilities_registry() );
-		remove_filter( 'oversio_acf_active', '__return_false', 99 );
+		remove_all_filters( 'aafm_integration_active_acf' );
+		add_filter( 'aafm_acf_active', '__return_false', 99 );
+		$this->assertFalse( aafm_integration_active( 'acf' ) );
+		aafm_registry_cache_should_flush( true );
+		$this->assertArrayNotHasKey( 'aafm/acf-list-field-groups', aafm_get_abilities_registry() );
+		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 	}
 
 	/**
@@ -112,7 +112,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( $post_id, $res['post_id'] );
 		$this->assertArrayHasKey( 'fields', $res );
@@ -124,7 +124,7 @@ final class AcfTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-get-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'aafm/acf-get-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
@@ -132,7 +132,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => 'Updated headline' ),
@@ -145,11 +145,11 @@ final class AcfTest extends TestCase {
 		// the stub's global seed merge — the write must land under the post-id bucket specifically.
 		$this->assertSame(
 			'Updated headline',
-			\Oversio\Tests\AcfStubStore::value( 'field_1', $post_id ),
+			\AAFM\Tests\AcfStubStore::value( 'field_1', $post_id ),
 			'The post write must use the post-id selector.'
 		);
 
-		$read = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'Updated headline', ( (array) $read['fields'] )['field_1'], 'The ACF post write must round-trip.' );
 	}
 
@@ -161,14 +161,14 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		\Oversio\Tests\AcfStubStore::$update_should_fail = true;
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		\AAFM\Tests\AcfStubStore::$update_should_fail = true;
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => 'Will not persist' ),
 			)
 		);
-		\Oversio\Tests\AcfStubStore::$update_should_fail = false;
+		\AAFM\Tests\AcfStubStore::$update_should_fail = false;
 
 		$this->assertInstanceOf( WP_Error::class, $res, 'A failed update_field must surface as an error, not a fake-success read.' );
 	}
@@ -177,13 +177,13 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => '<script>alert(1)</script>clean' ),
 			)
 		);
-		$read = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$json = (string) wp_json_encode( $read['fields'] );
 		$this->assertStringNotContainsString( '<script>', $json, 'A text-field write must be sanitized.' );
 	}
@@ -193,7 +193,7 @@ final class AcfTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
 		// A repeater-style nested array: every leaf must be sanitized at depth.
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array(
@@ -203,7 +203,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		$read = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$json = (string) wp_json_encode( $read['fields'] );
 		$this->assertStringNotContainsString( '<script>', $json, 'Nested array leaves must be sanitized.' );
 		$this->assertStringNotContainsString( 'alert(2)', $json, 'Deeply nested script content must be stripped.' );
@@ -212,7 +212,7 @@ final class AcfTest extends TestCase {
 	public function test_update_post_fields_rejects_a_smuggled_top_level_field(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res     = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => 'ok' ),
@@ -226,7 +226,7 @@ final class AcfTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
@@ -236,7 +236,7 @@ final class AcfTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) ),
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) ),
 			'An author must be denied an ACF write on another author\'s post.'
 		);
 	}
@@ -245,7 +245,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => 'Audited' ),
@@ -253,21 +253,21 @@ final class AcfTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/acf-update-post-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-post-fields', $abilities );
 	}
 
 	public function test_update_post_fields_denied_is_audited(): void {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'aafm/acf-update-post-fields' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/acf-update-post-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-post-fields', $abilities );
 	}
 
 	/**
@@ -277,7 +277,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( $term_id, $res['term_id'] );
 		$this->assertArrayHasKey( 'fields', $res );
@@ -289,7 +289,7 @@ final class AcfTest extends TestCase {
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-get-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
+			wp_get_ability( 'aafm/acf-get-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
 		);
 	}
 
@@ -297,7 +297,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-term-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
 			array(
 				'term_id' => $term_id,
 				'fields'  => array( 'field_1' => 'Term value' ),
@@ -309,18 +309,18 @@ final class AcfTest extends TestCase {
 		// The write was recorded under the "term_{id}" ACF selector, not the post bucket.
 		$this->assertSame(
 			'Term value',
-			\Oversio\Tests\AcfStubStore::value( 'field_1', 'term_' . $term_id ),
+			\AAFM\Tests\AcfStubStore::value( 'field_1', 'term_' . $term_id ),
 			'The term write must use the term_{id} selector.'
 		);
 
-		$read = wp_get_ability( 'oversio/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
 		$this->assertSame( 'Term value', ( (array) $read['fields'] )['field_1'] );
 	}
 
 	public function test_update_term_fields_rejects_a_smuggled_top_level_field(): void {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
-		$res     = wp_get_ability( 'oversio/acf-update-term-fields' )->execute(
+		$res     = wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
 			array(
 				'term_id' => $term_id,
 				'fields'  => array( 'field_1' => 'ok' ),
@@ -334,7 +334,7 @@ final class AcfTest extends TestCase {
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
+			wp_get_ability( 'aafm/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
 		);
 	}
 
@@ -344,7 +344,7 @@ final class AcfTest extends TestCase {
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) ),
+			wp_get_ability( 'aafm/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) ),
 			'An author without edit_term must be denied the term ACF write.'
 		);
 	}
@@ -353,7 +353,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-term-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
 			array(
 				'term_id' => $term_id,
 				'fields'  => array( 'field_1' => 'Audited' ),
@@ -361,21 +361,21 @@ final class AcfTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/acf-update-term-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-term-fields', $abilities );
 	}
 
 	public function test_update_term_fields_denied_is_audited(): void {
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
+			wp_get_ability( 'aafm/acf-update-term-fields' )->check_permissions( array( 'term_id' => $term_id ) )
 		);
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/acf-update-term-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-term-fields', $abilities );
 	}
 
 	/**
@@ -407,7 +407,7 @@ final class AcfTest extends TestCase {
 				'values' => array( 'field_email' => $email ),
 			)
 		);
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_acf();
 	}
 
@@ -415,7 +415,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( $user_id, $res['user_id'] );
 		$this->assertArrayHasKey( 'fields', $res );
@@ -431,7 +431,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$res  = wp_get_ability( 'oversio/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$res  = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
 		$json = (string) wp_json_encode( $res['fields'] );
 		$this->assertStringContainsString(
 			'acf-pii@example.com',
@@ -444,7 +444,7 @@ final class AcfTest extends TestCase {
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-get-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+			wp_get_ability( 'aafm/acf-get-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
 		);
 	}
 
@@ -453,7 +453,7 @@ final class AcfTest extends TestCase {
 		$target = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-get-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
+			wp_get_ability( 'aafm/acf-get-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
 			'An author without edit_user must be denied the user ACF read.'
 		);
 	}
@@ -462,7 +462,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-user-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
 			array(
 				'user_id' => $user_id,
 				'fields'  => array( 'field_1' => 'User value' ),
@@ -473,18 +473,18 @@ final class AcfTest extends TestCase {
 
 		$this->assertSame(
 			'User value',
-			\Oversio\Tests\AcfStubStore::value( 'field_1', 'user_' . $user_id ),
+			\AAFM\Tests\AcfStubStore::value( 'field_1', 'user_' . $user_id ),
 			'The user write must use the user_{id} selector.'
 		);
 
-		$read = wp_get_ability( 'oversio/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
 		$this->assertSame( 'User value', ( (array) $read['fields'] )['field_1'] );
 	}
 
 	public function test_update_user_fields_rejects_a_smuggled_top_level_field(): void {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		$res     = wp_get_ability( 'oversio/acf-update-user-fields' )->execute(
+		$res     = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
 			array(
 				'user_id' => $user_id,
 				'fields'  => array( 'field_1' => 'ok' ),
@@ -498,7 +498,7 @@ final class AcfTest extends TestCase {
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
 		);
 	}
 
@@ -506,7 +506,7 @@ final class AcfTest extends TestCase {
 		$target = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $target ) ),
 			'An author without edit_user must be denied the user ACF write.'
 		);
 	}
@@ -515,7 +515,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-user-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
 			array(
 				'user_id' => $user_id,
 				'fields'  => array( 'field_1' => 'Audited' ),
@@ -523,21 +523,21 @@ final class AcfTest extends TestCase {
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$success   = oversio_query_activity( array( 'status' => 'success' ) );
+		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'oversio/acf-update-user-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-user-fields', $abilities );
 	}
 
 	public function test_update_user_fields_denied_is_audited(): void {
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'author' ) );
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'oversio/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
+			wp_get_ability( 'aafm/acf-update-user-fields' )->check_permissions( array( 'user_id' => $user_id ) )
 		);
 
-		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
+		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'oversio/acf-update-user-fields', $abilities );
+		$this->assertContains( 'aafm/acf-update-user-fields', $abilities );
 	}
 
 	/**
@@ -555,7 +555,7 @@ final class AcfTest extends TestCase {
 				'values' => array(),
 			)
 		);
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_acf();
 	}
 
@@ -569,7 +569,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( '{}', (string) wp_json_encode( $res['fields'] ), 'Empty post fields must encode as {}.' );
 	}
@@ -579,7 +579,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-term-fields' )->execute( array( 'term_id' => $term_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( '{}', (string) wp_json_encode( $res['fields'] ), 'Empty term fields must encode as {}.' );
 	}
@@ -589,7 +589,7 @@ final class AcfTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$res = wp_get_ability( 'oversio/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
+		$res = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => $user_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( '{}', (string) wp_json_encode( $res['fields'] ), 'Empty user fields must encode as {}.' );
 	}
@@ -602,7 +602,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array(),
@@ -641,7 +641,7 @@ final class AcfTest extends TestCase {
 				'values' => $vals,
 			)
 		);
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_acf();
 	}
 
@@ -655,7 +655,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array(
@@ -667,7 +667,7 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		$stored = \Oversio\Tests\AcfStubStore::value( 'field_link', $post_id );
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_link', $post_id );
 		$this->assertIsArray( $stored );
 		$this->assertSame( 'Read more', $stored['title'], 'A link title is plain text and must survive intact.' );
 		$this->assertSame( 'https://x.test', $stored['url'], 'A link url must be preserved as a URL.' );
@@ -683,13 +683,13 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_url' => 'javascript:alert(1)' ),
 			)
 		);
-		$stored = (string) \Oversio\Tests\AcfStubStore::value( 'field_url', $post_id );
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_url', $post_id );
 		$this->assertStringNotContainsString( 'javascript:', $stored, 'esc_url_raw must strip a javascript: scheme.' );
 	}
 
@@ -703,7 +703,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_image' => 42 ),
@@ -717,7 +717,7 @@ final class AcfTest extends TestCase {
 		);
 		$this->assertSame(
 			'42',
-			(string) \Oversio\Tests\AcfStubStore::value( 'field_image', $post_id ),
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_image', $post_id ),
 			'The raw attachment id must persist under the post selector.'
 		);
 	}
@@ -731,7 +731,7 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_date' => '20260620' ),
@@ -745,7 +745,7 @@ final class AcfTest extends TestCase {
 		);
 		$this->assertSame(
 			'20260620',
-			(string) \Oversio\Tests\AcfStubStore::value( 'field_date', $post_id ),
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_date', $post_id ),
 			'The raw Ymd date must persist under the post selector.'
 		);
 	}
@@ -759,14 +759,14 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		\Oversio\Tests\AcfStubStore::$update_should_fail = true;
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		\AAFM\Tests\AcfStubStore::$update_should_fail = true;
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_image' => 42 ),
 			)
 		);
-		\Oversio\Tests\AcfStubStore::$update_should_fail = false;
+		\AAFM\Tests\AcfStubStore::$update_should_fail = false;
 
 		$this->assertInstanceOf(
 			WP_Error::class,
@@ -814,13 +814,13 @@ final class AcfTest extends TestCase {
 				),
 			)
 		);
-		oversio_registry_cache_should_flush( true );
+		aafm_registry_cache_should_flush( true );
 		$this->register_acf();
 
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array(
@@ -834,7 +834,7 @@ final class AcfTest extends TestCase {
 			)
 		);
 
-		$stored = \Oversio\Tests\AcfStubStore::value( 'field_rep', $post_id );
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_rep', $post_id );
 		$this->assertIsArray( $stored );
 		$this->assertStringNotContainsString( 'javascript:', (string) $stored[0]['link'], 'A url subfield in a repeater must have its javascript: scheme stripped at depth.' );
 		$this->assertSame( 'Plain caption', $stored[0]['caption'], 'A plain-text subfield must round-trip intact.' );
@@ -849,13 +849,13 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_wys' => '<script>alert(1)</script><strong>bold</strong>' ),
 			)
 		);
-		$stored = (string) \Oversio\Tests\AcfStubStore::value( 'field_wys', $post_id );
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_wys', $post_id );
 		$this->assertStringNotContainsString( '<script>', $stored, 'wp_kses_post must drop a <script>.' );
 		$this->assertStringContainsString( '<strong>', $stored, 'wp_kses_post must keep a benign <strong>.' );
 	}
@@ -867,19 +867,19 @@ final class AcfTest extends TestCase {
 	 */
 	public function test_get_post_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => 999999 ) );
+		$res = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	public function test_get_term_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-get-term-fields' )->execute( array( 'term_id' => 999999 ) );
+		$res = wp_get_ability( 'aafm/acf-get-term-fields' )->execute( array( 'term_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	public function test_get_user_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-get-user-fields' )->execute( array( 'user_id' => 999999 ) );
+		$res = wp_get_ability( 'aafm/acf-get-user-fields' )->execute( array( 'user_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -889,7 +889,7 @@ final class AcfTest extends TestCase {
 	 */
 	public function test_update_post_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => 999999,
 				'fields'  => array( 'field_1' => 'x' ),
@@ -900,7 +900,7 @@ final class AcfTest extends TestCase {
 
 	public function test_update_term_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-update-term-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
 			array(
 				'term_id' => 999999,
 				'fields'  => array( 'field_1' => 'x' ),
@@ -911,7 +911,7 @@ final class AcfTest extends TestCase {
 
 	public function test_update_user_fields_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'oversio/acf-update-user-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
 			array(
 				'user_id' => 999999,
 				'fields'  => array( 'field_1' => 'x' ),
@@ -928,13 +928,13 @@ final class AcfTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
 		// Seed a value via a first write, then an empty write must not disturb it.
-		wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_1' => 'Seeded' ),
 			)
 		);
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array(),
@@ -943,7 +943,7 @@ final class AcfTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'Seeded', ( (array) $res['fields'] )['field_1'], 'An empty write must leave prior values intact.' );
 
-		$read = wp_get_ability( 'oversio/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'aafm/acf-get-post-fields' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'Seeded', ( (array) $read['fields'] )['field_1'], 'The prior value must round-trip.' );
 	}
 
@@ -955,14 +955,14 @@ final class AcfTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'oversio/acf-update-post-fields' )->execute(
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
 			array(
 				'post_id' => $post_id,
 				'fields'  => array( 'field_unknown' => '<script>alert(1)</script>plain' ),
 			)
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$stored = (string) \Oversio\Tests\AcfStubStore::value( 'field_unknown', $post_id );
+		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_unknown', $post_id );
 		$this->assertStringNotContainsString( '<script>', $stored, 'An unknown field key sanitizes as text.' );
 		$this->assertStringContainsString( 'plain', $stored, 'The benign remainder round-trips.' );
 	}
@@ -977,21 +977,21 @@ final class AcfTest extends TestCase {
 	public function test_user_fields_discovery_respects_the_edit_users_floor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertTrue(
-			oversio_user_can_discover_ability( 'oversio/acf-get-post-fields' ),
+			aafm_user_can_discover_ability( 'aafm/acf-get-post-fields' ),
 			'An editor (edit_posts) must discover the post-field ability.'
 		);
 		$this->assertFalse(
-			oversio_user_can_discover_ability( 'oversio/acf-get-user-fields' ),
+			aafm_user_can_discover_ability( 'aafm/acf-get-user-fields' ),
 			'An editor lacking edit_users must NOT discover the user-field ability.'
 		);
 
 		$this->acting_as( 'administrator' );
 		$this->assertTrue(
-			oversio_user_can_discover_ability( 'oversio/acf-get-post-fields' ),
+			aafm_user_can_discover_ability( 'aafm/acf-get-post-fields' ),
 			'An admin must discover the post-field ability.'
 		);
 		$this->assertTrue(
-			oversio_user_can_discover_ability( 'oversio/acf-get-user-fields' ),
+			aafm_user_can_discover_ability( 'aafm/acf-get-user-fields' ),
 			'An admin (edit_users) must discover the user-field ability.'
 		);
 	}

@@ -2,14 +2,14 @@
 /**
  * Cross-type search ability (read). One query across every exposed content type.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'oversio_abilities_registry', 'oversio_register_search_definitions' );
+add_filter( 'aafm_abilities_registry', 'aafm_register_search_definitions' );
 
 /**
  * Contribute the cross-type search ability definition to the registry.
@@ -17,28 +17,28 @@ add_filter( 'oversio_abilities_registry', 'oversio_register_search_definitions' 
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function oversio_register_search_definitions( array $registry ): array {
-	$registry['oversio/search-content'] = array(
-		'label'        => __( 'Search content', 'oversio-agent-abilities' ),
-		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'oversio-agent-abilities' ),
+function aafm_register_search_definitions( array $registry ): array {
+	$registry['aafm/search-content'] = array(
+		'label'        => __( 'Search content', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
-		'args_builder' => 'oversio_args_search_content',
+		'args_builder' => 'aafm_args_search_content',
 	);
 	return $registry;
 }
 
 /**
- * Args for oversio/search-content.
+ * Args for aafm/search-content.
  *
  * @return array<string,mixed>
  */
-function oversio_args_search_content(): array {
+function aafm_args_search_content(): array {
 	return array(
-		'label'               => oversio_ability_label( 'oversio/search-content' ),
-		'description'         => oversio_ability_description( 'oversio/search-content' ),
-		'category'            => 'oversio-reads',
+		'label'               => aafm_ability_label( 'aafm/search-content' ),
+		'description'         => aafm_ability_description( 'aafm/search-content' ),
+		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -53,17 +53,17 @@ function oversio_args_search_content(): array {
 				'status'          => array(
 					'type'        => 'string',
 					'default'     => 'publish',
-					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'oversio-agent-abilities' ),
+					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
 				),
 				'page'            => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => OVERSIO_LIST_PAGE_MAX,
+					'maximum' => AAFM_LIST_PAGE_MAX,
 				),
 				'per_page'        => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => OVERSIO_LIST_PER_PAGE_MAX,
+					'maximum' => AAFM_LIST_PER_PAGE_MAX,
 				),
 				'content_format'  => array(
 					'type'    => 'string',
@@ -85,14 +85,14 @@ function oversio_args_search_content(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => oversio_rich_post_output_properties(),
+						'properties' => aafm_rich_post_output_properties(),
 					),
 				),
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'oversio_exec_search_content',
-		'permission_callback' => 'oversio_perm_read',
+		'execute_callback'    => 'aafm_exec_search_content',
+		'permission_callback' => 'aafm_perm_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -104,7 +104,7 @@ function oversio_args_search_content(): array {
 }
 
 /**
- * Execute oversio/search-content.
+ * Execute aafm/search-content.
  *
  * Searches across the allowlisted post types (narrowed, never widened, by post_types),
  * status-guarded with per-type private-read containment, returning redacted metadata only.
@@ -112,13 +112,13 @@ function oversio_args_search_content(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function oversio_exec_search_content( array $input ) {
+function aafm_exec_search_content( array $input ) {
 	$search = sanitize_text_field( (string) ( $input['search'] ?? '' ) );
 	if ( '' === $search ) {
-		return oversio_generic_error();
+		return aafm_generic_error();
 	}
 	$requested = ( isset( $input['post_types'] ) && is_array( $input['post_types'] ) ) ? $input['post_types'] : array();
-	$types     = oversio_resolve_search_post_types( $requested );
+	$types     = aafm_resolve_search_post_types( $requested );
 	if ( empty( $types ) ) {
 		return array(
 			'results' => array(),
@@ -130,7 +130,7 @@ function oversio_exec_search_content( array $input ) {
 	// derives from each object. The per-type filter below is what actually contains cross-type
 	// private leakage. Do not "harmonize" this with get-posts' per-object cap — that would
 	// loosen the floor and let a caller through who can't privately read any exposed type.
-	$status = oversio_validate_post_status( (string) ( $input['status'] ?? 'publish' ), current_user_can( 'read_private_posts' ) );
+	$status = aafm_validate_post_status( (string) ( $input['status'] ?? 'publish' ), current_user_can( 'read_private_posts' ) );
 	if ( is_wp_error( $status ) ) {
 		return $status;
 	}
@@ -154,7 +154,7 @@ function oversio_exec_search_content( array $input ) {
 		}
 	}
 
-	$paging  = oversio_paginate_args( $input, OVERSIO_LIST_PER_PAGE_MAX );
+	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$query   = new WP_Query(
 		array(
 			'post_type'        => $types,
@@ -177,7 +177,7 @@ function oversio_exec_search_content( array $input ) {
 
 	return array(
 		'results' => array_map(
-			static fn( WP_Post $p ): array => oversio_rich_post( $p, $options ),
+			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
 			array_values( $objects )
 		),
 		'total'   => (int) $query->found_posts,

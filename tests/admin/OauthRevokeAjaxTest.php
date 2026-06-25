@@ -3,21 +3,21 @@
  * Tests for the nonce- and capability-gated OAuth revoke AJAX endpoints that back
  * the Connections management tables.
  *
- * @package OversioAgentAbilities
+ * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace Oversio\Tests\Admin;
+namespace AAFM\Tests\Admin;
 
-use Oversio\Tests\TestCase;
+use AAFM\Tests\TestCase;
 
 final class OauthRevokeAjaxTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		oversio_install_oauth_tables();
-		oversio_truncate_oauth_tables();
+		aafm_install_oauth_tables();
+		aafm_truncate_oauth_tables();
 	}
 
 	public function tear_down(): void {
@@ -36,7 +36,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 	private function intercept_die(): void {
 		add_filter( 'wp_doing_ajax', '__return_true' );
 		$die = static function (): void {
-			throw new \WPDieException( 'oversio-die' );
+			throw new \WPDieException( 'aafm-die' );
 		};
 		add_filter( 'wp_die_ajax_handler', static fn() => $die );
 		add_filter( 'wp_die_handler', static fn() => $die );
@@ -72,7 +72,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_clients',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			array(
 				'client_id'   => $client_id,
 				'client_name' => 'Test',
@@ -82,7 +82,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_access_tokens',
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
 			array(
 				'token_hash'   => hash( 'sha256', $client_id . wp_rand() ),
 				'refresh_hash' => hash( 'sha256', 'r' . $client_id . wp_rand() ),
@@ -106,7 +106,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_codes',
+			$wpdb->prefix . 'aafm_oauth_codes',
 			array(
 				'code_hash'  => hash( 'sha256', $client_id . $user_id . wp_rand() ),
 				'client_id'  => $client_id,
@@ -130,7 +130,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE client_id = %s AND wp_user_id = %d",
 				$client_id,
 				$user_id
 			)
@@ -145,23 +145,23 @@ final class OauthRevokeAjaxTest extends TestCase {
 		// drops it too, so seed one and prove the handler clears it (the race fix at connection.php).
 		$this->seed_code( 'client_abc', 7 );
 
-		$nonce              = wp_create_nonce( 'oversio_admin' );
+		$nonce              = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']     = $nonce;
 		$_REQUEST['nonce']  = $nonce;
 		$_POST['client_id'] = 'client_abc';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'oversio_ajax_oauth_revoke_client' );
+		$json = $this->run_handler( 'aafm_ajax_oauth_revoke_client' );
 
 		$this->assertTrue( $json['success'] ?? false );
-		$this->assertTrue( oversio_oauth_client_is_deactivated( 'client_abc' ) );
+		$this->assertTrue( aafm_oauth_client_is_deactivated( 'client_abc' ) );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$active = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE client_id = %s AND is_active = 1",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE client_id = %s AND is_active = 1",
 				'client_abc'
 			)
 		);
@@ -174,7 +174,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		wp_set_current_user( $subscriber );
 		$this->seed_client_with_token( 'client_abc', 7 );
 
-		$nonce              = wp_create_nonce( 'oversio_admin' );
+		$nonce              = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']     = $nonce;
 		$_REQUEST['nonce']  = $nonce;
 		$_POST['client_id'] = 'client_abc';
@@ -183,7 +183,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		$thrown = false;
 		ob_start();
 		try {
-			oversio_ajax_oauth_revoke_client();
+			aafm_ajax_oauth_revoke_client();
 		} catch ( \WPDieException $e ) {
 			$thrown = true;
 		} finally {
@@ -192,7 +192,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 
 		$this->assertTrue( $thrown, 'A subscriber must be denied.' );
 		// The client must stay active: the cap check fires before any write.
-		$this->assertFalse( oversio_oauth_client_is_deactivated( 'client_abc' ) );
+		$this->assertFalse( aafm_oauth_client_is_deactivated( 'client_abc' ) );
 	}
 
 	public function test_revoke_grant_succeeds_for_admin(): void {
@@ -203,7 +203,7 @@ final class OauthRevokeAjaxTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'oversio_oauth_consents',
+			$wpdb->prefix . 'aafm_oauth_consents',
 			array(
 				'wp_user_id' => $admin,
 				'client_id'  => 'client_abc',
@@ -214,21 +214,21 @@ final class OauthRevokeAjaxTest extends TestCase {
 		// the consent and tokens are gone (the per-grant half of the revocation race fix).
 		$this->seed_code( 'client_abc', $admin );
 
-		$nonce              = wp_create_nonce( 'oversio_admin' );
+		$nonce              = wp_create_nonce( 'aafm_admin' );
 		$_POST['nonce']     = $nonce;
 		$_REQUEST['nonce']  = $nonce;
 		$_POST['user_id']   = (string) $admin;
 		$_POST['client_id'] = 'client_abc';
 
 		$this->intercept_die();
-		$json = $this->run_handler( 'oversio_ajax_oauth_revoke_grant' );
+		$json = $this->run_handler( 'aafm_ajax_oauth_revoke_grant' );
 
 		$this->assertTrue( $json['success'] ?? false );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$remaining = (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
 				$admin,
 				'client_abc'
 			)

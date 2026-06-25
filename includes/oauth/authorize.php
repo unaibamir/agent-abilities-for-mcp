@@ -300,7 +300,7 @@ function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
 		$form_action .= ' ' . $redirect_origin;
 	}
 
-	return "default-src 'none'; style-src 'unsafe-inline'; img-src data:; {$form_action}; base-uri 'none'; frame-ancestors 'none'";
+	return "default-src 'none'; style-src 'self'; img-src data:; {$form_action}; base-uri 'none'; frame-ancestors 'none'";
 }
 
 /**

@@ -107,79 +107,11 @@ function aafm_oauth_render_consent_page( array $view ): void {
 		'<span class="who">' . esc_html( $user_login ) . '</span>'
 	);
 
-	// Static, self-contained stylesheet (no dynamic data). Pure CSS, system fonts,
-	// CSP-clean (style-src 'unsafe-inline'). The inline block itself must stay here — the
-	// consent page renders outside wp-admin, so admin.css is never enqueued — but the token
-	// VALUES below are kept in lockstep with the admin palette in includes/admin/assets/admin.css
-	// (its :root block): the amber pair matches --aafm-amber-text (#815f00) and --aafm-amber-tint
-	// (#fcf9e8), and --radius matches --aafm-radius (8px). When that palette moves, move these.
-	$styles = '
-		:root{
-			--surface:#fff; --surface-2:#f6f7f7; --text:#1d2327; --text-muted:#50575e;
-			--border:#dcdcde; --border-strong:#c3c4c7; --accent:#2271b1; --accent-hover:#135e96;
-			--accent-soft:#e7f1f9; --green:#00a32a; --amber-text:#815f00; --amber-soft:#fcf9e8;
-			--amber-border:#f0dcb4; --radius:8px;
-		}
-		*{box-sizing:border-box;}
-		html,body{margin:0;padding:0;}
-		body{
-			font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-			background:var(--surface-2);
-			background-image:radial-gradient(circle at 12% -10%, #eef4fa 0, transparent 42%),radial-gradient(circle at 100% 0%, #f0f2f4 0, transparent 38%);
-			color:var(--text); line-height:1.5; -webkit-font-smoothing:antialiased;
-			min-height:100vh; min-height:100dvh;
-			display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px 16px;
-		}
-		main{width:100%; max-width:460px;}
-		.card{background:var(--surface); border:1px solid var(--border); border-radius:14px;
-			box-shadow:0 1px 2px rgba(0,0,0,.05), 0 12px 30px -12px rgba(0,0,0,.18); overflow:hidden;}
-		.card-head{padding:28px 28px 22px; border-bottom:1px solid var(--border); text-align:center;}
-		.mark{width:56px; height:56px; margin:0 auto 16px; display:block; border-radius:14px;
-			box-shadow:0 6px 18px -8px rgba(11,16,32,.6);}
-		.eyebrow{font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--accent); margin:0 0 6px;}
-		h1{font-size:21px; line-height:1.3; font-weight:600; margin:0; letter-spacing:-.01em;}
-		h1 strong{font-weight:700;}
-		.connect-row{display:flex; align-items:center; justify-content:center; gap:14px; padding:20px 28px;}
-		.avatar{width:46px; height:46px; border-radius:11px; flex:0 0 auto; display:grid; place-items:center; border:1px solid var(--border); background:var(--surface-2);}
-		.avatar.client{background:#0B1020; border-color:#0B1020;}
-		.avatar.site{background:var(--accent-soft); border-color:#cfe3f3; color:var(--accent); font-weight:700; font-size:17px;}
-		.flow{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-muted);}
-		.flow svg{display:block;}
-		.flow span{font-size:10px; letter-spacing:.05em; text-transform:uppercase; font-weight:600;}
-		.acting{margin:0 28px 4px; padding:14px 16px; background:var(--amber-soft); border:1px solid var(--amber-border);
-			border-radius:var(--radius); display:flex; gap:12px; align-items:flex-start;}
-		.acting svg{flex:0 0 auto; margin-top:1px;}
-		.acting p{margin:0; font-size:13.5px; color:var(--amber-text);}
-		.acting strong{color:#3d2f00;}
-		.acting .who{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#fff;
-			border:1px solid #e7d3a8; border-radius:5px; padding:1px 6px; font-size:12.5px; color:var(--amber-text);}
-		.guarantees{padding:18px 28px 4px;}
-		.guarantees h2{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:0 0 12px;}
-		ul.trust{list-style:none; margin:0; padding:0; display:grid; gap:11px;}
-		ul.trust li{display:flex; gap:11px; align-items:flex-start; font-size:13.5px;}
-		ul.trust li .tick{flex:0 0 auto; width:20px; height:20px; border-radius:50%; background:#e4f6ea; display:grid; place-items:center; margin-top:1px;}
-		ul.trust li b{font-weight:600; color:var(--text);}
-		ul.trust li span.txt{color:var(--text-muted);}
-		form{padding:20px 28px 26px; display:flex; flex-direction:column; gap:10px;}
-		.aafm-btn{font:inherit; font-size:15px; font-weight:600; border-radius:var(--radius); padding:12px 18px;
-			cursor:pointer; border:1px solid transparent; transition:background-color .15s ease, border-color .15s ease, transform .05s ease; min-height:46px; width:100%;}
-		.aafm-btn:active{transform:translateY(1px);}
-		.aafm-btn-primary{background:var(--accent); color:#fff; border-color:var(--accent);}
-		.aafm-btn-primary:hover{background:var(--accent-hover); border-color:var(--accent-hover);}
-		.aafm-btn-secondary{background:var(--surface); color:var(--text); border-color:var(--border-strong);}
-		.aafm-btn-secondary:hover{background:var(--surface-2); border-color:var(--text-muted);}
-		.aafm-btn:focus-visible{outline:3px solid rgba(34,113,177,.4); outline-offset:2px;}
-		.aafm-btn-secondary:focus-visible{outline-color:rgba(80,87,94,.45);}
-		.foot{text-align:center; font-size:11.5px; color:var(--text-muted); margin:16px 0 0;
-			display:flex; align-items:center; justify-content:center; gap:7px;}
-		.foot svg{opacity:.7;}
-		@media (max-width:400px){
-			.card-head,.connect-row,.guarantees,form{padding-left:20px; padding-right:20px;}
-			.acting{margin-left:20px; margin-right:20px;}
-			h1{font-size:19px;}
-		}
-		@media (prefers-reduced-motion:reduce){*{transition:none!important;}}
-	';
+	// The page's stylesheet lives in assets/consent.css and is linked below under the
+	// consent CSP (style-src 'self'). It is a plain file rather than inline CSS so the
+	// page passes the wp.org "enqueue your resources" check; the consent screen renders
+	// outside wp-admin (custom headers + exit), so admin.css is never enqueued. The token
+	// values in that file stay in lockstep with includes/admin/assets/admin.css (:root).
 
 	// Static inline SVGs (no dynamic data). The hub mark is the plugin logo.
 	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '">'
@@ -218,7 +150,13 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 	echo '<meta name="referrer" content="no-referrer">';
 	echo '<title>' . $title . '</title>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $title is esc_html() above.
-	echo '<style>' . $styles . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline stylesheet, no dynamic data.
+	// Register and flush the consent stylesheet through the enqueue API. This page builds
+	// its own <head> and exits (no wp_head), so we print the queued handle here directly;
+	// the CSP allows style-src 'self' for the resulting same-origin <link>.
+	$consent_css_path = AAFM_PLUGIN_DIR . 'assets/consent.css';
+	$consent_css_ver  = file_exists( $consent_css_path ) ? (string) filemtime( $consent_css_path ) : AAFM_VERSION;
+	wp_enqueue_style( 'aafm-consent', plugins_url( 'assets/consent.css', AAFM_PLUGIN_FILE ), array(), $consent_css_ver );
+	wp_print_styles( 'aafm-consent' );
 	echo '</head>';
 	echo '<body>';
 	echo '<main>';

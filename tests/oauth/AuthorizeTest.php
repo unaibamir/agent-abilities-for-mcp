@@ -407,15 +407,18 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringContainsString( '<!DOCTYPE html>', $html );
 		$this->assertStringContainsString( 'method="post"', $html );
 
-		// Design tokens present and both decision buttons emitted.
-		$this->assertStringContainsString( '--accent', $html );
+		// The stylesheet is linked (not inlined) and both decision buttons are emitted.
+		$this->assertStringContainsString( 'assets/consent.css', $html );
+		$this->assertStringNotContainsString( '<style', $html );
 		$this->assertStringContainsString( 'value="approve"', $html );
 		$this->assertStringContainsString( 'value="deny"', $html );
 
 		// Keyboard focus indicator (WCAG 2.4.7): the buttons paint a visible ring on
 		// :focus-visible. The admin ring token is not enqueued on this standalone page,
-		// so the inline styles must carry their own focus rule.
-		$this->assertStringContainsString( '.aafm-btn:focus-visible', $html );
+		// so the consent stylesheet carries its own focus rule.
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
+		$consent_css = (string) file_get_contents( AAFM_PLUGIN_DIR . 'assets/consent.css' );
+		$this->assertStringContainsString( '.aafm-btn:focus-visible', $consent_css );
 
 		// The agent user login is shown in the "acting as" note.
 		$this->assertStringContainsString( 'mcp-agent', $html );
@@ -470,7 +473,7 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringNotContainsString( '/cb', $csp );
 		// Every other hardened directive is preserved exactly.
 		$this->assertStringContainsString( "default-src 'none';", $csp );
-		$this->assertStringContainsString( "style-src 'unsafe-inline';", $csp );
+		$this->assertStringContainsString( "style-src 'self';", $csp );
 		$this->assertStringContainsString( 'img-src data:;', $csp );
 		$this->assertStringContainsString( "base-uri 'none';", $csp );
 		$this->assertStringContainsString( "frame-ancestors 'none'", $csp );

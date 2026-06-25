@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class CommentsReadTest extends TestCase {
 
@@ -17,23 +17,23 @@ final class CommentsReadTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
-			array( 'aafm/get-comments', 'aafm/get-pending-comments' )
+			'oversio_enabled_abilities',
+			array( 'oversio/get-comments', 'oversio/get-pending-comments' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_comment_reads_are_in_registry(): void {
-		$registry = aafm_get_abilities_registry();
-		foreach ( array( 'aafm/get-comments', 'aafm/get-pending-comments' ) as $name ) {
+		$registry = oversio_get_abilities_registry();
+		foreach ( array( 'oversio/get-comments', 'oversio/get-pending-comments' ) as $name ) {
 			$this->assertArrayHasKey( $name, $registry );
 			$this->assertSame( 'reads', $registry[ $name ]['group'] );
 			$this->assertSame( 'read', $registry[ $name ]['risk'] );
@@ -54,7 +54,7 @@ final class CommentsReadTest extends TestCase {
 				'comment_agent'        => 'EvilBot/1.0',
 			)
 		);
-		$out  = wp_get_ability( 'aafm/get-comments' )->execute( array( 'post_id' => $post ) );
+		$out  = wp_get_ability( 'oversio/get-comments' )->execute( array( 'post_id' => $post ) );
 		$json = wp_json_encode( $out );
 
 		// The approved comment is returned...
@@ -102,7 +102,7 @@ final class CommentsReadTest extends TestCase {
 			)
 		);
 
-		$out  = wp_get_ability( 'aafm/get-comments' )->execute( array( 'post_id' => $post ) );
+		$out  = wp_get_ability( 'oversio/get-comments' )->execute( array( 'post_id' => $post ) );
 		$json = wp_json_encode( $out );
 
 		$this->assertCount( 1, $out['comments'] );
@@ -129,16 +129,16 @@ final class CommentsReadTest extends TestCase {
 		// Subscriber lacks moderate_comments → denied, never reaches the body.
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-pending-comments' )->check_permissions( array() )
+			wp_get_ability( 'oversio/get-pending-comments' )->check_permissions( array() )
 		);
 
 		// Editor has moderate_comments → allowed, and sees the pending body.
 		$this->acting_as( 'editor' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-pending-comments' )->check_permissions( array() )
+			wp_get_ability( 'oversio/get-pending-comments' )->check_permissions( array() )
 		);
 
-		$out  = wp_get_ability( 'aafm/get-pending-comments' )->execute( array() );
+		$out  = wp_get_ability( 'oversio/get-pending-comments' )->execute( array() );
 		$json = wp_json_encode( $out );
 		$this->assertGreaterThanOrEqual( 1, count( $out['comments'] ) );
 		$this->assertStringContainsString( 'PENDING_SECRET_BODY', (string) $json );
@@ -163,13 +163,13 @@ final class CommentsReadTest extends TestCase {
 		// A subscriber cannot read the private post, so cannot read its comments.
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array( 'post_id' => $post ) )
 		);
 
 		// The denial is audited by the registration wrapper, like every other deny.
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/get-comments', $abilities );
+		$this->assertContains( 'oversio/get-comments', $abilities );
 	}
 
 	/**
@@ -189,7 +189,7 @@ final class CommentsReadTest extends TestCase {
 
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array( 'post_id' => $post ) )
 		);
 	}
 
@@ -219,15 +219,15 @@ final class CommentsReadTest extends TestCase {
 		// Subscriber: allowed on the public post, and actually sees the body.
 		$this->acting_as( 'subscriber' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $public ) )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array( 'post_id' => $public ) )
 		);
-		$out = wp_get_ability( 'aafm/get-comments' )->execute( array( 'post_id' => $public ) );
+		$out = wp_get_ability( 'oversio/get-comments' )->execute( array( 'post_id' => $public ) );
 		$this->assertStringContainsString( 'PUBLIC_VISIBLE_BODY', (string) wp_json_encode( $out ) );
 
 		// Editor can read the private post, so is allowed its comments too.
 		$this->acting_as( 'editor' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => $private ) )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array( 'post_id' => $private ) )
 		);
 	}
 }

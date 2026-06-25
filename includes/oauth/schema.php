@@ -9,7 +9,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
+if ( ! defined( 'OVERSIO_OAUTH_SCHEMA_VERSION' ) ) {
 	// v2 adds the refresh_parent_id index on the access-tokens table. v3 widens the
 	// resource (audience) column on the codes and access-tokens tables from VARCHAR(191)
 	// to VARCHAR(2048) so a long endpoint URL is not truncated, which would break the
@@ -20,9 +20,9 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// client_id) on access-tokens for the revoke-by-grant scan; an expires_at index plus
 	// a client_id and (wp_user_id, client_id) index on codes for the code GC and the
 	// revoke-by-client/grant code deletes; and a created_at index on clients for the
-	// abandoned-client reaper. Bumping the version makes aafm_maybe_upgrade_oauth_tables()
+	// abandoned-client reaper. Bumping the version makes oversio_maybe_upgrade_oauth_tables()
 	// re-run dbDelta so existing installs pick the change up (additive — indexes only).
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '5' );
+	define( 'OVERSIO_OAUTH_SCHEMA_VERSION', '5' );
 }
 
 /**
@@ -30,12 +30,12 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
  *
  * @return string[]
  */
-function aafm_oauth_table_suffixes(): array {
+function oversio_oauth_table_suffixes(): array {
 	return array(
-		'aafm_oauth_clients',
-		'aafm_oauth_codes',
-		'aafm_oauth_access_tokens',
-		'aafm_oauth_consents',
+		'oversio_oauth_clients',
+		'oversio_oauth_codes',
+		'oversio_oauth_access_tokens',
+		'oversio_oauth_consents',
 	);
 }
 
@@ -43,18 +43,18 @@ function aafm_oauth_table_suffixes(): array {
  * Create (or upgrade) the four OAuth tables, then record the schema version.
  *
  * Idempotent: dbDelta() only applies the diff, so repeat calls are no-ops once the
- * tables match. Mirrors aafm_install_activity_log() in includes/audit/log.php.
+ * tables match. Mirrors oversio_install_activity_log() in includes/audit/log.php.
  *
  * @return void
  */
-function aafm_install_oauth_tables(): void {
+function oversio_install_oauth_tables(): void {
 	global $wpdb;
 	require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 	$prefix          = $wpdb->prefix;
 	$charset_collate = $wpdb->get_charset_collate();
 
-	$clients = "CREATE TABLE {$prefix}aafm_oauth_clients (
+	$clients = "CREATE TABLE {$prefix}oversio_oauth_clients (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		client_name VARCHAR(191) NOT NULL DEFAULT '',
@@ -69,7 +69,7 @@ function aafm_install_oauth_tables(): void {
 		KEY created_at (created_at)
 	) {$charset_collate};";
 
-	$codes = "CREATE TABLE {$prefix}aafm_oauth_codes (
+	$codes = "CREATE TABLE {$prefix}oversio_oauth_codes (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 		code_hash VARCHAR(191) NOT NULL DEFAULT '',
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
@@ -86,7 +86,7 @@ function aafm_install_oauth_tables(): void {
 		KEY user_client (wp_user_id, client_id)
 	) {$charset_collate};";
 
-	$access_tokens = "CREATE TABLE {$prefix}aafm_oauth_access_tokens (
+	$access_tokens = "CREATE TABLE {$prefix}oversio_oauth_access_tokens (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 		token_hash VARCHAR(191) NOT NULL DEFAULT '',
 		refresh_hash VARCHAR(191) NOT NULL DEFAULT '',
@@ -107,7 +107,7 @@ function aafm_install_oauth_tables(): void {
 		KEY user_client (wp_user_id, client_id)
 	) {$charset_collate};";
 
-	$consents = "CREATE TABLE {$prefix}aafm_oauth_consents (
+	$consents = "CREATE TABLE {$prefix}oversio_oauth_consents (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 		wp_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
@@ -121,7 +121,7 @@ function aafm_install_oauth_tables(): void {
 	dbDelta( $access_tokens );
 	dbDelta( $consents );
 
-	update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+	update_option( 'oversio_oauth_schema_version', OVERSIO_OAUTH_SCHEMA_VERSION );
 }
 
 /**
@@ -133,12 +133,12 @@ function aafm_install_oauth_tables(): void {
  *
  * @return void
  */
-function aafm_maybe_upgrade_oauth_tables(): void {
-	if ( get_option( 'aafm_oauth_schema_version' ) === AAFM_OAUTH_SCHEMA_VERSION ) {
+function oversio_maybe_upgrade_oauth_tables(): void {
+	if ( get_option( 'oversio_oauth_schema_version' ) === OVERSIO_OAUTH_SCHEMA_VERSION ) {
 		return;
 	}
 
-	aafm_install_oauth_tables();
+	oversio_install_oauth_tables();
 }
 
 /**
@@ -146,14 +146,14 @@ function aafm_maybe_upgrade_oauth_tables(): void {
  *
  * Uses DELETE rather than TRUNCATE so it stays compatible with the PHPUnit harness,
  * which rewrites these tables to their TEMPORARY form (TRUNCATE cannot target a
- * temporary table in some MySQL configs). Mirrors aafm_drop_oauth_tables()' escaping.
+ * temporary table in some MySQL configs). Mirrors oversio_drop_oauth_tables()' escaping.
  *
  * @return void
  */
-function aafm_truncate_oauth_tables(): void {
+function oversio_truncate_oauth_tables(): void {
 	global $wpdb;
 
-	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+	foreach ( oversio_oauth_table_suffixes() as $suffix ) {
 		// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
 		$table = esc_sql( $wpdb->prefix . $suffix );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
@@ -165,7 +165,7 @@ function aafm_truncate_oauth_tables(): void {
  * Prune dead OAuth artifacts: expired authorization codes and inactive access
  * tokens whose refresh window has lapsed past a small grace period.
  *
- * Run daily by the `aafm_oauth_cleanup` cron event. Two passes:
+ * Run daily by the `oversio_oauth_cleanup` cron event. Two passes:
  *
  * - Codes are one-time and short-lived (60-second TTL), so any row past its
  *   `expires_at` is dead regardless of `used_at` and is deleted.
@@ -174,15 +174,15 @@ function aafm_truncate_oauth_tables(): void {
  *   never pruned by access-token expiry alone: its refresh token is still valid.
  *   The grace lets a rotated/replaced (now-inactive) refresh row linger briefly so
  *   the token manager's reuse-detection still has the parent chain to walk during a
- *   network race. Filterable via `aafm_oauth_cleanup_grace` (seconds).
+ *   network race. Filterable via `oversio_oauth_cleanup_grace` (seconds).
  *
  * Times are compared in UTC `Y-m-d H:i:s`, the storage format used across the
  * plugin (matches the token manager and audit log). Mirrors the direct-query and
- * escaping precedent of aafm_truncate_oauth_tables() / aafm_drop_oauth_tables().
+ * escaping precedent of oversio_truncate_oauth_tables() / oversio_drop_oauth_tables().
  *
  * @return void
  */
-function aafm_oauth_cleanup(): void {
+function oversio_oauth_cleanup(): void {
 	global $wpdb;
 
 	$now = gmdate( 'Y-m-d H:i:s', time() );
@@ -194,12 +194,12 @@ function aafm_oauth_cleanup(): void {
 	 *
 	 * @param int $grace Grace period in seconds. Default DAY_IN_SECONDS.
 	 */
-	$grace        = (int) apply_filters( 'aafm_oauth_cleanup_grace', DAY_IN_SECONDS );
+	$grace        = (int) apply_filters( 'oversio_oauth_cleanup_grace', DAY_IN_SECONDS );
 	$token_cutoff = gmdate( 'Y-m-d H:i:s', time() - $grace );
 
 	// Internal constant table names; esc_sql() makes the safety explicit for analyzers.
-	$codes_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_codes' );
-	$tokens_table = esc_sql( $wpdb->prefix . 'aafm_oauth_access_tokens' );
+	$codes_table  = esc_sql( $wpdb->prefix . 'oversio_oauth_codes' );
+	$tokens_table = esc_sql( $wpdb->prefix . 'oversio_oauth_access_tokens' );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
@@ -221,7 +221,7 @@ function aafm_oauth_cleanup(): void {
 
 	// Third pass: reap abandoned Dynamic Client Registration rows so the public DCR
 	// endpoint cannot grow the clients table without bound.
-	aafm_oauth_reap_abandoned_clients();
+	oversio_oauth_reap_abandoned_clients();
 }
 
 /**
@@ -234,12 +234,12 @@ function aafm_oauth_cleanup(): void {
  * flow that spans a session. A client with at least one consent OR any token row is kept, so a
  * live or revoked-but-historical client is never reaped. Deletes the matching codes too.
  *
- * The TTL is filterable via `aafm_oauth_client_reap_ttl` (seconds). All three tables are
+ * The TTL is filterable via `oversio_oauth_client_reap_ttl` (seconds). All three tables are
  * internal constants; the cutoff is bound.
  *
  * @return int Number of client rows reaped.
  */
-function aafm_oauth_reap_abandoned_clients(): int {
+function oversio_oauth_reap_abandoned_clients(): int {
 	global $wpdb;
 
 	/**
@@ -247,13 +247,13 @@ function aafm_oauth_reap_abandoned_clients(): int {
 	 *
 	 * @param int $ttl TTL in seconds. Default 7 days.
 	 */
-	$ttl    = (int) apply_filters( 'aafm_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS );
+	$ttl    = (int) apply_filters( 'oversio_oauth_client_reap_ttl', 7 * DAY_IN_SECONDS );
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - max( 0, $ttl ) );
 
-	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
-	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );
-	$tokens_table   = esc_sql( $wpdb->prefix . 'aafm_oauth_access_tokens' );
-	$codes_table    = esc_sql( $wpdb->prefix . 'aafm_oauth_codes' );
+	$clients_table  = esc_sql( $wpdb->prefix . 'oversio_oauth_clients' );
+	$consents_table = esc_sql( $wpdb->prefix . 'oversio_oauth_consents' );
+	$tokens_table   = esc_sql( $wpdb->prefix . 'oversio_oauth_access_tokens' );
+	$codes_table    = esc_sql( $wpdb->prefix . 'oversio_oauth_codes' );
 
 	// Find abandoned client_ids: older than the cutoff, with no consent row and no token row.
 	// All table names are internal constants; the cutoff is bound.
@@ -299,10 +299,10 @@ function aafm_oauth_reap_abandoned_clients(): int {
  *
  * @return void
  */
-function aafm_drop_oauth_tables(): void {
+function oversio_drop_oauth_tables(): void {
 	global $wpdb;
 
-	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+	foreach ( oversio_oauth_table_suffixes() as $suffix ) {
 		// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
 		$table = esc_sql( $wpdb->prefix . $suffix );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared

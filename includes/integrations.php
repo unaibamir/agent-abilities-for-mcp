@@ -4,7 +4,7 @@
  *
  * Every integration ability registers and is discoverable ONLY when its host plugin is
  * active. Detection is centralised here and is FILTERABLE per slug
- * (aafm_integration_active_<slug>) so the PHPUnit suite can force an integration on
+ * (oversio_integration_active_<slug>) so the PHPUnit suite can force an integration on
  * WITHOUT installing the host plugin, then stub the host API in the fixture. SEO is
  * detected per plugin: yoast (defined WPSEO_VERSION), rankmath (class RankMath),
  * aioseo (function aioseo). Each per-plugin set registers on its own predicate, so a
@@ -26,22 +26,22 @@ defined( 'ABSPATH' ) || exit;
  * @param string $slug One of 'yoast' | 'rankmath' | 'aioseo' | 'acf' | 'woocommerce'.
  * @return bool
  */
-function aafm_integration_active( string $slug ): bool {
+function oversio_integration_active( string $slug ): bool {
 	switch ( $slug ) {
 		case 'yoast':
-			$active = aafm_yoast_active();
+			$active = oversio_yoast_active();
 			break;
 		case 'rankmath':
-			$active = aafm_rankmath_active();
+			$active = oversio_rankmath_active();
 			break;
 		case 'aioseo':
-			$active = aafm_aioseo_active();
+			$active = oversio_aioseo_active();
 			break;
 		case 'acf':
-			$active = aafm_acf_active();
+			$active = oversio_acf_active();
 			break;
 		case 'woocommerce':
-			$active = aafm_woocommerce_active();
+			$active = oversio_woocommerce_active();
 			break;
 		default:
 			return false;
@@ -54,7 +54,7 @@ function aafm_integration_active( string $slug ): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_integration_active_' . $slug, $active );
+	return (bool) apply_filters( 'oversio_integration_active_' . $slug, $active );
 }
 
 /**
@@ -63,13 +63,13 @@ function aafm_integration_active( string $slug ): bool {
  * Real detection is defined('WPSEO_VERSION'). Wrapped in its own filter so the PHPUnit suite can
  * pin it deterministically: the suite stubs Yoast by defining WPSEO_VERSION process-wide, and a
  * defined constant can never be undefined, so the host-inactive registry test cannot flip detection
- * back off by removing the aafm_integration_active_yoast force filter alone. Driving this seam to
- * false through aafm_yoast_active lets that test force detection OFF deterministically. Production
+ * back off by removing the oversio_integration_active_yoast force filter alone. Driving this seam to
+ * false through oversio_yoast_active lets that test force detection OFF deterministically. Production
  * passes the real detection through unchanged.
  *
  * @return bool
  */
-function aafm_yoast_active(): bool {
+function oversio_yoast_active(): bool {
 	$active = defined( 'WPSEO_VERSION' );
 
 	/**
@@ -77,16 +77,16 @@ function aafm_yoast_active(): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_yoast_active', $active );
+	return (bool) apply_filters( 'oversio_yoast_active', $active );
 }
 
 /**
- * Whether Rank Math is active, behind a filterable seam (see aafm_yoast_active for the rationale;
+ * Whether Rank Math is active, behind a filterable seam (see oversio_yoast_active for the rationale;
  * Rank Math is stubbed with a process-wide RankMath marker class).
  *
  * @return bool
  */
-function aafm_rankmath_active(): bool {
+function oversio_rankmath_active(): bool {
 	$active = class_exists( 'RankMath' );
 
 	/**
@@ -94,16 +94,16 @@ function aafm_rankmath_active(): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_rankmath_active', $active );
+	return (bool) apply_filters( 'oversio_rankmath_active', $active );
 }
 
 /**
- * Whether All in One SEO is active, behind a filterable seam (see aafm_yoast_active for the
+ * Whether All in One SEO is active, behind a filterable seam (see oversio_yoast_active for the
  * rationale; AIOSEO is stubbed with a process-wide aioseo() marker function).
  *
  * @return bool
  */
-function aafm_aioseo_active(): bool {
+function oversio_aioseo_active(): bool {
 	$active = function_exists( 'aioseo' );
 
 	/**
@@ -111,7 +111,7 @@ function aafm_aioseo_active(): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_aioseo_active', $active );
+	return (bool) apply_filters( 'oversio_aioseo_active', $active );
 }
 
 /**
@@ -122,7 +122,7 @@ function aafm_aioseo_active(): bool {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_seo_post_object( array $input ): bool {
+function oversio_perm_seo_post_object( array $input ): bool {
 	$id = absint( $input['post_id'] ?? 0 );
 	return $id > 0 && get_post( $id ) instanceof WP_Post && current_user_can( 'edit_post', $id );
 }
@@ -134,7 +134,7 @@ function aafm_perm_seo_post_object( array $input ): bool {
  *
  * @return bool
  */
-function aafm_perm_seo_get_head_floor(): bool {
+function oversio_perm_seo_get_head_floor(): bool {
 	return current_user_can( 'edit_posts' );
 }
 
@@ -149,7 +149,7 @@ function aafm_perm_seo_get_head_floor(): bool {
  * is neither scalar nor array (objects, resources) is dropped. So script payloads cannot survive at
  * any level.
  *
- * Recursion is depth-bounded (default 32 levels via AAFM_SCHEMA_MAX_DEPTH): a nested array deeper
+ * Recursion is depth-bounded (default 32 levels via OVERSIO_SCHEMA_MAX_DEPTH): a nested array deeper
  * than the limit is dropped rather than recursed into, so a maliciously or accidentally deep
  * payload cannot exhaust the stack. Real JSON-LD graphs are only a handful of levels deep, so the
  * bound never clips legitimate input.
@@ -158,9 +158,9 @@ function aafm_perm_seo_get_head_floor(): bool {
  * @param int                     $depth  Current recursion depth (internal; callers pass 0).
  * @return array<int|string,mixed>
  */
-function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
-	if ( ! defined( 'AAFM_SCHEMA_MAX_DEPTH' ) ) {
-		define( 'AAFM_SCHEMA_MAX_DEPTH', 32 );
+function oversio_sanitize_schema_array( array $schema, int $depth = 0 ): array {
+	if ( ! defined( 'OVERSIO_SCHEMA_MAX_DEPTH' ) ) {
+		define( 'OVERSIO_SCHEMA_MAX_DEPTH', 32 );
 	}
 
 	$url_keys = array( 'url', 'image', 'logo', 'sameas', '@id', 'contenturl', 'thumbnailurl' );
@@ -169,10 +169,10 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
 		$safe_key = is_string( $key ) ? sanitize_text_field( $key ) : $key;
 		if ( is_array( $value ) ) {
 			// Past the depth bound, drop the sub-tree rather than recursing further.
-			if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
+			if ( $depth >= OVERSIO_SCHEMA_MAX_DEPTH ) {
 				continue;
 			}
-			$clean[ $safe_key ] = aafm_sanitize_schema_array( $value, $depth + 1 );
+			$clean[ $safe_key ] = oversio_sanitize_schema_array( $value, $depth + 1 );
 			continue;
 		}
 		if ( ! is_scalar( $value ) ) {
@@ -195,14 +195,14 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
  * own filter for the same reason the SEO sub-detection is: the PHPUnit suite stubs the ACF host
  * API by defining get_field() (and friends) process-wide, and a defined function can never be
  * undefined. So the host-inactive registry test cannot flip detection back off by removing the
- * aafm_integration_active_acf force filter alone — real detection would still see the stubbed
- * get_field and report ACF active. Driving this seam to false through aafm_acf_active lets that
- * test force detection OFF deterministically, mirroring how aafm_seo_active_plugin is pinned.
+ * oversio_integration_active_acf force filter alone — real detection would still see the stubbed
+ * get_field and report ACF active. Driving this seam to false through oversio_acf_active lets that
+ * test force detection OFF deterministically, mirroring how oversio_seo_active_plugin is pinned.
  * Production passes the real detection through unchanged.
  *
  * @return bool
  */
-function aafm_acf_active(): bool {
+function oversio_acf_active(): bool {
 	$active = class_exists( 'ACF' ) || function_exists( 'get_field' );
 
 	/**
@@ -212,7 +212,7 @@ function aafm_acf_active(): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_acf_active', $active );
+	return (bool) apply_filters( 'oversio_acf_active', $active );
 }
 
 /**
@@ -222,15 +222,15 @@ function aafm_acf_active(): bool {
  * reason the ACF sub-detection is: the PHPUnit suite stubs the WooCommerce host API by defining a
  * WooCommerce marker class process-wide, and a defined class can never be undefined. So a test that
  * needs WooCommerce reported INACTIVE (the host-absent default, the tab "Not installed" state)
- * cannot flip detection back off by removing the aafm_integration_active_woocommerce force filter
+ * cannot flip detection back off by removing the oversio_integration_active_woocommerce force filter
  * alone — real detection would still see the stubbed class and report WooCommerce active. Driving
- * this seam to false through aafm_woocommerce_active lets those tests force detection OFF
- * deterministically, mirroring how aafm_acf_active and aafm_seo_active_plugin are pinned.
+ * this seam to false through oversio_woocommerce_active lets those tests force detection OFF
+ * deterministically, mirroring how oversio_acf_active and oversio_seo_active_plugin are pinned.
  * Production passes the real detection through unchanged.
  *
  * @return bool
  */
-function aafm_woocommerce_active(): bool {
+function oversio_woocommerce_active(): bool {
 	$active = class_exists( 'WooCommerce' );
 
 	/**
@@ -240,5 +240,5 @@ function aafm_woocommerce_active(): bool {
 	 *
 	 * @param bool $active Detected active state.
 	 */
-	return (bool) apply_filters( 'aafm_woocommerce_active', $active );
+	return (bool) apply_filters( 'oversio_woocommerce_active', $active );
 }

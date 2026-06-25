@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 /**
  * Exercises the fixed-window rate limiter and the https_required policy helper.
@@ -27,12 +27,12 @@ class HttpTest extends TestCase {
 		$global = 1000;
 
 		// Calls 1..3 are within the per-IP cap.
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
 
 		// Call 4 exceeds the per-IP cap and is denied.
-		$this->assertFalse( aafm_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
+		$this->assertFalse( oversio_oauth_rate_ok( 'http_test_perip', $per_ip, $global ) );
 	}
 
 	/**
@@ -45,29 +45,29 @@ class HttpTest extends TestCase {
 		$global = 1000;
 
 		// Drain bucket A to its cap, then one over.
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
-		$this->assertFalse( aafm_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
+		$this->assertFalse( oversio_oauth_rate_ok( 'http_test_a', $per_ip, $global ) );
 
 		// Bucket B is still fresh.
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
-		$this->assertFalse( aafm_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
+		$this->assertFalse( oversio_oauth_rate_ok( 'http_test_b', $per_ip, $global ) );
 	}
 
 	/**
 	 * The global ceiling trips independently of the per-IP cap.
 	 *
 	 * A high per-IP limit and a small global limit so the global counter is the one
-	 * that denies. This also covers the second counter branch in aafm_oauth_rate_ok().
+	 * that denies. This also covers the second counter branch in oversio_oauth_rate_ok().
 	 */
 	public function test_global_limit_trips_after_cap(): void {
 		$per_ip = 1000;
 		$global = 2;
 
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
-		$this->assertTrue( aafm_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
-		$this->assertFalse( aafm_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
+		$this->assertTrue( oversio_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
+		$this->assertFalse( oversio_oauth_rate_ok( 'http_test_global', $per_ip, $global ) );
 	}
 
 	/**
@@ -78,7 +78,7 @@ class HttpTest extends TestCase {
 	 * false. We assert the observed value rather than forcing a contrived pass.
 	 */
 	public function test_https_required_returns_bool(): void {
-		$result = aafm_oauth_https_required();
+		$result = oversio_oauth_https_required();
 
 		$this->assertIsBool( $result );
 
@@ -88,7 +88,7 @@ class HttpTest extends TestCase {
 			$this->assertFalse( $result, 'HTTPS is relaxed on local/development environments.' );
 		} else {
 			// Production-like harness: HTTPS is required unless the override is set.
-			$expected = defined( 'AAFM_OAUTH_ALLOW_HTTP' ) && AAFM_OAUTH_ALLOW_HTTP ? false : true;
+			$expected = defined( 'OVERSIO_OAUTH_ALLOW_HTTP' ) && OVERSIO_OAUTH_ALLOW_HTTP ? false : true;
 			$this->assertSame( $expected, $result );
 		}
 	}

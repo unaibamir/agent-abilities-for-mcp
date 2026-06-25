@@ -1,6 +1,6 @@
 <?php
 /**
- * Single-term read ability: returns the aafm_redact_term shape, default-denies a
+ * Single-term read ability: returns the oversio_redact_term shape, default-denies a
  * nonexistent or cross-taxonomy id, and reads as a public read (read floor).
  *
  * @package AgentAbilitiesForMCP
@@ -8,9 +8,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 final class GetTermTest extends TestCase {
@@ -25,7 +25,7 @@ final class GetTermTest extends TestCase {
 			)
 		);
 
-		$result = aafm_exec_get_term(
+		$result = oversio_exec_get_term(
 			array(
 				'taxonomy' => 'category',
 				'term_id'  => $term_id,
@@ -47,7 +47,7 @@ final class GetTermTest extends TestCase {
 		$this->acting_as( 'subscriber' );
 		$this->assertInstanceOf(
 			WP_Error::class,
-			aafm_exec_get_term(
+			oversio_exec_get_term(
 				array(
 					'taxonomy' => 'category',
 					'term_id'  => 999999,
@@ -62,7 +62,7 @@ final class GetTermTest extends TestCase {
 		// A tag id claimed as a category must be rejected (term/taxonomy confusion guard).
 		$this->assertInstanceOf(
 			WP_Error::class,
-			aafm_exec_get_term(
+			oversio_exec_get_term(
 				array(
 					'taxonomy' => 'category',
 					'term_id'  => $tag_id,
@@ -75,7 +75,7 @@ final class GetTermTest extends TestCase {
 		$this->acting_as( 'subscriber' );
 		$this->assertInstanceOf(
 			WP_Error::class,
-			aafm_exec_get_term(
+			oversio_exec_get_term(
 				array(
 					'taxonomy' => 'nav_menu',
 					'term_id'  => 1,

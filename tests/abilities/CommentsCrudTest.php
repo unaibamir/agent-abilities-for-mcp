@@ -9,9 +9,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Comment;
 use WP_Error;
 
@@ -19,20 +19,20 @@ final class CommentsCrudTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/get-comment',
-				'aafm/create-comment',
-				'aafm/update-comment',
-				'aafm/delete-comment',
+				'oversio/get-comment',
+				'oversio/create-comment',
+				'oversio/update-comment',
+				'oversio/delete-comment',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_get_comment_returns_redacted_shape_without_email_or_ip(): void {
@@ -49,7 +49,7 @@ final class CommentsCrudTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/get-comment' )->execute( array( 'comment_id' => $comment ) );
+		$out = wp_get_ability( 'oversio/get-comment' )->execute( array( 'comment_id' => $comment ) );
 
 		$this->assertIsArray( $out );
 		$this->assertArrayHasKey( 'comment', $out );
@@ -68,7 +68,7 @@ final class CommentsCrudTest extends TestCase {
 
 	public function test_get_comment_missing_id_returns_error(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/get-comment' )->execute( array( 'comment_id' => 999999 ) );
+		$out = wp_get_ability( 'oversio/get-comment' )->execute( array( 'comment_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
@@ -77,7 +77,7 @@ final class CommentsCrudTest extends TestCase {
 		// not merely error inside execute — so the ability can't probe for valid ids.
 		$this->acting_as( 'editor' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-comment' )->check_permissions( array( 'comment_id' => 999999 ) )
+			wp_get_ability( 'oversio/get-comment' )->check_permissions( array( 'comment_id' => 999999 ) )
 		);
 	}
 
@@ -86,7 +86,7 @@ final class CommentsCrudTest extends TestCase {
 
 		$this->acting_as( 'author' ); // No moderate_comments.
 		$this->assertFalse(
-			wp_get_ability( 'aafm/create-comment' )->check_permissions(
+			wp_get_ability( 'oversio/create-comment' )->check_permissions(
 				array(
 					'post_id' => $post,
 					'content' => 'Nice post',
@@ -94,9 +94,9 @@ final class CommentsCrudTest extends TestCase {
 			)
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/create-comment', $abilities );
+		$this->assertContains( 'oversio/create-comment', $abilities );
 	}
 
 	public function test_create_comment_ties_author_to_the_agent_user_not_input(): void {
@@ -104,7 +104,7 @@ final class CommentsCrudTest extends TestCase {
 		$editor    = get_user_by( 'id', $editor_id );
 		$post      = self::factory()->post->create();
 
-		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+		$out = wp_get_ability( 'oversio/create-comment' )->execute(
 			array(
 				'post_id' => $post,
 				'content' => 'Authored by the agent user',
@@ -124,7 +124,7 @@ final class CommentsCrudTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create();
 
-		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+		$out = wp_get_ability( 'oversio/create-comment' )->execute(
 			array(
 				'post_id' => $post,
 				'content' => 'Hold me for moderation',
@@ -139,7 +139,7 @@ final class CommentsCrudTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$post = self::factory()->post->create();
 
-		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+		$out = wp_get_ability( 'oversio/create-comment' )->execute(
 			array(
 				'post_id' => $post,
 				'content' => 'Hello <script>alert(1)</script> world',
@@ -153,7 +153,7 @@ final class CommentsCrudTest extends TestCase {
 
 	public function test_create_comment_rejects_missing_post(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+		$out = wp_get_ability( 'oversio/create-comment' )->execute(
 			array(
 				'post_id' => 999999,
 				'content' => 'No such post',
@@ -168,7 +168,7 @@ final class CommentsCrudTest extends TestCase {
 		$post_b   = self::factory()->post->create();
 		$parent_b = self::factory()->comment->create( array( 'comment_post_ID' => $post_b ) );
 
-		$out = wp_get_ability( 'aafm/create-comment' )->execute(
+		$out = wp_get_ability( 'oversio/create-comment' )->execute(
 			array(
 				'post_id' => $post_a,
 				'content' => 'mismatched parent',
@@ -188,7 +188,7 @@ final class CommentsCrudTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+		$out = wp_get_ability( 'oversio/update-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'content'    => 'new body',
@@ -214,7 +214,7 @@ final class CommentsCrudTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+		$out = wp_get_ability( 'oversio/update-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'content'    => 'after',
@@ -238,7 +238,7 @@ final class CommentsCrudTest extends TestCase {
 		$post    = self::factory()->post->create();
 		$comment = self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
 
-		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+		$out = wp_get_ability( 'oversio/update-comment' )->execute(
 			array(
 				'comment_id' => $comment,
 				'content'    => 'keep <script>alert(1)</script> me',
@@ -254,7 +254,7 @@ final class CommentsCrudTest extends TestCase {
 
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/update-comment' )->check_permissions(
+			wp_get_ability( 'oversio/update-comment' )->check_permissions(
 				array(
 					'comment_id' => $comment,
 					'content'    => 'I should not be able to edit this',
@@ -265,7 +265,7 @@ final class CommentsCrudTest extends TestCase {
 
 	public function test_update_comment_missing_id_returns_error(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/update-comment' )->execute(
+		$out = wp_get_ability( 'oversio/update-comment' )->execute(
 			array(
 				'comment_id' => 999999,
 				'content'    => 'nope',
@@ -279,7 +279,7 @@ final class CommentsCrudTest extends TestCase {
 		$post    = self::factory()->post->create();
 		$comment = self::factory()->comment->create( array( 'comment_post_ID' => $post ) );
 
-		$out = wp_get_ability( 'aafm/delete-comment' )->execute( array( 'comment_id' => $comment ) );
+		$out = wp_get_ability( 'oversio/delete-comment' )->execute( array( 'comment_id' => $comment ) );
 
 		$this->assertSame(
 			array(
@@ -298,33 +298,33 @@ final class CommentsCrudTest extends TestCase {
 
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/delete-comment' )->check_permissions( array( 'comment_id' => $comment ) )
+			wp_get_ability( 'oversio/delete-comment' )->check_permissions( array( 'comment_id' => $comment ) )
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/delete-comment', $abilities );
+		$this->assertContains( 'oversio/delete-comment', $abilities );
 		// And the comment still exists — the denied call never touched it.
 		$this->assertInstanceOf( WP_Comment::class, get_comment( $comment ) );
 	}
 
 	public function test_delete_comment_missing_id_returns_error(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/delete-comment' )->execute( array( 'comment_id' => 999999 ) );
+		$out = wp_get_ability( 'oversio/delete-comment' )->execute( array( 'comment_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
 	public function test_writes_are_discoverable_by_a_moderator_and_hidden_from_a_low_cap_caller(): void {
 		$this->acting_as( 'editor' ); // Has moderate_comments + edit_comment.
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-comment' ) );
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/create-comment' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/update-comment' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/delete-comment' ) );
 		// get-comment falls through to its own object-independent read gate.
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-comment' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/get-comment' ) );
 
 		$this->acting_as( 'author' ); // No moderate_comments.
-		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-comment' ) );
-		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
-		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
+		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/create-comment' ) );
+		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/update-comment' ) );
+		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/delete-comment' ) );
 	}
 }

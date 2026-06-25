@@ -7,25 +7,25 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Admin;
+namespace Oversio\Tests\Admin;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class MetaKeysSaveTest extends TestCase {
 
 	public function test_sanitize_parses_multiline_trims_dedupes_drops_blocked(): void {
-		$out = aafm_sanitize_allowed_meta_keys_input(
-			array( 'aafm_meta_keys' => "subtitle\n subtitle \n\n_edit_lock\nwp_capabilities\nfeatured_color" )
+		$out = oversio_sanitize_allowed_meta_keys_input(
+			array( 'oversio_meta_keys' => "subtitle\n subtitle \n\n_edit_lock\nwp_capabilities\nfeatured_color" )
 		);
 		$this->assertSame( array( 'subtitle', 'featured_color' ), $out );
 	}
 
 	public function test_detected_keys_scopes_and_excludes_blocked(): void {
-		delete_transient( 'aafm_detected_meta_keys' );
+		delete_transient( 'oversio_detected_meta_keys' );
 		$id = self::factory()->post->create( array( 'post_type' => 'post' ) );
 		update_post_meta( $id, 'subtitle', 'x' );
 		update_post_meta( $id, '_edit_lock', '123' );
-		$keys = aafm_detected_meta_keys();
+		$keys = oversio_detected_meta_keys();
 		$this->assertContains( 'subtitle', $keys );
 		$this->assertNotContains( '_edit_lock', $keys );
 	}
@@ -34,22 +34,22 @@ final class MetaKeysSaveTest extends TestCase {
 		$id = self::factory()->post->create();
 		update_post_meta( $id, 'subtitle', 'x' );
 		ob_start();
-		aafm_render_abilities_tab();
+		oversio_render_abilities_tab();
 		$html = ob_get_clean();
 		$this->assertSame( 1, substr_count( $html, '<form' ) );
-		$this->assertStringContainsString( 'id="aafm-meta-keys-form"', $html );
-		$this->assertStringContainsString( 'name="aafm_meta_keys"', $html );
-		$this->assertStringContainsString( 'id="aafm-meta-keys-save"', $html );
-		$this->assertStringContainsString( 'aafm-meta-chip', $html );
+		$this->assertStringContainsString( 'id="oversio-meta-keys-form"', $html );
+		$this->assertStringContainsString( 'name="oversio_meta_keys"', $html );
+		$this->assertStringContainsString( 'id="oversio-meta-keys-save"', $html );
+		$this->assertStringContainsString( 'oversio-meta-chip', $html );
 		// Direction A presentation: the meta-keys selector lives in a card.
-		$this->assertStringContainsString( 'aafm-card', $html );
+		$this->assertStringContainsString( 'oversio-card', $html );
 
 		// The privacy warning now renders through the shared notice component (a <div> with an
-		// inline SVG icon), not the old ad-hoc <p class="aafm-notice">. The <div> never opens a
+		// inline SVG icon), not the old ad-hoc <p class="oversio-notice">. The <div> never opens a
 		// form, so the one-form invariant above still holds.
-		$this->assertStringContainsString( 'aafm-notice aafm-notice-warning', $html );
-		$this->assertStringContainsString( 'aafm-notice-ic', $html );
-		$this->assertStringContainsString( '<svg class="aafm-icon"', $html );
+		$this->assertStringContainsString( 'oversio-notice oversio-notice-warning', $html );
+		$this->assertStringContainsString( 'oversio-notice-ic', $html );
+		$this->assertStringContainsString( '<svg class="oversio-icon"', $html );
 	}
 
 	/**
@@ -59,11 +59,11 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_content_selector_renders_exposed_and_deny_textareas(): void {
 		ob_start();
-		aafm_render_meta_keys_selector();
+		oversio_render_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$exposed_pos = strpos( $html, 'name="aafm_meta_keys"' );
-		$deny_pos    = strpos( $html, 'name="aafm_deny_meta_keys"' );
+		$exposed_pos = strpos( $html, 'name="oversio_meta_keys"' );
+		$deny_pos    = strpos( $html, 'name="oversio_deny_meta_keys"' );
 
 		$this->assertNotFalse( $exposed_pos, 'Exposed textarea must render.' );
 		$this->assertNotFalse( $deny_pos, 'Deny textarea must render.' );
@@ -73,7 +73,7 @@ final class MetaKeysSaveTest extends TestCase {
 		$this->assertGreaterThanOrEqual( 2, substr_count( $html, '*' ) );
 
 		// The Save button keeps the primary style; the selector is not a nested form.
-		$this->assertStringContainsString( 'aafm-btn aafm-btn-primary', $html );
+		$this->assertStringContainsString( 'oversio-btn oversio-btn-primary', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 
@@ -83,12 +83,12 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_users_selector_renders_exposed_and_deny_textareas(): void {
 		ob_start();
-		aafm_render_user_meta_keys_selector();
+		oversio_render_user_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$this->assertStringContainsString( 'name="aafm_exposed_user_meta_keys"', $html );
-		$this->assertStringContainsString( 'name="aafm_denied_user_meta_keys"', $html );
-		$this->assertStringContainsString( 'aafm-btn', $html );
+		$this->assertStringContainsString( 'name="oversio_exposed_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_denied_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'oversio-btn', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 
@@ -98,16 +98,16 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_taxonomies_selector_renders_exposed_and_deny_textareas(): void {
 		ob_start();
-		aafm_render_term_meta_keys_selector();
+		oversio_render_term_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$exposed_pos = strpos( $html, 'name="aafm_exposed_term_meta_keys"' );
-		$deny_pos    = strpos( $html, 'name="aafm_denied_term_meta_keys"' );
+		$exposed_pos = strpos( $html, 'name="oversio_exposed_term_meta_keys"' );
+		$deny_pos    = strpos( $html, 'name="oversio_denied_term_meta_keys"' );
 
 		$this->assertNotFalse( $exposed_pos, 'Exposed textarea must render.' );
 		$this->assertNotFalse( $deny_pos, 'Deny textarea must render.' );
 		$this->assertLessThan( $deny_pos, $exposed_pos, 'Exposed must render above Deny.' );
-		$this->assertStringContainsString( 'aafm-btn aafm-btn-primary', $html );
+		$this->assertStringContainsString( 'oversio-btn oversio-btn-primary', $html );
 		$this->assertSame( 0, substr_count( $html, '<form' ) );
 	}
 
@@ -150,11 +150,11 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_content_selector_textareas_are_labelled_for_assistive_tech(): void {
 		ob_start();
-		aafm_render_meta_keys_selector();
+		oversio_render_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$this->assert_textarea_is_labelled( $html, 'aafm_meta_keys' );
-		$this->assert_textarea_is_labelled( $html, 'aafm_deny_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_deny_meta_keys' );
 	}
 
 	/**
@@ -163,11 +163,11 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_users_selector_textareas_are_labelled_for_assistive_tech(): void {
 		ob_start();
-		aafm_render_user_meta_keys_selector();
+		oversio_render_user_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$this->assert_textarea_is_labelled( $html, 'aafm_exposed_user_meta_keys' );
-		$this->assert_textarea_is_labelled( $html, 'aafm_denied_user_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_exposed_user_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_denied_user_meta_keys' );
 	}
 
 	/**
@@ -176,11 +176,11 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_taxonomies_selector_textareas_are_labelled_for_assistive_tech(): void {
 		ob_start();
-		aafm_render_term_meta_keys_selector();
+		oversio_render_term_meta_keys_selector();
 		$html = ob_get_clean();
 
-		$this->assert_textarea_is_labelled( $html, 'aafm_exposed_term_meta_keys' );
-		$this->assert_textarea_is_labelled( $html, 'aafm_denied_term_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_exposed_term_meta_keys' );
+		$this->assert_textarea_is_labelled( $html, 'oversio_denied_term_meta_keys' );
 	}
 
 	/**
@@ -189,14 +189,14 @@ final class MetaKeysSaveTest extends TestCase {
 	 */
 	public function test_abilities_tab_wires_users_selector_in_single_form(): void {
 		ob_start();
-		aafm_render_abilities_tab();
+		oversio_render_abilities_tab();
 		$html = ob_get_clean();
 
 		$this->assertSame( 1, substr_count( $html, '<form' ) );
-		$this->assertStringContainsString( 'name="aafm_exposed_user_meta_keys"', $html );
-		$this->assertStringContainsString( 'name="aafm_denied_user_meta_keys"', $html );
-		$this->assertStringContainsString( 'name="aafm_deny_meta_keys"', $html );
-		$this->assertStringContainsString( 'name="aafm_exposed_term_meta_keys"', $html );
-		$this->assertStringContainsString( 'name="aafm_denied_term_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_exposed_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_denied_user_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_deny_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_exposed_term_meta_keys"', $html );
+		$this->assertStringContainsString( 'name="oversio_denied_term_meta_keys"', $html );
 	}
 }

@@ -9,9 +9,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 final class AddPostTermsTest extends TestCase {
@@ -38,7 +38,7 @@ final class AddPostTermsTest extends TestCase {
 		);
 		wp_set_post_terms( $post, array( $keep ), 'category', false );
 
-		$result = aafm_exec_add_post_terms(
+		$result = oversio_exec_add_post_terms(
 			array(
 				'post_id'  => $post,
 				'taxonomy' => 'category',
@@ -64,7 +64,7 @@ final class AddPostTermsTest extends TestCase {
 		);
 		$this->acting_as( 'author' ); // a DIFFERENT author cannot edit owner's post.
 		$this->assertFalse(
-			aafm_perm_add_post_terms(
+			oversio_perm_add_post_terms(
 				array(
 					'post_id'  => $post,
 					'taxonomy' => 'category',
@@ -77,7 +77,7 @@ final class AddPostTermsTest extends TestCase {
 	public function test_denied_without_assign_terms_cap(): void {
 		// A custom public taxonomy whose assign_terms cap is decoupled from edit_posts.
 		register_taxonomy(
-			'aafm_proj',
+			'oversio_proj',
 			'post',
 			array(
 				'public'       => true,
@@ -85,7 +85,7 @@ final class AddPostTermsTest extends TestCase {
 			)
 		);
 		$editor = $this->acting_as( 'editor' ); // editor lacks manage_options.
-		$term   = self::factory()->term->create( array( 'taxonomy' => 'aafm_proj' ) );
+		$term   = self::factory()->term->create( array( 'taxonomy' => 'oversio_proj' ) );
 		$post   = self::factory()->post->create(
 			array(
 				'post_author' => $editor,
@@ -93,15 +93,15 @@ final class AddPostTermsTest extends TestCase {
 			)
 		);
 
-		$result = aafm_exec_add_post_terms(
+		$result = oversio_exec_add_post_terms(
 			array(
 				'post_id'  => $post,
-				'taxonomy' => 'aafm_proj',
+				'taxonomy' => 'oversio_proj',
 				'term_ids' => array( $term ),
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $result );
-		unregister_taxonomy( 'aafm_proj' );
+		unregister_taxonomy( 'oversio_proj' );
 	}
 
 	public function test_cross_taxonomy_term_is_rejected(): void {
@@ -116,7 +116,7 @@ final class AddPostTermsTest extends TestCase {
 		// A post_tag id passed as a category term must be rejected by the C2 validator.
 		$this->assertInstanceOf(
 			WP_Error::class,
-			aafm_exec_add_post_terms(
+			oversio_exec_add_post_terms(
 				array(
 					'post_id'  => $post,
 					'taxonomy' => 'category',
@@ -128,7 +128,7 @@ final class AddPostTermsTest extends TestCase {
 
 	public function test_discovery_floor_is_edit_posts(): void {
 		$this->acting_as( 'editor' );
-		$predicate = aafm_ability_list_permission( 'aafm/add-post-terms' );
+		$predicate = oversio_ability_list_permission( 'oversio/add-post-terms' );
 		$this->assertIsCallable( $predicate );
 		$this->assertTrue( $predicate() );
 
@@ -146,7 +146,7 @@ final class AddPostTermsTest extends TestCase {
 		);
 		$this->assertInstanceOf(
 			WP_Error::class,
-			aafm_exec_add_post_terms(
+			oversio_exec_add_post_terms(
 				array(
 					'post_id'  => $post,
 					'taxonomy' => 'category',

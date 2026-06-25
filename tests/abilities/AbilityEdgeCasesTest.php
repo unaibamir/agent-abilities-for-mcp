@@ -13,9 +13,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 use WP_Post;
 
@@ -33,26 +33,26 @@ final class AbilityEdgeCasesTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/get-posts',
-				'aafm/get-post',
-				'aafm/get-page',
-				'aafm/get-comments',
-				'aafm/get-users',
-				'aafm/get-media',
-				'aafm/update-post',
-				'aafm/set-featured-image',
-				'aafm/upload-media',
-				'aafm/moderate-comment',
+				'oversio/get-posts',
+				'oversio/get-post',
+				'oversio/get-page',
+				'oversio/get-comments',
+				'oversio/get-users',
+				'oversio/get-media',
+				'oversio/update-post',
+				'oversio/set-featured-image',
+				'oversio/upload-media',
+				'oversio/moderate-comment',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function tear_down(): void {
@@ -82,7 +82,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		// The input schema pins per_page to [1,50]; an over-max value is rejected by
 		// the Abilities API validator BEFORE execute runs (defence in depth on top of
 		// the helper's own clamp, which HelpersTest covers at the unit level).
-		$out = wp_get_ability( 'aafm/get-posts' )->execute(
+		$out = wp_get_ability( 'oversio/get-posts' )->execute(
 			array(
 				'post_type' => 'post',
 				'status'    => 'publish',
@@ -96,7 +96,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->acting_as( 'editor' );
 		self::factory()->post->create_many( 3, array( 'post_status' => 'publish' ) );
 		// per_page = 50 is the inclusive upper bound and must be accepted.
-		$out = wp_get_ability( 'aafm/get-posts' )->execute(
+		$out = wp_get_ability( 'oversio/get-posts' )->execute(
 			array(
 				'post_type' => 'post',
 				'status'    => 'publish',
@@ -111,7 +111,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->acting_as( 'editor' );
 		self::factory()->post->create( array( 'post_status' => 'publish' ) );
 
-		$out = wp_get_ability( 'aafm/get-posts' )->execute(
+		$out = wp_get_ability( 'oversio/get-posts' )->execute(
 			array(
 				'post_type' => 'post',
 				'status'    => 'publish',
@@ -124,11 +124,11 @@ final class AbilityEdgeCasesTest extends TestCase {
 
 	public function test_get_posts_rejects_unknown_post_type(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/get-posts' )->execute(
+		$out = wp_get_ability( 'oversio/get-posts' )->execute(
 			array( 'post_type' => 'definitely_not_a_type' )
 		);
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_invalid_post_type', $out->get_error_code() );
+		$this->assertSame( 'oversio_invalid_post_type', $out->get_error_code() );
 	}
 
 	public function test_get_post_allows_owner_editor_to_read_own_draft(): void {
@@ -144,9 +144,9 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-post' )->check_permissions( array( 'post_id' => $draft ) )
+			wp_get_ability( 'oversio/get-post' )->check_permissions( array( 'post_id' => $draft ) )
 		);
-		$out = wp_get_ability( 'aafm/get-post' )->execute( array( 'post_id' => $draft ) );
+		$out = wp_get_ability( 'oversio/get-post' )->execute( array( 'post_id' => $draft ) );
 		$this->assertSame( 'My private draft', $out['post']['title'] );
 		$this->assertSame( 'draft', $out['post']['status'] );
 	}
@@ -161,7 +161,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 		$this->acting_as( 'subscriber' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-post' )->check_permissions( array( 'post_id' => $post ) )
+			wp_get_ability( 'oversio/get-post' )->check_permissions( array( 'post_id' => $post ) )
 		);
 	}
 
@@ -171,7 +171,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->acting_as( 'editor' );
 		// Permission denies a non-page id outright.
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-page' )->check_permissions( array( 'page_id' => $post ) )
+			wp_get_ability( 'oversio/get-page' )->check_permissions( array( 'page_id' => $post ) )
 		);
 	}
 
@@ -187,9 +187,9 @@ final class AbilityEdgeCasesTest extends TestCase {
 		// No post_id supplied → whole-site approved listing, gated by 'read'.
 		$this->acting_as( 'subscriber' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array() )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array() )
 		);
-		$out      = wp_get_ability( 'aafm/get-comments' )->execute( array() );
+		$out      = wp_get_ability( 'oversio/get-comments' )->execute( array() );
 		$contents = wp_list_pluck( $out['comments'], 'content' );
 		$this->assertContains( 'Approved everywhere', $contents );
 	}
@@ -226,7 +226,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 
 		$this->acting_as( 'subscriber' );
-		$out      = wp_get_ability( 'aafm/get-comments' )->execute( array() );
+		$out      = wp_get_ability( 'oversio/get-comments' )->execute( array() );
 		$contents = wp_list_pluck( $out['comments'], 'content' );
 
 		$this->assertContains( 'VISIBLE_ON_PUBLIC_POST', $contents, 'Approved comment on a public post must be listed.' );
@@ -238,7 +238,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->acting_as( 'subscriber' );
 		// A non-existent post id is default-deny (can't probe for ids).
 		$this->assertFalse(
-			wp_get_ability( 'aafm/get-comments' )->check_permissions( array( 'post_id' => 99999 ) )
+			wp_get_ability( 'oversio/get-comments' )->check_permissions( array( 'post_id' => 99999 ) )
 		);
 	}
 
@@ -252,7 +252,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 			)
 		);
 
-		$out   = wp_get_ability( 'aafm/get-users' )->execute( array( 'search' => 'zaphodsearchable' ) );
+		$out   = wp_get_ability( 'oversio/get-users' )->execute( array( 'search' => 'zaphodsearchable' ) );
 		$names = wp_list_pluck( $out['users'], 'display_name' );
 		$this->assertContains( 'Zaphod Searchable', $names );
 	}
@@ -262,7 +262,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		// missing post resolves true for an admin), so execute's get_post() guard
 		// is the line that must error.
 		$this->acting_as( 'administrator' );
-		$out = wp_get_ability( 'aafm/update-post' )->execute(
+		$out = wp_get_ability( 'oversio/update-post' )->execute(
 			array(
 				'post_id' => 987654,
 				'title'   => 'ghost',
@@ -281,7 +281,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 		// 'trash' is never an allow-listed status for the updater — execute must error
 		// rather than silently route the post to trash via the status field.
-		$out = wp_get_ability( 'aafm/update-post' )->execute(
+		$out = wp_get_ability( 'oversio/update-post' )->execute(
 			array(
 				'post_id' => $post,
 				'status'  => 'trash',
@@ -294,7 +294,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 	public function test_update_post_execute_degrades_when_post_vanishes_post_update(): void {
 		// The top-of-execute guard sees the post, wp_update_post succeeds, then a
 		// destructive hook deletes it before the redacting re-fetch. Without an
-		// instanceof guard the typed aafm_redact_post() throws an uncaught TypeError
+		// instanceof guard the typed oversio_redact_post() throws an uncaught TypeError
 		// (fatal); the contract is a clean generic WP_Error instead.
 		$admin = $this->acting_as( 'administrator' );
 		$post  = self::factory()->post->create(
@@ -311,7 +311,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		};
 		add_action( 'post_updated', $nuke, 10, 1 );
 
-		$out = wp_get_ability( 'aafm/update-post' )->execute(
+		$out = wp_get_ability( 'oversio/update-post' )->execute(
 			array(
 				'post_id' => $post,
 				'title'   => 'Will vanish',
@@ -324,7 +324,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		// Must be the plugin's own clean generic error — not the Abilities API's
 		// 'ability_callback_exception' wrapper, which would mean a raw TypeError
 		// escaped the execute callback.
-		$this->assertSame( 'aafm_error', $out->get_error_code() );
+		$this->assertSame( 'oversio_error', $out->get_error_code() );
 	}
 
 	public function test_set_featured_image_execute_rejects_missing_post(): void {
@@ -335,7 +335,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 		$this->track_attachment_files( $att );
 
-		$out = wp_get_ability( 'aafm/set-featured-image' )->execute(
+		$out = wp_get_ability( 'oversio/set-featured-image' )->execute(
 			array(
 				'post_id'       => 876543,
 				'attachment_id' => $att,
@@ -361,7 +361,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 				)
 			)
 		);
-		$out    = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out    = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'big.png',
 				'data_base64' => self::PNG_B64,
@@ -381,7 +381,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		remove_filter( 'pre_option_max_upload_size', $cap );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_too_large', $out->get_error_code() );
+		$this->assertSame( 'oversio_too_large', $out->get_error_code() );
 		$this->assertSame( $before, $after, 'No attachment should be created on an oversize reject.' );
 	}
 
@@ -399,7 +399,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 				)
 			)
 		);
-		$out    = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out    = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'notreally.png',
 				// Encoding a benign test fixture, not obfuscating code.
@@ -418,13 +418,13 @@ final class AbilityEdgeCasesTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		$this->assertSame( 'aafm_disallowed_type', $out->get_error_code() );
+		$this->assertSame( 'oversio_disallowed_type', $out->get_error_code() );
 		$this->assertSame( $before, $after, 'No attachment should be created when bytes are not an allowed image.' );
 	}
 
 	public function test_moderate_comment_missing_comment_execute_errors(): void {
 		$this->acting_as( 'administrator' );
-		$out = wp_get_ability( 'aafm/moderate-comment' )->execute(
+		$out = wp_get_ability( 'oversio/moderate-comment' )->execute(
 			array(
 				'comment_id' => 765432,
 				'action'     => 'approve',

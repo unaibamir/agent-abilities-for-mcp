@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 /**
@@ -29,7 +29,7 @@ class CodesTest extends TestCase {
 			'wp_user_id'     => 42,
 			'redirect_uri'   => 'https://app.example/cb',
 			'code_challenge' => 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
-			'resource'       => 'https://site.example/wp-json/aafm/v1/mcp',
+			'resource'       => 'https://site.example/wp-json/oversio/v1/mcp',
 		);
 	}
 
@@ -37,7 +37,7 @@ class CodesTest extends TestCase {
 	 * Count rows whose code_hash exactly equals the given value.
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
-	 * form, so each DB test must call aafm_install_oauth_tables() first and read
+	 * form, so each DB test must call oversio_install_oauth_tables() first and read
 	 * the row back — the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $code_hash Value to match against the code_hash column.
@@ -49,7 +49,7 @@ class CodesTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE code_hash = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_codes WHERE code_hash = %s",
 				$code_hash
 			)
 		);
@@ -59,9 +59,9 @@ class CodesTest extends TestCase {
 	 * Minting returns a 64-hex raw code and stores only its SHA-256 hash.
 	 */
 	public function test_mint_returns_hex_and_stores_hash_not_raw(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$raw = aafm_oauth_mint_code( $this->ctx() );
+		$raw = oversio_oauth_mint_code( $this->ctx() );
 
 		$this->assertMatchesRegularExpression( '/^[a-f0-9]{64}$/', $raw );
 
@@ -76,15 +76,15 @@ class CodesTest extends TestCase {
 	 * a client must never get a successful redirect for a grant that was never persisted.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		global $wpdb;
 		// Drop the (temporary) table so the next insert fails inside the sandbox.
 		$suppress = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}oversio_oauth_codes" );
 
-		$result = aafm_oauth_mint_code( $this->ctx() );
+		$result = oversio_oauth_mint_code( $this->ctx() );
 
 		$wpdb->suppress_errors( $suppress );
 
@@ -95,12 +95,12 @@ class CodesTest extends TestCase {
 	 * A fresh code redeemed with the right client and redirect returns the row.
 	 */
 	public function test_redeem_fresh_code_returns_row(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
-		$raw = aafm_oauth_mint_code( $ctx );
+		$raw = oversio_oauth_mint_code( $ctx );
 
-		$row = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		$row = oversio_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 
 		$this->assertIsArray( $row );
 		$this->assertSame( (int) $ctx['wp_user_id'], (int) $row['wp_user_id'] );
@@ -113,15 +113,15 @@ class CodesTest extends TestCase {
 	 * The same code cannot be redeemed twice (atomic one-time use).
 	 */
 	public function test_redeem_is_one_time_use(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
-		$raw = aafm_oauth_mint_code( $ctx );
+		$raw = oversio_oauth_mint_code( $ctx );
 
-		$first = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		$first = oversio_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 		$this->assertIsArray( $first );
 
-		$second = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		$second = oversio_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 		$this->assertInstanceOf( WP_Error::class, $second );
 	}
 
@@ -132,23 +132,23 @@ class CodesTest extends TestCase {
 	 * transaction-isolated temporary row — no sleeping.
 	 */
 	public function test_redeem_expired_code_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx  = $this->ctx();
-		$raw  = aafm_oauth_mint_code( $ctx );
+		$raw  = oversio_oauth_mint_code( $ctx );
 		$hash = hash( 'sha256', $raw );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'aafm_oauth_codes',
+			$wpdb->prefix . 'oversio_oauth_codes',
 			array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 120 ) ),
 			array( 'code_hash' => $hash ),
 			array( '%s' ),
 			array( '%s' )
 		);
 
-		$res = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		$res = oversio_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -156,12 +156,12 @@ class CodesTest extends TestCase {
 	 * Redeeming with the wrong client_id fails.
 	 */
 	public function test_redeem_wrong_client_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
-		$raw = aafm_oauth_mint_code( $ctx );
+		$raw = oversio_oauth_mint_code( $ctx );
 
-		$res = aafm_oauth_redeem_code( $raw, 'other_client', $ctx['redirect_uri'] );
+		$res = oversio_oauth_redeem_code( $raw, 'other_client', $ctx['redirect_uri'] );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -169,12 +169,12 @@ class CodesTest extends TestCase {
 	 * Redeeming with the wrong redirect_uri fails.
 	 */
 	public function test_redeem_wrong_redirect_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
-		$raw = aafm_oauth_mint_code( $ctx );
+		$raw = oversio_oauth_mint_code( $ctx );
 
-		$res = aafm_oauth_redeem_code( $raw, $ctx['client_id'], 'https://app.example/other' );
+		$res = oversio_oauth_redeem_code( $raw, $ctx['client_id'], 'https://app.example/other' );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -182,12 +182,12 @@ class CodesTest extends TestCase {
 	 * Redeeming a code that was never minted fails.
 	 */
 	public function test_redeem_unknown_code_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
 		$raw = bin2hex( random_bytes( 32 ) );
 
-		$res = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+		$res = oversio_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 }

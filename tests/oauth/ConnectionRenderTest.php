@@ -2,7 +2,7 @@
 /**
  * Tests for the additive OAuth card at the top of the Connection tab.
  *
- * The card is gated on aafm_oauth_enabled(): when OAuth is on it renders first,
+ * The card is gated on oversio_oauth_enabled(): when OAuth is on it renders first,
  * before the existing Application Password endpoint card and the three numbered
  * steps; when OAuth is off it is omitted entirely and the rest of the tab renders
  * exactly as before. These assertions prove the gate is additive and leaves the
@@ -13,9 +13,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 /**
  * Verifies the OAuth connection card and the no-regression invariant.
@@ -26,7 +26,7 @@ class ConnectionRenderTest extends TestCase {
 	 * Restore the OAuth toggle after any test that changed it.
 	 */
 	public function tear_down(): void {
-		delete_option( 'aafm_oauth_enabled' );
+		delete_option( 'oversio_oauth_enabled' );
 		parent::tear_down();
 	}
 
@@ -37,7 +37,7 @@ class ConnectionRenderTest extends TestCase {
 	 */
 	private function render_connection_tab(): string {
 		ob_start();
-		aafm_render_connection_tab();
+		oversio_render_connection_tab();
 		return (string) ob_get_clean();
 	}
 
@@ -47,11 +47,11 @@ class ConnectionRenderTest extends TestCase {
 	 */
 	public function test_oauth_card_renders_when_enabled(): void {
 		$html = $this->render_connection_tab();
-		$url  = aafm_endpoint_url();
+		$url  = oversio_endpoint_url();
 
 		$this->assertStringContainsString( 'Connect with OAuth', $html );
 		$this->assertStringContainsString( esc_html( $url ), $html );
-		$this->assertStringContainsString( 'aafm-copy', $html );
+		$this->assertStringContainsString( 'oversio-copy', $html );
 		$this->assertStringContainsString( 'data-copy="' . esc_attr( $url ) . '"', $html );
 
 		// The card's copy button carries a disambiguating aria-label so screen-reader
@@ -64,7 +64,7 @@ class ConnectionRenderTest extends TestCase {
 	 * App Password fallback renders open so it is immediately visible.
 	 */
 	public function test_oauth_card_shows_notice_when_disabled(): void {
-		update_option( 'aafm_oauth_enabled', '0' );
+		update_option( 'oversio_oauth_enabled', '0' );
 
 		$html = $this->render_connection_tab();
 
@@ -89,9 +89,9 @@ class ConnectionRenderTest extends TestCase {
 	public function test_existing_app_password_section_is_untouched(): void {
 		$html = $this->render_connection_tab();
 
-		$this->assertStringContainsString( 'aafm-endpoint-card', $html );
-		$this->assertStringContainsString( 'aafm-create-user', $html );
-		$this->assertStringContainsString( 'aafm-test-connection', $html );
+		$this->assertStringContainsString( 'oversio-endpoint-card', $html );
+		$this->assertStringContainsString( 'oversio-create-user', $html );
+		$this->assertStringContainsString( 'oversio-test-connection', $html );
 		$this->assertStringContainsString( 'Create a dedicated agent user', $html );
 		$this->assertStringContainsString( 'Connect your client', $html );
 		$this->assertStringContainsString( 'Check the endpoint is reachable', $html );
@@ -101,8 +101,8 @@ class ConnectionRenderTest extends TestCase {
 	 * With OAuth on and no clients/grants, the management tables show empty states.
 	 */
 	public function test_oauth_management_empty_states_render(): void {
-		aafm_install_oauth_tables();
-		aafm_truncate_oauth_tables();
+		oversio_install_oauth_tables();
+		oversio_truncate_oauth_tables();
 
 		$html = $this->render_connection_tab();
 
@@ -111,7 +111,7 @@ class ConnectionRenderTest extends TestCase {
 		$this->assertStringContainsString( 'No clients have registered yet.', $html );
 		$this->assertStringContainsString( 'No one has approved an OAuth connection yet.', $html );
 		// The revoke AJAX nonce field is printed for the JS to read.
-		$this->assertStringContainsString( 'aafm_oauth_admin_nonce', $html );
+		$this->assertStringContainsString( 'oversio_oauth_admin_nonce', $html );
 	}
 
 	/**
@@ -119,8 +119,8 @@ class ConnectionRenderTest extends TestCase {
 	 */
 	public function test_oauth_management_renders_rows_escaped(): void {
 		global $wpdb;
-		aafm_install_oauth_tables();
-		aafm_truncate_oauth_tables();
+		oversio_install_oauth_tables();
+		oversio_truncate_oauth_tables();
 
 		$user_id = self::factory()->user->create(
 			array(
@@ -131,7 +131,7 @@ class ConnectionRenderTest extends TestCase {
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'aafm_oauth_clients',
+			$wpdb->prefix . 'oversio_oauth_clients',
 			array(
 				'client_id'     => 'client_abc123def456',
 				'client_name'   => 'Claude',
@@ -142,7 +142,7 @@ class ConnectionRenderTest extends TestCase {
 		);
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'aafm_oauth_consents',
+			$wpdb->prefix . 'oversio_oauth_consents',
 			array(
 				'wp_user_id' => $user_id,
 				'client_id'  => 'client_abc123def456',
@@ -152,15 +152,15 @@ class ConnectionRenderTest extends TestCase {
 
 		$html = $this->render_connection_tab();
 
-		$this->assertStringContainsString( 'widefat striped aafm-oauth-table', $html );
+		$this->assertStringContainsString( 'widefat striped oversio-oauth-table', $html );
 		$this->assertStringContainsString( 'data-client-id="client_abc123def456"', $html );
-		$this->assertStringContainsString( 'aafm-revoke-client', $html );
-		$this->assertStringContainsString( 'aafm-revoke-grant', $html );
+		$this->assertStringContainsString( 'oversio-revoke-client', $html );
+		$this->assertStringContainsString( 'oversio-revoke-grant', $html );
 		$this->assertStringContainsString( 'grant_owner', $html );
 		$this->assertStringContainsString( 'Grant Owner', $html );
 		// Redirect URI rendered through esc_url as a link.
 		$this->assertStringContainsString( 'href="https://claude.ai/cb"', $html );
 		// Active client shows the success pill.
-		$this->assertStringContainsString( 'aafm-pill aafm-pill-success', $html );
+		$this->assertStringContainsString( 'oversio-pill oversio-pill-success', $html );
 	}
 }

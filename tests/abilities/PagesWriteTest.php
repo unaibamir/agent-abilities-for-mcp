@@ -10,9 +10,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 use WP_Post;
 
@@ -22,33 +22,33 @@ final class PagesWriteTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
 		// simulated by pushing the action name onto $wp_current_filter — the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
-			array( 'aafm/create-page', 'aafm/update-page', 'aafm/trash-page' )
+			'oversio_enabled_abilities',
+			array( 'oversio/create-page', 'oversio/update-page', 'oversio/trash-page' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_page_writes_are_in_registry_as_writes(): void {
-		$registry = aafm_get_abilities_registry();
-		$this->assertSame( 'writes', $registry['aafm/create-page']['group'] );
-		$this->assertSame( 'write', $registry['aafm/create-page']['risk'] );
-		$this->assertSame( 'writes', $registry['aafm/update-page']['group'] );
-		$this->assertSame( 'destructive', $registry['aafm/trash-page']['risk'] );
+		$registry = oversio_get_abilities_registry();
+		$this->assertSame( 'writes', $registry['oversio/create-page']['group'] );
+		$this->assertSame( 'write', $registry['oversio/create-page']['risk'] );
+		$this->assertSame( 'writes', $registry['oversio/update-page']['group'] );
+		$this->assertSame( 'destructive', $registry['oversio/trash-page']['risk'] );
 	}
 
 	public function test_create_page_requires_publish_pages_and_publishes(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/create-page' )->execute(
+		$out = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'   => 'About',
 				'content' => 'Hi',
@@ -63,19 +63,19 @@ final class PagesWriteTest extends TestCase {
 		// by publish_pages, so the contributor is denied.
 		$this->acting_as( 'contributor' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/create-page' )->check_permissions( array() )
+			wp_get_ability( 'oversio/create-page' )->check_permissions( array() )
 		);
 	}
 
 	public function test_subscriber_denied_create_page_is_audited(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/create-page' )->check_permissions( array() )
+			wp_get_ability( 'oversio/create-page' )->check_permissions( array() )
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/create-page', $abilities );
+		$this->assertContains( 'oversio/create-page', $abilities );
 	}
 
 	public function test_create_page_rejects_smuggled_author_and_forces_current_user(): void {
@@ -85,7 +85,7 @@ final class PagesWriteTest extends TestCase {
 		// 1) A caller-supplied post_author is an undeclared field. The closed input
 		// schema (additionalProperties:false) rejects the whole call before execute,
 		// so the spoof can never reach wp_insert_post.
-		$rejected = wp_get_ability( 'aafm/create-page' )->execute(
+		$rejected = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'       => 'Whose page is this',
 				'content'     => 'Body',
@@ -95,7 +95,7 @@ final class PagesWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
 		// 2) On a clean call, authorship is forced to the current (agent) user.
-		$out     = wp_get_ability( 'aafm/create-page' )->execute(
+		$out     = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'   => 'My own page',
 				'content' => 'Body',
@@ -111,7 +111,7 @@ final class PagesWriteTest extends TestCase {
 		$this->acting_as( 'editor' );
 
 		// 1) post_type is undeclared in the closed schema → the call is rejected.
-		$rejected = wp_get_ability( 'aafm/create-page' )->execute(
+		$rejected = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'     => 'Not a post',
 				'content'   => 'Body',
@@ -121,7 +121,7 @@ final class PagesWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
 		// 2) A clean create pins the type to 'page' regardless — the agent has no say.
-		$out = wp_get_ability( 'aafm/create-page' )->execute(
+		$out = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'   => 'Ordinary page',
 				'content' => 'Body',
@@ -132,7 +132,7 @@ final class PagesWriteTest extends TestCase {
 
 	public function test_create_page_sanitizes_script_in_content(): void {
 		$this->acting_as( 'editor' );
-		$out    = wp_get_ability( 'aafm/create-page' )->execute(
+		$out    = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'   => 'XSS attempt',
 				'content' => 'Hello<script>alert(1)</script> world',
@@ -155,7 +155,7 @@ final class PagesWriteTest extends TestCase {
 		// Authors cannot edit pages at all (no edit_pages cap).
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/update-page' )->check_permissions( array( 'page_id' => $page ) )
+			wp_get_ability( 'oversio/update-page' )->check_permissions( array( 'page_id' => $page ) )
 		);
 	}
 
@@ -169,10 +169,10 @@ final class PagesWriteTest extends TestCase {
 			)
 		);
 		$this->assertTrue(
-			wp_get_ability( 'aafm/update-page' )->check_permissions( array( 'page_id' => $page ) )
+			wp_get_ability( 'oversio/update-page' )->check_permissions( array( 'page_id' => $page ) )
 		);
 		$this->assertTrue(
-			wp_get_ability( 'aafm/update-page' )->check_permissions(
+			wp_get_ability( 'oversio/update-page' )->check_permissions(
 				array(
 					'page_id' => $page,
 					'status'  => 'publish',
@@ -190,7 +190,7 @@ final class PagesWriteTest extends TestCase {
 			)
 		);
 		$this->acting_as( 'editor' );
-		$result = wp_get_ability( 'aafm/update-page' )->execute(
+		$result = wp_get_ability( 'oversio/update-page' )->execute(
 			array(
 				'page_id' => $post,
 				'title'   => 'Hijacked',
@@ -212,7 +212,7 @@ final class PagesWriteTest extends TestCase {
 		// Authors lack delete_pages entirely.
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/trash-page' )->check_permissions( array( 'page_id' => $page ) )
+			wp_get_ability( 'oversio/trash-page' )->check_permissions( array( 'page_id' => $page ) )
 		);
 	}
 
@@ -224,7 +224,7 @@ final class PagesWriteTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
-		wp_get_ability( 'aafm/trash-page' )->execute( array( 'page_id' => $page ) );
+		wp_get_ability( 'oversio/trash-page' )->execute( array( 'page_id' => $page ) );
 
 		$this->assertSame( 'trash', get_post_status( $page ) );
 		// Still recoverable — not permanently deleted.
@@ -240,7 +240,7 @@ final class PagesWriteTest extends TestCase {
 			)
 		);
 		$this->acting_as( 'editor' );
-		$result = wp_get_ability( 'aafm/trash-page' )->execute( array( 'page_id' => $post ) );
+		$result = wp_get_ability( 'oversio/trash-page' )->execute( array( 'page_id' => $post ) );
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'publish', get_post_status( $post ) );
 	}
@@ -255,9 +255,9 @@ final class PagesWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		update_option( 'oversio_allowed_meta_keys', array( 'subtitle' ) );
 
-		$out = wp_get_ability( 'aafm/create-page' )->execute(
+		$out = wp_get_ability( 'oversio/create-page' )->execute(
 			array(
 				'title'          => 'Enriched Page',
 				'slug'           => 'Enriched Page Slug',

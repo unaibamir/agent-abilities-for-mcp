@@ -12,9 +12,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class UsersReadTest extends TestCase {
 
@@ -22,22 +22,22 @@ final class UsersReadTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
 		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array( 'aafm/get-users' ) );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		update_option( 'oversio_enabled_abilities', array( 'oversio/get-users' ) );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_get_users_is_in_registry(): void {
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayHasKey( 'aafm/get-users', $registry );
-		$this->assertSame( 'reads', $registry['aafm/get-users']['group'] );
-		$this->assertSame( 'read', $registry['aafm/get-users']['risk'] );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayHasKey( 'oversio/get-users', $registry );
+		$this->assertSame( 'reads', $registry['oversio/get-users']['group'] );
+		$this->assertSame( 'read', $registry['oversio/get-users']['risk'] );
 	}
 
 	/**
@@ -46,10 +46,10 @@ final class UsersReadTest extends TestCase {
 	 */
 	public function test_requires_list_users_cap(): void {
 		$this->acting_as( 'author' );
-		$this->assertFalse( wp_get_ability( 'aafm/get-users' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'oversio/get-users' )->check_permissions( array() ) );
 
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( wp_get_ability( 'aafm/get-users' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'oversio/get-users' )->check_permissions( array() ) );
 	}
 
 	/**
@@ -58,11 +58,11 @@ final class UsersReadTest extends TestCase {
 	 */
 	public function test_denied_enumeration_is_audited(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'aafm/get-users' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'oversio/get-users' )->check_permissions( array() ) );
 
-		$rows  = aafm_query_activity( array( 'status' => 'denied' ) );
+		$rows  = oversio_query_activity( array( 'status' => 'denied' ) );
 		$names = wp_list_pluck( $rows, 'ability' );
-		$this->assertContains( 'aafm/get-users', $names );
+		$this->assertContains( 'oversio/get-users', $names );
 	}
 
 	/**
@@ -85,7 +85,7 @@ final class UsersReadTest extends TestCase {
 		);
 		$hash = get_userdata( $uid )->user_pass;
 
-		$out  = wp_get_ability( 'aafm/get-users' )->execute( array() );
+		$out  = wp_get_ability( 'oversio/get-users' )->execute( array() );
 		$json = (string) wp_json_encode( $out );
 
 		// Email IS exposed (locked reversal); login and the password hash never are.
@@ -113,7 +113,7 @@ final class UsersReadTest extends TestCase {
 		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
 		self::factory()->user->create( array( 'role' => 'subscriber' ) );
 
-		$out = wp_get_ability( 'aafm/get-users' )->execute( array( 'role' => 'editor' ) );
+		$out = wp_get_ability( 'oversio/get-users' )->execute( array( 'role' => 'editor' ) );
 		$ids = wp_list_pluck( $out['users'], 'id' );
 
 		$this->assertContains( $editor, $ids );
@@ -134,7 +134,7 @@ final class UsersReadTest extends TestCase {
 		self::factory()->post->create_many( 3, array( 'post_author' => $author_a ) );
 		self::factory()->post->create( array( 'post_author' => $author_b ) );
 
-		$out    = wp_get_ability( 'aafm/get-users' )->execute( array() );
+		$out    = wp_get_ability( 'oversio/get-users' )->execute( array() );
 		$counts = array();
 		foreach ( $out['users'] as $u ) {
 			$counts[ $u['id'] ] = $u['post_count'];
@@ -162,7 +162,7 @@ final class UsersReadTest extends TestCase {
 		}
 		wp_cache_flush();
 		$before_q = $wpdb->num_queries;
-		wp_get_ability( 'aafm/get-users' )->execute( array( 'per_page' => 50 ) );
+		wp_get_ability( 'oversio/get-users' )->execute( array( 'per_page' => 50 ) );
 		$small_cost = $wpdb->num_queries - $before_q;
 
 		// Add many more authored users; a per-user COUNT(*) would scale the cost up.
@@ -172,7 +172,7 @@ final class UsersReadTest extends TestCase {
 		}
 		wp_cache_flush();
 		$before_q = $wpdb->num_queries;
-		wp_get_ability( 'aafm/get-users' )->execute( array( 'per_page' => 50 ) );
+		wp_get_ability( 'oversio/get-users' )->execute( array( 'per_page' => 50 ) );
 		$large_cost = $wpdb->num_queries - $before_q;
 
 		// With batching the cost is flat-ish; the old N+1 added ~12 extra COUNT(*)
@@ -185,7 +185,7 @@ final class UsersReadTest extends TestCase {
 	}
 
 	/**
-	 * LOCKED reversal at the redactor layer: aafm_redact_user() exposes email but
+	 * LOCKED reversal at the redactor layer: oversio_redact_user() exposes email but
 	 * never the login or the password hash. This pins the shape both the list and
 	 * the single-user assembler build on.
 	 */
@@ -199,7 +199,7 @@ final class UsersReadTest extends TestCase {
 			)
 		);
 		$user = get_userdata( $uid );
-		$out  = aafm_redact_user( $user, 0 );
+		$out  = oversio_redact_user( $user, 0 );
 
 		// LOCKED reversal: email IS now part of the user read shape.
 		$this->assertSame( 'show@example.com', $out['email'] ?? null );
@@ -223,7 +223,7 @@ final class UsersReadTest extends TestCase {
 				'description' => 'Bio text here',
 			)
 		);
-		$out = aafm_rich_user( get_userdata( $uid ), 0 );
+		$out = oversio_rich_user( get_userdata( $uid ), 0 );
 
 		$this->assertSame( 'rich@example.com', $out['email'] );      // From the lean redactor.
 		$this->assertArrayHasKey( 'registered', $out );              // Rich-only.
@@ -237,9 +237,9 @@ final class UsersReadTest extends TestCase {
 	 * Enable + register the whole catalog so by-id reads like get-user resolve.
 	 */
 	private function register_users(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_get_user_returns_rich_shape_and_requires_list_users(): void {
@@ -254,13 +254,13 @@ final class UsersReadTest extends TestCase {
 		// Subscriber denied (no list_users).
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/get-user' )->check_permissions( array( 'user_id' => $target ) ),
+			wp_get_ability( 'oversio/get-user' )->check_permissions( array( 'user_id' => $target ) ),
 			'get-user must deny a subscriber.'
 		);
 
 		// Admin allowed; gets the rich shape incl. email.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => $target ) );
+		$res = wp_get_ability( 'oversio/get-user' )->execute( array( 'user_id' => $target ) );
 		$this->assertIsArray( $res );
 		$this->assertSame( 'one@example.com', $res['user']['email'] ?? null );
 		$this->assertArrayHasKey( 'registered', $res['user'] );
@@ -269,7 +269,7 @@ final class UsersReadTest extends TestCase {
 	public function test_get_user_unknown_id_is_a_clean_error(): void {
 		$this->register_users();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/get-user' )->execute( array( 'user_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/get-user' )->execute( array( 'user_id' => 999999 ) );
 		$this->assertInstanceOf( \WP_Error::class, $res );
 	}
 }

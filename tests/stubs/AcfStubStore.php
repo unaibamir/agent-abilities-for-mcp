@@ -11,7 +11,7 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests;
+namespace Oversio\Tests;
 
 /**
  * Process-wide backing store for the ACF host stubs.

@@ -16,7 +16,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_activity_log_definitions' );
 
 /**
  * Contribute the activity-log definition to the registry.
@@ -24,28 +24,28 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_activity_log_definitions( array $registry ): array {
-	$registry['aafm/get-activity-log'] = array(
+function oversio_register_activity_log_definitions( array $registry ): array {
+	$registry['oversio/get-activity-log'] = array(
 		'label'        => __( 'Get activity log', 'oversio-agent-abilities' ),
 		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, and the timestamp. Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'aafm_args_get_activity_log',
+		'args_builder' => 'oversio_args_get_activity_log',
 	);
 	return $registry;
 }
 
 /**
- * Args for aafm/get-activity-log.
+ * Args for oversio/get-activity-log.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_activity_log(): array {
+function oversio_args_get_activity_log(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-activity-log' ),
-		'description'         => aafm_ability_description( 'aafm/get-activity-log' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-activity-log' ),
+		'description'         => oversio_ability_description( 'oversio/get-activity-log' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -57,7 +57,7 @@ function aafm_args_get_activity_log(): array {
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PAGE_MAX,
 				),
 				'per_page' => array(
 					'type'    => 'integer',
@@ -74,8 +74,8 @@ function aafm_args_get_activity_log(): array {
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_activity_log',
-		'permission_callback' => 'aafm_perm_manage_options',
+		'execute_callback'    => 'oversio_exec_get_activity_log',
+		'permission_callback' => 'oversio_perm_manage_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -87,16 +87,16 @@ function aafm_args_get_activity_log(): array {
 }
 
 /**
- * Execute aafm/get-activity-log.
+ * Execute oversio/get-activity-log.
  *
- * Passes the (validated) filters straight to aafm_query_activity(), which caps per_page at
+ * Passes the (validated) filters straight to oversio_query_activity(), which caps per_page at
  * 200 and orders most-recent-first, then redacts each row to the safe field set — never
  * source_ip.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_get_activity_log( array $input ): array {
+function oversio_exec_get_activity_log( array $input ): array {
 	$args = array();
 	if ( ! empty( $input['status'] ) ) {
 		$args['status'] = (string) $input['status'];
@@ -112,7 +112,7 @@ function aafm_exec_get_activity_log( array $input ): array {
 	}
 
 	$entries = array();
-	foreach ( aafm_query_activity( $args ) as $row ) {
+	foreach ( oversio_query_activity( $args ) as $row ) {
 		$entries[] = array(
 			'id'                => isset( $row['id'] ) ? (int) $row['id'] : 0,
 			'ability'           => isset( $row['ability'] ) ? (string) $row['ability'] : '',
@@ -128,7 +128,7 @@ function aafm_exec_get_activity_log( array $input ): array {
 	// total counts the set narrowed by the optional status filter (the count helper supports
 	// status only); when an ability filter is also supplied, total still reflects the status
 	// scope and may exceed the per-ability entries shown. See the output_schema note.
-	$total = aafm_activity_count_filtered( isset( $args['status'] ) ? (string) $args['status'] : null );
+	$total = oversio_activity_count_filtered( isset( $args['status'] ) ? (string) $args['status'] : null );
 
 	return array(
 		'entries' => $entries,

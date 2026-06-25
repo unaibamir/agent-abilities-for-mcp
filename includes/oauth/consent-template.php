@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * @param string $site_name The site display name.
  * @return string One or two characters (already plain text; escape on output).
  */
-function aafm_oauth_site_initials( string $site_name ): string {
+function oversio_oauth_site_initials( string $site_name ): string {
 	$trimmed = trim( $site_name );
 	$words   = preg_split( '/\s+/', $trimmed );
 	if ( ! is_array( $words ) ) {
@@ -70,7 +70,7 @@ function aafm_oauth_site_initials( string $site_name ): string {
  *                                  and hidden_inputs (string[] of pre-escaped inputs).
  * @return void
  */
-function aafm_oauth_render_consent_page( array $view ): void {
+function oversio_oauth_render_consent_page( array $view ): void {
 	$client_name   = isset( $view['client_name'] ) ? (string) $view['client_name'] : '';
 	$user_login    = isset( $view['user_login'] ) ? (string) $view['user_login'] : '';
 	$site_name     = isset( $view['site_name'] ) ? (string) $view['site_name'] : '';
@@ -81,7 +81,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 		: array();
 
 	$lang       = esc_attr( get_bloginfo( 'language' ) );
-	$initials   = esc_html( aafm_oauth_site_initials( $site_name ) );
+	$initials   = esc_html( oversio_oauth_site_initials( $site_name ) );
 	$plain_site = esc_html( $site_name );
 
 	/* translators: 1: client/app name, 2: site name. */
@@ -154,10 +154,10 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// Register and flush the consent stylesheet through the enqueue API. This page builds
 	// its own <head> and exits (no wp_head), so we print the queued handle here directly;
 	// the CSP allows style-src 'self' for the resulting same-origin <link>.
-	$consent_css_path = AAFM_PLUGIN_DIR . 'assets/consent.css';
-	$consent_css_ver  = file_exists( $consent_css_path ) ? (string) filemtime( $consent_css_path ) : AAFM_VERSION;
-	wp_enqueue_style( 'aafm-consent', plugins_url( 'assets/consent.css', AAFM_PLUGIN_FILE ), array(), $consent_css_ver );
-	wp_print_styles( 'aafm-consent' );
+	$consent_css_path = OVERSIO_PLUGIN_DIR . 'assets/consent.css';
+	$consent_css_ver  = file_exists( $consent_css_path ) ? (string) filemtime( $consent_css_path ) : OVERSIO_VERSION;
+	wp_enqueue_style( 'oversio-consent', plugins_url( 'assets/consent.css', OVERSIO_PLUGIN_FILE ), array(), $consent_css_ver );
+	wp_print_styles( 'oversio-consent' );
 	echo '</head>';
 	echo '<body>';
 	echo '<main>';
@@ -197,11 +197,11 @@ function aafm_oauth_render_consent_page( array $view ): void {
 		echo $input; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-rendered, attribute-escaped input.
 	}
 	printf(
-		'<button type="submit" name="aafm_oauth_decision" value="approve" class="aafm-btn aafm-btn-primary">%s</button>',
+		'<button type="submit" name="oversio_oauth_decision" value="approve" class="oversio-btn oversio-btn-primary">%s</button>',
 		esc_html__( 'Approve & connect', 'oversio-agent-abilities' )
 	);
 	printf(
-		'<button type="submit" name="aafm_oauth_decision" value="deny" class="aafm-btn aafm-btn-secondary">%s</button>',
+		'<button type="submit" name="oversio_oauth_decision" value="deny" class="oversio-btn oversio-btn-secondary">%s</button>',
 		esc_html__( 'Deny', 'oversio-agent-abilities' )
 	);
 	echo '</form>';

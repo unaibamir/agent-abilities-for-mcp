@@ -24,14 +24,14 @@ defined( 'ABSPATH' ) || exit;
  * only when it was never set or holds a genuinely truthy value.
  *
  * This is the ONE fail-closed reader for every OAuth on/off toggle. Both
- * aafm_oauth_enabled() and aafm_oauth_dcr_enabled() route through it; there is no raw
+ * oversio_oauth_enabled() and oversio_oauth_dcr_enabled() route through it; there is no raw
  * get_option() boolean read of those toggles anywhere (verified), so a toggle stored in any
  * falsy form ('0', '', 'false', 'no', 'off', false, 0) reads as off rather than failing open.
  *
  * @param string $key The toggle option name.
  * @return bool True when the toggle is enabled, false when explicitly disabled.
  */
-function aafm_oauth_option_is_on( string $key ): bool {
+function oversio_oauth_option_is_on( string $key ): bool {
 	$value = get_option( $key, '1' );
 
 	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
@@ -44,8 +44,8 @@ function aafm_oauth_option_is_on( string $key ): bool {
  *
  * @return bool True unless the operator has explicitly disabled OAuth.
  */
-function aafm_oauth_enabled(): bool {
-	return aafm_oauth_option_is_on( 'aafm_oauth_enabled' );
+function oversio_oauth_enabled(): bool {
+	return oversio_oauth_option_is_on( 'oversio_oauth_enabled' );
 }
 
 /**
@@ -53,8 +53,8 @@ function aafm_oauth_enabled(): bool {
  *
  * @return bool True unless the operator has explicitly disabled DCR.
  */
-function aafm_oauth_dcr_enabled(): bool {
-	return aafm_oauth_option_is_on( 'aafm_oauth_dcr_enabled' );
+function oversio_oauth_dcr_enabled(): bool {
+	return oversio_oauth_option_is_on( 'oversio_oauth_dcr_enabled' );
 }
 
 /**
@@ -69,15 +69,15 @@ function aafm_oauth_dcr_enabled(): bool {
  *
  * @return void
  */
-function aafm_oauth_seed_default_options(): void {
+function oversio_oauth_seed_default_options(): void {
 	// Both toggles are read on EVERY request that could touch the OAuth surface:
-	// aafm_oauth_enabled() gates the CORS filters at bootstrap and the .well-known handler on
-	// parse_request, and aafm_oauth_request_targets_mcp_route() consults it on
+	// oversio_oauth_enabled() gates the CORS filters at bootstrap and the .well-known handler on
+	// parse_request, and oversio_oauth_request_targets_mcp_route() consults it on
 	// determine_current_user. They must stay autoloaded ('yes', the add_option default) so those
 	// hot-path reads never trigger a separate query — switching them to autoload 'no' would be a
 	// per-request regression, not an improvement.
-	add_option( 'aafm_oauth_enabled', '1', '', true );
-	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
+	add_option( 'oversio_oauth_enabled', '1', '', true );
+	add_option( 'oversio_oauth_dcr_enabled', '1', '', true );
 }
 
 /**
@@ -89,9 +89,9 @@ function aafm_oauth_seed_default_options(): void {
  *
  * @return array<string, mixed>
  */
-function aafm_oauth_protected_resource_metadata(): array {
+function oversio_oauth_protected_resource_metadata(): array {
 	return array(
-		'resource'                 => aafm_endpoint_url(),
+		'resource'                 => oversio_endpoint_url(),
 		'authorization_servers'    => array( home_url() ),
 		'bearer_methods_supported' => array( 'header' ),
 	);
@@ -106,10 +106,10 @@ function aafm_oauth_protected_resource_metadata(): array {
  *
  * @return array<string, mixed>
  */
-function aafm_oauth_authorization_server_metadata(): array {
+function oversio_oauth_authorization_server_metadata(): array {
 	return array(
 		'issuer'                                => home_url(),
-		'authorization_endpoint'                => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
+		'authorization_endpoint'                => add_query_arg( 'oversio_oauth', 'authorize', home_url( '/' ) ),
 		'token_endpoint'                        => rest_url( 'oversio-agent-abilities/oauth/token' ),
 		'registration_endpoint'                 => rest_url( 'oversio-agent-abilities/oauth/register' ),
 		'revocation_endpoint'                   => rest_url( 'oversio-agent-abilities/oauth/revoke' ),
@@ -125,11 +125,11 @@ function aafm_oauth_authorization_server_metadata(): array {
  *
  * Attached to the transport's 401 so a client that arrives unauthenticated learns
  * where to discover the authorization server (RFC 9728 resource_metadata). Points
- * at the same .well-known document aafm_oauth_maybe_serve_well_known() emits.
+ * at the same .well-known document oversio_oauth_maybe_serve_well_known() emits.
  *
  * @return string The Bearer challenge value for the WWW-Authenticate header.
  */
-function aafm_oauth_challenge_header(): string {
+function oversio_oauth_challenge_header(): string {
 	return 'Bearer resource_metadata="' . home_url( '/.well-known/oauth-protected-resource' ) . '"';
 }
 
@@ -153,10 +153,10 @@ function aafm_oauth_challenge_header(): string {
  * @param mixed           $request  The originating request (WP_REST_Request on the REST path).
  * @return mixed The response, with the header set when the condition matches.
  */
-function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
+function oversio_oauth_filter_rest_challenge( $response, $server, $request ) {
 	unset( $server );
 
-	if ( ! aafm_oauth_enabled() ) {
+	if ( ! oversio_oauth_enabled() ) {
 		return $response;
 	}
 
@@ -171,11 +171,11 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
 	// The MCP route the adapter registers (single-sourced in bootstrap.php).
-	if ( aafm_mcp_rest_route() !== $route ) {
+	if ( oversio_mcp_rest_route() !== $route ) {
 		return $response;
 	}
 
-	$response->header( 'WWW-Authenticate', aafm_oauth_challenge_header() );
+	$response->header( 'WWW-Authenticate', oversio_oauth_challenge_header() );
 
 	return $response;
 }
@@ -194,7 +194,7 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
  * @param array<int, string> $headers Header names WordPress already exposes.
  * @return array<int, string> The exposed set plus the OAuth + MCP session headers.
  */
-function aafm_oauth_filter_exposed_cors_headers( array $headers ): array {
+function oversio_oauth_filter_exposed_cors_headers( array $headers ): array {
 	foreach ( array( 'WWW-Authenticate', 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
 		$headers[] = $header;
 	}
@@ -214,7 +214,7 @@ function aafm_oauth_filter_exposed_cors_headers( array $headers ): array {
  * @param array<int, string> $headers Header names WordPress already allows.
  * @return array<int, string> The allowed set plus the MCP session + protocol headers.
  */
-function aafm_oauth_filter_allowed_cors_headers( array $headers ): array {
+function oversio_oauth_filter_allowed_cors_headers( array $headers ): array {
 	foreach ( array( 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
 		$headers[] = $header;
 	}
@@ -231,7 +231,7 @@ function aafm_oauth_filter_allowed_cors_headers( array $headers ): array {
  * @param string $path Request path (no query string).
  * @return string 'protected-resource', 'authorization-server', or '' for no match.
  */
-function aafm_oauth_match_well_known( string $path ): string {
+function oversio_oauth_match_well_known( string $path ): string {
 	$path = ltrim( $path, '/' );
 
 	if ( '.well-known/oauth-protected-resource' === $path ) {
@@ -255,8 +255,8 @@ function aafm_oauth_match_well_known( string $path ): string {
  *
  * @return void
  */
-function aafm_oauth_maybe_serve_well_known(): void {
-	if ( ! aafm_oauth_enabled() ) {
+function oversio_oauth_maybe_serve_well_known(): void {
+	if ( ! oversio_oauth_enabled() ) {
 		return;
 	}
 
@@ -265,20 +265,20 @@ function aafm_oauth_maybe_serve_well_known(): void {
 		: '';
 
 	$path  = (string) wp_parse_url( $request_uri, PHP_URL_PATH );
-	$which = aafm_oauth_match_well_known( $path );
+	$which = oversio_oauth_match_well_known( $path );
 
 	if ( '' === $which ) {
 		return;
 	}
 
-	if ( aafm_oauth_https_required() && ! is_ssl() ) {
+	if ( oversio_oauth_https_required() && ! is_ssl() ) {
 		status_header( 403 );
 		exit;
 	}
 
 	$metadata = 'protected-resource' === $which
-		? aafm_oauth_protected_resource_metadata()
-		: aafm_oauth_authorization_server_metadata();
+		? oversio_oauth_protected_resource_metadata()
+		: oversio_oauth_authorization_server_metadata();
 
 	header( 'Cache-Control: no-store' );
 	header( 'Content-Type: application/json; charset=utf-8' );

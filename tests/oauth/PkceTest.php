@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 /**
  * Verifies PKCE S256 challenge derivation and challenge-format validation.
@@ -35,8 +35,8 @@ class PkceTest extends TestCase {
 		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 		$challenge = $this->challenge_for( $verifier );
 
-		$this->assertTrue( aafm_pkce_verify( $verifier, $challenge ) );
-		$this->assertFalse( aafm_pkce_verify( 'wrong-verifier', $challenge ) );
+		$this->assertTrue( oversio_pkce_verify( $verifier, $challenge ) );
+		$this->assertFalse( oversio_pkce_verify( 'wrong-verifier', $challenge ) );
 	}
 
 	/**
@@ -46,9 +46,9 @@ class PkceTest extends TestCase {
 		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
 		$challenge = $this->challenge_for( $verifier );
 
-		$this->assertFalse( aafm_pkce_verify( '', $challenge ) );
-		$this->assertFalse( aafm_pkce_verify( $verifier, '' ) );
-		$this->assertFalse( aafm_pkce_verify( '', '' ) );
+		$this->assertFalse( oversio_pkce_verify( '', $challenge ) );
+		$this->assertFalse( oversio_pkce_verify( $verifier, '' ) );
+		$this->assertFalse( oversio_pkce_verify( '', '' ) );
 	}
 
 	/**
@@ -58,24 +58,24 @@ class PkceTest extends TestCase {
 		$challenge = $this->challenge_for( 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk' );
 
 		$this->assertSame( 43, strlen( $challenge ) );
-		$this->assertTrue( aafm_pkce_is_valid_challenge( $challenge ) );
+		$this->assertTrue( oversio_pkce_is_valid_challenge( $challenge ) );
 	}
 
 	/**
 	 * The 43- and 128-character length boundaries are both accepted.
 	 */
 	public function test_valid_challenge_accepts_length_boundaries(): void {
-		$this->assertTrue( aafm_pkce_is_valid_challenge( str_repeat( 'a', 43 ) ) );
-		$this->assertTrue( aafm_pkce_is_valid_challenge( str_repeat( 'a', 128 ) ) );
+		$this->assertTrue( oversio_pkce_is_valid_challenge( str_repeat( 'a', 43 ) ) );
+		$this->assertTrue( oversio_pkce_is_valid_challenge( str_repeat( 'a', 128 ) ) );
 	}
 
 	/**
 	 * Challenges shorter than 43 or longer than 128 characters are rejected.
 	 */
 	public function test_valid_challenge_rejects_out_of_range_lengths(): void {
-		$this->assertFalse( aafm_pkce_is_valid_challenge( str_repeat( 'a', 42 ) ) );
-		$this->assertFalse( aafm_pkce_is_valid_challenge( str_repeat( 'a', 129 ) ) );
-		$this->assertFalse( aafm_pkce_is_valid_challenge( '' ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( str_repeat( 'a', 42 ) ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( str_repeat( 'a', 129 ) ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( '' ) );
 	}
 
 	/**
@@ -84,10 +84,10 @@ class PkceTest extends TestCase {
 	public function test_valid_challenge_rejects_disallowed_characters(): void {
 		$base = str_repeat( 'a', 42 );
 
-		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . '+' ) );
-		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . '/' ) );
-		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . '=' ) );
-		$this->assertFalse( aafm_pkce_is_valid_challenge( $base . ' ' ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( $base . '+' ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( $base . '/' ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( $base . '=' ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( $base . ' ' ) );
 	}
 
 	/**
@@ -97,6 +97,6 @@ class PkceTest extends TestCase {
 	 * anchor with `\z` to reject a newline at the OAuth authorization trust boundary.
 	 */
 	public function test_valid_challenge_rejects_trailing_newline(): void {
-		$this->assertFalse( aafm_pkce_is_valid_challenge( str_repeat( 'a', 43 ) . "\n" ) );
+		$this->assertFalse( oversio_pkce_is_valid_challenge( str_repeat( 'a', 43 ) . "\n" ) );
 	}
 }

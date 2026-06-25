@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — order, order-note, and order-refund reads and writes (sub-slice W4-WC2).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_orders_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_orders_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_orders_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_orders_full_definitions' );
 
 /**
  * Contribute the WooCommerce orders definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_orders_ful
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_orders_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_orders_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_orders_registry_definitions() );
+	return array_merge( $registry, oversio_wc_orders_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce order definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_orders_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_orders_registry_definitions() );
+function oversio_register_wc_orders_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_orders_registry_definitions() );
 }
 
 /**
@@ -53,7 +53,7 @@ function aafm_register_wc_orders_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_orders_registry_definitions(): array {
+function oversio_wc_orders_registry_definitions(): array {
 	return array(
 		// Orders (sub-slice W4-WC2) — list is lean (no PII), get returns full billing/shipping PII
 		// under the Integrations security disclaimer. Both gate on the flat, object-independent
@@ -61,97 +61,97 @@ function aafm_wc_orders_registry_definitions(): array {
 		// case). PII exposure in wc-get-order is intentional: the revised WC PII stance in spec 48-
 		// mandates full billing/shipping on the single-order read, gated by manage_woocommerce and
 		// audited, not stripped.
-		'aafm/wc-list-orders'         => array(
+		'oversio/wc-list-orders'         => array(
 			'label'        => __( 'List WooCommerce orders', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_orders',
+			'args_builder' => 'oversio_args_wc_list_orders',
 		),
 
-		'aafm/wc-get-order'           => array(
+		'oversio/wc-get-order'           => array(
 			'label'        => __( 'Get WooCommerce order', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address (including email and phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_order',
+			'args_builder' => 'oversio_args_wc_get_order',
 		),
 
 		// Order writes (sub-slice W4-WC2.2) — create, update, focused status-only update.
-		'aafm/wc-create-order'        => array(
+		'oversio/wc-create-order'        => array(
 			'label'        => __( 'Create WooCommerce order', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce order from optional status, customer id, billing, shipping, and line items. Returns the full order shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_order',
+			'args_builder' => 'oversio_args_wc_create_order',
 		),
 
-		'aafm/wc-update-order'        => array(
+		'oversio/wc-update-order'        => array(
 			'label'        => __( 'Update WooCommerce order', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce order by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_order',
+			'args_builder' => 'oversio_args_wc_update_order',
 		),
 
-		'aafm/wc-update-order-status' => array(
+		'oversio/wc-update-order-status' => array(
 			'label'        => __( 'Update WooCommerce order status', 'oversio-agent-abilities' ),
 			'description'  => __( 'Sets the status of a WooCommerce order by id. Accepts both the short form (e.g. "completed") and the wc-prefixed form (e.g. "wc-completed"). Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_order_status',
+			'args_builder' => 'oversio_args_wc_update_order_status',
 		),
 
 		// Order notes (sub-slice W4-WC2.3 Group B).
-		'aafm/wc-list-order-notes'    => array(
+		'oversio/wc-list-order-notes'    => array(
 			'label'        => __( 'List WooCommerce order notes', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists all notes on a WooCommerce order by order id. Returns each note\'s id, text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_order_notes',
+			'args_builder' => 'oversio_args_wc_list_order_notes',
 		),
 
-		'aafm/wc-create-order-note'   => array(
+		'oversio/wc-create-order-note'   => array(
 			'label'        => __( 'Create WooCommerce order note', 'oversio-agent-abilities' ),
 			'description'  => __( 'Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing so it appears in the customer\'s account. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_order_note',
+			'args_builder' => 'oversio_args_wc_create_order_note',
 		),
 
 		// Order refunds (sub-slice W4-WC2.3 Group C).
-		'aafm/wc-list-order-refunds'  => array(
+		'oversio/wc-list-order-refunds'  => array(
 			'label'        => __( 'List WooCommerce order refunds', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists all refunds on a WooCommerce order by order id. Returns each refund\'s id, amount, reason, and date. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_order_refunds',
+			'args_builder' => 'oversio_args_wc_list_order_refunds',
 		),
 
-		'aafm/wc-get-order-refund'    => array(
+		'oversio/wc-get-order-refund'    => array(
 			'label'        => __( 'Get WooCommerce order refund', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads a single refund by refund id. Returns the refund amount, reason, and date. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_order_refund',
+			'args_builder' => 'oversio_args_wc_get_order_refund',
 		),
 
-		'aafm/wc-create-order-refund' => array(
+		'oversio/wc-create-order-refund' => array(
 			'label'        => __( 'Create WooCommerce order refund', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a refund on a WooCommerce order by order id. Accepts an amount, optional reason, and optional line-item breakdown. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_order_refund',
+			'args_builder' => 'oversio_args_wc_create_order_refund',
 		),
 
 	);
@@ -163,7 +163,7 @@ function aafm_wc_orders_registry_definitions(): array {
  * @param int $id Order id.
  * @return \WC_Order|null
  */
-function aafm_wc_get_order_object( int $id ): ?\WC_Order {
+function oversio_wc_get_order_object( int $id ): ?\WC_Order {
 	if ( $id < 1 || ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
@@ -178,14 +178,14 @@ function aafm_wc_get_order_object( int $id ): ?\WC_Order {
  * @param \WC_Order $order Order.
  * @return array<string,mixed>
  */
-function aafm_redact_wc_order( \WC_Order $order ): array {
+function oversio_redact_wc_order( \WC_Order $order ): array {
 	return array(
 		'id'           => (int) $order->get_id(),
 		'number'       => (string) $order->get_order_number(),
 		'status'       => (string) $order->get_status(),
 		'total'        => (string) $order->get_total(),
 		'currency'     => (string) $order->get_currency(),
-		'date_created' => aafm_wc_date_string( $order->get_date_created() ),
+		'date_created' => oversio_wc_date_string( $order->get_date_created() ),
 		'customer_id'  => (int) $order->get_customer_id(),
 	);
 }
@@ -198,12 +198,12 @@ function aafm_redact_wc_order( \WC_Order $order ): array {
  * disclaimer, gated by manage_woocommerce and audited. Do NOT strip or opt-in-gate it.
  *
  * Billing and shipping maps are cast with (object) so an empty address block encodes as {}
- * not [] in JSON (the same pattern as aafm_rich_wc_product's attributes map).
+ * not [] in JSON (the same pattern as oversio_rich_wc_product's attributes map).
  *
  * @param \WC_Order $order Order.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_order( \WC_Order $order ): array {
+function oversio_rich_wc_order( \WC_Order $order ): array {
 	// Line items: each raw item from get_items() is mapped to a clean scalar shape.
 	$line_items = array();
 	foreach ( (array) $order->get_items() as $item ) {
@@ -267,8 +267,8 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 		'number'        => (string) $order->get_order_number(),
 		'status'        => (string) $order->get_status(),
 		'currency'      => (string) $order->get_currency(),
-		'date_created'  => aafm_wc_date_string( $order->get_date_created() ),
-		'date_paid'     => aafm_wc_date_string( $order->get_date_paid() ),
+		'date_created'  => oversio_wc_date_string( $order->get_date_created() ),
+		'date_paid'     => oversio_wc_date_string( $order->get_date_paid() ),
 		'customer_id'   => (int) $order->get_customer_id(),
 		'customer_note' => (string) $order->get_customer_note(),
 		'line_items'    => $line_items,
@@ -284,15 +284,15 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 }
 
 /**
- * Args for aafm/wc-list-orders.
+ * Args for oversio/wc-list-orders.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_orders(): array {
+function oversio_args_wc_list_orders(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-orders' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-orders' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-orders' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-orders' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -335,8 +335,8 @@ function aafm_args_wc_list_orders(): array {
 				'total'  => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_orders',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_orders',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -348,16 +348,16 @@ function aafm_args_wc_list_orders(): array {
 }
 
 /**
- * Execute aafm/wc-list-orders.
+ * Execute oversio/wc-list-orders.
  *
  * Queries orders via wc_get_orders() with paginate=>true to get the grand total separate from
- * the page slice. Each order in the result is mapped through aafm_redact_wc_order() which
+ * the page slice. Each order in the result is mapped through oversio_redact_wc_order() which
  * returns only the lean fields — no billing/shipping/PII in list rows.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_wc_list_orders( array $input ): array {
+function oversio_exec_wc_list_orders( array $input ): array {
 	$out = array(
 		'orders' => array(),
 		'total'  => 0,
@@ -392,7 +392,7 @@ function aafm_exec_wc_list_orders( array $input ): array {
 
 	foreach ( $orders as $order ) {
 		if ( $order instanceof \WC_Order ) {
-			$out['orders'][] = aafm_redact_wc_order( $order );
+			$out['orders'][] = oversio_redact_wc_order( $order );
 		}
 	}
 	$out['total'] = $total;
@@ -401,15 +401,15 @@ function aafm_exec_wc_list_orders( array $input ): array {
 }
 
 /**
- * Args for aafm/wc-get-order.
+ * Args for oversio/wc-get-order.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_order(): array {
+function oversio_args_wc_get_order(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-order' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-order' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-order' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-order' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -490,8 +490,8 @@ function aafm_args_wc_get_order(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_order',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_order',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -503,21 +503,21 @@ function aafm_args_wc_get_order(): array {
 }
 
 /**
- * Execute aafm/wc-get-order.
+ * Execute oversio/wc-get-order.
  *
  * Resolves the order id through wc_get_order() — not the product wc_get_product(). An unknown
- * id or a non-WC_Order return falls through to aafm_generic_error(). The full shape including
- * customer billing/shipping PII is assembled by aafm_rich_wc_order().
+ * id or a non-WC_Order return falls through to oversio_generic_error(). The full shape including
+ * customer billing/shipping PII is assembled by oversio_rich_wc_order().
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_order( array $input ) {
-	$order = aafm_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
+function oversio_exec_wc_get_order( array $input ) {
+	$order = oversio_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_order( $order );
+	return oversio_rich_wc_order( $order );
 }
 
 // =============================================================================
@@ -533,7 +533,7 @@ function aafm_exec_wc_get_order( array $input ) {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_order_write_properties(): array {
+function oversio_wc_order_write_properties(): array {
 	return array(
 		'status'        => array(
 			'type'        => 'string',
@@ -609,7 +609,7 @@ function aafm_wc_order_write_properties(): array {
  * @param string $status Status slug to test.
  * @return bool
  */
-function aafm_wc_order_status_valid( string $status ): bool {
+function oversio_wc_order_status_valid( string $status ): bool {
 	if ( ! function_exists( 'wc_get_order_statuses' ) ) {
 		return false;
 	}
@@ -634,7 +634,7 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * @param array<string,mixed> $input Validated input (already schema-checked).
  * @return void
  */
-function aafm_wc_apply_order_input( \WC_Order $order, array $input ): void {
+function oversio_wc_apply_order_input( \WC_Order $order, array $input ): void {
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -739,11 +739,11 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): void {
 }
 
 /**
- * The shared output shape for order write results -- mirrors aafm_rich_wc_order() exactly.
+ * The shared output shape for order write results -- mirrors oversio_rich_wc_order() exactly.
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_order_output_properties(): array {
+function oversio_wc_order_output_properties(): array {
 	return array(
 		'id'            => array( 'type' => 'integer' ),
 		'number'        => array( 'type' => 'string' ),
@@ -813,26 +813,26 @@ function aafm_wc_order_output_properties(): array {
 }
 
 /**
- * Args for aafm/wc-create-order.
+ * Args for oversio/wc-create-order.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_order(): array {
+function oversio_args_wc_create_order(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-order' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-order' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-order' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-order' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wc_order_write_properties(),
+			'properties'           => oversio_wc_order_write_properties(),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_order_output_properties(),
+			'properties' => oversio_wc_order_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_order',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_order',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -843,57 +843,57 @@ function aafm_args_wc_create_order(): array {
 }
 
 /**
- * Execute aafm/wc-create-order.
+ * Execute oversio/wc-create-order.
  *
- * Creates a new WC_Order, applies validated input via aafm_wc_apply_order_input(),
- * saves, then returns the full rich shape via aafm_rich_wc_order(). An invalid status
+ * Creates a new WC_Order, applies validated input via oversio_wc_apply_order_input(),
+ * saves, then returns the full rich shape via oversio_rich_wc_order(). An invalid status
  * (not in wc_get_order_statuses()) returns WP_Error before the order is created.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_order( array $input ) {
+function oversio_exec_wc_create_order( array $input ) {
 	if ( ! class_exists( 'WC_Order' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Validate status before creating the order.
 	if ( array_key_exists( 'status', $input ) ) {
-		if ( ! aafm_wc_order_status_valid( (string) $input['status'] ) ) {
-			return aafm_generic_error();
+		if ( ! oversio_wc_order_status_valid( (string) $input['status'] ) ) {
+			return oversio_generic_error();
 		}
 	}
 
 	$order = new \WC_Order();
-	aafm_wc_apply_order_input( $order, $input );
+	oversio_wc_apply_order_input( $order, $input );
 	// Recalculate line + cart totals so the order total reflects its items. Without this the order
 	// total stays at 0.00 even when line_items were added (downstream refunds depend on it).
 	$order->calculate_totals();
 	$id = (int) $order->save();
 
-	$saved = aafm_wc_get_order_object( $id );
+	$saved = oversio_wc_get_order_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_order( $saved );
+	return oversio_rich_wc_order( $saved );
 }
 
 /**
- * Args for aafm/wc-update-order.
+ * Args for oversio/wc-update-order.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_order(): array {
-	$properties             = aafm_wc_order_write_properties();
+function oversio_args_wc_update_order(): array {
+	$properties             = oversio_wc_order_write_properties();
 	$properties['order_id'] = array(
 		'type'    => 'integer',
 		'minimum' => 1,
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-order' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-order' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-order' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-order' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -902,10 +902,10 @@ function aafm_args_wc_update_order(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_order_output_properties(),
+			'properties' => oversio_wc_order_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_order',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_order',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -916,25 +916,25 @@ function aafm_args_wc_update_order(): array {
 }
 
 /**
- * Execute aafm/wc-update-order.
+ * Execute oversio/wc-update-order.
  *
- * Resolves order_id via aafm_wc_get_order_object() (null = generic error), applies
+ * Resolves order_id via oversio_wc_get_order_object() (null = generic error), applies
  * only the sent fields (PATCH semantics -- unsent fields are untouched), saves, then
  * returns the full rich shape. An invalid status returns WP_Error before saving.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_order( array $input ) {
-	$order = aafm_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
+function oversio_exec_wc_update_order( array $input ) {
+	$order = oversio_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Validate status before applying changes.
 	if ( array_key_exists( 'status', $input ) ) {
-		if ( ! aafm_wc_order_status_valid( (string) $input['status'] ) ) {
-			return aafm_generic_error();
+		if ( ! oversio_wc_order_status_valid( (string) $input['status'] ) ) {
+			return oversio_generic_error();
 		}
 	}
 
@@ -942,34 +942,34 @@ function aafm_exec_wc_update_order( array $input ) {
 	$fields = $input;
 	unset( $fields['order_id'] );
 
-	aafm_wc_apply_order_input( $order, $fields );
+	oversio_wc_apply_order_input( $order, $fields );
 	$order->save();
 
-	$saved = aafm_wc_get_order_object( $order->get_id() );
+	$saved = oversio_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_order( $saved );
+	return oversio_rich_wc_order( $saved );
 }
 
 // =============================================================================
-// aafm/wc-update-order-status
+// oversio/wc-update-order-status
 // =============================================================================
 
 /**
- * Args for aafm/wc-update-order-status.
+ * Args for oversio/wc-update-order-status.
  *
  * Closed schema: only order_id and status are accepted. Both are required.
  * Status accepts both the short form (e.g. "completed") and the wc-prefixed
- * form (e.g. "wc-completed") -- aafm_wc_order_status_valid() handles both.
+ * form (e.g. "wc-completed") -- oversio_wc_order_status_valid() handles both.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_order_status(): array {
+function oversio_args_wc_update_order_status(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-order-status' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-order-status' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-order-status' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-order-status' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -986,10 +986,10 @@ function aafm_args_wc_update_order_status(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_order_output_properties(),
+			'properties' => oversio_wc_order_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_order_status',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_order_status',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -1000,7 +1000,7 @@ function aafm_args_wc_update_order_status(): array {
 }
 
 /**
- * Execute aafm/wc-update-order-status.
+ * Execute oversio/wc-update-order-status.
  *
  * Resolves the order by order_id (null = generic error), validates the status
  * slug against the registered WooCommerce statuses (both short and wc-prefixed
@@ -1010,15 +1010,15 @@ function aafm_args_wc_update_order_status(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_order_status( array $input ) {
-	$order = aafm_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
+function oversio_exec_wc_update_order_status( array $input ) {
+	$order = oversio_wc_get_order_object( (int) ( $input['order_id'] ?? 0 ) );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$status = (string) ( $input['status'] ?? '' );
-	if ( ! aafm_wc_order_status_valid( $status ) ) {
-		return aafm_generic_error();
+	if ( ! oversio_wc_order_status_valid( $status ) ) {
+		return oversio_generic_error();
 	}
 
 	// Strip the wc- prefix before handing to update_status() -- the stub and
@@ -1030,11 +1030,11 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	// is required here so the stub's save() flushes the in-memory data back to WcOrderStubStore.
 	$order->save();
 
-	$saved = aafm_wc_get_order_object( $order->get_id() );
+	$saved = oversio_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_order( $saved );
+	return oversio_rich_wc_order( $saved );
 }
 
 /*
@@ -1045,7 +1045,7 @@ function aafm_exec_wc_update_order_status( array $input ) {
  * Group C: wc-list-order-refunds (R), wc-get-order-refund (R),
  *          wc-create-order-refund (W)
  *
- * All gate on aafm_wc_perm() (manage_woocommerce). Every delete uses the
+ * All gate on oversio_wc_perm() (manage_woocommerce). Every delete uses the
  * WooCommerce object's own ->delete() or wc_delete_order_note() — none is a
  * wp_delete_post/wp_delete_comment literal so the SecurityRegressionTest stays green.
  * --------------------------------------------------------------------------
@@ -1065,7 +1065,7 @@ function aafm_exec_wc_update_order_status( array $input ) {
  * @param int $note_id  Note id.
  * @return object|null stdClass note object or null.
  */
-function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
+function oversio_wc_get_order_note( int $order_id, int $note_id ): ?object {
 	$notes = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	foreach ( $notes as $note ) {
 		// wc_get_order_notes() returns normalized objects whose id lives in ->id (not ->comment_ID).
@@ -1083,7 +1083,7 @@ function aafm_wc_get_order_note( int $order_id, int $note_id ): ?object {
  * @param object $note Note stdClass from wc_get_order_notes().
  * @return array<string,mixed>
  */
-function aafm_wc_redact_note( object $note ): array {
+function oversio_wc_redact_note( object $note ): array {
 	// wc_get_order_notes() returns normalized objects: ->id and ->content (not the raw comment fields).
 	$id            = isset( $note->id ) ? (int) $note->id : 0;
 	$text          = isset( $note->content ) ? (string) $note->content : '';
@@ -1110,7 +1110,7 @@ function aafm_wc_redact_note( object $note ): array {
  *
  * @return array<string,array<string,string>>
  */
-function aafm_wc_note_output_properties(): array {
+function oversio_wc_note_output_properties(): array {
 	return array(
 		'id'            => array( 'type' => 'integer' ),
 		'note'          => array( 'type' => 'string' ),
@@ -1125,7 +1125,7 @@ function aafm_wc_note_output_properties(): array {
  *
  * @return array<string,array<string,string>>
  */
-function aafm_wc_refund_output_properties(): array {
+function oversio_wc_refund_output_properties(): array {
 	return array(
 		'id'           => array( 'type' => 'integer' ),
 		'amount'       => array( 'type' => 'string' ),
@@ -1134,18 +1134,18 @@ function aafm_wc_refund_output_properties(): array {
 	);
 }
 
-// aafm/wc-list-order-notes (R).
+// oversio/wc-list-order-notes (R).
 
 /**
- * Args builder for aafm/wc-list-order-notes.
+ * Args builder for oversio/wc-list-order-notes.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_order_notes(): array {
+function oversio_args_wc_list_order_notes(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-order-notes' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-order-notes' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-order-notes' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-order-notes' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -1164,13 +1164,13 @@ function aafm_args_wc_list_order_notes(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => aafm_wc_note_output_properties(),
+						'properties' => oversio_wc_note_output_properties(),
 					),
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_order_notes',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_order_notes',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -1182,39 +1182,39 @@ function aafm_args_wc_list_order_notes(): array {
 }
 
 /**
- * Execute aafm/wc-list-order-notes.
+ * Execute oversio/wc-list-order-notes.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_order_notes( array $input ) {
+function oversio_exec_wc_list_order_notes( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
-	$order    = aafm_wc_get_order_object( $order_id );
+	$order    = oversio_wc_get_order_object( $order_id );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$raw   = wc_get_order_notes( array( 'order_id' => $order_id ) );
 	$notes = array();
 	foreach ( $raw as $note ) {
-		$notes[] = aafm_wc_redact_note( $note );
+		$notes[] = oversio_wc_redact_note( $note );
 	}
 
 	return array( 'notes' => $notes );
 }
 
-// aafm/wc-create-order-note (W).
+// oversio/wc-create-order-note (W).
 
 /**
- * Args builder for aafm/wc-create-order-note.
+ * Args builder for oversio/wc-create-order-note.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_order_note(): array {
+function oversio_args_wc_create_order_note(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-order-note' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-order-note' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-order-note' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-order-note' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -1243,8 +1243,8 @@ function aafm_args_wc_create_order_note(): array {
 				'date_created'  => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_order_note',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_order_note',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -1255,32 +1255,32 @@ function aafm_args_wc_create_order_note(): array {
 }
 
 /**
- * Execute aafm/wc-create-order-note.
+ * Execute oversio/wc-create-order-note.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_order_note( array $input ) {
+function oversio_exec_wc_create_order_note( array $input ) {
 	$order_id      = (int) ( $input['order_id'] ?? 0 );
 	$note_text     = sanitize_text_field( (string) ( $input['note'] ?? '' ) );
 	$customer_note = ! empty( $input['customer_note'] );
 
-	$order = aafm_wc_get_order_object( $order_id );
+	$order = oversio_wc_get_order_object( $order_id );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$note_id = $order->add_order_note( $note_text, $customer_note, true );
 	if ( ! $note_id ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Re-read the saved note so the response reflects WooCommerce's stored row (real date_created,
 	// real added_by, normalized content) instead of fabricating a date and hardcoding
 	// added_by_user (B2). Fall back to a minimal truthful shape only if the re-read fails.
-	$saved = aafm_wc_get_order_note( $order_id, (int) $note_id );
+	$saved = oversio_wc_get_order_note( $order_id, (int) $note_id );
 	if ( $saved instanceof \stdClass || is_object( $saved ) ) {
-		return aafm_wc_redact_note( $saved );
+		return oversio_wc_redact_note( $saved );
 	}
 
 	return array(
@@ -1306,7 +1306,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
  * @param int $refund_id Refund id.
  * @return \WC_Order_Refund|null
  */
-function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
+function oversio_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
 	if ( ! function_exists( 'wc_get_order' ) ) {
 		return null;
 	}
@@ -1323,7 +1323,7 @@ function aafm_wc_get_refund_object( int $refund_id ): ?\WC_Order_Refund {
  * @param \WC_Order_Refund $refund Refund object.
  * @return array<string,mixed>
  */
-function aafm_wc_redact_refund( \WC_Order_Refund $refund ): array {
+function oversio_wc_redact_refund( \WC_Order_Refund $refund ): array {
 	$date = $refund->get_date_created();
 	return array(
 		'id'           => $refund->get_id(),
@@ -1333,18 +1333,18 @@ function aafm_wc_redact_refund( \WC_Order_Refund $refund ): array {
 	);
 }
 
-// aafm/wc-list-order-refunds (R).
+// oversio/wc-list-order-refunds (R).
 
 /**
- * Args builder for aafm/wc-list-order-refunds.
+ * Args builder for oversio/wc-list-order-refunds.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_order_refunds(): array {
+function oversio_args_wc_list_order_refunds(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-order-refunds' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-order-refunds' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-order-refunds' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-order-refunds' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -1363,13 +1363,13 @@ function aafm_args_wc_list_order_refunds(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
-						'properties' => aafm_wc_refund_output_properties(),
+						'properties' => oversio_wc_refund_output_properties(),
 					),
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_order_refunds',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_order_refunds',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -1381,41 +1381,41 @@ function aafm_args_wc_list_order_refunds(): array {
 }
 
 /**
- * Execute aafm/wc-list-order-refunds.
+ * Execute oversio/wc-list-order-refunds.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_order_refunds( array $input ) {
+function oversio_exec_wc_list_order_refunds( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
-	$order    = aafm_wc_get_order_object( $order_id );
+	$order    = oversio_wc_get_order_object( $order_id );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$raw     = $order->get_refunds();
 	$refunds = array();
 	foreach ( $raw as $refund ) {
 		if ( $refund instanceof \WC_Order_Refund ) {
-			$refunds[] = aafm_wc_redact_refund( $refund );
+			$refunds[] = oversio_wc_redact_refund( $refund );
 		}
 	}
 
 	return array( 'refunds' => $refunds );
 }
 
-// aafm/wc-get-order-refund (R).
+// oversio/wc-get-order-refund (R).
 
 /**
- * Args builder for aafm/wc-get-order-refund.
+ * Args builder for oversio/wc-get-order-refund.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_order_refund(): array {
+function oversio_args_wc_get_order_refund(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-order-refund' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-order-refund' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-order-refund' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-order-refund' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -1429,10 +1429,10 @@ function aafm_args_wc_get_order_refund(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_refund_output_properties(),
+			'properties' => oversio_wc_refund_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_order_refund',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_order_refund',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -1444,35 +1444,35 @@ function aafm_args_wc_get_order_refund(): array {
 }
 
 /**
- * Execute aafm/wc-get-order-refund.
+ * Execute oversio/wc-get-order-refund.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_order_refund( array $input ) {
+function oversio_exec_wc_get_order_refund( array $input ) {
 	$refund_id = (int) ( $input['refund_id'] ?? 0 );
-	$refund    = aafm_wc_get_refund_object( $refund_id );
+	$refund    = oversio_wc_get_refund_object( $refund_id );
 	if ( null === $refund ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_wc_redact_refund( $refund );
+	return oversio_wc_redact_refund( $refund );
 }
 
-// aafm/wc-create-order-refund (W).
+// oversio/wc-create-order-refund (W).
 
 /**
- * Args builder for aafm/wc-create-order-refund.
+ * Args builder for oversio/wc-create-order-refund.
  *
  * The line_items[] sub-schema also carries additionalProperties:false (MED-4) so
  * smuggled keys inside a line-item are rejected before execute is ever called.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_order_refund(): array {
+function oversio_args_wc_create_order_refund(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-order-refund' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-order-refund' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-order-refund' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-order-refund' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -1512,8 +1512,8 @@ function aafm_args_wc_create_order_refund(): array {
 				'date_created' => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_order_refund',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_order_refund',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -1524,19 +1524,19 @@ function aafm_args_wc_create_order_refund(): array {
 }
 
 /**
- * Execute aafm/wc-create-order-refund.
+ * Execute oversio/wc-create-order-refund.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_order_refund( array $input ) {
+function oversio_exec_wc_create_order_refund( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
 	$amount   = sanitize_text_field( (string) ( $input['amount'] ?? '0.00' ) );
 	$reason   = sanitize_text_field( (string) ( $input['reason'] ?? '' ) );
 
-	$order = aafm_wc_get_order_object( $order_id );
+	$order = oversio_wc_get_order_object( $order_id );
 	if ( null === $order ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$refund_args = array(
@@ -1564,8 +1564,8 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	$refund = wc_create_refund( $refund_args );
 
 	if ( is_wp_error( $refund ) || ! ( $refund instanceof \WC_Order_Refund ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_wc_redact_refund( $refund );
+	return oversio_wc_redact_refund( $refund );
 }

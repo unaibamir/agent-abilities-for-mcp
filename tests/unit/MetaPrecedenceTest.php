@@ -12,9 +12,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Unit;
+namespace Oversio\Tests\Unit;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 final class MetaPrecedenceTest extends TestCase {
@@ -28,8 +28,8 @@ final class MetaPrecedenceTest extends TestCase {
 	 * @return void
 	 */
 	private function set_meta_options( array $allow, array $deny ): void {
-		update_option( 'aafm_allowed_meta_keys', $allow );
-		update_option( 'aafm_denied_meta_keys', $deny );
+		update_option( 'oversio_allowed_meta_keys', $allow );
+		update_option( 'oversio_denied_meta_keys', $deny );
 	}
 
 	/**
@@ -37,7 +37,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_hard_block_beats_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array() );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'session_tokens' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'session_tokens' ) );
 	}
 
 	/**
@@ -45,7 +45,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_hard_block_beats_explicit_allow(): void {
 		$this->set_meta_options( array( 'session_tokens' ), array() );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'session_tokens' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'session_tokens' ) );
 	}
 
 	/**
@@ -53,7 +53,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_beats_explicit_allow(): void {
 		$this->set_meta_options( array( 'foo' ), array( 'foo' ) );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -61,8 +61,8 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_beats_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array( 'foo' ) );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'foo' ) );
-		$this->assertSame( 'bar', aafm_validate_meta_key( 'bar' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'foo' ) );
+		$this->assertSame( 'bar', oversio_validate_meta_key( 'bar' ) );
 	}
 
 	/**
@@ -70,7 +70,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_deny_star_wins_even_with_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array( '*' ) );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -78,7 +78,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_default_empty_is_default_deny(): void {
 		$this->set_meta_options( array(), array() );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( 'foo' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -86,7 +86,7 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_allow_star_exposes_normal_key(): void {
 		$this->set_meta_options( array( '*' ), array() );
-		$this->assertSame( 'foo', aafm_validate_meta_key( 'foo' ) );
+		$this->assertSame( 'foo', oversio_validate_meta_key( 'foo' ) );
 	}
 
 	/**
@@ -95,8 +95,8 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_trailing_whitespace_cannot_smuggle_blocked_and_trims_normal(): void {
 		$this->set_meta_options( array( '*' ), array() );
-		$this->assertInstanceOf( WP_Error::class, aafm_validate_meta_key( ' session_tokens ' ) );
-		$this->assertSame( 'foo', aafm_validate_meta_key( 'foo ' ) );
+		$this->assertInstanceOf( WP_Error::class, oversio_validate_meta_key( ' session_tokens ' ) );
+		$this->assertSame( 'foo', oversio_validate_meta_key( 'foo ' ) );
 	}
 
 	/**
@@ -105,9 +105,9 @@ final class MetaPrecedenceTest extends TestCase {
 	 */
 	public function test_wildcard_sentinel_is_not_an_addressable_key(): void {
 		$this->set_meta_options( array( '*' ), array() );
-		$result = aafm_validate_meta_key( '*' );
+		$result = oversio_validate_meta_key( '*' );
 		$this->assertInstanceOf( WP_Error::class, $result );
-		$this->assertSame( 'aafm_meta_key_not_allowed', $result->get_error_code() );
+		$this->assertSame( 'oversio_meta_key_not_allowed', $result->get_error_code() );
 	}
 
 	/**
@@ -115,19 +115,19 @@ final class MetaPrecedenceTest extends TestCase {
 	 * hard-block / deny-all are indistinguishable to a caller.
 	 */
 	public function test_all_reject_modes_share_one_error_code(): void {
-		$code = 'aafm_meta_key_not_allowed';
+		$code = 'oversio_meta_key_not_allowed';
 
 		$this->set_meta_options( array( '*' ), array() );
-		$hard_block = aafm_validate_meta_key( 'session_tokens' );
+		$hard_block = oversio_validate_meta_key( 'session_tokens' );
 
 		$this->set_meta_options( array( 'foo' ), array( 'foo' ) );
-		$deny = aafm_validate_meta_key( 'foo' );
+		$deny = oversio_validate_meta_key( 'foo' );
 
 		$this->set_meta_options( array( '*' ), array( '*' ) );
-		$deny_all = aafm_validate_meta_key( 'foo' );
+		$deny_all = oversio_validate_meta_key( 'foo' );
 
 		$this->set_meta_options( array(), array() );
-		$not_allowed = aafm_validate_meta_key( 'foo' );
+		$not_allowed = oversio_validate_meta_key( 'foo' );
 
 		$this->assertSame( $code, $hard_block->get_error_code() );
 		$this->assertSame( $code, $deny->get_error_code() );
@@ -146,14 +146,14 @@ final class MetaPrecedenceTest extends TestCase {
 		$id = self::factory()->post->create( array( 'post_type' => 'post' ) );
 		update_post_meta( $id, 'subtitle', 'a custom value' );
 
-		$result = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+		$result = oversio_exec_get_all_post_meta( array( 'post_id' => $id ) );
 
 		$this->assertIsArray( $result );
 		$this->assertEquals( (object) array( 'subtitle' => 'a custom value' ), $result['meta'] );
 
 		// Deny-`*` kill switch beats allow-`*`: the bulk map collapses back to empty.
 		$this->set_meta_options( array( '*' ), array( '*' ) );
-		$result = aafm_exec_get_all_post_meta( array( 'post_id' => $id ) );
+		$result = oversio_exec_get_all_post_meta( array( 'post_id' => $id ) );
 		$this->assertEquals( (object) array(), $result['meta'] );
 	}
 }

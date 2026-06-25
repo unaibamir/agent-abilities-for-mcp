@@ -7,13 +7,13 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 // Task 5 wires revisions.php into the plugin bootstrap's require list. Until then,
-// load the ability file here so its global aafm_* functions resolve for this suite.
-if ( ! function_exists( 'aafm_perm_list_revisions' ) ) {
+// load the ability file here so its global oversio_* functions resolve for this suite.
+if ( ! function_exists( 'oversio_perm_list_revisions' ) ) {
 	require_once dirname( __DIR__, 2 ) . '/includes/abilities/revisions.php';
 }
 
@@ -41,15 +41,15 @@ final class RevisionsTest extends TestCase {
 			)
 		);
 
-		$this->assertTrue( aafm_perm_list_revisions( array( 'post_id' => $pid ) ) );
-		$out = aafm_exec_list_revisions( array( 'post_id' => $pid ) );
+		$this->assertTrue( oversio_perm_list_revisions( array( 'post_id' => $pid ) ) );
+		$out = oversio_exec_list_revisions( array( 'post_id' => $pid ) );
 		$this->assertGreaterThanOrEqual( 2, $out['total'] );
 		$this->assertArrayHasKey( 'id', $out['revisions'][0] );
 		$this->assertArrayNotHasKey( 'content', $out['revisions'][0] );
 
 		$other = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $other );
-		$this->assertFalse( aafm_perm_list_revisions( array( 'post_id' => $pid ) ) );
+		$this->assertFalse( oversio_perm_list_revisions( array( 'post_id' => $pid ) ) );
 	}
 
 	public function test_get_revision_enforces_parent(): void {
@@ -71,14 +71,14 @@ final class RevisionsTest extends TestCase {
 		$rev  = array_shift( $revs );
 
 		$this->assertTrue(
-			aafm_perm_get_revision(
+			oversio_perm_get_revision(
 				array(
 					'post_id'     => $a,
 					'revision_id' => (int) $rev->ID,
 				)
 			)
 		);
-		$out = aafm_exec_get_revision(
+		$out = oversio_exec_get_revision(
 			array(
 				'post_id'     => $a,
 				'revision_id' => (int) $rev->ID,
@@ -88,7 +88,7 @@ final class RevisionsTest extends TestCase {
 
 		$b = self::factory()->post->create( array( 'post_author' => $author ) );
 		$this->assertFalse(
-			aafm_perm_get_revision(
+			oversio_perm_get_revision(
 				array(
 					'post_id'     => $b,
 					'revision_id' => (int) $rev->ID,
@@ -126,7 +126,7 @@ final class RevisionsTest extends TestCase {
 		$content = $oldest->post_content;              // the state we expect to be restored ('v2').
 		$before  = count( $revs );
 
-		$out = aafm_exec_restore_revision(
+		$out = oversio_exec_restore_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $oldest->ID,
@@ -184,7 +184,7 @@ final class RevisionsTest extends TestCase {
 		add_filter( 'wp_insert_post_empty_content', $fail_restore );
 
 		try {
-			$out = aafm_exec_restore_revision(
+			$out = oversio_exec_restore_revision(
 				array(
 					'post_id'     => $pid,
 					'revision_id' => (int) $oldest->ID,
@@ -198,7 +198,7 @@ final class RevisionsTest extends TestCase {
 		$this->assertFalse( is_array( $out ) ); // never a false {restored:true}.
 
 		// The filter is gone: a subsequent restore on the same post now succeeds, proving no leak.
-		$out2 = aafm_exec_restore_revision(
+		$out2 = oversio_exec_restore_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $oldest->ID,
@@ -209,10 +209,10 @@ final class RevisionsTest extends TestCase {
 	}
 
 	public function test_revision_abilities_registered_and_discoverable(): void {
-		$reg = aafm_get_abilities_registry();
-		foreach ( array( 'aafm/list-revisions', 'aafm/get-revision', 'aafm/restore-revision' ) as $name ) {
+		$reg = oversio_get_abilities_registry();
+		foreach ( array( 'oversio/list-revisions', 'oversio/get-revision', 'oversio/restore-revision' ) as $name ) {
 			$this->assertArrayHasKey( $name, $reg );
-			$this->assertNotNull( aafm_ability_list_permission( $name ) );
+			$this->assertNotNull( oversio_ability_list_permission( $name ) );
 		}
 	}
 
@@ -237,7 +237,7 @@ final class RevisionsTest extends TestCase {
 		$other = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $other );
 		$this->assertFalse(
-			aafm_perm_restore_revision(
+			oversio_perm_restore_revision(
 				array(
 					'post_id'     => $pid,
 					'revision_id' => (int) $rev->ID,
@@ -267,7 +267,7 @@ final class RevisionsTest extends TestCase {
 		$rev  = array_shift( $revs );
 
 		// Default format is rendered: the_content wraps paragraphs.
-		$out = aafm_exec_get_revision(
+		$out = oversio_exec_get_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $rev->ID,
@@ -281,7 +281,7 @@ final class RevisionsTest extends TestCase {
 		$this->assertStringContainsString( '<p>', $out['revision']['content'] );
 
 		// Raw format returns the stored markup, unwrapped.
-		$raw = aafm_exec_get_revision(
+		$raw = oversio_exec_get_revision(
 			array(
 				'post_id'        => $pid,
 				'revision_id'    => (int) $rev->ID,
@@ -323,7 +323,7 @@ final class RevisionsTest extends TestCase {
 		$rev  = end( $revs ); // oldest snapshot holds 'beta line'.
 
 		// Without with_diff: diff is null.
-		$out = aafm_exec_get_revision(
+		$out = oversio_exec_get_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $rev->ID,
@@ -332,7 +332,7 @@ final class RevisionsTest extends TestCase {
 		$this->assertNull( $out['revision']['diff'] );
 
 		// With with_diff: a non-empty HTML diff table is returned.
-		$with = aafm_exec_get_revision(
+		$with = oversio_exec_get_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $rev->ID,
@@ -376,7 +376,7 @@ final class RevisionsTest extends TestCase {
 		$rev  = array_shift( $revs );
 
 		// Rendered: body and excerpt must be withheld (empty), no secret markup.
-		$rendered = aafm_exec_get_revision(
+		$rendered = oversio_exec_get_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $rev->ID,
@@ -387,7 +387,7 @@ final class RevisionsTest extends TestCase {
 		$this->assertSame( '', $rendered['revision']['excerpt'], 'Excerpt must be withheld for a password-protected parent.' );
 
 		// Raw: the stored markup must also be withheld.
-		$raw = aafm_exec_get_revision(
+		$raw = oversio_exec_get_revision(
 			array(
 				'post_id'        => $pid,
 				'revision_id'    => (int) $rev->ID,
@@ -397,7 +397,7 @@ final class RevisionsTest extends TestCase {
 		$this->assertSame( '', $raw['revision']['content'], 'Raw stored markup must be withheld for a password-protected parent.' );
 
 		// Diff must not leak the protected body either.
-		$with = aafm_exec_get_revision(
+		$with = oversio_exec_get_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $rev->ID,
@@ -433,14 +433,14 @@ final class RevisionsTest extends TestCase {
 		$target = array_shift( $revs ); // newest revision.
 
 		$this->assertTrue(
-			aafm_perm_delete_revision(
+			oversio_perm_delete_revision(
 				array(
 					'post_id'     => $pid,
 					'revision_id' => (int) $target->ID,
 				)
 			)
 		);
-		$out = aafm_exec_delete_revision(
+		$out = oversio_exec_delete_revision(
 			array(
 				'post_id'     => $pid,
 				'revision_id' => (int) $target->ID,
@@ -460,9 +460,9 @@ final class RevisionsTest extends TestCase {
 	}
 
 	public function test_delete_revision_registered_and_discoverable(): void {
-		$reg = aafm_get_abilities_registry();
-		$this->assertArrayHasKey( 'aafm/delete-revision', $reg );
-		$this->assertNotNull( aafm_ability_list_permission( 'aafm/delete-revision' ) );
+		$reg = oversio_get_abilities_registry();
+		$this->assertArrayHasKey( 'oversio/delete-revision', $reg );
+		$this->assertNotNull( oversio_ability_list_permission( 'oversio/delete-revision' ) );
 	}
 
 	public function test_delete_revision_denied_for_non_parent_editor(): void {
@@ -487,7 +487,7 @@ final class RevisionsTest extends TestCase {
 		$other = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $other );
 		$this->assertFalse(
-			aafm_perm_delete_revision(
+			oversio_perm_delete_revision(
 				array(
 					'post_id'     => $pid,
 					'revision_id' => (int) $rev->ID,
@@ -517,14 +517,14 @@ final class RevisionsTest extends TestCase {
 
 		// $b is editable, but $rev_a is a revision of $a, not $b — must be rejected by perm AND exec.
 		$this->assertFalse(
-			aafm_perm_delete_revision(
+			oversio_perm_delete_revision(
 				array(
 					'post_id'     => $b,
 					'revision_id' => (int) $rev_a->ID,
 				)
 			)
 		);
-		$out = aafm_exec_delete_revision(
+		$out = oversio_exec_delete_revision(
 			array(
 				'post_id'     => $b,
 				'revision_id' => (int) $rev_a->ID,
@@ -550,7 +550,7 @@ final class RevisionsTest extends TestCase {
 				'post_content' => 'L2 body content',
 			)
 		);
-		$out = aafm_exec_list_revisions( array( 'post_id' => $pid ) );
+		$out = oversio_exec_list_revisions( array( 'post_id' => $pid ) );
 		$this->assertNotEmpty( $out['revisions'] );
 		foreach ( $out['revisions'] as $row ) {
 			$this->assertArrayHasKey( 'id', $row );

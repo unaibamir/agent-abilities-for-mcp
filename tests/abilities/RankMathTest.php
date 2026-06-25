@@ -13,10 +13,10 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
-use AAFM\Tests\IntegrationStubs;
+use Oversio\Tests\TestCase;
+use Oversio\Tests\IntegrationStubs;
 use WP_Error;
 
 final class RankMathTest extends TestCase {
@@ -25,11 +25,11 @@ final class RankMathTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->force_integration( 'rankmath' );
 		$this->stub_rankmath();
-		aafm_registry_cache_should_flush( true );
+		oversio_registry_cache_should_flush( true );
 		$this->register_rankmath();
 	}
 
@@ -42,18 +42,18 @@ final class RankMathTest extends TestCase {
 	 * Enable + register the Rank Math set so the abilities can be invoked.
 	 */
 	private function register_rankmath(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/rankmath-get-post',
-				'aafm/rankmath-update-post',
-				'aafm/rankmath-get-schema',
-				'aafm/rankmath-update-schema',
-				'aafm/rankmath-get-head',
+				'oversio/rankmath-get-post',
+				'oversio/rankmath-update-post',
+				'oversio/rankmath-get-schema',
+				'oversio/rankmath-update-schema',
+				'oversio/rankmath-get-head',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_rankmath_get_post_reads_mapped_fields(): void {
@@ -62,7 +62,7 @@ final class RankMathTest extends TestCase {
 		update_post_meta( $post_id, 'rank_math_title', 'RM Title' );
 		update_post_meta( $post_id, 'rank_math_description', 'RM description.' );
 
-		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'rankmath', $res['plugin'] );
 		$this->assertSame( 'RM Title', $res['title'] );
 		$this->assertSame( 'RM description.', $res['description'] );
@@ -87,10 +87,10 @@ final class RankMathTest extends TestCase {
 			'twitter_image'       => 'https://example.com/rm-tw.jpg',
 			'robots'              => 'noindex,nofollow',
 		);
-		$res     = wp_get_ability( 'aafm/rankmath-update-post' )->execute( $payload );
+		$res     = wp_get_ability( 'oversio/rankmath-update-post' )->execute( $payload );
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'A full Rank Math write must succeed.' );
 
-		$read = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'oversio/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
 		foreach ( $payload as $field => $value ) {
 			if ( 'post_id' === $field ) {
 				continue;
@@ -105,7 +105,7 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+		wp_get_ability( 'oversio/rankmath-update-post' )->execute(
 			array(
 				'post_id' => $post_id,
 				'robots'  => 'noindex,nofollow',
@@ -114,7 +114,7 @@ final class RankMathTest extends TestCase {
 		$stored = get_post_meta( $post_id, 'rank_math_robots', true );
 		$this->assertSame( array( 'noindex', 'nofollow' ), $stored, 'rank_math_robots must be stored as an array.' );
 
-		$read = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'oversio/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'noindex,nofollow', $read['robots'], 'The read must implode the array back to the unified string.' );
 	}
 
@@ -122,7 +122,7 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+		wp_get_ability( 'oversio/rankmath-update-post' )->execute(
 			array(
 				'post_id' => $post_id,
 				'robots'  => 'noindex,evil,noarchive',
@@ -136,7 +136,7 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+		wp_get_ability( 'oversio/rankmath-update-post' )->execute(
 			array(
 				'post_id'   => $post_id,
 				'canonical' => 'javascript:alert(1)',
@@ -152,14 +152,14 @@ final class RankMathTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/rankmath-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/rankmath-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
 	public function test_rankmath_update_post_rejects_a_smuggled_field(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+		$res     = wp_get_ability( 'oversio/rankmath-update-post' )->execute(
 			array(
 				'post_id'   => $post_id,
 				'post_type' => 'attachment',
@@ -181,7 +181,7 @@ final class RankMathTest extends TestCase {
 				'name'  => 'Nested Thing',
 			),
 		);
-		$res    = wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+		$res    = wp_get_ability( 'oversio/rankmath-update-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
@@ -194,7 +194,7 @@ final class RankMathTest extends TestCase {
 		$this->assertNotEmpty( get_post_meta( $post_id, 'rank_math_schema_Article', true ), 'The dynamic per-type key must be written.' );
 		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_schema', true ), 'The flat key must NOT be written.' );
 
-		$read = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+		$read = wp_get_ability( 'oversio/rankmath-get-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
@@ -221,14 +221,14 @@ final class RankMathTest extends TestCase {
 				),
 			),
 		);
-		wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+		wp_get_ability( 'oversio/rankmath-update-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
 				'schema'  => $dirty,
 			)
 		);
-		$read = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+		$read = wp_get_ability( 'oversio/rankmath-get-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
@@ -244,7 +244,7 @@ final class RankMathTest extends TestCase {
 	public function test_rankmath_update_schema_refuses_a_non_array_payload(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+		$res     = wp_get_ability( 'oversio/rankmath-update-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
@@ -258,7 +258,7 @@ final class RankMathTest extends TestCase {
 		// The type suffix becomes part of a meta key, so a type with disallowed characters is refused.
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/rankmath-update-schema' )->execute(
+		$res     = wp_get_ability( 'oversio/rankmath-update-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article; DROP',
@@ -272,7 +272,7 @@ final class RankMathTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/rankmath-get-schema' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/rankmath-get-schema' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
@@ -280,7 +280,7 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/rankmath-get-head' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/rankmath-get-head' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'rankmath', $res['plugin'] );
 		$this->assertStringContainsString( 'Rank Math head', $res['head'] );
@@ -293,16 +293,16 @@ final class RankMathTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 		update_post_meta( $post_id, 'rank_math_robots', 'noindex,nofollow' );
 
-		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'noindex,nofollow', $res['robots'], 'A legacy string robots value must read back as that string.' );
 	}
 
 	public function test_rankmath_get_post_unknown_id_is_rejected(): void {
-		// An unknown post_id fails the per-object aafm_perm_seo_post_object gate (get_post() is not a
+		// An unknown post_id fails the per-object oversio_perm_seo_post_object gate (get_post() is not a
 		// WP_Post), so the Abilities API short-circuits with ability_invalid_permissions before the
-		// executor's defence-in-depth aafm_generic_error() can run. Either way the read is refused.
+		// executor's defence-in-depth oversio_generic_error() can run. Either way the read is refused.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
+		$res = wp_get_ability( 'oversio/rankmath-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'ability_invalid_permissions', $res->get_error_code() );
 	}
@@ -310,7 +310,7 @@ final class RankMathTest extends TestCase {
 	public function test_rankmath_get_schema_unknown_id_is_rejected(): void {
 		// Same per-object gate as get-post: an unknown post is refused before execute.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+		$res = wp_get_ability( 'oversio/rankmath-get-schema' )->execute(
 			array(
 				'post_id' => PHP_INT_MAX,
 				'type'    => 'Article',
@@ -327,7 +327,7 @@ final class RankMathTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 		update_post_meta( $post_id, 'rank_math_title', 'Seeded Title' );
 
-		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/rankmath-update-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty PATCH must not error.' );
 		$this->assertSame( 'Seeded Title', $res['title'], 'An empty PATCH must leave the seeded title untouched.' );
 	}
@@ -338,7 +338,7 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/rankmath-get-schema' )->execute(
+		$res = wp_get_ability( 'oversio/rankmath-get-schema' )->execute(
 			array(
 				'post_id' => $post_id,
 				'type'    => 'Article',
@@ -353,12 +353,12 @@ final class RankMathTest extends TestCase {
 
 	public function test_rankmath_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'aafm_integration_active_rankmath' );
-		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'rankmath' ) );
-		aafm_registry_cache_should_flush( true );
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'aafm/rankmath-get-post', $registry );
-		$this->assertArrayNotHasKey( 'aafm/rankmath-update-schema', $registry );
+		remove_all_filters( 'oversio_integration_active_rankmath' );
+		add_filter( 'oversio_rankmath_active', '__return_false', 99 );
+		$this->assertFalse( oversio_integration_active( 'rankmath' ) );
+		oversio_registry_cache_should_flush( true );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'oversio/rankmath-get-post', $registry );
+		$this->assertArrayNotHasKey( 'oversio/rankmath-update-schema', $registry );
 	}
 }

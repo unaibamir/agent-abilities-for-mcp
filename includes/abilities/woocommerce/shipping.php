@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — shipping zone and method reads and writes (sub-slice W4-WC5).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_shipping_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_shipping_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_shipping_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_shipping_full_definitions' );
 
 /**
  * Contribute the WooCommerce shipping definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_shipping_f
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_shipping_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_shipping_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_shipping_registry_definitions() );
+	return array_merge( $registry, oversio_wc_shipping_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce shipping definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_shipping_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_shipping_registry_definitions() );
+function oversio_register_wc_shipping_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_shipping_registry_definitions() );
 }
 
 /**
@@ -53,80 +53,80 @@ function aafm_register_wc_shipping_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_shipping_registry_definitions(): array {
+function oversio_wc_shipping_registry_definitions(): array {
 	return array(
 		// Shipping zones (sub-slice W4-WC5) — zone and method management gated on manage_woocommerce.
-		'aafm/wc-list-shipping-zones'    => array(
+		'oversio/wc-list-shipping-zones'    => array(
 			'label'        => __( 'List WooCommerce shipping zones', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists WooCommerce shipping zones with their id, name, and order. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_shipping_zones',
+			'args_builder' => 'oversio_args_wc_list_shipping_zones',
 		),
 
-		'aafm/wc-get-shipping-zone'      => array(
+		'oversio/wc-get-shipping-zone'      => array(
 			'label'        => __( 'Get WooCommerce shipping zone', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce shipping zone by id, including its name, order, and zone locations. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_shipping_zone',
+			'args_builder' => 'oversio_args_wc_get_shipping_zone',
 		),
 
-		'aafm/wc-create-shipping-zone'   => array(
+		'oversio/wc-create-shipping-zone'   => array(
 			'label'        => __( 'Create WooCommerce shipping zone', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce shipping zone from a name and optional order. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_shipping_zone',
+			'args_builder' => 'oversio_args_wc_create_shipping_zone',
 		),
 
-		'aafm/wc-update-shipping-zone'   => array(
+		'oversio/wc-update-shipping-zone'   => array(
 			'label'        => __( 'Update WooCommerce shipping zone', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce shipping zone by id, changing only the fields you send. An empty request body is a no-op success. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_shipping_zone',
+			'args_builder' => 'oversio_args_wc_update_shipping_zone',
 		),
 
 		// Shipping methods (sub-slice W4-WC5) — always scoped to a zone.
-		'aafm/wc-list-shipping-methods'  => array(
+		'oversio/wc-list-shipping-methods'  => array(
 			'label'        => __( 'List WooCommerce shipping methods', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_shipping_methods',
+			'args_builder' => 'oversio_args_wc_list_shipping_methods',
 		),
 
-		'aafm/wc-get-shipping-method'    => array(
+		'oversio/wc-get-shipping-method'    => array(
 			'label'        => __( 'Get WooCommerce shipping method', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one shipping method from a WooCommerce shipping zone by zone id and instance id. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_shipping_method',
+			'args_builder' => 'oversio_args_wc_get_shipping_method',
 		),
 
-		'aafm/wc-create-shipping-method' => array(
+		'oversio/wc-create-shipping-method' => array(
 			'label'        => __( 'Create WooCommerce shipping method', 'oversio-agent-abilities' ),
 			'description'  => __( 'Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (e.g. flat_rate, free_shipping, local_pickup). Returns the new method shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_shipping_method',
+			'args_builder' => 'oversio_args_wc_create_shipping_method',
 		),
 
-		'aafm/wc-update-shipping-method' => array(
+		'oversio/wc-update-shipping-method' => array(
 			'label'        => __( 'Update WooCommerce shipping method', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send. Returns the updated method shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_shipping_method',
+			'args_builder' => 'oversio_args_wc_update_shipping_method',
 		),
 
 	);
@@ -142,7 +142,7 @@ function aafm_wc_shipping_registry_definitions(): array {
  * @param int $zone_id Zone id (0 = Rest of World).
  * @return \WC_Shipping_Zone|null
  */
-function aafm_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
+function oversio_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
 	if ( $zone_id < 0 || ! class_exists( 'WC_Shipping_Zone' ) ) {
 		return null;
 	}
@@ -159,7 +159,7 @@ function aafm_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
  * @param \WC_Shipping_Zone $zone Zone object.
  * @return array<string,mixed>
  */
-function aafm_redact_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
+function oversio_redact_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
 	$data = $zone->get_data();
 	return array(
 		'id'         => (int) ( $data['id'] ?? $zone->get_id() ),
@@ -174,7 +174,7 @@ function aafm_redact_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
  * @param \WC_Shipping_Zone $zone Zone object.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
+function oversio_rich_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
 	$data = $zone->get_data();
 	return array(
 		'id'             => (int) ( $data['id'] ?? $zone->get_id() ),
@@ -189,7 +189,7 @@ function aafm_rich_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_shipping_zone_output_properties(): array {
+function oversio_wc_shipping_zone_output_properties(): array {
 	return array(
 		'id'             => array( 'type' => 'integer' ),
 		'zone_name'      => array( 'type' => 'string' ),
@@ -206,7 +206,7 @@ function aafm_wc_shipping_zone_output_properties(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_shipping_zone_write_properties(): array {
+function oversio_wc_shipping_zone_write_properties(): array {
 	return array(
 		'zone_name'  => array( 'type' => 'string' ),
 		'zone_order' => array(
@@ -225,7 +225,7 @@ function aafm_wc_shipping_zone_write_properties(): array {
  * @param array<string,mixed> $input Validated input fields (zone_id already extracted).
  * @return void
  */
-function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): void {
+function oversio_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): void {
 	if ( array_key_exists( 'zone_name', $input ) ) {
 		$zone->set_zone_name( sanitize_text_field( (string) $input['zone_name'] ) );
 	}
@@ -239,15 +239,15 @@ function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $inpu
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-shipping-zones.
+ * Args builder for oversio/wc-list-shipping-zones.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_shipping_zones(): array {
+function oversio_args_wc_list_shipping_zones(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-shipping-zones' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-shipping-zones' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-shipping-zones' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-shipping-zones' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -271,8 +271,8 @@ function aafm_args_wc_list_shipping_zones(): array {
 				'total' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_shipping_zones',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_shipping_zones',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -284,14 +284,14 @@ function aafm_args_wc_list_shipping_zones(): array {
 }
 
 /**
- * Execute aafm/wc-list-shipping-zones.
+ * Execute oversio/wc-list-shipping-zones.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_shipping_zones( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function oversio_exec_wc_list_shipping_zones( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$zones_raw = \WC_Shipping_Zones::get_zones();
@@ -299,7 +299,7 @@ function aafm_exec_wc_list_shipping_zones( array $input ) { // phpcs:ignore Gene
 	foreach ( $zones_raw as $zone_data ) {
 		$zone_obj = $zone_data['zone_object'] ?? null;
 		if ( $zone_obj instanceof \WC_Shipping_Zone ) {
-			$rows[] = aafm_redact_wc_shipping_zone( $zone_obj );
+			$rows[] = oversio_redact_wc_shipping_zone( $zone_obj );
 		}
 	}
 
@@ -314,15 +314,15 @@ function aafm_exec_wc_list_shipping_zones( array $input ) { // phpcs:ignore Gene
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-get-shipping-zone.
+ * Args builder for oversio/wc-get-shipping-zone.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_shipping_zone(): array {
+function oversio_args_wc_get_shipping_zone(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-shipping-zone' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-shipping-zone' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-shipping-zone' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-shipping-zone' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -336,10 +336,10 @@ function aafm_args_wc_get_shipping_zone(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_zone_output_properties(),
+			'properties' => oversio_wc_shipping_zone_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_shipping_zone',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_shipping_zone',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -351,18 +351,18 @@ function aafm_args_wc_get_shipping_zone(): array {
 }
 
 /**
- * Execute aafm/wc-get-shipping-zone.
+ * Execute oversio/wc-get-shipping-zone.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_shipping_zone( array $input ) {
+function oversio_exec_wc_get_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone    = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_shipping_zone( $zone );
+	return oversio_rich_wc_shipping_zone( $zone );
 }
 
 // =============================================================================
@@ -370,27 +370,27 @@ function aafm_exec_wc_get_shipping_zone( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-create-shipping-zone.
+ * Args builder for oversio/wc-create-shipping-zone.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_shipping_zone(): array {
+function oversio_args_wc_create_shipping_zone(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-shipping-zone' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-shipping-zone' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-shipping-zone' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-shipping-zone' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
 			'required'             => array( 'zone_name' ),
-			'properties'           => aafm_wc_shipping_zone_write_properties(),
+			'properties'           => oversio_wc_shipping_zone_write_properties(),
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_zone_output_properties(),
+			'properties' => oversio_wc_shipping_zone_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_shipping_zone',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_shipping_zone',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -401,30 +401,30 @@ function aafm_args_wc_create_shipping_zone(): array {
 }
 
 /**
- * Execute aafm/wc-create-shipping-zone.
+ * Execute oversio/wc-create-shipping-zone.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_shipping_zone( array $input ) {
+function oversio_exec_wc_create_shipping_zone( array $input ) {
 	if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$zone = new \WC_Shipping_Zone();
-	aafm_wc_apply_shipping_zone_input( $zone, $input );
+	oversio_wc_apply_shipping_zone_input( $zone, $input );
 
 	$id = (int) $zone->save();
 	if ( $id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_shipping_zone_object( $id );
+	$saved = oversio_wc_get_shipping_zone_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_shipping_zone( $saved );
+	return oversio_rich_wc_shipping_zone( $saved );
 }
 
 // =============================================================================
@@ -432,21 +432,21 @@ function aafm_exec_wc_create_shipping_zone( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-update-shipping-zone.
+ * Args builder for oversio/wc-update-shipping-zone.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_shipping_zone(): array {
-	$write_props            = aafm_wc_shipping_zone_write_properties();
+function oversio_args_wc_update_shipping_zone(): array {
+	$write_props            = oversio_wc_shipping_zone_write_properties();
 	$write_props['zone_id'] = array(
 		'type'    => 'integer',
 		'minimum' => 0,
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-shipping-zone' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-shipping-zone' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-shipping-zone' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-shipping-zone' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -455,10 +455,10 @@ function aafm_args_wc_update_shipping_zone(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_zone_output_properties(),
+			'properties' => oversio_wc_shipping_zone_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_shipping_zone',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_shipping_zone',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -469,32 +469,32 @@ function aafm_args_wc_update_shipping_zone(): array {
 }
 
 /**
- * Execute aafm/wc-update-shipping-zone.
+ * Execute oversio/wc-update-shipping-zone.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_shipping_zone( array $input ) {
+function oversio_exec_wc_update_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone    = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$fields = $input;
 	unset( $fields['zone_id'] );
-	aafm_wc_apply_shipping_zone_input( $zone, $fields );
+	oversio_wc_apply_shipping_zone_input( $zone, $fields );
 	$saved_id = (int) $zone->save();
 	if ( $saved_id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_shipping_zone_object( $zone_id );
+	$saved = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_shipping_zone( $saved );
+	return oversio_rich_wc_shipping_zone( $saved );
 }
 
 // =============================================================================
@@ -508,11 +508,11 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
  * @param int $instance_id Instance id.
  * @return \WC_Shipping_Method|null
  */
-function aafm_wc_get_shipping_method_object( int $zone_id, int $instance_id ): ?\WC_Shipping_Method {
+function oversio_wc_get_shipping_method_object( int $zone_id, int $instance_id ): ?\WC_Shipping_Method {
 	if ( $zone_id < 0 || $instance_id < 1 ) {
 		return null;
 	}
-	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
 		return null;
 	}
@@ -526,7 +526,7 @@ function aafm_wc_get_shipping_method_object( int $zone_id, int $instance_id ): ?
  * @param \WC_Shipping_Method $method Method object.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
+function oversio_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	// The per-instance display title is the "title" instance setting (WC populates
 	// $method->title from it). Fall back to the generic method label when no instance
 	// title has been saved. update_shipping_method persists to the same place, so a
@@ -541,7 +541,7 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 		'enabled'      => (string) $method->enabled,
 		// Shipping plugins store carrier API keys / account creds / license keys in settings.
 		// Run them through the recursive deny-by-default redactor before returning.
-		'settings'     => aafm_wc_redact_settings_deep( (array) $method->settings ),
+		'settings'     => oversio_wc_redact_settings_deep( (array) $method->settings ),
 	);
 }
 
@@ -550,7 +550,7 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_shipping_method_output_properties(): array {
+function oversio_wc_shipping_method_output_properties(): array {
 	return array(
 		'instance_id'  => array( 'type' => 'integer' ),
 		'id'           => array( 'type' => 'string' ),
@@ -568,15 +568,15 @@ function aafm_wc_shipping_method_output_properties(): array {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-shipping-methods.
+ * Args builder for oversio/wc-list-shipping-methods.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_shipping_methods(): array {
+function oversio_args_wc_list_shipping_methods(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-shipping-methods' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-shipping-methods' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-shipping-methods' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-shipping-methods' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -595,15 +595,15 @@ function aafm_args_wc_list_shipping_methods(): array {
 					'type'  => 'array',
 					'items' => array(
 						'type'                 => 'object',
-						'properties'           => aafm_wc_shipping_method_output_properties(),
+						'properties'           => oversio_wc_shipping_method_output_properties(),
 						'additionalProperties' => false,
 					),
 				),
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_shipping_methods',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_shipping_methods',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -615,23 +615,23 @@ function aafm_args_wc_list_shipping_methods(): array {
 }
 
 /**
- * Execute aafm/wc-list-shipping-methods.
+ * Execute oversio/wc-list-shipping-methods.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_shipping_methods( array $input ) {
+function oversio_exec_wc_list_shipping_methods( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone    = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$methods = $zone->get_shipping_methods();
 	$rows    = array();
 	foreach ( $methods as $method ) {
 		if ( $method instanceof \WC_Shipping_Method ) {
-			$rows[] = aafm_rich_wc_shipping_method( $method );
+			$rows[] = oversio_rich_wc_shipping_method( $method );
 		}
 	}
 
@@ -646,15 +646,15 @@ function aafm_exec_wc_list_shipping_methods( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-get-shipping-method.
+ * Args builder for oversio/wc-get-shipping-method.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_shipping_method(): array {
+function oversio_args_wc_get_shipping_method(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-shipping-method' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-shipping-method' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-shipping-method' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-shipping-method' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -673,10 +673,10 @@ function aafm_args_wc_get_shipping_method(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_method_output_properties(),
+			'properties' => oversio_wc_shipping_method_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_shipping_method',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_shipping_method',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -688,19 +688,19 @@ function aafm_args_wc_get_shipping_method(): array {
 }
 
 /**
- * Execute aafm/wc-get-shipping-method.
+ * Execute oversio/wc-get-shipping-method.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_shipping_method( array $input ) {
+function oversio_exec_wc_get_shipping_method( array $input ) {
 	$zone_id     = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$instance_id = isset( $input['instance_id'] ) ? (int) $input['instance_id'] : 0;
-	$method      = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
+	$method      = oversio_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_shipping_method( $method );
+	return oversio_rich_wc_shipping_method( $method );
 }
 
 // =============================================================================
@@ -708,15 +708,15 @@ function aafm_exec_wc_get_shipping_method( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-create-shipping-method.
+ * Args builder for oversio/wc-create-shipping-method.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_shipping_method(): array {
+function oversio_args_wc_create_shipping_method(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-shipping-method' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-shipping-method' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-shipping-method' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-shipping-method' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -735,10 +735,10 @@ function aafm_args_wc_create_shipping_method(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_method_output_properties(),
+			'properties' => oversio_wc_shipping_method_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_shipping_method',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_shipping_method',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -749,31 +749,31 @@ function aafm_args_wc_create_shipping_method(): array {
 }
 
 /**
- * Execute aafm/wc-create-shipping-method.
+ * Execute oversio/wc-create-shipping-method.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_shipping_method( array $input ) {
+function oversio_exec_wc_create_shipping_method( array $input ) {
 	$zone_id     = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$method_type = sanitize_text_field( (string) ( $input['method_type'] ?? '' ) );
 
-	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$instance_id = (int) $zone->add_shipping_method( $method_type );
 	if ( $instance_id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$method = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
+	$method = oversio_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_shipping_method( $method );
+	return oversio_rich_wc_shipping_method( $method );
 }
 
 // =============================================================================
@@ -781,15 +781,15 @@ function aafm_exec_wc_create_shipping_method( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-update-shipping-method.
+ * Args builder for oversio/wc-update-shipping-method.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_shipping_method(): array {
+function oversio_args_wc_update_shipping_method(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-shipping-method' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-shipping-method' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-shipping-method' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-shipping-method' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -814,10 +814,10 @@ function aafm_args_wc_update_shipping_method(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_shipping_method_output_properties(),
+			'properties' => oversio_wc_shipping_method_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_shipping_method',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_shipping_method',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -828,23 +828,23 @@ function aafm_args_wc_update_shipping_method(): array {
 }
 
 /**
- * Execute aafm/wc-update-shipping-method.
+ * Execute oversio/wc-update-shipping-method.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_shipping_method( array $input ) {
+function oversio_exec_wc_update_shipping_method( array $input ) {
 	$zone_id     = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$instance_id = isset( $input['instance_id'] ) ? (int) $input['instance_id'] : 0;
 
 	// Verify the zone exists and the method exists within it.
-	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
+	$zone = oversio_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$method = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
+	$method = oversio_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Persist the per-instance display title ("method_title" in this ability) into the
@@ -884,7 +884,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		);
 
 		if ( false === $updated_rows ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 
 		// Invalidate the shipping cache so the toggle is reflected on the next read.
@@ -894,10 +894,10 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	}
 
 	// Re-resolve from the zone so the returned shape reflects what was just persisted.
-	$updated = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
+	$updated = oversio_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $updated ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_shipping_method( $updated );
+	return oversio_rich_wc_shipping_method( $updated );
 }

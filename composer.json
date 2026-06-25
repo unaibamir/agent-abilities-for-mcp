@@ -34,7 +34,7 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "AAFM\\Tests\\": "tests/"
+      "Oversio\\Tests\\": "tests/"
     }
   },
   "scripts": {

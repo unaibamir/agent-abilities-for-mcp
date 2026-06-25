@@ -12,11 +12,11 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
-use AAFM\Tests\IntegrationStubs;
-use AAFM\Tests\WcTaxStubStore;
+use Oversio\Tests\TestCase;
+use Oversio\Tests\IntegrationStubs;
+use Oversio\Tests\WcTaxStubStore;
 use WP_Error;
 
 final class WooTaxTest extends TestCase {
@@ -25,15 +25,15 @@ final class WooTaxTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->stub_wc_tax();
 		$this->seed_wc_tax();
 		WcTaxStubStore::create_tax_rates_table();
 		WcTaxStubStore::seed_rates();
-		aafm_registry_cache_should_flush( true );
+		oversio_registry_cache_should_flush( true );
 		$this->register_wc_tax();
 	}
 
@@ -52,19 +52,19 @@ final class WooTaxTest extends TestCase {
 	 * Enable and register the full WooCommerce tax ability set.
 	 */
 	private function register_wc_tax(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-tax-rates',
-				'aafm/wc-get-tax-rate',
-				'aafm/wc-create-tax-rate',
-				'aafm/wc-update-tax-rate',
-				'aafm/wc-list-tax-classes',
-				'aafm/wc-create-tax-class',
+				'oversio/wc-list-tax-rates',
+				'oversio/wc-get-tax-rate',
+				'oversio/wc-create-tax-rate',
+				'oversio/wc-update-tax-rate',
+				'oversio/wc-list-tax-classes',
+				'oversio/wc-create-tax-class',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	// =========================================================================
@@ -76,24 +76,24 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_abilities_hidden_when_woocommerce_inactive(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'aafm_integration_active_woocommerce' );
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		remove_all_filters( 'oversio_integration_active_woocommerce' );
+		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
+		oversio_registry_cache_should_flush( true );
 
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'aafm/wc-list-tax-rates', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-get-tax-rate', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-create-tax-rate', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-update-tax-rate', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-list-tax-classes', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-create-tax-class', $registry );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'oversio/wc-list-tax-rates', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-get-tax-rate', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-create-tax-rate', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-update-tax-rate', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-list-tax-classes', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-create-tax-class', $registry );
 
-		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// aafm/wc-list-tax-rates
+	// oversio/wc-list-tax-rates
 	// =========================================================================
 
 	/**
@@ -101,7 +101,7 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_list_tax_rates_returns_seeded_rates(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-tax-rates' )->execute( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'rates', $res );
@@ -125,12 +125,12 @@ final class WooTaxTest extends TestCase {
 	public function test_list_tax_rates_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-list-tax-rates' )->check_permissions( array() )
+			wp_get_ability( 'oversio/wc-list-tax-rates' )->check_permissions( array() )
 		);
 	}
 
 	// =========================================================================
-	// aafm/wc-get-tax-rate
+	// oversio/wc-get-tax-rate
 	// =========================================================================
 
 	/**
@@ -140,10 +140,10 @@ final class WooTaxTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		// Fetch id from list first.
-		$list    = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
+		$list    = wp_get_ability( 'oversio/wc-list-tax-rates' )->execute( array() );
 		$rate_id = (int) $list['rates'][0]['id'];
 
-		$res = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => $rate_id ) );
+		$res = wp_get_ability( 'oversio/wc-get-tax-rate' )->execute( array( 'rate_id' => $rate_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( $rate_id, $res['id'] );
 		$this->assertSame( 'GB', $res['country'] );
@@ -154,12 +154,12 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_get_tax_rate_unknown_id_returns_wp_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/wc-get-tax-rate' )->execute( array( 'rate_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	// =========================================================================
-	// aafm/wc-create-tax-rate
+	// oversio/wc-create-tax-rate
 	// =========================================================================
 
 	/**
@@ -167,7 +167,7 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_rate_inserts_and_returns(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-tax-rate' )->execute(
 			array(
 				'rate'    => '10.0000',
 				'name'    => 'Test Rate',
@@ -181,13 +181,13 @@ final class WooTaxTest extends TestCase {
 		$this->assertSame( 'Test Rate', $res['name'] );
 
 		// Confirm it's actually in the DB.
-		$fetched = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => $res['id'] ) );
+		$fetched = wp_get_ability( 'oversio/wc-get-tax-rate' )->execute( array( 'rate_id' => $res['id'] ) );
 		$this->assertNotInstanceOf( WP_Error::class, $fetched );
 		$this->assertSame( 'Test Rate', $fetched['name'] );
 	}
 
 	// =========================================================================
-	// aafm/wc-update-tax-rate
+	// oversio/wc-update-tax-rate
 	// =========================================================================
 
 	/**
@@ -196,11 +196,11 @@ final class WooTaxTest extends TestCase {
 	public function test_update_tax_rate_changes_fields(): void {
 		$this->acting_as( 'administrator' );
 
-		$list             = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
+		$list             = wp_get_ability( 'oversio/wc-list-tax-rates' )->execute( array() );
 		$rate_id          = (int) $list['rates'][0]['id'];
 		$original_country = $list['rates'][0]['country'];
 
-		$res = wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-tax-rate' )->execute(
 			array(
 				'rate_id' => $rate_id,
 				'name'    => 'Updated VAT',
@@ -217,14 +217,14 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_update_tax_rate_unknown_id_returns_wp_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-tax-rate' )->execute(
 			array( 'rate_id' => 999999 )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
 	// =========================================================================
-	// aafm/wc-list-tax-classes
+	// oversio/wc-list-tax-classes
 	// =========================================================================
 
 	/**
@@ -232,7 +232,7 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_list_tax_classes_returns_standard_plus_seeded(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-tax-classes' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-tax-classes' )->execute( array() );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'classes', $res );
@@ -250,7 +250,7 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_list_tax_classes_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-tax-classes' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-tax-classes' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		foreach ( $res['classes'] as $class ) {
@@ -260,7 +260,7 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm/wc-create-tax-class
+	// oversio/wc-create-tax-class
 	// =========================================================================
 
 	/**
@@ -268,7 +268,7 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_class_succeeds(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-tax-class' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-tax-class' )->execute(
 			array( 'name' => 'Super Rate' )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
@@ -276,7 +276,7 @@ final class WooTaxTest extends TestCase {
 		$this->assertSame( 'Super Rate', $res['name'] );
 
 		// Confirm it appears in the list.
-		$list  = wp_get_ability( 'aafm/wc-list-tax-classes' )->execute( array() );
+		$list  = wp_get_ability( 'oversio/wc-list-tax-classes' )->execute( array() );
 		$slugs = array_column( $list['classes'], 'slug' );
 		$this->assertContains( 'super-rate', $slugs );
 	}
@@ -287,7 +287,7 @@ final class WooTaxTest extends TestCase {
 	public function test_create_tax_class_failure_returns_wp_error(): void {
 		$this->acting_as( 'administrator' );
 		WcTaxStubStore::$force_save_failure = true;
-		$res                                = wp_get_ability( 'aafm/wc-create-tax-class' )->execute(
+		$res                                = wp_get_ability( 'oversio/wc-create-tax-class' )->execute(
 			array( 'name' => 'Failing Class' )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res );
@@ -302,11 +302,11 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_rate_audit_success(): void {
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-tax-rate' )->execute( array( 'rate' => '3.0000' ) );
+		wp_get_ability( 'oversio/wc-create-tax-rate' )->execute( array( 'rate' => '3.0000' ) );
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-tax-rate', $abilities );
+		$this->assertContains( 'oversio/wc-create-tax-rate', $abilities );
 	}
 
 	/**
@@ -314,11 +314,11 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_rate_audit_deny(): void {
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-tax-rate' )->check_permissions( array( 'rate' => '3.0000' ) );
+		wp_get_ability( 'oversio/wc-create-tax-rate' )->check_permissions( array( 'rate' => '3.0000' ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-tax-rate', $abilities );
+		$this->assertContains( 'oversio/wc-create-tax-rate', $abilities );
 	}
 
 	// =========================================================================
@@ -331,19 +331,19 @@ final class WooTaxTest extends TestCase {
 	public function test_update_tax_rate_audit_success(): void {
 		$this->acting_as( 'administrator' );
 
-		$list    = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute( array() );
+		$list    = wp_get_ability( 'oversio/wc-list-tax-rates' )->execute( array() );
 		$rate_id = (int) $list['rates'][0]['id'];
 
-		wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+		wp_get_ability( 'oversio/wc-update-tax-rate' )->execute(
 			array(
 				'rate_id' => $rate_id,
 				'name'    => 'Audit VAT',
 			)
 		);
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-update-tax-rate', $abilities );
+		$this->assertContains( 'oversio/wc-update-tax-rate', $abilities );
 	}
 
 	/**
@@ -351,11 +351,11 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_update_tax_rate_audit_deny(): void {
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-update-tax-rate' )->check_permissions( array( 'rate_id' => 1 ) );
+		wp_get_ability( 'oversio/wc-update-tax-rate' )->check_permissions( array( 'rate_id' => 1 ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-update-tax-rate', $abilities );
+		$this->assertContains( 'oversio/wc-update-tax-rate', $abilities );
 	}
 
 	// =========================================================================
@@ -367,11 +367,11 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_class_audit_success(): void {
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/wc-create-tax-class' )->execute( array( 'name' => 'Audit Class' ) );
+		wp_get_ability( 'oversio/wc-create-tax-class' )->execute( array( 'name' => 'Audit Class' ) );
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-tax-class', $abilities );
+		$this->assertContains( 'oversio/wc-create-tax-class', $abilities );
 	}
 
 	/**
@@ -379,10 +379,10 @@ final class WooTaxTest extends TestCase {
 	 */
 	public function test_create_tax_class_audit_deny(): void {
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-tax-class' )->check_permissions( array( 'name' => 'Denied' ) );
+		wp_get_ability( 'oversio/wc-create-tax-class' )->check_permissions( array( 'name' => 'Denied' ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-tax-class', $abilities );
+		$this->assertContains( 'oversio/wc-create-tax-class', $abilities );
 	}
 }

@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — payment gateway reads and writes (sub-slice W4-WC7).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_gateways_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_gateways_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_gateways_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_gateways_full_definitions' );
 
 /**
  * Contribute the WooCommerce gateways definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_gateways_f
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_gateways_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_gateways_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_gateways_registry_definitions() );
+	return array_merge( $registry, oversio_wc_gateways_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce payment gateway definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_gateways_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_gateways_registry_definitions() );
+function oversio_register_wc_gateways_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_gateways_registry_definitions() );
 }
 
 /**
@@ -53,33 +53,33 @@ function aafm_register_wc_gateways_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_gateways_registry_definitions(): array {
+function oversio_wc_gateways_registry_definitions(): array {
 	return array(
-		'aafm/wc-list-payment-gateways'  => array(
+		'oversio/wc-list-payment-gateways'  => array(
 			'label'        => __( 'List WooCommerce payment gateways', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists all registered WooCommerce payment gateways with their id, title, and enabled state. Secret or credential settings are never returned. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_payment_gateways',
+			'args_builder' => 'oversio_args_wc_list_payment_gateways',
 		),
 
-		'aafm/wc-get-payment-gateway'    => array(
+		'oversio/wc-get-payment-gateway'    => array(
 			'label'        => __( 'Get WooCommerce payment gateway', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_payment_gateway',
+			'args_builder' => 'oversio_args_wc_get_payment_gateway',
 		),
 
-		'aafm/wc-update-payment-gateway' => array(
+		'oversio/wc-update-payment-gateway' => array(
 			'label'        => __( 'Update WooCommerce payment gateway', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_payment_gateway',
+			'args_builder' => 'oversio_args_wc_update_payment_gateway',
 		),
 	);
 }
@@ -100,14 +100,14 @@ function aafm_wc_gateways_registry_definitions(): array {
  * @param array<int|string,mixed> $settings Raw settings array (may be nested).
  * @return array<int|string,mixed>
  */
-function aafm_wc_redact_settings_deep( array $settings ): array {
+function oversio_wc_redact_settings_deep( array $settings ): array {
 	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)/i';
 	$redacted       = array();
 	foreach ( $settings as $key => $value ) {
 		if ( preg_match( $secret_pattern, (string) $key ) ) {
 			continue;
 		}
-		$redacted[ $key ] = is_array( $value ) ? aafm_wc_redact_settings_deep( $value ) : $value;
+		$redacted[ $key ] = is_array( $value ) ? oversio_wc_redact_settings_deep( $value ) : $value;
 	}
 	return $redacted;
 }
@@ -120,27 +120,27 @@ function aafm_wc_redact_settings_deep( array $settings ): array {
  * @param array<string,mixed> $settings Raw gateway settings array.
  * @return array<int|string,mixed>
  */
-function aafm_wc_redact_gateway_settings( array $settings ): array {
-	return aafm_wc_redact_settings_deep( $settings );
+function oversio_wc_redact_gateway_settings( array $settings ): array {
+	return oversio_wc_redact_settings_deep( $settings );
 }
 
 /**
  * Build the safe output shape for a payment gateway.
  *
  * Returns id, title, description, enabled (bool), order, and redacted settings.
- * Credential fields are stripped by aafm_wc_redact_gateway_settings().
+ * Credential fields are stripped by oversio_wc_redact_gateway_settings().
  *
  * @param \WC_Payment_Gateway $gateway Payment gateway object.
  * @return array<string,mixed>
  */
-function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway ): array {
+function oversio_wc_gateway_shape( \WC_Payment_Gateway $gateway ): array {
 	return array(
 		'id'          => $gateway->id,
 		'title'       => $gateway->title,
 		'description' => $gateway->description,
 		'enabled'     => 'yes' === $gateway->enabled,
 		'order'       => (int) ( $gateway->order ?? 0 ),
-		'settings'    => aafm_wc_redact_gateway_settings( $gateway->settings ),
+		'settings'    => oversio_wc_redact_gateway_settings( $gateway->settings ),
 	);
 }
 
@@ -149,15 +149,15 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway ): array {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-payment-gateways.
+ * Args builder for oversio/wc-list-payment-gateways.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_payment_gateways(): array {
+function oversio_args_wc_list_payment_gateways(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-payment-gateways' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-payment-gateways' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-payment-gateways' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-payment-gateways' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -179,8 +179,8 @@ function aafm_args_wc_list_payment_gateways(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_payment_gateways',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_payment_gateways',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -192,17 +192,17 @@ function aafm_args_wc_list_payment_gateways(): array {
 }
 
 /**
- * Execute aafm/wc-list-payment-gateways.
+ * Execute oversio/wc-list-payment-gateways.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_payment_gateways( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_list_payment_gateways( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$gateways = \WC_Payment_Gateways::instance()->payment_gateways();
 	$items    = array();
@@ -221,15 +221,15 @@ function aafm_exec_wc_list_payment_gateways( array $input ): array|\WP_Error { /
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-get-payment-gateway.
+ * Args builder for oversio/wc-get-payment-gateway.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_payment_gateway(): array {
+function oversio_args_wc_get_payment_gateway(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-payment-gateway' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-payment-gateway' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-payment-gateway' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-payment-gateway' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -249,8 +249,8 @@ function aafm_args_wc_get_payment_gateway(): array {
 				'settings'    => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_payment_gateway',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_payment_gateway',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -262,24 +262,24 @@ function aafm_args_wc_get_payment_gateway(): array {
 }
 
 /**
- * Execute aafm/wc-get-payment-gateway.
+ * Execute oversio/wc-get-payment-gateway.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
 	$gateways   = \WC_Payment_Gateways::instance()->payment_gateways();
 	if ( ! isset( $gateways[ $gateway_id ] ) ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
+		return new \WP_Error( 'oversio_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
 	}
-	return aafm_wc_gateway_shape( $gateways[ $gateway_id ] );
+	return oversio_wc_gateway_shape( $gateways[ $gateway_id ] );
 }
 
 // =============================================================================
@@ -287,15 +287,15 @@ function aafm_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-update-payment-gateway.
+ * Args builder for oversio/wc-update-payment-gateway.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_payment_gateway(): array {
+function oversio_args_wc_update_payment_gateway(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-payment-gateway' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-payment-gateway' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-payment-gateway' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-payment-gateway' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -325,8 +325,8 @@ function aafm_args_wc_update_payment_gateway(): array {
 				'settings'    => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_payment_gateway',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_payment_gateway',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -337,7 +337,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 }
 
 /**
- * Execute aafm/wc-update-payment-gateway.
+ * Execute oversio/wc-update-payment-gateway.
  *
  * Updates only the fields provided: enabled, title, description, order. Each field is persisted
  * immediately through WC_Payment_Gateway::update_option() (WooCommerce gateways expose no save()
@@ -347,17 +347,17 @@ function aafm_args_wc_update_payment_gateway(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 	if ( ! class_exists( 'WC_Payment_Gateways' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
 	$gateways   = \WC_Payment_Gateways::instance()->payment_gateways();
 	if ( ! isset( $gateways[ $gateway_id ] ) ) {
-			return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
+			return new \WP_Error( 'oversio_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
 	}
 	$gateway = $gateways[ $gateway_id ];
 
@@ -398,7 +398,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 
 		$saved_order = get_option( 'woocommerce_gateway_order', array() );
 		if ( ! is_array( $saved_order ) || (int) ( $saved_order[ $gateway_id ] ?? -1 ) !== $order_val ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 	}
 	// Verify the persisted state matches what we asked for. get_option() reflects the gateway's
@@ -406,8 +406,8 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 	// genuinely did not stick.
 	foreach ( $desired as $key => $value ) {
 		if ( (string) $gateway->get_option( $key ) !== (string) $value ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 	}
-	return aafm_wc_gateway_shape( $gateway );
+	return oversio_wc_gateway_shape( $gateway );
 }

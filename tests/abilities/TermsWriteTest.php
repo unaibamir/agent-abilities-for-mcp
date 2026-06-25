@@ -8,9 +8,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 use WP_Term;
 
@@ -20,35 +20,35 @@ final class TermsWriteTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
 		// simulated by pushing the action name onto $wp_current_filter — the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
-			array( 'aafm/create-term', 'aafm/update-term' )
+			'oversio_enabled_abilities',
+			array( 'oversio/create-term', 'oversio/update-term' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_writes_are_in_registry_as_writes(): void {
-		$registry = aafm_get_abilities_registry();
-		$this->assertSame( 'writes', $registry['aafm/create-term']['group'] );
-		$this->assertSame( 'write', $registry['aafm/create-term']['risk'] );
-		$this->assertSame( 'writes', $registry['aafm/update-term']['group'] );
-		$this->assertSame( 'write', $registry['aafm/update-term']['risk'] );
+		$registry = oversio_get_abilities_registry();
+		$this->assertSame( 'writes', $registry['oversio/create-term']['group'] );
+		$this->assertSame( 'write', $registry['oversio/create-term']['risk'] );
+		$this->assertSame( 'writes', $registry['oversio/update-term']['group'] );
+		$this->assertSame( 'write', $registry['oversio/update-term']['risk'] );
 	}
 
 	public function test_create_term_requires_manage_categories(): void {
 		$this->acting_as( 'author' );
-		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'oversio/create-term' )->check_permissions( array() ) );
 		$this->acting_as( 'editor' );
-		$this->assertTrue( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'oversio/create-term' )->check_permissions( array() ) );
 	}
 
 	public function test_create_term_gates_on_the_target_taxonomy_own_cap(): void {
@@ -60,12 +60,12 @@ final class TermsWriteTest extends TestCase {
 		// manage_terms cap rather than hardcoding manage_categories — otherwise an
 		// actor who can only manage categories could write into the custom taxonomy.
 		register_taxonomy(
-			'aafm_genre',
+			'oversio_genre',
 			'post',
 			array(
 				'public'       => true,
 				'show_in_rest' => true,
-				'capabilities' => array( 'manage_terms' => 'manage_aafm_genres' ),
+				'capabilities' => array( 'manage_terms' => 'manage_oversio_genres' ),
 			)
 		);
 
@@ -74,28 +74,28 @@ final class TermsWriteTest extends TestCase {
 		$user->add_cap( 'manage_categories' );
 		wp_set_current_user( $user_id );
 
-		$ability = wp_get_ability( 'aafm/create-term' );
+		$ability = wp_get_ability( 'oversio/create-term' );
 		// Can manage categories...
 		$this->assertTrue( $ability->check_permissions( array( 'taxonomy' => 'category' ) ) );
-		// ...but lacks manage_aafm_genres, so the custom-taxonomy write is denied.
-		$this->assertFalse( $ability->check_permissions( array( 'taxonomy' => 'aafm_genre' ) ) );
+		// ...but lacks manage_oversio_genres, so the custom-taxonomy write is denied.
+		$this->assertFalse( $ability->check_permissions( array( 'taxonomy' => 'oversio_genre' ) ) );
 
-		unregister_taxonomy( 'aafm_genre' );
+		unregister_taxonomy( 'oversio_genre' );
 	}
 
 	public function test_low_priv_create_term_denial_is_audited(): void {
 		// A subscriber lacks manage_categories: denied, and the denial is audited.
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'oversio/create-term' )->check_permissions( array() ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/create-term', $abilities );
+		$this->assertContains( 'oversio/create-term', $abilities );
 	}
 
 	public function test_create_term_inserts(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/create-term' )->execute(
+		$out = wp_get_ability( 'oversio/create-term' )->execute(
 			array(
 				'taxonomy' => 'category',
 				'name'     => 'Reviews',
@@ -108,7 +108,7 @@ final class TermsWriteTest extends TestCase {
 	public function test_create_term_rejects_non_public_taxonomy(): void {
 		// nav_menu is a private/internal taxonomy: default-deny, never written into.
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/create-term' )->execute(
+		$out = wp_get_ability( 'oversio/create-term' )->execute(
 			array(
 				'taxonomy' => 'nav_menu',
 				'name'     => 'Sneaky menu',
@@ -119,7 +119,7 @@ final class TermsWriteTest extends TestCase {
 
 	public function test_create_term_rejects_unknown_taxonomy(): void {
 		$this->acting_as( 'editor' );
-		$out = wp_get_ability( 'aafm/create-term' )->execute(
+		$out = wp_get_ability( 'oversio/create-term' )->execute(
 			array(
 				'taxonomy' => 'totally_fake',
 				'name'     => 'Phantom',
@@ -130,7 +130,7 @@ final class TermsWriteTest extends TestCase {
 
 	public function test_create_term_sanitizes_script_in_description(): void {
 		$this->acting_as( 'editor' );
-		$out  = wp_get_ability( 'aafm/create-term' )->execute(
+		$out  = wp_get_ability( 'oversio/create-term' )->execute(
 			array(
 				'taxonomy'    => 'category',
 				'name'        => 'Hardened',
@@ -154,7 +154,7 @@ final class TermsWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/update-term' )->execute(
+		$out = wp_get_ability( 'oversio/update-term' )->execute(
 			array(
 				'taxonomy' => 'category',
 				'term_id'  => $tag,
@@ -180,7 +180,7 @@ final class TermsWriteTest extends TestCase {
 		);
 
 		// Making the parent a child of its own child is circular -> rejected.
-		$out = wp_get_ability( 'aafm/update-term' )->execute(
+		$out = wp_get_ability( 'oversio/update-term' )->execute(
 			array(
 				'taxonomy' => 'category',
 				'term_id'  => $parent,
@@ -203,7 +203,7 @@ final class TermsWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/update-term' )->execute(
+		$out = wp_get_ability( 'oversio/update-term' )->execute(
 			array(
 				'taxonomy' => 'category',
 				'term_id'  => $term,

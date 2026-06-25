@@ -8,9 +8,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class SafetyEnforcementTest extends TestCase {
 
@@ -27,8 +27,8 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null;
 
 		// The transport denial path writes a 'denied' row to the custom log.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->ensure_categories();
 	}
 
@@ -45,13 +45,13 @@ final class SafetyEnforcementTest extends TestCase {
 		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
 		wp_set_current_user( $uid );
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.9';
-		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
+		update_option( 'oversio_ip_allowlist', array( '10.0.0.0/8' ) );
 
-		$result = aafm_transport_permission_callback( null );
+		$result = oversio_transport_permission_callback( null );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 403, $result->get_error_data()['status'] ?? 0 );
 
-		$denied = aafm_query_activity(
+		$denied = oversio_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 1,
@@ -66,23 +66,23 @@ final class SafetyEnforcementTest extends TestCase {
 		$uid = self::factory()->user->create();
 		wp_set_current_user( $uid );
 		$_SERVER['REMOTE_ADDR'] = '10.1.2.3';
-		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
-		$this->assertTrue( aafm_transport_permission_callback( null ) );
+		update_option( 'oversio_ip_allowlist', array( '10.0.0.0/8' ) );
+		$this->assertTrue( oversio_transport_permission_callback( null ) );
 	}
 
 	public function test_transport_empty_allowlist_allows_any_ip(): void {
 		$uid = self::factory()->user->create();
 		wp_set_current_user( $uid );
 		$_SERVER['REMOTE_ADDR'] = '198.51.100.7';
-		update_option( 'aafm_ip_allowlist', array() );
-		$this->assertTrue( aafm_transport_permission_callback( null ) );
+		update_option( 'oversio_ip_allowlist', array() );
+		$this->assertTrue( oversio_transport_permission_callback( null ) );
 	}
 
 	public function test_transport_unauthenticated_still_401_regardless_of_ip(): void {
 		wp_set_current_user( 0 );
 		$_SERVER['REMOTE_ADDR'] = '10.1.2.3'; // Would be allowed if it mattered.
-		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
-		$result = aafm_transport_permission_callback( null );
+		update_option( 'oversio_ip_allowlist', array( '10.0.0.0/8' ) );
+		$result = oversio_transport_permission_callback( null );
 		$this->assertInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 401, $result->get_error_data()['status'] ?? 0 );
 	}
@@ -91,13 +91,13 @@ final class SafetyEnforcementTest extends TestCase {
 	 * Register the plugin categories inside a simulated categories-init action.
 	 *
 	 * The Abilities API only permits category registration while the
-	 * 'wp_abilities_api_categories_init' action is running; aafm_register_categories()
+	 * 'wp_abilities_api_categories_init' action is running; oversio_register_categories()
 	 * is idempotent, so this is safe to call before every test.
 	 */
 	private function ensure_categories(): void {
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
-		aafm_register_categories();
+		oversio_register_categories();
 		array_pop( $wp_current_filter );
 	}
 
@@ -111,7 +111,7 @@ final class SafetyEnforcementTest extends TestCase {
 	private function register( string $name, array $args ) {
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_init';
-		$result              = aafm_register_ability_with_log( $name, $args );
+		$result              = oversio_register_ability_with_log( $name, $args );
 		array_pop( $wp_current_filter );
 		return $result;
 	}
@@ -119,25 +119,25 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_decorated_permission_rate_limits_and_audits(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_rate_limit_per_min', 1 );
+		update_option( 'oversio_rate_limit_per_min', 1 );
 
 		$this->register(
-			'aafm/rl-probe',
+			'oversio/rl-probe',
 			array(
 				'label'               => 'RL Probe',
 				'description'         => 'Throwaway ability for rate-limit testing.',
-				'category'            => 'aafm-reads',
+				'category'            => 'oversio-reads',
 				'output_schema'       => array( 'type' => 'object' ),
 				'execute_callback'    => '__return_empty_array',
 				'permission_callback' => '__return_true',
 			)
 		);
-		$ability = wp_get_ability( 'aafm/rl-probe' );
+		$ability = wp_get_ability( 'oversio/rl-probe' );
 
 		$this->assertTrue( $ability->check_permissions( array() ) );  // 1st: under limit.
 		$this->assertFalse( $ability->check_permissions( array() ) ); // 2nd: over limit -> false.
 
-		$denied = aafm_query_activity(
+		$denied = oversio_query_activity(
 			array(
 				'status'   => 'denied',
 				'per_page' => 1,
@@ -145,26 +145,26 @@ final class SafetyEnforcementTest extends TestCase {
 		);
 		$this->assertNotEmpty( $denied );
 		$this->assertSame( 'denied', $denied[0]['status'] );
-		$this->assertSame( 'aafm/rl-probe', $denied[0]['ability'] );
+		$this->assertSame( 'oversio/rl-probe', $denied[0]['ability'] );
 	}
 
 	public function test_rate_limit_off_decorator_is_no_op(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_rate_limit_per_min', 0 ); // Zero is the default and disables the limit.
+		update_option( 'oversio_rate_limit_per_min', 0 ); // Zero is the default and disables the limit.
 
 		$this->register(
-			'aafm/rl-off-probe',
+			'oversio/rl-off-probe',
 			array(
 				'label'               => 'RL Off Probe',
 				'description'         => 'Throwaway.',
-				'category'            => 'aafm-reads',
+				'category'            => 'oversio-reads',
 				'output_schema'       => array( 'type' => 'object' ),
 				'execute_callback'    => '__return_empty_array',
 				'permission_callback' => '__return_true',
 			)
 		);
-		$ability = wp_get_ability( 'aafm/rl-off-probe' );
+		$ability = wp_get_ability( 'oversio/rl-off-probe' );
 
 		// Many calls, all allowed — off means no token consumption, identical to today.
 		for ( $i = 0; $i < 5; $i++ ) {
@@ -177,14 +177,14 @@ final class SafetyEnforcementTest extends TestCase {
 		// ability call afterwards still gets its full allowance.
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_rate_limit_per_min', 1 );
+		update_option( 'oversio_rate_limit_per_min', 1 );
 
 		$this->register(
-			'aafm/rl-disc-probe',
+			'oversio/rl-disc-probe',
 			array(
 				'label'               => 'RL Disc Probe',
 				'description'         => 'Throwaway.',
-				'category'            => 'aafm-reads',
+				'category'            => 'oversio-reads',
 				'output_schema'       => array( 'type' => 'object' ),
 				'execute_callback'    => '__return_empty_array',
 				'permission_callback' => '__return_true',
@@ -192,12 +192,12 @@ final class SafetyEnforcementTest extends TestCase {
 		);
 
 		// Simulate discovery: call the RAW permission the way the tools/list filter does.
-		$raw = aafm_remember_raw_permission( 'aafm/rl-disc-probe' );
+		$raw = oversio_remember_raw_permission( 'oversio/rl-disc-probe' );
 		$this->assertTrue( (bool) $raw( array() ) ); // discovery visibility check — must NOT consume a token.
 		$this->assertTrue( (bool) $raw( array() ) ); // again — still no token.
 
 		// Now the FIRST real (decorated) call still has its full allowance of 1.
-		$ability = wp_get_ability( 'aafm/rl-disc-probe' );
+		$ability = wp_get_ability( 'oversio/rl-disc-probe' );
 		$this->assertTrue( $ability->check_permissions( array() ) );  // 1st real call allowed.
 		$this->assertFalse( $ability->check_permissions( array() ) ); // 2nd real call over limit.
 	}
@@ -205,38 +205,38 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_overrides_create_post(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '1' );
-		$out = aafm_exec_create_post( array( 'title' => 'Hello' ) );
+		update_option( 'oversio_force_draft', '1' );
+		$out = oversio_exec_create_post( array( 'title' => 'Hello' ) );
 		$this->assertSame( 'draft', $out['post']['status'] );
 	}
 
 	public function test_force_draft_overrides_create_page(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '1' );
-		$out = aafm_exec_create_page( array( 'title' => 'Hello Page' ) );
+		update_option( 'oversio_force_draft', '1' );
+		$out = oversio_exec_create_page( array( 'title' => 'Hello Page' ) );
 		$this->assertSame( 'draft', $out['post']['status'] );
 	}
 
 	public function test_force_draft_off_create_post_still_publishes(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '0' ); // OFF (default) — no behavior change.
-		$out = aafm_exec_create_post( array( 'title' => 'Published Hello' ) );
+		update_option( 'oversio_force_draft', '0' ); // OFF (default) — no behavior change.
+		$out = oversio_exec_create_post( array( 'title' => 'Published Hello' ) );
 		$this->assertSame( 'publish', $out['post']['status'] );
 	}
 
 	public function test_force_draft_overrides_update_post_to_publish(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '1' );
+		update_option( 'oversio_force_draft', '1' );
 		$id  = self::factory()->post->create(
 			array(
 				'post_status' => 'draft',
 				'post_author' => $uid,
 			)
 		);
-		$out = aafm_exec_update_post(
+		$out = oversio_exec_update_post(
 			array(
 				'post_id' => $id,
 				'status'  => 'publish',
@@ -248,7 +248,7 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_overrides_update_page_to_publish(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '1' );
+		update_option( 'oversio_force_draft', '1' );
 		$pid = self::factory()->post->create(
 			array(
 				'post_type'   => 'page',
@@ -256,7 +256,7 @@ final class SafetyEnforcementTest extends TestCase {
 				'post_author' => $uid,
 			)
 		);
-		$out = aafm_exec_update_page(
+		$out = oversio_exec_update_page(
 			array(
 				'page_id' => $pid,
 				'status'  => 'publish',
@@ -268,14 +268,14 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_off_update_to_publish_still_publishes(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '0' ); // OFF (default) — update may publish.
+		update_option( 'oversio_force_draft', '0' ); // OFF (default) — update may publish.
 		$id  = self::factory()->post->create(
 			array(
 				'post_status' => 'draft',
 				'post_author' => $uid,
 			)
 		);
-		$out = aafm_exec_update_post(
+		$out = oversio_exec_update_post(
 			array(
 				'post_id' => $id,
 				'status'  => 'publish',
@@ -287,7 +287,7 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_on_update_without_status_does_not_unpublish(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '1' );
+		update_option( 'oversio_force_draft', '1' );
 		$id = self::factory()->post->create(
 			array(
 				'post_status' => 'publish',
@@ -295,7 +295,7 @@ final class SafetyEnforcementTest extends TestCase {
 			)
 		);
 		// No 'status' in the input — force-draft must not retro-unpublish an edit-only update.
-		$out = aafm_exec_update_post(
+		$out = oversio_exec_update_post(
 			array(
 				'post_id' => $id,
 				'content' => 'Edited body only.',
@@ -307,15 +307,15 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_max_title_blocks_create_and_update(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_max_title_len', 5 );
+		update_option( 'oversio_max_title_len', 5 );
 
 		// Create over limit -> WP_Error.
-		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => 'TooLongTitle' ) ) );
+		$this->assertInstanceOf( \WP_Error::class, oversio_exec_create_post( array( 'title' => 'TooLongTitle' ) ) );
 		// Update over limit -> WP_Error.
 		$id = self::factory()->post->create( array( 'post_author' => $uid ) );
 		$this->assertInstanceOf(
 			\WP_Error::class,
-			aafm_exec_update_post(
+			oversio_exec_update_post(
 				array(
 					'post_id' => $id,
 					'title'   => 'AlsoTooLong',
@@ -323,25 +323,25 @@ final class SafetyEnforcementTest extends TestCase {
 			)
 		);
 		// Under limit create -> ok (has a 'post' key).
-		$this->assertArrayHasKey( 'post', (array) aafm_exec_create_post( array( 'title' => 'Hi' ) ) );
+		$this->assertArrayHasKey( 'post', (array) oversio_exec_create_post( array( 'title' => 'Hi' ) ) );
 	}
 
 	public function test_max_title_boundary_is_inclusive(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_max_title_len', 5 );
+		update_option( 'oversio_max_title_len', 5 );
 		// Exactly 5 chars -> allowed (inclusive boundary).
-		$this->assertArrayHasKey( 'post', (array) aafm_exec_create_post( array( 'title' => 'Hello' ) ) );
+		$this->assertArrayHasKey( 'post', (array) oversio_exec_create_post( array( 'title' => 'Hello' ) ) );
 		// 6 chars -> rejected.
-		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => 'Hello!' ) ) );
+		$this->assertInstanceOf( \WP_Error::class, oversio_exec_create_post( array( 'title' => 'Hello!' ) ) );
 	}
 
 	public function test_max_title_blocks_create_page_and_update_page(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_max_title_len', 5 );
+		update_option( 'oversio_max_title_len', 5 );
 
-		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_page( array( 'title' => 'LongPageTitle' ) ) );
+		$this->assertInstanceOf( \WP_Error::class, oversio_exec_create_page( array( 'title' => 'LongPageTitle' ) ) );
 		$pid = self::factory()->post->create(
 			array(
 				'post_type'   => 'page',
@@ -350,7 +350,7 @@ final class SafetyEnforcementTest extends TestCase {
 		);
 		$this->assertInstanceOf(
 			\WP_Error::class,
-			aafm_exec_update_page(
+			oversio_exec_update_page(
 				array(
 					'page_id' => $pid,
 					'title'   => 'AlsoTooLong',
@@ -363,15 +363,15 @@ final class SafetyEnforcementTest extends TestCase {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
 		// Zero is the default and disables the cap.
-		update_option( 'aafm_max_title_len', 0 );
-		$out = aafm_exec_create_post( array( 'title' => 'A Very Long Title That Would Otherwise Be Rejected' ) );
+		update_option( 'oversio_max_title_len', 0 );
+		$out = oversio_exec_create_post( array( 'title' => 'A Very Long Title That Would Otherwise Be Rejected' ) );
 		$this->assertArrayHasKey( 'post', (array) $out );
 	}
 
 	public function test_max_title_update_without_title_is_unaffected(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_max_title_len', 5 );
+		update_option( 'oversio_max_title_len', 5 );
 		$id = self::factory()->post->create(
 			array(
 				'post_author' => $uid,
@@ -379,7 +379,7 @@ final class SafetyEnforcementTest extends TestCase {
 			)
 		);
 		// Update only the content, no title field -> must NOT be rejected by max-title.
-		$out = aafm_exec_update_post(
+		$out = oversio_exec_update_post(
 			array(
 				'post_id' => $id,
 				'content' => 'new body',
@@ -391,11 +391,11 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_max_title_counts_multibyte_correctly(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_max_title_len', 3 );
+		update_option( 'oversio_max_title_len', 3 );
 		// 3 multibyte chars = within a 3-char limit (mb_strlen=3), even though byte length > 3.
-		$out = aafm_exec_create_post( array( 'title' => '今日は' ) ); // 3 CJK chars.
+		$out = oversio_exec_create_post( array( 'title' => '今日は' ) ); // 3 CJK chars.
 		$this->assertArrayHasKey( 'post', (array) $out );
 		// 4 multibyte chars -> over a 3-char limit.
-		$this->assertInstanceOf( \WP_Error::class, aafm_exec_create_post( array( 'title' => '今日はね' ) ) );
+		$this->assertInstanceOf( \WP_Error::class, oversio_exec_create_post( array( 'title' => '今日はね' ) ) );
 	}
 }

@@ -4,10 +4,10 @@
  *
  * Integration abilities register only while their host plugin is active, so a live registry walk
  * cannot tell you how many abilities WooCommerce "would" expose on a site where it is not
- * installed. aafm_integration_ability_manifest() holds the full per-ability picture independent of
- * host activation, and aafm_integration_manifest() DERIVES the per-slug counts from it — one source
+ * installed. oversio_integration_ability_manifest() holds the full per-ability picture independent of
+ * host activation, and oversio_integration_manifest() DERIVES the per-slug counts from it — one source
  * of truth, no second hand-kept tally to drift. It is the count contract for the integration
- * surface, alongside aafm_available_ability_count() for the whole catalog.
+ * surface, alongside oversio_available_ability_count() for the whole catalog.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -23,10 +23,10 @@ defined( 'ABSPATH' ) || exit;
  * This is the part of the integration surface that CANNOT be derived from the registry alone:
  *  - `name` fixes the per-slug order and the membership set (which abilities belong to which host),
  *    so the Integrations tab can render every ability — disabled — for an inactive host.
- *  - `risk` drives the per-slug read/write/destructive counts (aafm_integration_manifest()), which are
+ *  - `risk` drives the per-slug read/write/destructive counts (oversio_integration_manifest()), which are
  *    test-locked, so it stays explicit here rather than being read back.
  *
- * The label and description are NOT held here anymore — aafm_integration_ability_manifest() hydrates
+ * The label and description are NOT held here anymore — oversio_integration_ability_manifest() hydrates
  * them from the registry (the single source of truth) per slug, so there is no second copy to drift.
  *
  * KEEP IN LOCKSTEP WITH THE REGISTRY. IntegrationManifestTest force-activates every host and asserts
@@ -36,295 +36,295 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return array<string,list<array{name:string,risk:string}>>
  */
-function aafm_integration_ability_order(): array {
+function oversio_integration_ability_order(): array {
 	return array(
 		'yoast'       => array(
 			array(
-				'name' => 'aafm/yoast-get-post',
+				'name' => 'oversio/yoast-get-post',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/yoast-update-post',
+				'name' => 'oversio/yoast-update-post',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/yoast-get-head',
+				'name' => 'oversio/yoast-get-head',
 				'risk' => 'read',
 			),
 		),
 		'rankmath'    => array(
 			array(
-				'name' => 'aafm/rankmath-get-post',
+				'name' => 'oversio/rankmath-get-post',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/rankmath-update-post',
+				'name' => 'oversio/rankmath-update-post',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/rankmath-get-schema',
+				'name' => 'oversio/rankmath-get-schema',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/rankmath-update-schema',
+				'name' => 'oversio/rankmath-update-schema',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/rankmath-get-head',
+				'name' => 'oversio/rankmath-get-head',
 				'risk' => 'read',
 			),
 		),
 		'aioseo'      => array(
 			array(
-				'name' => 'aafm/aioseo-get-post',
+				'name' => 'oversio/aioseo-get-post',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/aioseo-update-post',
+				'name' => 'oversio/aioseo-update-post',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/aioseo-get-head',
+				'name' => 'oversio/aioseo-get-head',
 				'risk' => 'read',
 			),
 		),
 		'acf'         => array(
 			array(
-				'name' => 'aafm/acf-list-field-groups',
+				'name' => 'oversio/acf-list-field-groups',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/acf-get-post-fields',
+				'name' => 'oversio/acf-get-post-fields',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/acf-update-post-fields',
+				'name' => 'oversio/acf-update-post-fields',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/acf-get-term-fields',
+				'name' => 'oversio/acf-get-term-fields',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/acf-update-term-fields',
+				'name' => 'oversio/acf-update-term-fields',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/acf-get-user-fields',
+				'name' => 'oversio/acf-get-user-fields',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/acf-update-user-fields',
+				'name' => 'oversio/acf-update-user-fields',
 				'risk' => 'write',
 			),
 		),
 		'woocommerce' => array(
 			array(
-				'name' => 'aafm/wc-list-products',
+				'name' => 'oversio/wc-list-products',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-product',
+				'name' => 'oversio/wc-get-product',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-product',
+				'name' => 'oversio/wc-create-product',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-product',
+				'name' => 'oversio/wc-update-product',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-product',
+				'name' => 'oversio/wc-delete-product',
 				'risk' => 'destructive',
 			),
 			array(
-				'name' => 'aafm/wc-list-product-variations',
+				'name' => 'oversio/wc-list-product-variations',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-product-variation',
+				'name' => 'oversio/wc-get-product-variation',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-product-variation',
+				'name' => 'oversio/wc-create-product-variation',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-product-variation',
+				'name' => 'oversio/wc-update-product-variation',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-delete-product-variation',
+				'name' => 'oversio/wc-delete-product-variation',
 				'risk' => 'destructive',
 			),
 			array(
-				'name' => 'aafm/wc-list-product-attributes',
+				'name' => 'oversio/wc-list-product-attributes',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-product-attribute',
+				'name' => 'oversio/wc-create-product-attribute',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-product-attribute',
+				'name' => 'oversio/wc-update-product-attribute',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-orders',
+				'name' => 'oversio/wc-list-orders',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-order',
+				'name' => 'oversio/wc-get-order',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-order',
+				'name' => 'oversio/wc-create-order',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-order',
+				'name' => 'oversio/wc-update-order',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-order-status',
+				'name' => 'oversio/wc-update-order-status',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-order-notes',
+				'name' => 'oversio/wc-list-order-notes',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-order-note',
+				'name' => 'oversio/wc-create-order-note',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-order-refunds',
+				'name' => 'oversio/wc-list-order-refunds',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-order-refund',
+				'name' => 'oversio/wc-get-order-refund',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-order-refund',
+				'name' => 'oversio/wc-create-order-refund',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-customers',
+				'name' => 'oversio/wc-list-customers',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-customer',
+				'name' => 'oversio/wc-get-customer',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-customer',
+				'name' => 'oversio/wc-create-customer',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-customer',
+				'name' => 'oversio/wc-update-customer',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-coupons',
+				'name' => 'oversio/wc-list-coupons',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-coupon',
+				'name' => 'oversio/wc-get-coupon',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-coupon',
+				'name' => 'oversio/wc-create-coupon',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-coupon',
+				'name' => 'oversio/wc-update-coupon',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-shipping-zones',
+				'name' => 'oversio/wc-list-shipping-zones',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-shipping-zone',
+				'name' => 'oversio/wc-get-shipping-zone',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-shipping-zone',
+				'name' => 'oversio/wc-create-shipping-zone',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-shipping-zone',
+				'name' => 'oversio/wc-update-shipping-zone',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-shipping-methods',
+				'name' => 'oversio/wc-list-shipping-methods',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-shipping-method',
+				'name' => 'oversio/wc-get-shipping-method',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-shipping-method',
+				'name' => 'oversio/wc-create-shipping-method',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-shipping-method',
+				'name' => 'oversio/wc-update-shipping-method',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-tax-rates',
+				'name' => 'oversio/wc-list-tax-rates',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-tax-rate',
+				'name' => 'oversio/wc-get-tax-rate',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-tax-rate',
+				'name' => 'oversio/wc-create-tax-rate',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-update-tax-rate',
+				'name' => 'oversio/wc-update-tax-rate',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-list-tax-classes',
+				'name' => 'oversio/wc-list-tax-classes',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-create-tax-class',
+				'name' => 'oversio/wc-create-tax-class',
 				'risk' => 'write',
 			),
 			array(
-				'name' => 'aafm/wc-get-sales-report',
+				'name' => 'oversio/wc-get-sales-report',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-top-sellers-report',
+				'name' => 'oversio/wc-get-top-sellers-report',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-count-orders',
+				'name' => 'oversio/wc-count-orders',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-count-products',
+				'name' => 'oversio/wc-count-products',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-list-payment-gateways',
+				'name' => 'oversio/wc-list-payment-gateways',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-get-payment-gateway',
+				'name' => 'oversio/wc-get-payment-gateway',
 				'risk' => 'read',
 			),
 			array(
-				'name' => 'aafm/wc-update-payment-gateway',
+				'name' => 'oversio/wc-update-payment-gateway',
 				'risk' => 'write',
 			),
 		),
@@ -339,29 +339,29 @@ function aafm_integration_ability_order(): array {
  * register only while their host plugin is active, so a live registry walk cannot describe (or count)
  * an integration whose host is inactive. This descriptor holds the full picture independent of host
  * activation: it lets the Integrations tab render every ability — disabled — for an inactive host,
- * and lets aafm_integration_manifest() DERIVE the counts from one source instead of a second
+ * and lets oversio_integration_manifest() DERIVE the counts from one source instead of a second
  * hand-kept tally.
  *
- * The `name` order and the `risk` come from aafm_integration_ability_order(); the `label` and
+ * The `name` order and the `risk` come from oversio_integration_ability_order(); the `label` and
  * `description` are hydrated from the registry's guard-independent full view
- * (aafm_get_abilities_registry_full()), so the registry is the single source of truth for those two
+ * (oversio_get_abilities_registry_full()), so the registry is the single source of truth for those two
  * strings — no second copy to keep in sync. The render layer still prefers the matching
- * aafm_ability_disclosures() line over `description` at render time, mirroring the active-path hint
+ * oversio_ability_disclosures() line over `description` at render time, mirroring the active-path hint
  * logic so there is one disclosure source of truth.
  *
  * @return array<string,list<array{name:string,label:string,risk:string,description:string}>>
  */
-function aafm_integration_ability_manifest(): array {
+function oversio_integration_ability_manifest(): array {
 	$out = array();
-	foreach ( aafm_integration_ability_order() as $slug => $rows ) {
+	foreach ( oversio_integration_ability_order() as $slug => $rows ) {
 		$out[ $slug ] = array();
 		foreach ( $rows as $row ) {
 			$name           = (string) $row['name'];
 			$out[ $slug ][] = array(
 				'name'        => $name,
-				'label'       => aafm_ability_label( $name ),
+				'label'       => oversio_ability_label( $name ),
 				'risk'        => (string) $row['risk'],
-				'description' => aafm_ability_description( $name ),
+				'description' => oversio_ability_description( $name ),
 			);
 		}
 	}
@@ -371,18 +371,18 @@ function aafm_integration_ability_manifest(): array {
 /**
  * Per-integration ability counts, independent of whether the host plugin is active.
  *
- * DERIVED from aafm_integration_ability_manifest(): total is the row count, and read / write /
+ * DERIVED from oversio_integration_ability_manifest(): total is the row count, and read / write /
  * destructive are the per-risk tallies. The return shape is unchanged — each slug maps to
  * {total, read, write, destructive}, total === read + write + destructive — so every caller
- * (aafm_available_ability_count(), the Dashboard and Abilities counts, the Integrations card) is
+ * (oversio_available_ability_count(), the Dashboard and Abilities counts, the Integrations card) is
  * untouched by the source change. The slugs match the integration subjects used in the registry
- * and the Integrations cards (see aafm_integration_cards()).
+ * and the Integrations cards (see oversio_integration_cards()).
  *
  * @return array<string,array{total:int,read:int,write:int,destructive:int}>
  */
-function aafm_integration_manifest(): array {
+function oversio_integration_manifest(): array {
 	$manifest = array();
-	foreach ( aafm_integration_ability_manifest() as $slug => $rows ) {
+	foreach ( oversio_integration_ability_manifest() as $slug => $rows ) {
 		$read        = 0;
 		$write       = 0;
 		$destructive = 0;
@@ -419,13 +419,13 @@ function aafm_integration_manifest(): array {
  *
  * @return int
  */
-function aafm_available_ability_count(): int {
+function oversio_available_ability_count(): int {
 	$manifest_total = 0;
-	foreach ( aafm_integration_manifest() as $counts ) {
+	foreach ( oversio_integration_manifest() as $counts ) {
 		$manifest_total += (int) $counts['total'];
 	}
 
-	return aafm_core_ability_count() + $manifest_total;
+	return oversio_core_ability_count() + $manifest_total;
 }
 
 /**
@@ -438,11 +438,11 @@ function aafm_available_ability_count(): int {
  *
  * @return int
  */
-function aafm_core_ability_count(): int {
-	$manifest_slugs = array_keys( aafm_integration_manifest() );
+function oversio_core_ability_count(): int {
+	$manifest_slugs = array_keys( oversio_integration_manifest() );
 
 	$core     = 0;
-	$registry = aafm_get_abilities_registry();
+	$registry = oversio_get_abilities_registry();
 	foreach ( $registry as $meta ) {
 		if ( ! in_array( (string) ( $meta['subject'] ?? '' ), $manifest_slugs, true ) ) {
 			++$core;

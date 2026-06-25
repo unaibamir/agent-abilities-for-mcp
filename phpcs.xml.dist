@@ -28,7 +28,7 @@
 		<exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
 	</rule>
 
-	<!-- The cross-type private-read containment test registers an aafm_book CPT with its own
+	<!-- The cross-type private-read containment test registers an oversio_book CPT with its own
 	     capability set; read_private_books is the meta cap WordPress maps for it. Teach the
 	     capability sniff about it so the deliberate assertion isn't flagged as a typo.
 	     manage_woocommerce is the capability WooCommerce registers on activation and the gate the
@@ -53,8 +53,8 @@
 	<rule ref="WordPress.NamingConventions.PrefixAllGlobals">
 		<properties>
 			<property name="prefixes" type="array">
-				<element value="aafm"/>
-				<element value="AAFM"/>
+				<element value="oversio"/>
+				<element value="OVERSIO"/>
 			</property>
 		</properties>
 	</rule>

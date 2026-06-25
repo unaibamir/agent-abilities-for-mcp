@@ -4,7 +4,7 @@
  *
  * The update-site-settings ability is the single most dangerous write in the catalog: getting it
  * wrong could change siteurl/home/admin_email and lock out or take over the whole site.
- * It is contained four ways: (1) a fixed allowlist (aafm_allowed_site_settings) that excludes
+ * It is contained four ways: (1) a fixed allowlist (oversio_allowed_site_settings) that excludes
  * every takeover-class key and is re-stripped after any filter, (2) a closed input schema,
  * (3) a fail-closed execute that re-checks every submitted key against the allowlist and
  * rejects the WHOLE call the moment one is not on it — it never falls back to a raw
@@ -22,7 +22,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_settings_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_settings_definitions' );
 
 /**
  * Contribute the site-settings definitions to the registry.
@@ -30,22 +30,22 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_settings_definitions' );
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_settings_definitions( array $registry ): array {
-	$registry['aafm/get-site-settings']    = array(
+function oversio_register_settings_definitions( array $registry ): array {
+	$registry['oversio/get-site-settings']    = array(
 		'label'        => __( 'Get site settings', 'oversio-agent-abilities' ),
 		'description'  => __( 'Read a small allowlist of site settings: name, tagline, timezone, date and time formats, week start, and posts per page. Requires the manage-options capability. Never the site URL or admin email.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'aafm_args_get_site_settings',
+		'args_builder' => 'oversio_args_get_site_settings',
 	);
-	$registry['aafm/update-site-settings'] = array(
+	$registry['oversio/update-site-settings'] = array(
 		'label'        => __( 'Update site settings', 'oversio-agent-abilities' ),
 		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
-		'args_builder' => 'aafm_args_update_site_settings',
+		'args_builder' => 'oversio_args_update_site_settings',
 	);
 	return $registry;
 }
@@ -59,20 +59,20 @@ function aafm_register_settings_definitions( array $registry ): array {
  *
  * @return bool
  */
-function aafm_perm_manage_options(): bool {
+function oversio_perm_manage_options(): bool {
 	return current_user_can( 'manage_options' );
 }
 
 /**
- * Args for aafm/get-site-settings.
+ * Args for oversio/get-site-settings.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_site_settings(): array {
+function oversio_args_get_site_settings(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-site-settings' ),
-		'description'         => aafm_ability_description( 'aafm/get-site-settings' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-site-settings' ),
+		'description'         => oversio_ability_description( 'oversio/get-site-settings' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -84,8 +84,8 @@ function aafm_args_get_site_settings(): array {
 				'settings' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_site_settings',
-		'permission_callback' => 'aafm_perm_manage_options',
+		'execute_callback'    => 'oversio_exec_get_site_settings',
+		'permission_callback' => 'oversio_perm_manage_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -97,16 +97,16 @@ function aafm_args_get_site_settings(): array {
 }
 
 /**
- * Execute aafm/get-site-settings.
+ * Execute oversio/get-site-settings.
  *
  * Returns each allowlisted setting's current value as a key/value map. Only the fixed
  * allowlist is ever read, so the takeover-class keys can never appear in the output.
  *
  * @return array<string,mixed>
  */
-function aafm_exec_get_site_settings(): array {
+function oversio_exec_get_site_settings(): array {
 	$out = array();
-	foreach ( aafm_allowed_site_settings() as $key ) {
+	foreach ( oversio_allowed_site_settings() as $key ) {
 		$out[ $key ] = get_option( $key );
 	}
 	// The allowlist is never empty, so the map always has keys and stays a JSON object.
@@ -114,7 +114,7 @@ function aafm_exec_get_site_settings(): array {
 }
 
 /**
- * Args for aafm/update-site-settings.
+ * Args for oversio/update-site-settings.
  *
  * The schema is closed at the top level (additionalProperties:false) and the nested
  * settings object is validated server-side against the allowlist. The ability is
@@ -122,11 +122,11 @@ function aafm_exec_get_site_settings(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_args_update_site_settings(): array {
+function oversio_args_update_site_settings(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/update-site-settings' ),
-		'description'         => aafm_ability_description( 'aafm/update-site-settings' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/update-site-settings' ),
+		'description'         => oversio_ability_description( 'oversio/update-site-settings' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -144,8 +144,8 @@ function aafm_args_update_site_settings(): array {
 				'settings' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_update_site_settings',
-		'permission_callback' => 'aafm_perm_manage_options',
+		'execute_callback'    => 'oversio_exec_update_site_settings',
+		'permission_callback' => 'oversio_perm_manage_options',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -156,7 +156,7 @@ function aafm_args_update_site_settings(): array {
 }
 
 /**
- * Execute aafm/update-site-settings.
+ * Execute oversio/update-site-settings.
  *
  * Fail-closed: every submitted key is checked against the allowlist BEFORE any write, and
  * a single non-allowlisted key rejects the whole call — there is no partial apply and no
@@ -168,19 +168,19 @@ function aafm_args_update_site_settings(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_update_site_settings( array $input ) {
+function oversio_exec_update_site_settings( array $input ) {
 	$settings = isset( $input['settings'] ) && is_array( $input['settings'] ) ? $input['settings'] : array();
 	if ( array() === $settings ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$allow = aafm_allowed_site_settings();
+	$allow = oversio_allowed_site_settings();
 	// Fail closed: any key not on the allowlist rejects the whole call before a single write.
 	// The error names the rejected key and the allowed set so the agent can correct the call.
 	foreach ( array_keys( $settings ) as $key ) {
 		if ( ! in_array( (string) $key, $allow, true ) ) {
 			return new WP_Error(
-				'aafm_setting_not_allowed',
+				'oversio_setting_not_allowed',
 				sprintf(
 					/* translators: 1: the rejected setting key, 2: the comma-separated list of allowed setting keys. */
 					__( 'The setting "%1$s" cannot be changed. Allowed settings are: %2$s.', 'oversio-agent-abilities' ),
@@ -198,11 +198,11 @@ function aafm_exec_update_site_settings( array $input ) {
 	$integer_keys = array( 'posts_per_page', 'start_of_week' );
 	foreach ( $settings as $key => $value ) {
 		if ( ! is_scalar( $value ) ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 		if ( is_bool( $value ) && ! in_array( (string) $key, $integer_keys, true ) ) {
 			return new WP_Error(
-				'aafm_setting_bad_type',
+				'oversio_setting_bad_type',
 				sprintf(
 					/* translators: %s: the setting key that received a boolean value. */
 					__( 'The setting "%s" expects a text value, not true/false.', 'oversio-agent-abilities' ),
@@ -215,7 +215,7 @@ function aafm_exec_update_site_settings( array $input ) {
 	$updated = array();
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
-		update_option( $key, aafm_sanitize_site_setting( $key, $value ) );
+		update_option( $key, oversio_sanitize_site_setting( $key, $value ) );
 		// Read the value back so the agent sees ground truth after the clamp/sanitize.
 		$updated[ $key ] = get_option( $key );
 	}
@@ -235,7 +235,7 @@ function aafm_exec_update_site_settings( array $input ) {
  * @param mixed  $value Raw submitted value.
  * @return int|string Clamped/sanitized value ready for update_option.
  */
-function aafm_sanitize_site_setting( string $key, $value ) {
+function oversio_sanitize_site_setting( string $key, $value ) {
 	if ( 'posts_per_page' === $key ) {
 		// Floor to >=1 (a 0 breaks WP_Query) and cap at 100 to avoid an unbounded query.
 		return min( 100, max( 1, (int) $value ) );

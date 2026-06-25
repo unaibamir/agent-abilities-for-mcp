@@ -16,7 +16,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_plugins_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_plugins_definitions' );
 
 /**
  * Contribute the plugins-list definition to the registry.
@@ -24,40 +24,40 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_plugins_definitions' );
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_plugins_definitions( array $registry ): array {
-	$registry['aafm/list-plugins'] = array(
+function oversio_register_plugins_definitions( array $registry ): array {
+	$registry['oversio/list-plugins'] = array(
 		'label'        => __( 'List plugins', 'oversio-agent-abilities' ),
 		'description'  => __( 'Lists installed plugins with their name, version, and active state. Read-only — it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
-		'args_builder' => 'aafm_args_list_plugins',
+		'args_builder' => 'oversio_args_list_plugins',
 	);
 	return $registry;
 }
 
 /**
- * Permission for aafm/list-plugins: activate_plugins.
+ * Permission for oversio/list-plugins: activate_plugins.
  *
  * The same capability WordPress gates the Plugins screen behind. The check is object-
  * independent, so discovery can fall through to this callback with no server.php case.
  *
  * @return bool
  */
-function aafm_perm_list_plugins(): bool {
+function oversio_perm_list_plugins(): bool {
 	return current_user_can( 'activate_plugins' );
 }
 
 /**
- * Args for aafm/list-plugins.
+ * Args for oversio/list-plugins.
  *
  * @return array<string,mixed>
  */
-function aafm_args_list_plugins(): array {
+function oversio_args_list_plugins(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/list-plugins' ),
-		'description'         => aafm_ability_description( 'aafm/list-plugins' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/list-plugins' ),
+		'description'         => oversio_ability_description( 'oversio/list-plugins' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -69,8 +69,8 @@ function aafm_args_list_plugins(): array {
 				'plugins' => array( 'type' => 'array' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_list_plugins',
-		'permission_callback' => 'aafm_perm_list_plugins',
+		'execute_callback'    => 'oversio_exec_list_plugins',
+		'permission_callback' => 'oversio_perm_list_plugins',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -82,7 +82,7 @@ function aafm_args_list_plugins(): array {
 }
 
 /**
- * Execute aafm/list-plugins.
+ * Execute oversio/list-plugins.
  *
  * Returns the installed-plugin inventory. Each entry exposes the RELATIVE basename
  * (get_plugins() keys are relative to the plugins directory), the name, the version, and
@@ -90,7 +90,7 @@ function aafm_args_list_plugins(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_exec_list_plugins(): array {
+function oversio_exec_list_plugins(): array {
 	require_once ABSPATH . 'wp-admin/includes/plugin.php';
 
 	$out = array();

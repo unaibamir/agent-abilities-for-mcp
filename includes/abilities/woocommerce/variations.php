@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — product variation reads and writes (sub-slice W4-WC1b).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_variations_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_variations_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_variations_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_variations_full_definitions' );
 
 /**
  * Contribute the WooCommerce variations definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_variations
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_variations_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_variations_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_variations_registry_definitions() );
+	return array_merge( $registry, oversio_wc_variations_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce product variation definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_variations_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_variations_registry_definitions() );
+function oversio_register_wc_variations_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_variations_registry_definitions() );
 }
 
 /**
@@ -53,52 +53,52 @@ function aafm_register_wc_variations_full_definitions( array $registry ): array 
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_variations_registry_definitions(): array {
+function oversio_wc_variations_registry_definitions(): array {
 	return array(
 		// Variations (sub-slice W4-WC1b) — a variable product's child variations, parent_id-scoped.
-		'aafm/wc-list-product-variations'  => array(
+		'oversio/wc-list-product-variations'  => array(
 			'label'        => __( 'List WooCommerce product variations', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_product_variations',
+			'args_builder' => 'oversio_args_wc_list_product_variations',
 		),
 
-		'aafm/wc-get-product-variation'    => array(
+		'oversio/wc-get-product-variation'    => array(
 			'label'        => __( 'Get WooCommerce product variation', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one product variation by id, including its parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_product_variation',
+			'args_builder' => 'oversio_args_wc_get_product_variation',
 		),
 
-		'aafm/wc-create-product-variation' => array(
+		'oversio/wc-create-product-variation' => array(
 			'label'        => __( 'Create WooCommerce product variation', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_product_variation',
+			'args_builder' => 'oversio_args_wc_create_product_variation',
 		),
 
-		'aafm/wc-update-product-variation' => array(
+		'oversio/wc-update-product-variation' => array(
 			'label'        => __( 'Update WooCommerce product variation', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_product_variation',
+			'args_builder' => 'oversio_args_wc_update_product_variation',
 		),
 
-		'aafm/wc-delete-product-variation' => array(
+		'oversio/wc-delete-product-variation' => array(
 			'label'        => __( 'Delete WooCommerce product variation', 'oversio-agent-abilities' ),
 			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_delete_product_variation',
+			'args_builder' => 'oversio_args_wc_delete_product_variation',
 		),
 	);
 }
@@ -127,7 +127,7 @@ function aafm_wc_variations_registry_definitions(): array {
  * @param int $id Variation id.
  * @return \WC_Product_Variation|null
  */
-function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
+function oversio_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	if ( $id < 1 || ! function_exists( 'wc_get_product' ) ) {
 		return null;
 	}
@@ -157,7 +157,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
  * @param \WC_Product_Variation $variation Variation.
  * @return array<string,mixed>
  */
-function aafm_redact_wc_variation( \WC_Product_Variation $variation ): array {
+function oversio_redact_wc_variation( \WC_Product_Variation $variation ): array {
 	return array(
 		'id'           => (int) $variation->get_id(),
 		'parent_id'    => (int) $variation->get_parent_id(),
@@ -176,13 +176,13 @@ function aafm_redact_wc_variation( \WC_Product_Variation $variation ): array {
  * @param \WC_Product_Variation $variation Variation.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
+function oversio_rich_wc_variation( \WC_Product_Variation $variation ): array {
 	$attributes = array();
 	foreach ( (array) $variation->get_attributes() as $key => $value ) {
 		$attributes[ (string) $key ] = is_scalar( $value ) ? (string) $value : '';
 	}
 
-	$base = aafm_redact_wc_variation( $variation );
+	$base = oversio_redact_wc_variation( $variation );
 
 	return array_merge(
 		$base,
@@ -201,12 +201,12 @@ function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
 
 /**
  * The shared output_schema properties for the full single-variation shape — the exact field set
- * aafm_rich_wc_variation() emits. Reused by the get/create/update output_schemas so all three stay in
+ * oversio_rich_wc_variation() emits. Reused by the get/create/update output_schemas so all three stay in
  * lockstep with the rich assembler. `attributes` is an object (an empty map encodes as {}).
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_variation_output_properties(): array {
+function oversio_wc_variation_output_properties(): array {
 	return array(
 		'id'             => array( 'type' => 'integer' ),
 		'parent_id'      => array( 'type' => 'integer' ),
@@ -225,15 +225,15 @@ function aafm_wc_variation_output_properties(): array {
 }
 
 /**
- * Args for aafm/wc-list-product-variations.
+ * Args for oversio/wc-list-product-variations.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_product_variations(): array {
+function oversio_args_wc_list_product_variations(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-product-variations' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-product-variations' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-product-variations' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-product-variations' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -276,8 +276,8 @@ function aafm_args_wc_list_product_variations(): array {
 				'total'      => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_product_variations',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_product_variations',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -289,7 +289,7 @@ function aafm_args_wc_list_product_variations(): array {
 }
 
 /**
- * Execute aafm/wc-list-product-variations.
+ * Execute oversio/wc-list-product-variations.
  *
  * Resolves the parent product, then loads each child id as a variation. Supports page/per_page
  * paging over the child id list, with `total` reporting the full child count for pagination.
@@ -297,12 +297,12 @@ function aafm_args_wc_list_product_variations(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_wc_list_product_variations( array $input ) {
-	$parent = aafm_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
+function oversio_exec_wc_list_product_variations( array $input ) {
+	$parent = oversio_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
 	if ( null === $parent ) {
 		// Deliberately unlike wc-list-products: a missing parent is a genuine error here because
 		// variations require a parent to scope to, whereas a bare product list can legitimately be empty.
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$child_ids = array_map( 'intval', (array) $parent->get_children() );
@@ -315,9 +315,9 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 
 	$variations = array();
 	foreach ( $page_ids as $child_id ) {
-		$variation = aafm_wc_get_variation( (int) $child_id );
+		$variation = oversio_wc_get_variation( (int) $child_id );
 		if ( null !== $variation ) {
-			$variations[] = aafm_redact_wc_variation( $variation );
+			$variations[] = oversio_redact_wc_variation( $variation );
 		}
 	}
 
@@ -328,15 +328,15 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 }
 
 /**
- * Args for aafm/wc-get-product-variation.
+ * Args for oversio/wc-get-product-variation.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_product_variation(): array {
+function oversio_args_wc_get_product_variation(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-product-variation' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-product-variation' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-product-variation' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-product-variation' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -350,10 +350,10 @@ function aafm_args_wc_get_product_variation(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_variation_output_properties(),
+			'properties' => oversio_wc_variation_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_product_variation',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_product_variation',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -365,17 +365,17 @@ function aafm_args_wc_get_product_variation(): array {
 }
 
 /**
- * Execute aafm/wc-get-product-variation.
+ * Execute oversio/wc-get-product-variation.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_wc_get_product_variation( array $input ) {
-	$variation = aafm_wc_get_variation( (int) ( $input['variation_id'] ?? 0 ) );
+function oversio_exec_wc_get_product_variation( array $input ) {
+	$variation = oversio_wc_get_variation( (int) ( $input['variation_id'] ?? 0 ) );
 	if ( null === $variation ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_variation( $variation );
+	return oversio_rich_wc_variation( $variation );
 }
 
 /**
@@ -389,7 +389,7 @@ function aafm_exec_wc_get_product_variation( array $input ) {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_variation_write_properties(): array {
+function oversio_wc_variation_write_properties(): array {
 	return array(
 		'status'         => array(
 			'type'        => 'string',
@@ -442,7 +442,7 @@ function aafm_wc_variation_write_properties(): array {
  * @param array<string,mixed>   $input     Validated input (already schema-checked).
  * @return void
  */
-function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array $input ): void {
+function oversio_wc_apply_variation_input( \WC_Product_Variation $variation, array $input ): void {
 	if ( array_key_exists( 'status', $input ) ) {
 		$variation->set_status( sanitize_key( (string) $input['status'] ) );
 	}
@@ -453,10 +453,10 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 		$variation->set_description( wp_kses_post( (string) $input['description'] ) );
 	}
 	if ( array_key_exists( 'regular_price', $input ) ) {
-		$variation->set_regular_price( aafm_wc_sanitize_price( $input['regular_price'] ) );
+		$variation->set_regular_price( oversio_wc_sanitize_price( $input['regular_price'] ) );
 	}
 	if ( array_key_exists( 'sale_price', $input ) ) {
-		$variation->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
+		$variation->set_sale_price( oversio_wc_sanitize_price( $input['sale_price'] ) );
 	}
 	if ( array_key_exists( 'stock_status', $input ) ) {
 		$variation->set_stock_status( sanitize_key( (string) $input['stock_status'] ) );
@@ -471,7 +471,7 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 		$variation->set_image_id( absint( $input['image_id'] ) );
 	}
 	if ( array_key_exists( 'attributes', $input ) ) {
-		$variation->set_attributes( aafm_wc_sanitize_variation_attributes( (array) $input['attributes'] ) );
+		$variation->set_attributes( oversio_wc_sanitize_variation_attributes( (array) $input['attributes'] ) );
 	}
 }
 
@@ -483,7 +483,7 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
  * @param array<int|string,mixed> $attributes Raw attribute map.
  * @return array<string,string>
  */
-function aafm_wc_sanitize_variation_attributes( array $attributes ): array {
+function oversio_wc_sanitize_variation_attributes( array $attributes ): array {
 	$clean = array();
 	foreach ( $attributes as $key => $value ) {
 		if ( ! is_scalar( $value ) ) {
@@ -495,12 +495,12 @@ function aafm_wc_sanitize_variation_attributes( array $attributes ): array {
 }
 
 /**
- * Args for aafm/wc-create-product-variation.
+ * Args for oversio/wc-create-product-variation.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_product_variation(): array {
-	$properties               = aafm_wc_variation_write_properties();
+function oversio_args_wc_create_product_variation(): array {
+	$properties               = oversio_wc_variation_write_properties();
 	$properties['product_id'] = array(
 		'type'        => 'integer',
 		'minimum'     => 1,
@@ -508,9 +508,9 @@ function aafm_args_wc_create_product_variation(): array {
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-product-variation' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-product-variation' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-product-variation' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-product-variation' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -519,10 +519,10 @@ function aafm_args_wc_create_product_variation(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_variation_output_properties(),
+			'properties' => oversio_wc_variation_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_product_variation',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_product_variation',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -533,54 +533,54 @@ function aafm_args_wc_create_product_variation(): array {
 }
 
 /**
- * Execute aafm/wc-create-product-variation.
+ * Execute oversio/wc-create-product-variation.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_wc_create_product_variation( array $input ) {
+function oversio_exec_wc_create_product_variation( array $input ) {
 	if ( ! class_exists( 'WC_Product_Variation' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$parent = aafm_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
+	$parent = oversio_wc_get_product( (int) ( $input['product_id'] ?? 0 ) );
 	if ( null === $parent ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	// MCP LOW-1: a variation only belongs under a variable parent; attaching to a simple/grouped/
 	// external parent silently no-ops downstream, so refuse a non-variable parent up front.
 	if ( 'variable' !== $parent->get_type() ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	unset( $input['product_id'] );
 	$variation = new \WC_Product_Variation();
 	$variation->set_parent_id( (int) $parent->get_id() );
-	aafm_wc_apply_variation_input( $variation, $input );
+	oversio_wc_apply_variation_input( $variation, $input );
 	$id = (int) $variation->save();
 
-	$saved = aafm_wc_get_variation( $id );
+	$saved = oversio_wc_get_variation( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_variation( $saved );
+	return oversio_rich_wc_variation( $saved );
 }
 
 /**
- * Args for aafm/wc-update-product-variation.
+ * Args for oversio/wc-update-product-variation.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_product_variation(): array {
-	$properties                 = aafm_wc_variation_write_properties();
+function oversio_args_wc_update_product_variation(): array {
+	$properties                 = oversio_wc_variation_write_properties();
 	$properties['variation_id'] = array(
 		'type'    => 'integer',
 		'minimum' => 1,
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-product-variation' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-product-variation' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-product-variation' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-product-variation' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -589,10 +589,10 @@ function aafm_args_wc_update_product_variation(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_variation_output_properties(),
+			'properties' => oversio_wc_variation_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_product_variation',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_product_variation',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -603,37 +603,37 @@ function aafm_args_wc_update_product_variation(): array {
 }
 
 /**
- * Execute aafm/wc-update-product-variation.
+ * Execute oversio/wc-update-product-variation.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_wc_update_product_variation( array $input ) {
-	$variation = aafm_wc_get_variation( (int) ( $input['variation_id'] ?? 0 ) );
+function oversio_exec_wc_update_product_variation( array $input ) {
+	$variation = oversio_wc_get_variation( (int) ( $input['variation_id'] ?? 0 ) );
 	if ( null === $variation ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	unset( $input['variation_id'] );
-	aafm_wc_apply_variation_input( $variation, $input );
+	oversio_wc_apply_variation_input( $variation, $input );
 	$id = (int) $variation->save();
 
-	$saved = aafm_wc_get_variation( $id );
+	$saved = oversio_wc_get_variation( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_variation( $saved );
+	return oversio_rich_wc_variation( $saved );
 }
 
 /**
- * Args for aafm/wc-delete-product-variation.
+ * Args for oversio/wc-delete-product-variation.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_delete_product_variation(): array {
+function oversio_args_wc_delete_product_variation(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-delete-product-variation' ),
-		'description'         => aafm_ability_description( 'aafm/wc-delete-product-variation' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-delete-product-variation' ),
+		'description'         => oversio_ability_description( 'oversio/wc-delete-product-variation' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -652,8 +652,8 @@ function aafm_args_wc_delete_product_variation(): array {
 				'deleted' => array( 'type' => 'boolean' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_delete_product_variation',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_delete_product_variation',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -664,7 +664,7 @@ function aafm_args_wc_delete_product_variation(): array {
 }
 
 /**
- * Execute aafm/wc-delete-product-variation.
+ * Execute oversio/wc-delete-product-variation.
  *
  * Permanent removal through the variation object's own data store: $variation->delete( true ). The
  * force flag is WooCommerce's permanent-delete semantics (a variation has no recoverable WC trash for
@@ -674,15 +674,15 @@ function aafm_args_wc_delete_product_variation(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_wc_delete_product_variation( array $input ) {
+function oversio_exec_wc_delete_product_variation( array $input ) {
 	$id        = (int) ( $input['variation_id'] ?? 0 );
-	$variation = aafm_wc_get_variation( $id );
+	$variation = oversio_wc_get_variation( $id );
 	if ( null === $variation ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	// WC_Data::delete( true ) returns false when the data store could not remove the row.
 	if ( false === $variation->delete( true ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	return array(

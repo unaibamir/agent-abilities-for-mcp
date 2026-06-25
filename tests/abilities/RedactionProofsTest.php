@@ -13,9 +13,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Comment;
 use WP_Post;
 use WP_Term;
@@ -51,7 +51,7 @@ final class RedactionProofsTest extends TestCase {
 				'post_content'  => 'Body with <script>alert(1)</script> and SECRETMARKER.',
 			)
 		);
-		$shape   = aafm_redact_post( get_post( $post_id ) );
+		$shape   = oversio_redact_post( get_post( $post_id ) );
 
 		$this->assertArrayNotHasKey( 'post_password', $shape );
 		$this->assertArrayNotHasKey( 'content', $shape );
@@ -81,7 +81,7 @@ final class RedactionProofsTest extends TestCase {
 			)
 		);
 		$user    = new WP_User( $user_id );
-		$shape   = aafm_redact_user( $user );
+		$shape   = oversio_redact_user( $user );
 
 		// LOCKED reversal (47- line 144): email IS exposed in the user read shape,
 		// gated upstream by list_users + audited.
@@ -99,7 +99,7 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	public function test_redact_user_on_non_user_returns_empty(): void {
-		$this->assertSame( array(), aafm_redact_user( false ) );
+		$this->assertSame( array(), oversio_redact_user( false ) );
 	}
 
 	public function test_redact_comment_omits_email_ip_and_agent(): void {
@@ -115,7 +115,7 @@ final class RedactionProofsTest extends TestCase {
 				'comment_content'      => 'Hello there',
 			)
 		);
-		$shape      = aafm_redact_comment( get_comment( $comment_id ) );
+		$shape      = oversio_redact_comment( get_comment( $comment_id ) );
 
 		foreach ( array( 'comment_author_email', 'comment_author_IP', 'comment_author_url', 'comment_agent', 'author_email', 'author_ip', 'author_url' ) as $forbidden ) {
 			$this->assertArrayNotHasKey( $forbidden, $shape );
@@ -131,7 +131,7 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	public function test_redact_comment_on_non_comment_returns_empty(): void {
-		$this->assertSame( array(), aafm_redact_comment( null ) );
+		$this->assertSame( array(), oversio_redact_comment( null ) );
 	}
 
 	public function test_redact_term_exposes_only_safe_fields(): void {
@@ -141,7 +141,7 @@ final class RedactionProofsTest extends TestCase {
 				'name'     => 'Safe Term',
 			)
 		);
-		$shape   = aafm_redact_term( get_term( $term_id, 'category' ) );
+		$shape   = oversio_redact_term( get_term( $term_id, 'category' ) );
 		$this->assertArrayNotHasKey( 'term_taxonomy_id', $shape );
 		$this->assertArrayNotHasKey( 'filter', $shape );
 		$this->assertSame(
@@ -155,7 +155,7 @@ final class RedactionProofsTest extends TestCase {
 			DIR_TESTDATA . '/images/canola.jpg'
 		);
 		$file  = (string) get_attached_file( $att );
-		$shape = aafm_redact_media( get_post( $att ) );
+		$shape = oversio_redact_media( get_post( $att ) );
 
 		$this->assertArrayNotHasKey( '_wp_attached_file', $shape );
 		$this->assertArrayNotHasKey( 'path', $shape );
@@ -183,7 +183,7 @@ final class RedactionProofsTest extends TestCase {
 				'post_status'    => 'inherit',
 			)
 		);
-		$shape = aafm_redact_media( get_post( $att ) );
+		$shape = oversio_redact_media( get_post( $att ) );
 		$this->assertNull( $shape['width'] );
 		$this->assertNull( $shape['height'] );
 	}
@@ -191,7 +191,7 @@ final class RedactionProofsTest extends TestCase {
 	public function test_site_info_hides_environment_and_admin_email(): void {
 		// Drive the execute callback directly; assert the leaked-by-competitors fields
 		// are absent from the descriptor.
-		$shape = aafm_exec_get_site_info();
+		$shape = oversio_exec_get_site_info();
 		$this->assertArrayHasKey( 'site', $shape );
 		$site = $shape['site'];
 

@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — customer reads and writes (sub-slice W4-WC3).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_customers_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_customers_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_customers_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_customers_full_definitions' );
 
 /**
  * Contribute the WooCommerce customers definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_customers_
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_customers_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_customers_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_customers_registry_definitions() );
+	return array_merge( $registry, oversio_wc_customers_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce customer definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_customers_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_customers_registry_definitions() );
+function oversio_register_wc_customers_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_customers_registry_definitions() );
 }
 
 /**
@@ -53,43 +53,43 @@ function aafm_register_wc_customers_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_customers_registry_definitions(): array {
+function oversio_wc_customers_registry_definitions(): array {
 	return array(
 		// Customers (sub-slice W4-WC3) — PII-exposing abilities gated on manage_woocommerce.
-		'aafm/wc-list-customers'  => array(
+		'oversio/wc-list-customers'  => array(
 			'label'        => __( 'List WooCommerce customers', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_customers',
+			'args_builder' => 'oversio_args_wc_list_customers',
 		),
 
-		'aafm/wc-get-customer'    => array(
+		'oversio/wc-get-customer'    => array(
 			'label'        => __( 'Get WooCommerce customer', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce customer by id, including email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_customer',
+			'args_builder' => 'oversio_args_wc_get_customer',
 		),
 
-		'aafm/wc-create-customer' => array(
+		'oversio/wc-create-customer' => array(
 			'label'        => __( 'Create WooCommerce customer', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce customer from an email and username, with optional first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_customer',
+			'args_builder' => 'oversio_args_wc_create_customer',
 		),
 
-		'aafm/wc-update-customer' => array(
+		'oversio/wc-update-customer' => array(
 			'label'        => __( 'Update WooCommerce customer', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_customer',
+			'args_builder' => 'oversio_args_wc_update_customer',
 		),
 
 	);
@@ -98,9 +98,9 @@ function aafm_wc_customers_registry_definitions(): array {
 // =============================================================================
 // WC3 -- Customers: list, get, create, update
 // All abilities gate on the flat, object-independent manage_woocommerce cap
-// (aafm_wc_perm). None needs a server.php case — they fall through at discovery.
+// (oversio_wc_perm). None needs a server.php case — they fall through at discovery.
 // Customer PII (email, billing phone, billing/shipping addresses) is returned in
-// full under the Integrations security disclaimer (aafm_woocommerce_disclaimer).
+// full under the Integrations security disclaimer (oversio_woocommerce_disclaimer).
 // =============================================================================
 
 // -------------------------------------------------------------------------
@@ -114,7 +114,7 @@ function aafm_wc_customers_registry_definitions(): array {
  * @param int $id Customer id.
  * @return \WC_Customer|null
  */
-function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
+function oversio_wc_get_customer_object( int $id ): ?\WC_Customer {
 	if ( ! class_exists( 'WC_Customer' ) ) {
 		return null;
 	}
@@ -139,7 +139,7 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_customer_billing_properties(): array {
+function oversio_wc_customer_billing_properties(): array {
 	return array(
 		'first_name' => array( 'type' => 'string' ),
 		'last_name'  => array( 'type' => 'string' ),
@@ -160,7 +160,7 @@ function aafm_wc_customer_billing_properties(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_customer_shipping_properties(): array {
+function oversio_wc_customer_shipping_properties(): array {
 	return array(
 		'first_name' => array( 'type' => 'string' ),
 		'last_name'  => array( 'type' => 'string' ),
@@ -184,18 +184,18 @@ function aafm_wc_customer_shipping_properties(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_customer_write_properties(): array {
+function oversio_wc_customer_write_properties(): array {
 	return array(
 		'first_name' => array( 'type' => 'string' ),
 		'last_name'  => array( 'type' => 'string' ),
 		'billing'    => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wc_customer_billing_properties(),
+			'properties'           => oversio_wc_customer_billing_properties(),
 			'additionalProperties' => false,
 		),
 		'shipping'   => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wc_customer_shipping_properties(),
+			'properties'           => oversio_wc_customer_shipping_properties(),
 			'additionalProperties' => false,
 		),
 	);
@@ -206,7 +206,7 @@ function aafm_wc_customer_write_properties(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_customer_output_properties(): array {
+function oversio_wc_customer_output_properties(): array {
 	return array(
 		'id'           => array( 'type' => 'integer' ),
 		'email'        => array( 'type' => 'string' ),
@@ -218,12 +218,12 @@ function aafm_wc_customer_output_properties(): array {
 		'date_created' => array( 'type' => array( 'string', 'null' ) ),
 		'billing'      => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wc_customer_billing_properties(),
+			'properties'           => oversio_wc_customer_billing_properties(),
 			'additionalProperties' => false,
 		),
 		'shipping'     => array(
 			'type'                 => 'object',
-			'properties'           => aafm_wc_customer_shipping_properties(),
+			'properties'           => oversio_wc_customer_shipping_properties(),
 			'additionalProperties' => false,
 		),
 	);
@@ -235,7 +235,7 @@ function aafm_wc_customer_output_properties(): array {
  * @param \WC_Customer $customer Customer object.
  * @return array<string,mixed>
  */
-function aafm_redact_wc_customer( \WC_Customer $customer ): array {
+function oversio_redact_wc_customer( \WC_Customer $customer ): array {
 	return array(
 		'id'           => $customer->get_id(),
 		'email'        => $customer->get_email(),
@@ -256,7 +256,7 @@ function aafm_redact_wc_customer( \WC_Customer $customer ): array {
  * @param \WC_Customer $customer Customer object.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_customer( \WC_Customer $customer ): array {
+function oversio_rich_wc_customer( \WC_Customer $customer ): array {
 	$date_created = $customer->get_date_created();
 
 	$billing          = array(
@@ -295,7 +295,7 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
 		'username'     => $customer->get_username(),
 		'orders_count' => $customer->get_order_count(),
 		'total_spent'  => $customer->get_total_spent(),
-		'date_created' => aafm_wc_date_string( $customer->get_date_created() ),
+		'date_created' => oversio_wc_date_string( $customer->get_date_created() ),
 		'billing'      => $is_billing_empty ? (object) array() : $billing,
 		'shipping'     => $is_shipping_empty ? (object) array() : $shipping,
 	);
@@ -311,7 +311,7 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
  * @param array<string,mixed> $input    Validated input.
  * @return void
  */
-function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): void {
+function oversio_wc_apply_customer_input( \WC_Customer $customer, array $input ): void {
 	if ( array_key_exists( 'first_name', $input ) ) {
 		$customer->set_first_name( sanitize_text_field( (string) $input['first_name'] ) );
 	}
@@ -368,18 +368,18 @@ function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): v
 	}
 }
 
-// aafm/wc-list-customers (R).
+// oversio/wc-list-customers (R).
 
 /**
- * Args builder for aafm/wc-list-customers.
+ * Args builder for oversio/wc-list-customers.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_customers(): array {
+function oversio_args_wc_list_customers(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-customers' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-customers' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-customers' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-customers' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -417,8 +417,8 @@ function aafm_args_wc_list_customers(): array {
 				'total'     => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_customers',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_customers',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -430,15 +430,15 @@ function aafm_args_wc_list_customers(): array {
 }
 
 /**
- * Execute aafm/wc-list-customers.
+ * Execute oversio/wc-list-customers.
  *
  * Queries customers via wc_get_customers() (real WooCommerce) or WcCustomerStubStore (tests).
- * Each customer is mapped through the lean aafm_redact_wc_customer() shape — no addresses.
+ * Each customer is mapped through the lean oversio_redact_wc_customer() shape — no addresses.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_wc_list_customers( array $input ): array {
+function oversio_exec_wc_list_customers( array $input ): array {
 	if ( ! function_exists( 'wc_get_customers' ) ) {
 		return array(
 			'customers' => array(),
@@ -462,7 +462,7 @@ function aafm_exec_wc_list_customers( array $input ): array {
 	$customers = array();
 	foreach ( $objects as $customer ) {
 		if ( $customer instanceof \WC_Customer ) {
-			$customers[] = aafm_redact_wc_customer( $customer );
+			$customers[] = oversio_redact_wc_customer( $customer );
 		}
 	}
 
@@ -472,18 +472,18 @@ function aafm_exec_wc_list_customers( array $input ): array {
 	);
 }
 
-// aafm/wc-get-customer (R).
+// oversio/wc-get-customer (R).
 
 /**
- * Args builder for aafm/wc-get-customer.
+ * Args builder for oversio/wc-get-customer.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_customer(): array {
+function oversio_args_wc_get_customer(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-customer' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-customer' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-customer' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-customer' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -497,10 +497,10 @@ function aafm_args_wc_get_customer(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_customer_output_properties(),
+			'properties' => oversio_wc_customer_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_customer',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -512,35 +512,35 @@ function aafm_args_wc_get_customer(): array {
 }
 
 /**
- * Execute aafm/wc-get-customer.
+ * Execute oversio/wc-get-customer.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_customer( array $input ) {
-	$customer = aafm_wc_get_customer_object( (int) ( $input['customer_id'] ?? 0 ) );
+function oversio_exec_wc_get_customer( array $input ) {
+	$customer = oversio_wc_get_customer_object( (int) ( $input['customer_id'] ?? 0 ) );
 	if ( null === $customer ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_customer( $customer );
+	return oversio_rich_wc_customer( $customer );
 }
 
-// aafm/wc-create-customer (W).
+// oversio/wc-create-customer (W).
 
 /**
- * Args builder for aafm/wc-create-customer.
+ * Args builder for oversio/wc-create-customer.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_customer(): array {
-	$properties             = aafm_wc_customer_write_properties();
+function oversio_args_wc_create_customer(): array {
+	$properties             = oversio_wc_customer_write_properties();
 	$properties['email']    = array( 'type' => 'string' );
 	$properties['username'] = array( 'type' => 'string' );
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-customer' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-customer' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-customer' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-customer' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -549,10 +549,10 @@ function aafm_args_wc_create_customer(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_customer_output_properties(),
+			'properties' => oversio_wc_customer_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_customer',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -563,7 +563,7 @@ function aafm_args_wc_create_customer(): array {
 }
 
 /**
- * Execute aafm/wc-create-customer.
+ * Execute oversio/wc-create-customer.
  *
  * Creates via wc_create_new_customer(), then applies optional address fields and saves.
  * Returns WP_Error on any failure.
@@ -571,9 +571,9 @@ function aafm_args_wc_create_customer(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_customer( array $input ) {
+function oversio_exec_wc_create_customer( array $input ) {
 	if ( ! function_exists( 'wc_create_new_customer' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
@@ -585,48 +585,48 @@ function aafm_exec_wc_create_customer( array $input ) {
 	// failure after the account is already persisted).
 	$created = wc_create_new_customer( $email, $username, wp_generate_password() );
 	if ( $created instanceof \WP_Error ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$id = (int) $created;
 	if ( $id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Hydrate the persisted customer, layer on the optional address fields, and save once.
-	$customer = aafm_wc_get_customer_object( $id );
+	$customer = oversio_wc_get_customer_object( $id );
 	if ( null === $customer ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	aafm_wc_apply_customer_input( $customer, $input );
+	oversio_wc_apply_customer_input( $customer, $input );
 	if ( (int) $customer->save() < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_customer_object( $id );
+	$saved = oversio_wc_get_customer_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_customer( $saved );
+	return oversio_rich_wc_customer( $saved );
 }
 
-// aafm/wc-update-customer (W).
+// oversio/wc-update-customer (W).
 
 /**
- * Args builder for aafm/wc-update-customer.
+ * Args builder for oversio/wc-update-customer.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_customer(): array {
-	$properties                = aafm_wc_customer_write_properties();
+function oversio_args_wc_update_customer(): array {
+	$properties                = oversio_wc_customer_write_properties();
 	$properties['customer_id'] = array(
 		'type'    => 'integer',
 		'minimum' => 1,
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-customer' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-customer' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-customer' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-customer' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -635,10 +635,10 @@ function aafm_args_wc_update_customer(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_customer_output_properties(),
+			'properties' => oversio_wc_customer_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_customer',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -649,7 +649,7 @@ function aafm_args_wc_update_customer(): array {
 }
 
 /**
- * Execute aafm/wc-update-customer.
+ * Execute oversio/wc-update-customer.
  *
  * Loads the existing customer, applies only the keys present in $input, saves, then
  * returns the fresh rich shape. An input carrying only customer_id is a no-op success.
@@ -657,22 +657,22 @@ function aafm_args_wc_update_customer(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_customer( array $input ) {
+function oversio_exec_wc_update_customer( array $input ) {
 	$id       = (int) ( $input['customer_id'] ?? 0 );
-	$customer = aafm_wc_get_customer_object( $id );
+	$customer = oversio_wc_get_customer_object( $id );
 	if ( null === $customer ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	aafm_wc_apply_customer_input( $customer, $input );
+	oversio_wc_apply_customer_input( $customer, $input );
 	$saved_id = (int) $customer->save();
 	if ( $saved_id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_customer_object( $id );
+	$saved = oversio_wc_get_customer_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_customer( $saved );
+	return oversio_rich_wc_customer( $saved );
 }

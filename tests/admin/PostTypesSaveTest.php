@@ -7,41 +7,41 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Admin;
+namespace Oversio\Tests\Admin;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Privacy_Policy_Content;
 
 final class PostTypesSaveTest extends TestCase {
 
 	public function test_sanitize_keeps_only_eligible_opted_in_types(): void {
 		register_post_type(
-			'aafm_book',
+			'oversio_book',
 			array(
 				'public' => true,
 				'label'  => 'Books',
 			)
 		);
-		$posted = array( 'aafm_post_types' => array( 'aafm_book', 'attachment', 'revision', 'post', '<script>' ) );
-		$clean  = aafm_sanitize_allowed_post_types_input( $posted );
+		$posted = array( 'oversio_post_types' => array( 'oversio_book', 'attachment', 'revision', 'post', '<script>' ) );
+		$clean  = oversio_sanitize_allowed_post_types_input( $posted );
 		// Only the eligible CPT survives. attachment/revision fail the floor; post/page are
 		// always-on and never stored in the option; <script> sanitizes to nothing eligible.
-		$this->assertSame( array( 'aafm_book' ), $clean );
+		$this->assertSame( array( 'oversio_book' ), $clean );
 	}
 
 	public function test_sanitize_empty_post_stores_nothing(): void {
-		$this->assertSame( array(), aafm_sanitize_allowed_post_types_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_allowed_post_types_input( array() ) );
 	}
 
 	public function test_post_and_page_are_never_persisted_to_the_option(): void {
-		$clean = aafm_sanitize_allowed_post_types_input( array( 'aafm_post_types' => array( 'post', 'page' ) ) );
+		$clean = oversio_sanitize_allowed_post_types_input( array( 'oversio_post_types' => array( 'post', 'page' ) ) );
 		$this->assertSame( array(), $clean ); // they are forced on by the helper, not stored.
 	}
 
 	public function test_content_panel_renders_eligible_cpt_selector(): void {
 		$this->acting_as( 'administrator' );
 		register_post_type(
-			'aafm_book',
+			'oversio_book',
 			array(
 				'public'          => true,
 				'show_in_rest'    => true,
@@ -50,19 +50,19 @@ final class PostTypesSaveTest extends TestCase {
 				'label'           => 'Books',
 			)
 		);
-		update_option( 'aafm_allowed_post_types', array( 'aafm_book' ) );
+		update_option( 'oversio_allowed_post_types', array( 'oversio_book' ) );
 
 		ob_start();
-		aafm_render_abilities_tab();
+		oversio_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
 		// The selector renders the CPT as a checked checkbox with the post-types field name.
-		$this->assertStringContainsString( 'name="aafm_post_types[]"', $html );
-		$this->assertStringContainsString( 'value="aafm_book"', $html );
-		$this->assertStringContainsString( 'aafm-post-types-form', $html );
+		$this->assertStringContainsString( 'name="oversio_post_types[]"', $html );
+		$this->assertStringContainsString( 'value="oversio_book"', $html );
+		$this->assertStringContainsString( 'oversio-post-types-form', $html );
 		// Direction A presentation: the Expose column uses the toggle switch.
-		$this->assertStringContainsString( 'aafm-switch', $html );
-		$this->assertStringContainsString( 'aafm-card', $html );
+		$this->assertStringContainsString( 'oversio-switch', $html );
+		$this->assertStringContainsString( 'oversio-card', $html );
 		// post/page are always-on, not offered as toggles in the selector.
 		$this->assertStringNotContainsString( 'value="post"', $html );
 		// The governance note names the fields the agent can see.
@@ -72,7 +72,7 @@ final class PostTypesSaveTest extends TestCase {
 	public function test_abilities_tab_has_no_nested_post_types_form(): void {
 		$this->acting_as( 'administrator' );
 		register_post_type(
-			'aafm_book',
+			'oversio_book',
 			array(
 				'public'          => true,
 				'show_in_rest'    => true,
@@ -81,10 +81,10 @@ final class PostTypesSaveTest extends TestCase {
 				'label'           => 'Books',
 			)
 		);
-		update_option( 'aafm_allowed_post_types', array( 'aafm_book' ) );
+		update_option( 'oversio_allowed_post_types', array( 'oversio_book' ) );
 
 		ob_start();
-		aafm_render_abilities_tab();
+		oversio_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
 		// HTML forbids nested <form> elements: the browser drops the inner tags, breaking the
@@ -96,11 +96,11 @@ final class PostTypesSaveTest extends TestCase {
 		);
 
 		// The selector wrapper is a div, not a form.
-		$this->assertStringContainsString( '<div id="aafm-post-types-form"', $html );
-		$this->assertStringNotContainsString( '<form id="aafm-post-types-form"', $html );
+		$this->assertStringContainsString( '<div id="oversio-post-types-form"', $html );
+		$this->assertStringNotContainsString( '<form id="oversio-post-types-form"', $html );
 
 		// The save control is a non-submit button so it can never submit the outer form.
-		$this->assertStringContainsString( 'id="aafm-post-types-save"', $html );
+		$this->assertStringContainsString( 'id="oversio-post-types-save"', $html );
 		$this->assertStringContainsString( 'type="button"', $html );
 	}
 
@@ -108,14 +108,14 @@ final class PostTypesSaveTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		// No public non-builtin CPTs registered in this isolated test → selector lists nothing to opt into.
 		ob_start();
-		aafm_render_abilities_tab();
+		oversio_render_abilities_tab();
 		$html = (string) ob_get_clean();
-		$this->assertStringNotContainsString( 'name="aafm_post_types[]"', $html );
+		$this->assertStringNotContainsString( 'name="oversio_post_types[]"', $html );
 	}
 
 	public function test_privacy_policy_content_is_hooked_on_admin_init(): void {
 		$this->assertNotFalse(
-			has_action( 'admin_init', 'aafm_register_privacy_policy_content' ),
+			has_action( 'admin_init', 'oversio_register_privacy_policy_content' ),
 			'Privacy-policy content must be registered on admin_init.'
 		);
 	}
@@ -129,7 +129,7 @@ final class PostTypesSaveTest extends TestCase {
 		global $wp_actions;
 		$wp_actions['admin_init'] = ( $wp_actions['admin_init'] ?? 0 ) + 1;
 
-		aafm_register_privacy_policy_content();
+		oversio_register_privacy_policy_content();
 
 		$entries = WP_Privacy_Policy_Content::get_suggested_policy_text();
 		$ours    = wp_list_filter( $entries, array( 'plugin_name' => 'Agent Abilities for MCP' ) );

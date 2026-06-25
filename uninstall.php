@@ -34,23 +34,23 @@ require_once plugin_dir_path( __FILE__ ) . 'includes/oauth/schema.php';
  *
  * @return void
  */
-function aafm_run_uninstall(): void {
+function oversio_run_uninstall(): void {
 	if ( ! is_multisite() ) {
-		aafm_uninstall_site_data();
+		oversio_uninstall_site_data();
 		return;
 	}
 
-	$aafm_site_ids = get_sites(
+	$oversio_site_ids = get_sites(
 		array(
 			'fields' => 'ids',
 			'number' => 0,
 		)
 	);
-	foreach ( $aafm_site_ids as $aafm_site_id ) {
-		switch_to_blog( (int) $aafm_site_id );
-		aafm_uninstall_site_data();
+	foreach ( $oversio_site_ids as $oversio_site_id ) {
+		switch_to_blog( (int) $oversio_site_id );
+		oversio_uninstall_site_data();
 		restore_current_blog();
 	}
 }
 
-aafm_run_uninstall();
+oversio_run_uninstall();

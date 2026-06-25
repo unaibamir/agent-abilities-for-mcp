@@ -75,7 +75,7 @@
  * end, because neither delete-block (only trashes, no MCP force-delete) nor a delete-term ability (none
  * exists) can finish the cleanup over the wire.
  *
- * Environment fallbacks: AAFM_MCP_URL, AAFM_MCP_USER, AAFM_MCP_PASS, AAFM_MCP_BEARER.
+ * Environment fallbacks: OVERSIO_MCP_URL, OVERSIO_MCP_USER, OVERSIO_MCP_PASS, OVERSIO_MCP_BEARER.
  *
  * Exit code is the number of FAILed checks (0 = clean).
  *
@@ -97,17 +97,17 @@ if ( 'cli' !== PHP_SAPI ) {
  * per-step guards in cleanup()/flush_pending_restores() (and call_quiet()) swallow
  * it during teardown so one dead call can't abort the rest.
  */
-final class AAFM_Fatal extends \Exception {}
+final class OVERSIO_Fatal extends \Exception {}
 
 /**
  * Tiny client + assertion harness for the MCP endpoint. Single class keeps the
  * file self-contained — no autoloader, no WordPress bootstrap.
  */
-final class AAFM_Mcp_Regression {
+final class OVERSIO_Mcp_Regression {
 
 	private const MCP_ROUTE       = '/wp-json/oversio-agent-abilities/mcp';
 	private const PROTOCOL        = '2025-06-18';
-	private const FIXTURE_PREFIX  = 'AAFM-REGRESSION';
+	private const FIXTURE_PREFIX  = 'OVERSIO-REGRESSION';
 
 	/** @var array<string,mixed> */
 	private array $opts;
@@ -189,7 +189,7 @@ final class AAFM_Mcp_Regression {
 
 		$url = rtrim( (string) ( $opts['url'] ?? '' ), '/' );
 		if ( '' === $url ) {
-			$this->fatal( 'Missing --url (or AAFM_MCP_URL).' );
+			$this->fatal( 'Missing --url (or OVERSIO_MCP_URL).' );
 		}
 		// Accept either a base URL or the full endpoint.
 		if ( false !== strpos( $url, '/wp-json/' ) || false !== strpos( $url, 'rest_route=' ) ) {
@@ -282,7 +282,7 @@ final class AAFM_Mcp_Regression {
 			'params'  => [
 				'protocolVersion' => self::PROTOCOL,
 				'capabilities'    => (object) [],
-				'clientInfo'      => [ 'name' => 'aafm-regression', 'version' => '1.0.0' ],
+				'clientInfo'      => [ 'name' => 'oversio-regression', 'version' => '1.0.0' ],
 			],
 		] );
 
@@ -442,17 +442,17 @@ final class AAFM_Mcp_Regression {
 		$this->record( $section, 'get-all-post-meta returns a map', ! $all['isError'] && is_array( $all['data'] ) ? 'PASS' : 'FAIL', '' );
 
 		// Resolve the key to exercise: an explicit --meta-key override wins (pure MCP, snapshot-safe; works
-		// on a remote target too); otherwise the fixtures mu-plugin's allowlisted key (aafm_regression_pm
-		// via the aafm_allowed_meta_keys filter, local mode only). If neither is available (no override and
+		// on a remote target too); otherwise the fixtures mu-plugin's allowlisted key (oversio_regression_pm
+		// via the oversio_allowed_meta_keys filter, local mode only). If neither is available (no override and
 		// the mu-plugin could not install), SKIP the write path with a clear reason rather than fabricate a
 		// permanent option entry.
 		$key      = (string) ( $this->opts['meta-key'] ?? '' );
 		$override = '' !== $key;
 
 		// Governance probe: an unlisted post-meta key MUST be refused under a default-deny allowlist.
-		// 'aafm_regression_probe' is never the configured key. The probe meta dies with the throwaway
+		// 'oversio_regression_probe' is never the configured key. The probe meta dies with the throwaway
 		// primary post at cleanup, so an accepted write leaves nothing behind.
-		$probe = $this->call( 'update-post-meta', [ 'post_id' => $post_id, 'meta_key' => 'aafm_regression_probe', 'value' => '1' ] );
+		$probe = $this->call( 'update-post-meta', [ 'post_id' => $post_id, 'meta_key' => 'oversio_regression_probe', 'value' => '1' ] );
 		$this->record_default_deny_probe( $section, 'update-post-meta refuses an unlisted key (default)', (bool) $probe['isError'], $override );
 		if ( ! $override ) {
 			if ( ! $this->install_fixture_plugin() ) {
@@ -462,7 +462,7 @@ final class AAFM_Mcp_Regression {
 				$this->record( $section, 'meta write/get/delete (allowlist not configurable)', 'SKIP', $reason );
 				return;
 			}
-			$key = 'aafm_regression_pm';
+			$key = 'oversio_regression_pm';
 		}
 
 		// Choose the host post. The mu-plugin (non-override) path keeps using the primary post fixture so
@@ -489,7 +489,7 @@ final class AAFM_Mcp_Regression {
 
 			// The harness cannot know the remote allowlists the supplied key; a refused write is handled
 			// (reported SKIP), not a crash, so passing a non-allowlisted key on a remote stays clean.
-			$probe_w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'aafm-meta-value' ] );
+			$probe_w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'oversio-meta-value' ] );
 			if ( $probe_w['isError'] ) {
 				$this->record( $section, "update-post-meta writes '{$key}'", 'SKIP', 'target did not allowlist the supplied --meta-key (write refused cleanly)' );
 				return;
@@ -497,12 +497,12 @@ final class AAFM_Mcp_Regression {
 			$this->record( $section, "update-post-meta writes '{$key}'", 'PASS', '' );
 		} else {
 			// Real exercise against the allowlisted key: write -> get -> get-all -> delete.
-			$w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'aafm-meta-value' ] );
+			$w = $this->call( 'update-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key, 'value' => 'oversio-meta-value' ] );
 			$this->record( $section, "update-post-meta writes '{$key}'", ! $w['isError'] ? 'PASS' : 'FAIL', '' );
 		}
 
 		$r  = $this->call_data( 'get-post-meta', [ 'post_id' => $meta_pid, 'meta_key' => $key ] );
-		$ok = 'aafm-meta-value' === (string) $this->scalar( $r['value'] ?? $r['meta_value'] ?? ( $r[ $key ] ?? '' ) );
+		$ok = 'oversio-meta-value' === (string) $this->scalar( $r['value'] ?? $r['meta_value'] ?? ( $r[ $key ] ?? '' ) );
 		$this->record( $section, 'get-post-meta reads the value back', $ok ? 'PASS' : 'FAIL', '' );
 
 		$all2    = $this->call_data( 'get-all-post-meta', [ 'post_id' => $meta_pid ] );
@@ -641,7 +641,7 @@ final class AAFM_Mcp_Regression {
 		$cr      = $this->call_unwrap( 'create-term', [
 			'taxonomy'    => 'category',
 			'name'        => $this->marker . ' term',
-			'description' => 'aafm regression term',
+			'description' => 'oversio regression term',
 		], 'term' );
 		$term_id = (int) ( $cr['id'] ?? 0 );
 		if ( $term_id > 0 ) {
@@ -677,7 +677,7 @@ final class AAFM_Mcp_Regression {
 			'taxonomy'    => 'category',
 			'term_id'     => $term_id,
 			'name'        => $this->marker . ' term renamed',
-			'description' => 'aafm regression term edited',
+			'description' => 'oversio regression term edited',
 		] );
 		$after_ut = $this->call_unwrap( 'get-term', [ 'taxonomy' => 'category', 'term_id' => $term_id ], 'term' );
 		$upd_ok   = ! $ut['isError']
@@ -689,15 +689,15 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Full term CRUD lifecycle on a throwaway category term + the term-meta governance/write path.
 	 *
-	 * There is NO delete-term MCP tool, so created terms carry the AAFM-REGRESSION marker in their
+	 * There is NO delete-term MCP tool, so created terms carry the OVERSIO-REGRESSION marker in their
 	 * NAME and are swept host-side via WP-CLI (`wp term delete category <id>`) in cleanup() and
-	 * purge_orphans(). Term shape (aafm_redact_term / aafm_term_write_result): create/update return
+	 * purge_orphans(). Term shape (oversio_redact_term / oversio_term_write_result): create/update return
 	 * {term:{id,name,slug,parent}}; get/get-terms return the richer {id,name,slug,taxonomy,parent,
 	 * count,description}. Term-meta params are taxonomy/term_id/meta_key/value (note meta_key, NOT
 	 * the user-meta family's `key`); update returns {term_id,meta_key,value}, delete returns
 	 * {deleted}.
 	 *
-	 * The term-meta allowlist is FILTER-only (aafm_allowed_term_meta_keys) — there is no option to
+	 * The term-meta allowlist is FILTER-only (oversio_allowed_term_meta_keys) — there is no option to
 	 * snapshot/restore. The write path is exercised by dropping a temporary mu-plugin that adds one
 	 * test key (and the ACF field group for test_acf_lifecycle), then removing it — a reversible code
 	 * drop-in, not a live-state mutation. The probe (an unlisted key MUST be refused) is the
@@ -705,7 +705,7 @@ final class AAFM_Mcp_Regression {
 	 */
 	private function test_terms_full_lifecycle(): void {
 		$section  = 'Terms (full)';
-		$meta_key = 'aafm_regression_tm';
+		$meta_key = 'oversio_regression_tm';
 
 		// There is NO delete-term MCP tool — created terms are swept host-side via the local WP-CLI
 		// bridge. In remote mode that bridge can't reach the target, so creating a term here would
@@ -729,7 +729,7 @@ final class AAFM_Mcp_Regression {
 			if ( '' !== $tmk ) {
 				$this->exercise_term_meta_on_existing( $section, $tmk );
 			} else {
-				$this->record( $section, 'term-meta write/get/delete', 'SKIP', 'term-meta allowlist (aafm_allowed_term_meta_keys) is filter-only and not configurable via an admin option on the target. Pass --term-meta-key to exercise term-meta on the existing category 1 over MCP' );
+				$this->record( $section, 'term-meta write/get/delete', 'SKIP', 'term-meta allowlist (oversio_allowed_term_meta_keys) is filter-only and not configurable via an admin option on the target. Pass --term-meta-key to exercise term-meta on the existing category 1 over MCP' );
 			}
 			return;
 		}
@@ -738,7 +738,7 @@ final class AAFM_Mcp_Regression {
 		$cr      = $this->call_unwrap( 'create-term', [
 			'taxonomy'    => 'category',
 			'name'        => $this->marker . ' term',
-			'description' => 'aafm regression term',
+			'description' => 'oversio regression term',
 		], 'term' );
 		$term_id = (int) ( $cr['id'] ?? 0 );
 		if ( $term_id > 0 ) {
@@ -774,7 +774,7 @@ final class AAFM_Mcp_Regression {
 			'taxonomy'    => 'category',
 			'term_id'     => $term_id,
 			'name'        => $this->marker . ' term renamed',
-			'description' => 'aafm regression term edited',
+			'description' => 'oversio regression term edited',
 		] );
 		$after_ut = $this->call_unwrap( 'get-term', [ 'taxonomy' => 'category', 'term_id' => $term_id ], 'term' );
 		$upd_ok   = ! $ut['isError']
@@ -783,7 +783,7 @@ final class AAFM_Mcp_Regression {
 		$this->record( $section, 'update-term renames + re-describes the term', $upd_ok ? 'PASS' : 'FAIL', '' );
 
 		// Governance probe: an unlisted term-meta key MUST be refused (default-deny allowlist).
-		$probe    = $this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'aafm_regression_unlisted', 'value' => '1' ] );
+		$probe    = $this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => 'oversio_regression_unlisted', 'value' => '1' ] );
 		$governed = $probe['isError'];
 		$this->record( $section, 'update-term-meta refuses an unlisted key (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted an unlisted key' );
 
@@ -805,13 +805,13 @@ final class AAFM_Mcp_Regression {
 		}
 
 		// update-term-meta: write the allowlisted key; returns {term_id,meta_key,value}.
-		$w        = $this->call_data( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => $meta_key, 'value' => 'aafm-tm-value' ] );
-		$write_ok = 'aafm-tm-value' === (string) ( $w['value'] ?? '' ) && ( $w['meta_key'] ?? '' ) === $meta_key;
+		$w        = $this->call_data( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => $meta_key, 'value' => 'oversio-tm-value' ] );
+		$write_ok = 'oversio-tm-value' === (string) ( $w['value'] ?? '' ) && ( $w['meta_key'] ?? '' ) === $meta_key;
 		$this->record( $section, 'update-term-meta writes the allowlisted key', $write_ok ? 'PASS' : 'FAIL', '' );
 
 		// get-term-meta: read it back.
 		$r       = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $term_id, 'meta_key' => $meta_key ] );
-		$read_ok = 'aafm-tm-value' === (string) ( $r['value'] ?? '' );
+		$read_ok = 'oversio-tm-value' === (string) ( $r['value'] ?? '' );
 		$this->record( $section, 'get-term-meta reads the value back', $read_ok ? 'PASS' : 'FAIL', '' );
 
 		// delete-term-meta: remove the key, confirm it reads back empty.
@@ -852,17 +852,17 @@ final class AAFM_Mcp_Regression {
 			}
 		} );
 
-		$w = $this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key, 'value' => 'aafm-tm-value' ] );
+		$w = $this->call( 'update-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key, 'value' => 'oversio-tm-value' ] );
 		if ( $w['isError'] ) {
 			$this->clear_pending_restore( 'term-meta:' . $existing_term . ':' . $meta_key );
 			$this->record( $section, "update-term-meta writes '{$meta_key}' on category 1", 'SKIP', 'target did not allowlist the supplied --term-meta-key (write refused cleanly)' );
 			return;
 		}
-		$write_ok = 'aafm-tm-value' === (string) ( $w['data']['value'] ?? '' );
+		$write_ok = 'oversio-tm-value' === (string) ( $w['data']['value'] ?? '' );
 		$this->record( $section, "update-term-meta writes '{$meta_key}' on category 1", $write_ok ? 'PASS' : 'FAIL', '' );
 
 		$r       = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
-		$read_ok = 'aafm-tm-value' === (string) ( $r['value'] ?? '' );
+		$read_ok = 'oversio-tm-value' === (string) ( $r['value'] ?? '' );
 		$this->record( $section, 'get-term-meta reads the value back', $read_ok ? 'PASS' : 'FAIL', '' );
 
 		// Restore category 1 to its exact prior state (delete when it was absent before, else re-write).
@@ -885,7 +885,7 @@ final class AAFM_Mcp_Regression {
 	 * create-comment lands a PENDING comment (the ability pins status to hold), so the
 	 * moderation steps assert that posture: get-pending-comments must list it while it is
 	 * held, moderate-comment(approve) must flip it to 'approved', and delete-comment cleans
-	 * up permanently. Comment shape (aafm_redact_comment): id, post_id, author_name, content,
+	 * up permanently. Comment shape (oversio_redact_comment): id, post_id, author_name, content,
 	 * status, date_gmt, parent — never email or IP.
 	 */
 	private function test_comments_lifecycle(): void {
@@ -978,10 +978,10 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Full user CRUD lifecycle on a throwaway user. Never touches the agent user or any
-	 * pre-existing account — only the one created here, carrying the AAFM-REGRESSION marker
+	 * pre-existing account — only the one created here, carrying the OVERSIO-REGRESSION marker
 	 * in both login and email so purge_orphans() can sweep a leak.
 	 *
-	 * User shape (aafm_rich_user): id, display_name, email, roles, post_count, registered,
+	 * User shape (oversio_rich_user): id, display_name, email, roles, post_count, registered,
 	 * bio — never login or password hash. delete-user requires a reassign target; the agent
 	 * user is the reassignment recipient (its content is never the victim's).
 	 */
@@ -989,8 +989,8 @@ final class AAFM_Mcp_Regression {
 		$section = 'Users';
 
 		$rand  = substr( (string) random_int( 100000, 999999 ), 0, 6 );
-		$login = 'aafm_regression_' . $rand;
-		$email = 'aafm_regression_' . $rand . '@example.test';
+		$login = 'oversio_regression_' . $rand;
+		$email = 'oversio_regression_' . $rand . '@example.test';
 
 		// create-user: role is forced to the site default server-side; returns {user:{...}}.
 		$cu      = $this->call_unwrap( 'create-user', [
@@ -1057,7 +1057,7 @@ final class AAFM_Mcp_Regression {
 	 *
 	 * Probe first: an unlisted key must be refused by the default-deny allowlist (that
 	 * refusal is the governance PASS). To exercise the real write path, snapshot the
-	 * aafm_exposed_user_meta_keys option, add a test key, run update -> get -> delete-user-meta
+	 * oversio_exposed_user_meta_keys option, add a test key, run update -> get -> delete-user-meta
 	 * against a freshly created throwaway user, assert, then RESTORE the option exactly. If the
 	 * option cannot be configured (e.g. no WP-CLI), record the refusal PASS + a justified SKIP.
 	 *
@@ -1065,13 +1065,13 @@ final class AAFM_Mcp_Regression {
 	 */
 	private function test_user_meta_lifecycle(): void {
 		$section = 'User meta';
-		$option  = 'aafm_exposed_user_meta_keys';
-		$test_key = 'aafm_regression_um';
+		$option  = 'oversio_exposed_user_meta_keys';
+		$test_key = 'oversio_regression_um';
 
 		// A dedicated throwaway user to own the meta, tracked for cleanup.
 		$rand  = substr( (string) random_int( 100000, 999999 ), 0, 6 );
-		$login = 'aafm_regression_um_' . $rand;
-		$email = 'aafm_regression_um_' . $rand . '@example.test';
+		$login = 'oversio_regression_um_' . $rand;
+		$email = 'oversio_regression_um_' . $rand . '@example.test';
 		$cu      = $this->call_unwrap( 'create-user', [
 			'username'     => $login,
 			'email'        => $email,
@@ -1094,22 +1094,22 @@ final class AAFM_Mcp_Regression {
 
 		// Governance probe: an unlisted key must be refused under a default-deny allowlist. The probe
 		// meta dies with the throwaway user at cleanup, so an accepted write leaves nothing behind.
-		$probe = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => 'aafm_regression_unlisted', 'value' => '1' ] );
+		$probe = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => 'oversio_regression_unlisted', 'value' => '1' ] );
 		$this->record_default_deny_probe( $section, 'update-user-meta refuses an unlisted key (default)', (bool) $probe['isError'], '' !== $umk );
 		if ( '' !== $umk ) {
 			$before = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
 			$this->record( $section, "user-meta key '{$umk}' starts absent on the throwaway user", '' === (string) ( $before['value'] ?? '' ) ? 'PASS' : 'FAIL', '' );
 
-			$wo = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => $umk, 'value' => 'aafm-um-value' ] );
+			$wo = $this->call( 'update-user-meta', [ 'user_id' => $user_id, 'key' => $umk, 'value' => 'oversio-um-value' ] );
 			if ( $wo['isError'] ) {
 				$this->record( $section, "update-user-meta writes '{$umk}'", 'SKIP', 'target did not allowlist the supplied --user-meta-key (write refused cleanly)' );
 				return;
 			}
-			$wo_ok = 'aafm-um-value' === (string) ( $wo['data']['value'] ?? '' ) && ( $wo['data']['key'] ?? '' ) === $umk;
+			$wo_ok = 'oversio-um-value' === (string) ( $wo['data']['value'] ?? '' ) && ( $wo['data']['key'] ?? '' ) === $umk;
 			$this->record( $section, "update-user-meta writes '{$umk}'", $wo_ok ? 'PASS' : 'FAIL', '' );
 
 			$ro      = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
-			$ro_ok   = 'aafm-um-value' === (string) ( $ro['value'] ?? '' );
+			$ro_ok   = 'oversio-um-value' === (string) ( $ro['value'] ?? '' );
 			$this->record( $section, 'get-user-meta reads the value back', $ro_ok ? 'PASS' : 'FAIL', '' );
 
 			$do      = $this->call( 'delete-user-meta', [ 'user_id' => $user_id, 'key' => $umk ] );
@@ -1134,13 +1134,13 @@ final class AAFM_Mcp_Regression {
 		}
 
 		// update-user-meta: write the allowlisted key; returns {user_id,key,value}.
-		$w  = $this->call_data( 'update-user-meta', [ 'user_id' => $user_id, 'key' => $test_key, 'value' => 'aafm-um-value' ] );
-		$write_ok = 'aafm-um-value' === (string) ( $w['value'] ?? '' ) && ( $w['key'] ?? '' ) === $test_key;
+		$w  = $this->call_data( 'update-user-meta', [ 'user_id' => $user_id, 'key' => $test_key, 'value' => 'oversio-um-value' ] );
+		$write_ok = 'oversio-um-value' === (string) ( $w['value'] ?? '' ) && ( $w['key'] ?? '' ) === $test_key;
 		$this->record( $section, 'update-user-meta writes the allowlisted key', $write_ok ? 'PASS' : 'FAIL', '' );
 
 		// get-user-meta: read it back.
 		$r  = $this->call_data( 'get-user-meta', [ 'user_id' => $user_id, 'key' => $test_key ] );
-		$read_ok = 'aafm-um-value' === (string) ( $r['value'] ?? '' );
+		$read_ok = 'oversio-um-value' === (string) ( $r['value'] ?? '' );
 		$this->record( $section, 'get-user-meta reads the value back', $read_ok ? 'PASS' : 'FAIL', '' );
 
 		// delete-user-meta: remove the key, then confirm it reads back empty.
@@ -1194,15 +1194,15 @@ final class AAFM_Mcp_Regression {
 		$section = 'Custom post types';
 
 		// Governance probe runs regardless: a type that is NOT exposed to agents must be refused. The
-		// probe type 'aafm_regression_unexposed' is never registered or allowlisted by the mu-plugin.
-		$probe    = $this->call( 'create-cpt-item', [ 'post_type' => 'aafm_regression_unexposed', 'title' => $this->marker . ' cpt' ] );
+		// probe type 'oversio_regression_unexposed' is never registered or allowlisted by the mu-plugin.
+		$probe    = $this->call( 'create-cpt-item', [ 'post_type' => 'oversio_regression_unexposed', 'title' => $this->marker . ' cpt' ] );
 		$governed = $probe['isError'];
 		$this->record( $section, 'create-cpt-item refuses an unexposed type (default)', $governed ? 'PASS' : 'FAIL', $governed ? 'correctly refused' : 'UNEXPECTEDLY accepted' );
 
 		// Resolve the writable type to exercise. Precedence:
 		//   1. --cpt override always wins.
 		//   2. Local mode: the fixtures mu-plugin registers + allowlists a throwaway type
-		//      ('aafm_regression_cpt': public, show_in_rest, map_meta_cap, capability_type post so the
+		//      ('oversio_regression_cpt': public, show_in_rest, map_meta_cap, capability_type post so the
 		//      admin agent can create/edit/publish it).
 		//   3. Remote mode: auto-discover an agent-writable type from get-post-types — the first item with
 		//      writable===true that is not post/page — and exercise the lifecycle against it. If none is
@@ -1215,7 +1215,7 @@ final class AAFM_Mcp_Regression {
 					$this->record( $section, 'CPT create/update (no agent-writable type)', 'SKIP', 'could not install the fixtures mu-plugin via the DDEV bridge' );
 					return;
 				}
-				$cpt = 'aafm_regression_cpt';
+				$cpt = 'oversio_regression_cpt';
 			} else {
 				$cpt = $this->discover_writable_cpt();
 				if ( '' === $cpt ) {
@@ -1545,7 +1545,7 @@ final class AAFM_Mcp_Regression {
 	 * against a raster-image allowlist, and returns {attachment_id, media:{...}}. The whole chain
 	 * stays on fixtures this run creates: a 1x1 PNG attachment (tracked in $created_media) and a
 	 * throwaway post (tracked in $created_posts) to receive the featured image. Both are deleted
-	 * in cleanup(). Media shape (aafm_redact_media / aafm_media_item_payload): id, title, mime_type,
+	 * in cleanup(). Media shape (oversio_redact_media / oversio_media_item_payload): id, title, mime_type,
 	 * url, alt, width, height (+ caption/description/date_gmt/filesize/parent/sizes on the item).
 	 */
 	private function test_media_lifecycle(): void {
@@ -1644,7 +1644,7 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Full navigation-menu CRUD lifecycle on a throwaway menu + a throwaway item.
 	 *
-	 * Menus carry the AAFM-REGRESSION marker in their NAME so purge_orphans() can sweep a leak via
+	 * Menus carry the OVERSIO-REGRESSION marker in their NAME so purge_orphans() can sweep a leak via
 	 * list-menus. Menu items have no title search, but they die with their menu (delete-menu removes
 	 * all items), and the run deletes the item explicitly first. Single-object menu/item reads and
 	 * writes return their fields DIRECTLY (not enveloped): get-menu/create-menu/update-menu →
@@ -1691,7 +1691,7 @@ final class AAFM_Mcp_Regression {
 		$ci      = $this->call( 'create-menu-item', [
 			'menu_id' => $menu_id,
 			'title'   => $this->marker . ' item',
-			'url'     => 'https://example.com/aafm',
+			'url'     => 'https://example.com/oversio',
 		] );
 		$item_id = (int) ( $ci['data']['id'] ?? 0 );
 		if ( $item_id > 0 ) {
@@ -1716,11 +1716,11 @@ final class AAFM_Mcp_Regression {
 				'menu_id' => $menu_id,
 				'item_id' => $item_id,
 				'title'   => $this->marker . ' item updated',
-				'url'     => 'https://example.com/aafm-updated',
+				'url'     => 'https://example.com/oversio-updated',
 			] );
 			$ui_ok    = ! $ui['isError']
 				&& false !== strpos( (string) ( $ui['data']['title'] ?? '' ), 'updated' )
-				&& false !== strpos( (string) ( $ui['data']['url'] ?? '' ), 'aafm-updated' );
+				&& false !== strpos( (string) ( $ui['data']['url'] ?? '' ), 'oversio-updated' );
 			$this->record( $section, 'update-menu-item changes label and url', $ui_ok ? 'PASS' : 'FAIL', '' );
 
 			// delete-menu-item: permanent; confirm it is gone from the menu, then drop from tracking.
@@ -1756,7 +1756,7 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Full reusable-block (wp_block) CRUD lifecycle on a throwaway synced block.
 	 *
-	 * Blocks carry the AAFM-REGRESSION marker in their TITLE so purge_orphans() can sweep a leak via
+	 * Blocks carry the OVERSIO-REGRESSION marker in their TITLE so purge_orphans() can sweep a leak via
 	 * list-blocks (which supports a search). create/get/update-block return the rich shape DIRECTLY
 	 * (not enveloped): {id,title,slug,status,modified,content,date}. delete-block TRASHES the block
 	 * (recoverable) and returns {id,status:'trash'}; cleanup then force-purges it.
@@ -1837,7 +1837,7 @@ final class AAFM_Mcp_Regression {
 	 *
 	 * This site has ACF active but ships no field group, so the harness drops a temporary fixtures
 	 * mu-plugin (the same one the term-meta write path uses) that registers ONE text field
-	 * (aafm_reg_text / field key field_aafm_reg_text) on post + category + user. That makes the full
+	 * (oversio_reg_text / field key field_oversio_reg_text) on post + category + user. That makes the full
 	 * round-trip exercisable on throwaway fixtures: a throwaway post, the created category term, and a
 	 * throwaway user. Field values are snapshot-free — each fixture is created blank by this run and
 	 * deleted in cleanup(), so writing a field value mutates only throwaway objects. The mu-plugin is
@@ -1849,8 +1849,8 @@ final class AAFM_Mcp_Regression {
 	 */
 	private function test_acf_lifecycle(): void {
 		$section    = 'ACF';
-		$field_key  = 'field_aafm_reg_text';
-		$field_name = 'aafm_reg_text';
+		$field_key  = 'field_oversio_reg_text';
+		$field_name = 'oversio_reg_text';
 
 		// Decide host state up front so the SKIP reason is accurate. The ACF tools are only exposed
 		// when the host is active; if they are absent from tools/list, ACF is inactive/not installed.
@@ -1886,7 +1886,7 @@ final class AAFM_Mcp_Regression {
 		$groups   = $this->call_data( 'acf-list-field-groups', [] )['field_groups'] ?? [];
 		$has_group = false;
 		foreach ( $groups as $g ) {
-			if ( 'group_aafm_regression' === ( $g['key'] ?? '' ) ) {
+			if ( 'group_oversio_regression' === ( $g['key'] ?? '' ) ) {
 				foreach ( ( $g['fields'] ?? [] ) as $f ) {
 					if ( ( $f['key'] ?? '' ) === $field_key && 'text' === ( $f['type'] ?? '' ) ) {
 						$has_group = true;
@@ -1934,8 +1934,8 @@ final class AAFM_Mcp_Regression {
 		// --- User fields: a throwaway user, blank by creation. ---
 		$rand    = substr( (string) random_int( 100000, 999999 ), 0, 6 );
 		$cu      = $this->call_unwrap( 'create-user', [
-			'username'     => 'aafm_regression_acf_' . $rand,
-			'email'        => 'aafm_regression_acf_' . $rand . '@example.test',
+			'username'     => 'oversio_regression_acf_' . $rand,
+			'email'        => 'oversio_regression_acf_' . $rand . '@example.test',
 			'display_name' => $this->marker . ' acf-user',
 		], 'user' );
 		$user_id = (int) ( $cu['id'] ?? 0 );
@@ -2035,8 +2035,8 @@ final class AAFM_Mcp_Regression {
 		// --- User fields against a throwaway user (blank by creation; deleted in cleanup). ---
 		$rand    = substr( (string) random_int( 100000, 999999 ), 0, 6 );
 		$cu      = $this->call_unwrap( 'create-user', [
-			'username'     => 'aafm_regression_acf_' . $rand,
-			'email'        => 'aafm_regression_acf_' . $rand . '@example.test',
+			'username'     => 'oversio_regression_acf_' . $rand,
+			'email'        => 'oversio_regression_acf_' . $rand . '@example.test',
 			'display_name' => $this->marker . ' acf-user',
 		], 'user' );
 		$user_id = (int) ( $cu['id'] ?? 0 );
@@ -2133,7 +2133,7 @@ final class AAFM_Mcp_Regression {
 		// Reusable blocks: the ability only TRASHES (recoverable by design), so a trashed wp_block
 		// still carries the marker. There is no MCP force-delete for wp_block (it is outside the
 		// content allowlist), so finish the purge host-side via WP-CLI — same DDEV bridge used for
-		// option snapshot/restore — to leave zero AAFM-REGRESSION objects.
+		// option snapshot/restore — to leave zero OVERSIO-REGRESSION objects.
 		foreach ( $this->created_blocks as $id ) {
 			$this->call_quiet( 'delete-block', [ 'block_id' => $id ] );
 			try {
@@ -2301,7 +2301,7 @@ final class AAFM_Mcp_Regression {
 		foreach ( ( $users['users'] ?? [] ) as $item ) {
 			$id    = (int) ( $item['id'] ?? 0 );
 			$email = (string) ( $item['email'] ?? '' );
-			if ( $id <= 0 || false === stripos( $email, 'aafm_regression' ) ) {
+			if ( $id <= 0 || false === stripos( $email, 'oversio_regression' ) ) {
 				continue;
 			}
 			$reassign = $this->reassign_target_user( $id );
@@ -2369,13 +2369,13 @@ final class AAFM_Mcp_Regression {
 	 * @return array{id:string,post_id:int}|null
 	 */
 	private function create_db_template(): ?array {
-		$slug = 'aafm-regression-tpl-' . substr( (string) getmypid(), -4 );
+		$slug = 'oversio-regression-tpl-' . substr( (string) getmypid(), -4 );
 		$php  = '$slug = ' . var_export( $slug, true ) . ';'
 			. '$stylesheet = get_stylesheet();'
 			. '$pid = wp_insert_post( array('
 			. '"post_title" => "' . self::FIXTURE_PREFIX . ' template",'
 			. '"post_name" => $slug,'
-			. '"post_content" => "<!-- wp:paragraph --><p>aafm regression template seed</p><!-- /wp:paragraph -->",'
+			. '"post_content" => "<!-- wp:paragraph --><p>oversio regression template seed</p><!-- /wp:paragraph -->",'
 			. '"post_status" => "publish",'
 			. '"post_type" => "wp_template",'
 			. '), true );'
@@ -2440,7 +2440,7 @@ final class AAFM_Mcp_Regression {
 	/* ---------------------------------------------------------------------
 	 * Temporary fixtures mu-plugin bridge (host-side, via DDEV).
 	 *
-	 * The term-meta allowlist (aafm_allowed_term_meta_keys) and ACF field groups are FILTER/code
+	 * The term-meta allowlist (oversio_allowed_term_meta_keys) and ACF field groups are FILTER/code
 	 * configuration, not options, so they cannot be set over WP-CLI option writes. To exercise the
 	 * term-meta write path and the ACF field round-trips, a tiny mu-plugin is dropped into the WP
 	 * install for the duration of the run and removed afterwards — a reversible code drop-in that
@@ -2450,7 +2450,7 @@ final class AAFM_Mcp_Regression {
 
 	/** Absolute path (inside the web container) to the temporary fixtures mu-plugin. */
 	private function fixture_plugin_path(): string {
-		return 'wp/wp-content/mu-plugins/aafm-regression-fixtures.php';
+		return 'wp/wp-content/mu-plugins/oversio-regression-fixtures.php';
 	}
 
 	/**
@@ -2470,24 +2470,24 @@ final class AAFM_Mcp_Regression {
 		}
 		$php = <<<'PHP'
 <?php
-// AAFM-REGRESSION temporary fixtures. Registers, for the duration of a regression run: one allowlisted
+// OVERSIO-REGRESSION temporary fixtures. Registers, for the duration of a regression run: one allowlisted
 // term-meta key, one allowlisted post-meta key, one throwaway agent-writable custom post type, and one
 // throwaway ACF text field (post + category + user). This lets the harness exercise the term-meta and
 // post-meta write paths, the CPT create/update path, and the ACF field round-trips against throwaway
 // fixtures. Every addition is a FILTER drop-in (no live option is touched) and the file is auto-removed
 // by bin/mcp-regression.php at the end of the run, so nothing here outlives the run.
-add_filter( 'aafm_allowed_term_meta_keys', function ( $keys ) { $keys[] = 'aafm_regression_tm'; return $keys; } );
-add_filter( 'aafm_allowed_meta_keys', function ( $keys ) { $keys[] = 'aafm_regression_pm'; return $keys; } );
+add_filter( 'oversio_allowed_term_meta_keys', function ( $keys ) { $keys[] = 'oversio_regression_tm'; return $keys; } );
+add_filter( 'oversio_allowed_meta_keys', function ( $keys ) { $keys[] = 'oversio_regression_pm'; return $keys; } );
 // Expose the throwaway CPT to agents. The filter is re-floored by the plugin against the eligibility
 // gate (public + non-builtin), so the type must be registered first (priority default fires after init).
-add_filter( 'aafm_allowed_post_types', function ( $types ) { $types[] = 'aafm_regression_cpt'; return $types; } );
+add_filter( 'oversio_allowed_post_types', function ( $types ) { $types[] = 'oversio_regression_cpt'; return $types; } );
 // A throwaway, agent-writable custom post type. public + show_in_rest clears the eligibility floor;
 // capability_type 'post' + map_meta_cap reuses the administrator's edit/publish/delete_post caps (so the
 // mcp-agent admin can create, edit, publish, and delete it) and satisfies the update path's map_meta_cap
 // requirement. Not registered as a real content type anywhere else — it dies with this mu-plugin.
 add_action( 'init', function () {
-	register_post_type( 'aafm_regression_cpt', array(
-		'label'           => 'AAFM Regression CPT',
+	register_post_type( 'oversio_regression_cpt', array(
+		'label'           => 'OVERSIO Regression CPT',
 		'public'          => true,
 		'show_in_rest'    => true,
 		'capability_type' => 'post',
@@ -2498,10 +2498,10 @@ add_action( 'init', function () {
 add_action( 'acf/init', function () {
 	if ( ! function_exists( 'acf_add_local_field_group' ) ) { return; }
 	acf_add_local_field_group( array(
-		'key'      => 'group_aafm_regression',
-		'title'    => 'AAFM-REGRESSION fields',
+		'key'      => 'group_oversio_regression',
+		'title'    => 'OVERSIO-REGRESSION fields',
 		'fields'   => array(
-			array( 'key' => 'field_aafm_reg_text', 'label' => 'AAFM Reg Text', 'name' => 'aafm_reg_text', 'type' => 'text' ),
+			array( 'key' => 'field_oversio_reg_text', 'label' => 'OVERSIO Reg Text', 'name' => 'oversio_reg_text', 'type' => 'text' ),
 		),
 		'location' => array(
 			array( array( 'param' => 'post_type', 'operator' => '==', 'value' => 'post' ) ),
@@ -2520,10 +2520,10 @@ PHP;
 		// Verify the integrations are live before declaring success. The term-meta + post-meta allowlists
 		// and the throwaway CPT are the gate (the write-path tests depend on them); the ACF group is a
 		// bonus consumed only by test_acf_lifecycle.
-		$allow_tm = $this->ddev_wp( [ 'eval', 'echo in_array("aafm_regression_tm", aafm_allowed_term_meta_keys(), true) ? "1" : "0";' ] );
-		$allow_pm = $this->ddev_wp( [ 'eval', 'echo in_array("aafm_regression_pm", aafm_allowed_meta_keys(), true) ? "1" : "0";' ] );
-		$cpt      = $this->ddev_wp( [ 'eval', 'echo ( post_type_exists("aafm_regression_cpt") && in_array("aafm_regression_cpt", aafm_allowed_post_types(), true) ) ? "1" : "0";' ] );
-		$group    = $this->ddev_wp( [ 'eval', 'echo function_exists("acf_get_field_groups") && in_array("group_aafm_regression", array_map(function($g){return $g["key"];}, (array) acf_get_field_groups()), true) ? "1" : "0";' ] );
+		$allow_tm = $this->ddev_wp( [ 'eval', 'echo in_array("oversio_regression_tm", oversio_allowed_term_meta_keys(), true) ? "1" : "0";' ] );
+		$allow_pm = $this->ddev_wp( [ 'eval', 'echo in_array("oversio_regression_pm", oversio_allowed_meta_keys(), true) ? "1" : "0";' ] );
+		$cpt      = $this->ddev_wp( [ 'eval', 'echo ( post_type_exists("oversio_regression_cpt") && in_array("oversio_regression_cpt", oversio_allowed_post_types(), true) ) ? "1" : "0";' ] );
+		$group    = $this->ddev_wp( [ 'eval', 'echo function_exists("acf_get_field_groups") && in_array("group_oversio_regression", array_map(function($g){return $g["key"];}, (array) acf_get_field_groups()), true) ? "1" : "0";' ] );
 		$ok       = ( null !== $allow_tm && '1' === trim( $allow_tm ) )
 			&& ( null !== $allow_pm && '1' === trim( $allow_pm ) )
 			&& ( null !== $cpt && '1' === trim( $cpt ) );
@@ -3188,7 +3188,7 @@ PHP;
 		// would skip every remaining fixture deletion + option restore. As a throwable, call_quiet()
 		// and the per-step guards in cleanup()/flush_pending_restores() swallow it so teardown runs to
 		// the end; the top-level bootstrap catches it for the normal run and exits non-zero (code 2).
-		throw new AAFM_Fatal( $s );
+		throw new OVERSIO_Fatal( $s );
 	}
 
 	// Late-bound scratch state.
@@ -3225,7 +3225,7 @@ PHP;
 /**
  * @return array<string,mixed>
  */
-function aafm_parse_argv( array $argv ): array {
+function oversio_parse_argv( array $argv ): array {
 	$opts = [];
 	foreach ( array_slice( $argv, 1 ) as $arg ) {
 		if ( 0 !== strpos( $arg, '--' ) ) {
@@ -3240,14 +3240,14 @@ function aafm_parse_argv( array $argv ): array {
 		}
 	}
 	// Environment fallbacks.
-	$opts['url']    = $opts['url']    ?? ( getenv( 'AAFM_MCP_URL' )    ?: null );
-	$opts['user']   = $opts['user']   ?? ( getenv( 'AAFM_MCP_USER' )   ?: null );
-	$opts['pass']   = $opts['pass']   ?? ( getenv( 'AAFM_MCP_PASS' )   ?: null );
-	$opts['bearer'] = $opts['bearer'] ?? ( getenv( 'AAFM_MCP_BEARER' ) ?: null );
+	$opts['url']    = $opts['url']    ?? ( getenv( 'OVERSIO_MCP_URL' )    ?: null );
+	$opts['user']   = $opts['user']   ?? ( getenv( 'OVERSIO_MCP_USER' )   ?: null );
+	$opts['pass']   = $opts['pass']   ?? ( getenv( 'OVERSIO_MCP_PASS' )   ?: null );
+	$opts['bearer'] = $opts['bearer'] ?? ( getenv( 'OVERSIO_MCP_BEARER' ) ?: null );
 	return $opts;
 }
 
-$opts = aafm_parse_argv( $argv );
+$opts = oversio_parse_argv( $argv );
 if ( isset( $opts['help'] ) ) {
 	fwrite( STDOUT, "See the header of this file for usage.\n" );
 	exit( 0 );
@@ -3260,10 +3260,10 @@ if ( ! function_exists( 'wp_json_safe' ) ) {
 	}
 }
 
-$runner = new AAFM_Mcp_Regression( $opts );
+$runner = new OVERSIO_Mcp_Regression( $opts );
 try {
 	$code = $runner->run();
-} catch ( AAFM_Fatal $e ) {
+} catch ( OVERSIO_Fatal $e ) {
 	// Preserve today's behavior: a fatal during the normal run prints FATAL: ... and exits non-zero.
 	// The registered shutdown cleanup() still runs after this exit, restoring any mutated state.
 	fwrite( STDERR, 'FATAL: ' . $e->getMessage() . "\n" );

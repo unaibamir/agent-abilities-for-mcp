@@ -14,17 +14,17 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 final class SiteSettingsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 	}
 
 	/**
@@ -34,16 +34,16 @@ final class SiteSettingsTest extends TestCase {
 	private function register_all(): void {
 		global $wp_current_filter;
 		$wp_current_filter[] = 'wp_abilities_api_categories_init';
-		aafm_register_categories();
+		oversio_register_categories();
 		array_pop( $wp_current_filter );
-		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
+		update_option( 'oversio_enabled_abilities', array_keys( oversio_get_abilities_registry() ) );
 		$wp_current_filter[] = 'wp_abilities_api_init';
-		aafm_register_enabled_abilities();
+		oversio_register_enabled_abilities();
 		array_pop( $wp_current_filter );
 	}
 
 	public function test_allowlist_excludes_takeover_class_keys(): void {
-		$allow = aafm_allowed_site_settings();
+		$allow = oversio_allowed_site_settings();
 		$this->assertContains( 'blogname', $allow );
 		$this->assertContains( 'timezone_string', $allow );
 		foreach ( array( 'siteurl', 'home', 'admin_email', 'default_role', 'users_can_register' ) as $danger ) {
@@ -59,9 +59,9 @@ final class SiteSettingsTest extends TestCase {
 			$base[] = 'siteurl';
 			return $base;
 		};
-		add_filter( 'aafm_allowed_site_settings', $rogue );
-		$allow = aafm_allowed_site_settings();
-		remove_filter( 'aafm_allowed_site_settings', $rogue );
+		add_filter( 'oversio_allowed_site_settings', $rogue );
+		$allow = oversio_allowed_site_settings();
+		remove_filter( 'oversio_allowed_site_settings', $rogue );
 
 		$this->assertNotContains( 'admin_email', $allow, 'A rogue filter widened the allowlist to admin_email.' );
 		$this->assertNotContains( 'siteurl', $allow, 'A rogue filter widened the allowlist to siteurl.' );
@@ -70,10 +70,10 @@ final class SiteSettingsTest extends TestCase {
 	public function test_get_site_settings_returns_allowlisted_values_for_admin_only(): void {
 		$this->register_all();
 		$this->acting_as( 'subscriber' );
-		$this->assertNotTrue( wp_get_ability( 'aafm/get-site-settings' )->check_permissions( array() ) );
+		$this->assertNotTrue( wp_get_ability( 'oversio/get-site-settings' )->check_permissions( array() ) );
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/get-site-settings' )->execute( array() );
+		$res = wp_get_ability( 'oversio/get-site-settings' )->execute( array() );
 		$this->assertArrayHasKey( 'settings', $res );
 		$this->assertArrayHasKey( 'blogname', $res['settings'] );
 		$this->assertArrayNotHasKey( 'admin_email', $res['settings'], 'must never return admin_email.' );
@@ -82,7 +82,7 @@ final class SiteSettingsTest extends TestCase {
 	public function test_update_site_settings_writes_only_allowlisted_keys(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array(
 					'blogname'       => 'New Name',
@@ -99,7 +99,7 @@ final class SiteSettingsTest extends TestCase {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
 		$before = get_option( 'admin_email' );
-		$res    = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res    = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array( 'admin_email' => 'attacker@evil.test' ),
 			)
@@ -125,7 +125,7 @@ final class SiteSettingsTest extends TestCase {
 
 		// Smuggle every takeover key, paired with a legitimate one to prove the legitimate
 		// write does NOT sneak the rest in past a partial apply.
-		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array(
 					'blogname'           => 'Owned',
@@ -149,15 +149,15 @@ final class SiteSettingsTest extends TestCase {
 	public function test_update_site_settings_requires_manage_options_and_is_destructive(): void {
 		$this->register_all();
 		$this->acting_as( 'editor' );
-		$this->assertNotTrue( wp_get_ability( 'aafm/update-site-settings' )->check_permissions( array() ) );
-		$ann = wp_get_ability( 'aafm/update-site-settings' )->get_meta_item( 'annotations' );
+		$this->assertNotTrue( wp_get_ability( 'oversio/update-site-settings' )->check_permissions( array() ) );
+		$ann = wp_get_ability( 'oversio/update-site-settings' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $ann['destructive'] );
 	}
 
 	public function test_update_site_settings_clamps_integer_ranges(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array(
 					'posts_per_page' => 0,
@@ -174,7 +174,7 @@ final class SiteSettingsTest extends TestCase {
 		// absint would turn -5 into 5; the floor/cap form must clamp it to 1.
 		$this->register_all();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array( 'posts_per_page' => -5 ),
 			)
@@ -192,12 +192,12 @@ final class SiteSettingsTest extends TestCase {
 		$this->register_all();
 
 		$this->acting_as( 'administrator' );
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-site-settings' ) );
-		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-site-settings' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/get-site-settings' ) );
+		$this->assertTrue( oversio_user_can_discover_ability( 'oversio/update-site-settings' ) );
 
 		$this->acting_as( 'editor' );
-		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-site-settings' ) );
-		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-site-settings' ) );
+		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/get-site-settings' ) );
+		$this->assertFalse( oversio_user_can_discover_ability( 'oversio/update-site-settings' ) );
 	}
 
 	/**
@@ -208,13 +208,13 @@ final class SiteSettingsTest extends TestCase {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
 		$before = get_option( 'blogname' );
-		$res    = wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$res    = wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array( 'blogname' => array( 'x', 'y' ) ),
 			)
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'a non-scalar value must be rejected.' );
-		$this->assertSame( 'aafm_error', $res->get_error_code(), 'must degrade on our generic error, not the API exception net.' );
+		$this->assertSame( 'oversio_error', $res->get_error_code(), 'must degrade on our generic error, not the API exception net.' );
 		$this->assertSame( $before, get_option( 'blogname' ), 'blogname must be untouched after a rejected non-scalar.' );
 	}
 
@@ -226,7 +226,7 @@ final class SiteSettingsTest extends TestCase {
 	public function test_update_site_settings_normalizes_a_malformed_timezone(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/update-site-settings' )->execute(
+		wp_get_ability( 'oversio/update-site-settings' )->execute(
 			array(
 				'settings' => array( 'timezone_string' => 'Not/AZone' ),
 			)

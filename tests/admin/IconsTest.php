@@ -7,22 +7,22 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Admin;
+namespace Oversio\Tests\Admin;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class IconsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		// aafm_render_admin_page() defaults to the dashboard tab, which counts activity-log
+		// oversio_render_admin_page() defaults to the dashboard tab, which counts activity-log
 		// rows; install the table so the render is clean rather than emitting a DB notice.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 	}
 
 	public function test_integrations_icon_is_a_non_empty_svg(): void {
-		$svg = aafm_icon( 'integrations' );
+		$svg = oversio_icon( 'integrations' );
 		$this->assertNotSame( '', $svg, 'The integrations icon must not be empty.' );
 		$this->assertStringContainsString( '<svg', $svg );
 		$this->assertStringContainsString( 'viewBox="0 0 24 24"', $svg );
@@ -32,7 +32,7 @@ final class IconsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		ob_start();
-		aafm_render_admin_page();
+		oversio_render_admin_page();
 		$html = (string) ob_get_clean();
 
 		// The Integrations nav-tab anchor must carry an inline <svg> like the other tabs.

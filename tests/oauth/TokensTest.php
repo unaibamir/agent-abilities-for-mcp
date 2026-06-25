@@ -8,9 +8,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 
 /**
@@ -29,7 +29,7 @@ class TokensTest extends TestCase {
 		return array(
 			'client_id'  => 'client_abc',
 			'wp_user_id' => 42,
-			'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+			'resource'   => 'https://site.example/wp-json/oversio/v1/mcp',
 		);
 	}
 
@@ -37,7 +37,7 @@ class TokensTest extends TestCase {
 	 * Read a single token row by the SHA-256 hash of a raw access token.
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
-	 * form, so each DB test must call aafm_install_oauth_tables() first and read
+	 * form, so each DB test must call oversio_install_oauth_tables() first and read
 	 * the row back — the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $access_raw Raw access token.
@@ -49,7 +49,7 @@ class TokensTest extends TestCase {
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT * FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE token_hash = %s",
+				"SELECT * FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE token_hash = %s",
 				hash( 'sha256', $access_raw )
 			),
 			ARRAY_A
@@ -70,7 +70,7 @@ class TokensTest extends TestCase {
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT * FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE refresh_hash = %s",
+				"SELECT * FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE refresh_hash = %s",
 				hash( 'sha256', $refresh_raw )
 			),
 			ARRAY_A
@@ -91,7 +91,7 @@ class TokensTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE token_hash = %s OR refresh_hash = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE token_hash = %s OR refresh_hash = %s",
 				$value,
 				$value
 			)
@@ -103,14 +103,14 @@ class TokensTest extends TestCase {
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		global $wpdb;
 		$suppress = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_access_tokens" );
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}oversio_oauth_access_tokens" );
 
-		$result = aafm_oauth_mint_tokens( $this->ctx() );
+		$result = oversio_oauth_mint_tokens( $this->ctx() );
 
 		$wpdb->suppress_errors( $suppress );
 
@@ -122,14 +122,14 @@ class TokensTest extends TestCase {
 	 * only their SHA-256 hashes — never the raw values.
 	 */
 	public function test_mint_returns_tokens_and_stores_hashes_not_raw(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		$tokens = oversio_oauth_mint_tokens( $this->ctx() );
 
 		$this->assertIsArray( $tokens );
-		$this->assertStringStartsWith( 'aafm_oat_', $tokens['access_token'] );
+		$this->assertStringStartsWith( 'oversio_oat_', $tokens['access_token'] );
 		$this->assertNotEmpty( $tokens['refresh_token'] );
-		$this->assertStringStartsNotWith( 'aafm_oat_', $tokens['refresh_token'] );
+		$this->assertStringStartsNotWith( 'oversio_oat_', $tokens['refresh_token'] );
 
 		// The hash of each raw token is stored.
 		$this->assertNotNull( $this->row_by_access( $tokens['access_token'] ) );
@@ -144,21 +144,21 @@ class TokensTest extends TestCase {
 	 * A fresh access token validates to its wp_user_id.
 	 */
 	public function test_validate_fresh_access_token_returns_user_id(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
-		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+		$this->assertSame( (int) $ctx['wp_user_id'], oversio_oauth_validate_access_token( $tokens['access_token'] ) );
 	}
 
 	/**
 	 * An unknown access token does not validate.
 	 */
 	public function test_validate_unknown_access_token_returns_false(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$this->assertFalse( aafm_oauth_validate_access_token( 'aafm_oat_' . bin2hex( random_bytes( 32 ) ) ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( 'oversio_oat_' . bin2hex( random_bytes( 32 ) ) ) );
 	}
 
 	/**
@@ -168,42 +168,42 @@ class TokensTest extends TestCase {
 	 * transaction-isolated temporary row — no sleeping.
 	 */
 	public function test_validate_expired_access_token_returns_false(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		$tokens = oversio_oauth_mint_tokens( $this->ctx() );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			$wpdb->prefix . 'oversio_oauth_access_tokens',
 			array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 120 ) ),
 			array( 'token_hash' => hash( 'sha256', $tokens['access_token'] ) ),
 			array( '%s' ),
 			array( '%s' )
 		);
 
-		$this->assertFalse( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $tokens['access_token'] ) );
 	}
 
 	/**
 	 * A revoked (inactive) access token does not validate.
 	 */
 	public function test_validate_revoked_access_token_returns_false(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		$tokens = oversio_oauth_mint_tokens( $this->ctx() );
 
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			$wpdb->prefix . 'oversio_oauth_access_tokens',
 			array( 'is_active' => 0 ),
 			array( 'token_hash' => hash( 'sha256', $tokens['access_token'] ) ),
 			array( '%d' ),
 			array( '%s' )
 		);
 
-		$this->assertFalse( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $tokens['access_token'] ) );
 	}
 
 	/**
@@ -211,16 +211,16 @@ class TokensTest extends TestCase {
 	 * refresh row, and chains the new row's refresh_parent_id to the old id.
 	 */
 	public function test_rotate_refresh_issues_new_pair_and_chains_parent(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
 		$old_row = $this->row_by_refresh( $tokens['refresh_token'] );
 		$this->assertNotNull( $old_row );
 		$old_id = (int) $old_row['id'];
 
-		$rotated = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$rotated = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 
 		$this->assertIsArray( $rotated );
 		$this->assertNotSame( $tokens['access_token'], $rotated['access_token'] );
@@ -237,19 +237,19 @@ class TokensTest extends TestCase {
 		$this->assertSame( $old_id, (int) $new_row['refresh_parent_id'] );
 
 		// The new pair carries the same identity.
-		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $rotated['access_token'] ) );
+		$this->assertSame( (int) $ctx['wp_user_id'], oversio_oauth_validate_access_token( $rotated['access_token'] ) );
 	}
 
 	/**
 	 * Rotating with the wrong client_id is rejected.
 	 */
 	public function test_rotate_refresh_wrong_client_returns_error(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
-		$res = aafm_oauth_rotate_refresh( $tokens['refresh_token'], 'other_client' );
+		$res = oversio_oauth_rotate_refresh( $tokens['refresh_token'], 'other_client' );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -258,24 +258,24 @@ class TokensTest extends TestCase {
 	 * lineage — the legitimate second-generation access token goes inactive.
 	 */
 	public function test_rotate_refresh_reuse_detection_revokes_chain(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
 		// First, legitimate rotation: the original refresh token is now consumed.
-		$rotated = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$rotated = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $rotated );
 
 		// The second-generation access token works at this point.
-		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $rotated['access_token'] ) );
+		$this->assertSame( (int) $ctx['wp_user_id'], oversio_oauth_validate_access_token( $rotated['access_token'] ) );
 
 		// Replay the original (already consumed) refresh token.
-		$replay = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$replay = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 		$this->assertInstanceOf( WP_Error::class, $replay );
 
 		// Reuse detection nuked the chain: the legit second-gen token is now dead.
-		$this->assertFalse( aafm_oauth_validate_access_token( $rotated['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $rotated['access_token'] ) );
 
 		$new_row = $this->row_by_access( $rotated['access_token'] );
 		$this->assertNotNull( $new_row );
@@ -290,13 +290,13 @@ class TokensTest extends TestCase {
 	 * must remain the only one, proving rotation bailed before minting.
 	 */
 	public function test_rotate_refresh_expired_token_returns_error_and_does_not_mint(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
 		global $wpdb;
-		$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+		$table = $wpdb->prefix . 'oversio_oauth_access_tokens';
 
 		// Push refresh_expires_at into the past.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -314,7 +314,7 @@ class TokensTest extends TestCase {
 			"SELECT COUNT(*) FROM {$table}"
 		);
 
-		$res = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$res = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 		$this->assertInstanceOf( WP_Error::class, $res );
 
 		// No successor row was minted: the table still holds exactly one row, and
@@ -336,28 +336,28 @@ class TokensTest extends TestCase {
 	 * client was still active.
 	 */
 	public function test_rotate_refresh_rejected_for_deactivated_client(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$client = aafm_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
+		$client = oversio_oauth_register_client( array( 'redirect_uris' => array( 'https://app.example/cb' ) ) );
 		$this->assertIsArray( $client );
 		$client_id = (string) $client['client_id'];
 
-		$tokens = aafm_oauth_mint_tokens(
+		$tokens = oversio_oauth_mint_tokens(
 			array(
 				'client_id'  => $client_id,
 				'wp_user_id' => 42,
-				'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+				'resource'   => 'https://site.example/wp-json/oversio/v1/mcp',
 			)
 		);
 		$this->assertIsArray( $tokens );
 
 		// While active, rotation works.
-		$ok = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
+		$ok = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $client_id );
 		$this->assertIsArray( $ok, 'rotation should succeed while the client is active' );
 
 		// Deactivate the client, then a rotation of the fresh successor must be rejected.
 		$this->deactivate_client( $client_id );
-		$rejected = aafm_oauth_rotate_refresh( $ok['refresh_token'], $client_id );
+		$rejected = oversio_oauth_rotate_refresh( $ok['refresh_token'], $client_id );
 		$this->assertInstanceOf( WP_Error::class, $rejected, 'a deactivated client must not rotate its refresh token' );
 	}
 
@@ -370,7 +370,7 @@ class TokensTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->update(
-			$wpdb->prefix . 'aafm_oauth_clients',
+			$wpdb->prefix . 'oversio_oauth_clients',
 			array( 'is_active' => 0 ),
 			array( 'client_id' => $client_id ),
 			array( '%d' ),
@@ -387,15 +387,15 @@ class TokensTest extends TestCase {
 	 * single-winner property of the atomic consume.
 	 */
 	public function test_rotate_refresh_same_token_twice_second_is_rejected(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx    = $this->ctx();
-		$tokens = aafm_oauth_mint_tokens( $ctx );
+		$tokens = oversio_oauth_mint_tokens( $ctx );
 
-		$first = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$first = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $first );
 
-		$second = aafm_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
+		$second = oversio_oauth_rotate_refresh( $tokens['refresh_token'], $ctx['client_id'] );
 		$this->assertInstanceOf( WP_Error::class, $second );
 	}
 
@@ -409,35 +409,35 @@ class TokensTest extends TestCase {
 	 * deactivate every generation's access token.
 	 */
 	public function test_rotate_refresh_mid_lineage_replay_revokes_whole_chain(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$ctx = $this->ctx();
 
 		// gen0: fresh mint.
-		$gen0 = aafm_oauth_mint_tokens( $ctx );
+		$gen0 = oversio_oauth_mint_tokens( $ctx );
 
 		// gen0 -> gen1.
-		$gen1 = aafm_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
+		$gen1 = oversio_oauth_rotate_refresh( $gen0['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $gen1 );
 
 		// gen1 -> gen2.
-		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$gen2 = oversio_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $gen2 );
 
 		// Only the newest generation's row is still active — each rotation consumes
 		// the row it rotated from, deactivating that generation's access token too.
 		// So before the replay, gen2 is live while gen0 and gen1 are already
 		// inactive (their rows were consumed). The replay must still kill gen2.
-		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $gen2['access_token'] ) );
+		$this->assertSame( (int) $ctx['wp_user_id'], oversio_oauth_validate_access_token( $gen2['access_token'] ) );
 
 		// Replay the MIDDLE (gen1) refresh token — already consumed by the gen2 rotation.
-		$replay = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
+		$replay = oversio_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 		$this->assertInstanceOf( WP_Error::class, $replay );
 
 		// The whole lineage is dead: up to gen0 and down to gen2.
-		$this->assertFalse( aafm_oauth_validate_access_token( $gen0['access_token'] ) );
-		$this->assertFalse( aafm_oauth_validate_access_token( $gen1['access_token'] ) );
-		$this->assertFalse( aafm_oauth_validate_access_token( $gen2['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $gen0['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $gen1['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $gen2['access_token'] ) );
 
 		// Confirm at the row level that every generation is now inactive.
 		$gen0_row = $this->row_by_access( $gen0['access_token'] );
@@ -455,9 +455,9 @@ class TokensTest extends TestCase {
 	 * Replaying an unknown refresh token is rejected.
 	 */
 	public function test_rotate_refresh_unknown_token_returns_error(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$res = aafm_oauth_rotate_refresh( bin2hex( random_bytes( 32 ) ), 'client_abc' );
+		$res = oversio_oauth_rotate_refresh( bin2hex( random_bytes( 32 ) ), 'client_abc' );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -465,26 +465,26 @@ class TokensTest extends TestCase {
 	 * Revoking an access token deactivates it: validation then fails.
 	 */
 	public function test_revoke_access_token_deactivates_it(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		$tokens = oversio_oauth_mint_tokens( $this->ctx() );
 
-		$this->assertTrue( aafm_oauth_revoke_token( $tokens['access_token'] ) );
-		$this->assertFalse( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+		$this->assertTrue( oversio_oauth_revoke_token( $tokens['access_token'] ) );
+		$this->assertFalse( oversio_oauth_validate_access_token( $tokens['access_token'] ) );
 
 		// Revoking an already-revoked token affects no rows: idempotent, returns false.
-		$this->assertFalse( aafm_oauth_revoke_token( $tokens['access_token'] ) );
+		$this->assertFalse( oversio_oauth_revoke_token( $tokens['access_token'] ) );
 	}
 
 	/**
 	 * Revoking a refresh token deactivates its row.
 	 */
 	public function test_revoke_refresh_token_deactivates_row(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$tokens = aafm_oauth_mint_tokens( $this->ctx() );
+		$tokens = oversio_oauth_mint_tokens( $this->ctx() );
 
-		$this->assertTrue( aafm_oauth_revoke_token( $tokens['refresh_token'] ) );
+		$this->assertTrue( oversio_oauth_revoke_token( $tokens['refresh_token'] ) );
 
 		$row = $this->row_by_refresh( $tokens['refresh_token'] );
 		$this->assertNotNull( $row );
@@ -495,8 +495,8 @@ class TokensTest extends TestCase {
 	 * Revoking an unknown token returns false.
 	 */
 	public function test_revoke_unknown_token_returns_false(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
-		$this->assertFalse( aafm_oauth_revoke_token( bin2hex( random_bytes( 32 ) ) ) );
+		$this->assertFalse( oversio_oauth_revoke_token( bin2hex( random_bytes( 32 ) ) ) );
 	}
 }

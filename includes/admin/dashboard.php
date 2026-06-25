@@ -17,7 +17,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * @return array<int,array{id:int,login:string,roles:array<int,string>,is_admin:bool}>
  */
-function aafm_agent_user_candidates(): array {
+function oversio_agent_user_candidates(): array {
 	$users = get_users(
 		array(
 			'number'  => 50,
@@ -54,8 +54,8 @@ function aafm_agent_user_candidates(): array {
  *
  * @return int
  */
-function aafm_enabled_ability_count(): int {
-	return count( aafm_get_enabled_abilities() );
+function oversio_enabled_ability_count(): int {
+	return count( oversio_get_enabled_abilities() );
 }
 
 /**
@@ -63,8 +63,8 @@ function aafm_enabled_ability_count(): int {
  *
  * @return int
  */
-function aafm_total_ability_count(): int {
-	return count( aafm_get_abilities_registry() );
+function oversio_total_ability_count(): int {
+	return count( oversio_get_abilities_registry() );
 }
 
 /**
@@ -73,7 +73,7 @@ function aafm_total_ability_count(): int {
  *
  * @return string
  */
-function aafm_mcp_protocol_version(): string {
+function oversio_mcp_protocol_version(): string {
 	return '2025-06-18';
 }
 
@@ -82,11 +82,11 @@ function aafm_mcp_protocol_version(): string {
  *
  * @return int Non-negative row count.
  */
-function aafm_activity_count(): int {
+function oversio_activity_count(): int {
 	global $wpdb;
-	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
+	// The table name is an internal constant ($wpdb->prefix . 'oversio_activity_log'),
 	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
+	$table = esc_sql( oversio_activity_log_table() );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
@@ -105,11 +105,11 @@ function aafm_activity_count(): int {
  *
  * @return int Number of distinct principals active in the last 24 hours.
  */
-function aafm_recent_agent_count(): int {
+function oversio_recent_agent_count(): int {
 	global $wpdb;
-	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
+	// The table name is an internal constant ($wpdb->prefix . 'oversio_activity_log'),
 	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table  = esc_sql( aafm_activity_log_table() );
+	$table  = esc_sql( oversio_activity_log_table() );
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
@@ -126,24 +126,24 @@ function aafm_recent_agent_count(): int {
  *
  * @return bool
  */
-function aafm_has_oauth_grant(): bool {
-	return function_exists( 'aafm_oauth_list_grants' ) && ! empty( aafm_oauth_list_grants() );
+function oversio_has_oauth_grant(): bool {
+	return function_exists( 'oversio_oauth_list_grants' ) && ! empty( oversio_oauth_list_grants() );
 }
 
 /**
  * The three setup steps, each derived from real, observable site state — never a
  * faked "connected" signal. Step done-ness comes straight from the data helpers:
  *
- *   [0] abilities are enabled — aafm_enabled_ability_count() > 0
- *   [1] agent is connected    — aafm_has_oauth_grant() || aafm_agent_user_candidates() non-empty
- *   [2] a call has been made  — aafm_activity_count() > 0 (logged for real)
+ *   [0] abilities are enabled — oversio_enabled_ability_count() > 0
+ *   [1] agent is connected    — oversio_has_oauth_grant() || oversio_agent_user_candidates() non-empty
+ *   [2] a call has been made  — oversio_activity_count() > 0 (logged for real)
  *
  * The zero-based index is the contract callers rely on: $steps[0] is always the
  * abilities step, $steps[1] is always the connect step.
  *
  * @return array<int,array{title:string,desc:string,done:bool,href:string}>
  */
-function aafm_setup_steps(): array {
+function oversio_setup_steps(): array {
 	$tab_url = static function ( string $tab ): string {
 		return add_query_arg(
 			array(
@@ -158,19 +158,19 @@ function aafm_setup_steps(): array {
 		array(
 			'title' => __( 'Enable the abilities you want', 'oversio-agent-abilities' ),
 			'desc'  => __( 'Nothing is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab.', 'oversio-agent-abilities' ),
-			'done'  => aafm_enabled_ability_count() > 0,
+			'done'  => oversio_enabled_ability_count() > 0,
 			'href'  => $tab_url( 'abilities' ),
 		),
 		array(
 			'title' => __( 'Connect your agent', 'oversio-agent-abilities' ),
 			'desc'  => __( 'Approve it in the browser over OAuth, or set up an Application Password for a dedicated agent user. Either way its reach stays capped by what you turn on.', 'oversio-agent-abilities' ),
-			'done'  => aafm_has_oauth_grant() || ! empty( aafm_agent_user_candidates() ),
+			'done'  => oversio_has_oauth_grant() || ! empty( oversio_agent_user_candidates() ),
 			'href'  => $tab_url( 'connection' ),
 		),
 		array(
 			'title' => __( 'Make your first call', 'oversio-agent-abilities' ),
 			'desc'  => __( 'Point your MCP client at the endpoint and run one request. It shows up here once the activity log records it.', 'oversio-agent-abilities' ),
-			'done'  => aafm_activity_count() > 0,
+			'done'  => oversio_activity_count() > 0,
 			'href'  => $tab_url( 'connection' ),
 		),
 	);
@@ -180,7 +180,7 @@ function aafm_setup_steps(): array {
  * Render the Dashboard tab: a guided setup checklist, a four-card stat grid, and a
  * two-card row (endpoint + versions).
  *
- * The checklist reflects real, observable state from aafm_setup_steps(); when all three
+ * The checklist reflects real, observable state from oversio_setup_steps(); when all three
  * steps are done it collapses into a single "all set" success notice. The stat grid and
  * cards reuse the same counts the page already computes — enabled abilities, recent agent
  * activity (read from the audit log, not live connections), audit-log size, and agent
@@ -189,28 +189,28 @@ function aafm_setup_steps(): array {
  *
  * @return void
  */
-function aafm_render_dashboard_tab(): void {
-	$endpoint = aafm_endpoint_url();
-	$enabled  = aafm_enabled_ability_count();
+function oversio_render_dashboard_tab(): void {
+	$endpoint = oversio_endpoint_url();
+	$enabled  = oversio_enabled_ability_count();
 	// Single source of truth for "available / total" — counts the full catalog (core + every
 	// integration's manifest total) so an inactive integration still contributes its count and
 	// the Dashboard never disagrees with the Abilities tab.
-	$total         = aafm_available_ability_count();
-	$adapter       = aafm_loaded_adapter_version();
-	$candidates    = aafm_agent_user_candidates();
-	$recent        = aafm_recent_agent_count();
-	$log_rows      = aafm_activity_count();
-	$retention     = aafm_log_retention_days();
+	$total         = oversio_available_ability_count();
+	$adapter       = oversio_loaded_adapter_version();
+	$candidates    = oversio_agent_user_candidates();
+	$recent        = oversio_recent_agent_count();
+	$log_rows      = oversio_activity_count();
+	$retention     = oversio_log_retention_days();
 	$admin_agents  = array_values( array_filter( $candidates, static fn( array $c ): bool => ! empty( $c['is_admin'] ) ) );
 	$adapter_label = ( null === $adapter ) ? __( 'not loaded', 'oversio-agent-abilities' ) : $adapter;
 
-	$steps      = aafm_setup_steps();
+	$steps      = oversio_setup_steps();
 	$done_count = count( array_filter( $steps, static fn( array $s ): bool => ! empty( $s['done'] ) ) );
 	$step_total = count( $steps );
 
-	echo '<div class="aafm-dashboard">';
+	echo '<div class="oversio-dashboard">';
 
-	// Setup steps are always rendered inside a collapsible <details class="aafm-setup">. While any
+	// Setup steps are always rendered inside a collapsible <details class="oversio-setup">. While any
 	// step is pending the panel is open (the open attribute) with a "Finish setting up" summary, a
 	// progress bar, and the X-of-Y count. Once every step is done the panel collapses (no open
 	// attribute) into a "Setup complete" recap — the steps stay available behind the summary, and
@@ -218,17 +218,17 @@ function aafm_render_dashboard_tab(): void {
 	$is_complete = $done_count === $step_total;
 	$open_attr   = $is_complete ? '' : ' open';
 
-	printf( '<details class="aafm-setup"%s>', esc_attr( $open_attr ) );
-	echo '<summary class="aafm-setup-top">';
+	printf( '<details class="oversio-setup"%s>', esc_attr( $open_attr ) );
+	echo '<summary class="oversio-setup-top">';
 	if ( $is_complete ) {
-		echo '<span class="aafm-setup-ic" aria-hidden="true">';
-		echo aafm_icon( 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		echo '<span class="oversio-setup-ic" aria-hidden="true">';
+		echo oversio_icon( 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		echo '</span>';
 		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'oversio-agent-abilities' ) . '</h2>';
 	} else {
 		echo '<h2>' . esc_html__( 'Finish setting up', 'oversio-agent-abilities' ) . '</h2>';
 		printf(
-			'<span class="aafm-setup-count">%s</span>',
+			'<span class="oversio-setup-count">%s</span>',
 			esc_html(
 				sprintf(
 					/* translators: 1: number of completed setup steps, 2: total setup steps. */
@@ -241,13 +241,13 @@ function aafm_render_dashboard_tab(): void {
 		// Progress bar: filled to done / total. Width is a computed integer percent.
 		$progress_pct = $step_total > 0 ? (int) round( ( $done_count / $step_total ) * 100 ) : 0;
 		printf(
-			'<div class="aafm-progress" aria-hidden="true"><span style="width:%s%%"></span></div>',
+			'<div class="oversio-progress" aria-hidden="true"><span style="width:%s%%"></span></div>',
 			esc_attr( (string) $progress_pct )
 		);
 	}
 	echo '</summary>';
 
-	echo '<div class="aafm-setup-steps">';
+	echo '<div class="oversio-setup-steps">';
 	// The first not-done step is the "active" one (blue marker, number shown); the rest
 	// of the not-done steps are plain "to do" (grey marker, number shown). Done steps get
 	// the green check marker. When complete there is no active step at all.
@@ -258,61 +258,61 @@ function aafm_render_dashboard_tab(): void {
 		$is_done = ! empty( $step['done'] );
 
 		if ( $is_done ) {
-			$state_cls  = 'aafm-step-done';
-			$pill_class = 'aafm-pill aafm-pill-success';
+			$state_cls  = 'oversio-step-done';
+			$pill_class = 'oversio-pill oversio-pill-success';
 			$pill_text  = __( 'Done', 'oversio-agent-abilities' );
 		} elseif ( ! $active_marked ) {
-			$state_cls     = 'aafm-step-active';
-			$pill_class    = 'aafm-pill aafm-pill-warn';
+			$state_cls     = 'oversio-step-active';
+			$pill_class    = 'oversio-pill oversio-pill-warn';
 			$pill_text     = __( 'To do', 'oversio-agent-abilities' );
 			$active_marked = true;
 		} else {
-			$state_cls  = 'aafm-step-todo';
-			$pill_class = 'aafm-pill aafm-pill-neutral';
+			$state_cls  = 'oversio-step-todo';
+			$pill_class = 'oversio-pill oversio-pill-neutral';
 			$pill_text  = __( 'To do', 'oversio-agent-abilities' );
 		}
 
-		printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
+		printf( '<div class="oversio-step %s">', esc_attr( $state_cls ) );
 		if ( $is_done ) {
-			echo '<span class="aafm-sidx">';
-			echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			echo '<span class="oversio-sidx">';
+			echo oversio_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			echo '</span>';
 		} else {
-			printf( '<span class="aafm-sidx">%s</span>', esc_html( (string) $step_num ) );
+			printf( '<span class="oversio-sidx">%s</span>', esc_html( (string) $step_num ) );
 		}
-		echo '<div class="aafm-step-body">';
+		echo '<div class="oversio-step-body">';
 		printf( '<h3>%s</h3>', esc_html( (string) $step['title'] ) );
 		printf( '<p>%s</p>', esc_html( (string) $step['desc'] ) );
 		// The active step gets a primary CTA with a trailing arrow; other to-do steps don't.
-		if ( 'aafm-step-active' === $state_cls ) {
+		if ( 'oversio-step-active' === $state_cls ) {
 			printf(
-				'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
+				'<p class="oversio-step-act"><a class="oversio-btn oversio-btn-primary oversio-btn-sm" href="%1$s">%2$s %3$s</a></p>',
 				esc_url( (string) $step['href'] ),
 				esc_html__( 'Go to step', 'oversio-agent-abilities' ),
-				aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+				oversio_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			);
 		}
 		echo '</div>';
 		printf(
-			'<span class="aafm-step-state %1$s">%2$s</span>',
+			'<span class="oversio-step-state %1$s">%2$s</span>',
 			esc_attr( $pill_class ),
 			esc_html( $pill_text )
 		);
 		echo '</div>';
 	}
-	echo '</div>'; // .aafm-setup-steps
+	echo '</div>'; // .oversio-setup-steps
 	echo '</details>';
 
 	// Stat grid — four cards reusing the counts computed above. The compact mockup
 	// treatment: a value line plus a .stat-sub and/or a small pill, no embedded notices.
-	echo '<div class="aafm-stat-grid">';
+	echo '<div class="oversio-stat-grid">';
 
 	// Enabled abilities.
-	echo '<div class="aafm-stat aafm-stat-abilities">';
+	echo '<div class="oversio-stat oversio-stat-abilities">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf(
@@ -344,11 +344,11 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>';
 
 	// Recent agents (24h).
-	echo '<div class="aafm-stat aafm-stat-recent">';
+	echo '<div class="oversio-stat oversio-stat-recent">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'recent' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'recent' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
@@ -356,11 +356,11 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>';
 
 	// Audit log.
-	echo '<div class="aafm-stat aafm-stat-audit">';
+	echo '<div class="oversio-stat oversio-stat-audit">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'audit' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'audit' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf(
@@ -387,11 +387,11 @@ function aafm_render_dashboard_tab(): void {
 
 	// Agent users. The security signal is preserved: when an admin-capable agent exists,
 	// a warn pill flags it AND the sub text names the login(s).
-	echo '<div class="aafm-stat aafm-stat-agent-users">';
+	echo '<div class="oversio-stat oversio-stat-agent-users">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'groups' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'groups' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( count( $candidates ) ) ) );
@@ -401,7 +401,7 @@ function aafm_render_dashboard_tab(): void {
 		echo '<div class="stat-sub">' . esc_html__( 'All low-privilege', 'oversio-agent-abilities' ) . '</div>';
 	} else {
 		$logins = implode( ', ', array_map( static fn( array $c ): string => (string) $c['login'], $admin_agents ) );
-		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review role', 'oversio-agent-abilities' ) . '</span></div>';
+		echo '<div class="stat-sub"><span class="oversio-pill oversio-pill-warn">' . esc_html__( 'Review role', 'oversio-agent-abilities' ) . '</span></div>';
 		printf(
 			'<div class="stat-sub">%s</div>',
 			esc_html(
@@ -415,16 +415,16 @@ function aafm_render_dashboard_tab(): void {
 	}
 	echo '</div>';
 
-	echo '</div>'; // .aafm-stat-grid
+	echo '</div>'; // .oversio-stat-grid
 
 	// Lower row: endpoint + versions.
-	echo '<div class="aafm-stat-grid aafm-dashboard-lower">';
+	echo '<div class="oversio-stat-grid oversio-dashboard-lower">';
 
-	// Endpoint card — keeps the existing aafm-copy button + data-copy contract (admin.js binds to it).
-	echo '<section class="aafm-card aafm-card-endpoint">';
-	echo '<div class="aafm-card-head">';
+	// Endpoint card — keeps the existing oversio-copy button + data-copy contract (admin.js binds to it).
+	echo '<section class="oversio-card oversio-card-endpoint">';
+	echo '<div class="oversio-card-head">';
 	echo '<span class="icon">';
-	echo aafm_icon( 'endpoint' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'endpoint' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '<h2>' . esc_html__( 'MCP endpoint', 'oversio-agent-abilities' ) . '</h2>';
 	// Permalink-mode info pill on the right, like the mockup.
@@ -433,16 +433,16 @@ function aafm_render_dashboard_tab(): void {
 		? __( 'Pretty permalinks', 'oversio-agent-abilities' )
 		: __( 'Plain permalinks', 'oversio-agent-abilities' );
 	printf(
-		'<span class="aafm-pill aafm-pill-info" style="margin-inline-start:auto">%s</span>',
+		'<span class="oversio-pill oversio-pill-info" style="margin-inline-start:auto">%s</span>',
 		esc_html( $permalink_label )
 	);
 	echo '</div>';
-	echo '<div class="aafm-card-pad">';
+	echo '<div class="oversio-card-pad">';
 	printf(
-		'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
+		'<div class="oversio-field-mono"><code class="oversio-endpoint">%1$s</code> <button type="button" class="oversio-btn oversio-btn-secondary oversio-copy" data-copy="%2$s">%3$s<span class="oversio-copy-label">%4$s</span></button></div>',
 		esc_html( $endpoint ),
 		esc_attr( $endpoint ),
-		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		oversio_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		esc_html__( 'Copy', 'oversio-agent-abilities' )
 	);
 	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'oversio-agent-abilities' ) . '</p>';
@@ -450,19 +450,19 @@ function aafm_render_dashboard_tab(): void {
 	echo '</section>';
 
 	// Versions card.
-	echo '<section class="aafm-card aafm-card-versions">';
-	echo '<div class="aafm-card-head">';
+	echo '<section class="oversio-card oversio-card-versions">';
+	echo '<div class="oversio-card-head">';
 	echo '<span class="icon">';
-	echo aafm_icon( 'clock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo oversio_icon( 'clock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '<h2>' . esc_html__( 'Versions', 'oversio-agent-abilities' ) . '</h2>';
 	echo '</div>';
-	echo '<div class="aafm-card-pad">';
-	echo '<dl class="aafm-kv">';
+	echo '<div class="oversio-card-pad">';
+	echo '<dl class="oversio-kv">';
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
 		esc_html__( 'Plugin', 'oversio-agent-abilities' ),
-		esc_html( AAFM_VERSION )
+		esc_html( OVERSIO_VERSION )
 	);
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
@@ -472,7 +472,7 @@ function aafm_render_dashboard_tab(): void {
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
 		esc_html__( 'MCP protocol', 'oversio-agent-abilities' ),
-		esc_html( aafm_mcp_protocol_version() )
+		esc_html( oversio_mcp_protocol_version() )
 	);
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
@@ -483,7 +483,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>';
 	echo '</section>';
 
-	echo '</div>'; // .aafm-dashboard-lower
+	echo '</div>'; // .oversio-dashboard-lower
 
-	echo '</div>'; // .aafm-dashboard
+	echo '</div>'; // .oversio-dashboard
 }

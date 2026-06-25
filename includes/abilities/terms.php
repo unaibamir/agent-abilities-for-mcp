@@ -9,7 +9,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_terms_definitions' );
 
 /**
  * Contribute term ability definitions to the registry.
@@ -17,84 +17,84 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_terms_definitions( array $registry ): array {
-	$registry['aafm/get-terms']        = array(
+function oversio_register_terms_definitions( array $registry ): array {
+	$registry['oversio/get-terms']        = array(
 		'label'        => __( 'Get terms', 'oversio-agent-abilities' ),
 		'description'  => __( 'List terms (with counts) for a public taxonomy. Response includes total (the full match count for the taxonomy and search).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_get_terms',
+		'args_builder' => 'oversio_args_get_terms',
 	);
-	$registry['aafm/create-term']      = array(
+	$registry['oversio/create-term']      = array(
 		'label'        => __( 'Create term', 'oversio-agent-abilities' ),
 		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_create_term',
+		'args_builder' => 'oversio_args_create_term',
 	);
-	$registry['aafm/update-term']      = array(
+	$registry['oversio/update-term']      = array(
 		'label'        => __( 'Update term', 'oversio-agent-abilities' ),
 		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_update_term',
+		'args_builder' => 'oversio_args_update_term',
 	);
-	$registry['aafm/get-term']         = array(
+	$registry['oversio/get-term']         = array(
 		'label'        => __( 'Get term', 'oversio-agent-abilities' ),
 		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_get_term',
+		'args_builder' => 'oversio_args_get_term',
 	);
-	$registry['aafm/add-post-terms']   = array(
+	$registry['oversio/add-post-terms']   = array(
 		'label'        => __( 'Add post terms', 'oversio-agent-abilities' ),
 		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
-		'args_builder' => 'aafm_args_add_post_terms',
+		'args_builder' => 'oversio_args_add_post_terms',
 	);
-	$registry['aafm/get-term-meta']    = array(
+	$registry['oversio/get-term-meta']    = array(
 		'label'        => __( 'Get term meta', 'oversio-agent-abilities' ),
 		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_get_term_meta',
+		'args_builder' => 'oversio_args_get_term_meta',
 	);
-	$registry['aafm/update-term-meta'] = array(
+	$registry['oversio/update-term-meta'] = array(
 		'label'        => __( 'Update term meta', 'oversio-agent-abilities' ),
 		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_update_term_meta',
+		'args_builder' => 'oversio_args_update_term_meta',
 	);
-	$registry['aafm/delete-term-meta'] = array(
+	$registry['oversio/delete-term-meta'] = array(
 		'label'        => __( 'Delete term meta', 'oversio-agent-abilities' ),
 		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'taxonomies',
-		'args_builder' => 'aafm_args_delete_term_meta',
+		'args_builder' => 'oversio_args_delete_term_meta',
 	);
 	return $registry;
 }
 
 /**
- * Args for aafm/get-terms.
+ * Args for oversio/get-terms.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_terms(): array {
+function oversio_args_get_terms(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-terms' ),
-		'description'         => aafm_ability_description( 'aafm/get-terms' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-terms' ),
+		'description'         => oversio_ability_description( 'oversio/get-terms' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -106,12 +106,12 @@ function aafm_args_get_terms(): array {
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PAGE_MAX,
 				),
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_TERMS_PER_PAGE_MAX,
+					'maximum' => OVERSIO_TERMS_PER_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -126,8 +126,8 @@ function aafm_args_get_terms(): array {
 				'total' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_terms',
-		'permission_callback' => 'aafm_perm_read',
+		'execute_callback'    => 'oversio_exec_get_terms',
+		'permission_callback' => 'oversio_perm_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -139,7 +139,7 @@ function aafm_args_get_terms(): array {
 }
 
 /**
- * Execute aafm/get-terms.
+ * Execute oversio/get-terms.
  *
  * Validates the requested taxonomy against the public allow-list (default-deny on an
  * unknown or non-public taxonomy), then returns a redacted, bounded list of terms.
@@ -147,13 +147,13 @@ function aafm_args_get_terms(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_terms( array $input ) {
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+function oversio_exec_get_terms( array $input ) {
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
 
-	$paging = aafm_paginate_args( $input, AAFM_TERMS_PER_PAGE_MAX );
+	$paging = oversio_paginate_args( $input, OVERSIO_TERMS_PER_PAGE_MAX );
 
 	$terms = get_terms(
 		array(
@@ -165,7 +165,7 @@ function aafm_exec_get_terms( array $input ) {
 		)
 	);
 	if ( is_wp_error( $terms ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$objects = array_filter(
@@ -185,21 +185,21 @@ function aafm_exec_get_terms( array $input ) {
 	);
 
 	return array(
-		'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ),
+		'terms' => array_values( array_map( 'oversio_redact_term', $objects ) ),
 		'total' => is_wp_error( $total ) ? count( $objects ) : (int) $total,
 	);
 }
 
 /**
- * Args for aafm/get-term.
+ * Args for oversio/get-term.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_term(): array {
+function oversio_args_get_term(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-term' ),
-		'description'         => aafm_ability_description( 'aafm/get-term' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-term' ),
+		'description'         => oversio_ability_description( 'oversio/get-term' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -219,8 +219,8 @@ function aafm_args_get_term(): array {
 			'type'       => 'object',
 			'properties' => array( 'term' => array( 'type' => 'object' ) ),
 		),
-		'execute_callback'    => 'aafm_exec_get_term',
-		'permission_callback' => 'aafm_perm_read',
+		'execute_callback'    => 'oversio_exec_get_term',
+		'permission_callback' => 'oversio_perm_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -232,40 +232,40 @@ function aafm_args_get_term(): array {
 }
 
 /**
- * Execute aafm/get-term.
+ * Execute oversio/get-term.
  *
  * Confines the read to the public-allowlisted taxonomy AND to a term that actually
  * belongs to it: get_term( $id, $taxonomy ) returns null for a nonexistent id or one
  * in a different taxonomy, so a tag id claimed as a category is rejected. Returns the
- * same redacted shape as get-terms; nothing beyond aafm_redact_term() is exposed.
+ * same redacted shape as get-terms; nothing beyond oversio_redact_term() is exposed.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_term( array $input ) {
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+function oversio_exec_get_term( array $input ) {
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
 
 	$term = get_term( absint( $input['term_id'] ), $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return array( 'term' => aafm_redact_term( $term ) );
+	return array( 'term' => oversio_redact_term( $term ) );
 }
 
 /**
- * Args for aafm/add-post-terms.
+ * Args for oversio/add-post-terms.
  *
  * @return array<string,mixed>
  */
-function aafm_args_add_post_terms(): array {
+function oversio_args_add_post_terms(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/add-post-terms' ),
-		'description'         => aafm_ability_description( 'aafm/add-post-terms' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/add-post-terms' ),
+		'description'         => oversio_ability_description( 'oversio/add-post-terms' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -299,8 +299,8 @@ function aafm_args_add_post_terms(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_add_post_terms',
-		'permission_callback' => 'aafm_perm_add_post_terms',
+		'execute_callback'    => 'oversio_exec_add_post_terms',
+		'permission_callback' => 'oversio_perm_add_post_terms',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -311,24 +311,24 @@ function aafm_args_add_post_terms(): array {
 }
 
 /**
- * Permission for aafm/add-post-terms: per-object edit_post on the target post.
+ * Permission for oversio/add-post-terms: per-object edit_post on the target post.
  *
  * The taxonomy's assign_terms cap + term-existence are enforced at execute time by the
- * reused aafm_validate_term_ids_for_taxonomy() (C2). This callback is the post-edit gate:
+ * reused oversio_validate_term_ids_for_taxonomy() (C2). This callback is the post-edit gate:
  * a caller who cannot edit the post is denied before any term is touched, so an APPEND
  * can never attach terms to a post the agent is not authorized to edit.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
-function aafm_perm_add_post_terms( array $input ): bool {
+function oversio_perm_add_post_terms( array $input ): bool {
 	$id   = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$post = $id ? get_post( $id ) : null;
-	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
+	return $post instanceof WP_Post && oversio_can_edit_post_object( $post );
 }
 
 /**
- * Execute aafm/add-post-terms.
+ * Execute oversio/add-post-terms.
  *
  * APPEND semantics (distinct from the REPLACE-on-update path in the post writes): the
  * fourth arg to wp_set_post_terms() is true, so existing terms are preserved. Term ids are
@@ -339,19 +339,19 @@ function aafm_perm_add_post_terms( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_add_post_terms( array $input ) {
+function oversio_exec_add_post_terms( array $input ) {
 	$post_id = absint( $input['post_id'] );
 	$post    = get_post( $post_id );
 	if ( ! $post instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
 
-	$term_ids = aafm_validate_term_ids_for_taxonomy(
+	$term_ids = oversio_validate_term_ids_for_taxonomy(
 		$taxonomy,
 		isset( $input['term_ids'] ) && is_array( $input['term_ids'] ) ? $input['term_ids'] : array()
 	);
@@ -361,7 +361,7 @@ function aafm_exec_add_post_terms( array $input ) {
 
 	$result = wp_set_post_terms( $post_id, $term_ids, $taxonomy, true );
 	if ( is_wp_error( $result ) || false === $result ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$current = get_the_terms( $post_id, $taxonomy );
@@ -369,21 +369,21 @@ function aafm_exec_add_post_terms( array $input ) {
 
 	return array(
 		'post_id' => $post_id,
-		'terms'   => array_values( array_map( 'aafm_redact_term', $objects ) ),
+		'terms'   => array_values( array_map( 'oversio_redact_term', $objects ) ),
 	);
 }
 
 /**
  * Per-object term-edit gate shared by get/update/delete term-meta: the term must be readable
- * + key-allowlisted (aafm_validate_term_meta_request) AND the current user must hold
+ * + key-allowlisted (oversio_validate_term_meta_request) AND the current user must hold
  * edit_term on that specific term. Term meta can hold private data, so even the read gates on
  * edit_term here — mirroring how the post-meta family gates get/update/delete on edit_post.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
-function aafm_perm_can_edit_term_meta( array $input ): bool {
-	if ( is_wp_error( aafm_validate_term_meta_request( $input ) ) ) {
+function oversio_perm_can_edit_term_meta( array $input ): bool {
+	if ( is_wp_error( oversio_validate_term_meta_request( $input ) ) ) {
 		return false;
 	}
 	$term_id = absint( $input['term_id'] );
@@ -391,15 +391,15 @@ function aafm_perm_can_edit_term_meta( array $input ): bool {
 }
 
 /**
- * Args for aafm/get-term-meta.
+ * Args for oversio/get-term-meta.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_term_meta(): array {
+function oversio_args_get_term_meta(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-term-meta' ),
-		'description'         => aafm_ability_description( 'aafm/get-term-meta' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-term-meta' ),
+		'description'         => oversio_ability_description( 'oversio/get-term-meta' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -429,8 +429,8 @@ function aafm_args_get_term_meta(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_term_meta',
-		'permission_callback' => 'aafm_perm_get_term_meta',
+		'execute_callback'    => 'oversio_exec_get_term_meta',
+		'permission_callback' => 'oversio_perm_get_term_meta',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -442,7 +442,7 @@ function aafm_args_get_term_meta(): array {
 }
 
 /**
- * Permission for aafm/get-term-meta: per-object edit_term + key allowlist (EDIT 2).
+ * Permission for oversio/get-term-meta: per-object edit_term + key allowlist (EDIT 2).
  *
  * Term meta can hold private data, so reads require edit_term on the term, mirroring
  * get-post-meta's edit_post gate. Reuses the shared per-object gate.
@@ -450,12 +450,12 @@ function aafm_args_get_term_meta(): array {
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
-function aafm_perm_get_term_meta( array $input ): bool {
-	return aafm_perm_can_edit_term_meta( $input );
+function oversio_perm_get_term_meta( array $input ): bool {
+	return oversio_perm_can_edit_term_meta( $input );
 }
 
 /**
- * Execute aafm/get-term-meta.
+ * Execute oversio/get-term-meta.
  *
  * Re-validates taxonomy/term/key (defence in depth), then reads a single value. Non-scalar
  * values are refused so a serialized array/object can never be dumped to the agent.
@@ -463,8 +463,8 @@ function aafm_perm_get_term_meta( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
+function oversio_exec_get_term_meta( array $input ) {
+	$taxonomy = oversio_validate_term_meta_request( $input );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
@@ -472,7 +472,7 @@ function aafm_exec_get_term_meta( array $input ) {
 	$key     = (string) $input['meta_key'];
 	$value   = get_term_meta( $term_id, $key, true );
 	if ( '' !== $value && ! is_scalar( $value ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return array(
 		'term_id'  => $term_id,
@@ -482,15 +482,15 @@ function aafm_exec_get_term_meta( array $input ) {
 }
 
 /**
- * Args for aafm/update-term-meta.
+ * Args for oversio/update-term-meta.
  *
  * @return array<string,mixed>
  */
-function aafm_args_update_term_meta(): array {
+function oversio_args_update_term_meta(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/update-term-meta' ),
-		'description'         => aafm_ability_description( 'aafm/update-term-meta' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/update-term-meta' ),
+		'description'         => oversio_ability_description( 'oversio/update-term-meta' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -523,8 +523,8 @@ function aafm_args_update_term_meta(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_update_term_meta',
-		'permission_callback' => 'aafm_perm_update_term_meta',
+		'execute_callback'    => 'oversio_exec_update_term_meta',
+		'permission_callback' => 'oversio_perm_update_term_meta',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -535,17 +535,17 @@ function aafm_args_update_term_meta(): array {
 }
 
 /**
- * Permission for aafm/update-term-meta: per-object edit_term + key allowlist.
+ * Permission for oversio/update-term-meta: per-object edit_term + key allowlist.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
-function aafm_perm_update_term_meta( array $input ): bool {
-	return aafm_perm_can_edit_term_meta( $input );
+function oversio_perm_update_term_meta( array $input ): bool {
+	return oversio_perm_can_edit_term_meta( $input );
 }
 
 /**
- * Execute aafm/update-term-meta.
+ * Execute oversio/update-term-meta.
  *
  * Re-validates taxonomy/term/key, refuses non-scalar values, then writes a single value.
  * wp_slash() guards update_term_meta()'s internal unslash (matches the post-meta convention).
@@ -553,14 +553,14 @@ function aafm_perm_update_term_meta( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_update_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
+function oversio_exec_update_term_meta( array $input ) {
+	$taxonomy = oversio_validate_term_meta_request( $input );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
 	$term_id = absint( $input['term_id'] );
 	$key     = (string) $input['meta_key'];
-	$value   = aafm_sanitize_term_meta_value( $key, $input['value'] ?? '' );
+	$value   = oversio_sanitize_term_meta_value( $key, $input['value'] ?? '' );
 	if ( is_wp_error( $value ) ) {
 		return $value;
 	}
@@ -569,7 +569,7 @@ function aafm_exec_update_term_meta( array $input ) {
 		// longtext column, so the stored value reads back as a string; compare stringified forms
 		// to avoid a false failure on a genuine no-op (e.g. re-sending an int or bool).
 		if ( (string) get_term_meta( $term_id, $key, true ) !== (string) $value ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 	}
 	return array(
@@ -580,15 +580,15 @@ function aafm_exec_update_term_meta( array $input ) {
 }
 
 /**
- * Args for aafm/delete-term-meta.
+ * Args for oversio/delete-term-meta.
  *
  * @return array<string,mixed>
  */
-function aafm_args_delete_term_meta(): array {
+function oversio_args_delete_term_meta(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/delete-term-meta' ),
-		'description'         => aafm_ability_description( 'aafm/delete-term-meta' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/delete-term-meta' ),
+		'description'         => oversio_ability_description( 'oversio/delete-term-meta' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -614,8 +614,8 @@ function aafm_args_delete_term_meta(): array {
 				'deleted' => array( 'type' => 'boolean' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_delete_term_meta',
-		'permission_callback' => 'aafm_perm_delete_term_meta',
+		'execute_callback'    => 'oversio_exec_delete_term_meta',
+		'permission_callback' => 'oversio_perm_delete_term_meta',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -626,17 +626,17 @@ function aafm_args_delete_term_meta(): array {
 }
 
 /**
- * Permission for aafm/delete-term-meta: per-object edit_term + key allowlist.
+ * Permission for oversio/delete-term-meta: per-object edit_term + key allowlist.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
  */
-function aafm_perm_delete_term_meta( array $input ): bool {
-	return aafm_perm_can_edit_term_meta( $input );
+function oversio_perm_delete_term_meta( array $input ): bool {
+	return oversio_perm_can_edit_term_meta( $input );
 }
 
 /**
- * Execute aafm/delete-term-meta.
+ * Execute oversio/delete-term-meta.
  *
  * Re-validates taxonomy/term/key (defence in depth), then removes every value of that key.
  * delete_term_meta() with no value arg deletes all values of the key — the intended
@@ -645,8 +645,8 @@ function aafm_perm_delete_term_meta( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_delete_term_meta( array $input ) {
-	$taxonomy = aafm_validate_term_meta_request( $input );
+function oversio_exec_delete_term_meta( array $input ) {
+	$taxonomy = oversio_validate_term_meta_request( $input );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
@@ -669,8 +669,8 @@ function aafm_exec_delete_term_meta( array $input ) {
  * @param array<string,mixed> $input Ability input (taxonomy defaults to category).
  * @return bool
  */
-function aafm_perm_manage_terms( array $input ): bool {
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+function oversio_perm_manage_terms( array $input ): bool {
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return false;
 	}
@@ -687,7 +687,7 @@ function aafm_perm_manage_terms( array $input ): bool {
  * @param WP_Term $term Term object.
  * @return array<string,mixed>
  */
-function aafm_term_write_result( WP_Term $term ): array {
+function oversio_term_write_result( WP_Term $term ): array {
 	return array(
 		'term' => array(
 			'id'     => (int) $term->term_id,
@@ -699,15 +699,15 @@ function aafm_term_write_result( WP_Term $term ): array {
 }
 
 /**
- * Args for aafm/create-term.
+ * Args for oversio/create-term.
  *
  * @return array<string,mixed>
  */
-function aafm_args_create_term(): array {
+function oversio_args_create_term(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/create-term' ),
-		'description'         => aafm_ability_description( 'aafm/create-term' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/create-term' ),
+		'description'         => oversio_ability_description( 'oversio/create-term' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -732,8 +732,8 @@ function aafm_args_create_term(): array {
 			'type'       => 'object',
 			'properties' => array( 'term' => array( 'type' => 'object' ) ),
 		),
-		'execute_callback'    => 'aafm_exec_create_term',
-		'permission_callback' => 'aafm_perm_manage_terms',
+		'execute_callback'    => 'oversio_exec_create_term',
+		'permission_callback' => 'oversio_perm_manage_terms',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -744,7 +744,7 @@ function aafm_args_create_term(): array {
 }
 
 /**
- * Execute aafm/create-term.
+ * Execute oversio/create-term.
  *
  * Default-deny: the taxonomy is validated against the public allow-list, so an
  * unknown or internal taxonomy (nav_menu, link_category, etc.) is rejected before
@@ -755,8 +755,8 @@ function aafm_args_create_term(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_create_term( array $input ) {
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+function oversio_exec_create_term( array $input ) {
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
@@ -770,26 +770,26 @@ function aafm_exec_create_term( array $input ) {
 		)
 	);
 	if ( is_wp_error( $result ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$term = get_term( (int) $result['term_id'], $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_term_write_result( $term );
+	return oversio_term_write_result( $term );
 }
 
 /**
- * Args for aafm/update-term.
+ * Args for oversio/update-term.
  *
  * @return array<string,mixed>
  */
-function aafm_args_update_term(): array {
+function oversio_args_update_term(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/update-term' ),
-		'description'         => aafm_ability_description( 'aafm/update-term' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/update-term' ),
+		'description'         => oversio_ability_description( 'oversio/update-term' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -818,8 +818,8 @@ function aafm_args_update_term(): array {
 			'type'       => 'object',
 			'properties' => array( 'term' => array( 'type' => 'object' ) ),
 		),
-		'execute_callback'    => 'aafm_exec_update_term',
-		'permission_callback' => 'aafm_perm_manage_terms',
+		'execute_callback'    => 'oversio_exec_update_term',
+		'permission_callback' => 'oversio_perm_manage_terms',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -830,7 +830,7 @@ function aafm_args_update_term(): array {
 }
 
 /**
- * Execute aafm/update-term.
+ * Execute oversio/update-term.
  *
  * Confines the write to the allow-listed taxonomy AND to a term that actually
  * belongs to it: get_term( $id, $taxonomy ) returns null when the term is in a
@@ -841,8 +841,8 @@ function aafm_args_update_term(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_update_term( array $input ) {
-	$taxonomy = aafm_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
+function oversio_exec_update_term( array $input ) {
+	$taxonomy = oversio_validate_taxonomy( isset( $input['taxonomy'] ) ? (string) $input['taxonomy'] : 'category' );
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
@@ -850,7 +850,7 @@ function aafm_exec_update_term( array $input ) {
 	$term_id = absint( $input['term_id'] );
 	$term    = get_term( $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$args = array();
@@ -865,19 +865,19 @@ function aafm_exec_update_term( array $input ) {
 		// Circular-hierarchy guard: the requested parent must not be a descendant
 		// of the term being edited (which would make the term its own ancestor).
 		if ( $parent && term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) {
-			return new WP_Error( 'aafm_circular_term', __( 'That parent would create a circular hierarchy.', 'oversio-agent-abilities' ) );
+			return new WP_Error( 'oversio_circular_term', __( 'That parent would create a circular hierarchy.', 'oversio-agent-abilities' ) );
 		}
 		$args['parent'] = $parent;
 	}
 
 	$result = wp_update_term( $term_id, $taxonomy, $args );
 	if ( is_wp_error( $result ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$updated = get_term( $term_id, $taxonomy );
 	if ( ! $updated instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_term_write_result( $updated );
+	return oversio_term_write_result( $updated );
 }

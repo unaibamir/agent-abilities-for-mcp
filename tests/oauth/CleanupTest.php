@@ -7,12 +7,12 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\OAuth;
+namespace Oversio\Tests\OAuth;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 /**
- * Verifies aafm_oauth_cleanup() deletes expired authorization codes and dead
+ * Verifies oversio_oauth_cleanup() deletes expired authorization codes and dead
  * (inactive, past-grace) access-token rows while leaving live tokens — and rows
  * still inside the reuse-detection grace window — untouched.
  */
@@ -29,7 +29,7 @@ class CleanupTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'aafm_oauth_codes',
+			$wpdb->prefix . 'oversio_oauth_codes',
 			array(
 				'code_hash'  => $code_hash,
 				'client_id'  => 'client_abc',
@@ -52,7 +52,7 @@ class CleanupTest extends TestCase {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->insert(
-			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			$wpdb->prefix . 'oversio_oauth_access_tokens',
 			array(
 				'token_hash'         => $token_hash,
 				'refresh_hash'       => $token_hash . '_r',
@@ -77,7 +77,7 @@ class CleanupTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_codes WHERE code_hash = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_codes WHERE code_hash = %s",
 				$code_hash
 			)
 		);
@@ -95,7 +95,7 @@ class CleanupTest extends TestCase {
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT COUNT(*) FROM {$wpdb->prefix}aafm_oauth_access_tokens WHERE token_hash = %s",
+				"SELECT COUNT(*) FROM {$wpdb->prefix}oversio_oauth_access_tokens WHERE token_hash = %s",
 				$token_hash
 			)
 		);
@@ -105,7 +105,7 @@ class CleanupTest extends TestCase {
 	 * Expired codes and dead tokens are pruned; live tokens survive.
 	 */
 	public function test_cleanup_prunes_expired_code_and_dead_token_keeps_live(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$now    = time();
 		$past   = gmdate( 'Y-m-d H:i:s', $now - HOUR_IN_SECONDS );
@@ -117,7 +117,7 @@ class CleanupTest extends TestCase {
 		$this->seed_token( 'dead_token', 0, $past, $well_past );
 		$this->seed_token( 'live_token', 1, $future, $future );
 
-		aafm_oauth_cleanup();
+		oversio_oauth_cleanup();
 
 		$this->assertSame( 0, $this->count_code( 'expired_code' ), 'Expired authorization code should be deleted.' );
 		$this->assertSame( 0, $this->count_token( 'dead_token' ), 'Dead inactive token past grace should be deleted.' );
@@ -129,7 +129,7 @@ class CleanupTest extends TestCase {
 	 * slightly in the past, while a row past refresh_expires_at + grace is pruned.
 	 */
 	public function test_cleanup_respects_grace_window_both_ways(): void {
-		aafm_install_oauth_tables();
+		oversio_install_oauth_tables();
 
 		$now  = time();
 		$past = gmdate( 'Y-m-d H:i:s', $now - HOUR_IN_SECONDS );
@@ -142,7 +142,7 @@ class CleanupTest extends TestCase {
 		$this->seed_token( 'inside_grace', 0, $past, $just_expired );
 		$this->seed_token( 'beyond_grace', 0, $past, $beyond_grace );
 
-		aafm_oauth_cleanup();
+		oversio_oauth_cleanup();
 
 		$this->assertSame( 1, $this->count_token( 'inside_grace' ), 'Inactive token still inside the grace window should survive.' );
 		$this->assertSame( 0, $this->count_token( 'beyond_grace' ), 'Inactive token past refresh_expires_at + grace should be deleted.' );

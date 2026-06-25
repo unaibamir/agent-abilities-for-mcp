@@ -3,7 +3,7 @@
 changelog from git history into readme.txt + README.md + the Upgrade Notice.
 
 The plugin header `Version:` is the single source of truth for the version. The
-`AAFM_VERSION` constant must match it (the script fails loudly if it does not, which
+`OVERSIO_VERSION` constant must match it (the script fails loudly if it does not, which
 catches the classic "bumped one, forgot the other" mistake). The readme `Stable tag`
 is synced to that version automatically.
 
@@ -53,9 +53,9 @@ def header_version(txt):
 
 
 def const_version(txt):
-    m = re.search(rf"define\(\s*'AAFM_VERSION'\s*,\s*'({SEMVER})'", txt)
+    m = re.search(rf"define\(\s*'OVERSIO_VERSION'\s*,\s*'({SEMVER})'", txt)
     if not m:
-        fail("could not read the AAFM_VERSION constant from the plugin file")
+        fail("could not read the OVERSIO_VERSION constant from the plugin file")
     return m.group(1)
 
 
@@ -119,14 +119,14 @@ def main():
     head_v = header_version(php)
     const_v = const_version(php)
     if head_v != const_v:
-        fail(f"version mismatch: header is {head_v} but AAFM_VERSION is {const_v} — fix the PHP file")
+        fail(f"version mismatch: header is {head_v} but OVERSIO_VERSION is {const_v} — fix the PHP file")
 
     version = args.version or head_v
     if args.version and args.version != head_v and not args.dry_run:
         fail(f"--version {args.version} does not match the plugin header {head_v}; bump the PHP file first")
 
     prev = previous_tag(version)
-    print(f"version: {version}  (header & AAFM_VERSION agree)")
+    print(f"version: {version}  (header & OVERSIO_VERSION agree)")
     print(f"previous tag: {prev or '<none>'}")
 
     rt = README_TXT.read_text(encoding="utf-8")

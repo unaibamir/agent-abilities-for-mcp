@@ -12,9 +12,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Admin;
+namespace Oversio\Tests\Admin;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class MetaKeySanitizerTest extends TestCase {
 
@@ -22,8 +22,8 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Deny post-meta — keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_meta_keys_sanitizer_keeps_star_and_blocked(): void {
-		$out = aafm_sanitize_denied_meta_keys_input(
-			array( 'aafm_deny_meta_keys' => "*\n secret \n\nsecret\nwp_capabilities" )
+		$out = oversio_sanitize_denied_meta_keys_input(
+			array( 'oversio_deny_meta_keys' => "*\n secret \n\nsecret\nwp_capabilities" )
 		);
 		$this->assertSame( array( '*', 'secret', 'wp_capabilities' ), $out );
 	}
@@ -32,8 +32,8 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Exposed user-meta — keeps `*`, splits/trims/de-dupes, drops empties.
 	 */
 	public function test_exposed_user_meta_keys_sanitizer_keeps_star(): void {
-		$out = aafm_sanitize_exposed_user_meta_keys_input(
-			array( 'aafm_exposed_user_meta_keys' => "*\n profile_color \n\nprofile_color\nbio" )
+		$out = oversio_sanitize_exposed_user_meta_keys_input(
+			array( 'oversio_exposed_user_meta_keys' => "*\n profile_color \n\nprofile_color\nbio" )
 		);
 		$this->assertSame( array( '*', 'profile_color', 'bio' ), $out );
 	}
@@ -42,8 +42,8 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Deny user-meta — keeps `*`, keeps a hard-blocked auth key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_user_meta_keys_sanitizer_keeps_star_and_blocked(): void {
-		$out = aafm_sanitize_denied_user_meta_keys_input(
-			array( 'aafm_denied_user_meta_keys' => "*\n session_tokens \n\nsession_tokens\nprivate_note" )
+		$out = oversio_sanitize_denied_user_meta_keys_input(
+			array( 'oversio_denied_user_meta_keys' => "*\n session_tokens \n\nsession_tokens\nprivate_note" )
 		);
 		$this->assertSame( array( '*', 'session_tokens', 'private_note' ), $out );
 	}
@@ -52,8 +52,8 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Exposed term-meta — keeps `*`, drops a hard-blocked key, trims, de-dupes.
 	 */
 	public function test_exposed_term_meta_keys_sanitizer_keeps_star_drops_blocked(): void {
-		$out = aafm_sanitize_exposed_term_meta_keys_input(
-			array( 'aafm_exposed_term_meta_keys' => "*\n seo_title \n\nseo_title\n_edit_lock" )
+		$out = oversio_sanitize_exposed_term_meta_keys_input(
+			array( 'oversio_exposed_term_meta_keys' => "*\n seo_title \n\nseo_title\n_edit_lock" )
 		);
 		$this->assertSame( array( '*', 'seo_title' ), $out );
 	}
@@ -62,8 +62,8 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Deny term-meta — keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_term_meta_keys_sanitizer_keeps_star_and_blocked(): void {
-		$out = aafm_sanitize_denied_term_meta_keys_input(
-			array( 'aafm_denied_term_meta_keys' => "*\n secret \n\nsecret\nsession_tokens" )
+		$out = oversio_sanitize_denied_term_meta_keys_input(
+			array( 'oversio_denied_term_meta_keys' => "*\n secret \n\nsecret\nsession_tokens" )
 		);
 		$this->assertSame( array( '*', 'secret', 'session_tokens' ), $out );
 	}
@@ -72,10 +72,10 @@ final class MetaKeySanitizerTest extends TestCase {
 	 * Empty / missing payload yields an empty list, never a notice.
 	 */
 	public function test_sanitizers_handle_missing_payload(): void {
-		$this->assertSame( array(), aafm_sanitize_denied_meta_keys_input( array() ) );
-		$this->assertSame( array(), aafm_sanitize_exposed_user_meta_keys_input( array() ) );
-		$this->assertSame( array(), aafm_sanitize_denied_user_meta_keys_input( array() ) );
-		$this->assertSame( array(), aafm_sanitize_exposed_term_meta_keys_input( array() ) );
-		$this->assertSame( array(), aafm_sanitize_denied_term_meta_keys_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_denied_meta_keys_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_exposed_user_meta_keys_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_denied_user_meta_keys_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_exposed_term_meta_keys_input( array() ) );
+		$this->assertSame( array(), oversio_sanitize_denied_term_meta_keys_input( array() ) );
 	}
 }

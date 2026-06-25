@@ -3,7 +3,7 @@
  * ACF / SCF integration abilities — hydrated custom-field reads and writes (slice W4-A).
  *
  * Registers ONLY when ACF (or its Secure Custom Fields fork) is active
- * (aafm_integration_active('acf')); a host-inactive site contributes zero entries to the
+ * (oversio_integration_active('acf')); a host-inactive site contributes zero entries to the
  * registry. Field VALUES are read and written through ACF's own get_fields()/get_field()/
  * update_field() so a field's Return Format and storage are honoured. Every per-object ability
  * gates on the object's own edit capability: post fields on edit_post($id), term fields on
@@ -19,8 +19,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_acf_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_acf_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_acf_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_acf_full_definitions' );
 
 /**
  * Contribute the ACF definitions to the registry, but only when the ACF host plugin is active.
@@ -29,12 +29,12 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_acf_full_defi
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_acf_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'acf' ) ) {
+function oversio_register_acf_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'acf' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_acf_registry_definitions() );
+	return array_merge( $registry, oversio_acf_registry_definitions() );
 }
 
 /**
@@ -47,8 +47,8 @@ function aafm_register_acf_definitions( array $registry ): array {
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_acf_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_acf_registry_definitions() );
+function oversio_register_acf_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_acf_registry_definitions() );
 }
 
 /**
@@ -58,63 +58,63 @@ function aafm_register_acf_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_acf_registry_definitions(): array {
+function oversio_acf_registry_definitions(): array {
 	return array(
-		'aafm/acf-list-field-groups'  => array(
+		'oversio/acf-list-field-groups'  => array(
 			'label'        => __( 'List ACF field groups', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists the ACF field groups and the fields inside each (key, label, and type) for discovery. It returns structure only, never stored values. Requires the edit-posts capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_list_field_groups',
+			'args_builder' => 'oversio_args_acf_list_field_groups',
 		),
-		'aafm/acf-get-post-fields'    => array(
+		'oversio/acf-get-post-fields'    => array(
 			'label'        => __( 'Get post ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( "Reads all of a post's ACF field values, hydrated by field key. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_get_post_fields',
+			'args_builder' => 'oversio_args_acf_get_post_fields',
 		),
-		'aafm/acf-update-post-fields' => array(
+		'oversio/acf-update-post-fields' => array(
 			'label'        => __( 'Update post ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( 'Writes ACF field values on a post by field key, each value sanitized for its field type. Requires edit access to that post.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_update_post_fields',
+			'args_builder' => 'oversio_args_acf_update_post_fields',
 		),
-		'aafm/acf-get-term-fields'    => array(
+		'oversio/acf-get-term-fields'    => array(
 			'label'        => __( 'Get term ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( "Reads all of a term's ACF field values, hydrated by field key. Requires edit access to that term.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_get_term_fields',
+			'args_builder' => 'oversio_args_acf_get_term_fields',
 		),
-		'aafm/acf-update-term-fields' => array(
+		'oversio/acf-update-term-fields' => array(
 			'label'        => __( 'Update term ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( 'Writes ACF field values on a term by field key, each value sanitized for its field type. Requires edit access to that term.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_update_term_fields',
+			'args_builder' => 'oversio_args_acf_update_term_fields',
 		),
-		'aafm/acf-get-user-fields'    => array(
+		'oversio/acf-get-user-fields'    => array(
 			'label'        => __( 'Get user ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( "Reads all of a user's ACF field values, hydrated by field key. A field of the user_email type returns the real email address under the integration disclaimer. Requires edit access to that user.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_get_user_fields',
+			'args_builder' => 'oversio_args_acf_get_user_fields',
 		),
-		'aafm/acf-update-user-fields' => array(
+		'oversio/acf-update-user-fields' => array(
 			'label'        => __( 'Update user ACF fields', 'oversio-agent-abilities' ),
 			'description'  => __( 'Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'acf',
-			'args_builder' => 'aafm_args_acf_update_user_fields',
+			'args_builder' => 'oversio_args_acf_update_user_fields',
 		),
 	);
 }
@@ -125,20 +125,20 @@ function aafm_acf_registry_definitions(): array {
  *
  * @return bool
  */
-function aafm_perm_acf_list_field_groups(): bool {
+function oversio_perm_acf_list_field_groups(): bool {
 	return current_user_can( 'edit_posts' );
 }
 
 /**
- * Args for aafm/acf-list-field-groups.
+ * Args for oversio/acf-list-field-groups.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_list_field_groups(): array {
+function oversio_args_acf_list_field_groups(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-list-field-groups' ),
-		'description'         => aafm_ability_description( 'aafm/acf-list-field-groups' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/acf-list-field-groups' ),
+		'description'         => oversio_ability_description( 'oversio/acf-list-field-groups' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(),
@@ -174,8 +174,8 @@ function aafm_args_acf_list_field_groups(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_list_field_groups',
-		'permission_callback' => 'aafm_perm_acf_list_field_groups',
+		'execute_callback'    => 'oversio_exec_acf_list_field_groups',
+		'permission_callback' => 'oversio_perm_acf_list_field_groups',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -187,7 +187,7 @@ function aafm_args_acf_list_field_groups(): array {
 }
 
 /**
- * Execute aafm/acf-list-field-groups.
+ * Execute oversio/acf-list-field-groups.
  *
  * Walks every field group and its fields, returning only the discovery shape (key, label, type) —
  * never a stored value. Guards each ACF call with function_exists so the ability never fatals if
@@ -196,7 +196,7 @@ function aafm_args_acf_list_field_groups(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_acf_list_field_groups( array $input ) {
+function oversio_exec_acf_list_field_groups( array $input ) {
 	unset( $input );
 	$out = array( 'field_groups' => array() );
 
@@ -240,7 +240,7 @@ function aafm_exec_acf_list_field_groups( array $input ) {
  * @param int|string $selector ACF object selector (post id, "term_{id}", "user_{id}").
  * @return array<string,mixed>
  */
-function aafm_acf_read_fields( $selector ): array {
+function oversio_acf_read_fields( $selector ): array {
 	if ( ! function_exists( 'get_fields' ) ) {
 		return array();
 	}
@@ -254,7 +254,7 @@ function aafm_acf_read_fields( $selector ): array {
  *
  * @return string[]
  */
-function aafm_acf_url_field_types(): array {
+function oversio_acf_url_field_types(): array {
 	return array( 'url', 'link', 'file', 'image', 'oembed' );
 }
 
@@ -264,7 +264,7 @@ function aafm_acf_url_field_types(): array {
  *
  * @return string[]
  */
-function aafm_acf_wysiwyg_field_types(): array {
+function oversio_acf_wysiwyg_field_types(): array {
 	return array( 'wysiwyg', 'textarea' );
 }
 
@@ -275,7 +275,7 @@ function aafm_acf_wysiwyg_field_types(): array {
  *
  * @return string[]
  */
-function aafm_acf_url_leaf_keys(): array {
+function oversio_acf_url_leaf_keys(): array {
 	return array( 'url', 'src' );
 }
 
@@ -284,7 +284,7 @@ function aafm_acf_url_leaf_keys(): array {
  *
  * @return string[]
  */
-function aafm_acf_container_field_types(): array {
+function oversio_acf_container_field_types(): array {
 	return array( 'repeater', 'group', 'flexible_content' );
 }
 
@@ -299,7 +299,7 @@ function aafm_acf_container_field_types(): array {
  * @param string              $name       The nested key (a sub-field name).
  * @return array<string,mixed>|null The sub-field definition, or null when not found.
  */
-function aafm_acf_sub_field_def( array $parent_def, string $name ): ?array {
+function oversio_acf_sub_field_def( array $parent_def, string $name ): ?array {
 	$sub_fields = isset( $parent_def['sub_fields'] ) && is_array( $parent_def['sub_fields'] ) ? $parent_def['sub_fields'] : array();
 	foreach ( $sub_fields as $sub ) {
 		if ( is_array( $sub ) && isset( $sub['name'] ) && (string) $sub['name'] === $name ) {
@@ -326,13 +326,13 @@ function aafm_acf_sub_field_def( array $parent_def, string $name ): ?array {
  * @param string $field_key The top-level field key (to resolve its type).
  * @return mixed Sanitized value.
  */
-function aafm_acf_sanitize_value( $value, string $field_key ) {
+function oversio_acf_sanitize_value( $value, string $field_key ) {
 	$def = array();
 	if ( function_exists( 'acf_get_field' ) ) {
 		$resolved = acf_get_field( $field_key );
 		$def      = is_array( $resolved ) ? $resolved : array();
 	}
-	return aafm_acf_sanitize_leaf( $value, $def );
+	return oversio_acf_sanitize_leaf( $value, $def );
 }
 
 /**
@@ -348,10 +348,10 @@ function aafm_acf_sanitize_value( $value, string $field_key ) {
  *                                                 $in_url_struct is true).
  * @return mixed Sanitized value.
  */
-function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = false, string $key = '' ) {
+function oversio_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = false, string $key = '' ) {
 	$type    = is_array( $def ) ? (string) ( $def['type'] ?? '' ) : '';
-	$is_url  = in_array( $type, aafm_acf_url_field_types(), true );
-	$is_cont = in_array( $type, aafm_acf_container_field_types(), true );
+	$is_url  = in_array( $type, oversio_acf_url_field_types(), true );
+	$is_cont = in_array( $type, oversio_acf_container_field_types(), true );
 
 	if ( is_array( $value ) ) {
 		$clean = array();
@@ -361,15 +361,15 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 				// A repeater/group/flexible-content level. Numeric keys are row indices that
 				// keep the same container def; string keys are sub-field names whose own def
 				// drives their sanitizing — so a URL sub-field is esc_url_raw'd at depth.
-				$child_def          = is_string( $sub_key ) ? aafm_acf_sub_field_def( $def, (string) $sub_key ) : $def;
-				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $child_def, false, (string) $sub_key );
+				$child_def          = is_string( $sub_key ) ? oversio_acf_sub_field_def( $def, (string) $sub_key ) : $def;
+				$clean[ $safe_key ] = oversio_acf_sanitize_leaf( $sub, $child_def, false, (string) $sub_key );
 			} else {
 				// A URL-typed field whose value is a structured array (link/image/file): recurse
 				// with $in_url_struct so only the url/src leaf is esc_url_raw'd and the plain-text
 				// members (title/target/alt/caption/…) survive. A free-form nested array (no def)
 				// carries the same handling down.
 				$struct             = $in_url_struct || $is_url;
-				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $def, $struct, (string) $sub_key );
+				$clean[ $safe_key ] = oversio_acf_sanitize_leaf( $sub, $def, $struct, (string) $sub_key );
 			}
 		}
 		return $clean;
@@ -385,7 +385,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 	if ( $in_url_struct ) {
 		// A member of a URL-typed field's structured array. Only the url/src-keyed leaf is a URL;
 		// the rest is plain text and must NOT be esc_url_raw'd.
-		return in_array( $key, aafm_acf_url_leaf_keys(), true )
+		return in_array( $key, oversio_acf_url_leaf_keys(), true )
 			? esc_url_raw( $as_string )
 			: sanitize_text_field( $as_string );
 	}
@@ -393,7 +393,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 		// A URL-typed field with a scalar value: the value IS the URL, regardless of key name.
 		return esc_url_raw( $as_string );
 	}
-	if ( in_array( $type, aafm_acf_wysiwyg_field_types(), true ) ) {
+	if ( in_array( $type, oversio_acf_wysiwyg_field_types(), true ) ) {
 		return wp_kses_post( $as_string );
 	}
 	return sanitize_text_field( $as_string );
@@ -415,10 +415,10 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
  * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a write
  *                                       did not persist.
  */
-function aafm_acf_write_fields( array $fields, $selector ) {
+function oversio_acf_write_fields( array $fields, $selector ) {
 	if ( function_exists( 'update_field' ) ) {
 		foreach ( $fields as $field_key => $raw ) {
-			$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
+			$clean = oversio_acf_sanitize_value( $raw, (string) $field_key );
 			update_field( (string) $field_key, $clean, $selector );
 
 			// Verify the write persisted. A failed update_field() stores nothing, so the read-back
@@ -432,12 +432,12 @@ function aafm_acf_write_fields( array $fields, $selector ) {
 			if ( function_exists( 'get_field' ) ) {
 				$stored = get_field( (string) $field_key, $selector, false );
 				if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
-					return aafm_generic_error();
+					return oversio_generic_error();
 				}
 			}
 		}
 	}
-	return aafm_acf_read_fields( $selector );
+	return oversio_acf_read_fields( $selector );
 }
 
 /**
@@ -446,21 +446,21 @@ function aafm_acf_write_fields( array $fields, $selector ) {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_acf_post( array $input ): bool {
+function oversio_perm_acf_post( array $input ): bool {
 	$id = absint( $input['post_id'] ?? 0 );
 	return $id > 0 && get_post( $id ) instanceof WP_Post && current_user_can( 'edit_post', $id );
 }
 
 /**
- * Args for aafm/acf-get-post-fields.
+ * Args for oversio/acf-get-post-fields.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_get_post_fields(): array {
+function oversio_args_acf_get_post_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-get-post-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-get-post-fields' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/acf-get-post-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-get-post-fields' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -485,8 +485,8 @@ function aafm_args_acf_get_post_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_get_post_fields',
-		'permission_callback' => 'aafm_perm_acf_post',
+		'execute_callback'    => 'oversio_exec_acf_get_post_fields',
+		'permission_callback' => 'oversio_perm_acf_post',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -498,26 +498,26 @@ function aafm_args_acf_get_post_fields(): array {
 }
 
 /**
- * Execute aafm/acf-get-post-fields.
+ * Execute oversio/acf-get-post-fields.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_get_post_fields( array $input ) {
+function oversio_exec_acf_get_post_fields( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return array(
 		'post_id' => $id,
 		// Cast the top-level map so an empty fields set JSON-encodes to "{}" (object) per the
 		// schema, never "[]". Only the top level — nested repeater/relationship arrays stay lists.
-		'fields'  => (object) aafm_acf_read_fields( $id ),
+		'fields'  => (object) oversio_acf_read_fields( $id ),
 	);
 }
 
 /**
- * Args for aafm/acf-update-post-fields.
+ * Args for oversio/acf-update-post-fields.
  *
  * The closed top-level schema accepts exactly post_id + a free-form `fields` object map; a smuggled
  * sibling key (e.g. a stray role) is rejected by additionalProperties:false. The field map itself is
@@ -526,11 +526,11 @@ function aafm_exec_acf_get_post_fields( array $input ) {
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_update_post_fields(): array {
+function oversio_args_acf_update_post_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-update-post-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-update-post-fields' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/acf-update-post-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-update-post-fields' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -559,8 +559,8 @@ function aafm_args_acf_update_post_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_update_post_fields',
-		'permission_callback' => 'aafm_perm_acf_post',
+		'execute_callback'    => 'oversio_exec_acf_update_post_fields',
+		'permission_callback' => 'oversio_perm_acf_post',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -571,21 +571,21 @@ function aafm_args_acf_update_post_fields(): array {
 }
 
 /**
- * Execute aafm/acf-update-post-fields.
+ * Execute oversio/acf-update-post-fields.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_update_post_fields( array $input ) {
+function oversio_exec_acf_update_post_fields( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$fields = $input['fields'] ?? null;
 	if ( ! is_array( $fields ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, $id );
+	$written = oversio_acf_write_fields( $fields, $id );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}
@@ -603,7 +603,7 @@ function aafm_exec_acf_update_post_fields( array $input ) {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_acf_term( array $input ): bool {
+function oversio_perm_acf_term( array $input ): bool {
 	$id = absint( $input['term_id'] ?? 0 );
 	if ( $id < 1 || ! get_term( $id ) instanceof WP_Term ) {
 		return false;
@@ -617,20 +617,20 @@ function aafm_perm_acf_term( array $input ): bool {
  * @param int $id Term id.
  * @return string
  */
-function aafm_acf_term_selector( int $id ): string {
+function oversio_acf_term_selector( int $id ): string {
 	return 'term_' . $id;
 }
 
 /**
- * Args for aafm/acf-get-term-fields.
+ * Args for oversio/acf-get-term-fields.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_get_term_fields(): array {
+function oversio_args_acf_get_term_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-get-term-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-get-term-fields' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/acf-get-term-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-get-term-fields' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -655,8 +655,8 @@ function aafm_args_acf_get_term_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_get_term_fields',
-		'permission_callback' => 'aafm_perm_acf_term',
+		'execute_callback'    => 'oversio_exec_acf_get_term_fields',
+		'permission_callback' => 'oversio_perm_acf_term',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -668,33 +668,33 @@ function aafm_args_acf_get_term_fields(): array {
 }
 
 /**
- * Execute aafm/acf-get-term-fields.
+ * Execute oversio/acf-get-term-fields.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_get_term_fields( array $input ) {
+function oversio_exec_acf_get_term_fields( array $input ) {
 	$id = absint( $input['term_id'] ?? 0 );
 	if ( ! get_term( $id ) instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return array(
 		'term_id' => $id,
 		// (object) so an empty fields map encodes to "{}" per the schema (see the post read executor).
-		'fields'  => (object) aafm_acf_read_fields( aafm_acf_term_selector( $id ) ),
+		'fields'  => (object) oversio_acf_read_fields( oversio_acf_term_selector( $id ) ),
 	);
 }
 
 /**
- * Args for aafm/acf-update-term-fields.
+ * Args for oversio/acf-update-term-fields.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_update_term_fields(): array {
+function oversio_args_acf_update_term_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-update-term-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-update-term-fields' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/acf-update-term-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-update-term-fields' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -723,8 +723,8 @@ function aafm_args_acf_update_term_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_update_term_fields',
-		'permission_callback' => 'aafm_perm_acf_term',
+		'execute_callback'    => 'oversio_exec_acf_update_term_fields',
+		'permission_callback' => 'oversio_perm_acf_term',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -735,21 +735,21 @@ function aafm_args_acf_update_term_fields(): array {
 }
 
 /**
- * Execute aafm/acf-update-term-fields.
+ * Execute oversio/acf-update-term-fields.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_update_term_fields( array $input ) {
+function oversio_exec_acf_update_term_fields( array $input ) {
 	$id = absint( $input['term_id'] ?? 0 );
 	if ( ! get_term( $id ) instanceof WP_Term ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$fields = $input['fields'] ?? null;
 	if ( ! is_array( $fields ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) );
+	$written = oversio_acf_write_fields( $fields, oversio_acf_term_selector( $id ) );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}
@@ -767,7 +767,7 @@ function aafm_exec_acf_update_term_fields( array $input ) {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_acf_user( array $input ): bool {
+function oversio_perm_acf_user( array $input ): bool {
 	$id = absint( $input['user_id'] ?? 0 );
 	if ( $id < 1 || ! get_userdata( $id ) instanceof WP_User ) {
 		return false;
@@ -781,20 +781,20 @@ function aafm_perm_acf_user( array $input ): bool {
  * @param int $id User id.
  * @return string
  */
-function aafm_acf_user_selector( int $id ): string {
+function oversio_acf_user_selector( int $id ): string {
 	return 'user_' . $id;
 }
 
 /**
- * Args for aafm/acf-get-user-fields.
+ * Args for oversio/acf-get-user-fields.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_get_user_fields(): array {
+function oversio_args_acf_get_user_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-get-user-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-get-user-fields' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/acf-get-user-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-get-user-fields' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -819,8 +819,8 @@ function aafm_args_acf_get_user_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_get_user_fields',
-		'permission_callback' => 'aafm_perm_acf_user',
+		'execute_callback'    => 'oversio_exec_acf_get_user_fields',
+		'permission_callback' => 'oversio_perm_acf_user',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -832,7 +832,7 @@ function aafm_args_acf_get_user_fields(): array {
 }
 
 /**
- * Execute aafm/acf-get-user-fields.
+ * Execute oversio/acf-get-user-fields.
  *
  * Returns the hydrated user ACF values AS-IS. A user_email-type field's value (PII) is included,
  * not stripped — the edit_user gate, default-OFF state, and audit are the governance, mirroring the
@@ -841,28 +841,28 @@ function aafm_args_acf_get_user_fields(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_get_user_fields( array $input ) {
+function oversio_exec_acf_get_user_fields( array $input ) {
 	$id = absint( $input['user_id'] ?? 0 );
 	if ( ! get_userdata( $id ) instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return array(
 		'user_id' => $id,
 		// (object) so an empty fields map encodes to "{}" per the schema (see the post read executor).
-		'fields'  => (object) aafm_acf_read_fields( aafm_acf_user_selector( $id ) ),
+		'fields'  => (object) oversio_acf_read_fields( oversio_acf_user_selector( $id ) ),
 	);
 }
 
 /**
- * Args for aafm/acf-update-user-fields.
+ * Args for oversio/acf-update-user-fields.
  *
  * @return array<string,mixed>
  */
-function aafm_args_acf_update_user_fields(): array {
+function oversio_args_acf_update_user_fields(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/acf-update-user-fields' ),
-		'description'         => aafm_ability_description( 'aafm/acf-update-user-fields' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/acf-update-user-fields' ),
+		'description'         => oversio_ability_description( 'oversio/acf-update-user-fields' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -891,8 +891,8 @@ function aafm_args_acf_update_user_fields(): array {
 				),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_acf_update_user_fields',
-		'permission_callback' => 'aafm_perm_acf_user',
+		'execute_callback'    => 'oversio_exec_acf_update_user_fields',
+		'permission_callback' => 'oversio_perm_acf_user',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -903,21 +903,21 @@ function aafm_args_acf_update_user_fields(): array {
 }
 
 /**
- * Execute aafm/acf-update-user-fields.
+ * Execute oversio/acf-update-user-fields.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_acf_update_user_fields( array $input ) {
+function oversio_exec_acf_update_user_fields( array $input ) {
 	$id = absint( $input['user_id'] ?? 0 );
 	if ( ! get_userdata( $id ) instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$fields = $input['fields'] ?? null;
 	if ( ! is_array( $fields ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) );
+	$written = oversio_acf_write_fields( $fields, oversio_acf_user_selector( $id ) );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}

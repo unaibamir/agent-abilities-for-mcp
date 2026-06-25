@@ -13,9 +13,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Error;
 use WP_Post;
 
@@ -35,16 +35,16 @@ final class MediaWriteTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to
 		// the custom table, so it must exist before any ability is invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
 		// simulated by pushing the action name onto $wp_current_filter — the idiom WP
 		// core's own ability test trait uses. do_action() on the core hook trips the
 		// WPCS non-prefixed-hookname sniff (Phase 1 carried issue).
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array( 'aafm/set-featured-image', 'aafm/upload-media', 'aafm/update-media', 'aafm/delete-media' ) );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		update_option( 'oversio_enabled_abilities', array( 'oversio/set-featured-image', 'oversio/upload-media', 'oversio/update-media', 'oversio/delete-media' ) );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function tear_down(): void {
@@ -72,22 +72,22 @@ final class MediaWriteTest extends TestCase {
 
 
 	public function test_both_writes_are_in_registry_as_writes(): void {
-		$registry = aafm_get_abilities_registry();
+		$registry = oversio_get_abilities_registry();
 
-		$this->assertArrayHasKey( 'aafm/set-featured-image', $registry );
-		$this->assertSame( 'writes', $registry['aafm/set-featured-image']['group'] );
-		$this->assertSame( 'write', $registry['aafm/set-featured-image']['risk'] );
+		$this->assertArrayHasKey( 'oversio/set-featured-image', $registry );
+		$this->assertSame( 'writes', $registry['oversio/set-featured-image']['group'] );
+		$this->assertSame( 'write', $registry['oversio/set-featured-image']['risk'] );
 
-		$this->assertArrayHasKey( 'aafm/upload-media', $registry );
-		$this->assertSame( 'writes', $registry['aafm/upload-media']['group'] );
-		$this->assertSame( 'write', $registry['aafm/upload-media']['risk'] );
+		$this->assertArrayHasKey( 'oversio/upload-media', $registry );
+		$this->assertSame( 'writes', $registry['oversio/upload-media']['group'] );
+		$this->assertSame( 'write', $registry['oversio/upload-media']['risk'] );
 
 		// Both are additive writes (not destructive), annotated honestly.
-		$featured = aafm_args_set_featured_image();
+		$featured = oversio_args_set_featured_image();
 		$this->assertFalse( $featured['meta']['annotations']['readonly'] );
 		$this->assertFalse( $featured['meta']['annotations']['destructive'] );
 
-		$upload = aafm_args_upload_media();
+		$upload = oversio_args_upload_media();
 		$this->assertFalse( $upload['meta']['annotations']['readonly'] );
 		$this->assertFalse( $upload['meta']['annotations']['destructive'] );
 
@@ -106,7 +106,7 @@ final class MediaWriteTest extends TestCase {
 
 		$this->acting_as( 'author' ); // a different author — cannot edit someone else's post.
 		$this->assertFalse(
-			wp_get_ability( 'aafm/set-featured-image' )->check_permissions(
+			wp_get_ability( 'oversio/set-featured-image' )->check_permissions(
 				array(
 					'post_id'       => $post,
 					'attachment_id' => 1,
@@ -114,9 +114,9 @@ final class MediaWriteTest extends TestCase {
 			)
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/set-featured-image', $abilities );
+		$this->assertContains( 'oversio/set-featured-image', $abilities );
 	}
 
 	/**
@@ -129,7 +129,7 @@ final class MediaWriteTest extends TestCase {
 
 		// A plain post id (not an attachment) must be rejected.
 		$plain = self::factory()->post->create();
-		$out   = wp_get_ability( 'aafm/set-featured-image' )->execute(
+		$out   = wp_get_ability( 'oversio/set-featured-image' )->execute(
 			array(
 				'post_id'       => $post,
 				'attachment_id' => $plain,
@@ -146,7 +146,7 @@ final class MediaWriteTest extends TestCase {
 				'post_status'    => 'inherit',
 			)
 		);
-		$out2 = wp_get_ability( 'aafm/set-featured-image' )->execute(
+		$out2 = wp_get_ability( 'oversio/set-featured-image' )->execute(
 			array(
 				'post_id'       => $post,
 				'attachment_id' => $pdf,
@@ -167,7 +167,7 @@ final class MediaWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/set-featured-image' )->execute(
+		$out = wp_get_ability( 'oversio/set-featured-image' )->execute(
 			array(
 				'post_id'       => $post,
 				'attachment_id' => $image,
@@ -185,7 +185,7 @@ final class MediaWriteTest extends TestCase {
 	public function test_upload_media_requires_upload_files_and_audits_denial(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/upload-media' )->check_permissions(
+			wp_get_ability( 'oversio/upload-media' )->check_permissions(
 				array(
 					'filename'    => 'pixel.png',
 					'data_base64' => self::PNG_B64,
@@ -193,15 +193,15 @@ final class MediaWriteTest extends TestCase {
 			)
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/upload-media', $abilities );
+		$this->assertContains( 'oversio/upload-media', $abilities );
 	}
 
 	public function test_upload_media_author_is_allowed(): void {
 		$this->acting_as( 'author' );
 		$this->assertTrue(
-			wp_get_ability( 'aafm/upload-media' )->check_permissions(
+			wp_get_ability( 'oversio/upload-media' )->check_permissions(
 				array(
 					'filename'    => 'pixel.png',
 					'data_base64' => self::PNG_B64,
@@ -217,7 +217,7 @@ final class MediaWriteTest extends TestCase {
 	 */
 	public function test_upload_media_accepts_valid_png_and_returns_redacted_attachment(): void {
 		$this->acting_as( 'author' );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'pixel.png',
 				'data_base64' => self::PNG_B64,
@@ -263,7 +263,7 @@ final class MediaWriteTest extends TestCase {
 		// Building an SVG fixture to prove the upload rejects script-capable XML.
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
 		$svg = base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>' );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'x.svg',
 				'data_base64' => $svg,
@@ -285,7 +285,7 @@ final class MediaWriteTest extends TestCase {
 		// Building a PHP-payload fixture to prove non-image bytes are rejected.
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode
 		$php = base64_encode( "<?php echo 'pwned'; ?>" );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'shell.php',
 				'data_base64' => $php,
@@ -301,7 +301,7 @@ final class MediaWriteTest extends TestCase {
 	 */
 	public function test_upload_media_rejects_invalid_base64(): void {
 		$this->acting_as( 'author' );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'pixel.png',
 				'data_base64' => 'not really base64 @@@@',
@@ -317,7 +317,7 @@ final class MediaWriteTest extends TestCase {
 	 */
 	public function test_upload_media_normalizes_to_the_real_type_not_the_name(): void {
 		$this->acting_as( 'author' );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => 'liar.jpg',
 				'data_base64' => self::PNG_B64,
@@ -340,7 +340,7 @@ final class MediaWriteTest extends TestCase {
 	 */
 	public function test_upload_media_neutralizes_path_traversal_filename(): void {
 		$this->acting_as( 'author' );
-		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+		$out = wp_get_ability( 'oversio/upload-media' )->execute(
 			array(
 				'filename'    => '../../../../evil.png',
 				'data_base64' => self::PNG_B64,
@@ -365,10 +365,10 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	public function test_update_media_is_in_registry_as_write(): void {
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayHasKey( 'aafm/update-media', $registry );
-		$this->assertSame( 'writes', $registry['aafm/update-media']['group'] );
-		$this->assertSame( 'write', $registry['aafm/update-media']['risk'] );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayHasKey( 'oversio/update-media', $registry );
+		$this->assertSame( 'writes', $registry['oversio/update-media']['group'] );
+		$this->assertSame( 'write', $registry['oversio/update-media']['risk'] );
 	}
 
 	public function test_update_media_writes_fields(): void {
@@ -382,7 +382,7 @@ final class MediaWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/update-media' )->execute(
+		$out = wp_get_ability( 'oversio/update-media' )->execute(
 			array(
 				'attachment_id' => $att,
 				'title'         => 'New Title',
@@ -414,7 +414,7 @@ final class MediaWriteTest extends TestCase {
 
 		$value = 'A\\B path C:\\Users';
 
-		$out = wp_get_ability( 'aafm/update-media' )->execute(
+		$out = wp_get_ability( 'oversio/update-media' )->execute(
 			array(
 				'attachment_id' => $att,
 				'title'         => $value,
@@ -440,7 +440,7 @@ final class MediaWriteTest extends TestCase {
 				'post_type'      => 'attachment',
 			)
 		);
-		$out = wp_get_ability( 'aafm/update-media' )->execute( array( 'attachment_id' => $att ) );
+		$out = wp_get_ability( 'oversio/update-media' )->execute( array( 'attachment_id' => $att ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
@@ -458,7 +458,7 @@ final class MediaWriteTest extends TestCase {
 		);
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/update-media' )->check_permissions( array( 'attachment_id' => $att ) )
+			wp_get_ability( 'oversio/update-media' )->check_permissions( array( 'attachment_id' => $att ) )
 		);
 	}
 
@@ -466,15 +466,15 @@ final class MediaWriteTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$post = self::factory()->post->create();
 		$this->assertFalse(
-			wp_get_ability( 'aafm/update-media' )->check_permissions( array( 'attachment_id' => $post ) )
+			wp_get_ability( 'oversio/update-media' )->check_permissions( array( 'attachment_id' => $post ) )
 		);
 	}
 
 	public function test_delete_media_is_in_registry_as_destructive_write(): void {
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayHasKey( 'aafm/delete-media', $registry );
-		$this->assertSame( 'writes', $registry['aafm/delete-media']['group'] );
-		$this->assertSame( 'destructive', $registry['aafm/delete-media']['risk'] );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayHasKey( 'oversio/delete-media', $registry );
+		$this->assertSame( 'writes', $registry['oversio/delete-media']['group'] );
+		$this->assertSame( 'destructive', $registry['oversio/delete-media']['risk'] );
 	}
 
 	public function test_delete_media_permanently_removes_attachment(): void {
@@ -488,7 +488,7 @@ final class MediaWriteTest extends TestCase {
 			)
 		);
 
-		$out = wp_get_ability( 'aafm/delete-media' )->execute( array( 'attachment_id' => $att ) );
+		$out = wp_get_ability( 'oversio/delete-media' )->execute( array( 'attachment_id' => $att ) );
 
 		$this->assertTrue( $out['deleted'] );
 		$this->assertSame( $att, $out['attachment_id'] );
@@ -508,7 +508,7 @@ final class MediaWriteTest extends TestCase {
 		);
 		$this->acting_as( 'author' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $att ) )
+			wp_get_ability( 'oversio/delete-media' )->check_permissions( array( 'attachment_id' => $att ) )
 		);
 	}
 
@@ -516,7 +516,7 @@ final class MediaWriteTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$post = self::factory()->post->create();
 		$this->assertFalse(
-			wp_get_ability( 'aafm/delete-media' )->check_permissions( array( 'attachment_id' => $post ) )
+			wp_get_ability( 'oversio/delete-media' )->check_permissions( array( 'attachment_id' => $post ) )
 		);
 	}
 
@@ -532,7 +532,7 @@ final class MediaWriteTest extends TestCase {
 		);
 		update_post_meta( $att, '_wp_attached_file', '2026/06/adv.jpg' );
 
-		$out  = wp_get_ability( 'aafm/update-media' )->execute(
+		$out  = wp_get_ability( 'oversio/update-media' )->execute(
 			array(
 				'attachment_id' => $att,
 				'description'   => 'safe <script>alert(1)</script> text',

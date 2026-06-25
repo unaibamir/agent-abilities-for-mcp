@@ -1,34 +1,34 @@
 /* Agent Abilities for MCP — admin settings page (Direction A).
-   Tokens live on :root; every component is scoped under .aafm-wrap so it
+   Tokens live on :root; every component is scoped under .oversio-wrap so it
    never leaks into core admin chrome. WP-native neutrals, single accent. */
 
 :root {
-  --aafm-surface:#fff; --aafm-surface-2:#f6f7f7; --aafm-text:#1d2327;
-  --aafm-text-muted:#50575e; --aafm-text-subtle:#646970;
-  --aafm-border:#dcdcde; --aafm-border-strong:#c3c4c7;
-  --aafm-accent:#2271b1; --aafm-accent-hover:#135e96; --aafm-accent-tint:#f0f6fc;
-  --aafm-green:#00a32a; --aafm-green-text:#007017; --aafm-green-tint:#edfaef;
-  --aafm-amber:#dba617; --aafm-amber-text:#815f00; --aafm-amber-tint:#fcf9e8;
-  --aafm-red:#d63638; --aafm-red-text:#b32d2e; --aafm-red-tint:#fcf0f1;
-  --aafm-radius:8px; --aafm-radius-sm:5px; --aafm-shadow:0 1px 2px rgba(0,0,0,.04);
+  --oversio-surface:#fff; --oversio-surface-2:#f6f7f7; --oversio-text:#1d2327;
+  --oversio-text-muted:#50575e; --oversio-text-subtle:#646970;
+  --oversio-border:#dcdcde; --oversio-border-strong:#c3c4c7;
+  --oversio-accent:#2271b1; --oversio-accent-hover:#135e96; --oversio-accent-tint:#f0f6fc;
+  --oversio-green:#00a32a; --oversio-green-text:#007017; --oversio-green-tint:#edfaef;
+  --oversio-amber:#dba617; --oversio-amber-text:#815f00; --oversio-amber-tint:#fcf9e8;
+  --oversio-red:#d63638; --oversio-red-text:#b32d2e; --oversio-red-tint:#fcf0f1;
+  --oversio-radius:8px; --oversio-radius-sm:5px; --oversio-shadow:0 1px 2px rgba(0,0,0,.04);
 }
 
-.aafm-wrap {
-	--aafm-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
-	--aafm-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
-	--aafm-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
+.oversio-wrap {
+	--oversio-mono: Menlo, Consolas, Monaco, "Courier New", monospace;
+	--oversio-ring: 0 0 0 2px #fff, 0 0 0 4px rgba(34, 113, 177, 0.25);
+	--oversio-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.07);
 	/* The large display figure on the dashboard/abilities stat cards. A named token
 	   instead of a bare 28px so every stat card shares one type size. */
-	--aafm-stat-value-size: 28px;
+	--oversio-stat-value-size: 28px;
 
-	color: var(--aafm-text);
+	color: var(--oversio-text);
 	font-size: 14px;
 	line-height: 1.5;
 
 	/* Base size for every inline SVG icon. Specific contexts (pills, card-heads,
 	   stat cards, client cards, buttons) override this with their own dimensions;
 	   this floor stops any un-scoped icon from ballooning to its intrinsic size. */
-	.aafm-icon {
+	.oversio-icon {
 		inline-size: 16px;
 		block-size: 16px;
 		flex: 0 0 auto;
@@ -37,7 +37,7 @@
 	/* ---------- Page head (title + lede left, status pill right) ----------
 	   Ported from app.css .page-head. The status pill moves out of <h1> to the
 	   right edge of this flex row. */
-	.aafm-page-head {
+	.oversio-page-head {
 		display: flex;
 		align-items: flex-start;
 		gap: 16px;
@@ -56,27 +56,27 @@
 			padding: 0;
 		}
 
-		.aafm-page-lede {
-			color: var(--aafm-text-muted);
+		.oversio-page-lede {
+			color: var(--oversio-text-muted);
 			margin: 0;
 			max-inline-size: 70ch;
 		}
 
-		.aafm-status-pill {
+		.oversio-status-pill {
 			flex: 0 0 auto;
 		}
 	}
 
-	/* ---------- Buttons (ported from app.css .btn*, renamed .aafm-btn) ----------
+	/* ---------- Buttons (ported from app.css .btn*, renamed .oversio-btn) ----------
 	   The plugin's own button UI replaces WP-native .button / .button-primary in
 	   admin output. The icon inside a button is sized 15px to match the mockup. */
-	.aafm-btn {
+	.oversio-btn {
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
 		block-size: 34px;
 		padding-inline: 14px;
-		border-radius: var(--aafm-radius-sm);
+		border-radius: var(--oversio-radius-sm);
 		font-size: 13px;
 		font-weight: 600;
 		cursor: pointer;
@@ -88,52 +88,52 @@
 		line-height: 1;
 		vertical-align: middle;
 
-		.aafm-icon {
+		.oversio-icon {
 			inline-size: 15px;
 			block-size: 15px;
 		}
 
 		&:focus-visible {
 			outline: none;
-			box-shadow: var(--aafm-ring);
+			box-shadow: var(--oversio-ring);
 		}
 	}
 
-	.aafm-btn-primary {
-		background: var(--aafm-accent);
+	.oversio-btn-primary {
+		background: var(--oversio-accent);
 		color: #fff;
 
 		&:hover {
-			background: var(--aafm-accent-hover);
+			background: var(--oversio-accent-hover);
 			color: #fff;
 		}
 
 		&:active { background: #0a4b78; }
 	}
 
-	.aafm-btn-secondary {
-		background: var(--aafm-surface);
-		color: var(--aafm-accent);
-		border-color: var(--aafm-border-strong);
+	.oversio-btn-secondary {
+		background: var(--oversio-surface);
+		color: var(--oversio-accent);
+		border-color: var(--oversio-border-strong);
 
 		&:hover {
-			background: var(--aafm-accent-tint);
-			border-color: var(--aafm-accent);
-			color: var(--aafm-accent);
+			background: var(--oversio-accent-tint);
+			border-color: var(--oversio-accent);
+			color: var(--oversio-accent);
 		}
 	}
 
-	.aafm-btn-ghost {
+	.oversio-btn-ghost {
 		background: transparent;
-		color: var(--aafm-text-muted);
+		color: var(--oversio-text-muted);
 
 		&:hover {
-			background: var(--aafm-surface-2);
-			color: var(--aafm-text);
+			background: var(--oversio-surface-2);
+			color: var(--oversio-text);
 		}
 	}
 
-	.aafm-btn-sm {
+	.oversio-btn-sm {
 		block-size: 28px;
 		padding-inline: 10px;
 		font-size: 12px;
@@ -141,42 +141,42 @@
 
 	/* The copy buttons reuse the secondary button look; keep them from being
 	   stretched by a flex parent. */
-	.aafm-copy {
+	.oversio-copy {
 		flex: 0 0 auto;
 	}
 
 	/* ---------- Mini key/value list (Versions card) ----------
-	   Ported from app.css .kv. The dashboard outputs <dl class="aafm-kv">; this
+	   Ported from app.css .kv. The dashboard outputs <dl class="oversio-kv">; this
 	   was previously unstyled (the Image #1 misalignment). */
-	.aafm-kv {
+	.oversio-kv {
 		display: grid;
 		grid-template-columns: 1fr auto;
 		gap: 9px 16px;
 		margin: 0;
 
-		dt { color: var(--aafm-text-muted); }
+		dt { color: var(--oversio-text-muted); }
 		dd { margin: 0; font-weight: 600; }
 	}
 
 	/* ---------- Progress bar (setup card) — ported from app.css .progress ---------- */
-	.aafm-progress {
+	.oversio-progress {
 		inline-size: 130px;
 		block-size: 7px;
 		border-radius: 999px;
-		background: var(--aafm-surface-2);
+		background: var(--oversio-surface-2);
 		overflow: hidden;
-		border: 1px solid var(--aafm-border);
+		border: 1px solid var(--oversio-border);
 
 		span {
 			display: block;
 			block-size: 100%;
-			background: var(--aafm-accent);
+			background: var(--oversio-accent);
 			border-radius: 999px;
 		}
 	}
 
 	/* ---------- Pills / status ---------- */
-	.aafm-pill {
+	.oversio-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
@@ -189,17 +189,17 @@
 
 		.dashicons,
 		svg,
-		.aafm-icon {
+		.oversio-icon {
 			inline-size: 13px;
 			block-size: 13px;
 			font-size: 13px;
 		}
 
 		/* Leading status dot. Rendered from CSS (::before) so the markup stays
-		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> — no dot
-		   element needed. --aafm-dot is set per variant below; falls back to
+		   a bare <span class="oversio-pill oversio-pill-VARIANT">word</span> — no dot
+		   element needed. --oversio-dot is set per variant below; falls back to
 		   currentColor so the dot is always visible. */
-		--aafm-dot: currentColor;
+		--oversio-dot: currentColor;
 
 		&::before {
 			content: "";
@@ -207,88 +207,88 @@
 			inline-size: 7px;
 			block-size: 7px;
 			border-radius: 50%;
-			background: var(--aafm-dot);
+			background: var(--oversio-dot);
 		}
 
-		&.aafm-pill-success {
-			--aafm-dot: var(--aafm-green);
-			background: var(--aafm-green-tint);
-			color: var(--aafm-green-text);
+		&.oversio-pill-success {
+			--oversio-dot: var(--oversio-green);
+			background: var(--oversio-green-tint);
+			color: var(--oversio-green-text);
 		}
 
-		&.aafm-pill-warn {
-			--aafm-dot: var(--aafm-amber);
-			background: var(--aafm-amber-tint);
-			color: var(--aafm-amber-text);
+		&.oversio-pill-warn {
+			--oversio-dot: var(--oversio-amber);
+			background: var(--oversio-amber-tint);
+			color: var(--oversio-amber-text);
 		}
 
-		&.aafm-pill-danger {
-			--aafm-dot: var(--aafm-red);
-			background: var(--aafm-red-tint);
-			color: var(--aafm-red-text);
+		&.oversio-pill-danger {
+			--oversio-dot: var(--oversio-red);
+			background: var(--oversio-red-tint);
+			color: var(--oversio-red-text);
 		}
 
-		&.aafm-pill-info {
-			--aafm-dot: var(--aafm-accent);
-			background: var(--aafm-accent-tint);
-			color: var(--aafm-accent-hover);
+		&.oversio-pill-info {
+			--oversio-dot: var(--oversio-accent);
+			background: var(--oversio-accent-tint);
+			color: var(--oversio-accent-hover);
 		}
 
-		&.aafm-pill-neutral {
-			--aafm-dot: var(--aafm-border-strong);
-			background: var(--aafm-surface-2);
-			color: var(--aafm-text-muted);
+		&.oversio-pill-neutral {
+			--oversio-dot: var(--oversio-border-strong);
+			background: var(--oversio-surface-2);
+			color: var(--oversio-text-muted);
 		}
 	}
 
 	/* ---------- Cards ---------- */
-	.aafm-card {
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
-		box-shadow: var(--aafm-shadow);
+	.oversio-card {
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
+		box-shadow: var(--oversio-shadow);
 		margin-bottom: 15px;
 	}
 
-	.aafm-card-pad {
+	.oversio-card-pad {
 		padding-block: 18px;
 		padding-inline: 20px;
 	}
 
-	.aafm-card-head {
+	.oversio-card-head {
 		display: flex;
 		align-items: center;
 		gap: 10px;
 		padding-block: 14px;
 		padding-inline: 20px;
-		border-block-end: 1px solid var(--aafm-border);
+		border-block-end: 1px solid var(--oversio-border);
 
 		h2,
-		.aafm-card-head-title {
+		.oversio-card-head-title {
 			margin: 0;
 			font-size: 14px;
 			font-weight: 600;
 		}
 
-		/* aafm_render_section() wraps the title (and optional description) in a
+		/* oversio_render_section() wraps the title (and optional description) in a
 		   text column so a pill can sit at the row end; the head still lays the
 		   icon + text out in a row. */
-		.aafm-card-head-text {
+		.oversio-card-head-text {
 			display: flex;
 			flex-direction: column;
 			gap: 2px;
 		}
 
-		.aafm-card-head-desc {
+		.oversio-card-head-desc {
 			margin: 0;
 			font-size: 12.5px;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 		}
 
 		.icon,
-		.aafm-card-head-ic {
+		.oversio-card-head-ic {
 			display: flex;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 
 			.dashicons,
 			svg {
@@ -300,7 +300,7 @@
 	}
 
 	/* ---------- Stat cards ---------- */
-	.aafm-stat-grid {
+	.oversio-stat-grid {
 		display: grid;
 		gap: 16px;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -309,21 +309,21 @@
 
 	/* The Abilities tab reuses the stat cards but only shows two (Total / Enabled),
 	   so it caps the grid at two columns rather than stretching two cards across four. */
-	.aafm-abilities-stats {
+	.oversio-abilities-stats {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		margin-block-start: 0;
 	}
 
-	.aafm-stat {
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
+	.oversio-stat {
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
 		padding-block: 16px;
 		padding-inline: 18px;
-		box-shadow: var(--aafm-shadow);
+		box-shadow: var(--oversio-shadow);
 		transition: box-shadow 0.18s ease, transform 0.18s ease;
 
-		&:hover { box-shadow: var(--aafm-shadow-md); }
+		&:hover { box-shadow: var(--oversio-shadow-md); }
 
 		.stat-top {
 			display: flex;
@@ -337,12 +337,12 @@
 			font-weight: 600;
 			letter-spacing: 0.02em;
 			text-transform: uppercase;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 		}
 
 		.stat-ic {
 			display: flex;
-			color: var(--aafm-border-strong);
+			color: var(--oversio-border-strong);
 
 			.dashicons,
 			svg {
@@ -353,62 +353,62 @@
 		}
 
 		.stat-value {
-			font-size: var(--aafm-stat-value-size);
+			font-size: var(--oversio-stat-value-size);
 			font-weight: 600;
 			letter-spacing: -0.02em;
 
 			small {
 				font-size: 15px;
-				color: var(--aafm-text-subtle);
+				color: var(--oversio-text-subtle);
 				font-weight: 500;
 			}
 		}
 
 		.stat-sub {
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			font-size: 12.5px;
 			margin-block-start: 4px;
 		}
 
-		&.aafm-stat-span2 { grid-column: span 2; }
+		&.oversio-stat-span2 { grid-column: span 2; }
 	}
 
 	/* ---------- Endpoint field (mono) ---------- */
-	.aafm-endpoint {
+	.oversio-endpoint {
 		display: inline-block;
 		max-inline-size: 100%;
 		padding-block: 4px;
 		padding-inline: 8px;
-		font-family: var(--aafm-mono);
-		background: var(--aafm-surface-2);
-		border: 1px solid var(--aafm-border);
+		font-family: var(--oversio-mono);
+		background: var(--oversio-surface-2);
+		border: 1px solid var(--oversio-border);
 		border-radius: 3px;
 		overflow-wrap: anywhere;
 	}
 
 	/* In the dashboard endpoint card the URL stays on one line beside the inline
 	   Copy button (matches the mockup), scrolling horizontally rather than wrapping tall. */
-	.aafm-card-endpoint .aafm-field-mono .aafm-endpoint {
+	.oversio-card-endpoint .oversio-field-mono .oversio-endpoint {
 		overflow-x: auto;
 		overflow-wrap: normal;
 		white-space: nowrap;
 	}
 
-	.aafm-snippet {
-		font-family: var(--aafm-mono);
+	.oversio-snippet {
+		font-family: var(--oversio-mono);
 	}
 
-	.aafm-field-mono {
+	.oversio-field-mono {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 
-		.aafm-endpoint {
+		.oversio-endpoint {
 			flex: 1;
 			min-inline-size: 0;
 		}
 
-		.aafm-copy {
+		.oversio-copy {
 			flex: 0 0 auto;
 			white-space: nowrap;
 		}
@@ -417,27 +417,27 @@
 		.val {
 			flex: 1;
 			min-inline-size: 0;
-			font-family: var(--aafm-mono);
+			font-family: var(--oversio-mono);
 			font-size: 12.5px;
-			background: var(--aafm-surface-2);
-			border: 1px solid var(--aafm-border);
-			border-radius: var(--aafm-radius-sm);
+			background: var(--oversio-surface-2);
+			border: 1px solid var(--oversio-border);
+			border-radius: var(--oversio-radius-sm);
 			padding-block: 9px;
 			padding-inline: 11px;
-			color: var(--aafm-text);
+			color: var(--oversio-text);
 			overflow-x: auto;
 			white-space: nowrap;
 		}
 	}
 
 	/* ---------- OS tabs (CLI snippet selector) ---------- */
-	.aafm-os-tabs {
+	.oversio-os-tabs {
 		display: flex;
 		gap: 4px;
 		margin-block-end: 8px;
 	}
 
-	.aafm-os-note {
+	.oversio-os-note {
 		max-inline-size: 760px;
 
 		code {
@@ -446,71 +446,71 @@
 	}
 
 	/* ---------- Notices (notices.php — restyle only, markup unchanged) ---------- */
-	.aafm-notice {
+	.oversio-notice {
 		display: flex;
 		gap: 11px;
 		align-items: flex-start;
-		border: 1px solid var(--aafm-border);
-		border-inline-start: 4px solid var(--aafm-accent);
-		border-radius: var(--aafm-radius-sm);
+		border: 1px solid var(--oversio-border);
+		border-inline-start: 4px solid var(--oversio-accent);
+		border-radius: var(--oversio-radius-sm);
 		padding: 12px 14px;
 		margin: 12px 0;
 		font-size: 13px;
 		line-height: 1.5;
-		background: var(--aafm-accent-tint);
+		background: var(--oversio-accent-tint);
 		color: #0a4b78;
 
-		& .aafm-notice-ic {
+		& .oversio-notice-ic {
 			flex: 0 0 auto;
 			margin-block-start: 1px;
 			display: flex;
-			color: var(--aafm-accent);
+			color: var(--oversio-accent);
 
-			.aafm-icon {
+			.oversio-icon {
 				inline-size: 17px;
 				block-size: 17px;
 			}
 		}
 
-		& .aafm-notice-body {
+		& .oversio-notice-body {
 			flex: 1 1 auto;
 		}
 
 		& strong { font-weight: 600; }
 
-		&.aafm-notice-info {
-			border-inline-start-color: var(--aafm-accent);
-			background: var(--aafm-accent-tint);
+		&.oversio-notice-info {
+			border-inline-start-color: var(--oversio-accent);
+			background: var(--oversio-accent-tint);
 			color: #0a4b78;
 
-			& .aafm-notice-ic { color: var(--aafm-accent); }
+			& .oversio-notice-ic { color: var(--oversio-accent); }
 		}
 
-		&.aafm-notice-warning {
-			border-inline-start-color: var(--aafm-amber);
-			background: var(--aafm-amber-tint);
-			color: var(--aafm-amber-text);
+		&.oversio-notice-warning {
+			border-inline-start-color: var(--oversio-amber);
+			background: var(--oversio-amber-tint);
+			color: var(--oversio-amber-text);
 
-			& .aafm-notice-ic { color: var(--aafm-amber); }
+			& .oversio-notice-ic { color: var(--oversio-amber); }
 		}
 
-		&.aafm-notice-success {
-			border-inline-start-color: var(--aafm-green);
-			background: var(--aafm-green-tint);
-			color: var(--aafm-green-text);
+		&.oversio-notice-success {
+			border-inline-start-color: var(--oversio-green);
+			background: var(--oversio-green-tint);
+			color: var(--oversio-green-text);
 
-			& .aafm-notice-ic { color: var(--aafm-green); }
+			& .oversio-notice-ic { color: var(--oversio-green); }
 		}
 
-		&.aafm-notice-error {
-			border-inline-start-color: var(--aafm-red);
-			background: var(--aafm-red-tint);
-			color: var(--aafm-red-text);
+		&.oversio-notice-error {
+			border-inline-start-color: var(--oversio-red);
+			background: var(--oversio-red-tint);
+			color: var(--oversio-red-text);
 
-			& .aafm-notice-ic { color: var(--aafm-red); }
+			& .oversio-notice-ic { color: var(--oversio-red); }
 		}
 
-		&.aafm-notice-inline {
+		&.oversio-notice-inline {
 			margin: 6px 0;
 			padding: 6px 10px;
 		}
@@ -521,7 +521,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 2px;
-		border-block-end: 1px solid var(--aafm-border-strong);
+		border-block-end: 1px solid var(--oversio-border-strong);
 		margin: 18px 0 22px;
 		padding: 0;
 
@@ -534,7 +534,7 @@
 			border: 0;
 			border-block-end: 2px solid transparent;
 			background: transparent;
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 			text-decoration: none;
 			font-weight: 500;
 			font-size: 13.5px;
@@ -552,15 +552,15 @@
 
 			&:hover,
 			&:focus {
-				color: var(--aafm-accent);
+				color: var(--oversio-accent);
 				background: transparent;
 			}
 
 			/* A keyboard focus ring that is visibly distinct from the hover tint, so a
 			   keyboard user can tell which tab actually holds focus. */
 			&:focus-visible {
-				box-shadow: var(--aafm-ring);
-				border-radius: var(--aafm-radius-sm);
+				box-shadow: var(--oversio-ring);
+				border-radius: var(--oversio-radius-sm);
 				outline: none;
 			}
 		}
@@ -568,16 +568,16 @@
 		.nav-tab-active,
 		.nav-tab-active:hover,
 		.nav-tab-active:focus {
-			color: var(--aafm-accent);
-			border-block-end-color: var(--aafm-accent);
+			color: var(--oversio-accent);
+			border-block-end-color: var(--oversio-accent);
 			font-weight: 600;
 			background: transparent;
 		}
 	}
 
 	/* ---------- Sub-tabs (abilities subject nav — pill style) ---------- */
-	.aafm-subject-tabs,
-	.aafm-subtabs {
+	.oversio-subject-tabs,
+	.oversio-subtabs {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
@@ -591,9 +591,9 @@
 			block-size: 32px;
 			padding-inline: 13px;
 			border-radius: 999px;
-			border: 1px solid var(--aafm-border-strong);
-			background: var(--aafm-surface);
-			color: var(--aafm-text-muted);
+			border: 1px solid var(--oversio-border-strong);
+			background: var(--oversio-surface);
+			color: var(--oversio-text-muted);
 			text-decoration: none;
 			font-size: 13px;
 			font-weight: 500;
@@ -602,25 +602,25 @@
 
 			.count {
 				font-size: 11px;
-				color: var(--aafm-text-subtle);
+				color: var(--oversio-text-subtle);
 				font-weight: 600;
 			}
 
 			&:hover {
-				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				border-color: var(--oversio-accent);
+				color: var(--oversio-accent);
 			}
 
 			&:focus-visible {
-				box-shadow: var(--aafm-ring);
-				border-color: var(--aafm-accent);
+				box-shadow: var(--oversio-ring);
+				border-color: var(--oversio-accent);
 				outline: none;
 			}
 
 			&.current,
 			&.is-active {
-				background: var(--aafm-accent);
-				border-color: var(--aafm-accent);
+				background: var(--oversio-accent);
+				border-color: var(--oversio-accent);
 				color: #fff;
 
 				.count { color: rgba(255, 255, 255, 0.85); }
@@ -628,11 +628,11 @@
 		}
 	}
 
-	.aafm-subject-panel {
+	.oversio-subject-panel {
 		margin-block-start: 4px;
 	}
 
-	.aafm-subject-heading {
+	.oversio-subject-heading {
 		display: flex;
 		align-items: center;
 		gap: 6px;
@@ -641,25 +641,25 @@
 		font-weight: 600;
 	}
 
-	.aafm-count-badge {
+	.oversio-count-badge {
 		display: inline-block;
 		padding-block: 1px;
 		padding-inline: 8px;
 		border-radius: 10px;
 		font-size: 11px;
 		font-weight: 600;
-		color: var(--aafm-text-subtle);
+		color: var(--oversio-text-subtle);
 		background: #f0f0f1;
-		border: 1px solid var(--aafm-border);
+		border: 1px solid var(--oversio-border);
 	}
 
-	.aafm-ability-hint {
-		color: var(--aafm-text-subtle);
+	.oversio-ability-hint {
+		color: var(--oversio-text-subtle);
 		font-size: 12px;
 	}
 
 	/* ---------- Toggle switch ---------- */
-	.aafm-switch {
+	.oversio-switch {
 		position: relative;
 		display: inline-block;
 		inline-size: 38px;
@@ -676,11 +676,11 @@
 			cursor: pointer;
 		}
 
-		.aafm-switch-track {
+		.oversio-switch-track {
 			position: absolute;
 			inset: 0;
 			border-radius: 999px;
-			background: var(--aafm-border-strong);
+			background: var(--oversio-border-strong);
 			transition: background 0.18s ease;
 
 			&::before {
@@ -697,13 +697,13 @@
 			}
 		}
 
-		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
-		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
-		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
+		input:checked + .oversio-switch-track { background: var(--oversio-accent); }
+		input:checked + .oversio-switch-track::before { transform: translateX(16px); }
+		input:focus-visible + .oversio-switch-track { box-shadow: var(--oversio-ring); }
 	}
 
 	/* ---------- Risk badges (preserved colors) ---------- */
-	.aafm-badge {
+	.oversio-badge {
 		display: inline-block;
 		padding-block: 2px;
 		padding-inline: 8px;
@@ -712,31 +712,31 @@
 		line-height: 1.6;
 		text-transform: uppercase;
 
-		&.aafm-badge-read {
+		&.oversio-badge-read {
 			background: #e7f5ea;
 			color: #1a7f37;
 		}
 
-		&.aafm-badge-write {
+		&.oversio-badge-write {
 			background: #fcf3d6;
 			/* #7a5f00 on #fcf3d6 clears WCAG AA (>= 4.5:1) for this 11px uppercase text;
 			   the previous #8a6d00 sat at ~4.44:1, just under the floor. */
 			color: #7a5f00;
 		}
 
-		&.aafm-badge-destructive {
+		&.oversio-badge-destructive {
 			background: #fce4e4;
 			color: #b32d2e;
 		}
 
-		&.aafm-badge-readonly {
+		&.oversio-badge-readonly {
 			background: #e6f0f7;
 			color: #0a4b78;
 		}
 	}
 
 	/* ---------- Ability rows (grouped toggle list inside a card) ---------- */
-	.aafm-ability-group-head {
+	.oversio-ability-group-head {
 		display: flex;
 		align-items: center;
 		gap: 10px;
@@ -749,32 +749,32 @@
 		}
 	}
 
-	.aafm-ability-list {
+	.oversio-ability-list {
 		margin-block-end: 12px;
 	}
 
-	.aafm-ability-row {
+	.oversio-ability-row {
 		display: flex;
 		align-items: flex-start;
 		gap: 14px;
 		padding-block: 14px;
 		padding-inline: 18px;
-		border-block-end: 1px solid var(--aafm-border);
+		border-block-end: 1px solid var(--oversio-border);
 		transition: background 0.15s ease;
 
 		&:last-child { border-block-end: 0; }
 
-		&:hover { background: var(--aafm-surface-2); }
+		&:hover { background: var(--oversio-surface-2); }
 
-		.aafm-switch { margin-block-start: 1px; }
+		.oversio-switch { margin-block-start: 1px; }
 	}
 
-	.aafm-ability-main {
+	.oversio-ability-main {
 		flex: 1 1 auto;
 		min-inline-size: 0;
 	}
 
-	.aafm-ability-title {
+	.oversio-ability-title {
 		display: flex;
 		align-items: center;
 		gap: 9px;
@@ -787,32 +787,32 @@
 		}
 	}
 
-	.aafm-ability-row .aafm-ability-hint {
+	.oversio-ability-row .oversio-ability-hint {
 		margin-block: 4px 0;
 		max-inline-size: 80ch;
 	}
 
 	/* ---------- Integration cards (Integrations tab) ---------- */
-	.aafm-integrations {
-		.aafm-integrations-disclaimer {
+	.oversio-integrations {
+		.oversio-integrations-disclaimer {
 			margin-block-end: 24px;
 		}
 
-		.aafm-integrations-cards {
+		.oversio-integrations-cards {
 			display: flex;
 			flex-direction: column;
 			gap: 12px;
 		}
 
-		.aafm-integration-note {
+		.oversio-integration-note {
 			font-size: 13px;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			margin-block: 0;
 			padding-block: 12px 0;
 			padding-inline: 20px;
 		}
 
-		.aafm-section-toggle {
+		.oversio-section-toggle {
 			padding-inline: 20px;
 			margin-block: 12px 0;
 		}
@@ -820,8 +820,8 @@
 		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
 		   it (or Enter/Space) toggles the section. Reuse the abilities/help chevron affordance
 		   so it matches the rest of the admin. */
-		details.aafm-integration-card {
-			> summary.aafm-card-head {
+		details.oversio-integration-card {
+			> summary.oversio-card-head {
 				cursor: pointer;
 				list-style: none;
 				user-select: none;
@@ -838,12 +838,12 @@
 					block-size: 0;
 					border-inline-start: 5px solid transparent;
 					border-inline-end: 5px solid transparent;
-					border-block-start: 6px solid var(--aafm-text-subtle);
+					border-block-start: 6px solid var(--oversio-text-subtle);
 					transition: transform 0.18s ease;
 				}
 			}
 
-			&[open] > summary.aafm-card-head::after {
+			&[open] > summary.oversio-card-head::after {
 				transform: rotate(180deg);
 			}
 
@@ -851,7 +851,7 @@
 			.abilities-count {
 				margin-inline-start: auto;
 
-				.aafm-integration-count {
+				.oversio-integration-count {
 					margin: 0;
 				}
 			}
@@ -861,9 +861,9 @@
 				   interaction, rather than muting each control. The header (summary) stays at
 				   full strength so the plugin name, status, and counts read clearly, while
 				   everything the plugin would unlock stays legible underneath. */
-				.aafm-pill { opacity: 0.7; }
+				.oversio-pill { opacity: 0.7; }
 
-				.aafm-integration-body {
+				.oversio-integration-body {
 					opacity: 0.5;
 					pointer-events: none;
 				}
@@ -871,8 +871,8 @@
 		}
 
 		/* The accordion body holds the note, the per-card filter, and the ability list. */
-		.aafm-integration-body {
-			.aafm-card.aafm-ability-list {
+		.oversio-integration-body {
+			.oversio-card.oversio-ability-list {
 				border: none;
 				box-shadow: none;
 				border-radius: 0;
@@ -880,7 +880,7 @@
 		}
 
 		/* Per-card search + read/write filter. */
-		.aafm-integration-filter {
+		.oversio-integration-filter {
 			display: flex;
 			flex-wrap: wrap;
 			align-items: center;
@@ -889,30 +889,30 @@
 			padding-inline: 20px;
 			align-items: stretch;
 
-			.aafm-integration-search {
+			.oversio-integration-search {
 				flex: 1 1 220px;
 				min-inline-size: 160px;
 			}
 
-			.aafm-filter-risk {
+			.oversio-filter-risk {
 				display: inline-flex;
 				gap: 4px;
 			}
 
-			.aafm-filter-btn {
+			.oversio-filter-btn {
 				cursor: pointer;
 				font-size: 12px;
 				font-weight: 600;
 				padding-block: 5px;
 				padding-inline: 12px;
-				border: 1px solid var(--aafm-border);
-				border-radius: var(--aafm-radius-sm);
-				background: var(--aafm-surface);
-				color: var(--aafm-text-subtle);
+				border: 1px solid var(--oversio-border);
+				border-radius: var(--oversio-radius-sm);
+				background: var(--oversio-surface);
+				color: var(--oversio-text-subtle);
 
 				&.is-active {
-					background: var(--aafm-accent);
-					border-color: var(--aafm-accent);
+					background: var(--oversio-accent);
+					border-color: var(--oversio-accent);
 					color: #fff;
 				}
 			}
@@ -920,8 +920,8 @@
 	}
 
 	/* ---------- Collapsible abilities details/summary ---------- */
-	details.aafm-abilities-details {
-		border-block-start: 1px solid var(--aafm-border);
+	details.oversio-abilities-details {
+		border-block-start: 1px solid var(--oversio-border);
 
 		> summary {
 			display: flex;
@@ -946,7 +946,7 @@
 				block-size: 0;
 				border-inline-start: 5px solid transparent;
 				border-inline-end: 5px solid transparent;
-				border-block-start: 6px solid var(--aafm-text-subtle);
+				border-block-start: 6px solid var(--oversio-text-subtle);
 				transition: transform 0.18s ease;
 			}
 		}
@@ -957,57 +957,57 @@
 	}
 
 	/* ---------- Save bar (sticky-feel action bar under the abilities form) ---------- */
-	.aafm-savebar {
+	.oversio-savebar {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		margin-block-start: 24px;
 		padding-block: 12px;
 		padding-inline: 18px;
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
 		box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
 		position: sticky;
 		inset-block-end: 0;
 	}
 
 	/* ---------- Settings rows ---------- */
-	.aafm-set-row {
+	.oversio-set-row {
 		display: grid;
 		grid-template-columns: 220px 1fr;
 		gap: 24px;
 		padding: 20px;
-		border-block-end: 1px solid var(--aafm-border);
+		border-block-end: 1px solid var(--oversio-border);
 
 		&:last-child { border-block-end: 0; }
 
-		.aafm-set-label {
+		.oversio-set-label {
 			font-weight: 600;
 			font-size: 13.5px;
 
 			.opt {
 				display: block;
 				font-weight: 400;
-				color: var(--aafm-text-subtle);
+				color: var(--oversio-text-subtle);
 				font-size: 12px;
 				margin-block-start: 2px;
 			}
 		}
 
-		.aafm-set-control {
+		.oversio-set-control {
 			max-inline-size: 560px;
 		}
 
 		.help {
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			font-size: 12.5px;
 			margin-block: 8px 0;
 		}
 	}
 
-	.aafm-settings {
-		.aafm-notice {
+	.oversio-settings {
+		.oversio-notice {
 			margin-block: 10px;
 		}
 	}
@@ -1015,49 +1015,49 @@
 	/* ---------- Danger zone (Settings) ----------
 	   A destructive, irreversible action set apart with a red accent so it never
 	   reads as a routine control. The button itself stays WP-native (.button-link-delete). */
-	.aafm-danger {
-		border-color: var(--aafm-red);
+	.oversio-danger {
+		border-color: var(--oversio-red);
 
-		.aafm-card-head {
-			border-block-end-color: color-mix( in srgb, var(--aafm-red) 25%, var(--aafm-border) );
+		.oversio-card-head {
+			border-block-end-color: color-mix( in srgb, var(--oversio-red) 25%, var(--oversio-border) );
 
 			.icon,
-			.aafm-card-head-ic { color: var(--aafm-red); }
+			.oversio-card-head-ic { color: var(--oversio-red); }
 
 			h2,
-			.aafm-card-head-title { color: var(--aafm-red-text); }
+			.oversio-card-head-title { color: var(--oversio-red-text); }
 		}
 
-		.aafm-reset-status {
+		.oversio-reset-status {
 			margin-inline-start: 8px;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			font-size: 12.5px;
 		}
 	}
 
 	/* ---------- Setup checklist (Dashboard, Direction A) ----------
-	   Scoped under .aafm-setup so its .aafm-step / .aafm-sidx rows never
+	   Scoped under .oversio-setup so its .oversio-step / .oversio-sidx rows never
 	   collide with the Connection stepper, which owns the same generic
-	   class names under .aafm-connection (below). */
-	.aafm-setup {
+	   class names under .oversio-connection (below). */
+	.oversio-setup {
 		overflow: hidden;
 		/* The checklist is now a <details>, so it carries its own card surface (it used
-		   to inherit it from a .aafm-card wrapper). */
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
-		box-shadow: var(--aafm-shadow);
+		   to inherit it from a .oversio-card wrapper). */
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
+		box-shadow: var(--oversio-shadow);
 
 		/* The summary doubles as the checklist header. Reuse the Help/abilities chevron
 		   affordance so the collapse triangle matches the other collapsibles, and drop the
 		   header border when the panel is closed (no steps showing beneath it). */
-		.aafm-setup-top {
+		.oversio-setup-top {
 			display: flex;
 			align-items: center;
 			gap: 14px;
 			padding-block: 16px;
 			padding-inline: 20px;
-			border-block-end: 1px solid var(--aafm-border);
+			border-block-end: 1px solid var(--oversio-border);
 			cursor: pointer;
 			list-style: none;
 			user-select: none;
@@ -1072,11 +1072,11 @@
 				flex: 1;
 			}
 
-			.aafm-setup-ic {
+			.oversio-setup-ic {
 				display: flex;
-				color: var(--aafm-green-text, var(--aafm-text-subtle));
+				color: var(--oversio-green-text, var(--oversio-text-subtle));
 
-				.aafm-icon {
+				.oversio-icon {
 					inline-size: 18px;
 					block-size: 18px;
 				}
@@ -1089,7 +1089,7 @@
 				block-size: 0;
 				border-inline-start: 5px solid transparent;
 				border-inline-end: 5px solid transparent;
-				border-block-start: 6px solid var(--aafm-text-subtle);
+				border-block-start: 6px solid var(--oversio-text-subtle);
 				transition: transform 0.18s ease;
 				/* The solid triangle's visual mass sits above its bounding box centre, so a
 				   plain align-items:center reads as too high next to the cap-height heading.
@@ -1098,43 +1098,43 @@
 			}
 		}
 
-		&[open] .aafm-setup-top::after { transform: rotate(180deg); }
+		&[open] .oversio-setup-top::after { transform: rotate(180deg); }
 
-		&:not([open]) .aafm-setup-top { border-block-end: 0; }
+		&:not([open]) .oversio-setup-top { border-block-end: 0; }
 
-		.aafm-setup-count {
-			color: var(--aafm-text-subtle);
+		.oversio-setup-count {
+			color: var(--oversio-text-subtle);
 			font-size: 12.5px;
 			font-weight: 600;
 		}
 
 		/* Checklist rows. */
-		.aafm-step {
+		.oversio-step {
 			display: flex;
 			gap: 14px;
 			padding-block: 15px;
 			padding-inline: 20px;
-			border-block-end: 1px solid var(--aafm-border);
+			border-block-end: 1px solid var(--oversio-border);
 
 			&:last-child { border-block-end: 0; }
 		}
 
 		/* Numbered/state marker: green check (done) vs grey marker (to do). */
-		.aafm-sidx {
+		.oversio-sidx {
 			flex: 0 0 auto;
 			inline-size: 26px;
 			block-size: 26px;
 			border-radius: 50%;
 			display: grid;
 			place-items: center;
-			background: var(--aafm-surface-2);
-			color: var(--aafm-text-subtle);
-			border: 1px solid var(--aafm-border-strong);
+			background: var(--oversio-surface-2);
+			color: var(--oversio-text-subtle);
+			border: 1px solid var(--oversio-border-strong);
 			font-size: 12.5px;
 			font-weight: 700;
 
 			.dashicons,
-			.aafm-icon {
+			.oversio-icon {
 				inline-size: 16px;
 				block-size: 16px;
 				font-size: 16px;
@@ -1142,7 +1142,7 @@
 			}
 		}
 
-		.aafm-step-body {
+		.oversio-step-body {
 			flex: 1;
 			min-inline-size: 0;
 
@@ -1154,52 +1154,52 @@
 
 			p {
 				margin: 0;
-				color: var(--aafm-text-muted);
+				color: var(--oversio-text-muted);
 				font-size: 12.5px;
 			}
 
-			.aafm-step-act {
+			.oversio-step-act {
 				margin-block-start: 9px;
 			}
 		}
 
-		/* Right-side status tag: a real .aafm-pill carries the colour now, so this
+		/* Right-side status tag: a real .oversio-pill carries the colour now, so this
 		   wrapper only handles placement at the top-right of the row. */
-		.aafm-step-state {
+		.oversio-step-state {
 			flex: 0 0 auto;
 			align-self: flex-start;
 			margin-inline-start: auto;
 		}
 
-		.aafm-step-done {
-			.aafm-sidx {
-				background: var(--aafm-green);
+		.oversio-step-done {
+			.oversio-sidx {
+				background: var(--oversio-green);
 				color: #fff;
-				border-color: var(--aafm-green);
+				border-color: var(--oversio-green);
 			}
 
-			.aafm-step-body h3 { color: var(--aafm-text-subtle); }
+			.oversio-step-body h3 { color: var(--oversio-text-subtle); }
 		}
 
 		/* Active step: blue marker showing its number, like app.css .step--active .num. */
-		.aafm-step-active {
-			.aafm-sidx {
-				background: var(--aafm-accent);
+		.oversio-step-active {
+			.oversio-sidx {
+				background: var(--oversio-accent);
 				color: #fff;
-				border-color: var(--aafm-accent);
+				border-color: var(--oversio-accent);
 			}
 		}
 	}
 
 	/* ---------- Stepper (Connection) ----------
-	   Scoped under .aafm-connection so .aafm-step / .aafm-sidx don't bleed
+	   Scoped under .oversio-connection so .oversio-step / .oversio-sidx don't bleed
 	   onto the dashboard checklist (above), which reuses the same names. */
-	.aafm-connection .aafm-step {
+	.oversio-connection .oversio-step {
 		display: flex;
 		gap: 14px;
 		padding-block: 15px;
 		padding-inline: 20px;
-		border-block-end: 1px solid var(--aafm-border);
+		border-block-end: 1px solid var(--oversio-border);
 		flex-direction: column;
 
 		&:last-child { border-block-end: 0; }
@@ -1212,15 +1212,15 @@
 	/* Shared alignment class on each of the three numbered steps. It pins one inline
 	   padding so the step heads and rails line up edge-to-edge top to bottom, regardless
 	   of which content (form, code block, diagnostics) a given step holds. */
-	.aafm-connection .aafm-conn-step {
+	.oversio-connection .oversio-conn-step {
 		padding-inline: 0px;
 	}
 
-	.aafm-connection .aafm-step-rail { min-inline-size: 0; }
+	.oversio-connection .oversio-step-rail { min-inline-size: 0; }
 
 	/* WP-native action buttons in the connection steps carry long labels and
 	   default to white-space:nowrap; let them wrap inside a narrow column. */
-	.aafm-connection .aafm-step-rail .button {
+	.oversio-connection .oversio-step-rail .button {
 		max-inline-size: 100%;
 		white-space: normal;
 		block-size: auto;
@@ -1228,22 +1228,22 @@
 
 	/* The agent-login input must shrink with its column rather than hold its
 	   .regular-text width and push the row wider than the viewport. */
-	.aafm-connection .aafm-step-rail .regular-text {
+	.oversio-connection .oversio-step-rail .regular-text {
 		max-inline-size: 100%;
 	}
 
-	.aafm-connection .aafm-step-head {
+	.oversio-connection .oversio-step-head {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		margin-block-end: 12px;
 
-		.aafm-sidx {
+		.oversio-sidx {
 			flex: 0 0 auto;
 			inline-size: 28px;
 			block-size: 28px;
 			border-radius: 50%;
-			background: var(--aafm-accent);
+			background: var(--oversio-accent);
 			color: #fff;
 			display: grid;
 			place-items: center;
@@ -1258,21 +1258,21 @@
 		}
 
 		.sub {
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			font-size: 12.5px;
 			margin-block: 1px 0;
 		}
 	}
 
-	.aafm-connection .aafm-step-rail {
+	.oversio-connection .oversio-step-rail {
 		padding-inline-start: 13px;
 		margin-inline-start: 14px;
-		border-inline-start: 2px solid var(--aafm-border);
+		border-inline-start: 2px solid var(--oversio-border);
 		padding-block-end: 8px;
 	}
 
 	/* ---------- Activity toolbar (seg filter + clear-log button) ---------- */
-	.aafm-activity-toolbar {
+	.oversio-activity-toolbar {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
@@ -1280,88 +1280,88 @@
 		margin-block-end: 14px;
 
 		/* Row count sits right after the filter; the auto margin pushes Clear log to the end. */
-		.aafm-activity-count {
+		.oversio-activity-count {
 			margin-inline-end: auto;
-			color: var(--aafm-text-subtle);
+			color: var(--oversio-text-subtle);
 			font-size: 13px;
 		}
 	}
 
 	/* ---------- Segmented control ---------- */
-	.aafm-seg {
+	.oversio-seg {
 		display: inline-flex;
-		background: var(--aafm-surface-2);
-		border: 1px solid var(--aafm-border);
+		background: var(--oversio-surface-2);
+		border: 1px solid var(--oversio-border);
 		border-radius: 7px;
 		padding: 3px;
 		gap: 2px;
 
 		button,
-		.aafm-seg-btn {
+		.oversio-seg-btn {
 			border: 0;
 			background: transparent;
 			font-family: inherit;
 			font-size: 12.5px;
 			font-weight: 600;
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 			padding-block: 5px;
 			padding-inline: 12px;
 			border-radius: 5px;
 			cursor: pointer;
 
 			&:focus-visible {
-				box-shadow: var(--aafm-ring);
+				box-shadow: var(--oversio-ring);
 				outline: none;
 			}
 
 			&.on,
 			&.is-active {
-				background: var(--aafm-surface);
-				color: var(--aafm-text);
-				box-shadow: var(--aafm-shadow);
+				background: var(--oversio-surface);
+				color: var(--oversio-text);
+				box-shadow: var(--oversio-shadow);
 			}
 
 			/* Keep the focus ring visible even on the active segment, which otherwise
 			   sets its own box-shadow. */
 			&.on:focus-visible,
 			&.is-active:focus-visible {
-				box-shadow: var(--aafm-shadow), var(--aafm-ring);
+				box-shadow: var(--oversio-shadow), var(--oversio-ring);
 			}
 		}
 	}
 
 	/* ---------- Activity count headline + clarifier ---------- */
-	.aafm-activity-count {
-		.aafm-count-num {
-			color: var(--aafm-text);
+	.oversio-activity-count {
+		.oversio-count-num {
+			color: var(--oversio-text);
 			font-weight: 700;
 		}
 
-		.aafm-count-note {
-			color: var(--aafm-text-subtle);
+		.oversio-count-note {
+			color: var(--oversio-text-subtle);
 		}
 	}
 
 	/* ---------- Activity log pager (Prev / Page X of Y / Next) ---------- */
-	.aafm-pager {
+	.oversio-pager {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		margin-block-start: 14px;
 
-		.aafm-pager-status {
-			color: var(--aafm-text-subtle);
+		.oversio-pager-status {
+			color: var(--oversio-text-subtle);
 			font-size: 13px;
 		}
 
-		.aafm-btn[disabled] {
+		.oversio-btn[disabled] {
 			opacity: 0.5;
 			cursor: default;
 		}
 	}
 
 	/* The completed step-1 done line: a success pill plus a plain sentence and edit link. */
-	.aafm-agent-done {
+	.oversio-agent-done {
 		margin: 0;
 		display: flex;
 		align-items: center;
@@ -1370,18 +1370,18 @@
 	}
 
 	/* ---------- Code block ---------- */
-	.aafm-codeblock {
+	.oversio-codeblock {
 		position: relative;
 
 		pre {
 			margin: 0;
-			font-family: var(--aafm-mono);
+			font-family: var(--oversio-mono);
 			font-size: 12px;
 			line-height: 1.6;
-			color: var(--aafm-text);
-			background: var(--aafm-surface-2);
-			border: 1px solid var(--aafm-border);
-			border-radius: var(--aafm-radius-sm);
+			color: var(--oversio-text);
+			background: var(--oversio-surface-2);
+			border: 1px solid var(--oversio-border);
+			border-radius: var(--oversio-radius-sm);
 			padding-block: 14px;
 			padding-inline: 16px;
 			overflow-x: auto;
@@ -1395,43 +1395,43 @@
 	}
 
 	/* ---------- Client picker grid ---------- */
-	.aafm-client-grid {
+	.oversio-client-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 10px;
 	}
 
-	.aafm-client {
+	.oversio-client {
 		display: flex;
 		align-items: center;
 		gap: 9px;
 		padding-block: 11px;
 		padding-inline: 13px;
 		cursor: pointer;
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border-strong);
-		border-radius: var(--aafm-radius-sm);
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border-strong);
+		border-radius: var(--oversio-radius-sm);
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--aafm-text);
+		color: var(--oversio-text);
 		transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 
 		&:hover {
-			border-color: var(--aafm-accent);
-			background: var(--aafm-accent-tint);
+			border-color: var(--oversio-accent);
+			background: var(--oversio-accent-tint);
 		}
 
 		&.on {
-			border-color: var(--aafm-accent);
-			background: var(--aafm-accent-tint);
-			box-shadow: inset 0 0 0 1px var(--aafm-accent);
+			border-color: var(--oversio-accent);
+			background: var(--oversio-accent-tint);
+			box-shadow: inset 0 0 0 1px var(--oversio-accent);
 		}
 
 		.ci {
 			inline-size: 26px;
 			block-size: 26px;
 			border-radius: 6px;
-			background: var(--aafm-surface-2);
+			background: var(--oversio-surface-2);
 			display: grid;
 			place-items: center;
 			flex: 0 0 auto;
@@ -1441,23 +1441,23 @@
 				inline-size: 15px;
 				block-size: 15px;
 				font-size: 15px;
-				color: var(--aafm-text-subtle);
+				color: var(--oversio-text-subtle);
 			}
 		}
 	}
 
 	/* ---------- Diagnostics ---------- */
-	.aafm-diag {
+	.oversio-diag {
 		display: flex;
 		flex-direction: column;
 	}
 
-	.aafm-diag-row {
+	.oversio-diag-row {
 		display: flex;
 		gap: 12px;
 		padding-block: 13px;
 		padding-inline: 18px;
-		border-block-end: 1px solid var(--aafm-border);
+		border-block-end: 1px solid var(--oversio-border);
 		align-items: flex-start;
 
 		&:last-child { border-block-end: 0; }
@@ -1473,9 +1473,9 @@
 			flex: 0 0 auto;
 		}
 
-		.d-ok { background: var(--aafm-green); }
-		.d-warn { background: var(--aafm-amber); }
-		.d-bad { background: var(--aafm-red); }
+		.d-ok { background: var(--oversio-green); }
+		.d-warn { background: var(--oversio-amber); }
+		.d-bad { background: var(--oversio-red); }
 
 		.d-title {
 			font-weight: 600;
@@ -1483,42 +1483,42 @@
 		}
 
 		.d-detail {
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 			font-size: 12.5px;
 			margin-block-start: 2px;
 		}
 	}
 
-	.aafm-status {
+	.oversio-status {
 		font-weight: 600;
 
-		&.aafm-status-denied { color: #b32d2e; }
-		&.aafm-status-error { color: #8a6d00; }
-		&.aafm-status-success { color: #1a7f37; }
-		&.aafm-status-started { color: #646970; }
+		&.oversio-status-denied { color: #b32d2e; }
+		&.oversio-status-error { color: #8a6d00; }
+		&.oversio-status-success { color: #1a7f37; }
+		&.oversio-status-started { color: #646970; }
 	}
 
 	/* One save affordance across every form tab: whether the Save sits in the sticky
-	   .aafm-savebar (Abilities/Integrations) or on an inline <p> (Settings, the post-type
+	   .oversio-savebar (Abilities/Integrations) or on an inline <p> (Settings, the post-type
 	   and meta-key selectors), its status text reads the same — muted, with the same
 	   leading gap from the button. */
-	.aafm-save-status,
-	.aafm-user-status,
-	.aafm-test-status,
-	.aafm-clear-status,
-	.aafm-post-types-status,
-	.aafm-meta-keys-status,
-	.aafm-user-meta-keys-status,
-	.aafm-term-meta-keys-status {
+	.oversio-save-status,
+	.oversio-user-status,
+	.oversio-test-status,
+	.oversio-clear-status,
+	.oversio-post-types-status,
+	.oversio-meta-keys-status,
+	.oversio-user-meta-keys-status,
+	.oversio-term-meta-keys-status {
 		margin-inline-start: 8px;
-		color: var(--aafm-text-subtle);
+		color: var(--oversio-text-subtle);
 	}
 
-	/* ---------- Help accordion (native <details class="aafm-help-entry">) ---------- */
-	.aafm-help {
+	/* ---------- Help accordion (native <details class="oversio-help-entry">) ---------- */
+	.oversio-help {
 		max-inline-size: 820px;
 
-		.aafm-help-intro {
+		.oversio-help-intro {
 			margin-block-end: 16px;
 		}
 
@@ -1527,7 +1527,7 @@
 		}
 
 		/* Section heading above a group of <details> help entries. */
-		.aafm-acc-group {
+		.oversio-acc-group {
 			margin-block-end: 26px;
 
 			> h2 {
@@ -1537,11 +1537,11 @@
 			}
 		}
 
-		.aafm-help-entry {
+		.oversio-help-entry {
 			margin-block-end: 6px;
-			border: 1px solid var(--aafm-border);
-			border-radius: var(--aafm-radius-sm);
-			background: var(--aafm-surface);
+			border: 1px solid var(--oversio-border);
+			border-radius: var(--oversio-radius-sm);
+			background: var(--oversio-surface);
 
 			summary {
 				display: flex;
@@ -1551,11 +1551,11 @@
 				padding-inline: 14px;
 				cursor: pointer;
 				font-weight: 600;
-				color: var(--aafm-text);
+				color: var(--oversio-text);
 
 				/* The leading question glyph carries the accent, like the mockup's .qic. */
-				.aafm-icon {
-					color: var(--aafm-accent);
+				.oversio-icon {
+					color: var(--oversio-accent);
 				}
 
 				/* Hide the browser-default disclosure triangle; the chevron
@@ -1567,7 +1567,7 @@
 				}
 
 				&:hover {
-					color: var(--aafm-accent);
+					color: var(--oversio-accent);
 				}
 
 				/* Right-aligned chevron affordance — the same solid-triangle shape used by
@@ -1583,12 +1583,12 @@
 					block-size: 0;
 					border-inline-start: 5px solid transparent;
 					border-inline-end: 5px solid transparent;
-					border-block-start: 6px solid var(--aafm-text-subtle);
+					border-block-start: 6px solid var(--oversio-text-subtle);
 					transition: transform 0.18s ease;
 				}
 
 				&:hover::after {
-					border-block-start-color: var(--aafm-accent);
+					border-block-start-color: var(--oversio-accent);
 				}
 			}
 
@@ -1602,7 +1602,7 @@
 				}
 			}
 
-			.aafm-help-body {
+			.oversio-help-body {
 				padding-block: 4px 12px;
 				padding-inline: 14px;
 				color: #3c434a;
@@ -1621,14 +1621,14 @@
 					font-size: 12px;
 					padding-block: 1px;
 					padding-inline: 5px;
-					background: var(--aafm-surface-2);
-					border: 1px solid var(--aafm-border);
+					background: var(--oversio-surface-2);
+					border: 1px solid var(--oversio-border);
 					border-radius: 3px;
 				}
 			}
 		}
 
-		.aafm-help-copy-line {
+		.oversio-help-copy-line {
 			display: flex;
 			gap: 8px;
 			align-items: center;
@@ -1643,43 +1643,43 @@
 	}
 
 	.code-inline {
-		font-family: var(--aafm-mono);
+		font-family: var(--oversio-mono);
 		font-size: 12px;
-		background: var(--aafm-surface-2);
-		border: 1px solid var(--aafm-border);
+		background: var(--oversio-surface-2);
+		border: 1px solid var(--oversio-border);
 		border-radius: 4px;
 		padding-block: 1px;
 		padding-inline: 6px;
 	}
 
 	/* ---------- Detected meta-key chips ---------- */
-	.aafm-meta-keys {
-		.aafm-meta-chips {
+	.oversio-meta-keys {
+		.oversio-meta-chips {
 			display: flex;
 			flex-wrap: wrap;
 			gap: 6px;
 			margin-block: 8px;
 		}
 
-		.aafm-meta-chip {
+		.oversio-meta-chip {
 			padding-block: 2px;
 			padding-inline: 10px;
 			font-size: 12px;
 			line-height: 1.8;
 			border-radius: 12px;
-			background: var(--aafm-surface-2);
-			border: 1px solid var(--aafm-border);
+			background: var(--oversio-surface-2);
+			border: 1px solid var(--oversio-border);
 			cursor: pointer;
 
 			&:hover {
 				background: #f0f0f1;
-				border-color: var(--aafm-accent);
-				color: var(--aafm-accent);
+				border-color: var(--oversio-accent);
+				color: var(--oversio-accent);
 			}
 
 			&:focus-visible {
-				border-color: var(--aafm-accent);
-				box-shadow: var(--aafm-ring);
+				border-color: var(--oversio-accent);
+				box-shadow: var(--oversio-ring);
 				outline: none;
 			}
 		}
@@ -1690,17 +1690,17 @@
 	   data-config and the snippet tests reference them — but the redesigned
 	   Connection tab surfaces only the single primary codeblock for the selected
 	   client, so the expanded grid and its reveal toggle are hidden. */
-	.aafm-quickstarts {
+	.oversio-quickstarts {
 		display: none;
 
 		/* Long-label toggle must wrap inside a narrow column, not spill out. */
-		.aafm-quickstart-toggle {
+		.oversio-quickstart-toggle {
 			max-inline-size: 100%;
 			white-space: normal;
 			block-size: auto;
 		}
 
-		.aafm-quickstart-grid {
+		.oversio-quickstart-grid {
 			grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 			gap: 16px;
 			margin-block-start: 8px;
@@ -1711,33 +1711,33 @@
 			}
 		}
 
-		.aafm-quickstart-card {
+		.oversio-quickstart-card {
 			min-inline-size: 0;
 			padding: 12px;
-			background: var(--aafm-surface);
-			border: 1px solid var(--aafm-border);
-			border-radius: var(--aafm-radius-sm);
+			background: var(--oversio-surface);
+			border: 1px solid var(--oversio-border);
+			border-radius: var(--oversio-radius-sm);
 
-			.aafm-quickstart-name {
+			.oversio-quickstart-name {
 				margin-block: 0 4px;
 				font-size: 13px;
 			}
 
-			.aafm-quickstart-where {
+			.oversio-quickstart-where {
 				margin-block: 0 8px;
-				color: var(--aafm-text-subtle);
+				color: var(--oversio-text-subtle);
 				font-size: 12px;
 			}
 		}
 	}
 
 	/* ---------- Dashboard status cards ---------- */
-	.aafm-dashboard {
+	.oversio-dashboard {
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 
-		.aafm-card {
+		.oversio-card {
 			padding-block: 14px;
 			padding-inline: 16px;
 
@@ -1748,7 +1748,7 @@
 		}
 
 		/* Lower row: endpoint (wide) beside versions (narrow). */
-		.aafm-dashboard-lower {
+		.oversio-dashboard-lower {
 			grid-template-columns: 2fr 1fr;
 			margin-block-start: 0;
 			align-items: start;
@@ -1757,44 +1757,44 @@
 
 	/* ---------- Responsive ---------- */
 	@media (max-width: 960px) {
-		.aafm-stat-grid {
+		.oversio-stat-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 
-		.aafm-dashboard .aafm-dashboard-lower {
+		.oversio-dashboard .oversio-dashboard-lower {
 			grid-template-columns: 1fr;
 		}
 	}
 
 	@media (max-width: 720px) {
-		.aafm-stat.aafm-stat-span2 { grid-column: span 1; }
+		.oversio-stat.oversio-stat-span2 { grid-column: span 1; }
 	}
 
 	@media (max-width: 640px) {
-		.aafm-set-row {
+		.oversio-set-row {
 			grid-template-columns: 1fr;
 			gap: 10px;
 		}
 
-		.aafm-stat-grid {
+		.oversio-stat-grid {
 			grid-template-columns: 1fr;
 		}
 	}
 
 	@media (max-width: 600px) {
-		.aafm-quickstarts .aafm-quickstart-grid {
+		.oversio-quickstarts .oversio-quickstart-grid {
 			grid-template-columns: 1fr;
 		}
 	}
 
-	.aafm-table-wrap {
+	.oversio-table-wrap {
 		overflow-x: auto;
 	}
 
-	/* ---------- Shared section component (aafm_render_section) ---------- */
+	/* ---------- Shared section component (oversio_render_section) ---------- */
 	/* Real spacing between stacked sections so new sections inherit the gap
 	   automatically (the Settings cramped Safety/OAuth/Danger fix). */
-	.aafm-section {
+	.oversio-section {
 		margin-block: 20px;
 
 		&:first-child { margin-block-start: 0; }
@@ -1803,10 +1803,10 @@
 
 	/* Collapsible variant reuses the abilities-details chevron affordance so the
 	   triangle matches the Help/abilities collapsibles exactly. */
-	.aafm-section--collapsible {
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
+	.oversio-section--collapsible {
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
 
 		> summary {
 			display: flex;
@@ -1831,7 +1831,7 @@
 				block-size: 0;
 				border-inline-start: 5px solid transparent;
 				border-inline-end: 5px solid transparent;
-				border-block-start: 6px solid var(--aafm-text-subtle);
+				border-block-start: 6px solid var(--oversio-text-subtle);
 				transition: transform 0.18s ease;
 			}
 		}
@@ -1840,14 +1840,14 @@
 			transform: rotate(180deg);
 		}
 
-		.aafm-section-body {
+		.oversio-section-body {
 			padding-block: 0 16px;
 			padding-inline: 18px;
 		}
 	}
 
 	/* ---------- OAuth client/grant management (Connections OAuth card) ---------- */
-	.aafm-oauth-manage {
+	.oversio-oauth-manage {
 		margin-block-start: 20px;
 
 		h3 {
@@ -1857,15 +1857,15 @@
 
 		.sub {
 			margin-block: 0 12px;
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 			font-size: 13px;
 		}
 
-		.aafm-table-wrap {
+		.oversio-table-wrap {
 			margin-block-end: 8px;
 		}
 
-		.aafm-oauth-table {
+		.oversio-oauth-table {
 			code {
 				font-size: 12px;
 			}
@@ -1874,33 +1874,33 @@
 				word-break: break-all;
 			}
 
-			.aafm-btn {
+			.oversio-btn {
 				white-space: nowrap;
 			}
 		}
 
-		.aafm-muted {
-			color: var(--aafm-text-subtle);
+		.oversio-muted {
+			color: var(--oversio-text-subtle);
 		}
 
-		.aafm-empty-state {
+		.oversio-empty-state {
 			margin-block: 0 8px;
 			padding: 14px 16px;
-			border: 1px dashed var(--aafm-border-strong);
-			border-radius: var(--aafm-radius);
-			color: var(--aafm-text-muted);
-			background: var(--aafm-surface-2);
+			border: 1px dashed var(--oversio-border-strong);
+			border-radius: var(--oversio-radius);
+			color: var(--oversio-text-muted);
+			background: var(--oversio-surface-2);
 			font-size: 13px;
 		}
 	}
 }
 
 /* ---------- OAuth-first connection layout additions ---------- */
-.aafm-connection {
+.oversio-connection {
 
 	/* OAuth card header: title + Recommended pill on the same row */
-	.aafm-oauth-card {
-		.aafm-oauth-card-head {
+	.oversio-oauth-card {
+		.oversio-oauth-card-head {
 			display: flex;
 			align-items: center;
 			gap: 10px;
@@ -1914,30 +1914,30 @@
 			}
 		}
 
-		.aafm-recommended-pill {
+		.oversio-recommended-pill {
 			flex-shrink: 0;
 		}
 
 		/* Per-client instruction note above the snippet */
-		.aafm-oauth-note {
+		.oversio-oauth-note {
 			margin-block: 0 10px;
 			font-size: 13px;
-			color: var(--aafm-text);
+			color: var(--oversio-text);
 		}
 
 		/* Local-cert advisory inside an OAuth panel */
-		.aafm-oauth-local-note {
+		.oversio-oauth-local-note {
 			margin-block: 0 10px;
 			padding: 8px 12px;
-			background: var(--aafm-surface-2);
-			border-inline-start: 3px solid var(--aafm-warn-border, #dba617);
-			border-radius: 0 var(--aafm-radius) var(--aafm-radius) 0;
+			background: var(--oversio-surface-2);
+			border-inline-start: 3px solid var(--oversio-warn-border, #dba617);
+			border-radius: 0 var(--oversio-radius) var(--oversio-radius) 0;
 			font-size: 12px;
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 		}
 
 		/* Bridge <details> expander inside a native-mode OAuth panel */
-		.aafm-bridge-alt {
+		.oversio-bridge-alt {
 			margin-block-start: 12px;
 
 			> summary {
@@ -1946,7 +1946,7 @@
 				gap: 6px;
 				cursor: pointer;
 				font-size: 12px;
-				color: var(--aafm-accent);
+				color: var(--oversio-accent);
 				list-style: none;
 				padding-block: 2px;
 
@@ -1960,7 +1960,7 @@
 					block-size: 0;
 					border-block-start: 5px solid transparent;
 					border-block-end: 5px solid transparent;
-					border-inline-start: 6px solid var(--aafm-accent);
+					border-inline-start: 6px solid var(--oversio-accent);
 					transition: transform 0.15s ease;
 				}
 			}
@@ -1970,26 +1970,26 @@
 			}
 
 			/* Spacing when it is a plain div (bridge-mode clients) */
-			> .aafm-codeblock { margin-block-start: 8px; }
+			> .oversio-codeblock { margin-block-start: 8px; }
 		}
 
-		/* OAuth client picker (reuses .aafm-connect-controls layout) */
-		.aafm-oauth-picker {
+		/* OAuth client picker (reuses .oversio-connect-controls layout) */
+		.oversio-oauth-picker {
 			margin-block: 12px 16px;
 		}
 
 		/* Panel that shows the instruction for the selected client */
-		.aafm-oauth-panel {
+		.oversio-oauth-panel {
 			margin-block-start: 4px;
 		}
 	}
 
 	/* App-Password fallback <details> expander */
-	.aafm-app-password-fallback {
+	.oversio-app-password-fallback {
 		margin-block-start: 4px;
-		background: var(--aafm-surface);
-		border: 1px solid var(--aafm-border);
-		border-radius: var(--aafm-radius);
+		background: var(--oversio-surface);
+		border: 1px solid var(--oversio-border);
+		border-radius: var(--oversio-radius);
 
 		> summary {
 			display: flex;
@@ -2001,7 +2001,7 @@
 			list-style: none;
 			font-size: 13px;
 			font-weight: 600;
-			color: var(--aafm-text-muted);
+			color: var(--oversio-text-muted);
 			user-select: none;
 
 			&::marker,
@@ -2015,17 +2015,17 @@
 				block-size: 0;
 				border-inline-start: 5px solid transparent;
 				border-inline-end: 5px solid transparent;
-				border-block-start: 6px solid var(--aafm-text-subtle);
+				border-block-start: 6px solid var(--oversio-text-subtle);
 				transition: transform 0.18s ease;
 			}
 
 			&:hover {
-				color: var(--aafm-text);
+				color: var(--oversio-text);
 			}
 		}
 
 		&[open] > summary {
-			border-block-end: 1px solid var(--aafm-border);
+			border-block-end: 1px solid var(--oversio-border);
 
 			&::after {
 				transform: rotate(180deg);
@@ -2033,7 +2033,7 @@
 		}
 
 		/* Inner steps keep their normal gap and are padded inside the fallback */
-		.aafm-step {
+		.oversio-step {
 			margin-inline: 18px;
 
 			&:first-of-type { margin-block-start: 18px; }
@@ -2043,9 +2043,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.aafm-wrap *,
-	.aafm-wrap *::before,
-	.aafm-wrap *::after {
+	.oversio-wrap *,
+	.oversio-wrap *::before,
+	.oversio-wrap *::after {
 		transition: none !important;
 	}
 }

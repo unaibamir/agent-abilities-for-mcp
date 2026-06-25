@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — coupon reads and writes (sub-slice W4-WC4).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_coupons_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_coupons_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_coupons_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_coupons_full_definitions' );
 
 /**
  * Contribute the WooCommerce coupons definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_coupons_fu
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_coupons_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_coupons_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_coupons_registry_definitions() );
+	return array_merge( $registry, oversio_wc_coupons_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce coupon definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_coupons_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_coupons_registry_definitions() );
+function oversio_register_wc_coupons_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_coupons_registry_definitions() );
 }
 
 /**
@@ -53,43 +53,43 @@ function aafm_register_wc_coupons_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_coupons_registry_definitions(): array {
+function oversio_wc_coupons_registry_definitions(): array {
 	return array(
 		// Coupons (sub-slice W4-WC4) — discount/promotion management gated on manage_woocommerce.
-		'aafm/wc-list-coupons'  => array(
+		'oversio/wc-list-coupons'  => array(
 			'label'        => __( 'List WooCommerce coupons', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists WooCommerce coupons with their id, code, amount, discount type, expiry date, and usage count, plus a total. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_coupons',
+			'args_builder' => 'oversio_args_wc_list_coupons',
 		),
 
-		'aafm/wc-get-coupon'    => array(
+		'oversio/wc-get-coupon'    => array(
 			'label'        => __( 'Get WooCommerce coupon', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce coupon by id: code, amount, discount type, expiry, usage limits, spend limits, product and email restrictions, and other config. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_coupon',
+			'args_builder' => 'oversio_args_wc_get_coupon',
 		),
 
-		'aafm/wc-create-coupon' => array(
+		'oversio/wc-create-coupon' => array(
 			'label'        => __( 'Create WooCommerce coupon', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_coupon',
+			'args_builder' => 'oversio_args_wc_create_coupon',
 		),
 
-		'aafm/wc-update-coupon' => array(
+		'oversio/wc-update-coupon' => array(
 			'label'        => __( 'Update WooCommerce coupon', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce coupon by id, changing only the fields you send. An empty request body is a no-op success. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_coupon',
+			'args_builder' => 'oversio_args_wc_update_coupon',
 		),
 
 	);
@@ -106,7 +106,7 @@ function aafm_wc_coupons_registry_definitions(): array {
  * @param int $id Coupon id.
  * @return \WC_Coupon|null
  */
-function aafm_wc_get_coupon_object( int $id ): ?\WC_Coupon {
+function oversio_wc_get_coupon_object( int $id ): ?\WC_Coupon {
 	if ( $id <= 0 || ! class_exists( 'WC_Coupon' ) ) {
 		return null;
 	}
@@ -121,13 +121,13 @@ function aafm_wc_get_coupon_object( int $id ): ?\WC_Coupon {
  * @param \WC_Coupon $coupon Coupon object.
  * @return array<string,mixed>
  */
-function aafm_redact_wc_coupon( \WC_Coupon $coupon ): array {
+function oversio_redact_wc_coupon( \WC_Coupon $coupon ): array {
 	return array(
 		'id'            => $coupon->get_id(),
 		'code'          => $coupon->get_code(),
 		'amount'        => $coupon->get_amount(),
 		'discount_type' => $coupon->get_discount_type(),
-		'date_expires'  => aafm_wc_date_string( $coupon->get_date_expires() ),
+		'date_expires'  => oversio_wc_date_string( $coupon->get_date_expires() ),
 		'usage_count'   => $coupon->get_usage_count(),
 	);
 }
@@ -138,14 +138,14 @@ function aafm_redact_wc_coupon( \WC_Coupon $coupon ): array {
  * @param \WC_Coupon $coupon Coupon object.
  * @return array<string,mixed>
  */
-function aafm_rich_wc_coupon( \WC_Coupon $coupon ): array {
+function oversio_rich_wc_coupon( \WC_Coupon $coupon ): array {
 	return array(
 		'id'                   => $coupon->get_id(),
 		'code'                 => $coupon->get_code(),
 		'amount'               => $coupon->get_amount(),
 		'discount_type'        => $coupon->get_discount_type(),
 		'description'          => $coupon->get_description(),
-		'date_expires'         => aafm_wc_date_string( $coupon->get_date_expires() ),
+		'date_expires'         => oversio_wc_date_string( $coupon->get_date_expires() ),
 		'usage_count'          => $coupon->get_usage_count(),
 		'usage_limit'          => $coupon->get_usage_limit(),
 		'usage_limit_per_user' => $coupon->get_usage_limit_per_user(),
@@ -164,7 +164,7 @@ function aafm_rich_wc_coupon( \WC_Coupon $coupon ): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_coupon_output_properties(): array {
+function oversio_wc_coupon_output_properties(): array {
 	return array(
 		'id'                   => array( 'type' => 'integer' ),
 		'code'                 => array( 'type' => 'string' ),
@@ -199,7 +199,7 @@ function aafm_wc_coupon_output_properties(): array {
  *
  * @return array<string,mixed>
  */
-function aafm_wc_coupon_write_properties(): array {
+function oversio_wc_coupon_write_properties(): array {
 	return array(
 		'code'                 => array( 'type' => 'string' ),
 		'amount'               => array( 'type' => 'string' ),
@@ -244,7 +244,7 @@ function aafm_wc_coupon_write_properties(): array {
  * @param array<string,mixed> $input  Validated input fields (coupon_id already extracted).
  * @return void
  */
-function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
+function oversio_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
 	if ( array_key_exists( 'code', $input ) ) {
 		$coupon->set_code( sanitize_text_field( (string) $input['code'] ) );
 	}
@@ -302,15 +302,15 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-coupons.
+ * Args builder for oversio/wc-list-coupons.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_coupons(): array {
+function oversio_args_wc_list_coupons(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-coupons' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-coupons' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-coupons' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-coupons' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -347,8 +347,8 @@ function aafm_args_wc_list_coupons(): array {
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_coupons',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_coupons',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -360,14 +360,14 @@ function aafm_args_wc_list_coupons(): array {
 }
 
 /**
- * Execute aafm/wc-list-coupons.
+ * Execute oversio/wc-list-coupons.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_coupons( array $input ) {
+function oversio_exec_wc_list_coupons( array $input ) {
 	if ( ! class_exists( 'WC_Coupon' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$per_page = isset( $input['per_page'] ) ? absint( $input['per_page'] ) : 10;
@@ -391,9 +391,9 @@ function aafm_exec_wc_list_coupons( array $input ) {
 	$rows = array();
 	foreach ( $query->posts as $coupon_id ) {
 		// fields => 'ids' yields post ids; absint() also normalises the int|WP_Post union safely.
-		$coupon = aafm_wc_get_coupon_object( is_object( $coupon_id ) ? (int) $coupon_id->ID : absint( $coupon_id ) );
+		$coupon = oversio_wc_get_coupon_object( is_object( $coupon_id ) ? (int) $coupon_id->ID : absint( $coupon_id ) );
 		if ( null !== $coupon ) {
-			$rows[] = aafm_redact_wc_coupon( $coupon );
+			$rows[] = oversio_redact_wc_coupon( $coupon );
 		}
 	}
 
@@ -408,15 +408,15 @@ function aafm_exec_wc_list_coupons( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-get-coupon.
+ * Args builder for oversio/wc-get-coupon.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_coupon(): array {
+function oversio_args_wc_get_coupon(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-coupon' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-coupon' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-coupon' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-coupon' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -430,10 +430,10 @@ function aafm_args_wc_get_coupon(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_coupon_output_properties(),
+			'properties' => oversio_wc_coupon_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_coupon',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_coupon',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -445,17 +445,17 @@ function aafm_args_wc_get_coupon(): array {
 }
 
 /**
- * Execute aafm/wc-get-coupon.
+ * Execute oversio/wc-get-coupon.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_coupon( array $input ) {
-	$coupon = aafm_wc_get_coupon_object( absint( $input['coupon_id'] ?? 0 ) );
+function oversio_exec_wc_get_coupon( array $input ) {
+	$coupon = oversio_wc_get_coupon_object( absint( $input['coupon_id'] ?? 0 ) );
 	if ( null === $coupon ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rich_wc_coupon( $coupon );
+	return oversio_rich_wc_coupon( $coupon );
 }
 
 // =============================================================================
@@ -463,27 +463,27 @@ function aafm_exec_wc_get_coupon( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-create-coupon.
+ * Args builder for oversio/wc-create-coupon.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_coupon(): array {
+function oversio_args_wc_create_coupon(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-coupon' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-coupon' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-coupon' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-coupon' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
 			'required'             => array( 'code' ),
-			'properties'           => aafm_wc_coupon_write_properties(),
+			'properties'           => oversio_wc_coupon_write_properties(),
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_coupon_output_properties(),
+			'properties' => oversio_wc_coupon_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_coupon',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_coupon',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -494,30 +494,30 @@ function aafm_args_wc_create_coupon(): array {
 }
 
 /**
- * Execute aafm/wc-create-coupon.
+ * Execute oversio/wc-create-coupon.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_coupon( array $input ) {
+function oversio_exec_wc_create_coupon( array $input ) {
 	if ( ! class_exists( 'WC_Coupon' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$coupon = new \WC_Coupon();
-	aafm_wc_apply_coupon_input( $coupon, $input );
+	oversio_wc_apply_coupon_input( $coupon, $input );
 
 	$id = $coupon->save();
 	if ( ! $id ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_coupon_object( $id );
+	$saved = oversio_wc_get_coupon_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_coupon( $saved );
+	return oversio_rich_wc_coupon( $saved );
 }
 
 // =============================================================================
@@ -525,21 +525,21 @@ function aafm_exec_wc_create_coupon( array $input ) {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-update-coupon.
+ * Args builder for oversio/wc-update-coupon.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_coupon(): array {
-	$write_props              = aafm_wc_coupon_write_properties();
+function oversio_args_wc_update_coupon(): array {
+	$write_props              = oversio_wc_coupon_write_properties();
 	$write_props['coupon_id'] = array(
 		'type'    => 'integer',
 		'minimum' => 1,
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-coupon' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-coupon' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-coupon' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-coupon' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -548,10 +548,10 @@ function aafm_args_wc_update_coupon(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_wc_coupon_output_properties(),
+			'properties' => oversio_wc_coupon_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_coupon',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_coupon',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -562,31 +562,31 @@ function aafm_args_wc_update_coupon(): array {
 }
 
 /**
- * Execute aafm/wc-update-coupon.
+ * Execute oversio/wc-update-coupon.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_coupon( array $input ) {
+function oversio_exec_wc_update_coupon( array $input ) {
 	$id     = absint( $input['coupon_id'] ?? 0 );
-	$coupon = aafm_wc_get_coupon_object( $id );
+	$coupon = oversio_wc_get_coupon_object( $id );
 	if ( null === $coupon ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Strip the routing key before diffing so an id-only PATCH is a genuine no-op.
 	$fields = $input;
 	unset( $fields['coupon_id'] );
-	aafm_wc_apply_coupon_input( $coupon, $fields );
+	oversio_wc_apply_coupon_input( $coupon, $fields );
 	$saved_id = (int) $coupon->save();
 	if ( $saved_id < 1 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$saved = aafm_wc_get_coupon_object( $id );
+	$saved = oversio_wc_get_coupon_object( $id );
 	if ( null === $saved ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return aafm_rich_wc_coupon( $saved );
+	return oversio_rich_wc_coupon( $saved );
 }

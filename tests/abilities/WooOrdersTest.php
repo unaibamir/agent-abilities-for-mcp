@@ -1,7 +1,7 @@
 <?php
 /**
- * WooCommerce order read abilities: aafm/wc-list-orders (lean, no PII in list rows) and
- * aafm/wc-get-order (full shape including customer billing/shipping PII under the disclaimer).
+ * WooCommerce order read abilities: oversio/wc-list-orders (lean, no PII in list rows) and
+ * oversio/wc-get-order (full shape including customer billing/shipping PII under the disclaimer).
  *
  * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcOrderStubStore. The stub_wc_orders() helper
@@ -12,11 +12,11 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
-use AAFM\Tests\IntegrationStubs;
-use AAFM\Tests\WcOrderStubStore;
+use Oversio\Tests\TestCase;
+use Oversio\Tests\IntegrationStubs;
+use Oversio\Tests\WcOrderStubStore;
 use WP_Error;
 
 final class WooOrdersTest extends TestCase {
@@ -25,14 +25,14 @@ final class WooOrdersTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		// stub_woocommerce() adds manage_woocommerce to administrator and defines the base WC classes.
 		$this->stub_woocommerce();
 		// Seed order test fixtures including a PII-carrying order.
 		$this->seed_wc_orders();
-		aafm_registry_cache_should_flush( true );
+		oversio_registry_cache_should_flush( true );
 		$this->register_wc_orders();
 	}
 
@@ -50,19 +50,19 @@ final class WooOrdersTest extends TestCase {
 	 * Enable + register the WooCommerce order read ability set.
 	 */
 	private function register_wc_orders(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
+				'oversio/wc-list-orders',
+				'oversio/wc-get-order',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	// =========================================================================
-	// aafm/wc-list-orders
+	// oversio/wc-list-orders
 	// =========================================================================
 
 	/**
@@ -72,12 +72,12 @@ final class WooOrdersTest extends TestCase {
 		// An editor (no manage_woocommerce) must be denied at the permission gate.
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-list-orders' )->check_permissions( array() )
+			wp_get_ability( 'oversio/wc-list-orders' )->check_permissions( array() )
 		);
 
 		// An administrator (given manage_woocommerce by stub_woocommerce()) is allowed.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'orders', $res );
 		$this->assertArrayHasKey( 'total', $res );
@@ -87,7 +87,7 @@ final class WooOrdersTest extends TestCase {
 		// List rows must carry id, number, status, total, currency, date_created, customer_id
 		// and absolutely NO billing address, email, or phone fields.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertNotEmpty( $res['orders'] );
 
@@ -135,7 +135,7 @@ final class WooOrdersTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute(
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute(
 			array(
 				'per_page' => 2,
 				'page'     => 1,
@@ -171,7 +171,7 @@ final class WooOrdersTest extends TestCase {
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array( 'status' => 'completed' ) );
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute( array( 'status' => 'completed' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 2, $res['total'] );
 		$statuses = wp_list_pluck( $res['orders'], 'status' );
@@ -188,7 +188,7 @@ final class WooOrdersTest extends TestCase {
 
 		$this->acting_as( 'administrator' );
 		// Page 2 of per_page=2 should return only the third order.
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute(
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute(
 			array(
 				'per_page' => 2,
 				'page'     => 2,
@@ -206,14 +206,14 @@ final class WooOrdersTest extends TestCase {
 		WcOrderStubStore::reset();
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-list-orders' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( array(), $res['orders'], 'orders must be an empty array when the store is empty.' );
 		$this->assertSame( 0, $res['total'], 'total must be 0 when the store is empty.' );
 	}
 
 	// =========================================================================
-	// aafm/wc-get-order
+	// oversio/wc-get-order
 	// =========================================================================
 
 	/**
@@ -222,17 +222,17 @@ final class WooOrdersTest extends TestCase {
 	public function test_get_order_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-get-order' )->check_permissions( array( 'order_id' => 5001 ) )
+			wp_get_ability( 'oversio/wc-get-order' )->check_permissions( array( 'order_id' => 5001 ) )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 	}
 
 	public function test_get_order_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// Top-level shape.
@@ -284,7 +284,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_get_order_exposes_billing_pii_intentionally(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// The billing email MUST be the seeded value — not stripped, not redacted.
@@ -313,7 +313,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_orders();
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5099 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5099 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// Both billing and shipping must be stdClass/objects (encode as {}) not arrays ([]).
@@ -327,15 +327,15 @@ final class WooOrdersTest extends TestCase {
 
 	public function test_get_order_unknown_id_returns_generic_error(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'oversio_error', $res->get_error_code() );
 	}
 
 	public function test_get_order_rejects_zero_id(): void {
 		// The minimum:1 schema constraint must reject order_id:0 before execute runs.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 0 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 0 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -362,14 +362,14 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function provide_closed_schema_cases(): array {
 		return array(
-			'list-orders' => array( 'aafm/wc-list-orders', array() ),
-			'get-order'   => array( 'aafm/wc-get-order', array( 'order_id' => 5001 ) ),
+			'list-orders' => array( 'oversio/wc-list-orders', array() ),
+			'get-order'   => array( 'oversio/wc-get-order', array( 'order_id' => 5001 ) ),
 		);
 	}
 
 	public function test_get_order_line_items_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertIsArray( $res['line_items'] );
 
@@ -394,44 +394,44 @@ final class WooOrdersTest extends TestCase {
 		// Pin WooCommerce detection off through the low-level seam so the class WooCommerce
 		// marker (defined process-wide by stub_woocommerce()) does not falsely report WC active.
 		$this->reset_integration_stubs();
-		remove_all_filters( 'aafm_integration_active_woocommerce' );
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		remove_all_filters( 'oversio_integration_active_woocommerce' );
+		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
+		oversio_registry_cache_should_flush( true );
 
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'aafm/wc-list-orders', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-get-order', $registry );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'oversio/wc-list-orders', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-get-order', $registry );
 
-		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
-	// aafm/wc-create-order + aafm/wc-update-order
+	// oversio/wc-create-order + oversio/wc-update-order
 	// =========================================================================
 
 	/**
 	 * Enable + register the full order ability set including writes.
 	 */
 	private function register_wc_order_writes(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
-				'aafm/wc-create-order',
-				'aafm/wc-update-order',
+				'oversio/wc-list-orders',
+				'oversio/wc-get-order',
+				'oversio/wc-create-order',
+				'oversio/wc-update-order',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_create_order_returns_rich_shape_and_persists(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute(
 			array(
 				'status'        => 'processing',
 				'customer_id'   => 7,
@@ -461,7 +461,7 @@ final class WooOrdersTest extends TestCase {
 		$this->assertArrayHasKey( 'line_items', $res );
 		$this->assertGreaterThan( 0, $res['id'], 'Created order must have a non-zero id.' );
 		// Persisted: retrievable via wc-get-order.
-		$get = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => $res['id'] ) );
+		$get = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => $res['id'] ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $get );
 		$this->assertSame( $res['id'], $get['id'] );
 	}
@@ -470,7 +470,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-order' )->check_permissions( array( 'status' => 'processing' ) )
+			wp_get_ability( 'oversio/wc-create-order' )->check_permissions( array( 'status' => 'processing' ) )
 		);
 	}
 
@@ -478,7 +478,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_create_order_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute(
 			array( 'evil_field' => 'x' )
 		);
 		$this->assertInstanceOf( \WP_Error::class, $res, 'Closed schema must reject unknown top-level field.' );
@@ -493,7 +493,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_create_order_billing_nested_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute(
 			array(
 				'billing' => array(
 					'first_name' => 'Alice',
@@ -516,7 +516,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_create_order_line_items_nested_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute(
 			array(
 				'line_items' => array(
 					array(
@@ -537,7 +537,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_create_order_invalid_status_returns_error(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute(
 			array( 'status' => 'totally-invalid-status' )
 		);
 		$this->assertInstanceOf( \WP_Error::class, $res, 'Invalid status must return WP_Error.' );
@@ -546,7 +546,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_create_order_empty_billing_shipping_encode_as_objects(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-create-order' )->execute( array() );
+		$res = wp_get_ability( 'oversio/wc-create-order' )->execute( array() );
 		$this->assertNotInstanceOf( \WP_Error::class, $res );
 		$encoded = wp_json_encode( $res );
 		$this->assertIsString( $encoded );
@@ -558,7 +558,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id' => 5001,
 				'billing'  => array(
@@ -586,7 +586,7 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id' => 5050,
 				'billing'  => array( 'city' => 'Hamburg' ),
@@ -614,7 +614,7 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id' => 5051,
 				'shipping' => array( 'country' => 'FR' ),
@@ -630,7 +630,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_update_order_line_items_nested_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id'   => 5001,
 				'line_items' => array(
@@ -662,7 +662,7 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id'    => 5052,
 				'customer_id' => 7,
@@ -679,11 +679,11 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
 
-		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$before = wp_get_ability( 'oversio/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $before );
 
 		// Empty PATCH -- no fields.
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( \WP_Error::class, $res, 'Empty PATCH must be a no-op success.' );
 		$this->assertSame( $before['status'], $res['status'], 'Status must be unchanged on empty PATCH.' );
 	}
@@ -691,7 +691,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_update_order_unknown_id_returns_error(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute( array( 'order_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute( array( 'order_id' => 999999 ) );
 		$this->assertInstanceOf( \WP_Error::class, $res );
 	}
 
@@ -699,7 +699,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-update-order' )->check_permissions( array( 'order_id' => 5001 ) )
+			wp_get_ability( 'oversio/wc-update-order' )->check_permissions( array( 'order_id' => 5001 ) )
 		);
 	}
 
@@ -707,7 +707,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_update_order_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id'   => 5001,
 				'evil_field' => 'x',
@@ -722,7 +722,7 @@ final class WooOrdersTest extends TestCase {
 	public function test_update_order_billing_nested_smuggle_rejected(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order' )->execute(
 			array(
 				'order_id' => 5001,
 				'billing'  => array(
@@ -739,32 +739,32 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	// =========================================================================
-	// aafm/wc-update-order-status
+	// oversio/wc-update-order-status
 	// =========================================================================
 
 	/**
 	 * Enable + register the full order ability set including wc-update-order-status.
 	 */
 	private function register_wc_order_status_write(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
-				'aafm/wc-create-order',
-				'aafm/wc-update-order',
-				'aafm/wc-update-order-status',
+				'oversio/wc-list-orders',
+				'oversio/wc-get-order',
+				'oversio/wc-create-order',
+				'oversio/wc-update-order',
+				'oversio/wc-update-order-status',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_update_order_status_sets_the_status(): void {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 5001,
 				'status'   => 'completed',
@@ -781,7 +781,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 5001,
 				'status'   => 'wc-completed',
@@ -796,7 +796,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 5001,
 				'status'   => 'not-a-real-status',
@@ -814,7 +814,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 99999,
 				'status'   => 'completed',
@@ -832,7 +832,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'editor' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 5001,
 				'status'   => 'completed',
@@ -850,7 +850,7 @@ final class WooOrdersTest extends TestCase {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+		$res = wp_get_ability( 'oversio/wc-update-order-status' )->execute(
 			array(
 				'order_id' => 5001,
 				'status'   => 'completed',
@@ -894,7 +894,7 @@ final class WooOrdersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		wp_get_ability( $ability )->execute( $args );
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -906,12 +906,12 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function provide_success_audit_cases(): array {
 		return array(
-			'list-orders'         => array( 'aafm/wc-list-orders', array(), '' ),
-			'get-order'           => array( 'aafm/wc-get-order', array( 'order_id' => 5001 ), '' ),
-			'create-order'        => array( 'aafm/wc-create-order', array(), 'register_wc_order_writes' ),
-			'update-order'        => array( 'aafm/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes' ),
+			'list-orders'         => array( 'oversio/wc-list-orders', array(), '' ),
+			'get-order'           => array( 'oversio/wc-get-order', array( 'order_id' => 5001 ), '' ),
+			'create-order'        => array( 'oversio/wc-create-order', array(), 'register_wc_order_writes' ),
+			'update-order'        => array( 'oversio/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes' ),
 			'update-order-status' => array(
-				'aafm/wc-update-order-status',
+				'oversio/wc-update-order-status',
 				array(
 					'order_id' => 5001,
 					'status'   => 'completed',
@@ -936,7 +936,7 @@ final class WooOrdersTest extends TestCase {
 		$this->acting_as( $low_role );
 		wp_get_ability( $ability )->check_permissions( $args );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( $ability, $abilities );
 	}
@@ -948,12 +948,12 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function provide_denied_audit_cases(): array {
 		return array(
-			'list-orders'         => array( 'aafm/wc-list-orders', array(), '', 'editor' ),
-			'get-order'           => array( 'aafm/wc-get-order', array( 'order_id' => 5001 ), '', 'editor' ),
-			'create-order'        => array( 'aafm/wc-create-order', array(), 'register_wc_order_writes', 'editor' ),
-			'update-order'        => array( 'aafm/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes', 'editor' ),
+			'list-orders'         => array( 'oversio/wc-list-orders', array(), '', 'editor' ),
+			'get-order'           => array( 'oversio/wc-get-order', array( 'order_id' => 5001 ), '', 'editor' ),
+			'create-order'        => array( 'oversio/wc-create-order', array(), 'register_wc_order_writes', 'editor' ),
+			'update-order'        => array( 'oversio/wc-update-order', array( 'order_id' => 5001 ), 'register_wc_order_writes', 'editor' ),
 			'update-order-status' => array(
-				'aafm/wc-update-order-status',
+				'oversio/wc-update-order-status',
 				array(
 					'order_id' => 5001,
 					'status'   => 'completed',

@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Coexistence;
+namespace Oversio\Tests\Coexistence;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class AdapterLoadTest extends TestCase {
 
@@ -18,6 +18,6 @@ final class AdapterLoadTest extends TestCase {
 	}
 
 	public function test_min_adapter_version_constant_defined(): void {
-		$this->assertSame( '0.5.0', AAFM_MIN_ADAPTER_VERSION );
+		$this->assertSame( '0.5.0', OVERSIO_MIN_ADAPTER_VERSION );
 	}
 }

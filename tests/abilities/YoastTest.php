@@ -12,10 +12,10 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
-use AAFM\Tests\IntegrationStubs;
+use Oversio\Tests\TestCase;
+use Oversio\Tests\IntegrationStubs;
 use WP_Error;
 
 final class YoastTest extends TestCase {
@@ -24,11 +24,11 @@ final class YoastTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->force_integration( 'yoast' );
 		$this->stub_yoast();
-		aafm_registry_cache_should_flush( true );
+		oversio_registry_cache_should_flush( true );
 		$this->register_yoast();
 	}
 
@@ -41,12 +41,12 @@ final class YoastTest extends TestCase {
 	 * Enable + register the Yoast set so the abilities can be invoked.
 	 */
 	private function register_yoast(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
-			array( 'aafm/yoast-get-post', 'aafm/yoast-update-post', 'aafm/yoast-get-head' )
+			'oversio_enabled_abilities',
+			array( 'oversio/yoast-get-post', 'oversio/yoast-update-post', 'oversio/yoast-get-head' )
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_yoast_get_post_reads_mapped_fields_per_object_gated(): void {
@@ -60,7 +60,7 @@ final class YoastTest extends TestCase {
 		update_post_meta( $post_id, '_yoast_wpseo_title', 'SEO Title' );
 		update_post_meta( $post_id, '_yoast_wpseo_metadesc', 'A description.' );
 
-		$res = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( 'yoast', $res['plugin'] );
 		$this->assertSame( $post_id, $res['post_id'] );
 		$this->assertSame( 'SEO Title', $res['title'] );
@@ -78,7 +78,7 @@ final class YoastTest extends TestCase {
 		update_post_meta( $post_id, '_yoast_wpseo_meta-robots-nofollow', '1' );
 		update_post_meta( $post_id, '_yoast_wpseo_meta-robots-adv', 'noarchive,nosnippet' );
 
-		$res = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertSame( '1', $res['robots_noindex'] );
 		$this->assertSame( '1', $res['robots_nofollow'] );
 		$this->assertSame( 'noarchive,nosnippet', $res['robots_adv'] );
@@ -90,7 +90,7 @@ final class YoastTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 		update_post_meta( $post_id, '_yoast_wpseo_title', array( 'unexpected', 'array' ) );
 
-		$res = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( '', $res['title'] );
 	}
@@ -99,7 +99,7 @@ final class YoastTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/yoast-get-post' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/yoast-get-post' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
@@ -108,14 +108,14 @@ final class YoastTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/yoast-get-post' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/yoast-get-post' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
 	public function test_yoast_get_post_rejects_a_smuggled_field(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/yoast-get-post' )->execute(
+		$res     = wp_get_ability( 'oversio/yoast-get-post' )->execute(
 			array(
 				'post_id' => $post_id,
 				'plugin'  => 'rankmath',
@@ -144,10 +144,10 @@ final class YoastTest extends TestCase {
 			'robots_nofollow'     => '1',
 			'robots_adv'          => 'noarchive,nosnippet',
 		);
-		$res     = wp_get_ability( 'aafm/yoast-update-post' )->execute( $payload );
+		$res     = wp_get_ability( 'oversio/yoast-update-post' )->execute( $payload );
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'A full Yoast write must succeed.' );
 
-		$read = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$read = wp_get_ability( 'oversio/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
 		foreach ( $payload as $field => $value ) {
 			if ( 'post_id' === $field ) {
 				continue;
@@ -160,7 +160,7 @@ final class YoastTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'aafm/yoast-update-post' )->execute(
+		wp_get_ability( 'oversio/yoast-update-post' )->execute(
 			array(
 				'post_id'       => $post_id,
 				'canonical'     => 'javascript:alert(1)',
@@ -178,7 +178,7 @@ final class YoastTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		wp_get_ability( 'aafm/yoast-update-post' )->execute(
+		wp_get_ability( 'oversio/yoast-update-post' )->execute(
 			array(
 				'post_id'        => $post_id,
 				'robots_noindex' => '9',
@@ -191,7 +191,7 @@ final class YoastTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/yoast-update-post' )->execute(
+		$res = wp_get_ability( 'oversio/yoast-update-post' )->execute(
 			array(
 				'post_id'    => $post_id,
 				'robots_adv' => 'noarchive,evil,nosnippet',
@@ -205,7 +205,7 @@ final class YoastTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/yoast-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/yoast-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
@@ -214,14 +214,14 @@ final class YoastTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
 		$this->acting_as( 'author' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/yoast-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/yoast-update-post' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
 	public function test_yoast_update_post_rejects_a_smuggled_field(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();
-		$res     = wp_get_ability( 'aafm/yoast-update-post' )->execute(
+		$res     = wp_get_ability( 'oversio/yoast-update-post' )->execute(
 			array(
 				'post_id'   => $post_id,
 				'post_type' => 'attachment',
@@ -234,7 +234,7 @@ final class YoastTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
-		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( $post_id, $res['post_id'] );
 		$this->assertSame( 'yoast', $res['plugin'] );
@@ -246,16 +246,16 @@ final class YoastTest extends TestCase {
 		$post_id = (int) self::factory()->post->create();
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/yoast-get-head' )->check_permissions( array( 'post_id' => $post_id ) )
+			wp_get_ability( 'oversio/yoast-get-head' )->check_permissions( array( 'post_id' => $post_id ) )
 		);
 	}
 
 	public function test_yoast_get_post_unknown_id_is_rejected(): void {
-		// An unknown post_id fails the per-object aafm_perm_seo_post_object gate (get_post() is not a
+		// An unknown post_id fails the per-object oversio_perm_seo_post_object gate (get_post() is not a
 		// WP_Post), so the Abilities API short-circuits with ability_invalid_permissions before the
-		// executor's defence-in-depth aafm_generic_error() can run. Either way the read is refused.
+		// executor's defence-in-depth oversio_generic_error() can run. Either way the read is refused.
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
+		$res = wp_get_ability( 'oversio/yoast-get-post' )->execute( array( 'post_id' => PHP_INT_MAX ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 'ability_invalid_permissions', $res->get_error_code() );
 	}
@@ -267,34 +267,34 @@ final class YoastTest extends TestCase {
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 		update_post_meta( $post_id, '_yoast_wpseo_title', 'Seeded Title' );
 
-		$res = wp_get_ability( 'aafm/yoast-update-post' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-update-post' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty PATCH must not error.' );
 		$this->assertSame( 'Seeded Title', $res['title'], 'An empty PATCH must leave the seeded title untouched.' );
 	}
 
 	public function test_yoast_get_head_denies_an_author_on_anothers_post_at_execute(): void {
-		// The get-head abilities advertise on the edit_posts floor (aafm_perm_seo_get_head_floor) and
+		// The get-head abilities advertise on the edit_posts floor (oversio_perm_seo_get_head_floor) and
 		// refine to the per-object edit_post($id) gate INSIDE execute. All per-object SEO reads/writes
-		// otherwise share the single aafm_perm_seo_post_object gate; this proves the head executor's
+		// otherwise share the single oversio_perm_seo_post_object gate; this proves the head executor's
 		// own per-object refinement denies an author requesting someone else's post.
 		$author_a = $this->acting_as( 'author' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $author_a ) );
 		$this->acting_as( 'author' );
 
-		$res = wp_get_ability( 'aafm/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
+		$res = wp_get_ability( 'oversio/yoast-get-head' )->execute( array( 'post_id' => $post_id ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'An author must be denied the head of another author\'s post.' );
-		$this->assertSame( 'aafm_error', $res->get_error_code() );
+		$this->assertSame( 'oversio_error', $res->get_error_code() );
 	}
 
 	public function test_yoast_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'aafm_integration_active_yoast' );
-		add_filter( 'aafm_yoast_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'yoast' ) );
-		aafm_registry_cache_should_flush( true );
-		$registry = aafm_get_abilities_registry();
+		remove_all_filters( 'oversio_integration_active_yoast' );
+		add_filter( 'oversio_yoast_active', '__return_false', 99 );
+		$this->assertFalse( oversio_integration_active( 'yoast' ) );
+		oversio_registry_cache_should_flush( true );
+		$registry = oversio_get_abilities_registry();
 		$this->assertArrayNotHasKey(
-			'aafm/yoast-get-post',
+			'oversio/yoast-get-post',
 			$registry,
 			'A host-inactive Yoast ability must not be in the registry.'
 		);

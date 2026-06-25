@@ -7,7 +7,7 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests;
+namespace Oversio\Tests;
 
 use WP_UnitTestCase;
 
@@ -21,12 +21,12 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	public function set_up(): void {
 		parent::set_up();
-		delete_option( 'aafm_enabled_abilities' );
+		delete_option( 'oversio_enabled_abilities' );
 		// The registry catalog is memoized per request; tests mutate the
-		// aafm_abilities_registry filter set between cases, so start each one with a
+		// oversio_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).
-		if ( function_exists( 'aafm_flush_registry_cache' ) ) {
-			aafm_flush_registry_cache();
+		if ( function_exists( 'oversio_flush_registry_cache' ) ) {
+			oversio_flush_registry_cache();
 		}
 	}
 
@@ -34,17 +34,17 @@ abstract class TestCase extends WP_UnitTestCase {
 	 * Tear down plugin state after each test.
 	 *
 	 * WP_UnitTestCase does not unregister post types created mid-test, so a throwaway
-	 * `aafm_*` CPT registered in one method leaks into the next and breaks tests that
+	 * `oversio_*` CPT registered in one method leaks into the next and breaks tests that
 	 * assert its absence. Unregister those and clear the exposed-types option so every
 	 * CPT/admin case starts from a clean registry and a clean allowlist.
 	 */
 	public function tear_down(): void {
 		foreach ( array_keys( get_post_types() ) as $type ) {
-			if ( 0 === strncmp( $type, 'aafm_', 5 ) ) {
+			if ( 0 === strncmp( $type, 'oversio_', 5 ) ) {
 				unregister_post_type( $type );
 			}
 		}
-		delete_option( 'aafm_allowed_post_types' );
+		delete_option( 'oversio_allowed_post_types' );
 		parent::tear_down();
 	}
 
@@ -61,7 +61,7 @@ abstract class TestCase extends WP_UnitTestCase {
 	 */
 	protected function activity_log_table_exists(): bool {
 		global $wpdb;
-		$table      = $wpdb->prefix . 'aafm_activity_log';
+		$table      = $wpdb->prefix . 'oversio_activity_log';
 		$suppressed = $wpdb->suppress_errors( true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( "SELECT 1 FROM {$table} LIMIT 0" );
@@ -105,13 +105,13 @@ abstract class TestCase extends WP_UnitTestCase {
 	 * Enable a set of abilities and register them through the Abilities API init action.
 	 *
 	 * The recurring two-step idiom across the ability suites: write the enabled-abilities
-	 * option, then run aafm_register_enabled_abilities() inside a simulated
+	 * option, then run oversio_register_enabled_abilities() inside a simulated
 	 * wp_abilities_api_init action so the enabled slugs actually register.
 	 *
 	 * @param string[] $slugs Ability slugs to enable and register.
 	 */
 	protected function register_enabled( array $slugs ): void {
-		update_option( 'aafm_enabled_abilities', $slugs );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		update_option( 'oversio_enabled_abilities', $slugs );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 }

@@ -10,7 +10,7 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_comments_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_comments_definitions' );
 
 /**
  * Contribute comment ability definitions to the registry (reads).
@@ -18,76 +18,76 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_comments_definitions' );
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_comments_definitions( array $registry ): array {
-	$registry['aafm/get-comments']         = array(
+function oversio_register_comments_definitions( array $registry ): array {
+	$registry['oversio/get-comments']         = array(
 		'label'        => __( 'Get comments', 'oversio-agent-abilities' ),
 		'description'  => __( 'List approved comments for a post (email and IP are never returned).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_get_comments',
+		'args_builder' => 'oversio_args_get_comments',
 	);
-	$registry['aafm/get-pending-comments'] = array(
+	$registry['oversio/get-pending-comments'] = array(
 		'label'        => __( 'Get pending comments', 'oversio-agent-abilities' ),
 		'description'  => __( 'List the moderation queue (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_get_pending_comments',
+		'args_builder' => 'oversio_args_get_pending_comments',
 	);
-	$registry['aafm/moderate-comment']     = array(
+	$registry['oversio/moderate-comment']     = array(
 		'label'        => __( 'Moderate comment', 'oversio-agent-abilities' ),
 		'description'  => __( 'Approve, unapprove, spam, or trash a comment (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_moderate_comment',
+		'args_builder' => 'oversio_args_moderate_comment',
 	);
-	$registry['aafm/get-comment']          = array(
+	$registry['oversio/get-comment']          = array(
 		'label'        => __( 'Get comment', 'oversio-agent-abilities' ),
 		'description'  => __( 'Read one comment by id (email and IP are never returned).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_get_comment',
+		'args_builder' => 'oversio_args_get_comment',
 	);
-	$registry['aafm/create-comment']       = array(
+	$registry['oversio/create-comment']       = array(
 		'label'        => __( 'Create comment', 'oversio-agent-abilities' ),
 		'description'  => __( 'Add a pending comment to a post as the agent user (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_create_comment',
+		'args_builder' => 'oversio_args_create_comment',
 	);
-	$registry['aafm/update-comment']       = array(
+	$registry['oversio/update-comment']       = array(
 		'label'        => __( 'Update comment', 'oversio-agent-abilities' ),
 		'description'  => __( "Edit a comment's content (requires edit access to that comment).", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_update_comment',
+		'args_builder' => 'oversio_args_update_comment',
 	);
-	$registry['aafm/delete-comment']       = array(
+	$registry['oversio/delete-comment']       = array(
 		'label'        => __( 'Delete comment', 'oversio-agent-abilities' ),
 		'description'  => __( 'Permanently delete a comment (not recoverable; use moderate-comment to trash recoverably).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'comments',
-		'args_builder' => 'aafm_args_delete_comment',
+		'args_builder' => 'oversio_args_delete_comment',
 	);
 	return $registry;
 }
 
 /**
- * Args for aafm/get-comments.
+ * Args for oversio/get-comments.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_comments(): array {
+function oversio_args_get_comments(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-comments' ),
-		'description'         => aafm_ability_description( 'aafm/get-comments' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-comments' ),
+		'description'         => oversio_ability_description( 'oversio/get-comments' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -98,12 +98,12 @@ function aafm_args_get_comments(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -118,8 +118,8 @@ function aafm_args_get_comments(): array {
 				'total'    => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_comments',
-		'permission_callback' => 'aafm_perm_get_comments',
+		'execute_callback'    => 'oversio_exec_get_comments',
+		'permission_callback' => 'oversio_perm_get_comments',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -131,7 +131,7 @@ function aafm_args_get_comments(): array {
 }
 
 /**
- * Permission for aafm/get-comments: per-object post visibility.
+ * Permission for oversio/get-comments: per-object post visibility.
  *
  * A comment is only as visible as the post it belongs to. Approved comments on a
  * public, non-password-protected post are readable by any logged-in caller; for
@@ -143,7 +143,7 @@ function aafm_args_get_comments(): array {
  * @param array<string,mixed> $input Input.
  * @return bool
  */
-function aafm_perm_get_comments( array $input ): bool {
+function oversio_perm_get_comments( array $input ): bool {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 
 	// No post targeted: the whole-site approved listing is readable by any logged-in
@@ -158,22 +158,22 @@ function aafm_perm_get_comments( array $input ): bool {
 		return false;
 	}
 
-	return aafm_comment_post_is_readable( $post_id );
+	return oversio_comment_post_is_readable( $post_id );
 }
 
 /**
- * Execute aafm/get-comments.
+ * Execute oversio/get-comments.
  *
  * Returns APPROVED comments only. The status filter is pinned server-side so a
  * low-privilege caller can never reach a pending, spam, or trashed comment body
  * through this ability — unapproved bodies are only available via
- * aafm/get-pending-comments, which requires moderate_comments.
+ * oversio/get-pending-comments, which requires moderate_comments.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_get_comments( array $input ): array {
-	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+function oversio_exec_get_comments( array $input ): array {
+	$paging  = oversio_paginate_args( $input, OVERSIO_LIST_PER_PAGE_MAX );
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 
 	$comments = get_comments(
@@ -189,13 +189,13 @@ function aafm_exec_get_comments( array $input ): array {
 	// comment whose parent post they cannot read. A caller who can moderate comments
 	// already sees every comment in the dashboard, so the post-filter only applies to
 	// everyone else. This mirrors the per-object visibility guard in
-	// aafm_perm_get_comments() for the site-wide branch — "approved" is not "public"
+	// oversio_perm_get_comments() for the site-wide branch — "approved" is not "public"
 	// when the parent post is private, draft, or password-protected.
 	if ( $post_id <= 0 && ! current_user_can( 'moderate_comments' ) ) {
 		$comments = array_filter(
 			(array) $comments,
 			static fn( $comment ): bool => $comment instanceof WP_Comment
-				&& aafm_comment_post_is_readable( (int) $comment->comment_post_ID )
+				&& oversio_comment_post_is_readable( (int) $comment->comment_post_ID )
 		);
 	}
 
@@ -212,7 +212,7 @@ function aafm_exec_get_comments( array $input ): array {
 	);
 
 	return array(
-		'comments' => aafm_redact_comments( $comments ),
+		'comments' => oversio_redact_comments( $comments ),
 		'total'    => $total,
 	);
 }
@@ -223,12 +223,12 @@ function aafm_exec_get_comments( array $input ): array {
  * Approved comments on a public, non-password-protected post are readable by any
  * logged-in caller; for every other post (draft, private, scheduled, pending,
  * password-protected, or missing) the caller must be able to read the post itself.
- * This is the per-comment form of the visibility logic in aafm_perm_get_comments().
+ * This is the per-comment form of the visibility logic in oversio_perm_get_comments().
  *
  * @param int $post_id Parent post id.
  * @return bool
  */
-function aafm_comment_post_is_readable( int $post_id ): bool {
+function oversio_comment_post_is_readable( int $post_id ): bool {
 	if ( $post_id <= 0 ) {
 		return false;
 	}
@@ -257,29 +257,29 @@ function aafm_comment_post_is_readable( int $post_id ): bool {
  * @param mixed $comments Result of get_comments().
  * @return array<int,array<string,mixed>>
  */
-function aafm_redact_comments( $comments ): array {
+function oversio_redact_comments( $comments ): array {
 	$objects = array_filter(
 		(array) $comments,
 		static fn( $comment ): bool => $comment instanceof WP_Comment
 	);
 
-	return array_values( array_map( 'aafm_redact_comment', $objects ) );
+	return array_values( array_map( 'oversio_redact_comment', $objects ) );
 }
 
 /**
- * Args for aafm/get-comment.
+ * Args for oversio/get-comment.
  *
  * One comment by id, returned in the same redacted shape as the list reads — never
  * the author email or IP. The read is gated by the parent post's visibility, exactly
- * like aafm/get-comments, so an approved comment on a hidden post never leaks.
+ * like oversio/get-comments, so an approved comment on a hidden post never leaks.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_comment(): array {
+function oversio_args_get_comment(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-comment' ),
-		'description'         => aafm_ability_description( 'aafm/get-comment' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-comment' ),
+		'description'         => oversio_ability_description( 'oversio/get-comment' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -297,8 +297,8 @@ function aafm_args_get_comment(): array {
 				'comment' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_comment',
-		'permission_callback' => 'aafm_perm_get_comment',
+		'execute_callback'    => 'oversio_exec_get_comment',
+		'permission_callback' => 'oversio_perm_get_comment',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -310,19 +310,19 @@ function aafm_args_get_comment(): array {
 }
 
 /**
- * Permission for aafm/get-comment.
+ * Permission for oversio/get-comment.
  *
  * A comment is only as visible as the post it belongs to. Approved comments on a
  * public, non-password-protected post are readable by any logged-in caller; every
  * other comment (pending, spam, trash, or on a hidden post) requires the caller to
  * be able to read that post AND to moderate/edit the comment — the same posture as
- * aafm/get-comments, refined to a single object. A missing comment default-denies
+ * oversio/get-comments, refined to a single object. A missing comment default-denies
  * so the ability can't be used to probe for ids.
  *
  * @param array<string,mixed> $input Input.
  * @return bool
  */
-function aafm_perm_get_comment( array $input ): bool {
+function oversio_perm_get_comment( array $input ): bool {
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	if ( $id <= 0 ) {
 		return current_user_can( 'read' );
@@ -331,7 +331,7 @@ function aafm_perm_get_comment( array $input ): bool {
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) {
 		// Default-deny on a missing comment so the ability can't probe for ids —
-		// the same posture as aafm_perm_get_comments() for a missing target post.
+		// the same posture as oversio_perm_get_comments() for a missing target post.
 		return false;
 	}
 
@@ -339,7 +339,7 @@ function aafm_perm_get_comment( array $input ): bool {
 	$is_approved = '1' === (string) $comment->comment_approved || 'approve' === (string) $comment->comment_approved;
 
 	// Approved comment on a readable post: the same floor as the list read.
-	if ( $is_approved && aafm_comment_post_is_readable( $post_id ) ) {
+	if ( $is_approved && oversio_comment_post_is_readable( $post_id ) ) {
 		return true;
 	}
 
@@ -349,22 +349,22 @@ function aafm_perm_get_comment( array $input ): bool {
 }
 
 /**
- * Execute aafm/get-comment.
+ * Execute oversio/get-comment.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_comment( array $input ) {
+function oversio_exec_get_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return array( 'comment' => aafm_redact_comment( $comment ) );
+	return array( 'comment' => oversio_redact_comment( $comment ) );
 }
 
 /**
- * Args for aafm/create-comment.
+ * Args for oversio/create-comment.
  *
  * Security posture (this is the main abuse surface):
  *  - Floor cap is moderate_comments: an autonomous agent posting comments is a
@@ -376,18 +376,18 @@ function aafm_exec_get_comment( array $input ) {
  *  - Content is run through wp_kses_post() and wp_filter_comment() before insert, so
  *    raw script is never stored.
  *  - The comment is created PENDING (comment_approved '0'); a human or
- *    aafm/moderate-comment approves it. An agent never auto-publishes.
+ *    oversio/moderate-comment approves it. An agent never auto-publishes.
  *  - comment_post_ID must resolve to a real post. Optional parent must be a real
  *    comment ON THE SAME POST. comments_open() is deliberately not required —
  *    moderators add to closed threads in the dashboard and the cap floor gates abuse.
  *
  * @return array<string,mixed>
  */
-function aafm_args_create_comment(): array {
+function oversio_args_create_comment(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/create-comment' ),
-		'description'         => aafm_ability_description( 'aafm/create-comment' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/create-comment' ),
+		'description'         => oversio_ability_description( 'oversio/create-comment' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -418,8 +418,8 @@ function aafm_args_create_comment(): array {
 				'comment' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_create_comment',
-		'permission_callback' => 'aafm_perm_create_comment',
+		'execute_callback'    => 'oversio_exec_create_comment',
+		'permission_callback' => 'oversio_perm_create_comment',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -430,7 +430,7 @@ function aafm_args_create_comment(): array {
 }
 
 /**
- * Permission for aafm/create-comment: moderate_comments.
+ * Permission for oversio/create-comment: moderate_comments.
  *
  * An agent creating comments is treated as a moderation-class action. The single
  * site-wide cap is the gate; there is no per-object refinement because the author is
@@ -439,12 +439,12 @@ function aafm_args_create_comment(): array {
  *
  * @return bool
  */
-function aafm_perm_create_comment(): bool {
+function oversio_perm_create_comment(): bool {
 	return current_user_can( 'moderate_comments' );
 }
 
 /**
- * Execute aafm/create-comment.
+ * Execute oversio/create-comment.
  *
  * Builds the insert array from the current user (never from input), sanitizes the
  * content, forces pending status, validates the target post and optional parent, runs
@@ -461,31 +461,31 @@ function aafm_perm_create_comment(): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_create_comment( array $input ) {
+function oversio_exec_create_comment( array $input ) {
 	$post_id = isset( $input['post_id'] ) ? absint( $input['post_id'] ) : 0;
 	$parent  = isset( $input['parent'] ) ? absint( $input['parent'] ) : 0;
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 
 	if ( '' === trim( $content ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$post = get_post( $post_id );
 	if ( ! $post instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// An optional parent must be a real comment on the SAME post — no cross-post threading.
 	if ( $parent > 0 ) {
 		$parent_comment = get_comment( $parent );
 		if ( ! $parent_comment instanceof WP_Comment || (int) $parent_comment->comment_post_ID !== $post_id ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 	}
 
 	$user = wp_get_current_user();
 	if ( ! $user instanceof WP_User || 0 === (int) $user->ID ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Author identity is the agent user — never free-form input. Status is pending.
@@ -503,7 +503,7 @@ function aafm_exec_create_comment( array $input ) {
 		'comment_type'         => 'comment',
 		// Present but empty: wp_filter_comment() reads these keys, and we never record
 		// the agent's IP/user-agent for an agent-authored comment. Neither is ever
-		// returned — the response is built by aafm_redact_comment().
+		// returned — the response is built by oversio_redact_comment().
 		'comment_author_IP'    => '',
 		'comment_agent'        => '',
 	);
@@ -513,7 +513,7 @@ function aafm_exec_create_comment( array $input ) {
 
 	$comment_id = wp_insert_comment( $commentdata );
 	if ( ! $comment_id ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Pin status to pending in case a filter flipped it on insert.
@@ -521,34 +521,34 @@ function aafm_exec_create_comment( array $input ) {
 
 	$created = get_comment( $comment_id );
 	if ( ! $created instanceof WP_Comment ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return array( 'comment' => aafm_redact_comment( $created ) );
+	return array( 'comment' => oversio_redact_comment( $created ) );
 }
 
 /**
- * Args for aafm/get-pending-comments.
+ * Args for oversio/get-pending-comments.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_pending_comments(): array {
+function oversio_args_get_pending_comments(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-pending-comments' ),
-		'description'         => aafm_ability_description( 'aafm/get-pending-comments' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-pending-comments' ),
+		'description'         => oversio_ability_description( 'oversio/get-pending-comments' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -563,8 +563,8 @@ function aafm_args_get_pending_comments(): array {
 				'total'    => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_pending_comments',
-		'permission_callback' => 'aafm_perm_moderate_comments',
+		'execute_callback'    => 'oversio_exec_get_pending_comments',
+		'permission_callback' => 'oversio_perm_moderate_comments',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -584,18 +584,18 @@ function aafm_args_get_pending_comments(): array {
  *
  * @return bool
  */
-function aafm_perm_moderate_comments(): bool {
+function oversio_perm_moderate_comments(): bool {
 	return current_user_can( 'moderate_comments' );
 }
 
 /**
- * Execute aafm/get-pending-comments (moderation queue).
+ * Execute oversio/get-pending-comments (moderation queue).
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_get_pending_comments( array $input ): array {
-	$paging   = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+function oversio_exec_get_pending_comments( array $input ): array {
+	$paging   = oversio_paginate_args( $input, OVERSIO_LIST_PER_PAGE_MAX );
 	$comments = get_comments(
 		array(
 			'status' => 'hold',
@@ -612,14 +612,14 @@ function aafm_exec_get_pending_comments( array $input ): array {
 	);
 
 	return array(
-		'comments' => aafm_redact_comments( $comments ),
+		'comments' => oversio_redact_comments( $comments ),
 		'total'    => $total,
 	);
 }
 
 
 /**
- * Args for aafm/moderate-comment.
+ * Args for oversio/moderate-comment.
  *
  * Moderation only — this write never edits the comment content or author. The
  * action is constrained to a closed allowlist by the input schema, and again at
@@ -627,11 +627,11 @@ function aafm_exec_get_pending_comments( array $input ): array {
  *
  * @return array<string,mixed>
  */
-function aafm_args_moderate_comment(): array {
+function oversio_args_moderate_comment(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/moderate-comment' ),
-		'description'         => aafm_ability_description( 'aafm/moderate-comment' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/moderate-comment' ),
+		'description'         => oversio_ability_description( 'oversio/moderate-comment' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -654,8 +654,8 @@ function aafm_args_moderate_comment(): array {
 				'status' => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_moderate_comment',
-		'permission_callback' => 'aafm_perm_moderate_comment_obj',
+		'execute_callback'    => 'oversio_exec_moderate_comment',
+		'permission_callback' => 'oversio_perm_moderate_comment_obj',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -666,7 +666,7 @@ function aafm_args_moderate_comment(): array {
 }
 
 /**
- * Permission for aafm/moderate-comment: moderate_comments, then per-object edit.
+ * Permission for oversio/moderate-comment: moderate_comments, then per-object edit.
  *
  * The site-wide moderate_comments cap is the floor; on top of it the caller must
  * be able to edit the specific comment (edit_comment maps through the post's
@@ -676,7 +676,7 @@ function aafm_args_moderate_comment(): array {
  * @param array<string,mixed> $input Input.
  * @return bool
  */
-function aafm_perm_moderate_comment_obj( array $input ): bool {
+function oversio_perm_moderate_comment_obj( array $input ): bool {
 	if ( ! current_user_can( 'moderate_comments' ) ) {
 		return false;
 	}
@@ -685,7 +685,7 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
 }
 
 /**
- * Execute aafm/moderate-comment.
+ * Execute oversio/moderate-comment.
  *
  * Applies one moderation action from the closed allowlist. Destructive actions
  * are trash/spam only — both recoverable — never a permanent wp_delete_comment.
@@ -695,12 +695,12 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_moderate_comment( array $input ) {
+function oversio_exec_moderate_comment( array $input ) {
 	$id     = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$action = isset( $input['action'] ) ? sanitize_key( (string) $input['action'] ) : '';
 
 	if ( ! get_comment( $id ) instanceof WP_Comment ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	switch ( $action ) {
@@ -714,29 +714,29 @@ function aafm_exec_moderate_comment( array $input ) {
 			$ok = (bool) wp_spam_comment( $id );
 			break;
 		case 'trash':
-			if ( ! aafm_trash_is_enabled() ) {
+			if ( ! oversio_trash_is_enabled() ) {
 				// wp_trash_comment() force-deletes when the Trash is disabled;
 				// refuse rather than permanently destroy the comment.
-				return aafm_trash_disabled_error();
+				return oversio_trash_disabled_error();
 			}
 			$ok = (bool) wp_trash_comment( $id );
 			break;
 		default:
 			return new WP_Error(
-				'aafm_invalid_action',
+				'oversio_invalid_action',
 				__( 'Unsupported moderation action.', 'oversio-agent-abilities' )
 			);
 	}
 
 	if ( ! $ok ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	return array( 'status' => wp_get_comment_status( $id ) );
 }
 
 /**
- * Args for aafm/update-comment.
+ * Args for oversio/update-comment.
  *
  * Edits ONLY the comment body. The closed schema accepts comment_id + content; it
  * never accepts comment_post_ID, email, IP, or author fields, so an edit can't be
@@ -745,11 +745,11 @@ function aafm_exec_moderate_comment( array $input ) {
  *
  * @return array<string,mixed>
  */
-function aafm_args_update_comment(): array {
+function oversio_args_update_comment(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/update-comment' ),
-		'description'         => aafm_ability_description( 'aafm/update-comment' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/update-comment' ),
+		'description'         => oversio_ability_description( 'oversio/update-comment' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -776,8 +776,8 @@ function aafm_args_update_comment(): array {
 				'comment' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_update_comment',
-		'permission_callback' => 'aafm_perm_edit_comment_obj',
+		'execute_callback'    => 'oversio_exec_update_comment',
+		'permission_callback' => 'oversio_perm_edit_comment_obj',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -791,7 +791,7 @@ function aafm_args_update_comment(): array {
  * Per-object edit gate shared by update-comment and delete-comment.
  *
  * The site-wide moderate_comments cap is the floor — the same posture as
- * aafm_perm_moderate_comment_obj() — so a low-cap user who happens to be able to
+ * oversio_perm_moderate_comment_obj() — so a low-cap user who happens to be able to
  * edit their own comment can never reach these writes. On top of the floor the caller
  * must be able to edit the specific comment (edit_comment maps through the parent
  * post's edit caps), so a moderator can't touch a comment they couldn't edit in the
@@ -800,7 +800,7 @@ function aafm_args_update_comment(): array {
  * @param array<string,mixed> $input Input.
  * @return bool
  */
-function aafm_perm_edit_comment_obj( array $input ): bool {
+function oversio_perm_edit_comment_obj( array $input ): bool {
 	if ( ! current_user_can( 'moderate_comments' ) ) {
 		return false;
 	}
@@ -809,20 +809,20 @@ function aafm_perm_edit_comment_obj( array $input ): bool {
 }
 
 /**
- * Execute aafm/update-comment.
+ * Execute oversio/update-comment.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_update_comment( array $input ) {
+function oversio_exec_update_comment( array $input ) {
 	$id      = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 
 	if ( ! get_comment( $id ) instanceof WP_Comment ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	if ( '' === trim( $content ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// wp_update_comment() unslashes internally, so the content is slashed on the way in
@@ -837,31 +837,31 @@ function aafm_exec_update_comment( array $input ) {
 
 	// wp_update_comment() returns 1 on success, 0 when unchanged, false/WP_Error on failure.
 	if ( false === $ok || is_wp_error( $ok ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// The comment was confirmed to exist above and the update did not fail, so the
-	// re-fetch is the fresh, post-update record. aafm_redact_comment() tolerates a
+	// re-fetch is the fresh, post-update record. oversio_redact_comment() tolerates a
 	// non-WP_Comment by returning an empty array, so the response is always well-formed.
-	return array( 'comment' => aafm_redact_comment( get_comment( $id ) ) );
+	return array( 'comment' => oversio_redact_comment( get_comment( $id ) ) );
 }
 
 /**
- * Args for aafm/delete-comment.
+ * Args for oversio/delete-comment.
  *
  * PERMANENT delete (wp_delete_comment with force=true) — this bypasses the Trash and
- * cannot be undone. It is deliberately distinct from aafm/moderate-comment's 'trash'
+ * cannot be undone. It is deliberately distinct from oversio/moderate-comment's 'trash'
  * action, which is recoverable. risk=destructive, destructive:true, and the disclosure
  * states the permanence plainly. The moderate_comments floor plus per-object
  * edit_comment is the gate.
  *
  * @return array<string,mixed>
  */
-function aafm_args_delete_comment(): array {
+function oversio_args_delete_comment(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/delete-comment' ),
-		'description'         => aafm_ability_description( 'aafm/delete-comment' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/delete-comment' ),
+		'description'         => oversio_ability_description( 'oversio/delete-comment' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -880,8 +880,8 @@ function aafm_args_delete_comment(): array {
 				'comment_id' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_delete_comment',
-		'permission_callback' => 'aafm_perm_edit_comment_obj',
+		'execute_callback'    => 'oversio_exec_delete_comment',
+		'permission_callback' => 'oversio_perm_edit_comment_obj',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -892,7 +892,7 @@ function aafm_args_delete_comment(): array {
 }
 
 /**
- * Execute aafm/delete-comment.
+ * Execute oversio/delete-comment.
  *
  * Force-deletes via wp_delete_comment( $id, true ): the row is removed, not trashed,
  * and cannot be recovered. We resolve the comment first (so a missing id is an honest
@@ -901,16 +901,16 @@ function aafm_args_delete_comment(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_delete_comment( array $input ) {
+function oversio_exec_delete_comment( array $input ) {
 	$id = isset( $input['comment_id'] ) ? absint( $input['comment_id'] ) : 0;
 
 	if ( ! get_comment( $id ) instanceof WP_Comment ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$deleted = wp_delete_comment( $id, true );
 	if ( ! $deleted ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	return array(

@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * Generated-password length (characters) for create-user when the caller supplies none.
  * wp_generate_password() with this length and special characters yields a strong default.
  */
-const AAFM_GENERATED_PASSWORD_LENGTH = 24;
+const OVERSIO_GENERATED_PASSWORD_LENGTH = 24;
 
 /**
  * The logical name of the named lock that serializes the last-administrator guard across the
@@ -30,9 +30,9 @@ const AAFM_GENERATED_PASSWORD_LENGTH = 24;
  * concurrent demote and delete slip past each other's check). The value is the established
  * 'last_admin' lock name (kept stable for the existing tests that acquire it by that literal).
  */
-const AAFM_LAST_ADMIN_LOCK = 'last_admin';
+const OVERSIO_LAST_ADMIN_LOCK = 'last_admin';
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_users_definitions' );
 
 /**
  * Contribute the user read definition to the registry.
@@ -40,60 +40,60 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_users_definitions( array $registry ): array {
-	$registry['aafm/get-users']   = array(
+function oversio_register_users_definitions( array $registry ): array {
+	$registry['oversio/get-users']   = array(
 		'label'        => __( 'Get users', 'oversio-agent-abilities' ),
 		'description'  => __( 'List users: id, display name, email, roles, and post count. Response includes total (the full match count). Gated by the list-users capability. Never login or password.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
-		'args_builder' => 'aafm_args_get_users',
+		'args_builder' => 'oversio_args_get_users',
 	);
-	$registry['aafm/get-user']    = array(
+	$registry['oversio/get-user']    = array(
 		'label'        => __( 'Get user', 'oversio-agent-abilities' ),
 		'description'  => __( 'Read one user by id: id, display name, email, roles, post count, registration date, and bio. Never login or password.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
-		'args_builder' => 'aafm_args_get_user',
+		'args_builder' => 'oversio_args_get_user',
 	);
-	$registry['aafm/create-user'] = array(
+	$registry['oversio/create-user'] = array(
 		'label'        => __( 'Create user', 'oversio-agent-abilities' ),
 		'description'  => __( 'Create a new user with the site default role (never a caller-chosen role). Requires the create-users capability. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
-		'args_builder' => 'aafm_args_create_user',
+		'args_builder' => 'oversio_args_create_user',
 	);
-	$registry['aafm/update-user'] = array(
+	$registry['oversio/update-user'] = array(
 		'label'        => __( 'Update user', 'oversio-agent-abilities' ),
 		'description'  => __( 'Edit a user\'s display name, name, or email by id. Changing a role needs the promote-users capability and never demotes the last administrator.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'users',
-		'args_builder' => 'aafm_args_update_user',
+		'args_builder' => 'oversio_args_update_user',
 	);
-	$registry['aafm/delete-user'] = array(
+	$registry['oversio/delete-user'] = array(
 		'label'        => __( 'Delete user', 'oversio-agent-abilities' ),
 		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
-		'args_builder' => 'aafm_args_delete_user',
+		'args_builder' => 'oversio_args_delete_user',
 	);
 	return $registry;
 }
 
 /**
- * Args for aafm/get-users.
+ * Args for oversio/get-users.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_users(): array {
+function oversio_args_get_users(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-users' ),
-		'description'         => aafm_ability_description( 'aafm/get-users' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-users' ),
+		'description'         => oversio_ability_description( 'oversio/get-users' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -106,12 +106,12 @@ function aafm_args_get_users(): array {
 				'per_page' => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PER_PAGE_MAX,
 				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'maximum' => OVERSIO_LIST_PAGE_MAX,
 				),
 			),
 			'additionalProperties' => false,
@@ -126,8 +126,8 @@ function aafm_args_get_users(): array {
 				'total' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_users',
-		'permission_callback' => 'aafm_perm_list_users',
+		'execute_callback'    => 'oversio_exec_get_users',
+		'permission_callback' => 'oversio_perm_list_users',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -139,15 +139,15 @@ function aafm_args_get_users(): array {
 }
 
 /**
- * Args for aafm/get-user.
+ * Args for oversio/get-user.
  *
  * @return array<string,mixed>
  */
-function aafm_args_get_user(): array {
+function oversio_args_get_user(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/get-user' ),
-		'description'         => aafm_ability_description( 'aafm/get-user' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/get-user' ),
+		'description'         => oversio_ability_description( 'oversio/get-user' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -165,8 +165,8 @@ function aafm_args_get_user(): array {
 				'user' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_get_user',
-		'permission_callback' => 'aafm_perm_list_users',
+		'execute_callback'    => 'oversio_exec_get_user',
+		'permission_callback' => 'oversio_perm_list_users',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -178,7 +178,7 @@ function aafm_args_get_user(): array {
 }
 
 /**
- * Execute aafm/get-user.
+ * Execute oversio/get-user.
  *
  * Returns the rich single-user shape (the redacted whitelist plus registration date
  * and bio) for one user by id. Email is exposed by the locked decision; login and the
@@ -187,13 +187,13 @@ function aafm_args_get_user(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_user( array $input ) {
+function oversio_exec_get_user( array $input ) {
 	$id   = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$user = $id ? get_userdata( $id ) : false;
 	if ( ! $user instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return array( 'user' => aafm_rich_user( $user ) );
+	return array( 'user' => oversio_rich_user( $user ) );
 }
 
 /**
@@ -205,22 +205,22 @@ function aafm_exec_get_user( array $input ) {
  *
  * @return bool
  */
-function aafm_perm_list_users(): bool {
+function oversio_perm_list_users(): bool {
 	return current_user_can( 'list_users' );
 }
 
 /**
- * Execute aafm/get-users.
+ * Execute oversio/get-users.
  *
  * Lists users redacted to id, display name, email, roles, and post count. Login,
  * password hash, registration date, IP, capabilities, and meta are never
- * returned — only the safe whitelist produced by aafm_redact_user().
+ * returned — only the safe whitelist produced by oversio_redact_user().
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
-function aafm_exec_get_users( array $input ): array {
-	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+function oversio_exec_get_users( array $input ): array {
+	$paging = oversio_paginate_args( $input, OVERSIO_LIST_PER_PAGE_MAX );
 	$args   = array(
 		'number'      => $paging['per_page'],
 		'paged'       => $paging['page'],
@@ -255,7 +255,7 @@ function aafm_exec_get_users( array $input ): array {
 			continue;
 		}
 		$count      = isset( $counts[ $user->ID ] ) ? (int) $counts[ $user->ID ] : 0;
-		$redacted[] = aafm_redact_user( $user, $count );
+		$redacted[] = oversio_redact_user( $user, $count );
 	}
 
 	return array(
@@ -265,7 +265,7 @@ function aafm_exec_get_users( array $input ): array {
 }
 
 /**
- * Args for aafm/create-user.
+ * Args for oversio/create-user.
  *
  * Closed schema: username + email required; display_name/first_name/last_name/password
  * optional. There is deliberately NO role field — the role is forced to the site default
@@ -273,11 +273,11 @@ function aafm_exec_get_users( array $input ): array {
  *
  * @return array<string,mixed>
  */
-function aafm_args_create_user(): array {
+function oversio_args_create_user(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/create-user' ),
-		'description'         => aafm_ability_description( 'aafm/create-user' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/create-user' ),
+		'description'         => oversio_ability_description( 'oversio/create-user' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -311,8 +311,8 @@ function aafm_args_create_user(): array {
 				'user' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_create_user',
-		'permission_callback' => 'aafm_perm_create_user',
+		'execute_callback'    => 'oversio_exec_create_user',
+		'permission_callback' => 'oversio_perm_create_user',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -323,19 +323,19 @@ function aafm_args_create_user(): array {
 }
 
 /**
- * Permission for aafm/create-user: the create_users capability.
+ * Permission for oversio/create-user: the create_users capability.
  *
  * Object-independent (no per-object branch), so discovery can fall through to this
  * callback with empty input — it is the correct answer at both discovery and execute.
  *
  * @return bool
  */
-function aafm_perm_create_user(): bool {
+function oversio_perm_create_user(): bool {
 	return current_user_can( 'create_users' );
 }
 
 /**
- * Execute aafm/create-user.
+ * Execute oversio/create-user.
  *
  * Creates a user with the SITE DEFAULT role only. The role is read from the
  * default_role option, never from caller input, so an agent can never mint an
@@ -345,19 +345,19 @@ function aafm_perm_create_user(): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_create_user( array $input ) {
+function oversio_exec_create_user( array $input ) {
 	$username = sanitize_user( (string) ( $input['username'] ?? '' ), true );
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	if ( '' === $username || ! is_email( $email ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	if ( username_exists( $username ) || email_exists( $email ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$password = isset( $input['password'] ) && '' !== (string) $input['password']
 		? (string) $input['password']
-		: wp_generate_password( AAFM_GENERATED_PASSWORD_LENGTH, true );
+		: wp_generate_password( OVERSIO_GENERATED_PASSWORD_LENGTH, true );
 
 	// Invariant: an agent can never mint a privileged account here. The role is forced to the
 	// site default and never caller-chosen — but the default_role option is itself attacker- or
@@ -395,14 +395,14 @@ function aafm_exec_create_user( array $input ) {
 
 	$result = wp_insert_user( $userdata );
 	if ( is_wp_error( $result ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	return array( 'user' => aafm_rich_user( get_userdata( (int) $result ) ) );
+	return array( 'user' => oversio_rich_user( get_userdata( (int) $result ) ) );
 }
 
 /**
- * Args for aafm/update-user.
+ * Args for oversio/update-user.
  *
  * Closed schema: user_id required; display_name/first_name/last_name/email/role optional.
  * A role change is honored only for a caller who can promote_users, and never demotes the
@@ -410,11 +410,11 @@ function aafm_exec_create_user( array $input ) {
  *
  * @return array<string,mixed>
  */
-function aafm_args_update_user(): array {
+function oversio_args_update_user(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/update-user' ),
-		'description'         => aafm_ability_description( 'aafm/update-user' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/update-user' ),
+		'description'         => oversio_ability_description( 'oversio/update-user' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -448,8 +448,8 @@ function aafm_args_update_user(): array {
 				'user' => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_update_user',
-		'permission_callback' => 'aafm_perm_update_user',
+		'execute_callback'    => 'oversio_exec_update_user',
+		'permission_callback' => 'oversio_perm_update_user',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -460,7 +460,7 @@ function aafm_args_update_user(): array {
 }
 
 /**
- * Permission for aafm/update-user: per-object edit_user on the target id.
+ * Permission for oversio/update-user: per-object edit_user on the target id.
  *
  * Returns false with empty input (no id), so discovery uses the object-independent
  * edit_users floor in server.php; this per-object check still runs at execute time.
@@ -468,7 +468,7 @@ function aafm_args_update_user(): array {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_update_user( array $input ): bool {
+function oversio_perm_update_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	return $id > 0 && current_user_can( 'edit_user', $id );
 }
@@ -479,7 +479,7 @@ function aafm_perm_update_user( array $input ): bool {
  * @param int $max Stop counting at this many (2 is enough to answer "is this the last admin").
  * @return int Number of administrators, up to $max.
  */
-function aafm_count_administrators( int $max = 2 ): int {
+function oversio_count_administrators( int $max = 2 ): int {
 	// The default ceiling is 2: the only question every caller asks is "is this the LAST
 	// administrator?", and finding 2 already answers "no" — counting the rest is wasted work.
 	$admins = get_users(
@@ -496,7 +496,7 @@ function aafm_count_administrators( int $max = 2 ): int {
  * Run a callback inside a process-wide critical section keyed by name, using a MySQL named
  * lock so concurrent requests serialize.
  *
- * In this plugin the sole caller passes AAFM_LAST_ADMIN_LOCK: it serializes the last-
+ * In this plugin the sole caller passes OVERSIO_LAST_ADMIN_LOCK: it serializes the last-
  * administrator guard shared by update-user (role demote) and delete-user, so a concurrent
  * demote and delete cannot both pass the "is this the last admin?" pre-check and orphan the
  * site. The helper itself is generic — the name parameter is what scopes the lock.
@@ -513,9 +513,9 @@ function aafm_count_administrators( int $max = 2 ): int {
  * @param callable():T $callback The critical section.
  * @return T The callback's return value.
  */
-function aafm_with_named_lock( string $name, callable $callback ) {
+function oversio_with_named_lock( string $name, callable $callback ) {
 	global $wpdb;
-	$lock     = 'aafm_' . md5( $name );
+	$lock     = 'oversio_' . md5( $name );
 	$acquired = false;
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
@@ -535,7 +535,7 @@ function aafm_with_named_lock( string $name, callable $callback ) {
 }
 
 /**
- * Execute aafm/update-user.
+ * Execute oversio/update-user.
  *
  * Edits the safe profile fields by id. A role change is honored ONLY when the caller can
  * promote_users (the admin cap WP gates the role dropdown behind) and the target role is
@@ -546,11 +546,11 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_update_user( array $input ) {
+function oversio_exec_update_user( array $input ) {
 	$id     = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$target = $id ? get_userdata( $id ) : false;
 	if ( ! $target instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$data = array( 'ID' => $id );
@@ -562,7 +562,7 @@ function aafm_exec_update_user( array $input ) {
 	if ( isset( $input['email'] ) ) {
 		$email = sanitize_email( (string) $input['email'] );
 		if ( ! is_email( $email ) ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 		$data['user_email'] = $email;
 	}
@@ -581,7 +581,7 @@ function aafm_exec_update_user( array $input ) {
 			|| ! current_user_can( 'promote_users' )
 			|| ! current_user_can( 'promote_user', $id )
 		) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
 		// REST/MCP request — pull it in (mirrors the delete path's require below and core's own
@@ -591,7 +591,7 @@ function aafm_exec_update_user( array $input ) {
 		}
 		$editable_roles = get_editable_roles();
 		if ( empty( $editable_roles[ $role ] ) ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 		$data['role']  = $role;
 		$demotes_admin = 'administrator' !== $role && in_array( 'administrator', (array) $target->roles, true );
@@ -603,34 +603,34 @@ function aafm_exec_update_user( array $input ) {
 	// takes the plain path. The check is also re-run inside the lock, and the result re-verified
 	// after the write, rolling the admin role back if the demote left zero admins.
 	$writer = static function () use ( $data, $id, $demotes_admin ) {
-		if ( $demotes_admin && aafm_count_administrators() <= 1 ) {
-			return aafm_generic_error();
+		if ( $demotes_admin && oversio_count_administrators() <= 1 ) {
+			return oversio_generic_error();
 		}
 
 		$result = wp_update_user( $data );
 		if ( is_wp_error( $result ) ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 
 		// Defense in depth: if this write somehow left the site admin-less, restore the role.
-		if ( $demotes_admin && aafm_count_administrators() < 1 ) {
+		if ( $demotes_admin && oversio_count_administrators() < 1 ) {
 			$restored = get_userdata( $id );
 			if ( $restored instanceof WP_User ) {
 				$restored->set_role( 'administrator' );
 			}
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 
-		return array( 'user' => aafm_rich_user( get_userdata( $id ) ) );
+		return array( 'user' => oversio_rich_user( get_userdata( $id ) ) );
 	};
 
 	return $demotes_admin
-		? aafm_with_named_lock( AAFM_LAST_ADMIN_LOCK, $writer )
+		? oversio_with_named_lock( OVERSIO_LAST_ADMIN_LOCK, $writer )
 		: $writer();
 }
 
 /**
- * Args for aafm/delete-user.
+ * Args for oversio/delete-user.
  *
  * Closed schema: user_id required; reassign_to optional IN THE SCHEMA so the execute body
  * can refuse a missing target with the orphaned-content message rather than a bare schema
@@ -639,11 +639,11 @@ function aafm_exec_update_user( array $input ) {
  *
  * @return array<string,mixed>
  */
-function aafm_args_delete_user(): array {
+function oversio_args_delete_user(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/delete-user' ),
-		'description'         => aafm_ability_description( 'aafm/delete-user' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/delete-user' ),
+		'description'         => oversio_ability_description( 'oversio/delete-user' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -665,8 +665,8 @@ function aafm_args_delete_user(): array {
 				'deleted' => array( 'type' => 'boolean' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_delete_user',
-		'permission_callback' => 'aafm_perm_delete_user',
+		'execute_callback'    => 'oversio_exec_delete_user',
+		'permission_callback' => 'oversio_perm_delete_user',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -677,7 +677,7 @@ function aafm_args_delete_user(): array {
 }
 
 /**
- * Permission for aafm/delete-user: delete_users AND per-object delete_user on the id.
+ * Permission for oversio/delete-user: delete_users AND per-object delete_user on the id.
  *
  * Returns false with empty input (no id), so discovery uses the object-independent
  * delete_users floor in server.php; this per-object check still runs at execute time.
@@ -685,13 +685,13 @@ function aafm_args_delete_user(): array {
  * @param array<string,mixed> $input Validated input.
  * @return bool
  */
-function aafm_perm_delete_user( array $input ): bool {
+function oversio_perm_delete_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	return $id > 0 && current_user_can( 'delete_users' ) && current_user_can( 'delete_user', $id );
 }
 
 /**
- * Execute aafm/delete-user.
+ * Execute oversio/delete-user.
  *
  * Permanently removes a user via core wp_delete_user(), reassigning their content to
  * another existing user. Three guards: a reassign target is mandatory and must exist and
@@ -702,22 +702,22 @@ function aafm_perm_delete_user( array $input ): bool {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_delete_user( array $input ) {
+function oversio_exec_delete_user( array $input ) {
 	$id       = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
 	$reassign = isset( $input['reassign_to'] ) ? absint( $input['reassign_to'] ) : 0;
 	$victim   = $id ? get_userdata( $id ) : false;
 	if ( ! $victim instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// Never delete the current user.
 	if ( get_current_user_id() === $id ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	// The reassign target is mandatory, must exist, and must not be the victim.
 	if ( ! $reassign || $reassign === $id || ! get_userdata( $reassign ) instanceof WP_User ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$victim_is_admin = in_array( 'administrator', (array) $victim->roles, true );
@@ -727,20 +727,20 @@ function aafm_exec_delete_user( array $input ) {
 	// two of them can't both pass the pre-check and orphan the site. A non-admin delete takes
 	// the plain path. The check is re-run inside the lock.
 	$deleter = static function () use ( $id, $reassign, $victim_is_admin ) {
-		if ( $victim_is_admin && aafm_count_administrators() <= 1 ) {
-			return aafm_generic_error();
+		if ( $victim_is_admin && oversio_count_administrators() <= 1 ) {
+			return oversio_generic_error();
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 		$ok = wp_delete_user( $id, $reassign );
 		if ( ! $ok ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 
 		return array( 'deleted' => true );
 	};
 
 	return $victim_is_admin
-		? aafm_with_named_lock( AAFM_LAST_ADMIN_LOCK, $deleter )
+		? oversio_with_named_lock( OVERSIO_LAST_ADMIN_LOCK, $deleter )
 		: $deleter();
 }

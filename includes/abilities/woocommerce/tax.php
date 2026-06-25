@@ -2,7 +2,7 @@
 /**
  * WooCommerce integration abilities — tax rate and tax class reads and writes (sub-slice W4-WC6).
  *
- * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
+ * Registers ONLY when WooCommerce is active (oversio_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case). Shared helpers live in _shared.php, loaded before this file.
@@ -14,8 +14,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_wc_tax_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_tax_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_wc_tax_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_wc_tax_full_definitions' );
 
 /**
  * Contribute the WooCommerce tax definitions to the registry, but only when WooCommerce is
@@ -24,26 +24,26 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_wc_tax_full_d
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_tax_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+function oversio_register_wc_tax_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_wc_tax_registry_definitions() );
+	return array_merge( $registry, oversio_wc_tax_registry_definitions() );
 }
 
 /**
  * Contribute the WooCommerce tax definitions to the guard-independent full registry view.
  *
- * Unguarded by design: the full view (aafm_get_abilities_registry_full()) enumerates every
+ * Unguarded by design: the full view (oversio_get_abilities_registry_full()) enumerates every
  * WooCommerce ability even when WooCommerce is inactive, for the Integrations tab and the manifest.
  * The live registration path never reads this filter, so an inactive host still exposes zero tools.
  *
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_wc_tax_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_wc_tax_registry_definitions() );
+function oversio_register_wc_tax_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_wc_tax_registry_definitions() );
 }
 
 /**
@@ -53,62 +53,62 @@ function aafm_register_wc_tax_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_wc_tax_registry_definitions(): array {
+function oversio_wc_tax_registry_definitions(): array {
 	return array(
 		// Tax rates (W4-WC6).
-		'aafm/wc-list-tax-rates'   => array(
+		'oversio/wc-list-tax-rates'   => array(
 			'label'        => __( 'List WooCommerce tax rates', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists all WooCommerce tax rates across every tax class, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_tax_rates',
+			'args_builder' => 'oversio_args_wc_list_tax_rates',
 		),
 
-		'aafm/wc-get-tax-rate'     => array(
+		'oversio/wc-get-tax-rate'     => array(
 			'label'        => __( 'Get WooCommerce tax rate', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads one WooCommerce tax rate by id, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_get_tax_rate',
+			'args_builder' => 'oversio_args_wc_get_tax_rate',
 		),
 
-		'aafm/wc-create-tax-rate'  => array(
+		'oversio/wc-create-tax-rate'  => array(
 			'label'        => __( 'Create WooCommerce tax rate', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce tax rate. Required fields: rate (decimal string). Optional: country, state, name, priority, compound, shipping, order, class slug. Returns the full rate shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_tax_rate',
+			'args_builder' => 'oversio_args_wc_create_tax_rate',
 		),
 
-		'aafm/wc-update-tax-rate'  => array(
+		'oversio/wc-update-tax-rate'  => array(
 			'label'        => __( 'Update WooCommerce tax rate', 'oversio-agent-abilities' ),
 			'description'  => __( 'Updates a WooCommerce tax rate by id, changing only the fields you send. An empty body (only id) is a no-op success. Returns the updated rate shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_update_tax_rate',
+			'args_builder' => 'oversio_args_wc_update_tax_rate',
 		),
 
 		// Tax classes (W4-WC6).
-		'aafm/wc-list-tax-classes' => array(
+		'oversio/wc-list-tax-classes' => array(
 			'label'        => __( 'List WooCommerce tax classes', 'oversio-agent-abilities' ),
 			'description'  => __( 'Lists all WooCommerce tax classes including the Standard class, returning name and slug for each. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_list_tax_classes',
+			'args_builder' => 'oversio_args_wc_list_tax_classes',
 		),
 
-		'aafm/wc-create-tax-class' => array(
+		'oversio/wc-create-tax-class' => array(
 			'label'        => __( 'Create WooCommerce tax class', 'oversio-agent-abilities' ),
 			'description'  => __( 'Creates a WooCommerce tax class from a name, with an optional slug. Returns the new class shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
-			'args_builder' => 'aafm_args_wc_create_tax_class',
+			'args_builder' => 'oversio_args_wc_create_tax_class',
 		),
 
 	);
@@ -124,7 +124,7 @@ function aafm_wc_tax_registry_definitions(): array {
  * @param array<string,mixed> $row Raw DB row.
  * @return array<string,mixed>
  */
-function aafm_wc_tax_rate_shape( array $row ): array {
+function oversio_wc_tax_rate_shape( array $row ): array {
 	return array(
 		'id'       => (int) ( $row['id'] ?? $row['tax_rate_id'] ?? 0 ),
 		'country'  => (string) ( $row['country'] ?? $row['tax_rate_country'] ?? '' ),
@@ -146,7 +146,7 @@ function aafm_wc_tax_rate_shape( array $row ): array {
  *
  * @return array<int,array<string,mixed>>
  */
-function aafm_wc_get_all_tax_rates(): array {
+function oversio_wc_get_all_tax_rates(): array {
 	global $wpdb;
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 	$rows = $wpdb->get_results(
@@ -161,7 +161,7 @@ function aafm_wc_get_all_tax_rates(): array {
 	if ( ! is_array( $rows ) ) {
 		return array();
 	}
-	return array_values( array_map( 'aafm_wc_tax_rate_shape', $rows ) );
+	return array_values( array_map( 'oversio_wc_tax_rate_shape', $rows ) );
 }
 
 /**
@@ -170,7 +170,7 @@ function aafm_wc_get_all_tax_rates(): array {
  * @param int $rate_id Rate id.
  * @return array<string,mixed>|null
  */
-function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
+function oversio_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	global $wpdb;
 	$table = $wpdb->prefix . 'woocommerce_tax_rates';
 	$sql   = "SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
@@ -182,7 +182,7 @@ function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	if ( ! is_array( $row ) ) {
 		return null;
 	}
-	return aafm_wc_tax_rate_shape( $row );
+	return oversio_wc_tax_rate_shape( $row );
 }
 
 // =============================================================================
@@ -190,15 +190,15 @@ function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-tax-rates.
+ * Args builder for oversio/wc-list-tax-rates.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_tax_rates(): array {
+function oversio_args_wc_list_tax_rates(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-tax-rates' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-tax-rates' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-tax-rates' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-tax-rates' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -228,8 +228,8 @@ function aafm_args_wc_list_tax_rates(): array {
 				'total' => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_tax_rates',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_tax_rates',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -241,17 +241,17 @@ function aafm_args_wc_list_tax_rates(): array {
 }
 
 /**
- * Execute aafm/wc-list-tax-rates.
+ * Execute oversio/wc-list-tax-rates.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_tax_rates( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_list_tax_rates( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
-	$rates = aafm_wc_get_all_tax_rates();
+	$rates = oversio_wc_get_all_tax_rates();
 	return array(
 		'rates' => $rates,
 		'total' => count( $rates ),
@@ -263,15 +263,15 @@ function aafm_exec_wc_list_tax_rates( array $input ): array|\WP_Error { // phpcs
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-get-tax-rate.
+ * Args builder for oversio/wc-get-tax-rate.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_get_tax_rate(): array {
+function oversio_args_wc_get_tax_rate(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-get-tax-rate' ),
-		'description'         => aafm_ability_description( 'aafm/wc-get-tax-rate' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-get-tax-rate' ),
+		'description'         => oversio_ability_description( 'oversio/wc-get-tax-rate' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -298,8 +298,8 @@ function aafm_args_wc_get_tax_rate(): array {
 				'class'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_get_tax_rate',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_get_tax_rate',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -311,20 +311,20 @@ function aafm_args_wc_get_tax_rate(): array {
 }
 
 /**
- * Execute aafm/wc-get-tax-rate.
+ * Execute oversio/wc-get-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_get_tax_rate( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
 	$rate_id = isset( $input['rate_id'] ) ? (int) $input['rate_id'] : 0;
-	$rate    = aafm_wc_get_tax_rate_by_id( $rate_id );
+	$rate    = oversio_wc_get_tax_rate_by_id( $rate_id );
 	if ( null === $rate ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
+		return new \WP_Error( 'oversio_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
 	}
 	return $rate;
 }
@@ -334,15 +334,15 @@ function aafm_exec_wc_get_tax_rate( array $input ): array|\WP_Error {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-create-tax-rate.
+ * Args builder for oversio/wc-create-tax-rate.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_tax_rate(): array {
+function oversio_args_wc_create_tax_rate(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-tax-rate' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-tax-rate' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-tax-rate' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-tax-rate' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -380,8 +380,8 @@ function aafm_args_wc_create_tax_rate(): array {
 				'class'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_tax_rate',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_tax_rate',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -392,14 +392,14 @@ function aafm_args_wc_create_tax_rate(): array {
 }
 
 /**
- * Execute aafm/wc-create-tax-rate.
+ * Execute oversio/wc-create-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
 	global $wpdb;
@@ -419,17 +419,17 @@ function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 	$ok = $wpdb->insert( $table, $data, array( '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s' ) );
 	if ( false === $ok ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$new_id = (int) $wpdb->insert_id;
 	if ( $new_id <= 0 ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$rate = aafm_wc_get_tax_rate_by_id( $new_id );
+	$rate = oversio_wc_get_tax_rate_by_id( $new_id );
 	if ( null === $rate ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return $rate;
 }
@@ -439,15 +439,15 @@ function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-update-tax-rate.
+ * Args builder for oversio/wc-update-tax-rate.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_update_tax_rate(): array {
+function oversio_args_wc_update_tax_rate(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-update-tax-rate' ),
-		'description'         => aafm_ability_description( 'aafm/wc-update-tax-rate' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-update-tax-rate' ),
+		'description'         => oversio_ability_description( 'oversio/wc-update-tax-rate' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -489,8 +489,8 @@ function aafm_args_wc_update_tax_rate(): array {
 				'class'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_update_tax_rate',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_update_tax_rate',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -501,20 +501,20 @@ function aafm_args_wc_update_tax_rate(): array {
 }
 
 /**
- * Execute aafm/wc-update-tax-rate.
+ * Execute oversio/wc-update-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
 	$rate_id  = isset( $input['rate_id'] ) ? (int) $input['rate_id'] : 0;
-	$existing = aafm_wc_get_tax_rate_by_id( $rate_id );
+	$existing = oversio_wc_get_tax_rate_by_id( $rate_id );
 	if ( null === $existing ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
+		return new \WP_Error( 'oversio_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
 	}
 
 	global $wpdb;
@@ -562,13 +562,13 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
 	if ( ! empty( $fields ) ) {
 		$ok = $wpdb->update( $table, $fields, array( 'tax_rate_id' => $rate_id ), $format, array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct write to WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
 		if ( false === $ok ) {
-			return aafm_generic_error();
+			return oversio_generic_error();
 		}
 	}
 
-	$updated = aafm_wc_get_tax_rate_by_id( $rate_id );
+	$updated = oversio_wc_get_tax_rate_by_id( $rate_id );
 	if ( null === $updated ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	return $updated;
 }
@@ -582,7 +582,7 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
  *
  * @return array<int,array<string,string>>
  */
-function aafm_wc_build_tax_class_list(): array {
+function oversio_wc_build_tax_class_list(): array {
 	$out = array(
 		array(
 			'name' => 'Standard',
@@ -616,15 +616,15 @@ function aafm_wc_build_tax_class_list(): array {
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-list-tax-classes.
+ * Args builder for oversio/wc-list-tax-classes.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_list_tax_classes(): array {
+function oversio_args_wc_list_tax_classes(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-list-tax-classes' ),
-		'description'         => aafm_ability_description( 'aafm/wc-list-tax-classes' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/wc-list-tax-classes' ),
+		'description'         => oversio_ability_description( 'oversio/wc-list-tax-classes' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -646,8 +646,8 @@ function aafm_args_wc_list_tax_classes(): array {
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_list_tax_classes',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_list_tax_classes',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -659,17 +659,17 @@ function aafm_args_wc_list_tax_classes(): array {
 }
 
 /**
- * Execute aafm/wc-list-tax-classes.
+ * Execute oversio/wc-list-tax-classes.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_tax_classes( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_list_tax_classes( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
-	$classes = aafm_wc_build_tax_class_list();
+	$classes = oversio_wc_build_tax_class_list();
 	return array(
 		'classes' => $classes,
 		'total'   => count( $classes ),
@@ -681,15 +681,15 @@ function aafm_exec_wc_list_tax_classes( array $input ): array|\WP_Error { // php
 // =============================================================================
 
 /**
- * Args builder for aafm/wc-create-tax-class.
+ * Args builder for oversio/wc-create-tax-class.
  *
  * @return array<string,mixed>
  */
-function aafm_args_wc_create_tax_class(): array {
+function oversio_args_wc_create_tax_class(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/wc-create-tax-class' ),
-		'description'         => aafm_ability_description( 'aafm/wc-create-tax-class' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/wc-create-tax-class' ),
+		'description'         => oversio_ability_description( 'oversio/wc-create-tax-class' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
@@ -706,8 +706,8 @@ function aafm_args_wc_create_tax_class(): array {
 				'slug' => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_wc_create_tax_class',
-		'permission_callback' => 'aafm_wc_perm',
+		'execute_callback'    => 'oversio_exec_wc_create_tax_class',
+		'permission_callback' => 'oversio_wc_perm',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -718,18 +718,18 @@ function aafm_args_wc_create_tax_class(): array {
 }
 
 /**
- * Execute aafm/wc-create-tax-class.
+ * Execute oversio/wc-create-tax-class.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_tax_class( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
-		return aafm_generic_error();
+function oversio_exec_wc_create_tax_class( array $input ): array|\WP_Error {
+	if ( ! oversio_integration_active( 'woocommerce' ) ) {
+		return oversio_generic_error();
 	}
 
 	if ( ! class_exists( 'WC_Tax' ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );

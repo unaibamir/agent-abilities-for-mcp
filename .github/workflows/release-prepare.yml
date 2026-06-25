@@ -11,7 +11,7 @@ name: Prepare Release
 # the wordpress.org deploy).
 #
 # The plugin header `Version:` is the single source of truth. Bump it (and the
-# matching AAFM_VERSION constant) and merge that change BEFORE running this.
+# matching OVERSIO_VERSION constant) and merge that change BEFORE running this.
 
 on:
   workflow_dispatch: {}

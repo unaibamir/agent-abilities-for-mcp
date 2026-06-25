@@ -23,11 +23,11 @@ defined( 'ABSPATH' ) || exit;
  * Generous enough for any legitimate authorization code, refresh token, client_id,
  * or redirect URI we issue (all far shorter), but tight enough that an attacker
  * cannot push unbounded strings through hashing and DB lookups. Redirect URIs are
- * already capped at 2048 bytes in aafm_oauth_validate_redirect_uri(); this is the
+ * already capped at 2048 bytes in oversio_oauth_validate_redirect_uri(); this is the
  * matching guard for the token endpoint's opaque fields.
  */
-if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
-	define( 'AAFM_OAUTH_MAX_FIELD_LEN', 4096 );
+if ( ! defined( 'OVERSIO_OAUTH_MAX_FIELD_LEN' ) ) {
+	define( 'OVERSIO_OAUTH_MAX_FIELD_LEN', 4096 );
 }
 
 /**
@@ -36,42 +36,42 @@ if ( ! defined( 'AAFM_OAUTH_MAX_FIELD_LEN' ) ) {
  * The storage column is VARCHAR(191); 255 leaves headroom while refusing an
  * abusive name outright rather than silently truncating it.
  */
-if ( ! defined( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
-	define( 'AAFM_OAUTH_MAX_CLIENT_NAME_LEN', 255 );
+if ( ! defined( 'OVERSIO_OAUTH_MAX_CLIENT_NAME_LEN' ) ) {
+	define( 'OVERSIO_OAUTH_MAX_CLIENT_NAME_LEN', 255 );
 }
 
 /**
  * PKCE code-verifier length bounds (RFC 7636 §4.1): the spec fixes the verifier at 43-128
  * characters, so anything outside that range cannot be a valid verifier and is rejected up front.
  */
-if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MIN' ) ) {
-	define( 'AAFM_OAUTH_PKCE_VERIFIER_MIN', 43 );
+if ( ! defined( 'OVERSIO_OAUTH_PKCE_VERIFIER_MIN' ) ) {
+	define( 'OVERSIO_OAUTH_PKCE_VERIFIER_MIN', 43 );
 }
-if ( ! defined( 'AAFM_OAUTH_PKCE_VERIFIER_MAX' ) ) {
-	define( 'AAFM_OAUTH_PKCE_VERIFIER_MAX', 128 );
+if ( ! defined( 'OVERSIO_OAUTH_PKCE_VERIFIER_MAX' ) ) {
+	define( 'OVERSIO_OAUTH_PKCE_VERIFIER_MAX', 128 );
 }
 
 /**
  * Soft cap on the number of ACTIVE registered OAuth clients.
  *
  * Dynamic Client Registration is a public route, so without a ceiling a caller could fill the
- * clients table with registrations. The daily reaper (aafm_oauth_reap_abandoned_clients())
+ * clients table with registrations. The daily reaper (oversio_oauth_reap_abandoned_clients())
  * removes never-consented, token-less rows past their TTL, and this cap bounds the live total in
  * between reaps. The default is generous for real fleets (a site rarely connects hundreds of
- * distinct clients) while still refusing runaway growth. Filterable via aafm_oauth_max_clients.
+ * distinct clients) while still refusing runaway growth. Filterable via oversio_oauth_max_clients.
  */
-if ( ! defined( 'AAFM_OAUTH_MAX_ACTIVE_CLIENTS' ) ) {
-	define( 'AAFM_OAUTH_MAX_ACTIVE_CLIENTS', 500 );
+if ( ! defined( 'OVERSIO_OAUTH_MAX_ACTIVE_CLIENTS' ) ) {
+	define( 'OVERSIO_OAUTH_MAX_ACTIVE_CLIENTS', 500 );
 }
 
 /**
  * Whether a string exceeds the generic OAuth field length cap.
  *
  * @param string $value The candidate value.
- * @return bool True when the value is longer than AAFM_OAUTH_MAX_FIELD_LEN bytes.
+ * @return bool True when the value is longer than OVERSIO_OAUTH_MAX_FIELD_LEN bytes.
  */
-function aafm_oauth_field_too_long( string $value ): bool {
-	return strlen( $value ) > AAFM_OAUTH_MAX_FIELD_LEN;
+function oversio_oauth_field_too_long( string $value ): bool {
+	return strlen( $value ) > OVERSIO_OAUTH_MAX_FIELD_LEN;
 }
 
 /**
@@ -82,7 +82,7 @@ function aafm_oauth_field_too_long( string $value ): bool {
  *
  * @return void
  */
-function aafm_oauth_register_rest_routes(): void {
+function oversio_oauth_register_rest_routes(): void {
 	$namespace = 'oversio-agent-abilities/oauth';
 
 	register_rest_route(
@@ -90,7 +90,7 @@ function aafm_oauth_register_rest_routes(): void {
 		'/register',
 		array(
 			'methods'             => 'POST',
-			'callback'            => 'aafm_oauth_rest_register',
+			'callback'            => 'oversio_oauth_rest_register',
 			'permission_callback' => '__return_true',
 		)
 	);
@@ -100,7 +100,7 @@ function aafm_oauth_register_rest_routes(): void {
 		'/token',
 		array(
 			'methods'             => 'POST',
-			'callback'            => 'aafm_oauth_rest_token',
+			'callback'            => 'oversio_oauth_rest_token',
 			'permission_callback' => '__return_true',
 		)
 	);
@@ -110,7 +110,7 @@ function aafm_oauth_register_rest_routes(): void {
 		'/revoke',
 		array(
 			'methods'             => 'POST',
-			'callback'            => 'aafm_oauth_rest_revoke',
+			'callback'            => 'oversio_oauth_rest_revoke',
 			'permission_callback' => '__return_true',
 		)
 	);
@@ -122,7 +122,7 @@ function aafm_oauth_register_rest_routes(): void {
  * @param \WP_REST_Response $response The response to decorate.
  * @return \WP_REST_Response The same response, with the no-store header set.
  */
-function aafm_oauth_rest_no_store( WP_REST_Response $response ): WP_REST_Response {
+function oversio_oauth_rest_no_store( WP_REST_Response $response ): WP_REST_Response {
 	$response->header( 'Cache-Control', 'no-store' );
 	return $response;
 }
@@ -138,7 +138,7 @@ function aafm_oauth_rest_no_store( WP_REST_Response $response ): WP_REST_Respons
  * @param int    $status  The HTTP status code to return.
  * @return \WP_Error
  */
-function aafm_oauth_rest_error( string $code, string $message, int $status ): WP_Error {
+function oversio_oauth_rest_error( string $code, string $message, int $status ): WP_Error {
 	return new WP_Error( $code, $message, array( 'status' => $status ) );
 }
 
@@ -157,7 +157,7 @@ function aafm_oauth_rest_error( string $code, string $message, int $status ): WP
  * @param \WP_REST_Request $request The incoming request.
  * @return array<string,mixed> Merged parameter map (form body under JSON).
  */
-function aafm_oauth_rest_params( WP_REST_Request $request ): array {
+function oversio_oauth_rest_params( WP_REST_Request $request ): array {
 	$body = $request->get_body_params();
 	if ( empty( $body ) ) {
 		$content_type = $request->get_content_type();
@@ -191,8 +191,8 @@ function aafm_oauth_rest_params( WP_REST_Request $request ): array {
  * @param string           $key     The parameter name.
  * @return string The parameter value cast to string, or '' when absent or non-scalar.
  */
-function aafm_oauth_rest_param( WP_REST_Request $request, string $key ): string {
-	$params = aafm_oauth_rest_params( $request );
+function oversio_oauth_rest_param( WP_REST_Request $request, string $key ): string {
+	$params = oversio_oauth_rest_params( $request );
 
 	if ( ! isset( $params[ $key ] ) || ! is_scalar( $params[ $key ] ) ) {
 		return '';
@@ -206,9 +206,9 @@ function aafm_oauth_rest_param( WP_REST_Request $request, string $key ): string 
  *
  * @return \WP_Error|null A 400 error when HTTPS is required but the request is plain HTTP, otherwise null.
  */
-function aafm_oauth_rest_require_https() {
-	if ( aafm_oauth_https_required() && ! is_ssl() ) {
-		return aafm_oauth_rest_error(
+function oversio_oauth_rest_require_https() {
+	if ( oversio_oauth_https_required() && ! is_ssl() ) {
+		return oversio_oauth_rest_error(
 			'invalid_request',
 			__( 'This endpoint requires HTTPS.', 'oversio-agent-abilities' ),
 			400
@@ -223,27 +223,27 @@ function aafm_oauth_rest_require_https() {
  *
  * Gated on both the OAuth and DCR toggles (404 when either is off), HTTPS-only in
  * production, and rate-limited. Delegates validation and storage to
- * aafm_oauth_register_client() and echoes back the public-client metadata.
+ * oversio_oauth_register_client() and echoes back the public-client metadata.
  *
  * @param \WP_REST_Request $request The incoming request.
  * @return \WP_REST_Response|\WP_Error
  */
-function aafm_oauth_rest_register( WP_REST_Request $request ) {
-	if ( ! aafm_oauth_enabled() || ! aafm_oauth_dcr_enabled() ) {
-		return aafm_oauth_rest_error(
+function oversio_oauth_rest_register( WP_REST_Request $request ) {
+	if ( ! oversio_oauth_enabled() || ! oversio_oauth_dcr_enabled() ) {
+		return oversio_oauth_rest_error(
 			'rest_no_route',
 			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
 
-	$https = aafm_oauth_rest_require_https();
+	$https = oversio_oauth_rest_require_https();
 	if ( null !== $https ) {
 		return $https;
 	}
 
-	if ( ! aafm_oauth_rate_ok( 'register', 10, 100 ) ) {
-		return aafm_oauth_rest_error(
+	if ( ! oversio_oauth_rate_ok( 'register', 10, 100 ) ) {
+		return oversio_oauth_rest_error(
 			'rate_limited',
 			__( 'Too many registration requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
@@ -253,25 +253,25 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	/**
 	 * Soft cap on active clients. Filterable so a large fleet can lift it deliberately.
 	 *
-	 * @param int $max Maximum active clients. Default AAFM_OAUTH_MAX_ACTIVE_CLIENTS.
+	 * @param int $max Maximum active clients. Default OVERSIO_OAUTH_MAX_ACTIVE_CLIENTS.
 	 */
-	$max_clients = (int) apply_filters( 'aafm_oauth_max_clients', AAFM_OAUTH_MAX_ACTIVE_CLIENTS );
-	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
-		return aafm_oauth_rest_error(
+	$max_clients = (int) apply_filters( 'oversio_oauth_max_clients', OVERSIO_OAUTH_MAX_ACTIVE_CLIENTS );
+	if ( $max_clients > 0 && oversio_oauth_count_active_clients() >= $max_clients ) {
+		return oversio_oauth_rest_error(
 			'temporarily_unavailable',
 			__( 'Client registration is temporarily unavailable. Please try again later.', 'oversio-agent-abilities' ),
 			503
 		);
 	}
 
-	$params = aafm_oauth_rest_params( $request );
+	$params = oversio_oauth_rest_params( $request );
 
 	$redirect_uris = isset( $params['redirect_uris'] ) && is_array( $params['redirect_uris'] ) ? $params['redirect_uris'] : array();
 	$client_name   = isset( $params['client_name'] ) && is_scalar( $params['client_name'] ) ? (string) $params['client_name'] : '';
 
 	// Refuse an abusive client_name outright rather than silently truncating it.
-	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
-		return aafm_oauth_rest_error(
+	if ( strlen( $client_name ) > OVERSIO_OAUTH_MAX_CLIENT_NAME_LEN ) {
+		return oversio_oauth_rest_error(
 			'invalid_client_metadata',
 			__( 'The client name is too long.', 'oversio-agent-abilities' ),
 			400
@@ -281,7 +281,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	$grant_types    = isset( $params['grant_types'] ) && is_array( $params['grant_types'] ) ? $params['grant_types'] : array( 'authorization_code', 'refresh_token' );
 	$response_types = isset( $params['response_types'] ) && is_array( $params['response_types'] ) ? $params['response_types'] : array( 'code' );
 
-	$result = aafm_oauth_register_client(
+	$result = oversio_oauth_register_client(
 		array(
 			'redirect_uris'  => $redirect_uris,
 			'client_name'    => $client_name,
@@ -291,7 +291,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	);
 
 	if ( is_wp_error( $result ) ) {
-		return aafm_oauth_rest_error(
+		return oversio_oauth_rest_error(
 			'invalid_redirect_uri' === $result->get_error_code() ? 'invalid_redirect_uri' : 'invalid_client_metadata',
 			$result->get_error_message(),
 			400
@@ -310,7 +310,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 		201
 	);
 
-	return aafm_oauth_rest_no_store( $response );
+	return oversio_oauth_rest_no_store( $response );
 }
 
 /**
@@ -324,39 +324,39 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
  * @param \WP_REST_Request $request The incoming request.
  * @return \WP_REST_Response|\WP_Error
  */
-function aafm_oauth_rest_token( WP_REST_Request $request ) {
-	if ( ! aafm_oauth_enabled() ) {
-		return aafm_oauth_rest_error(
+function oversio_oauth_rest_token( WP_REST_Request $request ) {
+	if ( ! oversio_oauth_enabled() ) {
+		return oversio_oauth_rest_error(
 			'rest_no_route',
 			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
 
-	$https = aafm_oauth_rest_require_https();
+	$https = oversio_oauth_rest_require_https();
 	if ( null !== $https ) {
 		return $https;
 	}
 
-	if ( ! aafm_oauth_rate_ok( 'token', 30, 300 ) ) {
-		return aafm_oauth_rest_error(
+	if ( ! oversio_oauth_rate_ok( 'token', 30, 300 ) ) {
+		return oversio_oauth_rest_error(
 			'rate_limited',
 			__( 'Too many token requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
 		);
 	}
 
-	$grant_type = aafm_oauth_rest_param( $request, 'grant_type' );
+	$grant_type = oversio_oauth_rest_param( $request, 'grant_type' );
 
 	if ( 'authorization_code' === $grant_type ) {
-		return aafm_oauth_rest_token_authorization_code( $request );
+		return oversio_oauth_rest_token_authorization_code( $request );
 	}
 
 	if ( 'refresh_token' === $grant_type ) {
-		return aafm_oauth_rest_token_refresh( $request );
+		return oversio_oauth_rest_token_refresh( $request );
 	}
 
-	return aafm_oauth_rest_error(
+	return oversio_oauth_rest_error(
 		'unsupported_grant_type',
 		__( 'The grant type is missing or not supported.', 'oversio-agent-abilities' ),
 		400
@@ -369,13 +369,13 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
  * @param \WP_REST_Request $request The incoming request.
  * @return \WP_REST_Response|\WP_Error
  */
-function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
-	$code          = aafm_oauth_rest_param( $request, 'code' );
-	$redirect_uri  = aafm_oauth_rest_param( $request, 'redirect_uri' );
-	$client_id     = aafm_oauth_rest_param( $request, 'client_id' );
-	$code_verifier = aafm_oauth_rest_param( $request, 'code_verifier' );
+function oversio_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
+	$code          = oversio_oauth_rest_param( $request, 'code' );
+	$redirect_uri  = oversio_oauth_rest_param( $request, 'redirect_uri' );
+	$client_id     = oversio_oauth_rest_param( $request, 'client_id' );
+	$code_verifier = oversio_oauth_rest_param( $request, 'code_verifier' );
 
-	$invalid_grant = aafm_oauth_rest_error(
+	$invalid_grant = oversio_oauth_rest_error(
 		'invalid_grant',
 		__( 'The authorization grant is invalid.', 'oversio-agent-abilities' ),
 		400
@@ -390,34 +390,34 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 	// string reaches hashing or the DB. RFC 7636 fixes the verifier at 43-128 chars.
 	$verifier_len = strlen( $code_verifier );
 	if (
-		aafm_oauth_field_too_long( $code )
-		|| aafm_oauth_field_too_long( $redirect_uri )
-		|| aafm_oauth_field_too_long( $client_id )
-		|| $verifier_len < AAFM_OAUTH_PKCE_VERIFIER_MIN
-		|| $verifier_len > AAFM_OAUTH_PKCE_VERIFIER_MAX
+		oversio_oauth_field_too_long( $code )
+		|| oversio_oauth_field_too_long( $redirect_uri )
+		|| oversio_oauth_field_too_long( $client_id )
+		|| $verifier_len < OVERSIO_OAUTH_PKCE_VERIFIER_MIN
+		|| $verifier_len > OVERSIO_OAUTH_PKCE_VERIFIER_MAX
 	) {
 		return $invalid_grant;
 	}
 
 	// A deactivated client cannot redeem a code minted before it was disabled — is_active is
 	// only checked at authorize-time otherwise, so re-check it here.
-	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
+	if ( oversio_oauth_client_is_deactivated( $client_id ) ) {
 		return $invalid_grant;
 	}
 
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
-	// enforced inside aafm_oauth_redeem_code().
-	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );
+	// enforced inside oversio_oauth_redeem_code().
+	$row = oversio_oauth_redeem_code( $code, $client_id, $redirect_uri );
 	if ( is_wp_error( $row ) ) {
 		return $invalid_grant;
 	}
 
 	// PKCE: a failed verifier burns the (already-consumed) code, which is safe.
-	if ( ! aafm_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
+	if ( ! oversio_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
 		return $invalid_grant;
 	}
 
-	$tokens = aafm_oauth_mint_tokens(
+	$tokens = oversio_oauth_mint_tokens(
 		array(
 			'client_id'  => (string) $row['client_id'],
 			'wp_user_id' => (int) $row['wp_user_id'],
@@ -427,14 +427,14 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 
 	// A mint failure (the row never persisted) is a server_error, not a fake token response.
 	if ( is_wp_error( $tokens ) ) {
-		return aafm_oauth_rest_error(
+		return oversio_oauth_rest_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'oversio-agent-abilities' ),
 			500
 		);
 	}
 
-	return aafm_oauth_rest_token_response( $tokens );
+	return oversio_oauth_rest_token_response( $tokens );
 }
 
 /**
@@ -443,33 +443,33 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
  * @param \WP_REST_Request $request The incoming request.
  * @return \WP_REST_Response|\WP_Error
  */
-function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
-	$refresh_token = aafm_oauth_rest_param( $request, 'refresh_token' );
-	$client_id     = aafm_oauth_rest_param( $request, 'client_id' );
+function oversio_oauth_rest_token_refresh( WP_REST_Request $request ) {
+	$refresh_token = oversio_oauth_rest_param( $request, 'refresh_token' );
+	$client_id     = oversio_oauth_rest_param( $request, 'client_id' );
 
 	if (
 		'' === $refresh_token || '' === $client_id
-		|| aafm_oauth_field_too_long( $refresh_token )
-		|| aafm_oauth_field_too_long( $client_id )
+		|| oversio_oauth_field_too_long( $refresh_token )
+		|| oversio_oauth_field_too_long( $client_id )
 	) {
-		return aafm_oauth_rest_error(
+		return oversio_oauth_rest_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
 
-	// aafm_oauth_rotate_refresh() manages its own transaction — never wrap it.
-	$tokens = aafm_oauth_rotate_refresh( $refresh_token, $client_id );
+	// oversio_oauth_rotate_refresh() manages its own transaction — never wrap it.
+	$tokens = oversio_oauth_rotate_refresh( $refresh_token, $client_id );
 	if ( is_wp_error( $tokens ) ) {
-		return aafm_oauth_rest_error(
+		return oversio_oauth_rest_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
 
-	return aafm_oauth_rest_token_response( $tokens );
+	return oversio_oauth_rest_token_response( $tokens );
 }
 
 /**
@@ -478,7 +478,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
  * @param array{access_token:string,refresh_token:string,expires_in:int} $tokens The token set.
  * @return \WP_REST_Response
  */
-function aafm_oauth_rest_token_response( array $tokens ): WP_REST_Response {
+function oversio_oauth_rest_token_response( array $tokens ): WP_REST_Response {
 	$response = new WP_REST_Response(
 		array(
 			'access_token'  => $tokens['access_token'],
@@ -489,7 +489,7 @@ function aafm_oauth_rest_token_response( array $tokens ): WP_REST_Response {
 		200
 	);
 
-	return aafm_oauth_rest_no_store( $response );
+	return oversio_oauth_rest_no_store( $response );
 }
 
 /**
@@ -502,36 +502,36 @@ function aafm_oauth_rest_token_response( array $tokens ): WP_REST_Response {
  * @param \WP_REST_Request $request The incoming request.
  * @return \WP_REST_Response|\WP_Error
  */
-function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
-	if ( ! aafm_oauth_enabled() ) {
-		return aafm_oauth_rest_error(
+function oversio_oauth_rest_revoke( WP_REST_Request $request ) {
+	if ( ! oversio_oauth_enabled() ) {
+		return oversio_oauth_rest_error(
 			'rest_no_route',
 			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
 
-	$https = aafm_oauth_rest_require_https();
+	$https = oversio_oauth_rest_require_https();
 	if ( null !== $https ) {
 		return $https;
 	}
 
-	if ( ! aafm_oauth_rate_ok( 'revoke', 30, 300 ) ) {
-		return aafm_oauth_rest_error(
+	if ( ! oversio_oauth_rate_ok( 'revoke', 30, 300 ) ) {
+		return oversio_oauth_rest_error(
 			'rate_limited',
 			__( 'Too many revocation requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
 		);
 	}
 
-	$token = aafm_oauth_rest_param( $request, 'token' );
+	$token = oversio_oauth_rest_param( $request, 'token' );
 	if ( '' !== $token ) {
-		aafm_oauth_revoke_token( $token );
+		oversio_oauth_revoke_token( $token );
 	}
 
 	// RFC 7009: a successful revocation (or a no-op for an unknown token) is 200
 	// with an empty body. Never signal whether the token existed.
 	$response = new WP_REST_Response( null, 200 );
 
-	return aafm_oauth_rest_no_store( $response );
+	return oversio_oauth_rest_no_store( $response );
 }

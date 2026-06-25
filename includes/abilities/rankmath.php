@@ -3,13 +3,13 @@
  * Rank Math abilities (Wave 5): rankmath-get-post, rankmath-update-post, rankmath-get-schema,
  * rankmath-update-schema, rankmath-get-head.
  *
- * Registers ONLY when Rank Math is active (aafm_integration_active('rankmath')). Rank Math stores
+ * Registers ONLY when Rank Math is active (oversio_integration_active('rankmath')). Rank Math stores
  * post SEO in standard rank_math_* post meta, with two serialization traps the unified map got
  * wrong: rank_math_robots is a SERIALIZED ARRAY of directive tokens (not a CSV string), and schema
  * lives under DYNAMIC per-type keys rank_math_schema_{Type} (not a flat rank_math_schema). SEO meta
  * is post content, so every per-object ability gates on edit_post($id) via the shared
- * aafm_perm_seo_post_object(); the head ability uses the edit_posts floor at discovery, refined
- * per-object at execute. The schema writer reuses the relocated aafm_sanitize_schema_array().
+ * oversio_perm_seo_post_object(); the head ability uses the edit_posts floor at discovery, refined
+ * per-object at execute. The schema writer reuses the relocated oversio_sanitize_schema_array().
  *
  * @package AgentAbilitiesForMCP
  */
@@ -18,8 +18,8 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-add_filter( 'aafm_abilities_registry', 'aafm_register_rankmath_definitions' );
-add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_rankmath_full_definitions' );
+add_filter( 'oversio_abilities_registry', 'oversio_register_rankmath_definitions' );
+add_filter( 'oversio_abilities_registry_integrations', 'oversio_register_rankmath_full_definitions' );
 
 /**
  * Contribute the Rank Math definitions to the registry, but only when Rank Math is active. Host
@@ -28,12 +28,12 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_rankmath_full
  * @param array<string,array<string,mixed>> $registry Registry.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_rankmath_definitions( array $registry ): array {
-	if ( ! aafm_integration_active( 'rankmath' ) ) {
+function oversio_register_rankmath_definitions( array $registry ): array {
+	if ( ! oversio_integration_active( 'rankmath' ) ) {
 		return $registry; // Host inactive: contribute nothing.
 	}
 
-	return array_merge( $registry, aafm_rankmath_registry_definitions() );
+	return array_merge( $registry, oversio_rankmath_registry_definitions() );
 }
 
 /**
@@ -46,8 +46,8 @@ function aafm_register_rankmath_definitions( array $registry ): array {
  * @param array<string,array<string,mixed>> $registry Integration rows accumulator.
  * @return array<string,array<string,mixed>>
  */
-function aafm_register_rankmath_full_definitions( array $registry ): array {
-	return array_merge( $registry, aafm_rankmath_registry_definitions() );
+function oversio_register_rankmath_full_definitions( array $registry ): array {
+	return array_merge( $registry, oversio_rankmath_registry_definitions() );
 }
 
 /**
@@ -57,47 +57,47 @@ function aafm_register_rankmath_full_definitions( array $registry ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_rankmath_registry_definitions(): array {
+function oversio_rankmath_registry_definitions(): array {
 	return array(
-		'aafm/rankmath-get-post'      => array(
+		'oversio/rankmath-get-post'      => array(
 			'label'        => __( 'Get post SEO (Rank Math)', 'oversio-agent-abilities' ),
 			'description'  => __( "Reads a post's Rank Math SEO fields (title, description, focus keyword, canonical, social, and robots) from its rank_math_* post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
-			'args_builder' => 'aafm_args_rankmath_get_post',
+			'args_builder' => 'oversio_args_rankmath_get_post',
 		),
-		'aafm/rankmath-update-post'   => array(
+		'oversio/rankmath-update-post'   => array(
 			'label'        => __( 'Update post SEO (Rank Math)', 'oversio-agent-abilities' ),
 			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
-			'args_builder' => 'aafm_args_rankmath_update_post',
+			'args_builder' => 'oversio_args_rankmath_update_post',
 		),
-		'aafm/rankmath-get-schema'    => array(
+		'oversio/rankmath-get-schema'    => array(
 			'label'        => __( 'Get post schema (Rank Math)', 'oversio-agent-abilities' ),
 			'description'  => __( "Reads a post's structured-data (JSON-LD) schema of a given type from Rank Math's rank_math_schema_{Type} post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
-			'args_builder' => 'aafm_args_rankmath_get_schema',
+			'args_builder' => 'oversio_args_rankmath_get_schema',
 		),
-		'aafm/rankmath-update-schema' => array(
+		'oversio/rankmath-update-schema' => array(
 			'label'        => __( 'Update post schema (Rank Math)', 'oversio-agent-abilities' ),
 			'description'  => __( "Writes a post's structured-data (JSON-LD) schema of a given type to Rank Math's rank_math_schema_{Type} post meta, recursively sanitized. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
-			'args_builder' => 'aafm_args_rankmath_update_schema',
+			'args_builder' => 'oversio_args_rankmath_update_schema',
 		),
-		'aafm/rankmath-get-head'      => array(
+		'oversio/rankmath-get-head'      => array(
 			'label'        => __( 'Get post SEO head (Rank Math)', 'oversio-agent-abilities' ),
 			'description'  => __( 'Reads the rendered SEO head markup for a post from Rank Math, best-effort (empty when no head API is available). Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
-			'args_builder' => 'aafm_args_rankmath_get_head',
+			'args_builder' => 'oversio_args_rankmath_get_head',
 		),
 	);
 }
@@ -108,7 +108,7 @@ function aafm_rankmath_registry_definitions(): array {
  *
  * @return array<string,string>
  */
-function aafm_rankmath_fields(): array {
+function oversio_rankmath_fields(): array {
 	return array(
 		'title'               => 'rank_math_title',
 		'description'         => 'rank_math_description',
@@ -128,7 +128,7 @@ function aafm_rankmath_fields(): array {
  *
  * @return string[]
  */
-function aafm_rankmath_url_fields(): array {
+function oversio_rankmath_url_fields(): array {
 	return array( 'canonical', 'og_image', 'twitter_image' );
 }
 
@@ -138,7 +138,7 @@ function aafm_rankmath_url_fields(): array {
  *
  * @return string[]
  */
-function aafm_rankmath_robots_tokens(): array {
+function oversio_rankmath_robots_tokens(): array {
 	return array( 'index', 'noindex', 'nofollow', 'noarchive', 'noimageindex', 'nosnippet' );
 }
 
@@ -149,12 +149,12 @@ function aafm_rankmath_robots_tokens(): array {
  * @param int $id Post id.
  * @return array<string,mixed>
  */
-function aafm_rankmath_read_fields( int $id ): array {
+function oversio_rankmath_read_fields( int $id ): array {
 	$out = array(
 		'plugin'  => 'rankmath',
 		'post_id' => $id,
 	);
-	foreach ( aafm_rankmath_fields() as $field => $key ) {
+	foreach ( oversio_rankmath_fields() as $field => $key ) {
 		$val           = get_post_meta( $id, $key, true );
 		$out[ $field ] = is_scalar( $val ) ? (string) $val : '';
 	}
@@ -176,12 +176,12 @@ function aafm_rankmath_read_fields( int $id ): array {
  *
  * @return array<string,array<string,mixed>>
  */
-function aafm_rankmath_output_properties(): array {
+function oversio_rankmath_output_properties(): array {
 	$props = array(
 		'plugin'  => array( 'type' => 'string' ),
 		'post_id' => array( 'type' => 'integer' ),
 	);
-	foreach ( array_keys( aafm_rankmath_fields() ) as $field ) {
+	foreach ( array_keys( oversio_rankmath_fields() ) as $field ) {
 		$props[ $field ] = array( 'type' => 'string' );
 	}
 	$props['robots'] = array( 'type' => 'string' );
@@ -189,15 +189,15 @@ function aafm_rankmath_output_properties(): array {
 }
 
 /**
- * Args for aafm/rankmath-get-post.
+ * Args for oversio/rankmath-get-post.
  *
  * @return array<string,mixed>
  */
-function aafm_args_rankmath_get_post(): array {
+function oversio_args_rankmath_get_post(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/rankmath-get-post' ),
-		'description'         => aafm_ability_description( 'aafm/rankmath-get-post' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/rankmath-get-post' ),
+		'description'         => oversio_ability_description( 'oversio/rankmath-get-post' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -211,10 +211,10 @@ function aafm_args_rankmath_get_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_rankmath_output_properties(),
+			'properties' => oversio_rankmath_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_rankmath_get_post',
-		'permission_callback' => 'aafm_perm_seo_post_object',
+		'execute_callback'    => 'oversio_exec_rankmath_get_post',
+		'permission_callback' => 'oversio_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -226,32 +226,32 @@ function aafm_args_rankmath_get_post(): array {
 }
 
 /**
- * Execute aafm/rankmath-get-post.
+ * Execute oversio/rankmath-get-post.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_rankmath_get_post( array $input ) {
+function oversio_exec_rankmath_get_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	return aafm_rankmath_read_fields( $id );
+	return oversio_rankmath_read_fields( $id );
 }
 
 /**
- * Args for aafm/rankmath-update-post.
+ * Args for oversio/rankmath-update-post.
  *
  * @return array<string,mixed>
  */
-function aafm_args_rankmath_update_post(): array {
+function oversio_args_rankmath_update_post(): array {
 	$properties = array(
 		'post_id' => array(
 			'type'    => 'integer',
 			'minimum' => 1,
 		),
 	);
-	foreach ( array_keys( aafm_rankmath_fields() ) as $field ) {
+	foreach ( array_keys( oversio_rankmath_fields() ) as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
 	$properties['robots'] = array(
@@ -260,9 +260,9 @@ function aafm_args_rankmath_update_post(): array {
 	);
 
 	return array(
-		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
+		'label'               => oversio_ability_label( 'oversio/rankmath-update-post' ),
 		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Requires edit access to that post.", 'oversio-agent-abilities' ),
-		'category'            => 'aafm-writes',
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => $properties,
@@ -271,10 +271,10 @@ function aafm_args_rankmath_update_post(): array {
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
-			'properties' => aafm_rankmath_output_properties(),
+			'properties' => oversio_rankmath_output_properties(),
 		),
-		'execute_callback'    => 'aafm_exec_rankmath_update_post',
-		'permission_callback' => 'aafm_perm_seo_post_object',
+		'execute_callback'    => 'oversio_exec_rankmath_update_post',
+		'permission_callback' => 'oversio_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -285,7 +285,7 @@ function aafm_args_rankmath_update_post(): array {
 }
 
 /**
- * Execute aafm/rankmath-update-post.
+ * Execute oversio/rankmath-update-post.
  *
  * Writes the text/URL fields, then robots: split the CSV, validate each token against the allowlist,
  * and write the ARRAY (update_post_meta serializes it) — never a raw string, which Rank Math would
@@ -294,14 +294,14 @@ function aafm_args_rankmath_update_post(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_rankmath_update_post( array $input ) {
+function oversio_exec_rankmath_update_post( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
-	$url_fields = aafm_rankmath_url_fields();
-	foreach ( aafm_rankmath_fields() as $field => $key ) {
+	$url_fields = oversio_rankmath_url_fields();
+	foreach ( oversio_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}
@@ -311,7 +311,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {
-		$allowed = aafm_rankmath_robots_tokens();
+		$allowed = oversio_rankmath_robots_tokens();
 		$tokens  = array_filter( array_map( 'trim', explode( ',', (string) $input['robots'] ) ) );
 		$kept    = array_values(
 			array_filter(
@@ -322,7 +322,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		update_post_meta( $id, 'rank_math_robots', $kept );
 	}
 
-	return aafm_rankmath_read_fields( $id );
+	return oversio_rankmath_read_fields( $id );
 }
 
 /**
@@ -333,20 +333,20 @@ function aafm_exec_rankmath_update_post( array $input ) {
  * @param string $type Raw type argument.
  * @return string The validated type, or '' when invalid.
  */
-function aafm_rankmath_validate_schema_type( string $type ): string {
+function oversio_rankmath_validate_schema_type( string $type ): string {
 	return ( '' !== $type && (bool) preg_match( '/^[A-Za-z][A-Za-z0-9]*$/', $type ) ) ? $type : '';
 }
 
 /**
- * Args for aafm/rankmath-get-schema.
+ * Args for oversio/rankmath-get-schema.
  *
  * @return array<string,mixed>
  */
-function aafm_args_rankmath_get_schema(): array {
+function oversio_args_rankmath_get_schema(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/rankmath-get-schema' ),
-		'description'         => aafm_ability_description( 'aafm/rankmath-get-schema' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/rankmath-get-schema' ),
+		'description'         => oversio_ability_description( 'oversio/rankmath-get-schema' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -371,8 +371,8 @@ function aafm_args_rankmath_get_schema(): array {
 				'schema'  => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_rankmath_get_schema',
-		'permission_callback' => 'aafm_perm_seo_post_object',
+		'execute_callback'    => 'oversio_exec_rankmath_get_schema',
+		'permission_callback' => 'oversio_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -384,19 +384,19 @@ function aafm_args_rankmath_get_schema(): array {
 }
 
 /**
- * Execute aafm/rankmath-get-schema.
+ * Execute oversio/rankmath-get-schema.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_rankmath_get_schema( array $input ) {
+function oversio_exec_rankmath_get_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
+	$type = oversio_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
 	if ( '' === $type ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$stored = get_post_meta( $id, 'rank_math_schema_' . $type, true );
 	return array(
@@ -409,15 +409,15 @@ function aafm_exec_rankmath_get_schema( array $input ) {
 }
 
 /**
- * Args for aafm/rankmath-update-schema.
+ * Args for oversio/rankmath-update-schema.
  *
  * @return array<string,mixed>
  */
-function aafm_args_rankmath_update_schema(): array {
+function oversio_args_rankmath_update_schema(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/rankmath-update-schema' ),
-		'description'         => aafm_ability_description( 'aafm/rankmath-update-schema' ),
-		'category'            => 'aafm-writes',
+		'label'               => oversio_ability_label( 'oversio/rankmath-update-schema' ),
+		'description'         => oversio_ability_description( 'oversio/rankmath-update-schema' ),
+		'category'            => 'oversio-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -443,8 +443,8 @@ function aafm_args_rankmath_update_schema(): array {
 				'schema'  => array( 'type' => 'object' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_rankmath_update_schema',
-		'permission_callback' => 'aafm_perm_seo_post_object',
+		'execute_callback'    => 'oversio_exec_rankmath_update_schema',
+		'permission_callback' => 'oversio_perm_seo_post_object',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -455,29 +455,29 @@ function aafm_args_rankmath_update_schema(): array {
 }
 
 /**
- * Execute aafm/rankmath-update-schema.
+ * Execute oversio/rankmath-update-schema.
  *
  * Refuses a bad type or a non-array payload, recursively sanitizes the schema (reusing the shared
- * aafm_sanitize_schema_array), and writes it to the dynamic rank_math_schema_{Type} meta. Returns the
+ * oversio_sanitize_schema_array), and writes it to the dynamic rank_math_schema_{Type} meta. Returns the
  * refreshed shape.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_rankmath_update_schema( array $input ) {
+function oversio_exec_rankmath_update_schema( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$type = aafm_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
+	$type = oversio_rankmath_validate_schema_type( (string) ( $input['type'] ?? '' ) );
 	if ( '' === $type ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 	$schema = $input['schema'] ?? null;
 	if ( ! is_array( $schema ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
-	$clean = aafm_sanitize_schema_array( $schema );
+	$clean = oversio_sanitize_schema_array( $schema );
 	update_post_meta( $id, 'rank_math_schema_' . $type, $clean );
 	return array(
 		'post_id' => $id,
@@ -489,15 +489,15 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 }
 
 /**
- * Args for aafm/rankmath-get-head.
+ * Args for oversio/rankmath-get-head.
  *
  * @return array<string,mixed>
  */
-function aafm_args_rankmath_get_head(): array {
+function oversio_args_rankmath_get_head(): array {
 	return array(
-		'label'               => aafm_ability_label( 'aafm/rankmath-get-head' ),
-		'description'         => aafm_ability_description( 'aafm/rankmath-get-head' ),
-		'category'            => 'aafm-reads',
+		'label'               => oversio_ability_label( 'oversio/rankmath-get-head' ),
+		'description'         => oversio_ability_description( 'oversio/rankmath-get-head' ),
+		'category'            => 'oversio-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
@@ -517,8 +517,8 @@ function aafm_args_rankmath_get_head(): array {
 				'head'    => array( 'type' => 'string' ),
 			),
 		),
-		'execute_callback'    => 'aafm_exec_rankmath_get_head',
-		'permission_callback' => 'aafm_perm_seo_get_head_floor',
+		'execute_callback'    => 'oversio_exec_rankmath_get_head',
+		'permission_callback' => 'oversio_perm_seo_get_head_floor',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -530,19 +530,19 @@ function aafm_args_rankmath_get_head(): array {
 }
 
 /**
- * Execute aafm/rankmath-get-head.
+ * Execute oversio/rankmath-get-head.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_rankmath_get_head( array $input ) {
+function oversio_exec_rankmath_get_head( array $input ) {
 	$id = absint( $input['post_id'] ?? 0 );
 	if ( ! get_post( $id ) instanceof WP_Post || ! current_user_can( 'edit_post', $id ) ) {
-		return aafm_generic_error();
+		return oversio_generic_error();
 	}
 
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
-	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'rankmath' );
+	$head = (string) apply_filters( 'oversio_seo_rendered_head', '', $id, 'rankmath' );
 
 	return array(
 		'post_id' => $id,

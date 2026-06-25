@@ -3,7 +3,7 @@
  * OAuth HTTP helpers: transport-security policy and request rate limiting.
  *
  * Pure-ish helpers shared by the OAuth endpoints. They depend only on WordPress
- * primitives (environment type, the object cache, transients) plus aafm_source_ip()
+ * primitives (environment type, the object cache, transients) plus oversio_source_ip()
  * from the audit log module.
  *
  * @package AgentAbilitiesForMCP
@@ -13,21 +13,21 @@ declare( strict_types=1 );
 
 defined( 'ABSPATH' ) || exit;
 
-if ( ! defined( 'AAFM_OAUTH_RATE_WINDOW' ) ) {
-	define( 'AAFM_OAUTH_RATE_WINDOW', 60 );
+if ( ! defined( 'OVERSIO_OAUTH_RATE_WINDOW' ) ) {
+	define( 'OVERSIO_OAUTH_RATE_WINDOW', 60 );
 }
 
 /**
  * Whether OAuth endpoints must be served over HTTPS.
  *
  * HTTPS is mandatory in production. It is relaxed only on a local or development
- * environment, or when the AAFM_OAUTH_ALLOW_HTTP override constant is set true —
+ * environment, or when the OVERSIO_OAUTH_ALLOW_HTTP override constant is set true —
  * both intended for local agent development against http://localhost.
  *
  * @return bool True when HTTPS is required, false when plain HTTP is tolerated.
  */
-function aafm_oauth_https_required(): bool {
-	if ( defined( 'AAFM_OAUTH_ALLOW_HTTP' ) && AAFM_OAUTH_ALLOW_HTTP ) {
+function oversio_oauth_https_required(): bool {
+	if ( defined( 'OVERSIO_OAUTH_ALLOW_HTTP' ) && OVERSIO_OAUTH_ALLOW_HTTP ) {
 		return false;
 	}
 
@@ -54,16 +54,16 @@ function aafm_oauth_https_required(): bool {
  *
  * phpcs:disable Universal.NamingConventions.NoReservedKeywordParameterNames.globalFound -- $global is the contracted parameter name later OAuth PRs call against.
  */
-function aafm_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
+function oversio_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
 	// phpcs:enable Universal.NamingConventions.NoReservedKeywordParameterNames.globalFound
-	$window = AAFM_OAUTH_RATE_WINDOW;
-	$ip     = aafm_source_ip();
+	$window = OVERSIO_OAUTH_RATE_WINDOW;
+	$ip     = oversio_source_ip();
 
 	$ip_key     = 'rl_ip_' . md5( $bucket . '|' . $ip );
 	$global_key = 'rl_all_' . md5( $bucket );
 
-	$ip_count     = aafm_oauth_bump_counter( $ip_key, $window );
-	$global_count = aafm_oauth_bump_counter( $global_key, $window );
+	$ip_count     = oversio_oauth_bump_counter( $ip_key, $window );
+	$global_count = oversio_oauth_bump_counter( $global_key, $window );
 
 	return $ip_count <= $per_ip && $global_count <= $global;
 }
@@ -80,9 +80,9 @@ function aafm_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
  * @param int    $window Window length in seconds.
  * @return int The counter value after this hit.
  */
-function aafm_oauth_bump_counter( string $key, int $window ): int {
-	$group         = 'aafm_oauth';
-	$transient_key = 'aafm_oauth_' . $key;
+function oversio_oauth_bump_counter( string $key, int $window ): int {
+	$group         = 'oversio_oauth';
+	$transient_key = 'oversio_oauth_' . $key;
 
 	// First hit in a window: seed both stores at 1 and return.
 	if ( wp_cache_add( $key, 1, $group, $window ) ) {

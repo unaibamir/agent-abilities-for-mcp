@@ -16,7 +16,7 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests;
+namespace Oversio\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce tax rate and class stubs.
@@ -76,7 +76,7 @@ class WcTaxStubStore {
 	 * Create the woocommerce_tax_rates temp table in the test DB.
 	 *
 	 * Called from WooTaxTest::set_up() so $wpdb direct queries in the production
-	 * helper functions (aafm_wc_get_all_tax_rates etc.) resolve to this table.
+	 * helper functions (oversio_wc_get_all_tax_rates etc.) resolve to this table.
 	 *
 	 * @return void
 	 */

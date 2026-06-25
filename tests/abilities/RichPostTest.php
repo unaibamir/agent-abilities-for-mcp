@@ -1,15 +1,15 @@
 <?php
 /**
- * Unit tests for aafm_rich_post() — the enriched post-assembly helper.
+ * Unit tests for oversio_rich_post() — the enriched post-assembly helper.
  *
  * @package AgentAbilitiesForMCP
  */
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 use WP_Post;
 use WP_User;
 
@@ -23,7 +23,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Hello body.',
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		foreach ( array( 'id', 'title', 'status', 'type', 'slug', 'link', 'author_id', 'date_gmt', 'modified_gmt' ) as $key ) {
 			$this->assertArrayHasKey( $key, $shape, "Missing base key {$key}" );
@@ -39,7 +39,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => "First para.\n\nSecond para.",
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'content', $shape );
 		// the_content wraps paragraphs in <p> tags via wpautop.
@@ -53,7 +53,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Raw [shortcode] body no wpautop',
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'raw' ) );
+		$shape   = oversio_rich_post( get_post( $post_id ), array( 'content_format' => 'raw' ) );
 
 		$this->assertSame( 'Raw [shortcode] body no wpautop', $shape['content'] );
 	}
@@ -65,7 +65,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => "Para one.\n\nPara two.",
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ), array( 'content_format' => 'bogus' ) );
+		$shape   = oversio_rich_post( get_post( $post_id ), array( 'content_format' => 'bogus' ) );
 
 		$this->assertStringContainsString( '<p>', $shape['content'] );
 	}
@@ -78,7 +78,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'The full body that should not be trimmed here.',
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertSame( 'A hand-written excerpt.', $shape['excerpt'] );
 	}
@@ -92,7 +92,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => $body,
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertNotSame( '', $shape['excerpt'] );
 		// Trimmed to 55 words + the trailing hellip from wp_trim_words.
@@ -116,7 +116,7 @@ final class RichPostTest extends TestCase {
 		wp_set_object_terms( $post_id, array( (int) $cat_id ), 'category' );
 		wp_set_object_terms( $post_id, array( (int) $tag_id ), 'post_tag' );
 
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'terms', $shape );
 		$this->assertArrayHasKey( 'category', $shape['terms'] );
@@ -142,7 +142,7 @@ final class RichPostTest extends TestCase {
 				'post_author' => $user_id,
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertSame(
 			array( 'id', 'display_name' ),
@@ -155,7 +155,7 @@ final class RichPostTest extends TestCase {
 
 	public function test_rich_post_featured_image_null_when_absent(): void {
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'featured_image', $shape );
 		$this->assertNull( $shape['featured_image'] );
@@ -167,7 +167,7 @@ final class RichPostTest extends TestCase {
 		set_post_thumbnail( $post_id, $attach_id );
 		update_post_meta( $attach_id, '_wp_attachment_image_alt', 'Canola field' );
 
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertIsArray( $shape['featured_image'] );
 		$this->assertSame(
@@ -185,11 +185,11 @@ final class RichPostTest extends TestCase {
 		update_post_meta( $post_id, 'structured', array( 'a', 'b' ) );
 
 		add_filter(
-			'aafm_allowed_meta_keys',
+			'oversio_allowed_meta_keys',
 			static fn(): array => array( 'subtitle', 'structured' )
 		);
 
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'meta', $shape );
 		$this->assertSame( 'A Governed Subtitle', $shape['meta']['subtitle'] );
@@ -207,7 +207,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Heavy body here.',
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ), array( 'include_content' => false ) );
+		$shape   = oversio_rich_post( get_post( $post_id ), array( 'include_content' => false ) );
 
 		$this->assertArrayNotHasKey( 'content', $shape );
 		// Light fields still present.
@@ -225,7 +225,7 @@ final class RichPostTest extends TestCase {
 				'post_content' => 'Body present.',
 			)
 		);
-		$shape   = aafm_rich_post( get_post( $post_id ) );
+		$shape   = oversio_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'content', $shape );
 	}
@@ -245,7 +245,7 @@ final class RichPostTest extends TestCase {
 		$post    = get_post( $post_id );
 
 		foreach ( array( 'rendered', 'raw' ) as $format ) {
-			$shape = aafm_rich_post( $post, array( 'content_format' => $format ) );
+			$shape = oversio_rich_post( $post, array( 'content_format' => $format ) );
 			$json  = (string) wp_json_encode( $shape );
 
 			$this->assertArrayNotHasKey( 'content', $shape, "content must be omitted for a protected post ({$format})" );
@@ -269,7 +269,7 @@ final class RichPostTest extends TestCase {
 		$post    = get_post( $post_id );
 
 		foreach ( array( 'rendered', 'raw' ) as $format ) {
-			$shape = aafm_rich_post( $post, array( 'content_format' => $format ) );
+			$shape = oversio_rich_post( $post, array( 'content_format' => $format ) );
 			$json  = (string) wp_json_encode( $shape );
 
 			// The hand-authored excerpt IS safe to surface.
@@ -282,7 +282,7 @@ final class RichPostTest extends TestCase {
 	}
 
 	public function test_rich_post_output_schema_declares_nested_object_shapes(): void {
-		$props = aafm_rich_post_output_properties();
+		$props = oversio_rich_post_output_properties();
 
 		// author: object|null with id + display_name.
 		$this->assertSame(
@@ -335,7 +335,7 @@ final class RichPostTest extends TestCase {
 		);
 		wp_set_object_terms( $post_id, array( (int) $cat_id ), 'category' );
 
-		$shape = aafm_rich_post( get_post( $post_id ) );
+		$shape = oversio_rich_post( get_post( $post_id ) );
 
 		// author keys match the declared author.properties.
 		$this->assertSame(

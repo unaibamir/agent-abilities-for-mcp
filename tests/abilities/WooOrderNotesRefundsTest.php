@@ -15,11 +15,11 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\TestCase;
-use AAFM\Tests\IntegrationStubs;
-use AAFM\Tests\WcOrderStubStore;
+use Oversio\Tests\TestCase;
+use Oversio\Tests\IntegrationStubs;
+use Oversio\Tests\WcOrderStubStore;
 use WP_Error;
 
 final class WooOrderNotesRefundsTest extends TestCase {
@@ -28,12 +28,12 @@ final class WooOrderNotesRefundsTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
 		$this->seed_wc_orders();
-		aafm_registry_cache_should_flush( true );
+		oversio_registry_cache_should_flush( true );
 	}
 
 	public function tear_down(): void {
@@ -50,35 +50,35 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 * Enable + register the Group B (order notes) ability set.
 	 */
 	private function register_group_b(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
-				'aafm/wc-list-order-notes',
-				'aafm/wc-create-order-note',
+				'oversio/wc-list-orders',
+				'oversio/wc-get-order',
+				'oversio/wc-list-order-notes',
+				'oversio/wc-create-order-note',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	/**
 	 * Enable + register the Group C (order refunds) ability set.
 	 */
 	private function register_group_c(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
 		update_option(
-			'aafm_enabled_abilities',
+			'oversio_enabled_abilities',
 			array(
-				'aafm/wc-list-orders',
-				'aafm/wc-get-order',
-				'aafm/wc-list-order-refunds',
-				'aafm/wc-get-order-refund',
-				'aafm/wc-create-order-refund',
+				'oversio/wc-list-orders',
+				'oversio/wc-get-order',
+				'oversio/wc-list-order-refunds',
+				'oversio/wc-get-order-refund',
+				'oversio/wc-create-order-refund',
 			)
 		);
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	// =========================================================================
@@ -86,7 +86,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
-	// aafm/wc-list-order-notes
+	// oversio/wc-list-order-notes
 	// -------------------------------------------------------------------------
 
 	/**
@@ -117,7 +117,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'notes', $res );
@@ -135,7 +135,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-notes' )->execute( array( 'order_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -143,7 +143,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-list-order-notes' )->check_permissions( array( 'order_id' => 5001 ) )
+			wp_get_ability( 'oversio/wc-list-order-notes' )->check_permissions( array( 'order_id' => 5001 ) )
 		);
 	}
 
@@ -151,26 +151,26 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_notes( 5001, array() );
-		wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+		wp_get_ability( 'oversio/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-order-notes', $abilities );
+		$this->assertContains( 'oversio/wc-list-order-notes', $abilities );
 	}
 
 	public function test_list_order_notes_denied_is_audited(): void {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-order-notes' )->check_permissions( array( 'order_id' => 5001 ) );
+		wp_get_ability( 'oversio/wc-list-order-notes' )->check_permissions( array( 'order_id' => 5001 ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-order-notes', $abilities );
+		$this->assertContains( 'oversio/wc-list-order-notes', $abilities );
 	}
 
 
 	// -------------------------------------------------------------------------
-	// aafm/wc-create-order-note
+	// oversio/wc-create-order-note
 	// -------------------------------------------------------------------------
 
 	/**
@@ -181,7 +181,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_notes( 5001, array() );
 
-		$res = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order-note' )->execute(
 			array(
 				'order_id'      => 5001,
 				'note'          => 'This is a test note.',
@@ -202,7 +202,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order-note' )->execute(
 			array(
 				'order_id' => 999999,
 				'note'     => 'Should fail.',
@@ -215,7 +215,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-order-note' )->check_permissions(
+			wp_get_ability( 'oversio/wc-create-order-note' )->check_permissions(
 				array(
 					'order_id' => 5001,
 					'note'     => 'Test.',
@@ -228,31 +228,31 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_notes( 5001, array() );
-		wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+		wp_get_ability( 'oversio/wc-create-order-note' )->execute(
 			array(
 				'order_id' => 5001,
 				'note'     => 'Audit test note.',
 			)
 		);
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order-note', $abilities );
+		$this->assertContains( 'oversio/wc-create-order-note', $abilities );
 	}
 
 	public function test_create_order_note_denied_is_audited(): void {
 		$this->register_group_b();
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-order-note' )->check_permissions(
+		wp_get_ability( 'oversio/wc-create-order-note' )->check_permissions(
 			array(
 				'order_id' => 5001,
 				'note'     => 'Test.',
 			)
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order-note', $abilities );
+		$this->assertContains( 'oversio/wc-create-order-note', $abilities );
 	}
 
 
@@ -265,7 +265,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		WcOrderStubStore::seed_notes( 5001, array() );
 
 		WcOrderStubStore::$add_note_should_fail = true;
-		$res                                    = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+		$res                                    = wp_get_ability( 'oversio/wc-create-order-note' )->execute(
 			array(
 				'order_id' => 5001,
 				'note'     => 'This note should fail to add.',
@@ -281,7 +281,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
-	// aafm/wc-list-order-refunds
+	// oversio/wc-list-order-refunds
 	// -------------------------------------------------------------------------
 
 	/**
@@ -303,7 +303,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'refunds', $res );
@@ -320,7 +320,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 999999 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-refunds' )->execute( array( 'order_id' => 999999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -328,7 +328,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-list-order-refunds' )->check_permissions( array( 'order_id' => 5001 ) )
+			wp_get_ability( 'oversio/wc-list-order-refunds' )->check_permissions( array( 'order_id' => 5001 ) )
 		);
 	}
 
@@ -336,26 +336,26 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_refunds( 5001, array() );
-		wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+		wp_get_ability( 'oversio/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-list-order-refunds', $abilities );
+		$this->assertContains( 'oversio/wc-list-order-refunds', $abilities );
 	}
 
 	public function test_list_order_refunds_denied_is_audited(): void {
 		$this->register_group_c();
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-list-order-refunds' )->check_permissions( array( 'order_id' => 5001 ) );
+		wp_get_ability( 'oversio/wc-list-order-refunds' )->check_permissions( array( 'order_id' => 5001 ) );
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-list-order-refunds', $abilities );
+		$this->assertContains( 'oversio/wc-list-order-refunds', $abilities );
 	}
 
 
 	// -------------------------------------------------------------------------
-	// aafm/wc-get-order-refund
+	// oversio/wc-get-order-refund
 	// -------------------------------------------------------------------------
 
 	/**
@@ -377,7 +377,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-get-order-refund' )->execute( array( 'refund_id' => 200 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order-refund' )->execute( array( 'refund_id' => 200 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 200, $res['id'] );
@@ -390,7 +390,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-get-order-refund' )->execute( array( 'refund_id' => 99999 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order-refund' )->execute( array( 'refund_id' => 99999 ) );
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
@@ -398,13 +398,13 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-get-order-refund' )->check_permissions( array( 'refund_id' => 200 ) )
+			wp_get_ability( 'oversio/wc-get-order-refund' )->check_permissions( array( 'refund_id' => 200 ) )
 		);
 	}
 
 
 	// -------------------------------------------------------------------------
-	// aafm/wc-create-order-refund
+	// oversio/wc-create-order-refund
 	// -------------------------------------------------------------------------
 
 	/**
@@ -415,7 +415,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_refunds( 5001, array() );
 
-		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id' => 5001,
 				'amount'   => '5.00',
@@ -443,7 +443,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		WcOrderStubStore::seed_refunds( 5001, array() );
 
 		$reason = 'Customer requested refund: wrong color delivered.';
-		$res    = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		$res    = wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id' => 5001,
 				'amount'   => '9.99',
@@ -459,7 +459,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id' => 999999,
 				'amount'   => '5.00',
@@ -472,7 +472,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-create-order-refund' )->check_permissions(
+			wp_get_ability( 'oversio/wc-create-order-refund' )->check_permissions(
 				array(
 					'order_id' => 5001,
 					'amount'   => '5.00',
@@ -485,31 +485,31 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_refunds( 5001, array() );
-		wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id' => 5001,
 				'amount'   => '1.00',
 			)
 		);
 
-		$success   = aafm_query_activity( array( 'status' => 'success' ) );
+		$success   = oversio_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order-refund', $abilities );
+		$this->assertContains( 'oversio/wc-create-order-refund', $abilities );
 	}
 
 	public function test_create_order_refund_denied_is_audited(): void {
 		$this->register_group_c();
 		$this->acting_as( 'editor' );
-		wp_get_ability( 'aafm/wc-create-order-refund' )->check_permissions(
+		wp_get_ability( 'oversio/wc-create-order-refund' )->check_permissions(
 			array(
 				'order_id' => 5001,
 				'amount'   => '5.00',
 			)
 		);
 
-		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
+		$denied    = oversio_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
-		$this->assertContains( 'aafm/wc-create-order-refund', $abilities );
+		$this->assertContains( 'oversio/wc-create-order-refund', $abilities );
 	}
 
 
@@ -523,7 +523,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 
-		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		$res = wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id'   => 5001,
 				'amount'     => '5.00',
@@ -580,20 +580,20 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 */
 	public function provide_closed_schema_cases(): array {
 		return array(
-			'list-order-notes'    => array( 'b', 'aafm/wc-list-order-notes', array( 'order_id' => 5001 ) ),
+			'list-order-notes'    => array( 'b', 'oversio/wc-list-order-notes', array( 'order_id' => 5001 ) ),
 			'create-order-note'   => array(
 				'b',
-				'aafm/wc-create-order-note',
+				'oversio/wc-create-order-note',
 				array(
 					'order_id' => 5001,
 					'note'     => 'Test.',
 				),
 			),
-			'list-order-refunds'  => array( 'c', 'aafm/wc-list-order-refunds', array( 'order_id' => 5001 ) ),
-			'get-order-refund'    => array( 'c', 'aafm/wc-get-order-refund', array( 'refund_id' => 200 ) ),
+			'list-order-refunds'  => array( 'c', 'oversio/wc-list-order-refunds', array( 'order_id' => 5001 ) ),
+			'get-order-refund'    => array( 'c', 'oversio/wc-get-order-refund', array( 'refund_id' => 200 ) ),
 			'create-order-refund' => array(
 				'c',
-				'aafm/wc-create-order-refund',
+				'oversio/wc-create-order-refund',
 				array(
 					'order_id' => 5001,
 					'amount'   => '5.00',
@@ -611,19 +611,19 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 */
 	public function test_wc23_abilities_absent_when_host_inactive(): void {
 		$this->reset_integration_stubs();
-		remove_all_filters( 'aafm_integration_active_woocommerce' );
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		aafm_registry_cache_should_flush( true );
+		remove_all_filters( 'oversio_integration_active_woocommerce' );
+		add_filter( 'oversio_woocommerce_active', '__return_false', 99 );
+		$this->assertFalse( oversio_integration_active( 'woocommerce' ) );
+		oversio_registry_cache_should_flush( true );
 
-		$registry = aafm_get_abilities_registry();
-		$this->assertArrayNotHasKey( 'aafm/wc-list-order-notes', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-create-order-note', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-list-order-refunds', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-get-order-refund', $registry );
-		$this->assertArrayNotHasKey( 'aafm/wc-create-order-refund', $registry );
+		$registry = oversio_get_abilities_registry();
+		$this->assertArrayNotHasKey( 'oversio/wc-list-order-notes', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-create-order-note', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-list-order-refunds', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-get-order-refund', $registry );
+		$this->assertArrayNotHasKey( 'oversio/wc-create-order-refund', $registry );
 
-		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'oversio_woocommerce_active', '__return_false', 99 );
 	}
 
 	// =========================================================================
@@ -642,7 +642,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_notes( 5001, array() );
 
-		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'notes', $res );
@@ -658,7 +658,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_refunds( 5001, array() );
 
-		$res = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+		$res = wp_get_ability( 'oversio/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertArrayHasKey( 'refunds', $res );
@@ -678,7 +678,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_notes( 5001, array() );
 
-		$created = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+		$created = wp_get_ability( 'oversio/wc-create-order-note' )->execute(
 			array(
 				'order_id' => 5001,
 				'note'     => 'Round-trip note text.',
@@ -688,7 +688,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 		$this->assertArrayHasKey( 'id', $created );
 
-		$list = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+		$list = wp_get_ability( 'oversio/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $list );
 		$ids = array_column( $list['notes'], 'id' );
@@ -703,7 +703,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		WcOrderStubStore::seed_refunds( 5001, array() );
 
-		$created = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+		$created = wp_get_ability( 'oversio/wc-create-order-refund' )->execute(
 			array(
 				'order_id' => 5001,
 				'amount'   => '7.50',
@@ -714,7 +714,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $created );
 		$this->assertGreaterThan( 0, $created['id'] );
 
-		$list = wp_get_ability( 'aafm/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
+		$list = wp_get_ability( 'oversio/wc-list-order-refunds' )->execute( array( 'order_id' => 5001 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $list );
 		$ids = array_column( $list['refunds'], 'id' );
@@ -750,7 +750,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 			)
 		);
 
-		$res = wp_get_ability( 'aafm/wc-get-order-refund' )->execute( array( 'refund_id' => 802 ) );
+		$res = wp_get_ability( 'oversio/wc-get-order-refund' )->execute( array( 'refund_id' => 802 ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( 802, $res['id'] );

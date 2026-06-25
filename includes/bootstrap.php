@@ -14,31 +14,31 @@ use WP\MCP\Core\McpAdapter;
 /**
  * The MCP server's REST namespace. Single source for the four sites that need the route
  * literal (discovery, validator, connection, server). Splitting namespace from route keeps
- * the value byte-identical to what create_server() registers and what aafm_endpoint_url()
+ * the value byte-identical to what create_server() registers and what oversio_endpoint_url()
  * builds — the OAuth audience binding (hash_equals on the endpoint URL) is byte-sensitive.
  */
-if ( ! defined( 'AAFM_MCP_NAMESPACE' ) ) {
-	define( 'AAFM_MCP_NAMESPACE', 'oversio-agent-abilities' );
+if ( ! defined( 'OVERSIO_MCP_NAMESPACE' ) ) {
+	define( 'OVERSIO_MCP_NAMESPACE', 'oversio-agent-abilities' );
 }
 
 /**
  * The MCP server's route segment under its namespace.
  */
-if ( ! defined( 'AAFM_MCP_ROUTE_SEGMENT' ) ) {
-	define( 'AAFM_MCP_ROUTE_SEGMENT', 'mcp' );
+if ( ! defined( 'OVERSIO_MCP_ROUTE_SEGMENT' ) ) {
+	define( 'OVERSIO_MCP_ROUTE_SEGMENT', 'mcp' );
 }
 
 /**
  * The MCP REST route WITHOUT a leading slash: "oversio-agent-abilities/mcp".
  *
- * This is the exact string passed to rest_url() (in aafm_endpoint_url()) and the
+ * This is the exact string passed to rest_url() (in oversio_endpoint_url()) and the
  * namespace/route create_server() registers. Keep callers that need rest_url() input
  * on this form.
  *
  * @return string
  */
-function aafm_mcp_rest_namespace_route(): string {
-	return AAFM_MCP_NAMESPACE . '/' . AAFM_MCP_ROUTE_SEGMENT;
+function oversio_mcp_rest_namespace_route(): string {
+	return OVERSIO_MCP_NAMESPACE . '/' . OVERSIO_MCP_ROUTE_SEGMENT;
 }
 
 /**
@@ -48,8 +48,8 @@ function aafm_mcp_rest_namespace_route(): string {
  *
  * @return string
  */
-function aafm_mcp_rest_route(): string {
-	return '/' . aafm_mcp_rest_namespace_route();
+function oversio_mcp_rest_route(): string {
+	return '/' . oversio_mcp_rest_namespace_route();
 }
 
 /**
@@ -71,8 +71,8 @@ function aafm_mcp_rest_route(): string {
  * BEFORE us (an alphabetically-earlier folder), so its copy wins the class declaration before
  * our eager load runs. Bump the bound deliberately after verifying against a new adapter line.
  */
-if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
-	define( 'AAFM_MAX_ADAPTER_VERSION', '0.6.0' );
+if ( ! defined( 'OVERSIO_MAX_ADAPTER_VERSION' ) ) {
+	define( 'OVERSIO_MAX_ADAPTER_VERSION', '0.6.0' );
 }
 
 /**
@@ -85,21 +85,21 @@ if ( ! defined( 'AAFM_MAX_ADAPTER_VERSION' ) ) {
  * @param string $loaded_version Version reported by the active adapter copy.
  * @return bool
  */
-function aafm_adapter_is_compatible( string $loaded_version ): bool {
-	return version_compare( $loaded_version, AAFM_MIN_ADAPTER_VERSION, '>=' )
-		&& version_compare( $loaded_version, AAFM_MAX_ADAPTER_VERSION, '<' );
+function oversio_adapter_is_compatible( string $loaded_version ): bool {
+	return version_compare( $loaded_version, OVERSIO_MIN_ADAPTER_VERSION, '>=' )
+		&& version_compare( $loaded_version, OVERSIO_MAX_ADAPTER_VERSION, '<' );
 }
 
 /**
  * Whether the loaded adapter is newer than the tested upper bound.
  *
- * Lets aafm_init_mcp() pick the "too new" notice apart from the "too old" one.
+ * Lets oversio_init_mcp() pick the "too new" notice apart from the "too old" one.
  *
  * @param string $loaded_version Version reported by the active adapter copy.
  * @return bool
  */
-function aafm_adapter_is_too_new( string $loaded_version ): bool {
-	return version_compare( $loaded_version, AAFM_MAX_ADAPTER_VERSION, '>=' );
+function oversio_adapter_is_too_new( string $loaded_version ): bool {
+	return version_compare( $loaded_version, OVERSIO_MAX_ADAPTER_VERSION, '>=' );
 }
 
 /**
@@ -107,7 +107,7 @@ function aafm_adapter_is_too_new( string $loaded_version ): bool {
  *
  * @return string|null
  */
-function aafm_loaded_adapter_version(): ?string {
+function oversio_loaded_adapter_version(): ?string {
 	if ( ! class_exists( McpAdapter::class ) ) {
 		return null;
 	}
@@ -119,18 +119,18 @@ function aafm_loaded_adapter_version(): ?string {
  *
  * @return bool True when initialization proceeded.
  */
-function aafm_init_mcp(): bool {
-	$version = aafm_loaded_adapter_version();
+function oversio_init_mcp(): bool {
+	$version = oversio_loaded_adapter_version();
 
 	if ( null === $version ) {
-		add_action( 'admin_notices', 'aafm_notice_adapter_missing' );
+		add_action( 'admin_notices', 'oversio_notice_adapter_missing' );
 		return false;
 	}
-	if ( ! aafm_adapter_is_compatible( $version ) ) {
-		if ( aafm_adapter_is_too_new( $version ) ) {
-			add_action( 'admin_notices', 'aafm_notice_adapter_too_new' );
+	if ( ! oversio_adapter_is_compatible( $version ) ) {
+		if ( oversio_adapter_is_too_new( $version ) ) {
+			add_action( 'admin_notices', 'oversio_notice_adapter_too_new' );
 		} else {
-			add_action( 'admin_notices', 'aafm_notice_adapter_outdated' );
+			add_action( 'admin_notices', 'oversio_notice_adapter_outdated' );
 		}
 		return false;
 	}
@@ -139,7 +139,7 @@ function aafm_init_mcp(): bool {
 	add_filter( 'mcp_adapter_create_default_server', '__return_false' );
 
 	McpAdapter::instance();
-	add_action( 'mcp_adapter_init', 'aafm_register_mcp_server' );
+	add_action( 'mcp_adapter_init', 'oversio_register_mcp_server' );
 
 	return true;
 }
@@ -149,7 +149,7 @@ function aafm_init_mcp(): bool {
  *
  * @return void
  */
-function aafm_notice_adapter_missing(): void {
+function oversio_notice_adapter_missing(): void {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
@@ -168,13 +168,13 @@ function aafm_notice_adapter_missing(): void {
  *
  * @return void
  */
-function aafm_notice_adapter_outdated(): void {
+function oversio_notice_adapter_outdated(): void {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 
-	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
-	$plugin = aafm_resolve_adapter_owner_plugin();
+	$loaded = oversio_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
+	$plugin = oversio_resolve_adapter_owner_plugin();
 
 	echo '<div class="notice notice-warning"><p>';
 	if ( '' !== $plugin ) {
@@ -183,14 +183,14 @@ function aafm_notice_adapter_outdated(): void {
 			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
-			esc_html( AAFM_MIN_ADAPTER_VERSION )
+			esc_html( OVERSIO_MIN_ADAPTER_VERSION )
 		);
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: minimum required adapter version. */
 			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
-			esc_html( AAFM_MIN_ADAPTER_VERSION )
+			esc_html( OVERSIO_MIN_ADAPTER_VERSION )
 		);
 	}
 	echo '</p></div>';
@@ -205,13 +205,13 @@ function aafm_notice_adapter_outdated(): void {
  *
  * @return void
  */
-function aafm_notice_adapter_too_new(): void {
+function oversio_notice_adapter_too_new(): void {
 	if ( ! current_user_can( 'activate_plugins' ) ) {
 		return;
 	}
 
-	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
-	$plugin = aafm_resolve_adapter_owner_plugin();
+	$loaded = oversio_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
+	$plugin = oversio_resolve_adapter_owner_plugin();
 
 	echo '<div class="notice notice-warning"><p>';
 	if ( '' !== $plugin ) {
@@ -220,14 +220,14 @@ function aafm_notice_adapter_too_new(): void {
 			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
-			esc_html( AAFM_MAX_ADAPTER_VERSION )
+			esc_html( OVERSIO_MAX_ADAPTER_VERSION )
 		);
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
 			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
-			esc_html( AAFM_MAX_ADAPTER_VERSION )
+			esc_html( OVERSIO_MAX_ADAPTER_VERSION )
 		);
 	}
 	echo '</p></div>';
@@ -243,7 +243,7 @@ function aafm_notice_adapter_too_new(): void {
  *
  * @return string Plugin display name, or '' when it cannot be resolved.
  */
-function aafm_resolve_adapter_owner_plugin(): string {
+function oversio_resolve_adapter_owner_plugin(): string {
 	if ( ! class_exists( McpAdapter::class ) ) {
 		return '';
 	}

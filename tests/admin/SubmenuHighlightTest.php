@@ -7,9 +7,9 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Admin;
+namespace Oversio\Tests\Admin;
 
-use AAFM\Tests\TestCase;
+use Oversio\Tests\TestCase;
 
 final class SubmenuHighlightTest extends TestCase {
 
@@ -24,30 +24,30 @@ final class SubmenuHighlightTest extends TestCase {
 	public function test_dashboard_tab_highlights_the_parent_slug(): void {
 		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'dashboard';
-		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
+		$this->assertSame( 'oversio-agent-abilities', oversio_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_missing_tab_highlights_the_parent_slug(): void {
 		$_GET['page'] = 'oversio-agent-abilities';
 		unset( $_GET['tab'] );
-		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
+		$this->assertSame( 'oversio-agent-abilities', oversio_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_known_tab_highlights_its_tab_slug(): void {
 		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'abilities';
-		$this->assertSame( 'oversio-agent-abilities&tab=abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
+		$this->assertSame( 'oversio-agent-abilities&tab=abilities', oversio_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_unknown_tab_falls_back_to_the_parent_slug(): void {
 		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'bogus';
-		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
+		$this->assertSame( 'oversio-agent-abilities', oversio_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_other_page_returns_the_input_unchanged(): void {
 		$_GET['page'] = 'edit.php';
 		$_GET['tab']  = 'abilities';
-		$this->assertSame( 'some-other-file.php', aafm_highlight_tab_submenu( 'some-other-file.php' ) );
+		$this->assertSame( 'some-other-file.php', oversio_highlight_tab_submenu( 'some-other-file.php' ) );
 	}
 }

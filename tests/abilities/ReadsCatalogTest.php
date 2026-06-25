@@ -13,10 +13,10 @@
 
 declare( strict_types=1 );
 
-namespace AAFM\Tests\Abilities;
+namespace Oversio\Tests\Abilities;
 
-use AAFM\Tests\Fixtures\CatalogFixture;
-use AAFM\Tests\TestCase;
+use Oversio\Tests\Fixtures\CatalogFixture;
+use Oversio\Tests\TestCase;
 
 final class ReadsCatalogTest extends TestCase {
 
@@ -31,31 +31,31 @@ final class ReadsCatalogTest extends TestCase {
 		parent::set_up();
 		// The audited registration wrapper logs every permission check and execute to the
 		// custom table, so it must exist before any ability is registered/invoked.
-		aafm_install_activity_log();
-		aafm_clear_activity_log();
+		oversio_install_activity_log();
+		oversio_clear_activity_log();
 
 		// Wave 4: integration abilities only contribute to the registry when their host
 		// plugin is active. Force all three active (+ the mandatory registry-memo flush, the
 		// registry is cached) so the SEO integration reads are counted here.
-		add_filter( 'aafm_integration_active_yoast', '__return_true' );
-		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
-		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
-		add_filter( 'aafm_integration_active_acf', '__return_true' );
-		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
-		aafm_registry_cache_should_flush( true );
+		add_filter( 'oversio_integration_active_yoast', '__return_true' );
+		add_filter( 'oversio_integration_active_rankmath', '__return_true' );
+		add_filter( 'oversio_integration_active_aioseo', '__return_true' );
+		add_filter( 'oversio_integration_active_acf', '__return_true' );
+		add_filter( 'oversio_integration_active_woocommerce', '__return_true' );
+		oversio_registry_cache_should_flush( true );
 	}
 
 	/**
 	 * Enable every read and register categories + the enabled abilities.
 	 */
 	private function register_all_reads(): void {
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', self::READS );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		update_option( 'oversio_enabled_abilities', self::READS );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 	}
 
 	public function test_registry_contains_exactly_the_expected_reads(): void {
-		$registry = aafm_get_abilities_registry();
+		$registry = oversio_get_abilities_registry();
 
 		$reads = array_keys(
 			array_filter(
@@ -77,7 +77,7 @@ final class ReadsCatalogTest extends TestCase {
 	}
 
 	public function test_each_read_is_in_the_registry_as_a_read(): void {
-		$registry = aafm_get_abilities_registry();
+		$registry = oversio_get_abilities_registry();
 
 		foreach ( self::READS as $name ) {
 			$this->assertArrayHasKey( $name, $registry, $name . ' missing from registry' );
@@ -98,10 +98,10 @@ final class ReadsCatalogTest extends TestCase {
 			$this->assertNotNull( $ability, $name . ' could not be resolved' );
 
 			// The MCP tool name is the hyphenated transform and must be a legal MCP name.
-			$this->assertSame( str_replace( '/', '-', $name ), aafm_mcp_tool_name( $name ) );
+			$this->assertSame( str_replace( '/', '-', $name ), oversio_mcp_tool_name( $name ) );
 			$this->assertMatchesRegularExpression(
 				'/^[A-Za-z0-9_.-]+$/',
-				aafm_mcp_tool_name( $name ),
+				oversio_mcp_tool_name( $name ),
 				$name . ' does not map to a legal MCP tool name'
 			);
 
@@ -143,7 +143,7 @@ final class ReadsCatalogTest extends TestCase {
 	}
 
 	public function test_nothing_is_enabled_by_default(): void {
-		$this->assertSame( array(), aafm_get_enabled_abilities() );
+		$this->assertSame( array(), oversio_get_enabled_abilities() );
 	}
 
 	public function test_disabled_reads_are_never_registered(): void {
@@ -156,10 +156,10 @@ final class ReadsCatalogTest extends TestCase {
 				wp_unregister_ability( $name );
 			}
 		}
-		$this->assertSame( array(), aafm_get_enabled_abilities() );
+		$this->assertSame( array(), oversio_get_enabled_abilities() );
 
-		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->in_action( 'wp_abilities_api_categories_init', 'oversio_register_categories' );
+		$this->in_action( 'wp_abilities_api_init', 'oversio_register_enabled_abilities' );
 
 		foreach ( self::READS as $name ) {
 			$this->assertFalse( wp_has_ability( $name ), $name . ' registered while disabled' );

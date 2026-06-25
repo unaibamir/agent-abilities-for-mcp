@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
-        'name' => 'unaibamir/agent-abilities-for-mcp',
+        'name' => 'unaibamir/oversio-agent-abilities',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '2ca42a7b1c66d9f99d3e67e10915c9aab26c58b0',
+        'reference' => 'b134c53c2c49dc2a4d30dcbc4ad28a51c79b1817',
         'type' => 'wordpress-plugin',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -19,10 +19,10 @@
             'aliases' => array(),
             'dev_requirement' => false,
         ),
-        'unaibamir/agent-abilities-for-mcp' => array(
+        'unaibamir/oversio-agent-abilities' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '2ca42a7b1c66d9f99d3e67e10915c9aab26c58b0',
+            'reference' => 'b134c53c2c49dc2a4d30dcbc4ad28a51c79b1817',
             'type' => 'wordpress-plugin',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

@@ -9,7 +9,7 @@
 ( () => {
 	'use strict';
 
-	class AafmAdmin {
+	class OversioAdmin {
 		#ajaxUrl = oversioAdmin.ajaxUrl;
 		#nonce = oversioAdmin.nonce;
 
@@ -1319,5 +1319,5 @@
 		}
 	}
 
-	document.addEventListener( 'DOMContentLoaded', () => new AafmAdmin() );
+	document.addEventListener( 'DOMContentLoaded', () => new OversioAdmin() );
 } )();

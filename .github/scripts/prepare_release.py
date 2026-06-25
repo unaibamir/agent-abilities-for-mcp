@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PLUGIN = ROOT / "agent-abilities-for-mcp.php"
+PLUGIN = ROOT / "oversio-agent-abilities.php"
 README_TXT = ROOT / "readme.txt"
 README_MD = ROOT / "README.md"
 NOTES = ROOT / ".github" / "release-notes.md"

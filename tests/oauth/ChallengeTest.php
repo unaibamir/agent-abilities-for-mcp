@@ -26,11 +26,11 @@ final class ChallengeTest extends TestCase {
 
 	/**
 	 * The full REST route of the MCP server, mirroring create_server() in
-	 * includes/server.php: namespace 'agent-abilities-for-mcp' + route 'mcp'.
+	 * includes/server.php: namespace 'oversio-agent-abilities' + route 'mcp'.
 	 *
 	 * @var string
 	 */
-	private const MCP_ROUTE = '/agent-abilities-for-mcp/mcp';
+	private const MCP_ROUTE = '/oversio-agent-abilities/mcp';
 
 	/**
 	 * Saved REMOTE_ADDR so the 403 test restores the fixture's request environment.
@@ -62,7 +62,7 @@ final class ChallengeTest extends TestCase {
 	 * Build a WP_REST_Request carrying a given route, for driving the filter the
 	 * way WordPress does at rest_post_dispatch.
 	 *
-	 * @param string $route Full REST route, e.g. '/agent-abilities-for-mcp/mcp'.
+	 * @param string $route Full REST route, e.g. '/oversio-agent-abilities/mcp'.
 	 * @return \WP_REST_Request<array<string,mixed>>
 	 */
 	private function request_for_route( string $route ): \WP_REST_Request {

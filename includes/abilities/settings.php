@@ -32,16 +32,16 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_settings_definitions' );
  */
 function aafm_register_settings_definitions( array $registry ): array {
 	$registry['aafm/get-site-settings']    = array(
-		'label'        => __( 'Get site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a small allowlist of site settings: name, tagline, timezone, date and time formats, week start, and posts per page. Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get site settings', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read a small allowlist of site settings: name, tagline, timezone, date and time formats, week start, and posts per page. Requires the manage-options capability. Never the site URL or admin email.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_site_settings',
 	);
 	$registry['aafm/update-site-settings'] = array(
-		'label'        => __( 'Update site settings', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update site settings', 'oversio-agent-abilities' ),
+		'description'  => __( 'Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
@@ -132,7 +132,7 @@ function aafm_args_update_site_settings(): array {
 			'properties'           => array(
 				'settings' => array(
 					'type'        => 'object',
-					'description' => __( 'A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page. Any other key rejects the whole call.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page. Any other key rejects the whole call.', 'oversio-agent-abilities' ),
 				),
 			),
 			'required'             => array( 'settings' ),
@@ -183,7 +183,7 @@ function aafm_exec_update_site_settings( array $input ) {
 				'aafm_setting_not_allowed',
 				sprintf(
 					/* translators: 1: the rejected setting key, 2: the comma-separated list of allowed setting keys. */
-					__( 'The setting "%1$s" cannot be changed. Allowed settings are: %2$s.', 'agent-abilities-for-mcp' ),
+					__( 'The setting "%1$s" cannot be changed. Allowed settings are: %2$s.', 'oversio-agent-abilities' ),
 					(string) $key,
 					implode( ', ', $allow )
 				)
@@ -205,7 +205,7 @@ function aafm_exec_update_site_settings( array $input ) {
 				'aafm_setting_bad_type',
 				sprintf(
 					/* translators: %s: the setting key that received a boolean value. */
-					__( 'The setting "%s" expects a text value, not true/false.', 'agent-abilities-for-mcp' ),
+					__( 'The setting "%s" expects a text value, not true/false.', 'oversio-agent-abilities' ),
 					(string) $key
 				)
 			);

@@ -110,9 +110,9 @@ function aafm_oauth_authorization_server_metadata(): array {
 	return array(
 		'issuer'                                => home_url(),
 		'authorization_endpoint'                => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'token_endpoint'                        => rest_url( 'agent-abilities-for-mcp/oauth/token' ),
-		'registration_endpoint'                 => rest_url( 'agent-abilities-for-mcp/oauth/register' ),
-		'revocation_endpoint'                   => rest_url( 'agent-abilities-for-mcp/oauth/revoke' ),
+		'token_endpoint'                        => rest_url( 'oversio-agent-abilities/oauth/token' ),
+		'registration_endpoint'                 => rest_url( 'oversio-agent-abilities/oauth/register' ),
+		'revocation_endpoint'                   => rest_url( 'oversio-agent-abilities/oauth/revoke' ),
 		'response_types_supported'              => array( 'code' ),
 		'grant_types_supported'                 => array( 'authorization_code', 'refresh_token' ),
 		'code_challenge_methods_supported'      => array( 'S256' ),
@@ -143,8 +143,8 @@ function aafm_oauth_challenge_header(): string {
  * response: OAuth enabled, a 401 status (logged-out for this route — a logged-in but
  * unauthorized request is a 403 and must not get the beacon), and the MCP route.
  *
- * The MCP route is '/agent-abilities-for-mcp/mcp', mirroring create_server() in
- * includes/server.php (namespace 'agent-abilities-for-mcp' + route 'mcp'). The
+ * The MCP route is '/oversio-agent-abilities/mcp', mirroring create_server() in
+ * includes/server.php (namespace 'oversio-agent-abilities' + route 'mcp'). The
  * route gate keeps the header off unrelated 401s site-wide. Defensive by design:
  * any miss returns the response untouched and the filter never throws.
  *

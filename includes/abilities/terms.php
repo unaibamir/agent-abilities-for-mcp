@@ -19,64 +19,64 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_terms_definitions' );
  */
 function aafm_register_terms_definitions( array $registry ): array {
 	$registry['aafm/get-terms']        = array(
-		'label'        => __( 'Get terms', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List terms (with counts) for a public taxonomy. Response includes total (the full match count for the taxonomy and search).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get terms', 'oversio-agent-abilities' ),
+		'description'  => __( 'List terms (with counts) for a public taxonomy. Response includes total (the full match count for the taxonomy and search).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_terms',
 	);
 	$registry['aafm/create-term']      = array(
-		'label'        => __( 'Create term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create term', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_create_term',
 	);
 	$registry['aafm/update-term']      = array(
-		'label'        => __( 'Update term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update term', 'oversio-agent-abilities' ),
+		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term',
 	);
 	$registry['aafm/get-term']         = array(
-		'label'        => __( 'Get term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get term', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read a single term (by id) from a public taxonomy.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_term',
 	);
 	$registry['aafm/add-post-terms']   = array(
-		'label'        => __( 'Add post terms', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Add post terms', 'oversio-agent-abilities' ),
+		'description'  => __( 'Append terms to a post (does not replace existing terms). Requires edit access to the post and the taxonomy\'s assign_terms capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_add_post_terms',
 	);
 	$registry['aafm/get-term-meta']    = array(
-		'label'        => __( 'Get term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get term meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read a single allowlisted scalar meta value from a term in a public taxonomy.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_get_term_meta',
 	);
 	$registry['aafm/update-term-meta'] = array(
-		'label'        => __( 'Update term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update term meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a term you can edit.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
 		'args_builder' => 'aafm_args_update_term_meta',
 	);
 	$registry['aafm/delete-term-meta'] = array(
-		'label'        => __( 'Delete term meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete term meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Delete an allowlisted meta key from a term you can edit. Removes all values of that key.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'taxonomies',
@@ -865,7 +865,7 @@ function aafm_exec_update_term( array $input ) {
 		// Circular-hierarchy guard: the requested parent must not be a descendant
 		// of the term being edited (which would make the term its own ancestor).
 		if ( $parent && term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) {
-			return new WP_Error( 'aafm_circular_term', __( 'That parent would create a circular hierarchy.', 'agent-abilities-for-mcp' ) );
+			return new WP_Error( 'aafm_circular_term', __( 'That parent would create a circular hierarchy.', 'oversio-agent-abilities' ) );
 		}
 		$args['parent'] = $parent;
 	}

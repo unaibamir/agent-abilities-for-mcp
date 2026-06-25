@@ -66,7 +66,7 @@ function aafm_oauth_mint_code( array $ctx ) {
 	// A failed insert means there is no persisted grant — never return a code for it, or the
 	// client redirects with a code that can never be redeemed.
 	if ( false === $inserted ) {
-		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'agent-abilities-for-mcp' ) );
+		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'oversio-agent-abilities' ) );
 	}
 
 	return $raw;
@@ -117,7 +117,7 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 	if ( 0 === (int) $wpdb->rows_affected ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The authorization code is invalid, expired, or already used.', 'agent-abilities-for-mcp' )
+			__( 'The authorization code is invalid, expired, or already used.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -134,7 +134,7 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 	if ( ! is_array( $row ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The authorization code could not be read back after redemption.', 'agent-abilities-for-mcp' )
+			__( 'The authorization code could not be read back after redemption.', 'oversio-agent-abilities' )
 		);
 	}
 

@@ -21,12 +21,12 @@ function aafm_validate_post_type( string $type ) {
 	// The hard floor (public, non-internal) runs first and is independent of the allowlist —
 	// it rejects attachment/revision/internal types even if one is forced into the option.
 	if ( ! aafm_post_type_is_eligible( $type ) ) {
-		return new WP_Error( 'aafm_invalid_post_type', __( 'Unsupported post type.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_invalid_post_type', __( 'Unsupported post type.', 'oversio-agent-abilities' ) );
 	}
 
 	// Then default-deny: only types the operator has explicitly exposed (post/page always-on).
 	if ( ! in_array( $type, aafm_allowed_post_types(), true ) ) {
-		return new WP_Error( 'aafm_post_type_not_allowed', __( 'This content type is not exposed to agents.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_post_type_not_allowed', __( 'This content type is not exposed to agents.', 'oversio-agent-abilities' ) );
 	}
 
 	return $type;
@@ -258,7 +258,7 @@ function aafm_validate_meta_key( string $key ) {
 		&& ( aafm_meta_allow_has_star() || in_array( $key, aafm_allowed_meta_keys(), true ) ); // floor 3.
 
 	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_meta_key_not_allowed', __( 'This meta key is not available to agents.', 'oversio-agent-abilities' ) );
 	}
 	return $key;
 }
@@ -279,14 +279,14 @@ function aafm_validate_meta_key( string $key ) {
  */
 function aafm_sanitize_meta_value( string $key, $value ) {
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = sanitize_text_field( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'post', 'post' );
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	return $value;
 }
@@ -394,7 +394,7 @@ function aafm_validate_term_meta_key( string $key ) {
 		&& ( aafm_term_meta_allow_has_star() || in_array( $key, aafm_allowed_term_meta_keys(), true ) ); // floor 3.
 
 	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_term_meta_key_not_allowed', __( 'This term meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_term_meta_key_not_allowed', __( 'This term meta key is not available to agents.', 'oversio-agent-abilities' ) );
 	}
 	return $key;
 }
@@ -411,14 +411,14 @@ function aafm_validate_term_meta_key( string $key ) {
  */
 function aafm_sanitize_term_meta_value( string $key, $value ) {
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = sanitize_text_field( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'term', 'term' );
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	return $value;
 }
@@ -610,7 +610,7 @@ function aafm_validate_user_meta_key( string $key ) {
 		&& ( aafm_user_meta_allow_has_star() || in_array( $key, aafm_allowed_user_meta_keys(), true ) ); // floor 3.
 
 	if ( ! $exposed ) {
-		return new WP_Error( 'aafm_user_meta_key_not_allowed', __( 'This user meta key is not available to agents.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_user_meta_key_not_allowed', __( 'This user meta key is not available to agents.', 'oversio-agent-abilities' ) );
 	}
 	return $key;
 }
@@ -630,14 +630,14 @@ function aafm_validate_user_meta_key( string $key ) {
  */
 function aafm_sanitize_user_meta_value( string $key, $value ) {
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	if ( is_string( $value ) ) {
 		$value = sanitize_text_field( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'user', 'user' );
 	if ( ! is_scalar( $value ) ) {
-		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'oversio-agent-abilities' ) );
 	}
 	return $value;
 }
@@ -769,7 +769,7 @@ function aafm_validate_taxonomy( string $taxonomy ) {
 	$taxonomy = sanitize_key( $taxonomy );
 	$allowed  = get_taxonomies( array( 'public' => true ), 'names' );
 	if ( ! in_array( $taxonomy, $allowed, true ) ) {
-		return new WP_Error( 'aafm_invalid_taxonomy', __( 'Unsupported taxonomy.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_invalid_taxonomy', __( 'Unsupported taxonomy.', 'oversio-agent-abilities' ) );
 	}
 	return $taxonomy;
 }
@@ -979,7 +979,7 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 	}
 	// 'any', 'trash', 'auto-draft', 'inherit', and unknown values are always rejected —
 	// this is the no-`status=any`-widening guard.
-	return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
+	return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'oversio-agent-abilities' ) );
 }
 
 /**
@@ -1065,7 +1065,7 @@ function aafm_rich_post_output_properties(): array {
 		'modified_gmt'   => array( 'type' => 'string' ),
 		'content'        => array(
 			'type'        => 'string',
-			'description' => __( 'Present on single-post reads and when include_content=true; omitted for password-protected posts.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'Present on single-post reads and when include_content=true; omitted for password-protected posts.', 'oversio-agent-abilities' ),
 		),
 		'excerpt'        => array( 'type' => 'string' ),
 		'terms'          => array(
@@ -1461,7 +1461,7 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
  * @return WP_Error
  */
 function aafm_generic_error(): WP_Error {
-	return new WP_Error( 'aafm_error', __( 'The request could not be completed.', 'agent-abilities-for-mcp' ) );
+	return new WP_Error( 'aafm_error', __( 'The request could not be completed.', 'oversio-agent-abilities' ) );
 }
 
 /**
@@ -1493,7 +1493,7 @@ function aafm_trash_is_enabled(): bool {
 function aafm_trash_disabled_error(): WP_Error {
 	return new WP_Error(
 		'aafm_trash_disabled',
-		__( 'Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it.', 'agent-abilities-for-mcp' )
+		__( 'Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it.', 'oversio-agent-abilities' )
 	);
 }
 

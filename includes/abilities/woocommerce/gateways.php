@@ -56,8 +56,8 @@ function aafm_register_wc_gateways_full_definitions( array $registry ): array {
 function aafm_wc_gateways_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-payment-gateways'  => array(
-			'label'        => __( 'List WooCommerce payment gateways', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all registered WooCommerce payment gateways with their id, title, and enabled state. Secret or credential settings are never returned. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce payment gateways', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all registered WooCommerce payment gateways with their id, title, and enabled state. Secret or credential settings are never returned. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -65,8 +65,8 @@ function aafm_wc_gateways_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-payment-gateway'    => array(
-			'label'        => __( 'Get WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce payment gateway', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -74,8 +74,8 @@ function aafm_wc_gateways_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-payment-gateway' => array(
-			'label'        => __( 'Update WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce payment gateway', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -277,7 +277,7 @@ function aafm_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
 	$gateways   = \WC_Payment_Gateways::instance()->payment_gateways();
 	if ( ! isset( $gateways[ $gateway_id ] ) ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'agent-abilities-for-mcp' ) );
+		return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
 	}
 	return aafm_wc_gateway_shape( $gateways[ $gateway_id ] );
 }
@@ -357,7 +357,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 	$gateway_id = sanitize_text_field( (string) ( $input['gateway_id'] ?? '' ) );
 	$gateways   = \WC_Payment_Gateways::instance()->payment_gateways();
 	if ( ! isset( $gateways[ $gateway_id ] ) ) {
-			return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'agent-abilities-for-mcp' ) );
+			return new \WP_Error( 'aafm_not_found', __( 'Payment gateway not found.', 'oversio-agent-abilities' ) );
 	}
 	$gateway = $gateways[ $gateway_id ];
 

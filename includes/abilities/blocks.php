@@ -29,40 +29,40 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
  */
 function aafm_register_blocks_definitions( array $registry ): array {
 	$registry['aafm/list-blocks']  = array(
-		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List blocks', 'oversio-agent-abilities' ),
+		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_blocks',
 	);
 	$registry['aafm/get-block']    = array(
-		'label'        => __( 'Get block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get block', 'oversio-agent-abilities' ),
+		'description'  => __( 'Reads one reusable block by id, including its raw block markup. Requires edit access to that block.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_block',
 	);
 	$registry['aafm/create-block'] = array(
-		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create block', 'oversio-agent-abilities' ),
+		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_block',
 	);
 	$registry['aafm/update-block'] = array(
-		'label'        => __( 'Update block', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update block', 'oversio-agent-abilities' ),
+		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_block',
 	);
 	$registry['aafm/delete-block'] = array(
-		'label'        => __( 'Delete block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete block', 'oversio-agent-abilities' ),
+		'description'  => __( 'Moves a reusable block to the Trash, where you can restore it. Never a permanent delete. Requires delete access to that block.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',

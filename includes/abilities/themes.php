@@ -34,48 +34,48 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_themes_definitions' );
  */
 function aafm_register_themes_definitions( array $registry ): array {
 	$registry['aafm/get-active-theme']  = array(
-		'label'        => __( 'Get active theme', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Reads the active theme: name, version, stylesheet, parent, and whether it is a block theme. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get active theme', 'oversio-agent-abilities' ),
+		'description'  => __( 'Reads the active theme: name, version, stylesheet, parent, and whether it is a block theme. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_active_theme',
 	);
 	$registry['aafm/list-themes']       = array(
-		'label'        => __( 'List themes', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists installed themes by name, version, stylesheet, and active state. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List themes', 'oversio-agent-abilities' ),
+		'description'  => __( 'Lists installed themes by name, version, stylesheet, and active state. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_themes',
 	);
 	$registry['aafm/list-templates']    = array(
-		'label'        => __( 'List templates', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List templates', 'oversio-agent-abilities' ),
+		'description'  => __( 'Lists block templates (or template parts) by id, slug, title, type, and source. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_templates',
 	);
 	$registry['aafm/get-template']      = array(
-		'label'        => __( 'Get template', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Reads one block template by id, including its markup. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get template', 'oversio-agent-abilities' ),
+		'description'  => __( 'Reads one block template by id, including its markup. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_template',
 	);
 	$registry['aafm/get-global-styles'] = array(
-		'label'        => __( 'Get global styles', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get global styles', 'oversio-agent-abilities' ),
+		'description'  => __( "Reads the active theme's resolved global styles and settings (theme.json). Requires the edit-theme-options capability.", 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_global_styles',
 	);
 	$registry['aafm/update-template']   = array(
-		'label'        => __( 'Update template', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Updates a database block template by id. Its markup is sanitized, and theme-file templates cannot be edited. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update template', 'oversio-agent-abilities' ),
+		'description'  => __( 'Updates a database block template by id. Its markup is sanitized, and theme-file templates cannot be edited. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',

@@ -3,7 +3,7 @@
  * OAuth REST endpoints: dynamic client registration, token, and revocation.
  *
  * Exposes the three public OAuth HTTP routes under the
- * `agent-abilities-for-mcp/oauth` namespace. Each route's permission_callback is
+ * `oversio-agent-abilities/oauth` namespace. Each route's permission_callback is
  * `__return_true` — the OAuth grant itself is the authentication, not a WordPress
  * capability. The handlers gate on the feature toggles, enforce the HTTPS policy,
  * and rate-limit before doing any work, then delegate the cryptographic and
@@ -83,7 +83,7 @@ function aafm_oauth_field_too_long( string $value ): bool {
  * @return void
  */
 function aafm_oauth_register_rest_routes(): void {
-	$namespace = 'agent-abilities-for-mcp/oauth';
+	$namespace = 'oversio-agent-abilities/oauth';
 
 	register_rest_route(
 		$namespace,
@@ -210,7 +210,7 @@ function aafm_oauth_rest_require_https() {
 	if ( aafm_oauth_https_required() && ! is_ssl() ) {
 		return aafm_oauth_rest_error(
 			'invalid_request',
-			__( 'This endpoint requires HTTPS.', 'agent-abilities-for-mcp' ),
+			__( 'This endpoint requires HTTPS.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
@@ -232,7 +232,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() || ! aafm_oauth_dcr_enabled() ) {
 		return aafm_oauth_rest_error(
 			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
+			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
@@ -245,7 +245,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_rate_ok( 'register', 10, 100 ) ) {
 		return aafm_oauth_rest_error(
 			'rate_limited',
-			__( 'Too many registration requests. Try again shortly.', 'agent-abilities-for-mcp' ),
+			__( 'Too many registration requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
 		);
 	}
@@ -259,7 +259,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
 		return aafm_oauth_rest_error(
 			'temporarily_unavailable',
-			__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
+			__( 'Client registration is temporarily unavailable. Please try again later.', 'oversio-agent-abilities' ),
 			503
 		);
 	}
@@ -273,7 +273,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
 		return aafm_oauth_rest_error(
 			'invalid_client_metadata',
-			__( 'The client name is too long.', 'agent-abilities-for-mcp' ),
+			__( 'The client name is too long.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
@@ -328,7 +328,7 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() ) {
 		return aafm_oauth_rest_error(
 			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
+			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
@@ -341,7 +341,7 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_rate_ok( 'token', 30, 300 ) ) {
 		return aafm_oauth_rest_error(
 			'rate_limited',
-			__( 'Too many token requests. Try again shortly.', 'agent-abilities-for-mcp' ),
+			__( 'Too many token requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
 		);
 	}
@@ -358,7 +358,7 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 
 	return aafm_oauth_rest_error(
 		'unsupported_grant_type',
-		__( 'The grant type is missing or not supported.', 'agent-abilities-for-mcp' ),
+		__( 'The grant type is missing or not supported.', 'oversio-agent-abilities' ),
 		400
 	);
 }
@@ -377,7 +377,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 
 	$invalid_grant = aafm_oauth_rest_error(
 		'invalid_grant',
-		__( 'The authorization grant is invalid.', 'agent-abilities-for-mcp' ),
+		__( 'The authorization grant is invalid.', 'oversio-agent-abilities' ),
 		400
 	);
 
@@ -429,7 +429,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 	if ( is_wp_error( $tokens ) ) {
 		return aafm_oauth_rest_error(
 			'server_error',
-			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
+			__( 'The access token could not be issued.', 'oversio-agent-abilities' ),
 			500
 		);
 	}
@@ -454,7 +454,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 	) {
 		return aafm_oauth_rest_error(
 			'invalid_grant',
-			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),
+			__( 'The refresh token grant is invalid.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
@@ -464,7 +464,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 	if ( is_wp_error( $tokens ) ) {
 		return aafm_oauth_rest_error(
 			'invalid_grant',
-			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),
+			__( 'The refresh token grant is invalid.', 'oversio-agent-abilities' ),
 			400
 		);
 	}
@@ -506,7 +506,7 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() ) {
 		return aafm_oauth_rest_error(
 			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
+			__( 'No route was found matching the URL and request method.', 'oversio-agent-abilities' ),
 			404
 		);
 	}
@@ -519,7 +519,7 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_rate_ok( 'revoke', 30, 300 ) ) {
 		return aafm_oauth_rest_error(
 			'rate_limited',
-			__( 'Too many revocation requests. Try again shortly.', 'agent-abilities-for-mcp' ),
+			__( 'Too many revocation requests. Try again shortly.', 'oversio-agent-abilities' ),
 			429
 		);
 	}

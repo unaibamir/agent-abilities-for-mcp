@@ -153,24 +153,24 @@ function aafm_register_aioseo_full_definitions( array $registry ): array {
 function aafm_aioseo_registry_definitions(): array {
 	return array(
 		'aafm/aioseo-get-post'    => array(
-			'label'        => __( 'Get post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads a post's SEO fields (title, description, canonical, social, and robots) from All in One SEO's own data store, not post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO (All in One SEO)', 'oversio-agent-abilities' ),
+			'description'  => __( "Reads a post's SEO fields (title, description, canonical, social, and robots) from All in One SEO's own data store, not post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'aioseo',
 			'args_builder' => 'aafm_args_aioseo_get_post',
 		),
 		'aafm/aioseo-update-post' => array(
-			'label'        => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update post SEO (All in One SEO)', 'oversio-agent-abilities' ),
+			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'aioseo',
 			'args_builder' => 'aafm_args_aioseo_update_post',
 		),
 		'aafm/aioseo-get-head'    => array(
-			'label'        => __( 'Get post SEO head (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO head (All in One SEO)', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from All in One SEO, best-effort: the returned head string is empty when All in One SEO renders no head for that post. Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'aioseo',

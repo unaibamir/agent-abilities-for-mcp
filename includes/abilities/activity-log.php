@@ -26,8 +26,8 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_activity_log_definitions' 
  */
 function aafm_register_activity_log_definitions( array $registry ): array {
 	$registry['aafm/get-activity-log'] = array(
-		'label'        => __( 'Get activity log', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, and the timestamp. Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get activity log', 'oversio-agent-abilities' ),
+		'description'  => __( "Reads this plugin's own audit log: each row's ability name, status (started, success, error, denied), acting user id and login, the argument keys passed, and the timestamp. Most recent first. Response includes total (the count for the status filter). Never argument values or network addresses. Requires the manage-options capability.", 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

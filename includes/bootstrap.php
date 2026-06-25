@@ -18,7 +18,7 @@ use WP\MCP\Core\McpAdapter;
  * builds — the OAuth audience binding (hash_equals on the endpoint URL) is byte-sensitive.
  */
 if ( ! defined( 'AAFM_MCP_NAMESPACE' ) ) {
-	define( 'AAFM_MCP_NAMESPACE', 'agent-abilities-for-mcp' );
+	define( 'AAFM_MCP_NAMESPACE', 'oversio-agent-abilities' );
 }
 
 /**
@@ -29,7 +29,7 @@ if ( ! defined( 'AAFM_MCP_ROUTE_SEGMENT' ) ) {
 }
 
 /**
- * The MCP REST route WITHOUT a leading slash: "agent-abilities-for-mcp/mcp".
+ * The MCP REST route WITHOUT a leading slash: "oversio-agent-abilities/mcp".
  *
  * This is the exact string passed to rest_url() (in aafm_endpoint_url()) and the
  * namespace/route create_server() registers. Keep callers that need rest_url() input
@@ -42,7 +42,7 @@ function aafm_mcp_rest_namespace_route(): string {
 }
 
 /**
- * The MCP REST route WITH a leading slash: "/agent-abilities-for-mcp/mcp".
+ * The MCP REST route WITH a leading slash: "/oversio-agent-abilities/mcp".
  *
  * The form WP_REST_Request::get_route() returns and the routing predicates compare against.
  *
@@ -61,7 +61,7 @@ function aafm_mcp_rest_route(): string {
  *
  * After the eager-load fix (see adapter-loader.php), our bundled copy is the one in use
  * whenever we load before the conflicting sibling — and because we sort alphabetically first
- * as "agent-abilities-for-mcp", that is the normal case. We deliberately OVERRIDE any
+ * as "oversio-agent-abilities", that is the normal case. We deliberately OVERRIDE any
  * later-loading sibling's copy of ANY version (older or newer); the trade is that a sibling
  * bundling a newer adapter is forced onto our version, which is acceptable because the
  * adapter's public API is additive and stable across the versions we support.
@@ -154,7 +154,7 @@ function aafm_notice_adapter_missing(): void {
 		return;
 	}
 	echo '<div class="notice notice-error"><p>';
-	echo esc_html__( 'Agent Abilities for MCP could not load the MCP adapter. Please reinstall the plugin.', 'agent-abilities-for-mcp' );
+	echo esc_html__( 'Agent Abilities for MCP could not load the MCP adapter. Please reinstall the plugin.', 'oversio-agent-abilities' );
 	echo '</p></div>';
 }
 
@@ -173,14 +173,14 @@ function aafm_notice_adapter_outdated(): void {
 		return;
 	}
 
-	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'agent-abilities-for-mcp' );
+	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
 	$plugin = aafm_resolve_adapter_owner_plugin();
 
 	echo '<div class="notice notice-warning"><p>';
 	if ( '' !== $plugin ) {
 		printf(
 			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, but Agent Abilities for MCP requires %3$s or newer. Update or deactivate %1$s to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
 			esc_html( AAFM_MIN_ADAPTER_VERSION )
@@ -188,7 +188,7 @@ function aafm_notice_adapter_outdated(): void {
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: minimum required adapter version. */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, but %2$s or newer is required. Update or deactivate that plugin to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
 			esc_html( AAFM_MIN_ADAPTER_VERSION )
 		);
@@ -210,14 +210,14 @@ function aafm_notice_adapter_too_new(): void {
 		return;
 	}
 
-	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'agent-abilities-for-mcp' );
+	$loaded = aafm_loaded_adapter_version() ?? __( 'unknown', 'oversio-agent-abilities' );
 	$plugin = aafm_resolve_adapter_owner_plugin();
 
 	echo '<div class="notice notice-warning"><p>';
 	if ( '' !== $plugin ) {
 		printf(
 			/* translators: 1: offending plugin name, 2: loaded adapter version, 3: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %1$s is loading MCP Adapter %2$s, which is newer than this plugin supports (below %3$s). Update Agent Abilities for MCP, or deactivate %1$s, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $plugin ),
 			esc_html( $loaded ),
 			esc_html( AAFM_MAX_ADAPTER_VERSION )
@@ -225,7 +225,7 @@ function aafm_notice_adapter_too_new(): void {
 	} else {
 		printf(
 			/* translators: 1: loaded adapter version, 2: maximum supported adapter version (exclusive). */
-			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools.', 'oversio-agent-abilities' ),
 			esc_html( $loaded ),
 			esc_html( AAFM_MAX_ADAPTER_VERSION )
 		);

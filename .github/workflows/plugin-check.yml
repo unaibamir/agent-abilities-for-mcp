@@ -82,7 +82,7 @@ jobs:
           # repo. rsync reads .distignore as its exclude list (same rules the
           # release deploy applies), so dev-only files such as phpunit.xml.dist
           # and the dotfiles never reach the scan.
-          dest="$WP_DIR/wp-content/plugins/agent-abilities-for-mcp"
+          dest="$WP_DIR/wp-content/plugins/oversio-agent-abilities"
           mkdir -p "$dest"
           rsync -a --exclude-from="$GITHUB_WORKSPACE/.distignore" \
             "$GITHUB_WORKSPACE/" "$dest/"
@@ -93,7 +93,7 @@ jobs:
           # vendor (third-party, shipped) and languages (generated) are part of
           # the distribution but not our source to fix, so keep them out of the
           # scan. The dev-only files are already gone via .distignore above.
-          wp plugin check agent-abilities-for-mcp --path="$WP_DIR" \
+          wp plugin check oversio-agent-abilities --path="$WP_DIR" \
             --format=csv --fields=line,column,type,code,message \
             --exclude-directories=vendor,languages \
             | tee pcp-report.csv

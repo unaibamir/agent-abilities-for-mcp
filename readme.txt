@@ -67,7 +67,7 @@ Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code
 
 == Installation ==
 
-1. Upload the plugin to the `/wp-content/plugins/agent-abilities-for-mcp` directory, or install it from the WordPress plugins screen.
+1. Upload the plugin to the `/wp-content/plugins/oversio-agent-abilities` directory, or install it from the WordPress plugins screen.
 2. Activate it from the Plugins screen.
 3. Open the Agent Abilities menu in your admin sidebar. On the Abilities tab, turn on only the abilities you want the agent to have. Everything starts off.
 4. On the Connection tab, copy your site's MCP endpoint. The simplest path is OAuth: paste the endpoint into your MCP client and approve the connection once in the browser, where the agent acts as your own account.

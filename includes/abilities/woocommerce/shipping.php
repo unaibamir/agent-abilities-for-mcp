@@ -57,8 +57,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 	return array(
 		// Shipping zones (sub-slice W4-WC5) — zone and method management gated on manage_woocommerce.
 		'aafm/wc-list-shipping-zones'    => array(
-			'label'        => __( 'List WooCommerce shipping zones', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce shipping zones with their id, name, and order. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce shipping zones', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists WooCommerce shipping zones with their id, name, and order. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-shipping-zone'      => array(
-			'label'        => __( 'Get WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce shipping zone by id, including its name, order, and zone locations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce shipping zone', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce shipping zone by id, including its name, order, and zone locations. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-shipping-zone'   => array(
-			'label'        => __( 'Create WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce shipping zone from a name and optional order. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce shipping zone', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce shipping zone from a name and optional order. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-shipping-zone'   => array(
-			'label'        => __( 'Update WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce shipping zone by id, changing only the fields you send. An empty request body is a no-op success. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce shipping zone', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce shipping zone by id, changing only the fields you send. An empty request body is a no-op success. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -94,8 +94,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		// Shipping methods (sub-slice W4-WC5) — always scoped to a zone.
 		'aafm/wc-list-shipping-methods'  => array(
-			'label'        => __( 'List WooCommerce shipping methods', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce shipping methods', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -103,8 +103,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-shipping-method'    => array(
-			'label'        => __( 'Get WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one shipping method from a WooCommerce shipping zone by zone id and instance id. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce shipping method', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one shipping method from a WooCommerce shipping zone by zone id and instance id. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -112,8 +112,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-shipping-method' => array(
-			'label'        => __( 'Create WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (e.g. flat_rate, free_shipping, local_pickup). Returns the new method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce shipping method', 'oversio-agent-abilities' ),
+			'description'  => __( 'Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (e.g. flat_rate, free_shipping, local_pickup). Returns the new method shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -121,8 +121,8 @@ function aafm_wc_shipping_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-shipping-method' => array(
-			'label'        => __( 'Update WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send. Returns the updated method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce shipping method', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send. Returns the updated method shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

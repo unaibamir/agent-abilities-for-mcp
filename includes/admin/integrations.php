@@ -31,27 +31,27 @@ function aafm_integration_cards(): array {
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
 		'yoast'       => array(
-			'label'   => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Yoast SEO', 'oversio-agent-abilities' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'wordpress-seo/wp-seo.php' ),
 		),
 		'rankmath'    => array(
-			'label'   => __( 'Rank Math', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Rank Math', 'oversio-agent-abilities' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'seo-by-rank-math/rank-math.php' ),
 		),
 		'aioseo'      => array(
-			'label'   => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'All in One SEO', 'oversio-agent-abilities' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'all-in-one-seo-pack/all_in_one_seo_pack.php' ),
 		),
 		'acf'         => array(
-			'label'   => __( 'ACF', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'ACF', 'oversio-agent-abilities' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'advanced-custom-fields/acf.php', 'advanced-custom-fields-pro/acf.php', 'secure-custom-fields/secure-custom-fields.php' ),
 		),
 		'woocommerce' => array(
-			'label'   => __( 'WooCommerce', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'WooCommerce', 'oversio-agent-abilities' ),
 			'icon'    => 'integrations',
 			'plugins' => array( 'woocommerce/woocommerce.php' ),
 		),
@@ -118,12 +118,12 @@ function aafm_render_integrations_tab(): void {
 	echo '<div class="aafm-integrations">';
 
 	// Intro lede + the security disclaimer (humanized copy).
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities show up here only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities show up here only while its plugin is active, and each one stays off until you turn it on.', 'oversio-agent-abilities' ) . '</p>';
 
 	echo '<div class="aafm-integrations-disclaimer">';
 	echo aafm_get_notice_html( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside the helper.
 		'warning',
-		__( 'These integrations let an agent read and write real data on your site, including personal data through WooCommerce and ACF: customer names, emails, addresses, order details. What an agent can actually touch is still bounded by the WordPress role of the account it connects as, and by the abilities you switch on below. Everything it does is recorded in the activity log. Turn on only what you trust the connected agent to handle.', 'agent-abilities-for-mcp' )
+		__( 'These integrations let an agent read and write real data on your site, including personal data through WooCommerce and ACF: customer names, emails, addresses, order details. What an agent can actually touch is still bounded by the WordPress role of the account it connects as, and by the abilities you switch on below. Everything it does is recorded in the activity log. Turn on only what you trust the connected agent to handle.', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 
@@ -188,7 +188,7 @@ function aafm_render_integrations_tab(): void {
 				esc_html(
 					sprintf(
 						/* translators: 1: total abilities, 2: read count, 3: write count. */
-						__( '0 / %1$d · %2$d read, %3$d write', 'agent-abilities-for-mcp' ),
+						__( '0 / %1$d · %2$d read, %3$d write', 'oversio-agent-abilities' ),
 						(int) $counts['total'],
 						(int) $counts['read'],
 						(int) $counts['write']
@@ -214,7 +214,7 @@ function aafm_render_integrations_tab(): void {
 		echo '</details>';
 	}
 
-	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'oversio-agent-abilities' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	echo '</div>'; // .aafm-integrations
@@ -228,9 +228,9 @@ function aafm_render_integrations_tab(): void {
  */
 function aafm_integration_status_pill( string $status ): string {
 	$map                   = array(
-		'active'             => array( 'aafm-pill-success', __( 'Active', 'agent-abilities-for-mcp' ) ),
-		'installed_inactive' => array( 'aafm-pill-warn', __( 'Inactive', 'agent-abilities-for-mcp' ) ),
-		'not_installed'      => array( 'aafm-pill-neutral', __( 'Not installed', 'agent-abilities-for-mcp' ) ),
+		'active'             => array( 'aafm-pill-success', __( 'Active', 'oversio-agent-abilities' ) ),
+		'installed_inactive' => array( 'aafm-pill-warn', __( 'Inactive', 'oversio-agent-abilities' ) ),
+		'not_installed'      => array( 'aafm-pill-neutral', __( 'Not installed', 'oversio-agent-abilities' ) ),
 	);
 	list( $class, $label ) = $map[ $status ] ?? $map['not_installed'];
 	return sprintf(
@@ -253,16 +253,16 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 
 	switch ( $status ) {
 		case 'active':
-			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
+			return __( 'Active. Turn on the abilities you want this agent to use.', 'oversio-agent-abilities' );
 		case 'installed_inactive':
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */
-				__( 'Installed but not active. Activate %s to use these abilities.', 'agent-abilities-for-mcp' ),
+				__( 'Installed but not active. Activate %s to use these abilities.', 'oversio-agent-abilities' ),
 				$label
 			);
 		case 'not_installed':
 		default:
-			return __( 'Not installed. Install and activate the plugin to expose its abilities here.', 'agent-abilities-for-mcp' );
+			return __( 'Not installed. Install and activate the plugin to expose its abilities here.', 'oversio-agent-abilities' );
 	}
 }
 
@@ -286,20 +286,20 @@ function aafm_render_integration_filter( string $slug ): void {
 	printf(
 		'<label class="screen-reader-text" for="%1$s">%2$s</label>',
 		esc_attr( $input_id ),
-		esc_html__( 'Search abilities', 'agent-abilities-for-mcp' )
+		esc_html__( 'Search abilities', 'oversio-agent-abilities' )
 	);
 	printf(
 		'<input type="search" id="%1$s" class="aafm-integration-search" placeholder="%2$s" autocomplete="off">',
 		esc_attr( $input_id ),
-		esc_attr__( 'Search abilities…', 'agent-abilities-for-mcp' )
+		esc_attr__( 'Search abilities…', 'oversio-agent-abilities' )
 	);
 
 	// All / Read Only / Write toggle group. "All" starts selected. Each button is type="button".
-	echo '<div class="aafm-filter-risk" role="group" aria-label="' . esc_attr__( 'Filter by risk', 'agent-abilities-for-mcp' ) . '">';
+	echo '<div class="aafm-filter-risk" role="group" aria-label="' . esc_attr__( 'Filter by risk', 'oversio-agent-abilities' ) . '">';
 	$risks = array(
-		'all'   => __( 'All', 'agent-abilities-for-mcp' ),
-		'read'  => __( 'Read Only', 'agent-abilities-for-mcp' ),
-		'write' => __( 'Write', 'agent-abilities-for-mcp' ),
+		'all'   => __( 'All', 'oversio-agent-abilities' ),
+		'read'  => __( 'Read Only', 'oversio-agent-abilities' ),
+		'write' => __( 'Write', 'oversio-agent-abilities' ),
 	);
 	foreach ( $risks as $value => $label ) {
 		printf(
@@ -348,7 +348,7 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button></p>',
 		esc_attr( $slug ),
 		$has_sensitive ? ' data-has-sensitive="1"' : '',
-		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
+		esc_html__( 'Enable all / Disable all', 'oversio-agent-abilities' )
 	);
 
 	// Each per-plugin card renders a flat ability list directly in the accordion body.
@@ -409,7 +409,7 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 		esc_attr( $risk )
 	);
 	if ( 'read' === $risk ) {
-		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'oversio-agent-abilities' ) . '</span>';
 	}
 	printf(
 		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',

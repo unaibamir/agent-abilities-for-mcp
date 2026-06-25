@@ -19,24 +19,24 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_structure_definitions' );
  */
 function aafm_register_structure_definitions( array $registry ): array {
 	$registry['aafm/get-taxonomies'] = array(
-		'label'        => __( 'Get taxonomies', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List public taxonomies registered on the site.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get taxonomies', 'oversio-agent-abilities' ),
+		'description'  => __( 'List public taxonomies registered on the site.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_taxonomies',
 	);
 	$registry['aafm/get-post-types'] = array(
-		'label'        => __( 'Get post types', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get post types', 'oversio-agent-abilities' ),
+		'description'  => __( 'List public post types registered on the site. Each type includes a writable flag indicating whether agents may create/update items of that type.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_post_types',
 	);
 	$registry['aafm/get-site-info']  = array(
-		'label'        => __( 'Get site info', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve the site name, tagline, URL, and language.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get site info', 'oversio-agent-abilities' ),
+		'description'  => __( 'Retrieve the site name, tagline, URL, and language.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',

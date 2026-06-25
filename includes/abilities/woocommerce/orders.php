@@ -62,8 +62,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		// mandates full billing/shipping on the single-order read, gated by manage_woocommerce and
 		// audited, not stripped.
 		'aafm/wc-list-orders'         => array(
-			'label'        => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce orders', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -71,8 +71,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-order'           => array(
-			'label'        => __( 'Get WooCommerce order', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address (including email and phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce order', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address (including email and phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -81,8 +81,8 @@ function aafm_wc_orders_registry_definitions(): array {
 
 		// Order writes (sub-slice W4-WC2.2) — create, update, focused status-only update.
 		'aafm/wc-create-order'        => array(
-			'label'        => __( 'Create WooCommerce order', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce order from optional status, customer id, billing, shipping, and line items. Returns the full order shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce order', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce order from optional status, customer id, billing, shipping, and line items. Returns the full order shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -90,8 +90,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-order'        => array(
-			'label'        => __( 'Update WooCommerce order', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce order by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce order', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce order by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -99,8 +99,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-order-status' => array(
-			'label'        => __( 'Update WooCommerce order status', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Sets the status of a WooCommerce order by id. Accepts both the short form (e.g. "completed") and the wc-prefixed form (e.g. "wc-completed"). Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce order status', 'oversio-agent-abilities' ),
+			'description'  => __( 'Sets the status of a WooCommerce order by id. Accepts both the short form (e.g. "completed") and the wc-prefixed form (e.g. "wc-completed"). Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -109,8 +109,8 @@ function aafm_wc_orders_registry_definitions(): array {
 
 		// Order notes (sub-slice W4-WC2.3 Group B).
 		'aafm/wc-list-order-notes'    => array(
-			'label'        => __( 'List WooCommerce order notes', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all notes on a WooCommerce order by order id. Returns each note\'s id, text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce order notes', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all notes on a WooCommerce order by order id. Returns each note\'s id, text, date, and whether it is customer-facing. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -118,8 +118,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-order-note'   => array(
-			'label'        => __( 'Create WooCommerce order note', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing so it appears in the customer\'s account. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce order note', 'oversio-agent-abilities' ),
+			'description'  => __( 'Adds a note to a WooCommerce order by order id. Optionally marks the note as customer-facing so it appears in the customer\'s account. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -128,8 +128,8 @@ function aafm_wc_orders_registry_definitions(): array {
 
 		// Order refunds (sub-slice W4-WC2.3 Group C).
 		'aafm/wc-list-order-refunds'  => array(
-			'label'        => __( 'List WooCommerce order refunds', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all refunds on a WooCommerce order by order id. Returns each refund\'s id, amount, reason, and date. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce order refunds', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all refunds on a WooCommerce order by order id. Returns each refund\'s id, amount, reason, and date. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -137,8 +137,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-order-refund'    => array(
-			'label'        => __( 'Get WooCommerce order refund', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads a single refund by refund id. Returns the refund amount, reason, and date. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce order refund', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads a single refund by refund id. Returns the refund amount, reason, and date. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -146,8 +146,8 @@ function aafm_wc_orders_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-order-refund' => array(
-			'label'        => __( 'Create WooCommerce order refund', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a refund on a WooCommerce order by order id. Accepts an amount, optional reason, and optional line-item breakdown. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce order refund', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a refund on a WooCommerce order by order id. Accepts an amount, optional reason, and optional line-item breakdown. Reason text is returned verbatim under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

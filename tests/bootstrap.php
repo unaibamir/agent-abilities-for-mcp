@@ -14,7 +14,7 @@ require_once $_tests_dir . '/includes/functions.php';
 tests_add_filter(
 	'muplugins_loaded',
 	static function (): void {
-		require dirname( __DIR__ ) . '/agent-abilities-for-mcp.php';
+		require dirname( __DIR__ ) . '/oversio-agent-abilities.php';
 	}
 );
 

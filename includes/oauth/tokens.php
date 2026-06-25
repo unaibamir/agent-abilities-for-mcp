@@ -95,7 +95,7 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 	// A failed insert means there is no persisted token row — never return a token pair for it,
 	// or the client gets a successful token response it can never use.
 	if ( false === $inserted ) {
-		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'oversio-agent-abilities' ) );
 	}
 
 	return array(
@@ -175,7 +175,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( ! is_array( $row ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token is invalid.', 'agent-abilities-for-mcp' )
+			__( 'The refresh token is invalid.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -187,7 +187,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token has already been used; the token chain has been revoked.', 'agent-abilities-for-mcp' )
+			__( 'The refresh token has already been used; the token chain has been revoked.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -195,7 +195,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( (string) $row['client_id'] !== $client_id ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token was issued to a different client.', 'agent-abilities-for-mcp' )
+			__( 'The refresh token was issued to a different client.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -204,7 +204,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The client is no longer active.', 'agent-abilities-for-mcp' )
+			__( 'The client is no longer active.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -214,7 +214,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	if ( gmdate( 'Y-m-d H:i:s', time() ) >= (string) $row['refresh_expires_at'] ) {
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token has expired.', 'agent-abilities-for-mcp' )
+			__( 'The refresh token has expired.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -253,7 +253,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 
 		return new WP_Error(
 			'invalid_grant',
-			__( 'The refresh token is invalid.', 'agent-abilities-for-mcp' )
+			__( 'The refresh token is invalid.', 'oversio-agent-abilities' )
 		);
 	}
 

@@ -36,72 +36,72 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_menus_definitions' );
  */
 function aafm_register_menus_definitions( array $registry ): array {
 	$registry['aafm/list-menus']       = array(
-		'label'        => __( 'List menus', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists the navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List menus', 'oversio-agent-abilities' ),
+		'description'  => __( 'Lists the navigation menus by id, name, slug, and item count. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_menus',
 	);
 	$registry['aafm/get-menu']         = array(
-		'label'        => __( 'Get menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Reads one navigation menu by id: its name, slug, and item count. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get menu', 'oversio-agent-abilities' ),
+		'description'  => __( 'Reads one navigation menu by id: its name, slug, and item count. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_get_menu',
 	);
 	$registry['aafm/list-menu-items']  = array(
-		'label'        => __( 'List menu items', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists the items in a navigation menu by id: each item id, title, URL, what it links to, and its place in the order. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List menu items', 'oversio-agent-abilities' ),
+		'description'  => __( 'Lists the items in a navigation menu by id: each item id, title, URL, what it links to, and its place in the order. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_list_menu_items',
 	);
 	$registry['aafm/create-menu']      = array(
-		'label'        => __( 'Create menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create menu', 'oversio-agent-abilities' ),
+		'description'  => __( 'Creates a navigation menu by name. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_menu',
 	);
 	$registry['aafm/update-menu']      = array(
-		'label'        => __( 'Update menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update menu', 'oversio-agent-abilities' ),
+		'description'  => __( 'Renames a navigation menu by id. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_menu',
 	);
 	$registry['aafm/delete-menu']      = array(
-		'label'        => __( 'Delete menu', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently deletes a navigation menu and all of its items. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete menu', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently deletes a navigation menu and all of its items. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_delete_menu',
 	);
 	$registry['aafm/create-menu-item'] = array(
-		'label'        => __( 'Create menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Adds an item (link) to a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create menu item', 'oversio-agent-abilities' ),
+		'description'  => __( 'Adds an item (link) to a navigation menu. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_create_menu_item',
 	);
 	$registry['aafm/update-menu-item'] = array(
-		'label'        => __( 'Update menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update menu item', 'oversio-agent-abilities' ),
+		'description'  => __( "Updates a menu item's title or URL by id. Requires the edit-theme-options capability.", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
 		'args_builder' => 'aafm_args_update_menu_item',
 	);
 	$registry['aafm/delete-menu-item'] = array(
-		'label'        => __( 'Delete menu item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently removes one item from a navigation menu. Requires the edit-theme-options capability.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete menu item', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently removes one item from a navigation menu. Requires the edit-theme-options capability.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'site',

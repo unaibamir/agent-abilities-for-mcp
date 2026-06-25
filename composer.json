@@ -1,5 +1,5 @@
 {
-  "name": "unaibamir/agent-abilities-for-mcp",
+  "name": "unaibamir/oversio-agent-abilities",
   "description": "Exposes curated WordPress abilities to AI agents over the Model Context Protocol (MCP).",
   "type": "wordpress-plugin",
   "license": "GPL-2.0-or-later",

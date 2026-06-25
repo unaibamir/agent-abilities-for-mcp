@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <ruleset name="Agent Abilities for MCP">
-	<description>WordPress Coding Standards for agent-abilities-for-mcp.</description>
+	<description>WordPress Coding Standards for oversio-agent-abilities.</description>
 
 	<file>.</file>
 
@@ -45,7 +45,7 @@
 	<rule ref="WordPress.WP.I18n">
 		<properties>
 			<property name="text_domain" type="array">
-				<element value="agent-abilities-for-mcp"/>
+				<element value="oversio-agent-abilities"/>
 			</property>
 		</properties>
 	</rule>

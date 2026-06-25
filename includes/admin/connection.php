@@ -109,12 +109,12 @@ function aafm_diagnostic_checks(): array {
 	$version  = function_exists( 'aafm_loaded_adapter_version' ) ? aafm_loaded_adapter_version() : null;
 	$checks[] = array(
 		'id'     => 'adapter',
-		'label'  => __( 'MCP adapter active and compatible', 'agent-abilities-for-mcp' ),
+		'label'  => __( 'MCP adapter active and compatible', 'oversio-agent-abilities' ),
 		'status' => ( null !== $version && aafm_adapter_is_compatible( $version ) ) ? 'pass' : 'fail',
 		'detail' => null !== $version
 			/* translators: %s: adapter version number. */
-			? sprintf( __( 'Adapter %s loaded.', 'agent-abilities-for-mcp' ), $version )
-			: __( 'Adapter not loaded.', 'agent-abilities-for-mcp' ),
+			? sprintf( __( 'Adapter %s loaded.', 'oversio-agent-abilities' ), $version )
+			: __( 'Adapter not loaded.', 'oversio-agent-abilities' ),
 	);
 
 	// 2. The MCP REST route is registered.
@@ -122,7 +122,7 @@ function aafm_diagnostic_checks(): array {
 	$has_route = (bool) preg_grep( '#^' . preg_quote( aafm_mcp_rest_route(), '#' ) . '#', array_keys( $routes ) );
 	$checks[]  = array(
 		'id'     => 'endpoint',
-		'label'  => __( 'MCP REST endpoint registered', 'agent-abilities-for-mcp' ),
+		'label'  => __( 'MCP REST endpoint registered', 'oversio-agent-abilities' ),
 		'status' => $has_route ? 'pass' : 'fail',
 		'detail' => aafm_endpoint_url(),
 	);
@@ -131,11 +131,11 @@ function aafm_diagnostic_checks(): array {
 	$auth_seen = isset( $_SERVER['HTTP_AUTHORIZATION'] ) || isset( $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] );
 	$checks[]  = array(
 		'id'     => 'auth_header',
-		'label'  => __( 'Authorization header reaches WordPress', 'agent-abilities-for-mcp' ),
+		'label'  => __( 'Authorization header reaches WordPress', 'oversio-agent-abilities' ),
 		'status' => $auth_seen ? 'pass' : 'warn',
 		'detail' => $auth_seen
-			? __( 'Authorization header present on this request.', 'agent-abilities-for-mcp' )
-			: __( 'Not detectable from this admin page load. Application Password auth still works if your host forwards the header.', 'agent-abilities-for-mcp' ),
+			? __( 'Authorization header present on this request.', 'oversio-agent-abilities' )
+			: __( 'Not detectable from this admin page load. Application Password auth still works if your host forwards the header.', 'oversio-agent-abilities' ),
 	);
 
 	return $checks;
@@ -153,7 +153,7 @@ function aafm_diagnostic_checks(): array {
 function aafm_create_agent_user( string $login ) {
 	$login = sanitize_user( $login, true );
 	if ( '' === $login ) {
-		return new WP_Error( 'aafm_bad_login', __( 'Invalid username.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_bad_login', __( 'Invalid username.', 'oversio-agent-abilities' ) );
 	}
 	$existing_id = username_exists( $login );
 	if ( $existing_id ) {
@@ -161,7 +161,7 @@ function aafm_create_agent_user( string $login ) {
 		// id and edit link so the caller can offer "Edit user" instead of a dead-end error.
 		return new WP_Error(
 			'aafm_user_exists',
-			__( 'That user already exists, so there is nothing to create. You can edit it instead.', 'agent-abilities-for-mcp' ),
+			__( 'That user already exists, so there is nothing to create. You can edit it instead.', 'oversio-agent-abilities' ),
 			array(
 				'user_id'  => (int) $existing_id,
 				'edit_url' => (string) get_edit_user_link( (int) $existing_id ),
@@ -254,14 +254,14 @@ function aafm_client_snippet( string $client, string $username, string $os = 'un
  */
 function aafm_quickstart_clients(): array {
 	return array(
-		'claude-desktop' => __( 'Claude Desktop', 'agent-abilities-for-mcp' ),
-		'claude-code'    => __( 'Claude Code', 'agent-abilities-for-mcp' ),
-		'cursor'         => __( 'Cursor', 'agent-abilities-for-mcp' ),
-		'vscode'         => __( 'VS Code', 'agent-abilities-for-mcp' ),
-		'windsurf'       => __( 'Windsurf', 'agent-abilities-for-mcp' ),
-		'gemini-cli'     => __( 'Gemini CLI', 'agent-abilities-for-mcp' ),
-		'manus'          => __( 'Manus', 'agent-abilities-for-mcp' ),
-		'generic'        => __( 'Generic', 'agent-abilities-for-mcp' ),
+		'claude-desktop' => __( 'Claude Desktop', 'oversio-agent-abilities' ),
+		'claude-code'    => __( 'Claude Code', 'oversio-agent-abilities' ),
+		'cursor'         => __( 'Cursor', 'oversio-agent-abilities' ),
+		'vscode'         => __( 'VS Code', 'oversio-agent-abilities' ),
+		'windsurf'       => __( 'Windsurf', 'oversio-agent-abilities' ),
+		'gemini-cli'     => __( 'Gemini CLI', 'oversio-agent-abilities' ),
+		'manus'          => __( 'Manus', 'oversio-agent-abilities' ),
+		'generic'        => __( 'Generic', 'oversio-agent-abilities' ),
 	);
 }
 
@@ -276,21 +276,21 @@ function aafm_quickstart_clients(): array {
 function aafm_quickstart_note( string $client ): string {
 	switch ( $client ) {
 		case 'claude-desktop':
-			return __( 'Paste into claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude.', 'agent-abilities-for-mcp' );
+			return __( 'Paste into claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude.', 'oversio-agent-abilities' );
 		case 'claude-code':
-			return __( "Add it to your project's .mcp.json, or run claude mcp add.", 'agent-abilities-for-mcp' );
+			return __( "Add it to your project's .mcp.json, or run claude mcp add.", 'oversio-agent-abilities' );
 		case 'cursor':
-			return __( 'Add it to ~/.cursor/mcp.json (or Settings → MCP), then reload.', 'agent-abilities-for-mcp' );
+			return __( 'Add it to ~/.cursor/mcp.json (or Settings → MCP), then reload.', 'oversio-agent-abilities' );
 		case 'vscode':
-			return __( 'Save it as .vscode/mcp.json in your workspace. Note the key is "servers", not "mcpServers".', 'agent-abilities-for-mcp' );
+			return __( 'Save it as .vscode/mcp.json in your workspace. Note the key is "servers", not "mcpServers".', 'oversio-agent-abilities' );
 		case 'windsurf':
-			return __( "Add it under Windsurf's MCP config (mcp_config.json) and refresh the server list.", 'agent-abilities-for-mcp' );
+			return __( "Add it under Windsurf's MCP config (mcp_config.json) and refresh the server list.", 'oversio-agent-abilities' );
 		case 'gemini-cli':
-			return __( 'Add it to the mcpServers block in your Gemini CLI settings.json.', 'agent-abilities-for-mcp' );
+			return __( 'Add it to the mcpServers block in your Gemini CLI settings.json.', 'oversio-agent-abilities' );
 		case 'manus':
-			return __( "Add it to Manus's MCP server config.", 'agent-abilities-for-mcp' );
+			return __( "Add it to Manus's MCP server config.", 'oversio-agent-abilities' );
 		case 'generic':
-			return __( 'For any client that speaks MCP over the mcp-wordpress-remote proxy, use this block.', 'agent-abilities-for-mcp' );
+			return __( 'For any client that speaks MCP over the mcp-wordpress-remote proxy, use this block.', 'oversio-agent-abilities' );
 		default:
 			return '';
 	}
@@ -372,21 +372,21 @@ function aafm_oauth_client_mode( string $client ): string {
 function aafm_oauth_client_note( string $client ): string {
 	switch ( $client ) {
 		case 'claude-desktop':
-			return __( 'Settings → Connectors → Add custom connector, then paste the endpoint URL.', 'agent-abilities-for-mcp' );
+			return __( 'Settings → Connectors → Add custom connector, then paste the endpoint URL.', 'oversio-agent-abilities' );
 		case 'claude-code':
-			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
+			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'oversio-agent-abilities' );
 		case 'cursor':
-			return __( 'Add a server to ~/.cursor/mcp.json with a "url" pointing at the endpoint, then reload.', 'agent-abilities-for-mcp' );
+			return __( 'Add a server to ~/.cursor/mcp.json with a "url" pointing at the endpoint, then reload.', 'oversio-agent-abilities' );
 		case 'vscode':
-			return __( 'Add a .vscode/mcp.json server with "type":"http" and the endpoint "url" (key is "servers").', 'agent-abilities-for-mcp' );
+			return __( 'Add a .vscode/mcp.json server with "type":"http" and the endpoint "url" (key is "servers").', 'oversio-agent-abilities' );
 		case 'windsurf':
-			return __( "Add the endpoint URL as a server in Windsurf's MCP config, then refresh.", 'agent-abilities-for-mcp' );
+			return __( "Add the endpoint URL as a server in Windsurf's MCP config, then refresh.", 'oversio-agent-abilities' );
 		case 'gemini-cli':
-			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' );
+			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'oversio-agent-abilities' );
 		case 'manus':
-			return __( "Add the endpoint URL in Manus's MCP server config.", 'agent-abilities-for-mcp' );
+			return __( "Add the endpoint URL in Manus's MCP server config.", 'oversio-agent-abilities' );
 		case 'generic':
-			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' );
+			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'oversio-agent-abilities' );
 		default:
 			return '';
 	}
@@ -400,7 +400,7 @@ function aafm_oauth_client_note( string $client ): string {
 function aafm_ajax_create_agent_user(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to create users.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to create users.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$login  = isset( $_POST['login'] ) ? sanitize_user( wp_unslash( (string) $_POST['login'] ), true ) : '';
 	$result = aafm_create_agent_user( $login );
@@ -430,12 +430,12 @@ function aafm_ajax_create_agent_user(): void {
 function aafm_ajax_oauth_revoke_client(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_id'] ) ) : '';
 	if ( '' === $client_id ) {
-		wp_send_json_error( array( 'message' => __( 'Missing client.', 'agent-abilities-for-mcp' ) ) );
+		wp_send_json_error( array( 'message' => __( 'Missing client.', 'oversio-agent-abilities' ) ) );
 	}
 
 	aafm_oauth_deactivate_client( $client_id );
@@ -464,14 +464,14 @@ function aafm_ajax_oauth_revoke_client(): void {
 function aafm_ajax_oauth_revoke_grant(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$user_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$client_id = isset( $_POST['client_id'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_id'] ) ) : '';
 	if ( $user_id <= 0 || '' === $client_id ) {
-		wp_send_json_error( array( 'message' => __( 'Missing grant.', 'agent-abilities-for-mcp' ) ) );
+		wp_send_json_error( array( 'message' => __( 'Missing grant.', 'oversio-agent-abilities' ) ) );
 	}
 
 	aafm_oauth_delete_consent( $user_id, $client_id );
@@ -505,7 +505,7 @@ function aafm_ajax_oauth_revoke_grant(): void {
 function aafm_ajax_test_connection(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 
 	// Forward the current admin's own cookies on the self-call (admin-eye reachability check).
@@ -579,27 +579,27 @@ function aafm_render_oauth_management(): void {
 	wp_nonce_field( 'aafm_admin', 'aafm_oauth_admin_nonce' );
 
 	// ---- Registered clients ----
-	echo '<h3>' . esc_html__( 'Registered clients', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="sub">' . esc_html__( 'Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h3>' . esc_html__( 'Registered clients', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="sub">' . esc_html__( 'Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away.', 'oversio-agent-abilities' ) . '</p>';
 
 	if ( empty( $clients ) ) {
-		echo '<p class="aafm-empty-state">' . esc_html__( 'No clients have registered yet.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-empty-state">' . esc_html__( 'No clients have registered yet.', 'oversio-agent-abilities' ) . '</p>';
 	} else {
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-clients-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Client ID', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Redirect URIs', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Created', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Active tokens', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th>' . esc_html__( 'Client', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Client ID', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Redirect URIs', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Created', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Active tokens', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Status', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Action', 'oversio-agent-abilities' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ( $clients as $client ) {
 			$full_id  = $client['client_id'];
 			$short_id = strlen( $full_id ) > 14 ? substr( $full_id, 0, 14 ) . '…' : $full_id;
-			$name     = '' !== $client['client_name'] ? $client['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
+			$name     = '' !== $client['client_name'] ? $client['client_name'] : __( '(unnamed client)', 'oversio-agent-abilities' );
 
 			printf( '<tr data-client-row="%s">', esc_attr( $full_id ) );
 			printf( '<td>%s</td>', esc_html( $name ) );
@@ -607,7 +607,7 @@ function aafm_render_oauth_management(): void {
 
 			echo '<td>';
 			if ( empty( $client['redirect_uris'] ) ) {
-				echo '<span class="aafm-muted">' . esc_html__( 'None', 'agent-abilities-for-mcp' ) . '</span>';
+				echo '<span class="aafm-muted">' . esc_html__( 'None', 'oversio-agent-abilities' ) . '</span>';
 			} else {
 				$links = array();
 				foreach ( $client['redirect_uris'] as $uri ) {
@@ -622,9 +622,9 @@ function aafm_render_oauth_management(): void {
 
 			echo '<td class="aafm-status-cell">';
 			if ( $client['is_active'] ) {
-				echo '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'Active', 'agent-abilities-for-mcp' ) . '</span>';
+				echo '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'Active', 'oversio-agent-abilities' ) . '</span>';
 			} else {
-				echo '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Revoked', 'agent-abilities-for-mcp' ) . '</span>';
+				echo '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Revoked', 'oversio-agent-abilities' ) . '</span>';
 			}
 			echo '</td>';
 
@@ -633,10 +633,10 @@ function aafm_render_oauth_management(): void {
 				printf(
 					'<button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-client" data-client-id="%s">%s</button>',
 					esc_attr( $full_id ),
-					esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
+					esc_html__( 'Revoke', 'oversio-agent-abilities' )
 				);
 			} else {
-				echo '<span class="aafm-muted">' . esc_html__( 'Revoked', 'agent-abilities-for-mcp' ) . '</span>';
+				echo '<span class="aafm-muted">' . esc_html__( 'Revoked', 'oversio-agent-abilities' ) . '</span>';
 			}
 			echo '</td>';
 			echo '</tr>';
@@ -647,25 +647,25 @@ function aafm_render_oauth_management(): void {
 	}
 
 	// ---- Active grants ----
-	echo '<h3>' . esc_html__( 'Active grants', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="sub">' . esc_html__( 'People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h3>' . esc_html__( 'Active grants', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="sub">' . esc_html__( 'People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect.', 'oversio-agent-abilities' ) . '</p>';
 
 	if ( empty( $grants ) ) {
-		echo '<p class="aafm-empty-state">' . esc_html__( 'No one has approved an OAuth connection yet.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="aafm-empty-state">' . esc_html__( 'No one has approved an OAuth connection yet.', 'oversio-agent-abilities' ) . '</p>';
 	} else {
-		$scope_hint = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'agent-abilities-for-mcp' );
+		$scope_hint = __( 'The app can only do what this user\'s role allows and what you have turned on under Abilities.', 'oversio-agent-abilities' );
 
 		echo '<div class="aafm-table-wrap">';
 		echo '<table class="widefat striped aafm-oauth-table aafm-grants-table"><thead><tr>';
-		echo '<th>' . esc_html__( 'User', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Client', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Scope', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Granted', 'agent-abilities-for-mcp' ) . '</th>';
-		echo '<th>' . esc_html__( 'Action', 'agent-abilities-for-mcp' ) . '</th>';
+		echo '<th>' . esc_html__( 'User', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Client', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Scope', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Granted', 'oversio-agent-abilities' ) . '</th>';
+		echo '<th>' . esc_html__( 'Action', 'oversio-agent-abilities' ) . '</th>';
 		echo '</tr></thead><tbody>';
 
 		foreach ( $grants as $grant ) {
-			$client_name = '' !== $grant['client_name'] ? $grant['client_name'] : __( '(unnamed client)', 'agent-abilities-for-mcp' );
+			$client_name = '' !== $grant['client_name'] ? $grant['client_name'] : __( '(unnamed client)', 'oversio-agent-abilities' );
 
 			printf(
 				'<tr data-grant-row="%1$s|%2$s">',
@@ -682,14 +682,14 @@ function aafm_render_oauth_management(): void {
 			printf(
 				'<td><span title="%1$s">%2$s</span></td>',
 				esc_attr( $scope_hint ),
-				esc_html__( 'Full access', 'agent-abilities-for-mcp' )
+				esc_html__( 'Full access', 'oversio-agent-abilities' )
 			);
 			printf( '<td>%s</td>', esc_html( aafm_format_admin_datetime( $grant['granted_at'] ) ) );
 			printf(
 				'<td><button type="button" class="aafm-btn aafm-btn-secondary aafm-revoke-grant" data-user-id="%1$s" data-client-id="%2$s">%3$s</button></td>',
 				esc_attr( (string) $grant['user_id'] ),
 				esc_attr( $grant['client_id'] ),
-				esc_html__( 'Revoke', 'agent-abilities-for-mcp' )
+				esc_html__( 'Revoke', 'oversio-agent-abilities' )
 			);
 			echo '</tr>';
 		}
@@ -745,15 +745,15 @@ function aafm_render_connection_tab(): void {
 
 	// ---- 1. Endpoint card (the single canonical endpoint display) ----
 	echo '<section class="aafm-card aafm-card-pad aafm-endpoint-card">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'MCP endpoint', 'oversio-agent-abilities' ) . '</div>';
 	echo '<div class="aafm-field-mono">';
 	printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
 	printf(
 		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%1$s" aria-label="%4$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $url ),
 		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
-		esc_attr__( 'Copy the MCP endpoint URL', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'oversio-agent-abilities' ),
+		esc_attr__( 'Copy the MCP endpoint URL', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 	echo '</section>';
@@ -761,35 +761,35 @@ function aafm_render_connection_tab(): void {
 	// ---- 2. OAuth card ----
 	echo '<section class="aafm-card aafm-card-pad aafm-oauth-card">';
 	echo '<div class="aafm-oauth-card-head">';
-	echo '<h2>' . esc_html__( 'Connect with OAuth', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<h2>' . esc_html__( 'Connect with OAuth', 'oversio-agent-abilities' ) . '</h2>';
+	echo '<span class="aafm-pill aafm-pill-info aafm-recommended-pill">' . esc_html__( 'Recommended', 'oversio-agent-abilities' ) . '</span>';
 	echo '</div>';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval — no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval — no secret to copy or store.', 'oversio-agent-abilities' ) . '</p>';
 
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
 
 		echo '<div class="aafm-connect-os">';
-		echo '<div class="aafm-stat-label" id="aafm-os-label-oauth">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="aafm-stat-label" id="aafm-os-label-oauth">' . esc_html__( 'Your operating system', 'oversio-agent-abilities' ) . '</div>';
 		// The OS tabs are a cross-cutting filter over the per-client snippet pairs (one tablist,
 		// many panels), so they carry no aria-controls (optional in the WAI-ARIA tabs pattern);
 		// the tablist is given an accessible name via aria-labelledby instead.
 		echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-oauth">';
 		printf(
 			'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
-			esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
+			esc_html__( 'macOS / Linux', 'oversio-agent-abilities' )
 		);
 		printf(
 			'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
-			esc_html__( 'Windows', 'agent-abilities-for-mcp' )
+			esc_html__( 'Windows', 'oversio-agent-abilities' )
 		);
 		echo '</div>';
 		echo '</div>';
 
 		echo '<div class="aafm-connect-client">';
-		echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'oversio-agent-abilities' ) . '</div>';
 		echo '<div class="aafm-client-grid" id="aafm-oauth-clients">';
 		$first = true;
 		foreach ( aafm_quickstart_clients() as $slug => $label ) {
@@ -830,11 +830,11 @@ function aafm_render_connection_tab(): void {
 				}
 				// Local cert notice for native-mode clients when the site is local.
 				if ( $is_local ) {
-					$local_note = __( 'Your site looks local. If the client throws a certificate error, use the bridge snippet below and point NODE_EXTRA_CA_CERTS at your mkcert root CA.', 'agent-abilities-for-mcp' );
+					$local_note = __( 'Your site looks local. If the client throws a certificate error, use the bridge snippet below and point NODE_EXTRA_CA_CERTS at your mkcert root CA.', 'oversio-agent-abilities' );
 					echo '<p class="aafm-oauth-local-note">' . esc_html( $local_note ) . '</p>';
 				}
 				echo '<details class="aafm-bridge-alt">';
-				echo '<summary>' . esc_html__( 'Need a local server instead? Use the mcp-remote bridge.', 'agent-abilities-for-mcp' ) . '</summary>';
+				echo '<summary>' . esc_html__( 'Need a local server instead? Use the mcp-remote bridge.', 'oversio-agent-abilities' ) . '</summary>';
 			} else {
 				// Bridge-mode clients: lead straight with the snippet.
 				if ( '' !== $note ) {
@@ -850,7 +850,7 @@ function aafm_render_connection_tab(): void {
 				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 				esc_attr( $unix_oauth ),
 				aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-				esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+				esc_html__( 'Copy', 'oversio-agent-abilities' )
 			);
 			echo '</div>';
 
@@ -860,7 +860,7 @@ function aafm_render_connection_tab(): void {
 				'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 				esc_attr( $windows_oauth ),
 				aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-				esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+				esc_html__( 'Copy', 'oversio-agent-abilities' )
 			);
 			echo '</div>';
 
@@ -881,7 +881,7 @@ function aafm_render_connection_tab(): void {
 		// OAuth is off — short notice instead of the picker.
 		echo '<p class="sub">' . esc_html__(
 			'OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below.',
-			'agent-abilities-for-mcp'
+			'oversio-agent-abilities'
 		) . '</p>';
 	}
 
@@ -892,7 +892,7 @@ function aafm_render_connection_tab(): void {
 	// OAuth is on because most operators will use the OAuth path above.
 	$open_attr = $oauth_on ? '' : ' open';
 	printf( '<details class="aafm-app-password-fallback"%s>', esc_attr( $open_attr ) );
-	echo '<summary>' . esc_html__( 'OAuth not working? Connect with an Application Password', 'agent-abilities-for-mcp' ) . '</summary>';
+	echo '<summary>' . esc_html__( 'OAuth not working? Connect with an Application Password', 'oversio-agent-abilities' ) . '</summary>';
 
 	// ---- Step 1: create a dedicated agent user ----
 	$default_agent_login = 'mcp-agent';
@@ -910,30 +910,30 @@ function aafm_render_connection_tab(): void {
 		echo '1';
 	}
 	echo '</span><div>';
-	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h2>' . esc_html__( 'Create a dedicated agent user', 'oversio-agent-abilities' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'Give the agent its own user with the least privilege it needs. It can only do what that user\'s role allows, and every ability is off until you turn it on.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 	echo '<div class="aafm-step-rail"><div class="aafm-card aafm-card-pad">';
 	wp_nonce_field( 'aafm_admin', 'aafm_conn_nonce' );
 	if ( $agent_exists ) {
 		$edit_url = (string) get_edit_user_link( $existing_agent_id );
 		echo '<p class="aafm-agent-done">';
-		echo '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'Done', 'agent-abilities-for-mcp' ) . '</span> ';
+		echo '<span class="aafm-pill aafm-pill-success">' . esc_html__( 'Done', 'oversio-agent-abilities' ) . '</span> ';
 		printf(
 			/* translators: %s: the agent user's login. */
-			esc_html__( 'The %s user already exists, so you can move straight to connecting your client.', 'agent-abilities-for-mcp' ),
+			esc_html__( 'The %s user already exists, so you can move straight to connecting your client.', 'oversio-agent-abilities' ),
 			'<strong>' . esc_html( $default_agent_login ) . '</strong>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- login escaped above.
 		);
 		if ( '' !== $edit_url ) {
 			printf(
 				' <a href="%1$s">%2$s</a>',
 				esc_url( $edit_url ),
-				esc_html__( 'Edit user', 'agent-abilities-for-mcp' )
+				esc_html__( 'Edit user', 'oversio-agent-abilities' )
 			);
 		}
 		echo '</p>';
 	} else {
-		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'oversio-agent-abilities' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	}
 	echo '</div></div>';
 	echo '</div>';
@@ -941,8 +941,8 @@ function aafm_render_connection_tab(): void {
 	// ---- Step 2: connect your client (App Password path) ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">2</span><div>';
-	echo '<h2>' . esc_html__( 'Connect your client', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h2>' . esc_html__( 'Connect your client', 'oversio-agent-abilities' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'Generate an Application Password for the agent user (Users → Profile → Application Passwords), pick your client, then copy the config.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 
 	echo '<div class="aafm-step-rail"><div class="aafm-card">';
@@ -951,23 +951,23 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-card-pad aafm-connect-controls">';
 
 	echo '<div class="aafm-connect-os">';
-	echo '<div class="aafm-stat-label" id="aafm-os-label-bridge">' . esc_html__( 'Your operating system', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-stat-label" id="aafm-os-label-bridge">' . esc_html__( 'Your operating system', 'oversio-agent-abilities' ) . '</div>';
 	// The .aafm-seg buttons double as the OS tabs admin.js binds (aafm-os-tab + data-os).
 	// One tablist filters many snippet panels, so no aria-controls; named via aria-labelledby.
 	echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-bridge">';
 	printf(
 		'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
-		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
+		esc_html__( 'macOS / Linux', 'oversio-agent-abilities' )
 	);
 	printf(
 		'<button type="button" class="aafm-os-tab" data-os="windows" role="tab" aria-selected="false">%s</button>',
-		esc_html__( 'Windows', 'agent-abilities-for-mcp' )
+		esc_html__( 'Windows', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 	echo '</div>';
 
 	echo '<div class="aafm-connect-client">';
-	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'oversio-agent-abilities' ) . '</div>';
 	echo '<div class="aafm-client-grid" id="aafm-clients">';
 	$first = true;
 	foreach ( aafm_quickstart_clients() as $slug => $label ) {
@@ -999,7 +999,7 @@ function aafm_render_connection_tab(): void {
 		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $unix_snippet ),
 		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 
@@ -1009,29 +1009,29 @@ function aafm_render_connection_tab(): void {
 		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 		esc_attr( $windows_snippet ),
 		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 
 	// Windows / certificate notices.
-	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above.', 'agent-abilities-for-mcp' );
+	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above.', 'oversio-agent-abilities' );
 
-	$cert_note = __( 'If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
+	$cert_note = __( 'If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'oversio-agent-abilities' );
 	if ( $is_local ) {
-		$cert_note .= ' ' . __( 'This site looks local, so that line is already included above.', 'agent-abilities-for-mcp' );
+		$cert_note .= ' ' . __( 'This site looks local, so that line is already included above.', 'oversio-agent-abilities' );
 	}
 
 	// Bespoke notice chrome on purpose: this callout needs two labelled rows (Windows, Certificate),
 	// which aafm_render_notice()'s single dashicon + single body block cannot express.
 	echo '<div class="aafm-os-note notice notice-info inline">';
-	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
-	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'agent-abilities-for-mcp' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
+	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Windows', 'oversio-agent-abilities' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $windows_note, $kses_code ) . '</span></p>';
+	echo '<p class="aafm-os-note-row"><span class="aafm-os-note-label">' . esc_html__( 'Certificate', 'oversio-agent-abilities' ) . '</span> <span class="aafm-os-note-text">' . wp_kses( $cert_note, $kses_code ) . '</span></p>';
 	echo '</div>';
 
 	// Per-client quickstarts: the JS-toggled grid of ready-to-paste configs, one per client.
 	// Each client's exact snippet stays present here so the picker can surface any of them.
 	echo '<div class="aafm-quickstarts">';
-	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
+	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'oversio-agent-abilities' ) . '</button></p>';
 	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
 	foreach ( aafm_quickstart_clients() as $slug => $label ) {
 		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
@@ -1044,7 +1044,7 @@ function aafm_render_connection_tab(): void {
 			'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
 			esc_attr( $snippet ),
 			aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+			esc_html__( 'Copy', 'oversio-agent-abilities' )
 		);
 		echo '</div>';
 		echo '</div>';
@@ -1060,15 +1060,15 @@ function aafm_render_connection_tab(): void {
 	// ---- Step 3: check the endpoint is reachable ----
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
-	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'oversio-agent-abilities' ) . '</h2>';
+	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 
 	echo '<div class="aafm-step-rail"><div class="aafm-card">';
 	echo '<div class="aafm-card-pad aafm-connect-check">';
 	echo '<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-test-connection">';
 	echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-	echo esc_html__( 'Check endpoint', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
+	echo esc_html__( 'Check endpoint', 'oversio-agent-abilities' ) . '</button> <span class="aafm-test-status" aria-live="polite"></span>';
 	echo '</div>';
 
 	// Diagnostics rail: one row per check, status mapped to a coloured dot.

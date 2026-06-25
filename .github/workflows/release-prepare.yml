@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          VERSION="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          VERSION="$(grep -E '^\s*\*\s*Version:' oversio-agent-abilities.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
           if [ -z "$VERSION" ]; then echo "could not read version"; exit 1; fi
           BRANCH="release/$VERSION"
 

@@ -33,7 +33,7 @@ final class PluginActionLinksTest extends TestCase {
 	public function test_links_target_the_right_tabs(): void {
 		$actions = aafm_plugin_action_links( array() );
 
-		$this->assertStringContainsString( 'page=agent-abilities-for-mcp', $actions['aafm-getting-started'] );
+		$this->assertStringContainsString( 'page=oversio-agent-abilities', $actions['aafm-getting-started'] );
 		$this->assertStringNotContainsString( 'tab=', $actions['aafm-getting-started'] );
 		$this->assertStringContainsString( 'Getting Started', $actions['aafm-getting-started'] );
 

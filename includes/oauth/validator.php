@@ -114,8 +114,8 @@ function aafm_oauth_resolve_current_user( $user_id ) {
  *
  * The determine_current_user filter runs before REST routing resolves $request->get_route(),
  * so the target is derived from the raw request: the URI path (pretty permalinks give
- * /wp-json/agent-abilities-for-mcp/mcp) and the rest_route query var (plain permalinks give
- * ?rest_route=/agent-abilities-for-mcp/mcp). The MCP rest path is taken from the registered
+ * /wp-json/oversio-agent-abilities/mcp) and the rest_route query var (plain permalinks give
+ * ?rest_route=/oversio-agent-abilities/mcp). The MCP rest path is taken from the registered
  * endpoint so it tracks any future rename.
  *
  * @return bool True only when the request is for the MCP endpoint.
@@ -124,7 +124,7 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 	// Single-sourced in bootstrap.php (leading-slash form).
 	$mcp_route = aafm_mcp_rest_route();
 
-	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp.
+	// Plain-permalink form: ?rest_route=/oversio-agent-abilities/mcp.
 	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
 		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( rtrim( $rest_route, '/' ) === $mcp_route ) {

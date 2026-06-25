@@ -60,8 +60,8 @@ function aafm_wc_attributes_registry_definitions(): array {
 		// Every ability gates on the flat, object-independent manage_woocommerce capability and falls through
 		// to its real permission_callback at discovery, so none needs a server.php case.
 		'aafm/wc-list-product-attributes'  => array(
-			'label'        => __( 'List WooCommerce product attributes', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all global WooCommerce product attribute taxonomies with their id, name (label), slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce product attributes', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all global WooCommerce product attribute taxonomies with their id, name (label), slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -69,8 +69,8 @@ function aafm_wc_attributes_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-product-attribute' => array(
-			'label'        => __( 'Create WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a new global WooCommerce product attribute taxonomy from a name (required) plus optional slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce product attribute', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a new global WooCommerce product attribute taxonomy from a name (required) plus optional slug, type, sort order, and archive flag. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -78,8 +78,8 @@ function aafm_wc_attributes_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-product-attribute' => array(
-			'label'        => __( 'Update WooCommerce product attribute', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a global WooCommerce product attribute taxonomy by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce product attribute', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a global WooCommerce product attribute taxonomy by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

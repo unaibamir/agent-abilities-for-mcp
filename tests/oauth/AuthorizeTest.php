@@ -488,7 +488,7 @@ class AuthorizeTest extends TestCase {
 	 */
 	public function test_consent_csp_allows_offloaded_stylesheet_origin(): void {
 		$cdn = static function () {
-			return 'https://cdn.example.net/wp-content/plugins/agent-abilities-for-mcp/assets/consent.css';
+			return 'https://cdn.example.net/wp-content/plugins/oversio-agent-abilities/assets/consent.css';
 		};
 		add_filter( 'plugins_url', $cdn, 10, 0 );
 		$csp = aafm_oauth_consent_csp();

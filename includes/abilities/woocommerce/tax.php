@@ -57,8 +57,8 @@ function aafm_wc_tax_registry_definitions(): array {
 	return array(
 		// Tax rates (W4-WC6).
 		'aafm/wc-list-tax-rates'   => array(
-			'label'        => __( 'List WooCommerce tax rates', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all WooCommerce tax rates across every tax class, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce tax rates', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all WooCommerce tax rates across every tax class, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_tax_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-tax-rate'     => array(
-			'label'        => __( 'Get WooCommerce tax rate', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce tax rate by id, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce tax rate', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce tax rate by id, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_tax_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-tax-rate'  => array(
-			'label'        => __( 'Create WooCommerce tax rate', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce tax rate. Required fields: rate (decimal string). Optional: country, state, name, priority, compound, shipping, order, class slug. Returns the full rate shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce tax rate', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce tax rate. Required fields: rate (decimal string). Optional: country, state, name, priority, compound, shipping, order, class slug. Returns the full rate shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_tax_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-tax-rate'  => array(
-			'label'        => __( 'Update WooCommerce tax rate', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce tax rate by id, changing only the fields you send. An empty body (only id) is a no-op success. Returns the updated rate shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce tax rate', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce tax rate by id, changing only the fields you send. An empty body (only id) is a no-op success. Returns the updated rate shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -94,8 +94,8 @@ function aafm_wc_tax_registry_definitions(): array {
 
 		// Tax classes (W4-WC6).
 		'aafm/wc-list-tax-classes' => array(
-			'label'        => __( 'List WooCommerce tax classes', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all WooCommerce tax classes including the Standard class, returning name and slug for each. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce tax classes', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists all WooCommerce tax classes including the Standard class, returning name and slug for each. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -103,8 +103,8 @@ function aafm_wc_tax_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-tax-class' => array(
-			'label'        => __( 'Create WooCommerce tax class', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce tax class from a name, with an optional slug. Returns the new class shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce tax class', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce tax class from a name, with an optional slug. Returns the new class shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -324,7 +324,7 @@ function aafm_exec_wc_get_tax_rate( array $input ): array|\WP_Error {
 	$rate_id = isset( $input['rate_id'] ) ? (int) $input['rate_id'] : 0;
 	$rate    = aafm_wc_get_tax_rate_by_id( $rate_id );
 	if ( null === $rate ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'agent-abilities-for-mcp' ) );
+		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
 	}
 	return $rate;
 }
@@ -514,7 +514,7 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
 	$rate_id  = isset( $input['rate_id'] ) ? (int) $input['rate_id'] : 0;
 	$existing = aafm_wc_get_tax_rate_by_id( $rate_id );
 	if ( null === $existing ) {
-		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'agent-abilities-for-mcp' ) );
+		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'oversio-agent-abilities' ) );
 	}
 
 	global $wpdb;

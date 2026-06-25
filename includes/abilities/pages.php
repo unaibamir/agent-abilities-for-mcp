@@ -19,48 +19,48 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_pages_definitions' );
  */
 function aafm_register_pages_definitions( array $registry ): array {
 	$registry['aafm/get-pages']   = array(
-		'label'        => __( 'Get pages', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get pages', 'oversio-agent-abilities' ),
+		'description'  => __( 'List pages filtered by status and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item. Response includes total.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_pages',
 	);
 	$registry['aafm/get-page']    = array(
-		'label'        => __( 'Get page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected pages), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get page', 'oversio-agent-abilities' ),
+		'description'  => __( 'Retrieve a single page by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected pages), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_page',
 	);
 	$registry['aafm/create-page'] = array(
-		'label'        => __( 'Create page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create and publish a page (requires publish_pages). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create page', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create and publish a page (requires publish_pages). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_page',
 	);
 	$registry['aafm/update-page'] = array(
-		'label'        => __( 'Update page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update page', 'oversio-agent-abilities' ),
+		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_page',
 	);
 	$registry['aafm/trash-page']  = array(
-		'label'        => __( 'Trash page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Move a page to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Trash page', 'oversio-agent-abilities' ),
+		'description'  => __( 'Move a page to trash (recoverable, never permanently deleted).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_page',
 	);
 	$registry['aafm/delete-page'] = array(
-		'label'        => __( 'Delete page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete page', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',

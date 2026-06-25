@@ -21,32 +21,32 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_meta_definitions' );
  */
 function aafm_register_meta_definitions( array $registry ): array {
 	$registry['aafm/get-post-meta']     = array(
-		'label'        => __( 'Get post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get post meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read a single allowlisted meta value from a post the agent can edit (scalar only).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post_meta',
 	);
 	$registry['aafm/get-all-post-meta'] = array(
-		'label'        => __( 'Get all post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get all post meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read every allowlisted scalar meta value from a post the agent can edit, returned as a key/value map. Protected, underscore, and non-scalar values are excluded.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_all_post_meta',
 	);
 	$registry['aafm/update-post-meta']  = array(
-		'label'        => __( 'Update post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update post meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a post the agent can edit.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post_meta',
 	);
 	$registry['aafm/delete-post-meta']  = array(
-		'label'        => __( 'Delete post meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete post meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Delete an allowlisted meta key from a post the agent can edit. Removes all values of that key.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -104,7 +104,7 @@ function aafm_args_get_post_meta(): array {
 				'meta_key' => array( 'type' => 'string' ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 				'value'    => array(
 					'type'        => array( 'string', 'number', 'boolean' ),
-					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'oversio-agent-abilities' ),
 				),
 			),
 		),

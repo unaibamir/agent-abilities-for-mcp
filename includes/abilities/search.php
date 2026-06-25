@@ -19,8 +19,8 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_search_definitions' );
  */
 function aafm_register_search_definitions( array $registry ): array {
 	$registry['aafm/search-content'] = array(
-		'label'        => __( 'Search content', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Search content', 'oversio-agent-abilities' ),
+		'description'  => __( 'Search across the exposed content types in one query. Each result returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per result. Response includes total.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -53,7 +53,7 @@ function aafm_args_search_content(): array {
 				'status'          => array(
 					'type'        => 'string',
 					'default'     => 'publish',
-					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'oversio-agent-abilities' ),
 				),
 				'page'            => array(
 					'type'    => 'integer',

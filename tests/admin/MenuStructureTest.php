@@ -35,18 +35,18 @@ final class MenuStructureTest extends TestCase {
 
 		aafm_register_admin_menu();
 
-		$this->assertArrayHasKey( 'agent-abilities-for-mcp', $admin_page_hooks );
-		$this->assertArrayHasKey( 'agent-abilities-for-mcp', $submenu );
-		$slugs = wp_list_pluck( $submenu['agent-abilities-for-mcp'], 2 );
-		$this->assertContains( 'agent-abilities-for-mcp', $slugs );
-		$this->assertContains( 'agent-abilities-for-mcp&tab=connection', $slugs );
-		$this->assertContains( 'agent-abilities-for-mcp&tab=integrations', $slugs );
-		$this->assertContains( 'agent-abilities-for-mcp&tab=help', $slugs );
+		$this->assertArrayHasKey( 'oversio-agent-abilities', $admin_page_hooks );
+		$this->assertArrayHasKey( 'oversio-agent-abilities', $submenu );
+		$slugs = wp_list_pluck( $submenu['oversio-agent-abilities'], 2 );
+		$this->assertContains( 'oversio-agent-abilities', $slugs );
+		$this->assertContains( 'oversio-agent-abilities&tab=connection', $slugs );
+		$this->assertContains( 'oversio-agent-abilities&tab=integrations', $slugs );
+		$this->assertContains( 'oversio-agent-abilities&tab=help', $slugs );
 	}
 
 	public function test_assets_enqueue_on_the_top_level_hook(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
-		aafm_enqueue_admin_assets( 'toplevel_page_agent-abilities-for-mcp' );
+		aafm_enqueue_admin_assets( 'toplevel_page_oversio-agent-abilities' );
 		$this->assertTrue( wp_style_is( 'aafm-admin', 'enqueued' ) );
 		$this->assertTrue( wp_script_is( 'aafm-admin', 'enqueued' ) );
 	}
@@ -57,7 +57,7 @@ final class MenuStructureTest extends TestCase {
 		ob_start();
 		aafm_render_admin_page();
 		$html = (string) ob_get_clean();
-		$this->assertStringContainsString( 'admin.php?page=agent-abilities-for-mcp', $html );
-		$this->assertStringNotContainsString( 'options-general.php?page=agent-abilities-for-mcp', $html );
+		$this->assertStringContainsString( 'admin.php?page=oversio-agent-abilities', $html );
+		$this->assertStringNotContainsString( 'options-general.php?page=oversio-agent-abilities', $html );
 	}
 }

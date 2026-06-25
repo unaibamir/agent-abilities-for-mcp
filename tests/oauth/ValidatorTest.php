@@ -98,7 +98,7 @@ class ValidatorTest extends TestCase {
 	 * Point the request at the MCP REST route (pretty-permalink form).
 	 */
 	private function on_mcp_route(): void {
-		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/oversio-agent-abilities/mcp';
 	}
 
 	/**
@@ -184,7 +184,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * The plain-permalink rest_route form (?rest_route=/agent-abilities-for-mcp/mcp) is also
+	 * The plain-permalink rest_route form (?rest_route=/oversio-agent-abilities/mcp) is also
 	 * recognised as the MCP route.
 	 */
 	public function test_token_resolves_on_plain_permalink_rest_route(): void {
@@ -200,30 +200,30 @@ class ValidatorTest extends TestCase {
 
 		// Plain-permalink request: index.php with the rest_route query var, no pretty path.
 		$_SERVER['REQUEST_URI'] = '/index.php';
-		$_GET['rest_route']     = '/agent-abilities-for-mcp/mcp';
+		$_GET['rest_route']     = '/oversio-agent-abilities/mcp';
 
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
 	}
 
 	/**
 	 * TF-2: on a subdirectory install (site under a path prefix like /blog), the pretty-permalink
-	 * MCP path is /blog/wp-json/agent-abilities-for-mcp/mcp. The route guard must derive the
+	 * MCP path is /blog/wp-json/oversio-agent-abilities/mcp. The route guard must derive the
 	 * expected path from rest_url(), which carries that prefix, so a valid token still resolves —
 	 * a hardcoded /wp-json/... literal would never match.
 	 */
 	public function test_token_resolves_on_subdirectory_install(): void {
 		// Model a site installed under /blog with pretty permalinks: rest_url() returns the
-		// prefixed pretty endpoint (https://host/blog/wp-json/agent-abilities-for-mcp/mcp).
+		// prefixed pretty endpoint (https://host/blog/wp-json/oversio-agent-abilities/mcp).
 		$rest_prefix = trim( rest_get_url_prefix(), '/' );
 		$pretty_url  = static function ( string $url ) use ( $rest_prefix ): string {
 			// Only rewrite the MCP endpoint URL; the route may sit in the path (pretty) or the
 			// rest_route query var (plain), so match against the whole URL. Leave everything else
 			// (and any already-prefixed call) alone so the audience and the route derivation agree.
-			if ( false === strpos( $url, 'agent-abilities-for-mcp/mcp' ) || false !== strpos( $url, '/blog/' ) ) {
+			if ( false === strpos( $url, 'oversio-agent-abilities/mcp' ) || false !== strpos( $url, '/blog/' ) ) {
 				return $url;
 			}
 			$host = (string) wp_parse_url( $url, PHP_URL_SCHEME ) . '://' . (string) wp_parse_url( $url, PHP_URL_HOST );
-			return $host . '/blog/' . $rest_prefix . '/agent-abilities-for-mcp/mcp';
+			return $host . '/blog/' . $rest_prefix . '/oversio-agent-abilities/mcp';
 		};
 		add_filter( 'rest_url', $pretty_url );
 
@@ -497,7 +497,7 @@ class ValidatorTest extends TestCase {
 
 		try {
 			// Pretty-permalink MCP request path, reconstructed without $wp_rewrite.
-			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+			$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/oversio-agent-abilities/mcp';
 			unset( $_GET['rest_route'] );
 			$this->assertTrue(
 				aafm_oauth_request_targets_mcp_route(),
@@ -547,7 +547,7 @@ class ValidatorTest extends TestCase {
 			);
 
 			$this->assertStringContainsString(
-				'agent-abilities-for-mcp/mcp',
+				'oversio-agent-abilities/mcp',
 				$url_without_rewrite,
 				'aafm_endpoint_url() must include the MCP route even when $wp_rewrite is null.'
 			);

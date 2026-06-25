@@ -6,9 +6,9 @@ If you're looking for what the plugin does or how to install it, read `readme.tx
 
 ## The shape of the thing
 
-The repo root *is* the plugin. There's no build step — the files at the top level are what ships. `agent-abilities-for-mcp.php` is the only entry point; it defines the `AAFM_*` constants, then loads everything from `includes/` and wires it up on `plugins_loaded` via `aafm_bootstrap()`.
+The repo root *is* the plugin. There's no build step — the files at the top level are what ships. `oversio-agent-abilities.php` is the only entry point; it defines the `AAFM_*` constants, then loads everything from `includes/` and wires it up on `plugins_loaded` via `aafm_bootstrap()`.
 
-Everything uses the `aafm_` function prefix, the `AAFM_` constant prefix, and the `agent-abilities-for-mcp` text domain. The style is procedural on purpose — it's the right idiom for a wp.org plugin, and there's no first-party autoloader, just an explicit `require_once` list in the main file. Don't OOP-ify it.
+Everything uses the `aafm_` function prefix, the `AAFM_` constant prefix, and the `oversio-agent-abilities` text domain. The style is procedural on purpose — it's the right idiom for a wp.org plugin, and there's no first-party autoloader, just an explicit `require_once` list in the main file. Don't OOP-ify it.
 
 ## How an ability becomes a tool
 
@@ -44,7 +44,7 @@ They didn't used to. A single ability's description was once typed in the regist
 - Every `aafm_args_*` builder calls those two helpers instead of repeating the text.
 - The integration manifest hydrates its label/description from the registry too.
 
-One rule you must not break: keep the `__()` call at the registry definition site, with a literal string and the text domain. The derive helpers return the already-translated string — they never wrap a variable in `__()`. Plugin Check's i18n scanner needs to see literal `__('…', 'agent-abilities-for-mcp')` calls, and it only sees them at the registry. Move the literal and you break translation extraction.
+One rule you must not break: keep the `__()` call at the registry definition site, with a literal string and the text domain. The derive helpers return the already-translated string — they never wrap a variable in `__()`. Plugin Check's i18n scanner needs to see literal `__('…', 'oversio-agent-abilities')` calls, and it only sees them at the registry. Move the literal and you break translation extraction.
 
 ### The disclosure line is deliberately not derived
 
@@ -94,9 +94,9 @@ All three have to be clean before anything is commit-ready.
 
 ### Plugin Check, the one with a trap
 
-Run Plugin Check the way CI does — stage the distributable tree first. **Do not** run `ddev wp plugin check agent-abilities-for-mcp` directly against the dev checkout: the plugin is a symlink to the repo root, so a naked run recurses into the bundled WordPress under `wp/` and either hangs at full CPU or spits out false text-domain errors.
+Run Plugin Check the way CI does — stage the distributable tree first. **Do not** run `ddev wp plugin check oversio-agent-abilities` directly against the dev checkout: the plugin is a symlink to the repo root, so a naked run recurses into the bundled WordPress under `wp/` and either hangs at full CPU or spits out false text-domain errors.
 
-Instead, mirror `.github/workflows/plugin-check.yml`: `rsync` the tree into a real directory named exactly `agent-abilities-for-mcp` (the name matters — Plugin Check derives the expected text domain from the folder), using `.distignore` as the exclude list so dev-only files don't get scanned, then run the check with `--exclude-directories=vendor,languages`. The folder name has to be exact or you'll get ~105 false "text domain mismatch" errors. Fail only on errors; the single DirectDB warning on the internal audit table is an accepted false positive.
+Instead, mirror `.github/workflows/plugin-check.yml`: `rsync` the tree into a real directory named exactly `oversio-agent-abilities` (the name matters — Plugin Check derives the expected text domain from the folder), using `.distignore` as the exclude list so dev-only files don't get scanned, then run the check with `--exclude-directories=vendor,languages`. The folder name has to be exact or you'll get ~105 false "text domain mismatch" errors. Fail only on errors; the single DirectDB warning on the internal audit table is an accepted false positive.
 
 ## Commits
 

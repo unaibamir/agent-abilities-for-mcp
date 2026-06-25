@@ -42,40 +42,40 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_users_definitions' );
  */
 function aafm_register_users_definitions( array $registry ): array {
 	$registry['aafm/get-users']   = array(
-		'label'        => __( 'Get users', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List users: id, display name, email, roles, and post count. Response includes total (the full match count). Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get users', 'oversio-agent-abilities' ),
+		'description'  => __( 'List users: id, display name, email, roles, and post count. Response includes total (the full match count). Gated by the list-users capability. Never login or password.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_get_users',
 	);
 	$registry['aafm/get-user']    = array(
-		'label'        => __( 'Get user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one user by id: id, display name, email, roles, post count, registration date, and bio. Never login or password.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get user', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read one user by id: id, display name, email, roles, post count, registration date, and bio. Never login or password.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_get_user',
 	);
 	$registry['aafm/create-user'] = array(
-		'label'        => __( 'Create user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new user with the site default role (never a caller-chosen role). Requires the create-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create user', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create a new user with the site default role (never a caller-chosen role). Requires the create-users capability. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_create_user',
 	);
 	$registry['aafm/update-user'] = array(
-		'label'        => __( 'Update user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Edit a user\'s display name, name, or email by id. Changing a role needs the promote-users capability and never demotes the last administrator.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update user', 'oversio-agent-abilities' ),
+		'description'  => __( 'Edit a user\'s display name, name, or email by id. Changing a role needs the promote-users capability and never demotes the last administrator.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_update_user',
 	);
 	$registry['aafm/delete-user'] = array(
-		'label'        => __( 'Delete user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete user', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',

@@ -101,7 +101,7 @@ class SchemaTest extends TestCase {
 		$this->assertGreaterThanOrEqual( 512, $this->varchar_length( 'aafm_oauth_access_tokens', 'resource' ), 'access_tokens.resource must not truncate long URLs.' );
 
 		// Round-trip a long resource through the token mint and read it back intact.
-		$long_resource = 'https://' . str_repeat( 'sub.', 60 ) . 'example.com/wp-json/agent-abilities-for-mcp/mcp';
+		$long_resource = 'https://' . str_repeat( 'sub.', 60 ) . 'example.com/wp-json/oversio-agent-abilities/mcp';
 		$this->assertGreaterThan( 191, strlen( $long_resource ), 'fixture: the resource must exceed the old 191 cap.' );
 
 		$tokens = aafm_oauth_mint_tokens(

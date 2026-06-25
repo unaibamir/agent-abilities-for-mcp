@@ -39,88 +39,88 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_posts_definitions' );
  */
 function aafm_register_posts_definitions( array $registry ): array {
 	$registry['aafm/get-posts']       = array(
-		'label'        => __( 'Get posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get posts', 'oversio-agent-abilities' ),
+		'description'  => __( 'List posts filtered by type, status, and search term. Each item returns id, title, status, type, slug, link, author {id, display_name}, dates, excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and allowlisted meta. Set include_content=true to also return full content per item; content_format (rendered or raw) only takes effect when include_content is true. Response includes total.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_posts',
 	);
 	$registry['aafm/count-posts']     = array(
-		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Count posts', 'oversio-agent-abilities' ),
+		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_count_posts',
 	);
 	$registry['aafm/get-post']        = array(
-		'label'        => __( 'Get post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Retrieve a single post by ID. Returns id, title, status, type, slug, link, author {id, display_name}, dates, full content (rendered HTML by default, or raw markup via content_format; omitted for password-protected posts), excerpt, terms grouped by taxonomy, featured_image {id, url, alt} or null, and meta (allowlisted scalar values only).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_post',
 	);
 	$registry['aafm/create-draft']    = array(
-		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create draft', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_draft',
 	);
 	$registry['aafm/create-post']     = array(
-		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_post',
 	);
 	$registry['aafm/update-post']     = array(
-		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_post',
 	);
 	$registry['aafm/replace-in-post'] = array(
-		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the result and edits only the body; status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Replace in post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the result and edits only the body; status is never touched. Reversible via revisions.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_replace_in_post',
 	);
 	$registry['aafm/trash-post']      = array(
-		'label'        => __( 'Trash post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Trash post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Move a post to trash (recoverable, never permanently deleted).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_trash_post',
 	);
 	$registry['aafm/create-cpt-item'] = array(
-		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create content item', 'oversio-agent-abilities' ),
+		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_create_cpt_item',
 	);
 	$registry['aafm/update-cpt-item'] = array(
-		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update content item', 'oversio-agent-abilities' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_update_cpt_item',
 	);
 	$registry['aafm/delete-post']     = array(
-		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete post', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -500,7 +500,7 @@ function aafm_write_cpt_content_schema( bool $require_title ): array {
 	$schema['properties']['post_type'] = array(
 		'type'        => 'string',
 		'minLength'   => 1,
-		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'oversio-agent-abilities' ),
 	);
 	$required                          = $schema['required'] ?? array();
 	$required[]                        = 'post_type';
@@ -575,7 +575,7 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 	// Max-title guard covers create (post + page via delegation) and, in the updater, update (post + page).
 	$title = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
 	if ( ! aafm_title_within_limit( $title ) ) {
-		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'oversio-agent-abilities' ) );
 	}
 
 	// Validate enrichment BEFORE inserting so a bad term/attachment/meta aborts with nothing written.
@@ -834,7 +834,7 @@ function aafm_exec_update_post( array $input ) {
 	if ( isset( $input['title'] ) ) {
 		$title = sanitize_text_field( (string) $input['title'] );
 		if ( ! aafm_title_within_limit( $title ) ) {
-			return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
+			return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'oversio-agent-abilities' ) );
 		}
 		$postarr['post_title'] = $title;
 	}

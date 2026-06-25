@@ -147,7 +147,7 @@ function aafm_setup_steps(): array {
 	$tab_url = static function ( string $tab ): string {
 		return add_query_arg(
 			array(
-				'page' => 'agent-abilities-for-mcp',
+				'page' => 'oversio-agent-abilities',
 				'tab'  => $tab,
 			),
 			admin_url( 'admin.php' )
@@ -156,20 +156,20 @@ function aafm_setup_steps(): array {
 
 	return array(
 		array(
-			'title' => __( 'Enable the abilities you want', 'agent-abilities-for-mcp' ),
-			'desc'  => __( 'Nothing is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab.', 'agent-abilities-for-mcp' ),
+			'title' => __( 'Enable the abilities you want', 'oversio-agent-abilities' ),
+			'desc'  => __( 'Nothing is exposed until you turn it on. Pick the abilities the agent should have on the Abilities tab.', 'oversio-agent-abilities' ),
 			'done'  => aafm_enabled_ability_count() > 0,
 			'href'  => $tab_url( 'abilities' ),
 		),
 		array(
-			'title' => __( 'Connect your agent', 'agent-abilities-for-mcp' ),
-			'desc'  => __( 'Approve it in the browser over OAuth, or set up an Application Password for a dedicated agent user. Either way its reach stays capped by what you turn on.', 'agent-abilities-for-mcp' ),
+			'title' => __( 'Connect your agent', 'oversio-agent-abilities' ),
+			'desc'  => __( 'Approve it in the browser over OAuth, or set up an Application Password for a dedicated agent user. Either way its reach stays capped by what you turn on.', 'oversio-agent-abilities' ),
 			'done'  => aafm_has_oauth_grant() || ! empty( aafm_agent_user_candidates() ),
 			'href'  => $tab_url( 'connection' ),
 		),
 		array(
-			'title' => __( 'Make your first call', 'agent-abilities-for-mcp' ),
-			'desc'  => __( 'Point your MCP client at the endpoint and run one request. It shows up here once the activity log records it.', 'agent-abilities-for-mcp' ),
+			'title' => __( 'Make your first call', 'oversio-agent-abilities' ),
+			'desc'  => __( 'Point your MCP client at the endpoint and run one request. It shows up here once the activity log records it.', 'oversio-agent-abilities' ),
 			'done'  => aafm_activity_count() > 0,
 			'href'  => $tab_url( 'connection' ),
 		),
@@ -202,7 +202,7 @@ function aafm_render_dashboard_tab(): void {
 	$log_rows      = aafm_activity_count();
 	$retention     = aafm_log_retention_days();
 	$admin_agents  = array_values( array_filter( $candidates, static fn( array $c ): bool => ! empty( $c['is_admin'] ) ) );
-	$adapter_label = ( null === $adapter ) ? __( 'not loaded', 'agent-abilities-for-mcp' ) : $adapter;
+	$adapter_label = ( null === $adapter ) ? __( 'not loaded', 'oversio-agent-abilities' ) : $adapter;
 
 	$steps      = aafm_setup_steps();
 	$done_count = count( array_filter( $steps, static fn( array $s ): bool => ! empty( $s['done'] ) ) );
@@ -224,15 +224,15 @@ function aafm_render_dashboard_tab(): void {
 		echo '<span class="aafm-setup-ic" aria-hidden="true">';
 		echo aafm_icon( 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 		echo '</span>';
-		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'agent-abilities-for-mcp' ) . '</h2>';
+		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'oversio-agent-abilities' ) . '</h2>';
 	} else {
-		echo '<h2>' . esc_html__( 'Finish setting up', 'agent-abilities-for-mcp' ) . '</h2>';
+		echo '<h2>' . esc_html__( 'Finish setting up', 'oversio-agent-abilities' ) . '</h2>';
 		printf(
 			'<span class="aafm-setup-count">%s</span>',
 			esc_html(
 				sprintf(
 					/* translators: 1: number of completed setup steps, 2: total setup steps. */
-					__( '%1$d of %2$d done', 'agent-abilities-for-mcp' ),
+					__( '%1$d of %2$d done', 'oversio-agent-abilities' ),
 					$done_count,
 					$step_total
 				)
@@ -260,16 +260,16 @@ function aafm_render_dashboard_tab(): void {
 		if ( $is_done ) {
 			$state_cls  = 'aafm-step-done';
 			$pill_class = 'aafm-pill aafm-pill-success';
-			$pill_text  = __( 'Done', 'agent-abilities-for-mcp' );
+			$pill_text  = __( 'Done', 'oversio-agent-abilities' );
 		} elseif ( ! $active_marked ) {
 			$state_cls     = 'aafm-step-active';
 			$pill_class    = 'aafm-pill aafm-pill-warn';
-			$pill_text     = __( 'To do', 'agent-abilities-for-mcp' );
+			$pill_text     = __( 'To do', 'oversio-agent-abilities' );
 			$active_marked = true;
 		} else {
 			$state_cls  = 'aafm-step-todo';
 			$pill_class = 'aafm-pill aafm-pill-neutral';
-			$pill_text  = __( 'To do', 'agent-abilities-for-mcp' );
+			$pill_text  = __( 'To do', 'oversio-agent-abilities' );
 		}
 
 		printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
@@ -288,7 +288,7 @@ function aafm_render_dashboard_tab(): void {
 			printf(
 				'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
 				esc_url( (string) $step['href'] ),
-				esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
+				esc_html__( 'Go to step', 'oversio-agent-abilities' ),
 				aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 			);
 		}
@@ -310,7 +310,7 @@ function aafm_render_dashboard_tab(): void {
 	// Enabled abilities.
 	echo '<div class="aafm-stat aafm-stat-abilities">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
@@ -321,13 +321,13 @@ function aafm_render_dashboard_tab(): void {
 		esc_html(
 			sprintf(
 				/* translators: %d: total number of abilities in the catalog. */
-				__( 'of %d', 'agent-abilities-for-mcp' ),
+				__( 'of %d', 'oversio-agent-abilities' ),
 				$total
 			)
 		)
 	);
 	if ( 0 === $enabled ) {
-		echo '<div class="stat-sub">' . esc_html__( 'Turn some on to start', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="stat-sub">' . esc_html__( 'Turn some on to start', 'oversio-agent-abilities' ) . '</div>';
 	} else {
 		$still_off = max( 0, $total - $enabled );
 		printf(
@@ -335,7 +335,7 @@ function aafm_render_dashboard_tab(): void {
 			esc_html(
 				sprintf(
 					/* translators: %s: number of abilities still turned off. */
-					__( '%s still off', 'agent-abilities-for-mcp' ),
+					__( '%s still off', 'oversio-agent-abilities' ),
 					number_format_i18n( $still_off )
 				)
 			)
@@ -346,19 +346,19 @@ function aafm_render_dashboard_tab(): void {
 	// Recent agents (24h).
 	echo '<div class="aafm-stat aafm-stat-recent">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'recent' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
-	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="stat-sub">' . esc_html__( 'Separate agent users seen in the activity log in the last 24 hours. This is recent activity from the log, not a count of live connections.', 'oversio-agent-abilities' ) . '</div>';
 	echo '</div>';
 
 	// Audit log.
 	echo '<div class="aafm-stat aafm-stat-audit">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'audit' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
@@ -366,7 +366,7 @@ function aafm_render_dashboard_tab(): void {
 	printf(
 		'<div class="stat-value">%1$s <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $log_rows ) ),
-		esc_html( _n( 'entry', 'entries', $log_rows, 'agent-abilities-for-mcp' ) )
+		esc_html( _n( 'entry', 'entries', $log_rows, 'oversio-agent-abilities' ) )
 	);
 	if ( $retention > 0 ) {
 		$log_sub = sprintf(
@@ -375,12 +375,12 @@ function aafm_render_dashboard_tab(): void {
 				'Keeping the last %s day of activity.',
 				'Keeping the last %s days of activity.',
 				$retention,
-				'agent-abilities-for-mcp'
+				'oversio-agent-abilities'
 			),
 			number_format_i18n( $retention )
 		);
 	} else {
-		$log_sub = __( 'Keeping all activity.', 'agent-abilities-for-mcp' );
+		$log_sub = __( 'Keeping all activity.', 'oversio-agent-abilities' );
 	}
 	printf( '<div class="stat-sub">%s</div>', esc_html( $log_sub ) );
 	echo '</div>';
@@ -389,25 +389,25 @@ function aafm_render_dashboard_tab(): void {
 	// a warn pill flags it AND the sub text names the login(s).
 	echo '<div class="aafm-stat aafm-stat-agent-users">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'groups' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( count( $candidates ) ) ) );
 	if ( empty( $candidates ) ) {
-		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'oversio-agent-abilities' ) . '</div>';
 	} elseif ( empty( $admin_agents ) ) {
-		echo '<div class="stat-sub">' . esc_html__( 'All low-privilege', 'agent-abilities-for-mcp' ) . '</div>';
+		echo '<div class="stat-sub">' . esc_html__( 'All low-privilege', 'oversio-agent-abilities' ) . '</div>';
 	} else {
 		$logins = implode( ', ', array_map( static fn( array $c ): string => (string) $c['login'], $admin_agents ) );
-		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review role', 'agent-abilities-for-mcp' ) . '</span></div>';
+		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review role', 'oversio-agent-abilities' ) . '</span></div>';
 		printf(
 			'<div class="stat-sub">%s</div>',
 			esc_html(
 				sprintf(
 					/* translators: %s: comma-separated list of user logins that can manage the site. */
-					__( 'Can manage the site: %s. Give the agent its own low-privilege user instead.', 'agent-abilities-for-mcp' ),
+					__( 'Can manage the site: %s. Give the agent its own low-privilege user instead.', 'oversio-agent-abilities' ),
 					$logins
 				)
 			)
@@ -426,12 +426,12 @@ function aafm_render_dashboard_tab(): void {
 	echo '<span class="icon">';
 	echo aafm_icon( 'endpoint' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
-	echo '<h2>' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'MCP endpoint', 'oversio-agent-abilities' ) . '</h2>';
 	// Permalink-mode info pill on the right, like the mockup.
 	$pretty          = (bool) get_option( 'permalink_structure' );
 	$permalink_label = $pretty
-		? __( 'Pretty permalinks', 'agent-abilities-for-mcp' )
-		: __( 'Plain permalinks', 'agent-abilities-for-mcp' );
+		? __( 'Pretty permalinks', 'oversio-agent-abilities' )
+		: __( 'Plain permalinks', 'oversio-agent-abilities' );
 	printf(
 		'<span class="aafm-pill aafm-pill-info" style="margin-inline-start:auto">%s</span>',
 		esc_html( $permalink_label )
@@ -443,9 +443,9 @@ function aafm_render_dashboard_tab(): void {
 		esc_html( $endpoint ),
 		esc_attr( $endpoint ),
 		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'oversio-agent-abilities' )
 	);
-	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div>';
 	echo '</section>';
 
@@ -455,28 +455,28 @@ function aafm_render_dashboard_tab(): void {
 	echo '<span class="icon">';
 	echo aafm_icon( 'clock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
-	echo '<h2>' . esc_html__( 'Versions', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'Versions', 'oversio-agent-abilities' ) . '</h2>';
 	echo '</div>';
 	echo '<div class="aafm-card-pad">';
 	echo '<dl class="aafm-kv">';
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'Plugin', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Plugin', 'oversio-agent-abilities' ),
 		esc_html( AAFM_VERSION )
 	);
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'PHP', 'agent-abilities-for-mcp' ),
+		esc_html__( 'PHP', 'oversio-agent-abilities' ),
 		esc_html( PHP_VERSION )
 	);
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'MCP protocol', 'agent-abilities-for-mcp' ),
+		esc_html__( 'MCP protocol', 'oversio-agent-abilities' ),
 		esc_html( aafm_mcp_protocol_version() )
 	);
 	printf(
 		'<dt>%1$s</dt><dd>%2$s</dd>',
-		esc_html__( 'Bundled adapter', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Bundled adapter', 'oversio-agent-abilities' ),
 		esc_html( $adapter_label )
 	);
 	echo '</dl>';

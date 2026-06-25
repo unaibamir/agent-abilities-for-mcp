@@ -93,10 +93,10 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_register_admin_menu();
 		global $submenu;
 		$slugs = array();
-		foreach ( (array) ( $submenu['agent-abilities-for-mcp'] ?? array() ) as $item ) {
+		foreach ( (array) ( $submenu['oversio-agent-abilities'] ?? array() ) as $item ) {
 			$slugs[] = $item[2];
 		}
-		$this->assertContains( 'agent-abilities-for-mcp', $slugs );
+		$this->assertContains( 'oversio-agent-abilities', $slugs );
 	}
 
 	public function test_abilities_tab_renders_checkboxes_for_registry_entries(): void {

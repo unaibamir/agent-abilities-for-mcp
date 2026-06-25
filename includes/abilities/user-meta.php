@@ -24,24 +24,24 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_user_meta_definitions' );
  */
 function aafm_register_user_meta_definitions( array $registry ): array {
 	$registry['aafm/get-user-meta']    = array(
-		'label'        => __( 'Get user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read a single allowlisted scalar meta value from a user the agent can edit. Auth, capability, and 2FA keys are never readable.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get user meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read a single allowlisted scalar meta value from a user the agent can edit. Auth, capability, and 2FA keys are never readable.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_get_user_meta',
 	);
 	$registry['aafm/update-user-meta'] = array(
-		'label'        => __( 'Update user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update user meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Write a single allowlisted scalar meta value to a user the agent can edit. Auth, capability, and 2FA keys are blocked outright.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'users',
 		'args_builder' => 'aafm_args_update_user_meta',
 	);
 	$registry['aafm/delete-user-meta'] = array(
-		'label'        => __( 'Delete user meta', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete user meta', 'oversio-agent-abilities' ),
+		'description'  => __( 'Delete an allowlisted meta key from a user the agent can edit. Removes all values of that key. Auth and capability keys can never be touched.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -88,7 +88,7 @@ function aafm_args_get_user_meta(): array {
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'oversio-agent-abilities' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),
@@ -101,7 +101,7 @@ function aafm_args_get_user_meta(): array {
 				'key'     => array( 'type' => 'string' ),
 				'value'   => array(
 					'type'        => array( 'string', 'number', 'boolean' ),
-					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The stored scalar value. A key with no stored value is returned as an empty string, not null.', 'oversio-agent-abilities' ),
 				),
 			),
 		),
@@ -137,7 +137,7 @@ function aafm_args_update_user_meta(): array {
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'oversio-agent-abilities' ),
 				),
 				'value'   => array(
 					'type' => array( 'string', 'number', 'boolean', 'integer' ),
@@ -187,7 +187,7 @@ function aafm_args_delete_user_meta(): array {
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'oversio-agent-abilities' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),

@@ -108,7 +108,7 @@ final class ConnectionTest extends TestCase {
 
 	public function test_client_snippet_points_at_endpoint_and_username(): void {
 		$snippet = aafm_client_snippet( 'claude', 'mcp-agent' );
-		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );
+		$this->assertStringContainsString( rest_url( 'oversio-agent-abilities/mcp' ), $snippet );
 		$this->assertStringContainsString( 'mcp-agent', $snippet );
 		// The wizard never embeds a real secret — only the paste placeholder.
 		$this->assertStringContainsString( 'PASTE-APPLICATION-PASSWORD-HERE', $snippet );
@@ -167,7 +167,7 @@ final class ConnectionTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-diag', $html );
 
 		// The endpoint URL is shown verbatim.
-		$this->assertStringContainsString( esc_html( rest_url( 'agent-abilities-for-mcp/mcp' ) ), $html );
+		$this->assertStringContainsString( esc_html( rest_url( 'oversio-agent-abilities/mcp' ) ), $html );
 
 		// The proxy package name survives in the primary config block.
 		$this->assertStringContainsString( '@automattic/mcp-wordpress-remote', $html );

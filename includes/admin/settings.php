@@ -109,7 +109,7 @@ function aafm_count_dropped_ip_lines( string $raw ): int {
 function aafm_ajax_save_settings(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$clean  = aafm_sanitize_settings_input( $posted );
@@ -236,12 +236,12 @@ function aafm_reset_plugin(): void {
 function aafm_ajax_reset_plugin(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	aafm_reset_plugin();
 	wp_send_json_success(
 		array(
-			'message' => __( 'Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone.', 'agent-abilities-for-mcp' ),
+			'message' => __( 'Plugin reset. Every setting and the activity log were cleared; your agent user and its content were left alone.', 'oversio-agent-abilities' ),
 		)
 	);
 }
@@ -262,7 +262,7 @@ function aafm_render_settings_tab(): void {
 
 	aafm_render_notice(
 		'info',
-		__( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'agent-abilities-for-mcp' )
+		__( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'oversio-agent-abilities' )
 	);
 
 	echo '<form id="aafm-settings-form">';
@@ -275,13 +275,13 @@ function aafm_render_settings_tab(): void {
 	// Rate limit.
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'Rate limit', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'Per minute', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Rate limit', 'oversio-agent-abilities' ),
+			'opt'     => __( 'Per minute', 'oversio-agent-abilities' ),
 			'control' => sprintf(
 				'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
 				esc_attr( (string) aafm_rate_limit_per_min() )
 			),
-			'help'    => __( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'oversio-agent-abilities' ),
 		)
 	);
 
@@ -289,17 +289,17 @@ function aafm_render_settings_tab(): void {
 	ob_start();
 	aafm_render_notice(
 		'warning',
-		__( 'Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops.', 'agent-abilities-for-mcp' )
+		__( 'Before you save a list with anything in it, add the IP address your AI client connects from. As soon as this list has one entry, any request from an address that is not on it is blocked, including your own agent. Get it wrong and every agent call stops.', 'oversio-agent-abilities' )
 	);
 	$ip_notice = (string) ob_get_clean();
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'IP allowlist', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'One per line', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'IP allowlist', 'oversio-agent-abilities' ),
+			'opt'     => __( 'One per line', 'oversio-agent-abilities' ),
 			'control' => sprintf(
 				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code">%s</textarea>',
 				esc_textarea( implode( "\n", aafm_ip_allowlist() ) )
-			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
+			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'oversio-agent-abilities' ) . '</p>' . $ip_notice,
 		)
 	);
 
@@ -307,36 +307,36 @@ function aafm_render_settings_tab(): void {
 	// name/value/checked() contract — the save handler and its tests bind to that, not this markup.
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Force draft on create', 'oversio-agent-abilities' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
-				. '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ),
+				. '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'oversio-agent-abilities' ) . '</label>',
+			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live.', 'oversio-agent-abilities' ),
 		)
 	);
 
 	// Max title length.
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'Maximum title length', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'Characters', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Maximum title length', 'oversio-agent-abilities' ),
+			'opt'     => __( 'Characters', 'oversio-agent-abilities' ),
 			'control' => sprintf(
 				'<input type="number" id="aafm-max-title" name="aafm_max_title_len" class="small-text" min="0" step="1" value="%s">',
 				esc_attr( (string) aafm_max_title_len() )
 			),
-			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'oversio-agent-abilities' ),
 		)
 	);
 
 	// Activity-log retention. A daily job removes entries older than this many days.
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'Keep activity log for', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'Days', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Keep activity log for', 'oversio-agent-abilities' ),
+			'opt'     => __( 'Days', 'oversio-agent-abilities' ),
 			'control' => sprintf(
 				'<input type="number" id="aafm-log-retention" name="aafm_log_retention_days" class="small-text" min="0" max="3650" step="1" value="%s">',
 				esc_attr( (string) aafm_log_retention_days() )
 			),
-			'help'    => __( 'How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry.', 'oversio-agent-abilities' ),
 		)
 	);
 
@@ -344,10 +344,10 @@ function aafm_render_settings_tab(): void {
 	// name/value/checked() is what the save handler and uninstall.php bind to, not this markup.
 	aafm_render_set_row(
 		array(
-			'label'   => __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ),
+			'label'   => __( 'Delete data on uninstall', 'oversio-agent-abilities' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), true, false ) . '><span class="aafm-switch-track"></span></label> '
-				. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'oversio-agent-abilities' ) . '</label>',
+			'help'    => __( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'oversio-agent-abilities' ),
 		)
 	);
 
@@ -355,7 +355,7 @@ function aafm_render_settings_tab(): void {
 	aafm_render_section(
 		array(
 			'icon'  => 'shield',
-			'title' => __( 'Safety controls', 'agent-abilities-for-mcp' ),
+			'title' => __( 'Safety controls', 'oversio-agent-abilities' ),
 			'body'  => $safety_body,
 		)
 	);
@@ -371,37 +371,37 @@ function aafm_render_settings_tab(): void {
 	// association, not a second one, so the redundant-`for` defect cannot recur. The set-row
 	// label carries the title id here so the existing aria-labelledby reference resolves.
 	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'oversio-agent-abilities' ) . '</div>';
 	echo '<div class="aafm-set-control">';
 	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">' . esc_html__( 'Let agents connect by pasting your site URL.', 'oversio-agent-abilities' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 
 	// Enable dynamic client registration. Same tie-up as the row above.
 	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'oversio-agent-abilities' ) . '</div>';
 	echo '<div class="aafm-set-control">';
 	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Allow agents to self-register a client automatically.', 'oversio-agent-abilities' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 
 	$oauth_body = (string) ob_get_clean();
 	aafm_render_section(
 		array(
 			'icon'  => 'connection',
-			'title' => __( 'OAuth', 'agent-abilities-for-mcp' ),
+			'title' => __( 'OAuth', 'oversio-agent-abilities' ),
 			'body'  => $oauth_body,
 		)
 	);
 
 	aafm_render_notice(
 		'warning',
-		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'agent-abilities-for-mcp' )
+		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'oversio-agent-abilities' )
 	);
 
-	echo '<p><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
+	echo '<p><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'oversio-agent-abilities' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
 	echo '</form>';
 
 	// Danger zone — a destructive, irreversible reset. Sits outside the settings <form> so the
@@ -415,14 +415,14 @@ function aafm_render_settings_tab(): void {
 	echo '<span class="aafm-card-head-ic">';
 	echo aafm_icon( 'warning' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
-	echo '<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h3></div>';
+	echo '<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">' . esc_html__( 'Danger zone', 'oversio-agent-abilities' ) . '</h3></div>';
 	echo '</div>';
 	echo '<div class="aafm-card-pad aafm-section-body">';
 	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
+	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'oversio-agent-abilities' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'oversio-agent-abilities' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
-	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
-	echo '<p class="help">' . esc_html__( 'Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'oversio-agent-abilities' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
+	echo '<p class="help">' . esc_html__( 'Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div></div>';
 
 	echo '</div>';

@@ -104,24 +104,24 @@ function aafm_register_yoast_full_definitions( array $registry ): array {
 function aafm_yoast_registry_definitions(): array {
 	return array(
 		'aafm/yoast-get-post'    => array(
-			'label'        => __( 'Get post SEO (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads a post's Yoast SEO fields (title, description, focus keyword, canonical, social, and the three robots directives) from its _yoast_wpseo_* post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO (Yoast)', 'oversio-agent-abilities' ),
+			'description'  => __( "Reads a post's Yoast SEO fields (title, description, focus keyword, canonical, social, and the three robots directives) from its _yoast_wpseo_* post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
 			'args_builder' => 'aafm_args_yoast_get_post',
 		),
 		'aafm/yoast-update-post' => array(
-			'label'        => __( 'Update post SEO (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update post SEO (Yoast)', 'oversio-agent-abilities' ),
+			'description'  => __( "Writes a post's Yoast SEO fields to its _yoast_wpseo_* post meta. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'yoast',
 			'args_builder' => 'aafm_args_yoast_update_post',
 		),
 		'aafm/yoast-get-head'    => array(
-			'label'        => __( 'Get post SEO head (Yoast)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO head (Yoast)', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Yoast, best-effort: the returned head string is empty when Yoast exposes no head API for that post. Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'yoast',
@@ -296,21 +296,21 @@ function aafm_args_yoast_update_post(): array {
 	$properties['robots_noindex']  = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1', '2' ),
-		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'oversio-agent-abilities' ),
 	);
 	$properties['robots_nofollow'] = array(
 		'type'        => 'string',
 		'enum'        => array( '0', '1' ),
-		'description' => __( 'Yoast nofollow directive: 0 = follow, 1 = nofollow.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Yoast nofollow directive: 0 = follow, 1 = nofollow.', 'oversio-agent-abilities' ),
 	);
 	$properties['robots_adv']      = array(
 		'type'        => 'string',
-		'description' => __( 'Advanced robots directives as a comma-separated list. Accepted tokens: noarchive, nosnippet, noimageindex. Unknown tokens are dropped.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Advanced robots directives as a comma-separated list. Accepted tokens: noarchive, nosnippet, noimageindex. Unknown tokens are dropped.', 'oversio-agent-abilities' ),
 	);
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/yoast-update-post' ),
-		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's Yoast SEO fields. URL fields are sanitized as URLs and the robots directives are validated. Requires edit access to that post.", 'oversio-agent-abilities' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',

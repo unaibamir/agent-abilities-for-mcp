@@ -105,7 +105,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	if ( null === $client ) {
 		return aafm_oauth_local_error(
 			'invalid_client',
-			__( 'Unknown or inactive client.', 'agent-abilities-for-mcp' )
+			__( 'Unknown or inactive client.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -115,7 +115,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	if ( ! is_array( $registered ) || '' === $redirect_uri || ! in_array( $redirect_uri, $registered, true ) ) {
 		return aafm_oauth_local_error(
 			'invalid_redirect_uri',
-			__( 'The redirect URI does not match the client registration.', 'agent-abilities-for-mcp' )
+			__( 'The redirect URI does not match the client registration.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -125,7 +125,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	if ( 'code' !== $response_type ) {
 		return new WP_Error(
 			'unsupported_response_type',
-			__( 'Only the authorization code response type is supported.', 'agent-abilities-for-mcp' )
+			__( 'Only the authorization code response type is supported.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -133,13 +133,13 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	if ( 'S256' !== $method ) {
 		return new WP_Error(
 			'invalid_request',
-			__( 'PKCE with the S256 method is required.', 'agent-abilities-for-mcp' )
+			__( 'PKCE with the S256 method is required.', 'oversio-agent-abilities' )
 		);
 	}
 	if ( '' === $challenge || ! aafm_pkce_is_valid_challenge( $challenge ) ) {
 		return new WP_Error(
 			'invalid_request',
-			__( 'A valid PKCE code challenge is required.', 'agent-abilities-for-mcp' )
+			__( 'A valid PKCE code challenge is required.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -151,7 +151,7 @@ function aafm_oauth_validate_authorize_params( array $params ) {
 	} elseif ( ! hash_equals( $endpoint, $resource ) ) {
 		return new WP_Error(
 			'invalid_target',
-			__( 'The requested resource is not served by this server.', 'agent-abilities-for-mcp' )
+			__( 'The requested resource is not served by this server.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -349,7 +349,7 @@ function aafm_oauth_render_local_error( int $status, string $message ): void {
 	status_header( $status );
 	header( 'Content-Type: text/html; charset=utf-8' );
 	echo '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
-		. esc_html__( 'Authorization error', 'agent-abilities-for-mcp' )
+		. esc_html__( 'Authorization error', 'oversio-agent-abilities' )
 		. '</title></head><body><p>'
 		. esc_html( $message )
 		. '</p></body></html>';
@@ -402,7 +402,7 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 	if ( is_wp_error( $code ) || '' === $code ) {
 		aafm_oauth_render_local_error(
 			500,
-			__( 'Could not issue an authorization code. Please try again.', 'agent-abilities-for-mcp' )
+			__( 'Could not issue an authorization code. Please try again.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -486,7 +486,7 @@ function aafm_oauth_handle_authorize(): void {
 
 	// HTTPS is mandatory in production.
 	if ( aafm_oauth_https_required() && ! is_ssl() ) {
-		aafm_oauth_render_local_error( 400, __( 'HTTPS is required for authorization.', 'agent-abilities-for-mcp' ) );
+		aafm_oauth_render_local_error( 400, __( 'HTTPS is required for authorization.', 'oversio-agent-abilities' ) );
 	}
 
 	// Rate limit the authorize surface.
@@ -530,7 +530,7 @@ function aafm_oauth_handle_authorize(): void {
 	if ( ! current_user_can( $min_cap ) ) {
 		aafm_oauth_render_local_error(
 			403,
-			__( 'Your account does not have permission to authorize access.', 'agent-abilities-for-mcp' )
+			__( 'Your account does not have permission to authorize access.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -544,7 +544,7 @@ function aafm_oauth_handle_authorize(): void {
 		if ( ! wp_verify_nonce( $nonce, 'aafm_oauth_consent' ) ) {
 			aafm_oauth_render_local_error(
 				403,
-				__( 'Your authorization session expired. Please start again.', 'agent-abilities-for-mcp' )
+				__( 'Your authorization session expired. Please start again.', 'oversio-agent-abilities' )
 			);
 		}
 	}

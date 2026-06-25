@@ -105,7 +105,7 @@ final class AAFM_Fatal extends \Exception {}
  */
 final class AAFM_Mcp_Regression {
 
-	private const MCP_ROUTE       = '/wp-json/agent-abilities-for-mcp/mcp';
+	private const MCP_ROUTE       = '/wp-json/oversio-agent-abilities/mcp';
 	private const PROTOCOL        = '2025-06-18';
 	private const FIXTURE_PREFIX  = 'AAFM-REGRESSION';
 
@@ -1351,7 +1351,7 @@ final class AAFM_Mcp_Regression {
 		foreach ( $plugins as $p ) {
 			$file = (string) ( $p['plugin'] ?? '' );
 			$name = (string) ( $p['name'] ?? '' );
-			if ( false !== stripos( $file, 'agent-abilities-for-mcp' ) || false !== stripos( $name, 'Agent Abilities for MCP' ) ) {
+			if ( false !== stripos( $file, 'oversio-agent-abilities' ) || false !== stripos( $name, 'Agent Abilities for MCP' ) ) {
 				$self = true;
 				break;
 			}

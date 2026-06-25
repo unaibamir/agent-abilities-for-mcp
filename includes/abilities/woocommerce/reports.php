@@ -57,8 +57,8 @@ function aafm_wc_reports_registry_definitions(): array {
 	return array(
 		// Reports, counts, and payment gateways (sub-slice W4-WC7).
 		'aafm/wc-get-sales-report'       => array(
-			'label'        => __( 'Get WooCommerce sales report', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce sales report', 'oversio-agent-abilities' ),
+			'description'  => __( 'Returns a sales summary for a date range: total sales, order count, net sales, and average order value. Defaults to the current calendar month. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_reports_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-top-sellers-report' => array(
-			'label'        => __( 'Get WooCommerce top sellers report', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce top sellers report', 'oversio-agent-abilities' ),
+			'description'  => __( 'Returns the best-selling products for a period (week, month, or year) ordered by quantity sold. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_reports_registry_definitions(): array {
 		),
 
 		'aafm/wc-count-orders'           => array(
-			'label'        => __( 'Count WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Count WooCommerce orders', 'oversio-agent-abilities' ),
+			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_reports_registry_definitions(): array {
 		),
 
 		'aafm/wc-count-products'         => array(
-			'label'        => __( 'Count WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Count WooCommerce products', 'oversio-agent-abilities' ),
+			'description'  => __( 'Returns product counts broken down by post status (publish, draft, private, pending, trash) plus a total of active (non-trash) products. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',

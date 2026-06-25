@@ -18,10 +18,10 @@ function aafm_register_admin_menu(): void {
 	$icon = 'dashicons-superhero';
 
 	add_menu_page(
-		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
-		__( 'Agent Abilities', 'agent-abilities-for-mcp' ),
+		__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ),
+		__( 'Agent Abilities', 'oversio-agent-abilities' ),
 		'manage_options',
-		'agent-abilities-for-mcp',
+		'oversio-agent-abilities',
 		'aafm_render_admin_page',
 		$icon,
 		80
@@ -31,10 +31,10 @@ function aafm_register_admin_menu(): void {
 	// their tab in the slug so the link is admin.php?page=…&tab=… and the parent page renders.
 	foreach ( aafm_admin_tabs() as $slug => $label ) {
 		$menu_slug = ( 'dashboard' === $slug )
-			? 'agent-abilities-for-mcp'
-			: 'agent-abilities-for-mcp&tab=' . $slug;
+			? 'oversio-agent-abilities'
+			: 'oversio-agent-abilities&tab=' . $slug;
 		add_submenu_page(
-			'agent-abilities-for-mcp',
+			'oversio-agent-abilities',
 			$label,
 			$label,
 			'manage_options',
@@ -54,28 +54,28 @@ function aafm_register_admin_menu(): void {
  * @return array<string,string> The links with ours prepended.
  */
 function aafm_plugin_action_links( array $actions ): array {
-	$base = 'admin.php?page=agent-abilities-for-mcp';
+	$base = 'admin.php?page=oversio-agent-abilities';
 
 	$links = array(
 		'aafm-getting-started' => sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( admin_url( $base ) ),
-			esc_html__( 'Getting Started', 'agent-abilities-for-mcp' )
+			esc_html__( 'Getting Started', 'oversio-agent-abilities' )
 		),
 		'aafm-abilities'       => sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( admin_url( $base . '&tab=abilities' ) ),
-			esc_html__( 'Abilities', 'agent-abilities-for-mcp' )
+			esc_html__( 'Abilities', 'oversio-agent-abilities' )
 		),
 		'aafm-integrations'    => sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( admin_url( $base . '&tab=integrations' ) ),
-			esc_html__( 'Integrations', 'agent-abilities-for-mcp' )
+			esc_html__( 'Integrations', 'oversio-agent-abilities' )
 		),
 		'aafm-settings'        => sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( admin_url( $base . '&tab=settings' ) ),
-			esc_html__( 'Settings', 'agent-abilities-for-mcp' )
+			esc_html__( 'Settings', 'oversio-agent-abilities' )
 		),
 	);
 
@@ -97,17 +97,17 @@ function aafm_plugin_action_links( array $actions ): array {
 function aafm_highlight_tab_submenu( $submenu_file ) {
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only menu highlighting, no state change.
 	$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( (string) $_GET['page'] ) ) : '';
-	if ( 'agent-abilities-for-mcp' !== $page ) {
+	if ( 'oversio-agent-abilities' !== $page ) {
 		return $submenu_file;
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only menu highlighting, no state change.
 	$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( (string) $_GET['tab'] ) ) : 'dashboard';
 	if ( 'dashboard' === $tab || ! in_array( $tab, array_keys( aafm_admin_tabs() ), true ) ) {
-		return 'agent-abilities-for-mcp';
+		return 'oversio-agent-abilities';
 	}
 
-	return 'agent-abilities-for-mcp&tab=' . $tab;
+	return 'oversio-agent-abilities&tab=' . $tab;
 }
 
 /**
@@ -117,7 +117,7 @@ function aafm_highlight_tab_submenu( $submenu_file ) {
  * @return void
  */
 function aafm_enqueue_admin_assets( string $hook ): void {
-	if ( 'toplevel_page_agent-abilities-for-mcp' !== $hook ) {
+	if ( 'toplevel_page_oversio-agent-abilities' !== $hook ) {
 		return;
 	}
 	// Use filemtime() as the cache-buster so ?ver= changes whenever the file changes,
@@ -138,46 +138,46 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 			'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'aafm_admin' ),
 			'i18n'    => array(
-				'quickstartsShow'          => __( 'Show config for a specific client', 'agent-abilities-for-mcp' ),
-				'quickstartsHide'          => __( 'Hide client configs', 'agent-abilities-for-mcp' ),
-				'saving'                   => __( 'Saving…', 'agent-abilities-for-mcp' ),
-				'saved'                    => __( 'Saved', 'agent-abilities-for-mcp' ),
-				'errorSaving'              => __( 'Error saving', 'agent-abilities-for-mcp' ),
-				'creating'                 => __( 'Creating…', 'agent-abilities-for-mcp' ),
-				'checking'                 => __( 'Checking…', 'agent-abilities-for-mcp' ),
-				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
-				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
-				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
-				'settingsNotSaved'         => __( 'Could not save — your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
-				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
+				'quickstartsShow'          => __( 'Show config for a specific client', 'oversio-agent-abilities' ),
+				'quickstartsHide'          => __( 'Hide client configs', 'oversio-agent-abilities' ),
+				'saving'                   => __( 'Saving…', 'oversio-agent-abilities' ),
+				'saved'                    => __( 'Saved', 'oversio-agent-abilities' ),
+				'errorSaving'              => __( 'Error saving', 'oversio-agent-abilities' ),
+				'creating'                 => __( 'Creating…', 'oversio-agent-abilities' ),
+				'checking'                 => __( 'Checking…', 'oversio-agent-abilities' ),
+				'cleared'                  => __( 'Cleared', 'oversio-agent-abilities' ),
+				'error'                    => __( 'Error', 'oversio-agent-abilities' ),
+				'requestFailed'            => __( 'Request failed.', 'oversio-agent-abilities' ),
+				'settingsNotSaved'         => __( 'Could not save — your previous settings are still in effect.', 'oversio-agent-abilities' ),
+				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'oversio-agent-abilities' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
-				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'agent-abilities-for-mcp' ),
+				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'oversio-agent-abilities' ),
 				/* translators: %d: the new agent user's numeric ID. */
-				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
-				'editUser'                 => __( 'Edit user', 'agent-abilities-for-mcp' ),
+				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'oversio-agent-abilities' ),
+				'editUser'                 => __( 'Edit user', 'oversio-agent-abilities' ),
 				/* translators: 1: current page number, 2: total number of pages. */
-				'pagerStatus'              => __( 'Page %1$s of %2$s', 'agent-abilities-for-mcp' ),
-				'loadingPage'              => __( 'Loading…', 'agent-abilities-for-mcp' ),
-				'noActivity'               => __( 'No activity recorded yet.', 'agent-abilities-for-mcp' ),
+				'pagerStatus'              => __( 'Page %1$s of %2$s', 'oversio-agent-abilities' ),
+				'loadingPage'              => __( 'Loading…', 'oversio-agent-abilities' ),
+				'noActivity'               => __( 'No activity recorded yet.', 'oversio-agent-abilities' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
-				'connectionOk'             => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
+				'connectionOk'             => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'oversio-agent-abilities' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
-				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
+				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'oversio-agent-abilities' ),
 				/* translators: %s: error message returned by the server. */
-				'errorWithMessage'         => __( 'Error: %s', 'agent-abilities-for-mcp' ),
-				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),
-				'copyCopied'               => __( 'Copied', 'agent-abilities-for-mcp' ),
-				'copyFallback'             => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
-				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
-				'resetWorking'             => __( 'Resetting…', 'agent-abilities-for-mcp' ),
-				'resetDone'                => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
-				'resetFailed'              => __( 'Reset failed.', 'agent-abilities-for-mcp' ),
-				'sectionToggleConfirm'     => __( 'This section includes destructive abilities (trash/delete). Enable all of them?', 'agent-abilities-for-mcp' ),
-				'integrationToggleConfirm' => __( 'These abilities can read and change personal data such as customer details and orders. Turn all of them on?', 'agent-abilities-for-mcp' ),
-				'revokeClientConfirm'      => __( 'Revoke this client? It is turned off and its active sessions end right away.', 'agent-abilities-for-mcp' ),
-				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
-				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
-				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
+				'errorWithMessage'         => __( 'Error: %s', 'oversio-agent-abilities' ),
+				'errorUnknown'             => __( 'unknown', 'oversio-agent-abilities' ),
+				'copyCopied'               => __( 'Copied', 'oversio-agent-abilities' ),
+				'copyFallback'             => __( 'Press Ctrl+C', 'oversio-agent-abilities' ),
+				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'oversio-agent-abilities' ),
+				'resetWorking'             => __( 'Resetting…', 'oversio-agent-abilities' ),
+				'resetDone'                => __( 'Reset. Reloading…', 'oversio-agent-abilities' ),
+				'resetFailed'              => __( 'Reset failed.', 'oversio-agent-abilities' ),
+				'sectionToggleConfirm'     => __( 'This section includes destructive abilities (trash/delete). Enable all of them?', 'oversio-agent-abilities' ),
+				'integrationToggleConfirm' => __( 'These abilities can read and change personal data such as customer details and orders. Turn all of them on?', 'oversio-agent-abilities' ),
+				'revokeClientConfirm'      => __( 'Revoke this client? It is turned off and its active sessions end right away.', 'oversio-agent-abilities' ),
+				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'oversio-agent-abilities' ),
+				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'oversio-agent-abilities' ),
+				'statusRevoked'            => __( 'Revoked', 'oversio-agent-abilities' ),
 			),
 		)
 	);
@@ -266,7 +266,7 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 function aafm_ajax_save_abilities(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$enabled = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	update_option( 'aafm_enabled_abilities', $enabled );
@@ -302,7 +302,7 @@ function aafm_sanitize_allowed_post_types_input( array $posted ): array {
 function aafm_ajax_save_post_types(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$types = aafm_sanitize_allowed_post_types_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	update_option( 'aafm_allowed_post_types', $types );
@@ -498,7 +498,7 @@ function aafm_detected_meta_keys(): array {
 function aafm_ajax_save_meta_keys(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$posted = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$keys   = aafm_sanitize_allowed_meta_keys_input( $posted );
@@ -526,7 +526,7 @@ function aafm_ajax_save_meta_keys(): void {
 function aafm_ajax_save_denied_meta_keys(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$keys = aafm_sanitize_denied_meta_keys_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	update_option( 'aafm_denied_meta_keys', $keys );
@@ -541,7 +541,7 @@ function aafm_ajax_save_denied_meta_keys(): void {
 function aafm_ajax_save_user_meta_keys(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_user_meta_keys_input( $posted );
@@ -564,7 +564,7 @@ function aafm_ajax_save_user_meta_keys(): void {
 function aafm_ajax_save_term_meta_keys(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	$posted  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$exposed = aafm_sanitize_exposed_term_meta_keys_input( $posted );
@@ -589,9 +589,9 @@ function aafm_register_privacy_policy_content(): void {
 		return;
 	}
 	$content = wp_kses_post(
-		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'agent-abilities-for-mcp' ) . '</p>'
+		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'oversio-agent-abilities' ) . '</p>'
 	);
-	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ), $content );
+	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'oversio-agent-abilities' ), $content );
 }
 
 /**
@@ -602,7 +602,7 @@ function aafm_register_privacy_policy_content(): void {
 function aafm_ajax_clear_log(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 	aafm_clear_activity_log();
 	wp_send_json_success();
@@ -622,7 +622,7 @@ function aafm_ajax_clear_log(): void {
 function aafm_ajax_get_log_page(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'oversio-agent-abilities' ) ), 403 );
 	}
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
@@ -699,13 +699,13 @@ function aafm_activity_rows_data( array $rows ): array {
  */
 function aafm_admin_tabs(): array {
 	return array(
-		'dashboard'    => __( 'Dashboard', 'agent-abilities-for-mcp' ),
-		'connection'   => __( 'Connection', 'agent-abilities-for-mcp' ),
-		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
-		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
-		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
-		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
-		'help'         => __( 'Help', 'agent-abilities-for-mcp' ),
+		'dashboard'    => __( 'Dashboard', 'oversio-agent-abilities' ),
+		'connection'   => __( 'Connection', 'oversio-agent-abilities' ),
+		'abilities'    => __( 'Abilities', 'oversio-agent-abilities' ),
+		'integrations' => __( 'Integrations', 'oversio-agent-abilities' ),
+		'settings'     => __( 'Settings', 'oversio-agent-abilities' ),
+		'activity'     => __( 'Activity Log', 'oversio-agent-abilities' ),
+		'help'         => __( 'Help', 'oversio-agent-abilities' ),
 	);
 }
 
@@ -729,18 +729,18 @@ function aafm_render_admin_page(): void {
 	$adapter_version = aafm_loaded_adapter_version();
 	if ( null !== $adapter_version ) {
 		$pill_class = 'aafm-pill aafm-pill-success';
-		$pill_label = __( 'Endpoint live', 'agent-abilities-for-mcp' );
+		$pill_label = __( 'Endpoint live', 'oversio-agent-abilities' );
 	} else {
 		$pill_class = 'aafm-pill aafm-pill-warn';
-		$pill_label = __( 'Adapter not loaded', 'agent-abilities-for-mcp' );
+		$pill_label = __( 'Adapter not loaded', 'oversio-agent-abilities' );
 	}
 
 	echo '<div class="wrap aafm-wrap">';
 
 	// Header: title + lede on the left, the status pill on the right (moved out of the h1).
 	echo '<div class="aafm-page-head"><div class="title-wrap">';
-	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
-	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ) . '</h1>';
+	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'oversio-agent-abilities' ) . '</p>';
 	echo '</div>';
 	printf(
 		'<span class="aafm-status-pill %1$s">%2$s</span>',
@@ -760,7 +760,7 @@ function aafm_render_admin_page(): void {
 			esc_url(
 				add_query_arg(
 					array(
-						'page' => 'agent-abilities-for-mcp',
+						'page' => 'oversio-agent-abilities',
 						'tab'  => $slug,
 					),
 					admin_url( 'admin.php' )
@@ -810,12 +810,12 @@ function aafm_render_admin_page(): void {
  */
 function aafm_abilities_subjects(): array {
 	return array(
-		'content'    => __( 'Content', 'agent-abilities-for-mcp' ),
-		'taxonomies' => __( 'Taxonomies & Terms', 'agent-abilities-for-mcp' ),
-		'comments'   => __( 'Comments', 'agent-abilities-for-mcp' ),
-		'users'      => __( 'Users', 'agent-abilities-for-mcp' ),
-		'media'      => __( 'Media', 'agent-abilities-for-mcp' ),
-		'site'       => __( 'Site & structure', 'agent-abilities-for-mcp' ),
+		'content'    => __( 'Content', 'oversio-agent-abilities' ),
+		'taxonomies' => __( 'Taxonomies & Terms', 'oversio-agent-abilities' ),
+		'comments'   => __( 'Comments', 'oversio-agent-abilities' ),
+		'users'      => __( 'Users', 'oversio-agent-abilities' ),
+		'media'      => __( 'Media', 'oversio-agent-abilities' ),
+		'site'       => __( 'Site & structure', 'oversio-agent-abilities' ),
 	);
 }
 
@@ -835,7 +835,7 @@ function aafm_abilities_subjects(): array {
 function aafm_site_subgroups(): array {
 	return array(
 		'site_settings' => array(
-			'label'     => __( 'Site settings', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Site settings', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/get-site-settings',
 				'aafm/update-site-settings',
@@ -846,13 +846,13 @@ function aafm_site_subgroups(): array {
 			),
 		),
 		'plugins'       => array(
-			'label'     => __( 'Plugins', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Plugins', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/list-plugins',
 			),
 		),
 		'themes'        => array(
-			'label'     => __( 'Themes & styles', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Themes & styles', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/get-active-theme',
 				'aafm/list-themes',
@@ -863,7 +863,7 @@ function aafm_site_subgroups(): array {
 			),
 		),
 		'blocks'        => array(
-			'label'     => __( 'Blocks', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Blocks', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/list-blocks',
 				'aafm/get-block',
@@ -873,7 +873,7 @@ function aafm_site_subgroups(): array {
 			),
 		),
 		'menus'         => array(
-			'label'     => __( 'Menus', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Menus', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/list-menus',
 				'aafm/get-menu',
@@ -887,7 +887,7 @@ function aafm_site_subgroups(): array {
 			),
 		),
 		'search'        => array(
-			'label'     => __( 'Search', 'agent-abilities-for-mcp' ),
+			'label'     => __( 'Search', 'oversio-agent-abilities' ),
 			'abilities' => array(
 				'aafm/search-content',
 			),
@@ -932,7 +932,7 @@ function aafm_render_abilities_tab(): void {
 	echo '<div class="aafm-stat-grid aafm-abilities-stats">';
 	echo '<div class="aafm-stat aafm-stat-abilities">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'abilities' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
@@ -941,7 +941,7 @@ function aafm_render_abilities_tab(): void {
 	echo '</div>';
 	echo '<div class="aafm-stat aafm-stat-enabled">';
 	echo '<div class="stat-top">';
-	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'agent-abilities-for-mcp' ) . '</span>';
+	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'oversio-agent-abilities' ) . '</span>';
 	echo '<span class="stat-ic">';
 	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
 	echo '</span>';
@@ -952,7 +952,7 @@ function aafm_render_abilities_tab(): void {
 		esc_html(
 			sprintf(
 				/* translators: %d: total number of abilities in the catalog. */
-				__( 'of %d', 'agent-abilities-for-mcp' ),
+				__( 'of %d', 'oversio-agent-abilities' ),
 				$ability_total
 			)
 		)
@@ -964,8 +964,8 @@ function aafm_render_abilities_tab(): void {
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
 	$groups = array(
-		'reads'  => __( 'Reads', 'agent-abilities-for-mcp' ),
-		'writes' => __( 'Writes', 'agent-abilities-for-mcp' ),
+		'reads'  => __( 'Reads', 'oversio-agent-abilities' ),
+		'writes' => __( 'Writes', 'oversio-agent-abilities' ),
 	);
 
 	$disclosures = aafm_ability_disclosures();
@@ -984,7 +984,7 @@ function aafm_render_abilities_tab(): void {
 	// panel, roving tabindex (only the active tab is in the tab sequence), and the JS adds
 	// Arrow/Home/End handling. Each panel below carries the matching id + aria-labelledby.
 	$first = array_key_first( $display_tabs );
-	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist" aria-label="' . esc_attr__( 'Ability subjects', 'agent-abilities-for-mcp' ) . '">';
+	echo '<div class="aafm-subtabs aafm-subject-tabs" role="tablist" aria-label="' . esc_attr__( 'Ability subjects', 'oversio-agent-abilities' ) . '">';
 	foreach ( $display_tabs as $slug => $tab ) {
 		$is_active = ( $slug === $first );
 		$tab_id    = 'aafm-subject-tab-' . $slug;
@@ -1028,7 +1028,7 @@ function aafm_render_abilities_tab(): void {
 			'<h2 class="aafm-subject-heading"><span class="aafm-count-badge">%1$s / %2$s</span> %3$s</h2>',
 			esc_html( (string) $subject_enabled ),
 			esc_html( (string) $subject_total ),
-			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
+			esc_html__( 'enabled', 'oversio-agent-abilities' )
 		);
 
 		// Per-section enable/disable-all control. JS scopes by .aafm-subject-panel[data-subject]
@@ -1045,7 +1045,7 @@ function aafm_render_abilities_tab(): void {
 			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button></p>',
 			esc_attr( $slug ),
 			$has_destructive ? ' data-has-destructive="1"' : '',
-			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
+			esc_html__( 'Enable all / Disable all', 'oversio-agent-abilities' )
 		);
 
 		if ( 'content' === $slug ) {
@@ -1105,7 +1105,7 @@ function aafm_render_abilities_tab(): void {
 		echo '</div>';
 	}
 
-	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save changes', 'oversio-agent-abilities' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
@@ -1153,7 +1153,7 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// Read-only badge only on read-risk rows; never on write/destructive. risk === 'read' is the
 	// authoritative read-only signal at render time (the catalog carries no annotations.readonly).
 	if ( 'read' === $risk ) {
-		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
+		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'oversio-agent-abilities' ) . '</span>';
 	}
 
 	printf(
@@ -1266,9 +1266,9 @@ function aafm_render_post_types_selector(): void {
 
 	if ( empty( $eligible ) ) {
 		echo '<div class="aafm-card aafm-card-pad">';
-		echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-		echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
-		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'agent-abilities-for-mcp' ) );
+		echo '<h3>' . esc_html__( 'Exposed content types', 'oversio-agent-abilities' ) . '</h3>';
+		echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'oversio-agent-abilities' ) . '</p>';
+		aafm_render_notice( 'info', __( 'No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here.', 'oversio-agent-abilities' ) );
 		echo '</div>';
 		return;
 	}
@@ -1276,14 +1276,14 @@ function aafm_render_post_types_selector(): void {
 	// The selector is a plain <div> (never a nested <form>): only the outer abilities <form>
 	// may open a form here, and the save control below is a type="button" the JS binds to.
 	echo '<div id="aafm-post-types-form" class="aafm-card aafm-card-pad aafm-post-types">';
-	echo '<h3>' . esc_html__( 'Exposed content types', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<h3>' . esc_html__( 'Exposed content types', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'oversio-agent-abilities' ) . '</p>';
 	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
-	echo '<th>' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Writes', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'REST', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Expose', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Type', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Writes', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'REST', 'oversio-agent-abilities' ) . '</th>';
 	echo '</tr></thead><tbody>';
 
 	foreach ( $eligible as $type ) {
@@ -1300,13 +1300,13 @@ function aafm_render_post_types_selector(): void {
 			esc_html( (string) $label ),
 			esc_html( $type ),
 			$mapped
-				? esc_html__( 'Allowed', 'agent-abilities-for-mcp' )
-				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only — writes need map_meta_cap', 'agent-abilities-for-mcp' ) . '</span>',
-			$rest ? esc_html__( 'yes', 'agent-abilities-for-mcp' ) : esc_html__( 'no', 'agent-abilities-for-mcp' ),
+				? esc_html__( 'Allowed', 'oversio-agent-abilities' )
+				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only — writes need map_meta_cap', 'oversio-agent-abilities' ) . '</span>',
+			$rest ? esc_html__( 'yes', 'oversio-agent-abilities' ) : esc_html__( 'no', 'oversio-agent-abilities' ),
 			esc_attr(
 				sprintf(
 					/* translators: %s: the content type's singular label, e.g. "Product". */
-					__( 'Expose %s to agents', 'agent-abilities-for-mcp' ),
+					__( 'Expose %s to agents', 'oversio-agent-abilities' ),
 					(string) $label
 				)
 			)
@@ -1315,8 +1315,8 @@ function aafm_render_post_types_selector(): void {
 
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
-	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
-	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
+	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'oversio-agent-abilities' ) );
+	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'oversio-agent-abilities' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -1340,9 +1340,9 @@ function aafm_render_meta_keys_selector(): void {
 	// Mirrors the post-types selector: a plain <div> (never a nested <form>) with a
 	// type="button" save, so the one outer abilities <form> is never closed early.
 	echo '<div id="aafm-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-meta-keys-label' ) . '">' . esc_html__( 'Exposed meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'agent-abilities-for-mcp' ) );
+	echo '<h3 id="' . esc_attr( 'aafm-meta-keys-label' ) . '">' . esc_html__( 'Exposed meta keys', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden.', 'oversio-agent-abilities' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can\'t be added.', 'oversio-agent-abilities' ) );
 
 	printf(
 		'<textarea name="aafm_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
@@ -1351,11 +1351,11 @@ function aafm_render_meta_keys_selector(): void {
 		esc_attr( 'aafm-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $allowed ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description">' . esc_html__( 'Detected on your exposed types', 'oversio-agent-abilities' ) . '</p>';
 	if ( empty( $detected ) ) {
-		echo '<p class="description">' . esc_html__( 'Nothing detected yet on the types you expose.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Nothing detected yet on the types you expose.', 'oversio-agent-abilities' ) . '</p>';
 	} else {
 		echo '<div class="aafm-meta-chips">';
 		foreach ( $detected as $key ) {
@@ -1370,7 +1370,7 @@ function aafm_render_meta_keys_selector(): void {
 
 	// Deny list, below the exposed list. Denied keys always win over the exposed list, even
 	// when it uses *. The chip source above writes only into the Exposed textarea.
-	echo '<h3 id="' . esc_attr( 'aafm-deny-meta-keys-label' ) . '">' . esc_html__( 'Denied meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-deny-meta-keys-label' ) . '">' . esc_html__( 'Denied meta keys', 'oversio-agent-abilities' ) . '</h3>';
 	printf(
 		'<textarea name="aafm_deny_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
 		esc_attr( 'aafm-deny-meta-keys' ),
@@ -1378,9 +1378,9 @@ function aafm_render_meta_keys_selector(): void {
 		esc_attr( 'aafm-deny-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $denied ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-deny-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-deny-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<p><button type="button" id="aafm-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
+	echo '<p><button type="button" id="aafm-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save meta keys', 'oversio-agent-abilities' ) . '</button> <span class="aafm-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -1399,9 +1399,9 @@ function aafm_render_user_meta_keys_selector(): void {
 	$denied  = aafm_denied_user_meta_keys();
 
 	echo '<div id="aafm-user-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-exposed-user-meta-keys-label' ) . '">' . esc_html__( 'Exposed user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
+	echo '<h3 id="' . esc_attr( 'aafm-exposed-user-meta-keys-label' ) . '">' . esc_html__( 'Exposed user meta keys', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *.', 'oversio-agent-abilities' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added.', 'oversio-agent-abilities' ) );
 
 	printf(
 		'<textarea name="aafm_exposed_user_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
@@ -1410,9 +1410,9 @@ function aafm_render_user_meta_keys_selector(): void {
 		esc_attr( 'aafm-exposed-user-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $exposed ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-user-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-user-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<h3 id="' . esc_attr( 'aafm-denied-user-meta-keys-label' ) . '">' . esc_html__( 'Denied user meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-denied-user-meta-keys-label' ) . '">' . esc_html__( 'Denied user meta keys', 'oversio-agent-abilities' ) . '</h3>';
 	printf(
 		'<textarea name="aafm_denied_user_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
 		esc_attr( 'aafm-denied-user-meta-keys' ),
@@ -1420,9 +1420,9 @@ function aafm_render_user_meta_keys_selector(): void {
 		esc_attr( 'aafm-denied-user-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $denied ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-denied-user-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-denied-user-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<p><button type="button" id="aafm-user-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save user meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-meta-keys-status" aria-live="polite"></span></p>';
+	echo '<p><button type="button" id="aafm-user-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save user meta keys', 'oversio-agent-abilities' ) . '</button> <span class="aafm-user-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -1441,9 +1441,9 @@ function aafm_render_term_meta_keys_selector(): void {
 	$denied  = aafm_denied_term_meta_keys();
 
 	echo '<div id="aafm-term-meta-keys-form" class="aafm-card aafm-card-pad aafm-meta-keys">';
-	echo '<h3 id="' . esc_attr( 'aafm-exposed-term-meta-keys-label' ) . '">' . esc_html__( 'Exposed term meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
-	echo '<p class="description">' . esc_html__( 'These are the only term meta keys an agent can read or write on a term it can already edit. Denied keys always win, even when the exposed list uses *.', 'agent-abilities-for-mcp' ) . '</p>';
-	aafm_render_notice( 'warning', __( 'Term meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and cannot be added.', 'agent-abilities-for-mcp' ) );
+	echo '<h3 id="' . esc_attr( 'aafm-exposed-term-meta-keys-label' ) . '">' . esc_html__( 'Exposed term meta keys', 'oversio-agent-abilities' ) . '</h3>';
+	echo '<p class="description">' . esc_html__( 'These are the only term meta keys an agent can read or write on a term it can already edit. Denied keys always win, even when the exposed list uses *.', 'oversio-agent-abilities' ) . '</p>';
+	aafm_render_notice( 'warning', __( 'Term meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and cannot be added.', 'oversio-agent-abilities' ) );
 
 	printf(
 		'<textarea name="aafm_exposed_term_meta_keys" id="%1$s" rows="6" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
@@ -1452,9 +1452,9 @@ function aafm_render_term_meta_keys_selector(): void {
 		esc_attr( 'aafm-exposed-term-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $exposed ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-term-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-exposed-term-meta-keys-hint' ) . '">' . esc_html__( 'One key per line. * matches any key.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<h3 id="' . esc_attr( 'aafm-denied-term-meta-keys-label' ) . '">' . esc_html__( 'Denied term meta keys', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3 id="' . esc_attr( 'aafm-denied-term-meta-keys-label' ) . '">' . esc_html__( 'Denied term meta keys', 'oversio-agent-abilities' ) . '</h3>';
 	printf(
 		'<textarea name="aafm_denied_term_meta_keys" id="%1$s" rows="4" class="large-text code" aria-labelledby="%2$s" aria-describedby="%3$s">%4$s</textarea>',
 		esc_attr( 'aafm-denied-term-meta-keys' ),
@@ -1462,9 +1462,9 @@ function aafm_render_term_meta_keys_selector(): void {
 		esc_attr( 'aafm-denied-term-meta-keys-hint' ),
 		esc_textarea( implode( "\n", $denied ) )
 	);
-	echo '<p class="description" id="' . esc_attr( 'aafm-denied-term-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description" id="' . esc_attr( 'aafm-denied-term-meta-keys-hint' ) . '">' . esc_html__( 'Denied keys win over exposed, even with *. One per line.', 'oversio-agent-abilities' ) . '</p>';
 
-	echo '<p><button type="button" id="aafm-term-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save term meta keys', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-term-meta-keys-status" aria-live="polite"></span></p>';
+	echo '<p><button type="button" id="aafm-term-meta-keys-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save term meta keys', 'oversio-agent-abilities' ) . '</button> <span class="aafm-term-meta-keys-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
 
@@ -1490,11 +1490,11 @@ function aafm_render_activity_tab(): void {
 
 	// Status filter — server-side: each button re-queries page 1 with its status (admin.js).
 	echo '<div class="aafm-activity-toolbar">';
-	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
-	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all" aria-pressed="true">' . esc_html__( 'All', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="success" aria-pressed="false">' . esc_html__( 'Success', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="error" aria-pressed="false">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
-	echo '<button type="button" class="aafm-seg-btn" data-filter="denied" aria-pressed="false">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'oversio-agent-abilities' ) . '">';
+	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all" aria-pressed="true">' . esc_html__( 'All', 'oversio-agent-abilities' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="success" aria-pressed="false">' . esc_html__( 'Success', 'oversio-agent-abilities' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="error" aria-pressed="false">' . esc_html__( 'Errors', 'oversio-agent-abilities' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="denied" aria-pressed="false">' . esc_html__( 'Denied', 'oversio-agent-abilities' ) . '</button>';
 	echo '</div>';
 
 	// Live count headline plus a plain clarifier describing the retention window.
@@ -1505,12 +1505,12 @@ function aafm_render_activity_tab(): void {
 				'entries, keeping the last %s day',
 				'entries, keeping the last %s days',
 				$retention,
-				'agent-abilities-for-mcp'
+				'oversio-agent-abilities'
 			),
 			number_format_i18n( $retention )
 		);
 	} else {
-		$count_note = __( 'entries, keeping everything', 'agent-abilities-for-mcp' );
+		$count_note = __( 'entries, keeping everything', 'oversio-agent-abilities' );
 	}
 	printf(
 		'<span class="aafm-activity-count" aria-live="polite"><strong class="aafm-count-num">%1$s</strong> <span class="aafm-count-note">%2$s</span></span>',
@@ -1518,7 +1518,7 @@ function aafm_render_activity_tab(): void {
 		esc_html( $count_note )
 	);
 
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'oversio-agent-abilities' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '</div>';
 
 	printf(
@@ -1526,11 +1526,11 @@ function aafm_render_activity_tab(): void {
 		esc_attr( (string) $total_pages )
 	);
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
-	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Ability', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Arg keys', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Time (UTC)', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Principal', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Ability', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Status', 'oversio-agent-abilities' ) . '</th>';
+	echo '<th>' . esc_html__( 'Arg keys', 'oversio-agent-abilities' ) . '</th>';
 	echo '</tr></thead><tbody>';
 
 	echo aafm_activity_rows_html( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each cell is escaped inside the helper.
@@ -1540,13 +1540,13 @@ function aafm_render_activity_tab(): void {
 
 	// Pager: Prev / "Page X of Y" / Next. Disabled at the ends; updated by admin.js on filter/page.
 	echo '<div class="aafm-pager">';
-	echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-pager-prev" disabled>' . esc_html__( 'Previous', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-pager-prev" disabled>' . esc_html__( 'Previous', 'oversio-agent-abilities' ) . '</button>';
 	printf(
 		'<span class="aafm-pager-status" aria-live="polite">%s</span>',
 		esc_html(
 			sprintf(
 				/* translators: 1: current page number, 2: total number of pages. */
-				__( 'Page %1$s of %2$s', 'agent-abilities-for-mcp' ),
+				__( 'Page %1$s of %2$s', 'oversio-agent-abilities' ),
 				number_format_i18n( 1 ),
 				number_format_i18n( $total_pages )
 			)
@@ -1555,7 +1555,7 @@ function aafm_render_activity_tab(): void {
 	printf(
 		'<button type="button" class="aafm-btn aafm-btn-secondary aafm-pager-next"%s>%s</button>',
 		$total_pages > 1 ? '' : ' disabled',
-		esc_html__( 'Next', 'agent-abilities-for-mcp' )
+		esc_html__( 'Next', 'oversio-agent-abilities' )
 	);
 	echo '</div>';
 
@@ -1594,7 +1594,7 @@ function aafm_activity_filter_status( string $filter ): ?string {
  */
 function aafm_activity_rows_html( array $rows ): string {
 	if ( empty( $rows ) ) {
-		return '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
+		return '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'oversio-agent-abilities' ) . '</td></tr>';
 	}
 
 	// Map each log status to a pill variant; the status word stays visible (never colour-only).
@@ -1654,7 +1654,7 @@ function aafm_help_copy_line( string $code ): string {
 		esc_html( $code ),
 		esc_attr( $code ),
 		aafm_icon( 'copy' ), // Static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		esc_html__( 'Copy', 'oversio-agent-abilities' )
 	);
 }
 
@@ -1693,21 +1693,21 @@ function aafm_render_help_tab(): void {
 
 	echo '<div class="aafm-help">';
 
-	echo '<p class="description aafm-help-intro">' . esc_html__( 'Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="description aafm-help-intro">' . esc_html__( 'Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case.', 'oversio-agent-abilities' ) . '</p>';
 
 	// Section 1 — Connecting.
 	echo '<div class="aafm-acc-group">';
-	echo '<h2>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'Connecting', 'oversio-agent-abilities' ) . '</h2>';
 
 	// 1. Client won't connect / endpoint unreachable.
 	aafm_render_help_entry(
-		__( 'My client won\'t connect, or the endpoint looks unreachable', 'agent-abilities-for-mcp' ),
+		__( 'My client won\'t connect, or the endpoint looks unreachable', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Start on the Connection tab: run Step 3 "Check the endpoint is reachable". If that fails, open Diagnostics on the same tab and confirm "MCP adapter active and compatible" and "MCP REST endpoint registered" both show green.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'The endpoint URL depends on your permalink mode. With pretty permalinks it is the /wp-json/ form; with plain permalinks it is the index.php?rest_route= form. Always copy whatever the Connection tab shows under "Endpoint" rather than typing it by hand:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Start on the Connection tab: run Step 3 "Check the endpoint is reachable". If that fails, open Diagnostics on the same tab and confirm "MCP adapter active and compatible" and "MCP REST endpoint registered" both show green.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'The endpoint URL depends on your permalink mode. With pretty permalinks it is the /wp-json/ form; with plain permalinks it is the index.php?rest_route= form. Always copy whatever the Connection tab shows under "Endpoint" rather than typing it by hand:', 'oversio-agent-abilities' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'Pretty:', 'agent-abilities-for-mcp' ) . '</strong> <code>/wp-json/agent-abilities-for-mcp/mcp</code></li>'
-			. '<li><strong>' . esc_html__( 'Plain:', 'agent-abilities-for-mcp' ) . '</strong> <code>index.php?rest_route=/agent-abilities-for-mcp/mcp</code></li>'
+			. '<li><strong>' . esc_html__( 'Pretty:', 'oversio-agent-abilities' ) . '</strong> <code>/wp-json/oversio-agent-abilities/mcp</code></li>'
+			. '<li><strong>' . esc_html__( 'Plain:', 'oversio-agent-abilities' ) . '</strong> <code>index.php?rest_route=/oversio-agent-abilities/mcp</code></li>'
 			. '</ul>',
 			$inline
 		)
@@ -1715,30 +1715,30 @@ function aafm_render_help_tab(): void {
 
 	// 4. Windows: client config won't start.
 	aafm_render_help_entry(
-		__( 'The client connects but the AI backend gets blocked (403 / 406 / 429)', 'agent-abilities-for-mcp' ),
+		__( 'The client connects but the AI backend gets blocked (403 / 406 / 429)', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'This is the most common failure, and it is not an auth problem: the JSON-RPC POST never reaches WordPress at all. A CDN, WAF, or managed-host security rule sees automated traffic and rejects it before PHP runs, so you get a 403 (blocked), 406 (request looks like a bot), or 429 (rate limited) instead of a real MCP reply.', 'agent-abilities-for-mcp' ) . '</p>'
-				. '<p><strong>' . esc_html__( 'Cloudflare:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'turn off "Block AI Bots" / Bot Fight Mode for this site, and add a WAF skip (allow) rule for the MCP route so it is never challenged or blocked. If the site is behind Cloudflare Zero Trust / Access, exempt the route there too.', 'agent-abilities-for-mcp' ) . '</p>'
-				. '<p><strong>' . esc_html__( 'ModSecurity / managed-host rules:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'a generic rule returning 406 or 429 on POSTs from HTTP libraries is common on managed WordPress hosts. Ask the host to allow the MCP route, or add the path to the firewall allowlist.', 'agent-abilities-for-mcp' ) . '</p>'
-				. '<p>' . esc_html__( 'Add the allow / skip rule for whichever endpoint form your site uses (copy the exact one from the Connection tab):', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'This is the most common failure, and it is not an auth problem: the JSON-RPC POST never reaches WordPress at all. A CDN, WAF, or managed-host security rule sees automated traffic and rejects it before PHP runs, so you get a 403 (blocked), 406 (request looks like a bot), or 429 (rate limited) instead of a real MCP reply.', 'oversio-agent-abilities' ) . '</p>'
+				. '<p><strong>' . esc_html__( 'Cloudflare:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'turn off "Block AI Bots" / Bot Fight Mode for this site, and add a WAF skip (allow) rule for the MCP route so it is never challenged or blocked. If the site is behind Cloudflare Zero Trust / Access, exempt the route there too.', 'oversio-agent-abilities' ) . '</p>'
+				. '<p><strong>' . esc_html__( 'ModSecurity / managed-host rules:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'a generic rule returning 406 or 429 on POSTs from HTTP libraries is common on managed WordPress hosts. Ask the host to allow the MCP route, or add the path to the firewall allowlist.', 'oversio-agent-abilities' ) . '</p>'
+				. '<p>' . esc_html__( 'Add the allow / skip rule for whichever endpoint form your site uses (copy the exact one from the Connection tab):', 'oversio-agent-abilities' ) . '</p>'
 				. '<ul>'
-				. '<li><strong>' . esc_html__( 'Pretty:', 'agent-abilities-for-mcp' ) . '</strong> <code>/wp-json/agent-abilities-for-mcp/*</code></li>'
-				. '<li><strong>' . esc_html__( 'Plain:', 'agent-abilities-for-mcp' ) . '</strong> <code>/index.php?rest_route=/agent-abilities-for-mcp/*</code></li>'
+				. '<li><strong>' . esc_html__( 'Pretty:', 'oversio-agent-abilities' ) . '</strong> <code>/wp-json/oversio-agent-abilities/*</code></li>'
+				. '<li><strong>' . esc_html__( 'Plain:', 'oversio-agent-abilities' ) . '</strong> <code>/index.php?rest_route=/oversio-agent-abilities/*</code></li>'
 				. '</ul>'
-				. '<p>' . esc_html__( 'To confirm it is the edge and not WordPress, run the curl probe below: if curl from your own machine gets a 200 but the AI client still fails, the block is on the proxy or IP path the AI backend uses, not on your endpoint.', 'agent-abilities-for-mcp' ) . '</p>',
+				. '<p>' . esc_html__( 'To confirm it is the edge and not WordPress, run the curl probe below: if curl from your own machine gets a 200 but the AI client still fails, the block is on the proxy or IP path the AI backend uses, not on your endpoint.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 		// CDN / WAF: page or edge cache intercepts the REST route.
 		aafm_render_help_entry(
-			__( 'A page cache or CDN is intercepting the endpoint', 'agent-abilities-for-mcp' ),
+			__( 'A page cache or CDN is intercepting the endpoint', 'oversio-agent-abilities' ),
 			wp_kses(
-				'<p>' . esc_html__( 'Full-page caching (a caching plugin) or edge caching (the CDN) can serve a cached or empty response for the MCP route instead of letting the request hit PHP. The symptom is a stale, blank, or HTML response where JSON-RPC was expected.', 'agent-abilities-for-mcp' ) . '</p>'
-				. '<p>' . esc_html__( 'Exclude the MCP endpoint path from both full-page cache and edge cache. REST routes are dynamic and must never be cached:', 'agent-abilities-for-mcp' ) . '</p>'
+				'<p>' . esc_html__( 'Full-page caching (a caching plugin) or edge caching (the CDN) can serve a cached or empty response for the MCP route instead of letting the request hit PHP. The symptom is a stale, blank, or HTML response where JSON-RPC was expected.', 'oversio-agent-abilities' ) . '</p>'
+				. '<p>' . esc_html__( 'Exclude the MCP endpoint path from both full-page cache and edge cache. REST routes are dynamic and must never be cached:', 'oversio-agent-abilities' ) . '</p>'
 				. '<ul>'
-				. '<li><code>/wp-json/agent-abilities-for-mcp/*</code> ' . esc_html__( '(pretty permalinks)', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><code>/index.php?rest_route=/agent-abilities-for-mcp/*</code> ' . esc_html__( '(plain permalinks)', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><code>/wp-json/oversio-agent-abilities/*</code> ' . esc_html__( '(pretty permalinks)', 'oversio-agent-abilities' ) . '</li>'
+				. '<li><code>/index.php?rest_route=/oversio-agent-abilities/*</code> ' . esc_html__( '(plain permalinks)', 'oversio-agent-abilities' ) . '</li>'
 				. '</ul>',
 				$inline
 			)
@@ -1746,29 +1746,29 @@ function aafm_render_help_tab(): void {
 
 		// Connecting: a redirect breaks the POST.
 		aafm_render_help_entry(
-			__( 'A redirect is breaking the request (trailing slash or http to https)', 'agent-abilities-for-mcp' ),
+			__( 'A redirect is breaking the request (trailing slash or http to https)', 'oversio-agent-abilities' ),
 			wp_kses(
-				'<p>' . esc_html__( 'A 301 redirect — adding or removing a trailing slash, or forcing http to https — can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'agent-abilities-for-mcp' ) . '</p>'
-				. '<p>' . esc_html__( 'Use the exact endpoint URL the Connection tab shows, with the right scheme (https) and no extra trailing slash, so no redirect is triggered. If your server force-redirects http to https, make sure the config URL already starts with https so the POST is never redirected.', 'agent-abilities-for-mcp' ) . '</p>',
+				'<p>' . esc_html__( 'A 301 redirect — adding or removing a trailing slash, or forcing http to https — can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'oversio-agent-abilities' ) . '</p>'
+				. '<p>' . esc_html__( 'Use the exact endpoint URL the Connection tab shows, with the right scheme (https) and no extra trailing slash, so no redirect is triggered. If your server force-redirects http to https, make sure the config URL already starts with https so the POST is never redirected.', 'oversio-agent-abilities' ) . '</p>',
 				$inline
 			)
 		);
 
 		// Connecting: self-test with curl (verified against a live endpoint: 200/401/403-406-429/404/5xx).
 		aafm_render_help_entry(
-			__( 'Test the endpoint yourself with curl', 'agent-abilities-for-mcp' ),
+			__( 'Test the endpoint yourself with curl', 'oversio-agent-abilities' ),
 			wp_kses(
-				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and — if it fails — which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'agent-abilities-for-mcp' ) . '</p>'
-				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/wp-json/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
-				. '<p>' . esc_html__( 'If your permalinks are plain, use the index.php form instead:', 'agent-abilities-for-mcp' ) . '</p>'
-				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/index.php?rest_route=/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
-				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
+				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and — if it fails — which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'oversio-agent-abilities' ) . '</p>'
+				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/wp-json/oversio-agent-abilities/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
+				. '<p>' . esc_html__( 'If your permalinks are plain, use the index.php form instead:', 'oversio-agent-abilities' ) . '</p>'
+				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/index.php?rest_route=/oversio-agent-abilities/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
+				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'oversio-agent-abilities' ) . '</strong></p>'
 				. '<ul>'
-				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working — if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '200', 'oversio-agent-abilities' ) . '</strong> — ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working — if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'oversio-agent-abilities' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'oversio-agent-abilities' ) . '</strong> — ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section).', 'oversio-agent-abilities' ) . '</li>'
+				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'oversio-agent-abilities' ) . '</strong> — ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'oversio-agent-abilities' ) . '</li>'
+				. '<li><strong>' . esc_html__( '404', 'oversio-agent-abilities' ) . '</strong> — ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'oversio-agent-abilities' ) . '</li>'
+				. '<li><strong>' . esc_html__( '5xx', 'oversio-agent-abilities' ) . '</strong> — ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'oversio-agent-abilities' ) . '</li>'
 				. '</ul>',
 				$inline
 			)
@@ -1776,36 +1776,36 @@ function aafm_render_help_tab(): void {
 
 		// 4. Windows: client config won't start.
 		aafm_render_help_entry(
-			__( 'Windows: my client config won\'t start', 'agent-abilities-for-mcp' ),
+			__( 'Windows: my client config won\'t start', 'oversio-agent-abilities' ),
 			wp_kses(
-				'<p>' . esc_html__( 'Windows MCP clients cannot spawn the npx shim by its name alone. The launcher has to be wrapped so the command resolves:', 'agent-abilities-for-mcp' ) . ' <code>cmd /c npx …</code></p>'
-				. '<p>' . esc_html__( 'You do not need to hand-edit anything — switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'agent-abilities-for-mcp' ) . '</p>',
+				'<p>' . esc_html__( 'Windows MCP clients cannot spawn the npx shim by its name alone. The launcher has to be wrapped so the command resolves:', 'oversio-agent-abilities' ) . ' <code>cmd /c npx …</code></p>'
+				. '<p>' . esc_html__( 'You do not need to hand-edit anything — switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'oversio-agent-abilities' ) . '</p>',
 				$inline
 			)
 		);
 
 	// 5. Local / staging won't connect (self-signed cert).
 	aafm_render_help_entry(
-		__( 'My local or staging site won\'t connect (self-signed certificate)', 'agent-abilities-for-mcp' ),
+		__( 'My local or staging site won\'t connect (self-signed certificate)', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust, so the proxy refuses the TLS handshake. For local testing only, you can tell Node to accept it. The Connection tab already adds this for you when it detects a local site.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'Quick (least safe) — add this to the config env block:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust, so the proxy refuses the TLS handshake. For local testing only, you can tell Node to accept it. The Connection tab already adds this for you when it detects a local site.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'Quick (least safe) — add this to the config env block:', 'oversio-agent-abilities' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_TLS_REJECT_UNAUTHORIZED": "0"' )
-			. '<p>' . esc_html__( 'Better — point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'Better — point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'oversio-agent-abilities' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_EXTRA_CA_CERTS": "/path/to/rootCA.pem"' )
 			. aafm_help_copy_line( '"NODE_USE_SYSTEM_CA": "1"' )
-			. '<p><strong>' . esc_html__( 'Never use any of these on a production site.', 'agent-abilities-for-mcp' ) . '</strong></p>',
+			. '<p><strong>' . esc_html__( 'Never use any of these on a production site.', 'oversio-agent-abilities' ) . '</strong></p>',
 			$inline
 		)
 	);
 
 	// Browser / OAuth clients: how a client connects without a copied secret.
 	aafm_render_help_entry(
-		__( 'Connecting a browser or OAuth client', 'agent-abilities-for-mcp' ),
+		__( 'Connecting a browser or OAuth client', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'There are two ways for an agent to authenticate. Most desktop clients use an Application Password: create one for the agent user under Users → Profile → Application Passwords, then paste the generated config from Connection → Step 2. Keep the password\'s spaces when you copy it.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'OAuth is the other way, and it is off by default. Turn it on under Settings and the agent connects by browser approval instead of a copied secret: you paste your site URL into the client and approve the request in your browser. The Connection tab shows the OAuth card and the endpoint to use once it is enabled.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'For browser-based clients, the plugin already exposes the session and approval headers a browser needs to read across origins (the MCP session id, the protocol version, and the OAuth challenge), so a web client can complete the handshake. If a browser client still cannot read the session header, check that nothing in front of WordPress is stripping CORS response headers.', 'agent-abilities-for-mcp' ) . '</p>',
+			'<p>' . esc_html__( 'There are two ways for an agent to authenticate. Most desktop clients use an Application Password: create one for the agent user under Users → Profile → Application Passwords, then paste the generated config from Connection → Step 2. Keep the password\'s spaces when you copy it.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'OAuth is the other way, and it is off by default. Turn it on under Settings and the agent connects by browser approval instead of a copied secret: you paste your site URL into the client and approve the request in your browser. The Connection tab shows the OAuth card and the endpoint to use once it is enabled.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'For browser-based clients, the plugin already exposes the session and approval headers a browser needs to read across origins (the MCP session id, the protocol version, and the OAuth challenge), so a web client can complete the handshake. If a browser client still cannot read the session header, check that nothing in front of WordPress is stripping CORS response headers.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
@@ -1814,30 +1814,30 @@ function aafm_render_help_tab(): void {
 
 	// Section 2 — Authentication.
 	echo '<div class="aafm-acc-group">';
-	echo '<h2>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'Authentication', 'oversio-agent-abilities' ) . '</h2>';
 
 	// 2. Authorization header diagnostic fails.
 	aafm_render_help_entry(
-		__( 'The "Authorization header reaches WordPress" diagnostic fails', 'agent-abilities-for-mcp' ),
+		__( 'The "Authorization header reaches WordPress" diagnostic fails', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Apache (.htaccess) — either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
+			'<p>' . esc_html__( 'Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p><strong>' . esc_html__( 'Apache (.htaccess) — either of these:', 'oversio-agent-abilities' ) . '</strong></p>'
 			. aafm_help_copy_line( 'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1' )
 			. aafm_help_copy_line( 'RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]' )
-			. '<p><strong>' . esc_html__( 'Nginx / FastCGI:', 'agent-abilities-for-mcp' ) . '</strong></p>'
+			. '<p><strong>' . esc_html__( 'Nginx / FastCGI:', 'oversio-agent-abilities' ) . '</strong></p>'
 			. aafm_help_copy_line( 'fastcgi_param HTTP_AUTHORIZATION $http_authorization;' )
-			. '<p>' . esc_html__( 'After applying, reload the web server and re-run Connection → Diagnostics.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'After applying, reload the web server and re-run Connection → Diagnostics.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// 3. Application Passwords option missing.
 	aafm_render_help_entry(
-		__( 'The Application Passwords option is missing from my profile', 'agent-abilities-for-mcp' ),
+		__( 'The Application Passwords option is missing from my profile', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https — so it hides the option.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly detects https. Forwarding the standard X-Forwarded-Proto header from the proxy is the usual fix.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production — the credential would travel unencrypted.', 'agent-abilities-for-mcp' ) . '</strong></p>',
+			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https — so it hides the option.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly detects https. Forwarding the standard X-Forwarded-Proto header from the proxy is the usual fix.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production — the credential would travel unencrypted.', 'oversio-agent-abilities' ) . '</strong></p>',
 			$inline
 		)
 	);
@@ -1846,62 +1846,62 @@ function aafm_render_help_tab(): void {
 
 	// Section 3 — Abilities & permissions.
 	echo '<div class="aafm-acc-group">';
-	echo '<h2>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'Abilities & permissions', 'oversio-agent-abilities' ) . '</h2>';
 
 	// 6. Agent sees fewer tools than expected.
 	aafm_render_help_entry(
-		__( 'My agent sees fewer tools than I expected', 'agent-abilities-for-mcp' ),
+		__( 'My agent sees fewer tools than I expected', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'This is intentional least-privilege behaviour. Each connection is filtered by the agent user\'s own capabilities, so the agent only ever sees abilities its role allows: reads need read capabilities; writes need the matching edit, publish, moderate, or manage capabilities.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do — keep it to what the agent genuinely needs.', 'agent-abilities-for-mcp' ) . '</p>',
+			'<p>' . esc_html__( 'This is intentional least-privilege behaviour. Each connection is filtered by the agent user\'s own capabilities, so the agent only ever sees abilities its role allows: reads need read capabilities; writes need the matching edit, publish, moderate, or manage capabilities.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do — keep it to what the agent genuinely needs.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// 7. Ability enabled but agent still can't use it.
 	aafm_render_help_entry(
-		__( 'An ability is enabled but the agent still can\'t use it', 'agent-abilities-for-mcp' ),
+		__( 'An ability is enabled but the agent still can\'t use it', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Two things both have to be true for an ability to work:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Two things both have to be true for an ability to work:', 'oversio-agent-abilities' ) . '</p>'
 			. '<ul>'
-			. '<li>' . esc_html__( 'The ability is turned ON on the Abilities tab. Everything is OFF by default.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li>' . esc_html__( 'The agent user holds the WordPress capability that ability requires.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li>' . esc_html__( 'The ability is turned ON on the Abilities tab. Everything is OFF by default.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li>' . esc_html__( 'The agent user holds the WordPress capability that ability requires.', 'oversio-agent-abilities' ) . '</li>'
 			. '</ul>'
-			. '<p>' . esc_html__( 'If the toggle is on but the agent still gets refused, it is almost always the capability. Check the agent user\'s role.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'If the toggle is on but the agent still gets refused, it is almost always the capability. Check the agent user\'s role.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// Meta governance: the allow/deny model and the * wildcard.
 	aafm_render_help_entry(
-		__( 'How the exposed and denied meta key lists work (and what * does)', 'agent-abilities-for-mcp' ),
+		__( 'How the exposed and denied meta key lists work (and what * does)', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Meta is locked down by default: until you list a key under "Exposed meta keys" on the Abilities tab, an agent cannot read or write any post meta. Two keys are always off limits no matter what you list: keys starting with an underscore (protected meta) and authentication keys. Those stay blocked even if you try to add them.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'A single * in the exposed list means "allow every key except the ones that are blocked or denied". The order the plugin checks is fixed: blocked keys lose first, then the denied list, then the exposed list (or the * wildcard). So the deny list always wins. A key in "Denied meta keys" stays hidden even when the exposed list is set to *.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'One thing to know about * and reading all of a post\'s meta at once: a single-key read works for any key * covers, but the "read all meta" ability only returns the keys you spelled out by name. Under a bare *, with no named keys, it returns an empty set. List the keys you want returned in bulk.', 'agent-abilities-for-mcp' ) . '</p>',
+			'<p>' . esc_html__( 'Meta is locked down by default: until you list a key under "Exposed meta keys" on the Abilities tab, an agent cannot read or write any post meta. Two keys are always off limits no matter what you list: keys starting with an underscore (protected meta) and authentication keys. Those stay blocked even if you try to add them.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'A single * in the exposed list means "allow every key except the ones that are blocked or denied". The order the plugin checks is fixed: blocked keys lose first, then the denied list, then the exposed list (or the * wildcard). So the deny list always wins. A key in "Denied meta keys" stays hidden even when the exposed list is set to *.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'One thing to know about * and reading all of a post\'s meta at once: a single-key read works for any key * covers, but the "read all meta" ability only returns the keys you spelled out by name. Under a bare *, with no named keys, it returns an empty set. List the keys you want returned in bulk.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// Term meta is filter-only (no admin field).
 	aafm_render_help_entry(
-		__( 'Exposing term (category and tag) meta', 'agent-abilities-for-mcp' ),
+		__( 'Exposing term (category and tag) meta', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Term meta has no field on the Abilities tab. It is off by default and you open it up with a small filter in your own code (a site-specific plugin or your theme\'s functions.php). Add the key names you want an agent to read or write on terms:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Term meta has no field on the Abilities tab. It is off by default and you open it up with a small filter in your own code (a site-specific plugin or your theme\'s functions.php). Add the key names you want an agent to read or write on terms:', 'oversio-agent-abilities' ) . '</p>'
 			. aafm_help_copy_line( 'add_filter( \'aafm_allowed_term_meta_keys\', fn( $keys ) => array_merge( $keys, [ \'my_term_color\', \'my_term_icon\' ] ) );' )
-			. '<p>' . esc_html__( 'The same protections apply as for post meta: underscore-prefixed and authentication keys are stripped out even if your filter tries to add them.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'The same protections apply as for post meta: underscore-prefixed and authentication keys are stripped out even if your filter tries to add them.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// Widening the exposed post types.
 	aafm_render_help_entry(
-		__( 'My custom post type is not available to the agent', 'agent-abilities-for-mcp' ),
+		__( 'My custom post type is not available to the agent', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Out of the box an agent can only touch posts and pages. Every other content type is off until you turn it on under "Exposed content types" on the Abilities tab. Only public, non-internal types show up there to choose from.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'If you would rather set this in code, the same list runs through a filter you can add to:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Out of the box an agent can only touch posts and pages. Every other content type is off until you turn it on under "Exposed content types" on the Abilities tab. Only public, non-internal types show up there to choose from.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'If you would rather set this in code, the same list runs through a filter you can add to:', 'oversio-agent-abilities' ) . '</p>'
 			. aafm_help_copy_line( 'add_filter( \'aafm_allowed_post_types\', fn( $types ) => array_merge( $types, [ \'product\', \'event\' ] ) );' )
-			. '<p>' . esc_html__( 'After exposing a type, the agent still needs the WordPress capabilities for that type, and the relevant abilities still have to be turned on.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'After exposing a type, the agent still needs the WordPress capabilities for that type, and the relevant abilities still have to be turned on.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
@@ -1910,37 +1910,37 @@ function aafm_render_help_tab(): void {
 
 	// Section 4 — Clients, privacy & limits.
 	echo '<div class="aafm-acc-group">';
-	echo '<h2>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'Clients, privacy & limits', 'oversio-agent-abilities' ) . '</h2>';
 
 	// 8. Which AI clients work, and how to set each one up.
 	aafm_render_help_entry(
-		__( 'Which AI clients work, and how do I set each one up?', 'agent-abilities-for-mcp' ),
+		__( 'Which AI clients work, and how do I set each one up?', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Claude Desktop, Claude Code, Cursor, and Windsurf all connect the same way: through the @automattic/mcp-wordpress-remote proxy, which is the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user\'s Application Password and builds the auth itself.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Claude Desktop, Claude Code, Cursor, and Windsurf all connect the same way: through the @automattic/mcp-wordpress-remote proxy, which is the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user\'s Application Password and builds the auth itself.', 'oversio-agent-abilities' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'Claude Desktop:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'paste the generated block into its claude_desktop_config.json (Settings → Developer → Edit Config) and restart the app.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Claude Code:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add the same server to its MCP config (claude mcp add, or the .mcp.json in your project).', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Cursor:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add the block to its MCP config (~/.cursor/mcp.json, or Settings → MCP) and reload.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Windsurf:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it under its MCP / plugins config (mcp_config.json) and refresh the server list.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Claude Desktop:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'paste the generated block into its claude_desktop_config.json (Settings → Developer → Edit Config) and restart the app.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Claude Code:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'add the same server to its MCP config (claude mcp add, or the .mcp.json in your project).', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Cursor:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'add the block to its MCP config (~/.cursor/mcp.json, or Settings → MCP) and reload.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Windsurf:', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'add it under its MCP / plugins config (mcp_config.json) and refresh the server list.', 'oversio-agent-abilities' ) . '</li>'
 			. '</ul>'
-			. '<p>' . esc_html__( 'Copy the config straight from Connection → Step 2 — do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'The hosted ChatGPT and Gemini apps cannot connect in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Their web connectors expect a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet, so they cannot reach the proxy the way the clients above do. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'Copy the config straight from Connection → Step 2 — do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p><strong>' . esc_html__( 'The hosted ChatGPT and Gemini apps cannot connect in this release.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'Their web connectors expect a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet, so they cannot reach the proxy the way the clients above do. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// 8b. Plain-language security model (the differentiator).
 	aafm_render_help_entry(
-		__( 'What can and can\'t this plugin do? (the security model in plain language)', 'agent-abilities-for-mcp' ),
+		__( 'What can and can\'t this plugin do? (the security model in plain language)', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'oversio-agent-abilities' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site — the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password — not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Deletes are trash, not destroy.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Delete-style abilities move content to the Trash, where you can restore it; they do not permanently erase it.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'No external calls.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site — the AI client connects in to you, not the other way round.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password — not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Deletes are trash, not destroy.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'Delete-style abilities move content to the Trash, where you can restore it; they do not permanently erase it.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'oversio-agent-abilities' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'oversio-agent-abilities' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'oversio-agent-abilities' ) . '</li>'
 			. '</ul>',
 			$inline
 		)
@@ -1948,20 +1948,20 @@ function aafm_render_help_tab(): void {
 
 	// 9. Privacy / what gets logged.
 	aafm_render_help_entry(
-		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
+		__( 'What does the plugin log, and does it call out to anything?', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin makes no external calls — nothing about your site or its content is sent anywhere.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
+			'<p>' . esc_html__( 'The plugin makes no external calls — nothing about your site or its content is sent anywhere.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);
 
 	// 10. Rate limiting.
 	aafm_render_help_entry(
-		__( 'Is there rate limiting?', 'agent-abilities-for-mcp' ),
+		__( 'Is there rate limiting?', 'oversio-agent-abilities' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each connection can make at most that many agent calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, so two connections do not eat into each other\'s budget.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'agent-abilities-for-mcp' ) . '</p>',
+			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each connection can make at most that many agent calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, so two connections do not eat into each other\'s budget.', 'oversio-agent-abilities' ) . '</p>'
+			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'oversio-agent-abilities' ) . '</p>',
 			$inline
 		)
 	);

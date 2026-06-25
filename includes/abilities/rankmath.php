@@ -60,40 +60,40 @@ function aafm_register_rankmath_full_definitions( array $registry ): array {
 function aafm_rankmath_registry_definitions(): array {
 	return array(
 		'aafm/rankmath-get-post'      => array(
-			'label'        => __( 'Get post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads a post's Rank Math SEO fields (title, description, focus keyword, canonical, social, and robots) from its rank_math_* post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO (Rank Math)', 'oversio-agent-abilities' ),
+			'description'  => __( "Reads a post's Rank Math SEO fields (title, description, focus keyword, canonical, social, and robots) from its rank_math_* post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
 			'args_builder' => 'aafm_args_rankmath_get_post',
 		),
 		'aafm/rankmath-update-post'   => array(
-			'label'        => __( 'Update post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update post SEO (Rank Math)', 'oversio-agent-abilities' ),
+			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
 			'args_builder' => 'aafm_args_rankmath_update_post',
 		),
 		'aafm/rankmath-get-schema'    => array(
-			'label'        => __( 'Get post schema (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads a post's structured-data (JSON-LD) schema of a given type from Rank Math's rank_math_schema_{Type} post meta. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post schema (Rank Math)', 'oversio-agent-abilities' ),
+			'description'  => __( "Reads a post's structured-data (JSON-LD) schema of a given type from Rank Math's rank_math_schema_{Type} post meta. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
 			'args_builder' => 'aafm_args_rankmath_get_schema',
 		),
 		'aafm/rankmath-update-schema' => array(
-			'label'        => __( 'Update post schema (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's structured-data (JSON-LD) schema of a given type to Rank Math's rank_math_schema_{Type} post meta, recursively sanitized. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update post schema (Rank Math)', 'oversio-agent-abilities' ),
+			'description'  => __( "Writes a post's structured-data (JSON-LD) schema of a given type to Rank Math's rank_math_schema_{Type} post meta, recursively sanitized. Requires edit access to that post.", 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
 			'args_builder' => 'aafm_args_rankmath_update_schema',
 		),
 		'aafm/rankmath-get-head'      => array(
-			'label'        => __( 'Get post SEO head (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Rank Math, best-effort (empty when no head API is available). Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get post SEO head (Rank Math)', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Rank Math, best-effort (empty when no head API is available). Requires the edit-posts capability and edit access to that post.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',
@@ -256,12 +256,12 @@ function aafm_args_rankmath_update_post(): array {
 	}
 	$properties['robots'] = array(
 		'type'        => 'string',
-		'description' => __( 'Robots directives as a comma-separated list. Accepted tokens: index, noindex, nofollow, noarchive, noimageindex, nosnippet. Unknown tokens are dropped, and the value is stored as Rank Math\'s serialized directive array.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Robots directives as a comma-separated list. Accepted tokens: index, noindex, nofollow, noarchive, noimageindex, nosnippet. Unknown tokens are dropped, and the value is stored as Rank Math\'s serialized directive array.', 'oversio-agent-abilities' ),
 	);
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
-		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Requires edit access to that post.", 'oversio-agent-abilities' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -357,7 +357,7 @@ function aafm_args_rankmath_get_schema(): array {
 				'type'    => array(
 					'type'        => 'string',
 					'pattern'     => '^[A-Za-z][A-Za-z0-9]*$',
-					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'oversio-agent-abilities' ),
 				),
 			),
 			'required'             => array( 'post_id', 'type' ),
@@ -428,7 +428,7 @@ function aafm_args_rankmath_update_schema(): array {
 				'type'    => array(
 					'type'        => 'string',
 					'pattern'     => '^[A-Za-z][A-Za-z0-9]*$',
-					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'oversio-agent-abilities' ),
 				),
 				'schema'  => array( 'type' => 'object' ),
 			),

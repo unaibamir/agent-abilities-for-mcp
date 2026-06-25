@@ -22,27 +22,27 @@ final class SubmenuHighlightTest extends TestCase {
 	}
 
 	public function test_dashboard_tab_highlights_the_parent_slug(): void {
-		$_GET['page'] = 'agent-abilities-for-mcp';
+		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'dashboard';
-		$this->assertSame( 'agent-abilities-for-mcp', aafm_highlight_tab_submenu( 'agent-abilities-for-mcp' ) );
+		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_missing_tab_highlights_the_parent_slug(): void {
-		$_GET['page'] = 'agent-abilities-for-mcp';
+		$_GET['page'] = 'oversio-agent-abilities';
 		unset( $_GET['tab'] );
-		$this->assertSame( 'agent-abilities-for-mcp', aafm_highlight_tab_submenu( 'agent-abilities-for-mcp' ) );
+		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_known_tab_highlights_its_tab_slug(): void {
-		$_GET['page'] = 'agent-abilities-for-mcp';
+		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'abilities';
-		$this->assertSame( 'agent-abilities-for-mcp&tab=abilities', aafm_highlight_tab_submenu( 'agent-abilities-for-mcp' ) );
+		$this->assertSame( 'oversio-agent-abilities&tab=abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_unknown_tab_falls_back_to_the_parent_slug(): void {
-		$_GET['page'] = 'agent-abilities-for-mcp';
+		$_GET['page'] = 'oversio-agent-abilities';
 		$_GET['tab']  = 'bogus';
-		$this->assertSame( 'agent-abilities-for-mcp', aafm_highlight_tab_submenu( 'agent-abilities-for-mcp' ) );
+		$this->assertSame( 'oversio-agent-abilities', aafm_highlight_tab_submenu( 'oversio-agent-abilities' ) );
 	}
 
 	public function test_other_page_returns_the_input_unchanged(): void {

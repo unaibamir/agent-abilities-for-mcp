@@ -85,7 +85,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	$plain_site = esc_html( $site_name );
 
 	/* translators: 1: client/app name, 2: site name. */
-	$title = esc_html( sprintf( __( 'Authorize %1$s · %2$s', 'agent-abilities-for-mcp' ), $client_name, $site_name ) );
+	$title = esc_html( sprintf( __( 'Authorize %1$s · %2$s', 'oversio-agent-abilities' ), $client_name, $site_name ) );
 
 	/*
 	 * Headline, safe-by-construction: the client name is the only untrusted input and is
@@ -94,7 +94,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	 */
 	$headline = sprintf(
 		/* translators: 1: client/app name (already bolded + escaped), 2: site name (escaped). */
-		esc_html__( '%1$s wants to connect to %2$s', 'agent-abilities-for-mcp' ),
+		esc_html__( '%1$s wants to connect to %2$s', 'oversio-agent-abilities' ),
 		'<strong>' . esc_html( $client_name ) . '</strong>',
 		$plain_site
 	);
@@ -103,8 +103,8 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// substituted into an escaped translation string — same safe-by-construction pattern.
 	$acting = sprintf(
 		/* translators: 1: bolded phrase "as your WordPress account", 2: the username chip. */
-		esc_html__( 'The agent acts %1$s %2$s — it can do what your account is permitted to do, nothing more.', 'agent-abilities-for-mcp' ),
-		'<strong>' . esc_html__( 'as your WordPress account', 'agent-abilities-for-mcp' ) . '</strong>',
+		esc_html__( 'The agent acts %1$s %2$s — it can do what your account is permitted to do, nothing more.', 'oversio-agent-abilities' ),
+		'<strong>' . esc_html__( 'as your WordPress account', 'oversio-agent-abilities' ) . '</strong>',
 		'<span class="who">' . esc_html( $user_login ) . '</span>'
 	);
 
@@ -115,7 +115,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// values in that file stay in lockstep with includes/admin/assets/admin.css (:root).
 
 	// Static inline SVGs (no dynamic data). The hub mark is the plugin logo.
-	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '">'
+	$mark_svg = '<svg class="mark" viewBox="0 0 64 64" role="img" aria-label="' . esc_attr__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ) . '">'
 		. '<defs>'
 		. '<radialGradient id="aGlow" cx="50%" cy="42%" r="55%"><stop offset="0%" stop-color="#9BC4FF"/><stop offset="55%" stop-color="#4F9DFF"/><stop offset="100%" stop-color="#2E6FD6"/></radialGradient>'
 		. '<linearGradient id="aLine" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6AA9FF"/><stop offset="100%" stop-color="#4F9DFF"/></linearGradient>'
@@ -138,10 +138,10 @@ function aafm_oauth_render_consent_page( array $view ): void {
 
 	// Governance guarantees: each a bold lead + plain description, both translatable.
 	$guarantees = array(
-		array( __( 'Off by default.', 'agent-abilities-for-mcp' ), __( 'The agent can only call abilities an admin has switched on in WordPress.', 'agent-abilities-for-mcp' ) ),
-		array( __( 'Capped to your role.', 'agent-abilities-for-mcp' ), __( 'Every action runs inside your capabilities, never above them.', 'agent-abilities-for-mcp' ) ),
-		array( __( 'Every action is logged.', 'agent-abilities-for-mcp' ), __( 'There is an audit trail of what the agent did and when.', 'agent-abilities-for-mcp' ) ),
-		array( __( 'Deletes go to Trash.', 'agent-abilities-for-mcp' ), __( 'Removals are recoverable, not permanent.', 'agent-abilities-for-mcp' ) ),
+		array( __( 'Off by default.', 'oversio-agent-abilities' ), __( 'The agent can only call abilities an admin has switched on in WordPress.', 'oversio-agent-abilities' ) ),
+		array( __( 'Capped to your role.', 'oversio-agent-abilities' ), __( 'Every action runs inside your capabilities, never above them.', 'oversio-agent-abilities' ) ),
+		array( __( 'Every action is logged.', 'oversio-agent-abilities' ), __( 'There is an audit trail of what the agent did and when.', 'oversio-agent-abilities' ) ),
+		array( __( 'Deletes go to Trash.', 'oversio-agent-abilities' ), __( 'Removals are recoverable, not permanent.', 'oversio-agent-abilities' ) ),
 	);
 
 	echo '<!DOCTYPE html>';
@@ -166,14 +166,14 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	// Header: logo, eyebrow, headline.
 	echo '<div class="card-head">';
 	echo $mark_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG markup.
-	echo '<p class="eyebrow">' . esc_html__( 'Authorize connection', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="eyebrow">' . esc_html__( 'Authorize connection', 'oversio-agent-abilities' ) . '</p>';
 	echo '<h1>' . $headline . '</h1>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $headline pre-escaped by construction.
 	echo '</div>';
 
 	// Client -> site connect row (decorative; the names are stated in the headline + note).
 	echo '<div class="connect-row" aria-hidden="true">';
 	echo '<span class="avatar client">' . $client_glyph . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG.
-	echo '<span class="flow">' . $flow_svg . '<span>' . esc_html__( 'connect', 'agent-abilities-for-mcp' ) . '</span></span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
+	echo '<span class="flow">' . $flow_svg . '<span>' . esc_html__( 'connect', 'oversio-agent-abilities' ) . '</span></span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
 	echo '<span class="avatar site">' . $initials . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $initials esc_html() above.
 	echo '</div>';
 
@@ -182,7 +182,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 
 	// Governance guarantees.
 	echo '<div class="guarantees">';
-	echo '<h2>' . esc_html__( 'How this stays governed', 'agent-abilities-for-mcp' ) . '</h2>';
+	echo '<h2>' . esc_html__( 'How this stays governed', 'oversio-agent-abilities' ) . '</h2>';
 	echo '<ul class="trust">';
 	foreach ( $guarantees as $row ) {
 		echo '<li>' . $tick_svg . '<span class="txt"><b>' . esc_html( $row[0] ) . '</b> ' . esc_html( $row[1] ) . '</span></li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped strings.
@@ -198,17 +198,17 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	}
 	printf(
 		'<button type="submit" name="aafm_oauth_decision" value="approve" class="aafm-btn aafm-btn-primary">%s</button>',
-		esc_html__( 'Approve & connect', 'agent-abilities-for-mcp' )
+		esc_html__( 'Approve & connect', 'oversio-agent-abilities' )
 	);
 	printf(
 		'<button type="submit" name="aafm_oauth_decision" value="deny" class="aafm-btn aafm-btn-secondary">%s</button>',
-		esc_html__( 'Deny', 'agent-abilities-for-mcp' )
+		esc_html__( 'Deny', 'oversio-agent-abilities' )
 	);
 	echo '</form>';
 
 	echo '</div>'; // .card
 
-	echo '<p class="foot">' . $shield_svg . esc_html__( 'Secured by Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
+	echo '<p class="foot">' . $shield_svg . esc_html__( 'Secured by Agent Abilities for MCP', 'oversio-agent-abilities' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
 
 	echo '</main>';
 	echo '</body>';

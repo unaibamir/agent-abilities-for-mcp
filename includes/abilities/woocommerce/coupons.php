@@ -57,8 +57,8 @@ function aafm_wc_coupons_registry_definitions(): array {
 	return array(
 		// Coupons (sub-slice W4-WC4) — discount/promotion management gated on manage_woocommerce.
 		'aafm/wc-list-coupons'  => array(
-			'label'        => __( 'List WooCommerce coupons', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce coupons with their id, code, amount, discount type, expiry date, and usage count, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce coupons', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists WooCommerce coupons with their id, code, amount, discount type, expiry date, and usage count, plus a total. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_coupons_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-coupon'    => array(
-			'label'        => __( 'Get WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce coupon by id: code, amount, discount type, expiry, usage limits, spend limits, product and email restrictions, and other config. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce coupon', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce coupon by id: code, amount, discount type, expiry, usage limits, spend limits, product and email restrictions, and other config. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_coupons_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-coupon' => array(
-			'label'        => __( 'Create WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce coupon', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce coupon from a code and discount type, with optional amount, usage limits, spend limits, product restrictions, and email restrictions. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_coupons_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-coupon' => array(
-			'label'        => __( 'Update WooCommerce coupon', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce coupon by id, changing only the fields you send. An empty request body is a no-op success. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce coupon', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce coupon by id, changing only the fields you send. An empty request body is a no-op success. Returns the full coupon shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

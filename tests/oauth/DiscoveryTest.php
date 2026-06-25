@@ -41,9 +41,9 @@ class DiscoveryTest extends TestCase {
 		$this->assertSame( array( 'code' ), $meta['response_types_supported'] );
 		$this->assertSame( array( 'none' ), $meta['token_endpoint_auth_methods_supported'] );
 
-		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/token', $meta['token_endpoint'] );
-		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', $meta['registration_endpoint'] );
-		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/revoke', $meta['revocation_endpoint'] );
+		$this->assertStringContainsString( 'oversio-agent-abilities/oauth/token', $meta['token_endpoint'] );
+		$this->assertStringContainsString( 'oversio-agent-abilities/oauth/register', $meta['registration_endpoint'] );
+		$this->assertStringContainsString( 'oversio-agent-abilities/oauth/revoke', $meta['revocation_endpoint'] );
 	}
 
 	/**

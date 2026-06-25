@@ -44,7 +44,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertSame( 19, substr_count( $html, '<details class="aafm-help-entry">' ) );
 
 		// Spot-check the load-bearing technical fixes are present and accurate.
-		$this->assertStringContainsString( 'rest_route=/agent-abilities-for-mcp/mcp', $html );
+		$this->assertStringContainsString( 'rest_route=/oversio-agent-abilities/mcp', $html );
 		$this->assertStringContainsString( 'SetEnvIf Authorization', $html );
 		$this->assertStringContainsString( 'fastcgi_param HTTP_AUTHORIZATION', $html );
 		$this->assertStringContainsString( 'NODE_TLS_REJECT_UNAUTHORIZED', $html );
@@ -72,7 +72,7 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Zero Trust', $html );
 		// Page/edge cache exclusion and the wildcard allow path for the MCP route.
 		$this->assertStringContainsString( 'edge cache', $html );
-		$this->assertStringContainsString( '/wp-json/agent-abilities-for-mcp/*', $html );
+		$this->assertStringContainsString( '/wp-json/oversio-agent-abilities/*', $html );
 		// Trailing-slash / http->https redirect entry.
 		$this->assertStringContainsString( 'trailing slash', $html );
 	}

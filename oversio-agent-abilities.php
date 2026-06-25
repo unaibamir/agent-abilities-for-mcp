@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Agent Abilities for MCP – Secure MCP Server for Claude & AI Agents
- * Plugin URI:        https://github.com/unaibamir/agent-abilities-for-mcp
+ * Plugin URI:        https://github.com/unaibamir/oversio-agent-abilities
  * Description:       Secure WordPress MCP server: give Claude, Cursor and AI agents scoped, audited, least-privilege access over the Model Context Protocol. Off by default.
  * Version:           1.0.0
  * Requires at least: 6.9
@@ -10,7 +10,7 @@
  * Author URI:        https://unaib.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       agent-abilities-for-mcp
+ * Text Domain:       oversio-agent-abilities
  * Domain Path:       /languages
  *
  * @package AgentAbilitiesForMCP
@@ -36,7 +36,7 @@ define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 // gate). A prepended autoloader alone is not enough — later plugins' Composer autoloaders also
 // prepend and leapfrog ours — so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
 // bundle now, during the plugin-include phase. Because plugin folders load alphabetically and we
-// sort first as "agent-abilities-for-mcp", this runs before any conflicting sibling's file, so PHP
+// sort first as "oversio-agent-abilities", this runs before any conflicting sibling's file, so PHP
 // commits to our copy and later siblings transparently use it. The prepended autoloader (still
 // registered first) resolves interface/trait dependencies during the eager load and covers
 // no-conflict installs. The floor/notice logic in includes/bootstrap.php stays as the fallback for

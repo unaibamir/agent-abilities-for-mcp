@@ -20,56 +20,56 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_media_definitions' );
  */
 function aafm_register_media_definitions( array $registry ): array {
 	$registry['aafm/get-media']          = array(
-		'label'        => __( 'Get media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get media', 'oversio-agent-abilities' ),
+		'description'  => __( 'List media library items (URL, alt, mime, dimensions). Response includes total (the full match count).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_get_media',
 	);
 	$registry['aafm/get-media-item']     = array(
-		'label'        => __( 'Get media item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get media item', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read one media item by id: caption, description, date, filesize, parent, and all image sizes.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_get_media_item',
 	);
 	$registry['aafm/count-media']        = array(
-		'label'        => __( 'Count media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count media library items, total and broken down by mime type.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Count media', 'oversio-agent-abilities' ),
+		'description'  => __( 'Count media library items, total and broken down by mime type.', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_count_media',
 	);
 	$registry['aafm/set-featured-image'] = array(
-		'label'        => __( 'Set featured image', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Set a post's featured image to an existing image attachment ID.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Set featured image', 'oversio-agent-abilities' ),
+		'description'  => __( "Set a post's featured image to an existing image attachment ID.", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_set_featured_image',
 	);
 	$registry['aafm/upload-media']       = array(
-		'label'        => __( 'Upload media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Upload media', 'oversio-agent-abilities' ),
+		'description'  => __( 'Upload an image from base64 data (jpg, png, gif, webp; SVG rejected).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_upload_media',
 	);
 	$registry['aafm/update-media']       = array(
-		'label'        => __( 'Update media', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Update an attachment's title, alt text, caption, or description.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update media', 'oversio-agent-abilities' ),
+		'description'  => __( "Update an attachment's title, alt text, caption, or description.", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'media',
 		'args_builder' => 'aafm_args_update_media',
 	);
 	$registry['aafm/delete-media']       = array(
-		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete an attachment — the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete media', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently delete an attachment — the file and library entry are removed and cannot be recovered.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'media',
@@ -506,12 +506,12 @@ function aafm_exec_upload_media( array $input ) {
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 	$decoded = base64_decode( $payload, true );
 	if ( false === $decoded || '' === $decoded ) {
-		return new WP_Error( 'aafm_bad_base64', __( 'Invalid base64 payload.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_bad_base64', __( 'Invalid base64 payload.', 'oversio-agent-abilities' ) );
 	}
 
 	// Size cap from WordPress, enforced before anything is written.
 	if ( strlen( $decoded ) > (int) wp_max_upload_size() ) {
-		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'oversio-agent-abilities' ) );
 	}
 
 	// Derive the true MIME from the decoded BYTES, never the supplied name/extension.
@@ -520,7 +520,7 @@ function aafm_exec_upload_media( array $input ) {
 
 	$allow = aafm_upload_allowlist();
 	if ( ! is_string( $real_mime ) || ! isset( $allow[ $real_mime ] ) ) {
-		return new WP_Error( 'aafm_disallowed_type', __( 'Unsupported or unsafe file type.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_disallowed_type', __( 'Unsupported or unsafe file type.', 'oversio-agent-abilities' ) );
 	}
 
 	// Build a safe filename with the canonical extension for the real type. The
@@ -540,7 +540,7 @@ function aafm_exec_upload_media( array $input ) {
 	$check = wp_check_filetype_and_ext( $upload['file'], $safe_name );
 	if ( empty( $check['type'] ) || ! isset( $allow[ $check['type'] ] ) ) {
 		wp_delete_file( $upload['file'] );
-		return new WP_Error( 'aafm_type_mismatch', __( 'File contents did not match an allowed type.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_type_mismatch', __( 'File contents did not match an allowed type.', 'oversio-agent-abilities' ) );
 	}
 
 	$attachment_id = wp_insert_attachment(
@@ -665,7 +665,7 @@ function aafm_exec_update_media( array $input ) {
 	$has_description = array_key_exists( 'description', $input );
 
 	if ( ! $has_title && ! $has_alt && ! $has_caption && ! $has_description ) {
-		return new WP_Error( 'aafm_nothing_to_update', __( 'Provide at least one field to update.', 'agent-abilities-for-mcp' ) );
+		return new WP_Error( 'aafm_nothing_to_update', __( 'Provide at least one field to update.', 'oversio-agent-abilities' ) );
 	}
 
 	$postarr = array( 'ID' => $att_id );

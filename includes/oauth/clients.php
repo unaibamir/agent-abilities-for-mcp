@@ -37,14 +37,14 @@ function aafm_oauth_register_client( array $req ) {
 	if ( empty( $redirect_uris ) ) {
 		return new WP_Error(
 			'invalid_redirect_uri',
-			__( 'At least one redirect URI is required.', 'agent-abilities-for-mcp' )
+			__( 'At least one redirect URI is required.', 'oversio-agent-abilities' )
 		);
 	}
 
 	if ( count( $redirect_uris ) > 10 ) {
 		return new WP_Error(
 			'invalid_redirect_uri',
-			__( 'A client may register at most 10 redirect URIs.', 'agent-abilities-for-mcp' )
+			__( 'A client may register at most 10 redirect URIs.', 'oversio-agent-abilities' )
 		);
 	}
 
@@ -52,7 +52,7 @@ function aafm_oauth_register_client( array $req ) {
 		if ( ! is_string( $uri ) || ! aafm_oauth_validate_redirect_uri( $uri ) ) {
 			return new WP_Error(
 				'invalid_redirect_uri',
-				__( 'A redirect URI is not allowed.', 'agent-abilities-for-mcp' )
+				__( 'A redirect URI is not allowed.', 'oversio-agent-abilities' )
 			);
 		}
 	}
@@ -86,7 +86,7 @@ function aafm_oauth_register_client( array $req ) {
 	if ( false === $inserted ) {
 		return new WP_Error(
 			'registration_failed',
-			__( 'Could not store the client registration.', 'agent-abilities-for-mcp' )
+			__( 'Could not store the client registration.', 'oversio-agent-abilities' )
 		);
 	}
 

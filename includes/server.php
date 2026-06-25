@@ -388,7 +388,7 @@ function aafm_transport_permission_callback( $request ) {
 	unset( $request );
 
 	if ( ! is_user_logged_in() ) {
-		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'agent-abilities-for-mcp' ), array( 'status' => 401 ) );
+		return new WP_Error( 'aafm_unauthenticated', __( 'Authentication required.', 'oversio-agent-abilities' ), array( 'status' => 401 ) );
 	}
 
 	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {
@@ -401,7 +401,7 @@ function aafm_transport_permission_callback( $request ) {
 				'principal_login'   => (string) $user->user_login,
 			)
 		);
-		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
+		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'oversio-agent-abilities' ), array( 'status' => 403 ) );
 	}
 
 	return true;
@@ -471,8 +471,8 @@ function aafm_register_mcp_server( $adapter ): void {
 		'aafm-server',
 		AAFM_MCP_NAMESPACE,
 		AAFM_MCP_ROUTE_SEGMENT,
-		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
-		__( 'Curated, governed WordPress abilities for AI agents.', 'agent-abilities-for-mcp' ),
+		__( 'Agent Abilities for MCP', 'oversio-agent-abilities' ),
+		__( 'Curated, governed WordPress abilities for AI agents.', 'oversio-agent-abilities' ),
 		AAFM_VERSION,
 		array( \WP\MCP\Transport\HttpTransport::class ),
 		\WP\MCP\Infrastructure\ErrorHandling\ErrorLogMcpErrorHandler::class,

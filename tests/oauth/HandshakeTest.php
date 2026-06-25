@@ -182,7 +182,7 @@ class HandshakeTest extends TestCase {
 	 * @return string The minted client_id.
 	 */
 	private function register_client( array $redirect_uris ): string {
-		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/register' );
 		$request->set_header( 'Content-Type', 'application/json' );
 		$request->set_body(
 			wp_json_encode(
@@ -246,7 +246,7 @@ class HandshakeTest extends TestCase {
 			$params['code_verifier'] = $verifier;
 		}
 
-		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$request = new WP_REST_Request( 'POST', '/oversio-agent-abilities/oauth/token' );
 		$request->set_body_params( $params );
 
 		return rest_do_request( $request );
@@ -350,7 +350,7 @@ class HandshakeTest extends TestCase {
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot of a server superglobal, restored verbatim after the assertion.
 		$prev_uri                      = $_SERVER['REQUEST_URI'] ?? null;
 		$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer ' . $access_token;
-		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/agent-abilities-for-mcp/mcp';
+		$_SERVER['REQUEST_URI']        = '/' . trim( rest_get_url_prefix(), '/' ) . '/oversio-agent-abilities/mcp';
 		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ), 'the OAuth bearer must resolve to the approving user' );
 		if ( null === $prev_uri ) {
 			unset( $_SERVER['REQUEST_URI'] );

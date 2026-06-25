@@ -57,8 +57,8 @@ function aafm_wc_customers_registry_definitions(): array {
 	return array(
 		// Customers (sub-slice W4-WC3) — PII-exposing abilities gated on manage_woocommerce.
 		'aafm/wc-list-customers'  => array(
-			'label'        => __( 'List WooCommerce customers', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce customers', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_customers_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-customer'    => array(
-			'label'        => __( 'Get WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce customer by id, including email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce customer', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce customer by id, including email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_customers_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-customer' => array(
-			'label'        => __( 'Create WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce customer from an email and username, with optional first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce customer', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce customer from an email and username, with optional first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_customers_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-customer' => array(
-			'label'        => __( 'Update WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce customer', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce customer by id, changing only the fields you send. An empty request body is a no-op success. Returns the full customer shape. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',

@@ -24,32 +24,32 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_revisions_definitions' );
  */
 function aafm_register_revisions_definitions( array $registry ): array {
 	$registry['aafm/list-revisions']   = array(
-		'label'        => __( 'List revisions', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List the revisions of a post the agent can edit (metadata only — no body content).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'List revisions', 'oversio-agent-abilities' ),
+		'description'  => __( 'List the revisions of a post the agent can edit (metadata only — no body content).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_list_revisions',
 	);
 	$registry['aafm/get-revision']     = array(
-		'label'        => __( 'Get revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Get a single revision of a post the agent can edit, including its body content (rendered or raw) and an optional diff against the post's current content.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get revision', 'oversio-agent-abilities' ),
+		'description'  => __( "Get a single revision of a post the agent can edit, including its body content (rendered or raw) and an optional diff against the post's current content.", 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_get_revision',
 	);
 	$registry['aafm/restore-revision'] = array(
-		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible.', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Restore revision', 'oversio-agent-abilities' ),
+		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible.', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
 		'args_builder' => 'aafm_args_restore_revision',
 	);
 	$registry['aafm/delete-revision']  = array(
-		'label'        => __( 'Delete revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit access to the parent post.", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete revision', 'oversio-agent-abilities' ),
+		'description'  => __( "Permanently delete a single revision from a post's history. This cannot be undone (unlike trashing a post, there is no Trash for revisions). The live post is not changed. Requires edit access to the parent post.", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',

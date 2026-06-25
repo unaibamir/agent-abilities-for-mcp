@@ -20,56 +20,56 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_comments_definitions' );
  */
 function aafm_register_comments_definitions( array $registry ): array {
 	$registry['aafm/get-comments']         = array(
-		'label'        => __( 'Get comments', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List approved comments for a post (email and IP are never returned).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get comments', 'oversio-agent-abilities' ),
+		'description'  => __( 'List approved comments for a post (email and IP are never returned).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_get_comments',
 	);
 	$registry['aafm/get-pending-comments'] = array(
-		'label'        => __( 'Get pending comments', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List the moderation queue (requires moderate_comments).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get pending comments', 'oversio-agent-abilities' ),
+		'description'  => __( 'List the moderation queue (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_get_pending_comments',
 	);
 	$registry['aafm/moderate-comment']     = array(
-		'label'        => __( 'Moderate comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Approve, unapprove, spam, or trash a comment (requires moderate_comments).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Moderate comment', 'oversio-agent-abilities' ),
+		'description'  => __( 'Approve, unapprove, spam, or trash a comment (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_moderate_comment',
 	);
 	$registry['aafm/get-comment']          = array(
-		'label'        => __( 'Get comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one comment by id (email and IP are never returned).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Get comment', 'oversio-agent-abilities' ),
+		'description'  => __( 'Read one comment by id (email and IP are never returned).', 'oversio-agent-abilities' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_get_comment',
 	);
 	$registry['aafm/create-comment']       = array(
-		'label'        => __( 'Create comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Add a pending comment to a post as the agent user (requires moderate_comments).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Create comment', 'oversio-agent-abilities' ),
+		'description'  => __( 'Add a pending comment to a post as the agent user (requires moderate_comments).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_create_comment',
 	);
 	$registry['aafm/update-comment']       = array(
-		'label'        => __( 'Update comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Edit a comment's content (requires edit access to that comment).", 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Update comment', 'oversio-agent-abilities' ),
+		'description'  => __( "Edit a comment's content (requires edit access to that comment).", 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
 		'args_builder' => 'aafm_args_update_comment',
 	);
 	$registry['aafm/delete-comment']       = array(
-		'label'        => __( 'Delete comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a comment (not recoverable; use moderate-comment to trash recoverably).', 'agent-abilities-for-mcp' ),
+		'label'        => __( 'Delete comment', 'oversio-agent-abilities' ),
+		'description'  => __( 'Permanently delete a comment (not recoverable; use moderate-comment to trash recoverably).', 'oversio-agent-abilities' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'comments',
@@ -642,7 +642,7 @@ function aafm_args_moderate_comment(): array {
 				'action'     => array(
 					'type'        => 'string',
 					'enum'        => array( 'approve', 'unapprove', 'spam', 'trash' ),
-					'description' => __( 'Moderation action: approve (publish the comment), unapprove (return it to the pending queue), spam (mark as spam), or trash (move to the Trash).', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Moderation action: approve (publish the comment), unapprove (return it to the pending queue), spam (mark as spam), or trash (move to the Trash).', 'oversio-agent-abilities' ),
 				),
 			),
 			'required'             => array( 'comment_id', 'action' ),
@@ -724,7 +724,7 @@ function aafm_exec_moderate_comment( array $input ) {
 		default:
 			return new WP_Error(
 				'aafm_invalid_action',
-				__( 'Unsupported moderation action.', 'agent-abilities-for-mcp' )
+				__( 'Unsupported moderation action.', 'oversio-agent-abilities' )
 			);
 	}
 

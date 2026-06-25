@@ -57,8 +57,8 @@ function aafm_wc_variations_registry_definitions(): array {
 	return array(
 		// Variations (sub-slice W4-WC1b) — a variable product's child variations, parent_id-scoped.
 		'aafm/wc-list-product-variations'  => array(
-			'label'        => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce product variations', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -66,8 +66,8 @@ function aafm_wc_variations_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-product-variation'    => array(
-			'label'        => __( 'Get WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one product variation by id, including its parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce product variation', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one product variation by id, including its parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -75,8 +75,8 @@ function aafm_wc_variations_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-product-variation' => array(
-			'label'        => __( 'Create WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce product variation', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a variation under a variable product (parent product id required) from optional status, description, prices, SKU, stock, image, and attribute values. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -84,8 +84,8 @@ function aafm_wc_variations_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-product-variation' => array(
-			'label'        => __( 'Update WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce product variation', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a product variation by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -93,8 +93,8 @@ function aafm_wc_variations_registry_definitions(): array {
 		),
 
 		'aafm/wc-delete-product-variation' => array(
-			'label'        => __( 'Delete WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Delete WooCommerce product variation', 'oversio-agent-abilities' ),
+			'description'  => __( 'Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',

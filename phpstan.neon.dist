@@ -5,7 +5,7 @@ parameters:
 	level: 8
 	phpVersion: 80000
 	paths:
-		- agent-abilities-for-mcp.php
+		- oversio-agent-abilities.php
 		- includes
 		- uninstall.php
 	bootstrapFiles:

@@ -16,7 +16,7 @@
  *
  * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace, resolving from our bundled
  * copy, at the plugin file's top level. Because plugin folders load alphabetically and we sort
- * first as "agent-abilities-for-mcp", this runs before any sibling's autoloader is even loaded;
+ * first as "oversio-agent-abilities", this runs before any sibling's autoloader is even loaded;
  * McpAdapter is a final class with no declaration-time dependencies, so eager resolution is clean.
  *
  * MAINTENANCE: when the bundled wordpress/mcp-adapter is updated, re-verify
@@ -149,7 +149,7 @@ function aafm_register_adapter_autoloader(): void {
  * first reference to WP\MCP\Core\McpAdapter can resolve to a sibling's older copy (confirmed:
  * Rank Math SEO bundles 0.4.1). PHP, however, allows only ONE declaration of a class per
  * request. Because plugin folders load alphabetically and we sort first as
- * "agent-abilities-for-mcp", our main file runs before any conflicting sibling's file. Declaring
+ * "oversio-agent-abilities", our main file runs before any conflicting sibling's file. Declaring
  * all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase, makes PHP commit to our
  * copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is identical across 0.4.1 and 0.5.0 (0.5.0 is an additive superset), so a

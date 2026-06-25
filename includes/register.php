@@ -22,8 +22,8 @@ function aafm_register_categories(): void {
 		wp_register_ability_category(
 			'aafm-reads',
 			array(
-				'label'       => __( 'Agent reads', 'agent-abilities-for-mcp' ),
-				'description' => __( 'Read-only abilities exposed to AI agents.', 'agent-abilities-for-mcp' ),
+				'label'       => __( 'Agent reads', 'oversio-agent-abilities' ),
+				'description' => __( 'Read-only abilities exposed to AI agents.', 'oversio-agent-abilities' ),
 			)
 		);
 	}
@@ -31,8 +31,8 @@ function aafm_register_categories(): void {
 		wp_register_ability_category(
 			'aafm-writes',
 			array(
-				'label'       => __( 'Agent writes', 'agent-abilities-for-mcp' ),
-				'description' => __( 'Guarded write abilities exposed to AI agents.', 'agent-abilities-for-mcp' ),
+				'label'       => __( 'Agent writes', 'oversio-agent-abilities' ),
+				'description' => __( 'Guarded write abilities exposed to AI agents.', 'oversio-agent-abilities' ),
 			)
 		);
 	}
@@ -78,7 +78,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			esc_html(
 				sprintf(
 					/* translators: %s: ability name */
-					__( 'Ability "%s" was not registered: a permission_callback is required.', 'agent-abilities-for-mcp' ),
+					__( 'Ability "%s" was not registered: a permission_callback is required.', 'oversio-agent-abilities' ),
 					$name
 				)
 			),

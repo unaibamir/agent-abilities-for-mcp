@@ -56,8 +56,8 @@ function aafm_register_wc_products_full_definitions( array $registry ): array {
 function aafm_wc_products_registry_definitions(): array {
 	return array(
 		'aafm/wc-list-products'  => array(
-			'label'        => __( 'List WooCommerce products', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'List WooCommerce products', 'oversio-agent-abilities' ),
+			'description'  => __( 'Lists WooCommerce products with their id, name, SKU, price, stock status, status, categories, and featured flag, plus a total. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -65,8 +65,8 @@ function aafm_wc_products_registry_definitions(): array {
 		),
 
 		'aafm/wc-get-product'    => array(
-			'label'        => __( 'Get WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce product by id, including its description, prices, stock, images, attributes, variation ids, and categories. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Get WooCommerce product', 'oversio-agent-abilities' ),
+			'description'  => __( 'Reads one WooCommerce product by id, including its description, prices, stock, images, attributes, variation ids, and categories. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -74,8 +74,8 @@ function aafm_wc_products_registry_definitions(): array {
 		),
 
 		'aafm/wc-create-product' => array(
-			'label'        => __( 'Create WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce product from a name (required) plus optional type, status, description, prices, SKU, stock, categories, tags, images, and attributes. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Create WooCommerce product', 'oversio-agent-abilities' ),
+			'description'  => __( 'Creates a WooCommerce product from a name (required) plus optional type, status, description, prices, SKU, stock, categories, tags, images, and attributes. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -83,8 +83,8 @@ function aafm_wc_products_registry_definitions(): array {
 		),
 
 		'aafm/wc-update-product' => array(
-			'label'        => __( 'Update WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Update WooCommerce product', 'oversio-agent-abilities' ),
+			'description'  => __( 'Updates a WooCommerce product by id, changing only the fields you send. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -92,8 +92,8 @@ function aafm_wc_products_registry_definitions(): array {
 		),
 
 		'aafm/wc-delete-product' => array(
-			'label'        => __( 'Delete WooCommerce product', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'label'        => __( 'Delete WooCommerce product', 'oversio-agent-abilities' ),
+			'description'  => __( 'Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability.', 'oversio-agent-abilities' ),
 			'group'        => 'writes',
 			'risk'         => 'destructive',
 			'subject'      => 'woocommerce',

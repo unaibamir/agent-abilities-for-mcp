@@ -327,12 +327,30 @@ function aafm_exec_count_posts( array $input ) {
 	// Statuses excluded from the active total (still surfaced in by_status).
 	$non_active = array( 'trash', 'auto-draft' );
 
-	$counts    = (array) wp_count_posts( $type );
+	// Pass the 'readable' perm so counts respect the caller's read capability. On its own,
+	// though, 'readable' only restricts the `private` status — wp_count_posts() still hands
+	// back draft/pending/future/trash counts to any reader, leaking how many unpublished
+	// items exist under this read-only gate. So layer a capability check on top of it.
+	$counts = (array) wp_count_posts( $type, 'readable' );
+
+	// Editors of this post type get the full breakdown; everyone else is limited to counts
+	// for publicly-viewable statuses (normally just 'publish'). Non-public status counts are
+	// zeroed for non-editors so the breakdown keeps its shape without exposing the rest.
+	$type_object  = get_post_type_object( $type );
+	$can_edit     = ( null !== $type_object ) && current_user_can( $type_object->cap->edit_posts );
+	$public_stati = get_post_stati( array( 'public' => true ) );
+
 	$by_status = array();
 	$total     = 0;
 	foreach ( $counts as $status => $n ) {
-		$status               = (string) $status;
-		$n                    = (int) $n;
+		$status = (string) $status;
+		$n      = (int) $n;
+
+		// Hide non-public status counts from callers who cannot edit this post type.
+		if ( ! $can_edit && ! in_array( $status, $public_stati, true ) ) {
+			$n = 0;
+		}
+
 		$by_status[ $status ] = $n;
 		if ( ! in_array( $status, $non_active, true ) ) {
 			$total += $n;

@@ -572,10 +572,14 @@ function aafm_oauth_handle_authorize(): void {
 	$user_id = get_current_user_id();
 
 	if ( $is_post ) {
-		// Deny: hand access_denied back to the client.
+		// Default-deny: only an explicit 'approve' grants a code. Treat anything else —
+		// a blank field, 'deny', or any unexpected value — as a denial and hand
+		// access_denied back to the client. An allow-list (not a 'deny'-only check) is
+		// what makes a malformed consent decision fail CLOSED instead of falling through
+		// to approval.
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 		$decision = isset( $_POST['aafm_oauth_decision'] ) ? sanitize_text_field( wp_unslash( $_POST['aafm_oauth_decision'] ) ) : '';
-		if ( 'deny' === $decision ) {
+		if ( 'approve' !== $decision ) {
 			aafm_oauth_redirect_error( $valid['redirect_uri'], 'access_denied', $valid['state'] );
 		}
 

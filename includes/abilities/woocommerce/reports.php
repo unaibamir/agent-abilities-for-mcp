@@ -172,6 +172,7 @@ function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
 	$page        = 1;
 	$per_page    = 200;
 	$total_sales = 0.0;
+	$net_sales   = 0.0;
 	$order_count = 0;
 
 	do {
@@ -198,6 +199,18 @@ function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
 				continue;
 			}
 			$total_sales += (float) $order->get_total();
+
+			// True net sales: strip tax and shipping out of the gross order total, then back
+			// out the product-only portion of any refunds (the total refund minus its tax and
+			// shipping components). This leaves after-discount product revenue actually kept --
+			// not the gross figure that net_sales used to (incorrectly) echo.
+			$net_sales += (float) $order->get_total()
+				- (float) $order->get_total_tax()
+				- (float) $order->get_shipping_total()
+				- ( (float) $order->get_total_refunded()
+					- (float) $order->get_total_tax_refunded()
+					- (float) $order->get_total_shipping_refunded() );
+
 			++$order_count;
 		}
 
@@ -206,12 +219,13 @@ function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
 	} while ( $page_count === $per_page );
 
 	$total_sales = round( $total_sales, 2 );
+	$net_sales   = round( $net_sales, 2 );
 	$avg         = $order_count > 0 ? round( $total_sales / $order_count, 2 ) : 0.0;
 
 	return array(
 		'total_sales'   => number_format( $total_sales, 2, '.', '' ),
 		'order_count'   => $order_count,
-		'net_sales'     => number_format( $total_sales, 2, '.', '' ),
+		'net_sales'     => number_format( $net_sales, 2, '.', '' ),
 		'average_sales' => number_format( $avg, 2, '.', '' ),
 	);
 }

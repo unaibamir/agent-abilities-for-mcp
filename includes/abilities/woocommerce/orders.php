@@ -632,9 +632,9 @@ function aafm_wc_order_status_valid( string $status ): bool {
  *
  * @param \WC_Order           $order The order to mutate.
  * @param array<string,mixed> $input Validated input (already schema-checked).
- * @return void
+ * @return array<int,int> Requested product IDs that could not be resolved to a product (empty when all resolved).
  */
-function aafm_wc_apply_order_input( \WC_Order $order, array $input ): void {
+function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -721,21 +721,47 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): void {
 	}
 
 	// Line items -- add each item via add_product (create path only; update does not re-add items).
+	// Any product_id that can't be resolved is collected and returned so the caller can surface a
+	// hard error instead of silently saving an incomplete order.
+	$unresolved = array();
 	if ( array_key_exists( 'line_items', $input ) && is_array( $input['line_items'] ) ) {
 		foreach ( $input['line_items'] as $item ) {
 			if ( ! is_array( $item ) ) {
 				continue;
 			}
-			$pid = absint( $item['product_id'] ?? 0 );
-			$qty = max( 1, absint( $item['quantity'] ?? 1 ) );
-			if ( $pid > 0 && function_exists( 'wc_get_product' ) ) {
-				$product = wc_get_product( $pid );
-				if ( $product ) {
-					$order->add_product( $product, $qty );
-				}
+			$pid     = absint( $item['product_id'] ?? 0 );
+			$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
+			$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
+			if ( $product instanceof \WC_Product ) {
+				$order->add_product( $product, $qty );
+			} else {
+				$unresolved[] = $pid;
 			}
 		}
 	}
+
+	return $unresolved;
+}
+
+/**
+ * Build the WP_Error returned when one or more line-item product IDs cannot be resolved.
+ *
+ * Keeps create and update reporting identical and lets the caller see exactly which IDs failed
+ * instead of receiving a "successful" but incomplete order.
+ *
+ * @param array<int,int> $unresolved Requested product IDs that did not resolve to a product.
+ * @return \WP_Error
+ */
+function aafm_wc_unresolved_line_items_error( array $unresolved ): \WP_Error {
+	$ids = implode( ', ', array_map( 'absint', $unresolved ) );
+	return new \WP_Error(
+		'aafm_unresolved_line_items',
+		sprintf(
+			/* translators: %s: comma-separated list of product IDs that could not be found. */
+			__( 'One or more line item products could not be found: %s', 'agent-abilities-for-mcp' ),
+			$ids
+		)
+	);
 }
 
 /**
@@ -864,8 +890,11 @@ function aafm_exec_wc_create_order( array $input ) {
 		}
 	}
 
-	$order = new \WC_Order();
-	aafm_wc_apply_order_input( $order, $input );
+	$order      = new \WC_Order();
+	$unresolved = aafm_wc_apply_order_input( $order, $input );
+	if ( array() !== $unresolved ) {
+		return aafm_wc_unresolved_line_items_error( $unresolved );
+	}
 	// Recalculate line + cart totals so the order total reflects its items. Without this the order
 	// total stays at 0.00 even when line_items were added (downstream refunds depend on it).
 	$order->calculate_totals();
@@ -942,7 +971,10 @@ function aafm_exec_wc_update_order( array $input ) {
 	$fields = $input;
 	unset( $fields['order_id'] );
 
-	aafm_wc_apply_order_input( $order, $fields );
+	$unresolved = aafm_wc_apply_order_input( $order, $fields );
+	if ( array() !== $unresolved ) {
+		return aafm_wc_unresolved_line_items_error( $unresolved );
+	}
 	$order->save();
 
 	$saved = aafm_wc_get_order_object( $order->get_id() );
@@ -1549,14 +1581,86 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	if ( ! empty( $input['line_items'] ) && is_array( $input['line_items'] ) ) {
 		$line_items = array();
 		foreach ( $input['line_items'] as $item ) {
-			$item                        = (array) $item;
-			$line_item_id                = isset( $item['line_item_id'] ) ? (int) $item['line_item_id'] : 0;
-			$refund_total                = isset( $item['refund_total'] ) ? (string) $item['refund_total'] : '0.00';
-			$refund_tax                  = isset( $item['refund_tax'] ) ? (string) $item['refund_tax'] : '0.00';
-			$line_items[ $line_item_id ] = array(
-				'refund_total' => $refund_total,
-				'refund_tax'   => array( $refund_tax ),
-			);
+			$item         = (array) $item;
+			$line_item_id = isset( $item['line_item_id'] ) ? (int) $item['line_item_id'] : 0;
+			$refund_total = isset( $item['refund_total'] ) ? (string) $item['refund_total'] : '0.00';
+			$refund_tax   = isset( $item['refund_tax'] ) ? (string) $item['refund_tax'] : '0.00';
+
+			$refund_line = array( 'refund_total' => $refund_total );
+
+			// wc_create_refund() keys refund_tax by the *tax rate id*, not by position. A line
+			// item can be taxed under several rate ids at once (compound state+county, EU
+			// multi-jurisdiction); get_taxes()['total'] is a rate_id => tax_amount map. Spread
+			// the requested refund_tax across every rate id in proportion to that rate's share
+			// of the line's total tax, rather than dumping the whole amount on the first rate.
+			$order_item = $order->get_item( $line_item_id );
+			if ( $order_item instanceof \WC_Order_Item ) {
+				$item_taxes = $order_item->get_taxes();
+				if ( isset( $item_taxes['total'] ) && is_array( $item_taxes['total'] ) && array() !== $item_taxes['total'] ) {
+					$line_taxes       = array_map( 'floatval', $item_taxes['total'] );
+					$total_line_tax   = array_sum( $line_taxes );
+					$refund_tax_total = (float) wc_format_decimal( $refund_tax );
+
+					// Skip a zero/empty-tax line (avoids dividing by zero) and skip when there
+					// is nothing to refund; either way emit no refund_tax for this line.
+					if ( $total_line_tax > 0 && $refund_tax_total > 0 ) {
+						$decimals = wc_get_price_decimals();
+						$scale    = 10 ** $decimals;
+
+						// Allocate in integer minor units (e.g. cents) using the largest-remainder
+						// method so every part is >= 0 and the parts sum to the requested refund_tax
+						// exactly. Rounding each proportional share independently can overshoot the
+						// total and drive the balancing rate negative, which WooCommerce rejects.
+						$total_units = (int) round( $refund_tax_total * $scale );
+
+						// Nothing meaningful to refund once quantised to the store's precision.
+						if ( $total_units > 0 ) {
+							$floors     = array();
+							$remainders = array();
+							$order_keys = array();
+							$floor_sum  = 0;
+
+							foreach ( $line_taxes as $rate_id => $tax_amount ) {
+								$ideal              = $total_units * ( $tax_amount / $total_line_tax );
+								$floor              = (int) floor( $ideal );
+								$floors[ $rate_id ] = $floor;
+								$remainders[]       = array(
+									'rate_id' => $rate_id,
+									'frac'    => $ideal - $floor,
+								);
+								$order_keys[]       = $rate_id;
+								$floor_sum         += $floor;
+							}
+
+							// Hand out the leftover units one at a time to the largest fractional
+							// remainders. Ties break toward the earlier rate so allocation is stable.
+							$leftover = $total_units - $floor_sum;
+							usort(
+								$remainders,
+								static function ( array $a, array $b ) use ( $order_keys ): int {
+									$cmp = $b['frac'] <=> $a['frac'];
+									if ( 0 !== $cmp ) {
+										return $cmp;
+									}
+									return array_search( $a['rate_id'], $order_keys, true ) <=> array_search( $b['rate_id'], $order_keys, true );
+								}
+							);
+							for ( $i = 0; $i < $leftover; $i++ ) {
+								++$floors[ $remainders[ $i ]['rate_id'] ];
+							}
+
+							$refund_taxes = array();
+							foreach ( $floors as $rate_id => $units ) {
+								$refund_taxes[ $rate_id ] = wc_format_decimal( $units / $scale, $decimals );
+							}
+
+							$refund_line['refund_tax'] = $refund_taxes;
+						}
+					}
+				}
+			}
+
+			$line_items[ $line_item_id ] = $refund_line;
 		}
 		$refund_args['line_items'] = $line_items;
 	}

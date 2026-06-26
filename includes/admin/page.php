@@ -963,6 +963,19 @@ function aafm_render_abilities_tab(): void {
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
+	// This form and the Integrations tab both save through the same aafm_save_abilities action, but
+	// each only renders the toggles for the subjects it owns. Declare the core subjects this form
+	// owns via aafm_scope[] so the server preserves every persisted ability OUTSIDE that scope (the
+	// integration abilities — WooCommerce, Yoast, ACF) from the stored option instead of treating a
+	// save here as a full replace that drops them. Mirrors the Integrations form; resolved by
+	// aafm_resolve_scoped_enabled_input(). $subjects is already the core subjects that have abilities.
+	foreach ( array_keys( $subjects ) as $scope_subject ) {
+		printf(
+			'<input type="hidden" name="aafm_scope[]" value="%s">',
+			esc_attr( (string) $scope_subject )
+		);
+	}
+
 	$groups = array(
 		'reads'  => __( 'Reads', 'agent-abilities-for-mcp' ),
 		'writes' => __( 'Writes', 'agent-abilities-for-mcp' ),

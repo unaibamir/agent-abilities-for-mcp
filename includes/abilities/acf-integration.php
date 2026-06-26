@@ -400,43 +400,104 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 }
 
 /**
+ * Map an ACF selector type to the hard-block denylist that the dedicated meta abilities enforce.
+ *
+ * User fields are gated by the user-scoped floor (aafm_hard_blocked_user_meta_key — the CVE-class
+ * control that blocks capability/session/app-password/2FA keys); post and term fields both reuse
+ * the post-agnostic floor (aafm_hard_blocked_meta_key), mirroring how aafm_validate_term_meta_key()
+ * itself reuses that same post-agnostic hard-block. This is the SAME denylist the meta and user-meta
+ * write abilities use — it is reused here, never reinvented.
+ *
+ * @param string $key           The effective meta key ACF would store under.
+ * @param string $selector_type One of 'post', 'term', 'user'.
+ * @return bool True when the key is permanently blocked from agent writes.
+ */
+function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): bool {
+	if ( 'user' === $selector_type ) {
+		return aafm_hard_blocked_user_meta_key( $key );
+	}
+	return aafm_hard_blocked_meta_key( $key );
+}
+
+/**
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
+ *
+ * Every key is gated up front, before any write lands — two floors, both required:
+ *
+ *   1. The key MUST resolve to a real, defined ACF field (acf_get_field() returns an array, not
+ *      false). This is the privilege-escalation fix: for an UNRESOLVED key, ACF's update_field()
+ *      falls back to writing raw object metadata under the literal key, an unrestricted meta-write
+ *      primitive that the dedicated meta abilities never permit. On a user selector that fallback
+ *      let a caller who can edit_user() their own account write wp_capabilities and self-promote to
+ *      administrator; on posts/terms it wrote arbitrary meta outside any allowlist. acf_get_field()
+ *      returns false in exactly the cases where update_field() would take that fallback, so it is
+ *      the precise gate.
+ *   2. Even a resolved field's effective storage key must clear the SAME hard-block denylist the
+ *      dedicated meta/user-meta abilities enforce, scoped to the selector type. Both the
+ *      caller-supplied key and the field's real storage name (the meta_key ACF writes under) are
+ *      checked, so a field whose name collides with a protected key (wp_capabilities, session
+ *      tokens, application passwords, 2FA keys, …) can never be written through this path either.
+ *
+ * A single offending key rejects the whole request with a generic WP_Error before any update_field()
+ * runs — matching this function's existing fail-fast, single-generic-error convention (the verify
+ * step below already returns aafm_generic_error() on the first non-persisting write) and avoiding a
+ * partial write when any key in the map is rejected. Legitimate, defined fields are written and
+ * verified exactly as before.
  *
  * After each write the stored value is read back and compared to the sanitized value written; a
  * mismatch (a failed update_field that stored nothing) surfaces as an error so a failed write is
  * never audited as a success. A no-op write of an unchanged value still matches, so it is not
- * treated as a failure. An unknown field key (no ACF definition) is sanitized as plain text and
- * written like any other key — that behavior is unchanged here; the verify step still confirms it
- * persisted.
+ * treated as a failure.
  *
- * @param array<string,mixed> $fields   Caller field map: field key => raw value.
- * @param int|string          $selector ACF object selector.
- * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a write
- *                                       did not persist.
+ * @param array<string,mixed> $fields        Caller field map: field key => raw value.
+ * @param int|string          $selector      ACF object selector.
+ * @param string              $selector_type One of 'post', 'term', 'user' — selects the denylist.
+ * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a key is
+ *                                       refused or a write did not persist.
  */
-function aafm_acf_write_fields( array $fields, $selector ) {
-	if ( function_exists( 'update_field' ) ) {
-		foreach ( $fields as $field_key => $raw ) {
-			$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
-			update_field( (string) $field_key, $clean, $selector );
+function aafm_acf_write_fields( array $fields, $selector, string $selector_type ) {
+	if ( ! function_exists( 'update_field' ) ) {
+		return aafm_acf_read_fields( $selector );
+	}
 
-			// Verify the write persisted. A failed update_field() stores nothing, so the read-back
-			// will not equal the value we intended. Read the RAW (unformatted) value — get_field()'s
-			// third arg false — because the formatted read diverges from the stored value for whole
-			// field families (image/file return an array or URL while storing an attachment ID, date
-			// pickers reformat, relationship/post-object return objects); comparing the formatted
-			// shape would flag those successful writes as failures. Compare normalized JSON so
-			// scalars and structured arrays both compare cleanly, and a same-value no-op still
-			// matches.
-			if ( function_exists( 'get_field' ) ) {
-				$stored = get_field( (string) $field_key, $selector, false );
-				if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
-					return aafm_generic_error();
-				}
+	// Floor pass: reject the whole request before writing anything if any key is not a defined ACF
+	// field, or its effective meta key is hard-blocked. Fail-closed — if acf_get_field() is somehow
+	// unavailable while update_field() exists, no key can resolve and every write is refused.
+	foreach ( $fields as $field_key => $raw ) {
+		unset( $raw );
+		$field_key = (string) $field_key;
+		$def       = function_exists( 'acf_get_field' ) ? acf_get_field( $field_key ) : false;
+		if ( ! is_array( $def ) || empty( $def['key'] ) ) {
+			return aafm_generic_error(); // Unresolved key — the update_field() raw-meta fallback path.
+		}
+		foreach ( array( $field_key, (string) ( $def['name'] ?? '' ) ) as $candidate ) {
+			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
+				return aafm_generic_error(); // Defense in depth: protected meta key.
 			}
 		}
 	}
+
+	foreach ( $fields as $field_key => $raw ) {
+		$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
+		update_field( (string) $field_key, $clean, $selector );
+
+		// Verify the write persisted. A failed update_field() stores nothing, so the read-back
+		// will not equal the value we intended. Read the RAW (unformatted) value — get_field()'s
+		// third arg false — because the formatted read diverges from the stored value for whole
+		// field families (image/file return an array or URL while storing an attachment ID, date
+		// pickers reformat, relationship/post-object return objects); comparing the formatted
+		// shape would flag those successful writes as failures. Compare normalized JSON so
+		// scalars and structured arrays both compare cleanly, and a same-value no-op still
+		// matches.
+		if ( function_exists( 'get_field' ) ) {
+			$stored = get_field( (string) $field_key, $selector, false );
+			if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
+				return aafm_generic_error();
+			}
+		}
+	}
+
 	return aafm_acf_read_fields( $selector );
 }
 
@@ -585,7 +646,7 @@ function aafm_exec_acf_update_post_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, $id );
+	$written = aafm_acf_write_fields( $fields, $id, 'post' );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}
@@ -749,7 +810,7 @@ function aafm_exec_acf_update_term_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ) );
+	$written = aafm_acf_write_fields( $fields, aafm_acf_term_selector( $id ), 'term' );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}
@@ -917,7 +978,7 @@ function aafm_exec_acf_update_user_fields( array $input ) {
 	if ( ! is_array( $fields ) ) {
 		return aafm_generic_error();
 	}
-	$written = aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ) );
+	$written = aafm_acf_write_fields( $fields, aafm_acf_user_selector( $id ), 'user' );
 	if ( is_wp_error( $written ) ) {
 		return $written;
 	}

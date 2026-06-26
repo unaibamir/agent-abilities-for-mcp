@@ -948,10 +948,14 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * MEDIUM-3: an unknown field key (no ACF definition — acf_get_field returns false) is sanitized
-	 * as plain text and round-trips without a fatal.
+	 * SECURITY: an unknown field key (no ACF definition — acf_get_field returns false) is REJECTED.
+	 *
+	 * The old behavior sanitized an unresolved key as text and wrote it. That was the
+	 * privilege-escalation primitive: an unresolved key fell through update_field() to a raw
+	 * meta write outside any allowlist (on users it could even target wp_capabilities). The fix
+	 * fails the whole request closed with a WP_Error before any write runs, so nothing is stored.
 	 */
-	public function test_update_post_fields_unknown_field_key_sanitizes_as_text(): void {
+	public function test_update_post_fields_unknown_field_key_is_rejected(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
@@ -961,10 +965,11 @@ final class AcfTest extends TestCase {
 				'fields'  => array( 'field_unknown' => '<script>alert(1)</script>plain' ),
 			)
 		);
-		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$stored = (string) \AAFM\Tests\AcfStubStore::value( 'field_unknown', $post_id );
-		$this->assertStringNotContainsString( '<script>', $stored, 'An unknown field key sanitizes as text.' );
-		$this->assertStringContainsString( 'plain', $stored, 'The benign remainder round-trips.' );
+		$this->assertInstanceOf( WP_Error::class, $res, 'An unresolved ACF field key must be rejected.' );
+		$this->assertNull(
+			\AAFM\Tests\AcfStubStore::value( 'field_unknown', $post_id ),
+			'A rejected request must not write the unknown key.'
+		);
 	}
 
 	/**

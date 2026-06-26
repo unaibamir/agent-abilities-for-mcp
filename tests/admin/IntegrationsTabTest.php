@@ -105,17 +105,43 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	public function test_status_helper_reports_not_installed_when_host_files_absent(): void {
-		// Neither Yoast nor WooCommerce ships its host file in this WP install, and neither is
-		// active, so each reports not_installed. The SEO slices' stubs define the detection markers
-		// (WPSEO_VERSION etc.) process-wide, so pin the Yoast seam off to keep this status
-		// deterministic regardless of test order.
+		// not_installed is the file-driven branch: with the host inactive AND no candidate host file
+		// under WP_PLUGIN_DIR, the helper reports not_installed. Force each active seam off — the same
+		// seam production detection passes through — so a leaked in-process stub can never flip
+		// detection back to 'active' and mask this branch: the SEO slices define WPSEO_VERSION etc.
+		// process-wide and WooProductsTest defines a WC marker class, and neither can be undefined.
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
-		// WooProductsTest defines a WooCommerce marker class process-wide, so pin the WC seam off too
-		// (the same seam production detection passes through) to keep the not_installed status
-		// deterministic regardless of test order.
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertSame( 'not_installed', aafm_integration_status( 'woocommerce' ) );
-		$this->assertSame( 'not_installed', aafm_integration_status( 'yoast' ) );
+
+		// The expected status is derived from the real on-disk probe, never hardcoded: this WP test
+		// install shares the developer's wp-content, so it can physically carry an INACTIVE copy of a
+		// host plugin (e.g. wordpress-seo/wp-seo.php is present here). When the file is present,
+		// installed_inactive is the CORRECT answer — hardcoding not_installed there would assert a
+		// false premise about the environment, not a bug in the helper.
+		foreach ( array( 'woocommerce', 'yoast' ) as $slug ) {
+			$present = false;
+			foreach ( aafm_integration_cards()[ $slug ]['plugins'] as $file ) {
+				if ( aafm_integration_plugin_file_exists( $file ) ) {
+					$present = true;
+					break;
+				}
+			}
+			$status = aafm_integration_status( $slug );
+			// With the active seam forced off the status is file-driven, never 'active' — this is the
+			// leaked-stub regression this test guards against.
+			$this->assertNotSame( 'active', $status, "Forcing {$slug} inactive must defeat any leaked detection stub." );
+			$this->assertSame(
+				$present ? 'installed_inactive' : 'not_installed',
+				$status,
+				"The {$slug} status must follow on-disk host-file presence when the host is inactive."
+			);
+		}
+
+		// Anchor the not_installed branch deterministically, independent of which host plugins happen
+		// to be physically installed: an unknown slug has no candidate host files, the degenerate case
+		// of "all candidate files absent", so it must always report not_installed.
+		$this->assertSame( 'not_installed', aafm_integration_status( 'aafm-no-such-integration' ) );
+
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 	}

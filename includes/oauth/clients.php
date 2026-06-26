@@ -118,8 +118,8 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$is_active = $wpdb->get_var(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT is_active FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s",
+			'SELECT is_active FROM %i WHERE client_id = %s',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
 		)
 	);
@@ -140,11 +140,11 @@ function aafm_oauth_client_is_deactivated( string $client_id ): bool {
  */
 function aafm_oauth_count_active_clients(): int {
 	global $wpdb;
-	$table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$table = $wpdb->prefix . 'aafm_oauth_clients';
 
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_active = 1" );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE is_active = 1', $table ) );
 	$wpdb->suppress_errors( $suppressed );
 
 	return max( 0, (int) $count );
@@ -222,7 +222,7 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
  */
 function aafm_oauth_list_clients(): array {
 	global $wpdb;
-	$clients_table = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$clients_table = $wpdb->prefix . 'aafm_oauth_clients';
 	$tokens_table  = $wpdb->prefix . 'aafm_oauth_access_tokens';
 	$now           = gmdate( 'Y-m-d H:i:s', time() );
 
@@ -230,8 +230,8 @@ function aafm_oauth_list_clients(): array {
 	// (a brand-new install before activation finishes) by returning an empty list
 	// instead of surfacing a DB error.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$rows = $wpdb->get_results( "SELECT client_id, client_name, redirect_uris, created_at, is_active FROM {$clients_table} ORDER BY created_at DESC, id DESC", ARRAY_A );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT client_id, client_name, redirect_uris, created_at, is_active FROM %i ORDER BY created_at DESC, id DESC', $clients_table ), ARRAY_A );
 	$wpdb->suppress_errors( $suppressed );
 
 	if ( ! is_array( $rows ) ) {
@@ -241,11 +241,11 @@ function aafm_oauth_list_clients(): array {
 	// One grouped pass over the tokens table builds a client_id => active-token-count map, so
 	// the listing never runs a COUNT per client (an N+1 that scanned the token table once per row).
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$count_rows = $wpdb->get_results(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; the value is bound.
-			"SELECT client_id, COUNT(*) AS active_tokens FROM {$tokens_table} WHERE is_active = 1 AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY client_id",
+			'SELECT client_id, COUNT(*) AS active_tokens FROM %i WHERE is_active = 1 AND ( expires_at IS NULL OR expires_at > %s ) GROUP BY client_id',
+			$tokens_table,
 			$now
 		),
 		ARRAY_A
@@ -289,23 +289,25 @@ function aafm_oauth_list_clients(): array {
  */
 function aafm_oauth_list_grants(): array {
 	global $wpdb;
-	// Internal constant table names; esc_sql() makes the safety explicit for analyzers.
-	$consents_table = esc_sql( $wpdb->prefix . 'aafm_oauth_consents' );
-	$clients_table  = esc_sql( $wpdb->prefix . 'aafm_oauth_clients' );
+	$consents_table = $wpdb->prefix . 'aafm_oauth_consents';
+	$clients_table  = $wpdb->prefix . 'aafm_oauth_clients';
 
 	// Read-only listing for the admin table: tolerate a not-yet-installed table
-	// by returning an empty list instead of surfacing a DB error. Table names are
-	// internal constants; the LEFT JOIN keeps a consent whose client row was removed.
+	// by returning an empty list instead of surfacing a DB error. Both table names are
+	// bound as %i identifiers; the LEFT JOIN keeps a consent whose client row was removed.
 	$suppressed = $wpdb->suppress_errors();
-	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$rows = $wpdb->get_results(
-		"SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
-		 FROM {$consents_table} c
-		 LEFT JOIN {$clients_table} cl ON cl.client_id = c.client_id
-		 ORDER BY c.granted_at DESC, c.id DESC",
+		$wpdb->prepare(
+			'SELECT c.wp_user_id, c.client_id, c.granted_at, cl.client_name
+			 FROM %i c
+			 LEFT JOIN %i cl ON cl.client_id = c.client_id
+			 ORDER BY c.granted_at DESC, c.id DESC',
+			$consents_table,
+			$clients_table
+		),
 		ARRAY_A
 	);
-	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
 	$wpdb->suppress_errors( $suppressed );
 
 	if ( ! is_array( $rows ) ) {
@@ -354,8 +356,8 @@ function aafm_oauth_deactivate_client( string $client_id ): bool {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$updated = $wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"UPDATE {$table} SET is_active = 0 WHERE client_id = %s AND is_active = 1",
+			'UPDATE %i SET is_active = 0 WHERE client_id = %s AND is_active = 1',
+			$table,
 			$client_id
 		)
 	);

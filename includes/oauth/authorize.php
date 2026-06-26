@@ -68,8 +68,8 @@ function aafm_oauth_get_active_client( string $client_id ): ?array {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT * FROM {$wpdb->prefix}aafm_oauth_clients WHERE client_id = %s AND is_active = 1",
+			'SELECT * FROM %i WHERE client_id = %s AND is_active = 1',
+			$wpdb->prefix . 'aafm_oauth_clients',
 			$client_id
 		),
 		ARRAY_A
@@ -184,8 +184,8 @@ function aafm_oauth_has_consent( int $user_id, string $client_id ): bool {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$found = $wpdb->get_var(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT id FROM {$wpdb->prefix}aafm_oauth_consents WHERE wp_user_id = %d AND client_id = %s",
+			'SELECT id FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$wpdb->prefix . 'aafm_oauth_consents',
 			$user_id,
 			$client_id
 		)

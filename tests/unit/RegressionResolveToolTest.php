@@ -23,7 +23,8 @@ final class RegressionResolveToolTest extends TestCase {
 	 * Load the harness class without running it, build an instance with no constructor side
 	 * effects, and invoke the private resolve_tool() against a controlled tool list.
 	 *
-	 * @param list<string> $tool_names Tool names as tools/list would return them (sorted).
+	 * @param array<int, string> $tool_names Tool names as tools/list would return them (sorted).
+	 * @param string             $short      The short tool name to resolve against that list.
 	 */
 	private function resolve( array $tool_names, string $short ): string {
 		require_once dirname( __DIR__, 2 ) . '/bin/mcp-regression.php';

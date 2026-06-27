@@ -548,6 +548,9 @@ class WC_Order {
 	public function get_total_tax() { return (string) ( $this->data['total_tax'] ?? '0.00' ); }
 	public function get_subtotal() { return (string) ( $this->data['subtotal'] ?? '0.00' ); }
 	public function get_shipping_total() { return (string) ( $this->data['shipping_total'] ?? '0.00' ); }
+	public function get_total_refunded() { return (float) ( $this->data['total_refunded'] ?? 0 ); }
+	public function get_total_tax_refunded() { return (float) ( $this->data['total_tax_refunded'] ?? 0 ); }
+	public function get_total_shipping_refunded() { return (float) ( $this->data['total_shipping_refunded'] ?? 0 ); }
 	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
 	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
 	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }

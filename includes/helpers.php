@@ -154,11 +154,14 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	if ( in_array( $key, $blocked, true ) ) {
+	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
+	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
+	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities).
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/', $key );
+	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities). The `i`
+	// modifier keeps a mixed-case spelling from slipping past.
+	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $key );
 }
 
 /**
@@ -472,11 +475,14 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	if ( in_array( $key, $blocked, true ) ) {
+	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
+	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
+	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities).
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/', $key );
+	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities). The
+	// `i` modifier keeps a mixed-case spelling from slipping past.
+	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $key );
 }
 
 /**

@@ -226,11 +226,11 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
 			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php — the two must never disagree on the active/unexpired predicate.
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
-			"SELECT * FROM {$table}
+			'SELECT * FROM %i
 			 WHERE token_hash = %s
 			   AND is_active = 1
-			   AND expires_at > %s",
+			   AND expires_at > %s',
+			$table,
 			hash( 'sha256', $raw ),
 			$now
 		),

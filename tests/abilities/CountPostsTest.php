@@ -55,6 +55,63 @@ final class CountPostsTest extends TestCase {
 		$this->assertSame( array_sum( array_map( 'intval', $by_status ) ), $out['total'] );
 	}
 
+	public function test_hides_non_public_status_counts_from_non_editors(): void {
+		// Seed a mixed-status set: 2 publish + 1 draft + 1 pending.
+		$this->acting_as( 'editor' );
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'publish',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'draft',
+			)
+		);
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'post',
+				'post_status' => 'pending',
+			)
+		);
+
+		// An editor of the post type sees the full per-status breakdown, including non-public counts.
+		$as_editor = aafm_exec_count_posts( array( 'post_type' => 'post' ) );
+		$this->assertIsArray( $as_editor );
+		$editor_status = (array) $as_editor['by_status'];
+		$this->assertSame( 2, $editor_status['publish'] );
+		$this->assertSame( 1, $editor_status['draft'], 'Editor must see the real draft count.' );
+		$this->assertSame( 1, $editor_status['pending'], 'Editor must see the real pending count.' );
+		// total excludes trash + auto-draft; here that is publish + draft + pending.
+		$this->assertSame( 4, $as_editor['total'] );
+
+		// A read-only subscriber sees public-status counts only; non-public counts are zeroed.
+		$this->acting_as( 'subscriber' );
+		$as_subscriber = aafm_exec_count_posts( array( 'post_type' => 'post' ) );
+		$this->assertIsArray( $as_subscriber );
+		$sub_status = (array) $as_subscriber['by_status'];
+
+		// The public status is unaffected.
+		$this->assertSame( 2, $sub_status['publish'], 'A subscriber still sees the public publish count.' );
+
+		// Non-public status counts are zeroed even though draft/pending posts exist.
+		$this->assertSame( 0, $sub_status['draft'], 'Draft count must be hidden from a non-editor.' );
+		$this->assertSame( 0, $sub_status['pending'], 'Pending count must be hidden from a non-editor.' );
+		$this->assertSame( 0, $sub_status['future'], 'Future count must be hidden from a non-editor.' );
+		$this->assertSame( 0, $sub_status['trash'], 'Trash count must be hidden from a non-editor.' );
+
+		// total now excludes the hidden non-public items: only the 2 published remain.
+		$this->assertSame( 2, $as_subscriber['total'], 'Subscriber total must exclude the hidden non-public items.' );
+	}
+
 	public function test_defaults_to_post_type_post(): void {
 		$this->acting_as( 'editor' );
 		self::factory()->post->create(

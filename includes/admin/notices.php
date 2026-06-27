@@ -10,15 +10,15 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Build the HTML for an admin notice. The message is escaped unless $args['html'] is true,
- * in which case the caller is responsible for having run it through wp_kses already.
+ * Build the HTML for an admin notice. The message is escaped with esc_html() unless $args['html']
+ * is true, in which case it is run through wp_kses_post() so only post-safe markup survives.
  *
  * The leading glyph is an inline SVG from aafm_icon(), keyed by variant. Callers can
  * override it with the `icon` arg (an aafm_icon name). The legacy `dashicon` arg is still
  * accepted for back-compat and mapped to the closest aafm_icon glyph.
  *
  * @param string              $variant warning|info|success|error (unknown → info).
- * @param string              $message Plain text (escaped) or pre-kses'd HTML when $args['html'].
+ * @param string              $message Plain text (escaped), or HTML run through wp_kses_post() when $args['html'].
  * @param array<string,mixed> $args    icon (override aafm_icon name), dashicon (legacy override), inline (bool), html (bool).
  * @return string
  */
@@ -51,7 +51,7 @@ function aafm_get_notice_html( string $variant, string $message, array $args = a
 	}
 
 	$inline = empty( $args['inline'] ) ? '' : ' aafm-notice-inline';
-	$body   = empty( $args['html'] ) ? esc_html( $message ) : $message;
+	$body   = empty( $args['html'] ) ? esc_html( $message ) : wp_kses_post( $message );
 
 	return sprintf(
 		'<div class="aafm-notice aafm-notice-%1$s%2$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',

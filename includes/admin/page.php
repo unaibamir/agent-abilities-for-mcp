@@ -963,6 +963,19 @@ function aafm_render_abilities_tab(): void {
 	echo '<form id="aafm-abilities-form" class="aafm-abilities">';
 	wp_nonce_field( 'aafm_admin', 'aafm_nonce' );
 
+	// This form and the Integrations tab both save through the same aafm_save_abilities action, but
+	// each only renders the toggles for the subjects it owns. Declare the core subjects this form
+	// owns via aafm_scope[] so the server preserves every persisted ability OUTSIDE that scope (the
+	// integration abilities — WooCommerce, Yoast, ACF) from the stored option instead of treating a
+	// save here as a full replace that drops them. Mirrors the Integrations form; resolved by
+	// aafm_resolve_scoped_enabled_input(). $subjects is already the core subjects that have abilities.
+	foreach ( array_keys( $subjects ) as $scope_subject ) {
+		printf(
+			'<input type="hidden" name="aafm_scope[]" value="%s">',
+			esc_attr( (string) $scope_subject )
+		);
+	}
+
 	$groups = array(
 		'reads'  => __( 'Reads', 'agent-abilities-for-mcp' ),
 		'writes' => __( 'Writes', 'agent-abilities-for-mcp' ),
@@ -1938,7 +1951,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site — the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password — not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Deletes are trash, not destroy.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Delete-style abilities move content to the Trash, where you can restore it; they do not permanently erase it.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',

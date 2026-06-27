@@ -179,6 +179,12 @@ final class RichPostTest extends TestCase {
 	}
 
 	public function test_rich_post_meta_only_includes_allowlisted_scalar_keys(): void {
+		// SECURITY (M3): the allowlisted-meta block is gated on a per-object edit capability, so
+		// the value-shape assertions must run as a user who can actually edit the post. An admin
+		// edits any post; without this, the meta block is correctly empty and there is nothing to
+		// assert about its contents.
+		$this->acting_as( 'administrator' );
+
 		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		update_post_meta( $post_id, 'subtitle', 'A Governed Subtitle' );
 		update_post_meta( $post_id, 'secret_internal', 'should-never-leak' );
@@ -198,6 +204,38 @@ final class RichPostTest extends TestCase {
 		// Allowlisted-but-non-scalar value is skipped, never dumped.
 		$this->assertArrayNotHasKey( 'structured', $shape['meta'] );
 		$this->assertStringNotContainsString( 'should-never-leak', (string) wp_json_encode( $shape ) );
+	}
+
+	/**
+	 * SECURITY (M3): the allowlisted-meta block is withheld from a reader who cannot edit the post.
+	 *
+	 * The dedicated get-post-meta ability gates on edit_post; surfacing the same allowlisted meta
+	 * unconditionally in the content reads would leak editor-only meta to any authenticated reader.
+	 * A subscriber (no edit cap on someone else's post) must get an empty meta block.
+	 */
+	public function test_rich_post_meta_is_omitted_for_a_non_editor(): void {
+		$author_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		$post_id   = self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_author' => $author_id,
+			)
+		);
+		update_post_meta( $post_id, 'subtitle', 'A Governed Subtitle' );
+
+		add_filter(
+			'aafm_allowed_meta_keys',
+			static fn(): array => array( 'subtitle' )
+		);
+
+		// A subscriber cannot edit another user's post.
+		$this->acting_as( 'subscriber' );
+
+		$shape = aafm_rich_post( get_post( $post_id ) );
+
+		$this->assertArrayHasKey( 'meta', $shape );
+		$this->assertSame( array(), $shape['meta'], 'A non-editor must receive no allowlisted meta.' );
+		$this->assertStringNotContainsString( 'A Governed Subtitle', (string) wp_json_encode( $shape ) );
 	}
 
 	public function test_rich_post_omits_content_when_include_content_false(): void {

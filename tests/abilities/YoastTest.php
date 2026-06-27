@@ -49,6 +49,45 @@ final class YoastTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
+	/**
+	 * The SEO per-object gate must honor the operator's post-type exposure allowlist: a public,
+	 * map_meta_cap CPT the admin CAN edit but which is NOT exposed (only post/page are on by
+	 * default) is refused — SEO meta on a non-exposed type is out of scope, exactly as the core
+	 * content writes refuse it. A normal post stays allowed for the same admin.
+	 */
+	public function test_seo_gate_denies_a_non_exposed_cpt(): void {
+		register_post_type(
+			'aafm_seo_secret',
+			array(
+				'public'       => true,
+				'map_meta_cap' => true,
+			)
+		);
+		delete_option( 'aafm_allowed_post_types' ); // post/page always-on; nothing else exposed.
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$cpt_id   = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'aafm_seo_secret',
+				'post_author' => $admin_id,
+			)
+		);
+
+		$this->assertTrue( current_user_can( 'edit_post', $cpt_id ), 'the admin can edit the CPT post itself.' );
+		$this->assertFalse(
+			aafm_perm_seo_post_object( array( 'post_id' => $cpt_id ) ),
+			'the SEO gate must deny a non-exposed CPT even when the user can edit the post.'
+		);
+
+		$post_id = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$this->assertTrue(
+			aafm_perm_seo_post_object( array( 'post_id' => $post_id ) ),
+			'a normal, exposed post stays allowed for the same admin.'
+		);
+
+		unregister_post_type( 'aafm_seo_secret' );
+	}
+
 	public function test_yoast_get_post_reads_mapped_fields_per_object_gated(): void {
 		$editor_id = $this->acting_as( 'editor' );
 		$post_id   = (int) self::factory()->post->create(

@@ -154,11 +154,14 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	if ( in_array( $key, $blocked, true ) ) {
+	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
+	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
+	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities).
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/', $key );
+	// Any prefix*capabilities form, including multisite per-blog keys (wp_2_capabilities). The `i`
+	// modifier keeps a mixed-case spelling from slipping past.
+	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?capabilities$/i', $key );
 }
 
 /**
@@ -472,11 +475,14 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	 */
 	$extra   = (array) apply_filters( 'aafm_hard_blocked_user_meta_keys', array() );
 	$blocked = array_merge( $builtin, array_map( 'strval', $extra ) );
-	if ( in_array( $key, $blocked, true ) ) {
+	// Case-insensitive compare (defense in depth): a mixed-case variant of a protected key
+	// (e.g. wp_Capabilities) must be blocked just like its canonical lowercase spelling.
+	if ( in_array( strtolower( $key ), array_map( 'strtolower', $blocked ), true ) ) {
 		return true;
 	}
-	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities).
-	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/', $key );
+	// Any prefix*capabilities / *user_level form, incl. multisite per-blog (wp_2_capabilities). The
+	// `i` modifier keeps a mixed-case spelling from slipping past.
+	return (bool) preg_match( '/^' . preg_quote( $wpdb->prefix, '/' ) . '\d*_?(capabilities|user_level)$/i', $key );
 }
 
 /**
@@ -829,7 +835,10 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
 function aafm_validate_featured_attachment_id( $attachment_id ) {
 	$id  = absint( $attachment_id );
 	$att = $id ? get_post( $id ) : null;
-	if ( ! $att instanceof WP_Post || 'attachment' !== $att->post_type ) {
+	// Must be a real attachment AND an image — the dedicated set-featured-image ability
+	// also requires wp_attachment_is_image(), so this enrichment path agrees with it and
+	// rejects non-image attachments (PDFs, audio, video, etc.).
+	if ( ! $att instanceof WP_Post || 'attachment' !== $att->post_type || ! wp_attachment_is_image( $id ) ) {
 		return aafm_generic_error();
 	}
 	return $id;
@@ -1176,12 +1185,20 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 		)
 		: null;
 
+	// SECURITY: the allowlisted post-meta block mirrors the data the dedicated
+	// aafm/get-post-meta ability exposes, and that ability gates on edit_post. The
+	// content reads (get-post/get-posts/get-pages) only gate on a read capability, so
+	// surfacing allowlisted meta here unconditionally would leak editor-only meta to
+	// any authenticated reader. Gate the block on the same per-object edit check the
+	// meta ability uses; readers who cannot edit this post get no meta block at all.
 	$meta = array();
-	foreach ( aafm_allowed_meta_keys() as $meta_key ) {
-		$value = get_post_meta( $post->ID, $meta_key, true );
-		// Skip empty strings (absent keys) and never expose non-scalar blobs.
-		if ( is_scalar( $value ) && '' !== $value ) {
-			$meta[ $meta_key ] = $value;
+	if ( aafm_can_edit_post_object( $post ) ) {
+		foreach ( aafm_allowed_meta_keys() as $meta_key ) {
+			$value = get_post_meta( $post->ID, $meta_key, true );
+			// Skip empty strings (absent keys) and never expose non-scalar blobs.
+			if ( is_scalar( $value ) && '' !== $value ) {
+				$meta[ $meta_key ] = $value;
+			}
 		}
 	}
 	$shape['meta'] = $meta;

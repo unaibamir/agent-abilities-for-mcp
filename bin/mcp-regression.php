@@ -2894,6 +2894,20 @@ PHP;
 	}
 
 	private function resolve_tool( string $short ): string {
+		// Prefer the plugin's canonical tool. Integration abilities share the same `aafm-`
+		// prefix (e.g. `aafm-aioseo-get-post`, `aafm-rankmath-update-post`) and can sort BEFORE
+		// the canonical `aafm-<short>` in the alphabetically-sorted tool list — `a` < `g`/`u` — so
+		// the plain str_ends_with() suffix match below would shadow `aafm-get-post` with the
+		// integration tool and call the wrong one. Pin the exact canonical name first.
+		$canonical = 'aafm-' . $short;
+		foreach ( $this->tool_names as $n ) {
+			if ( $n === $canonical ) {
+				return $n;
+			}
+		}
+		// Fallback: exact match, then suffix match. Covers tools that only exist under an
+		// integration prefix (resolved via their own full short slug, which makes `aafm-<short>`
+		// the exact name) and servers that expose tools under a non-`aafm-` prefix.
 		foreach ( $this->tool_names as $n ) {
 			if ( $n === $short || str_ends_with( $n, $short ) ) {
 				return $n;
@@ -3247,26 +3261,32 @@ function aafm_parse_argv( array $argv ): array {
 	return $opts;
 }
 
-$opts = aafm_parse_argv( $argv );
-if ( isset( $opts['help'] ) ) {
-	fwrite( STDOUT, "See the header of this file for usage.\n" );
-	exit( 0 );
-}
-
-// Minimal json helper used in one error message above.
+// Minimal json helper used in one error message above. Defined unconditionally (it is part of the
+// class's runtime contract) so the harness behaves identically whether run as a script or required.
 if ( ! function_exists( 'wp_json_safe' ) ) {
 	function wp_json_safe( $v ): string {
 		return (string) json_encode( $v );
 	}
 }
 
-$runner = new AAFM_Mcp_Regression( $opts );
-try {
-	$code = $runner->run();
-} catch ( AAFM_Fatal $e ) {
-	// Preserve today's behavior: a fatal during the normal run prints FATAL: ... and exits non-zero.
-	// The registered shutdown cleanup() still runs after this exit, restoring any mutated state.
-	fwrite( STDERR, 'FATAL: ' . $e->getMessage() . "\n" );
-	$code = 2;
+// Only drive a live run when this file is executed directly as a CLI script. When it is `require`d
+// (e.g. by the unit test that exercises resolve_tool()), the class/function definitions above load
+// but no network run, shutdown handler, or exit() fires.
+if ( isset( $argv[0] ) && realpath( $argv[0] ) === __FILE__ ) {
+	$opts = aafm_parse_argv( $argv );
+	if ( isset( $opts['help'] ) ) {
+		fwrite( STDOUT, "See the header of this file for usage.\n" );
+		exit( 0 );
+	}
+
+	$runner = new AAFM_Mcp_Regression( $opts );
+	try {
+		$code = $runner->run();
+	} catch ( AAFM_Fatal $e ) {
+		// Preserve today's behavior: a fatal during the normal run prints FATAL: ... and exits non-zero.
+		// The registered shutdown cleanup() still runs after this exit, restoring any mutated state.
+		fwrite( STDERR, 'FATAL: ' . $e->getMessage() . "\n" );
+		$code = 2;
+	}
+	exit( $code );
 }
-exit( $code );

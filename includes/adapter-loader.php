@@ -100,6 +100,38 @@ function aafm_adapter_class_to_path( string $class_name ): ?string {
 }
 
 /**
+ * Reverse of aafm_adapter_class_to_path(): derive the FQCN a bundled file declares from its path.
+ *
+ * Pure string mapping (no filesystem I/O) so the eager loader can ask "is this file's class already
+ * declared?" before it require_once's the file. Given a PSR-4 base directory and its namespace
+ * prefix, a file at "{base}Core/McpAdapter.php" maps to "{prefix}Core\McpAdapter". Returns null for
+ * any path outside the base or without a .php extension, so an unexpected path falls back to the
+ * old unconditional require rather than guessing a wrong class name.
+ *
+ * @param string $path   Absolute path to a bundled PHP file.
+ * @param string $base   PSR-4 base directory (matching the prefix), trailing slash optional.
+ * @param string $prefix Namespace prefix for that base, including its trailing separator.
+ * @return string|null Fully-qualified class name, or null when the path is not under the base.
+ */
+function aafm_adapter_path_to_class( string $path, string $base, string $prefix ): ?string {
+	$path = wp_normalize_path( $path );
+	$base = rtrim( wp_normalize_path( $base ), '/' ) . '/';
+
+	if ( 0 !== strncmp( $path, $base, strlen( $base ) ) ) {
+		return null;
+	}
+
+	$relative = substr( $path, strlen( $base ) );
+	if ( '.php' !== strtolower( substr( $relative, -4 ) ) ) {
+		return null;
+	}
+
+	$relative = substr( $relative, 0, -4 );
+
+	return $prefix . str_replace( '/', '\\', $relative );
+}
+
+/**
  * Register a prepended SPL autoloader that resolves the WP\MCP\ namespace from our bundled copy.
  *
  * Idempotent: a static guard ensures at most one loader is ever registered, no matter how many
@@ -186,8 +218,26 @@ function aafm_eager_load_adapter(): void {
 
 	$loaded = true;
 
-	$base = AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/';
+	aafm_eager_require_adapter_dir( AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/' );
+}
 
+/**
+ * Recursively require every WP\MCP\ class file under $base, skipping any already declared.
+ *
+ * Split out of aafm_eager_load_adapter() (no static guard of its own) so the redeclaration-safety
+ * behaviour can be exercised against a fixture directory. The eager-load pass only ever wins the
+ * WP\MCP\ race when OUR file runs first; if a sibling that loads before us already declared one of
+ * these classes (e.g. an alphabetically-earlier plugin bundling its own mcp-adapter copy), an
+ * unconditional require_once would throw a non-catchable "Cannot declare class … already in use"
+ * fatal and white-screen the whole site before bootstrap.php's floor notice can render. So before
+ * requiring a file we derive the class it declares and skip it when that class/interface/trait
+ * already exists — making the eager load idempotent against foreign pre-declaration and letting the
+ * floor/notice fallback take over instead of fataling.
+ *
+ * @param string $base PSR-4 base directory for the WP\MCP\ namespace, with trailing slash.
+ * @return void
+ */
+function aafm_eager_require_adapter_dir( string $base ): void {
 	if ( ! is_dir( $base ) ) {
 		return;
 	}
@@ -206,6 +256,16 @@ function aafm_eager_load_adapter(): void {
 		// Skip CLI classes: McpCommand extends \WP_CLI_Command, which is undefined outside a
 		// WP-CLI request, so declaring it here would fatal. The REST /mcp path never needs them.
 		if ( false !== strpos( wp_normalize_path( $path ), '/includes/Cli/' ) ) {
+			continue;
+		}
+
+		// If a class this file declares is already in scope (a sibling that loaded before us
+		// declared its own copy), requiring our file would fatal on redeclaration. Skip it: PHP
+		// keeps the already-declared copy, and our floor/notice fallback handles a version mismatch.
+		$fqcn = aafm_adapter_path_to_class( $path, $base, 'WP\\MCP\\' );
+		if ( null !== $fqcn
+			&& ( class_exists( $fqcn, false ) || interface_exists( $fqcn, false ) || trait_exists( $fqcn, false ) )
+		) {
 			continue;
 		}
 

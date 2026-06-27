@@ -108,36 +108,28 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 /**
  * Validate an access token and return the user it belongs to.
  *
- * The raw token is hashed and looked up by token_hash. A token validates only
- * when it is active and its expires_at is still in the future.
+ * Delegates the token lookup to aafm_oauth_get_access_token_row() so the active/unexpired predicate
+ * lives in exactly one place, then re-enforces client deactivation — matching the live request path
+ * in validator.php. A token validates only when it is active, unexpired, AND its owning client has
+ * not been deactivated; so disabling a compromised client invalidates its live access tokens here
+ * too, not just on the REST path.
  *
  * @param string $raw The raw access token presented by the client.
- * @return int|false The wp_user_id on success, or false when expired, inactive, or unknown.
+ * @return int|false The wp_user_id on success, or false when expired, inactive, deactivated, or unknown.
  */
 function aafm_oauth_validate_access_token( string $raw ) {
-	global $wpdb;
-	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
-	$now   = gmdate( 'Y-m-d H:i:s', time() );
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$user_id = $wpdb->get_var(
-		$wpdb->prepare(
-			// Keep this WHERE clause in sync with aafm_oauth_get_access_token_row() in validator.php — the two must never disagree on the active/unexpired predicate.
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
-			"SELECT wp_user_id FROM {$table}
-			 WHERE token_hash = %s
-			   AND is_active = 1
-			   AND expires_at > %s",
-			hash( 'sha256', $raw ),
-			$now
-		)
-	);
-
-	if ( null === $user_id ) {
+	$row = aafm_oauth_get_access_token_row( $raw );
+	if ( null === $row ) {
 		return false;
 	}
 
-	return (int) $user_id;
+	// Re-enforce client deactivation: a token already in a client's hands keeps working unless its
+	// owning client is re-checked, so a deactivated client's live tokens must stop validating.
+	if ( aafm_oauth_client_is_deactivated( (string) ( $row['client_id'] ?? '' ) ) ) {
+		return false;
+	}
+
+	return (int) $row['wp_user_id'];
 }
 
 /**
@@ -164,8 +156,8 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT * FROM {$table} WHERE refresh_hash = %s",
+			'SELECT * FROM %i WHERE refresh_hash = %s',
+			$table,
 			hash( 'sha256', $raw )
 		),
 		ARRAY_A
@@ -298,11 +290,11 @@ function aafm_oauth_revoke_token( string $raw ): bool {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
-			"UPDATE {$table}
+			'UPDATE %i
 			 SET is_active = 0
 			 WHERE ( token_hash = %s OR refresh_hash = %s )
-			   AND is_active = 1",
+			   AND is_active = 1',
+			$table,
 			$hash,
 			$hash
 		)
@@ -331,8 +323,8 @@ function aafm_oauth_revoke_client_tokens( string $client_id ): int {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"UPDATE {$table} SET is_active = 0 WHERE client_id = %s AND is_active = 1",
+			'UPDATE %i SET is_active = 0 WHERE client_id = %s AND is_active = 1',
+			$table,
 			$client_id
 		)
 	);
@@ -361,8 +353,8 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"UPDATE {$table} SET is_active = 0 WHERE wp_user_id = %d AND client_id = %s AND is_active = 1",
+			'UPDATE %i SET is_active = 0 WHERE wp_user_id = %d AND client_id = %s AND is_active = 1',
+			$table,
 			$user_id,
 			$client_id
 		)
@@ -402,8 +394,8 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$parent_id = $wpdb->get_var(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT refresh_parent_id FROM {$table} WHERE id = %d",
+				'SELECT refresh_parent_id FROM %i WHERE id = %d',
+				$table,
 				$cursor
 			)
 		);
@@ -433,8 +425,8 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$child_ids = $wpdb->get_col(
 			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-				"SELECT id FROM {$table} WHERE refresh_parent_id = %d",
+				'SELECT id FROM %i WHERE refresh_parent_id = %d',
+				$table,
 				$current
 			)
 		);
@@ -464,13 +456,15 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	// Deactivate the whole lineage in a single bounded UPDATE.
 	$placeholders = implode( ', ', array_fill( 0, count( $ids ), '%d' ) );
 
-	// $table is an internal constant; $placeholders is a list of %d built from the
-	// id count and every id is bound via $ids, so the query is fully prepared.
+	// The table name is bound via the leading %i placeholder; $placeholders is a list
+	// of %d built from the id count and every id is bound via $ids, so the query is
+	// fully prepared. The %d list is still interpolated, so the InterpolatedNotPrepared
+	// and UnfinishedPrepare ignores stay.
 	// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 	$wpdb->query(
 		$wpdb->prepare(
-			"UPDATE {$table} SET is_active = 0 WHERE id IN ( {$placeholders} )",
-			$ids
+			"UPDATE %i SET is_active = 0 WHERE id IN ( {$placeholders} )",
+			array_merge( array( $table ), $ids )
 		)
 	);
 	// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare

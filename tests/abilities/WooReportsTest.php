@@ -129,6 +129,45 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * The net_sales figure must be the product revenue actually KEPT: gross total minus tax and
+	 * shipping, minus the product-only portion of any refund (refund total minus its tax/shipping).
+	 * Every other sales-report test runs with zero orders, so the net_sales arithmetic (only
+	 * reached with >= 1 order in the window) never executed before this. Seed one completed order
+	 * carrying tax + shipping + a partial refund and assert the kept-revenue figure.
+	 */
+	public function test_get_sales_report_nets_out_tax_shipping_and_refunds(): void {
+		$this->acting_as( 'administrator' );
+
+		// 120 gross = 95 product + 10 tax + 15 shipping. A 30.00 refund splits into 23 product +
+		// 2 tax + 5 shipping. Kept product revenue = 95 - 23 = 72.00.
+		\AAFM\Tests\WcOrderStubStore::seed(
+			9001,
+			array(
+				'status'                  => 'completed',
+				'total'                   => '120.00',
+				'total_tax'               => '10.00',
+				'shipping_total'          => '15.00',
+				'total_refunded'          => '30.00',
+				'total_tax_refunded'      => '2.00',
+				'total_shipping_refunded' => '5.00',
+				'date_created'            => '2021-06-15 12:00:00',
+			)
+		);
+
+		$res = aafm_exec_wc_get_sales_report(
+			array(
+				'start_date' => '2021-06-01',
+				'end_date'   => '2021-06-30',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $res['order_count'] );
+		$this->assertSame( '120.00', $res['total_sales'], 'total_sales is the gross order total.' );
+		$this->assertSame( '72.00', $res['net_sales'], 'net_sales nets out tax, shipping, and the product portion of the refund.' );
+	}
+
+	/**
 	 * Sales report returns WP_Error when WooCommerce integration is inactive.
 	 */
 	public function test_get_sales_report_inactive_wc(): void {

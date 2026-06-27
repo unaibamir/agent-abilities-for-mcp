@@ -46,7 +46,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-block'] = array(
 		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a reusable block. Its markup is sanitized, and the author is always the agent. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a reusable block (published immediately). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -78,6 +78,20 @@ function aafm_register_blocks_definitions( array $registry ): array {
  */
 function aafm_perm_blocks_floor(): bool {
 	return current_user_can( 'edit_posts' );
+}
+
+/**
+ * Object-independent floor for CREATING a block: the caller can publish posts.
+ *
+ * The create-block write forces post_status=publish, and wp_insert_post() does no capability check
+ * of its own — so gating only on edit_posts would let a Contributor (edit_posts WITHOUT
+ * publish_posts) mint a published synced wp_block they could never create in wp-admin. Require
+ * publish_posts so the ability matches the editor capability the published-block write needs.
+ *
+ * @return bool
+ */
+function aafm_perm_blocks_create(): bool {
+	return current_user_can( 'publish_posts' );
 }
 
 /**
@@ -268,7 +282,7 @@ function aafm_args_create_block(): array {
 			'properties' => aafm_rich_block_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_create_block',
-		'permission_callback' => 'aafm_perm_blocks_floor',
+		'permission_callback' => 'aafm_perm_blocks_create',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,

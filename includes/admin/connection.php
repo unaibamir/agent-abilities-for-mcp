@@ -508,11 +508,25 @@ function aafm_ajax_test_connection(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 
-	// Forward the current admin's own cookies on the self-call (admin-eye reachability check).
+	// Forward only the current admin's WordPress auth cookies on the self-call (admin-eye
+	// reachability check). The self-request is same-origin and already nonce + cap gated, but it
+	// should carry just what the auth handshake needs — the logged-in/auth/secure-auth cookies plus
+	// the session test cookie — not the operator's entire cookie jar (analytics, third-party, etc.).
+	$auth_cookie_names = array();
+	foreach ( array( 'LOGGED_IN_COOKIE', 'AUTH_COOKIE', 'SECURE_AUTH_COOKIE', 'TEST_COOKIE' ) as $cookie_const ) {
+		if ( defined( $cookie_const ) ) {
+			$auth_cookie_names[] = (string) constant( $cookie_const );
+		}
+	}
+
 	$cookies = array();
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- entry already nonce + cap checked; reading own cookies for a self-call.
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- entry already nonce + cap checked; reading own auth cookies for a self-call.
 	foreach ( wp_unslash( $_COOKIE ) as $cookie_name => $cookie_value ) {
-		$cookies[ (string) $cookie_name ] = is_scalar( $cookie_value ) ? (string) $cookie_value : '';
+		$cookie_name = (string) $cookie_name;
+		if ( ! in_array( $cookie_name, $auth_cookie_names, true ) ) {
+			continue; // Drop everything that is not a WordPress auth cookie.
+		}
+		$cookies[ $cookie_name ] = is_scalar( $cookie_value ) ? (string) $cookie_value : '';
 	}
 
 	$body = (string) wp_json_encode(

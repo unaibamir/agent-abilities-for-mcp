@@ -184,6 +184,78 @@ final class MetaKeysSaveTest extends TestCase {
 	}
 
 	/**
+	 * Return the inner text of the first <textarea name="$name"> in the markup.
+	 *
+	 * @param string $html Rendered markup.
+	 * @param string $name The textarea name attribute to locate.
+	 * @return string The (HTML-escaped) textarea contents.
+	 */
+	private function textarea_contents( string $html, string $name ): string {
+		$this->assertSame(
+			1,
+			preg_match(
+				'/<textarea[^>]*\bname="' . preg_quote( $name, '/' ) . '"[^>]*>(.*?)<\/textarea>/s',
+				$html,
+				$m
+			),
+			"Textarea {$name} must render."
+		);
+		return $m[1];
+	}
+
+	/**
+	 * Regression: when the allow option holds the `*` wildcard, the exposed textarea must SHOW the
+	 * `*` (the getters strip it). If it rendered empty the operator could not see allow-all was
+	 * active and a re-save would silently wipe the wildcard. Covers all three selectors plus the
+	 * deny-all path. Each option is snapshot/restored so live state is untouched.
+	 *
+	 * @dataProvider provide_wildcard_render_cases
+	 *
+	 * @param string   $option   Option name to seed with the wildcard.
+	 * @param callable $renderer Selector render function.
+	 * @param string   $name     Textarea name that must surface the `*`.
+	 */
+	public function test_wildcard_is_surfaced_in_textarea( string $option, callable $renderer, string $name ): void {
+		$had  = array_key_exists( $option, wp_load_alloptions() );
+		$prev = get_option( $option, null );
+
+		update_option( $option, array( '*' ) );
+
+		ob_start();
+		$renderer();
+		$html = ob_get_clean();
+
+		// Restore the exact prior state before asserting.
+		if ( $had ) {
+			update_option( $option, $prev );
+		} else {
+			delete_option( $option );
+		}
+
+		$this->assertStringContainsString(
+			'*',
+			$this->textarea_contents( $html, $name ),
+			"The {$name} textarea must surface the `*` wildcard from {$option}."
+		);
+	}
+
+	/**
+	 * The six exposed/denied textareas across the post, user, and term selectors.
+	 *
+	 * @return array<string, array{0:string,1:callable,2:string}>
+	 */
+	public function provide_wildcard_render_cases(): array {
+		return array(
+			'post exposed' => array( 'aafm_allowed_meta_keys', 'aafm_render_meta_keys_selector', 'aafm_meta_keys' ),
+			'post denied'  => array( 'aafm_denied_meta_keys', 'aafm_render_meta_keys_selector', 'aafm_deny_meta_keys' ),
+			'user exposed' => array( 'aafm_exposed_user_meta_keys', 'aafm_render_user_meta_keys_selector', 'aafm_exposed_user_meta_keys' ),
+			'user denied'  => array( 'aafm_denied_user_meta_keys', 'aafm_render_user_meta_keys_selector', 'aafm_denied_user_meta_keys' ),
+			'term exposed' => array( 'aafm_exposed_term_meta_keys', 'aafm_render_term_meta_keys_selector', 'aafm_exposed_term_meta_keys' ),
+			'term denied'  => array( 'aafm_denied_term_meta_keys', 'aafm_render_term_meta_keys_selector', 'aafm_denied_term_meta_keys' ),
+		);
+	}
+
+	/**
 	 * The full abilities tab wires the Users AND Taxonomies selectors into their panels, still
 	 * inside the single outer form (no second form opened by any meta selector).
 	 */

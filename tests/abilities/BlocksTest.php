@@ -147,6 +147,29 @@ final class BlocksTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $res, 'closed schema rejects a smuggled post_type.' );
 	}
 
+	/**
+	 * Create-block force-publishes the wp_block, and wp_insert_post() does no capability check —
+	 * so the gate must require publish_posts. A Contributor holds edit_posts but NOT publish_posts
+	 * (they cannot publish in wp-admin either) and must be denied; an Editor is allowed.
+	 */
+	public function test_create_block_requires_publish_posts(): void {
+		$this->register_blocks();
+
+		$this->acting_as( 'contributor' );
+		$this->assertTrue( current_user_can( 'edit_posts' ), 'a contributor clears the old edit_posts floor.' );
+		$this->assertFalse( current_user_can( 'publish_posts' ), 'a contributor lacks publish_posts.' );
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/create-block' )->check_permissions( array( 'title' => 'x' ) ),
+			'a user without publish_posts must be denied create-block (it force-publishes).'
+		);
+
+		$this->acting_as( 'editor' );
+		$this->assertTrue(
+			wp_get_ability( 'aafm/create-block' )->check_permissions( array( 'title' => 'x' ) ),
+			'an editor (publish_posts) is allowed to create a block.'
+		);
+	}
+
 	public function test_update_block_edits_markup_with_per_object_gate(): void {
 		$this->register_blocks();
 		$id = $this->make_block( 'Old' );

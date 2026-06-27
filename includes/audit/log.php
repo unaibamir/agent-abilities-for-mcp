@@ -176,12 +176,11 @@ function aafm_prune_activity_log(): void {
 	}
 
 	global $wpdb;
-	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
-	$table  = esc_sql( aafm_activity_log_table() );
+	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE created_at < %s", $cutoff ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE created_at < %s', $table, $cutoff ) );
 }
 
 /**
@@ -214,8 +213,8 @@ function aafm_query_activity( array $args ): array {
 	$page     = isset( $args['page'] ) ? max( 1, (int) $args['page'] ) : 1;
 	$offset   = ( $page - 1 ) * $per_page;
 	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
-	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
+	// never user input; the leading %i placeholder below quotes/escapes the identifier.
+	$table = aafm_activity_log_table();
 
 	$where  = '1=1';
 	$params = array();
@@ -231,9 +230,16 @@ function aafm_query_activity( array $args ): array {
 	$params[] = $per_page;
 	$params[] = $offset;
 
+	// Bind the table identifier via the leading %i placeholder, so it is the first arg to
+	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders — their values
+	// (status, ability) were pushed onto $params above and are substituted by prepare(), never
+	// interpolated literals. The only interpolation into the SQL string is the static {$where}
+	// scaffolding (the "1=1 AND status = %s …" shape), which carries no user input.
+	array_unshift( $params, $table );
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+	$sql = "SELECT * FROM %i WHERE {$where} ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d";
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A );
 
 	return is_array( $rows ) ? $rows : array();
@@ -251,18 +257,16 @@ function aafm_query_activity( array $args ): array {
  */
 function aafm_activity_count_filtered( ?string $status = null ): int {
 	global $wpdb;
-	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
-	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
+	$table = aafm_activity_log_table();
 
 	if ( null === $status || '' === $status ) {
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $table ) );
 		return max( 0, (int) $count );
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s", $status ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
 	return max( 0, (int) $count );
 }
 
@@ -273,10 +277,9 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  */
 function aafm_clear_activity_log(): void {
 	global $wpdb;
-	// Internal constant table name; esc_sql() is belt-and-suspenders for the analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$wpdb->query( "TRUNCATE TABLE {$table}" );
+	$table = aafm_activity_log_table();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
 }
 
 /**
@@ -303,8 +306,7 @@ function aafm_uninstall_site(): void {
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).
 	delete_transient( 'aafm_detected_meta_keys' );
-	// Internal constant table name; esc_sql() makes the safety explicit for analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+	$table = aafm_activity_log_table();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );
 }

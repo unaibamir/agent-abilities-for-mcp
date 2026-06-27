@@ -153,6 +153,34 @@ class TokensTest extends TestCase {
 	}
 
 	/**
+	 * A valid, unexpired access token whose owning OAuth client has been deactivated must stop
+	 * validating — matching the live REST path, which re-checks client deactivation so disabling a
+	 * compromised client kills its already-issued access tokens immediately.
+	 */
+	public function test_validate_fails_when_owning_client_is_deactivated(): void {
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client(
+			array( 'redirect_uris' => array( 'https://app.example/callback' ) )
+		);
+		$this->assertIsArray( $client );
+
+		$ctx    = array(
+			'client_id'  => $client['client_id'],
+			'wp_user_id' => 42,
+			'resource'   => 'https://site.example/wp-json/aafm/v1/mcp',
+		);
+		$tokens = aafm_oauth_mint_tokens( $ctx );
+
+		// Active client: the token validates to its user.
+		$this->assertSame( 42, aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+
+		// Deactivating the client must immediately invalidate its live access token.
+		$this->assertTrue( aafm_oauth_deactivate_client( $client['client_id'] ) );
+		$this->assertFalse( aafm_oauth_validate_access_token( $tokens['access_token'] ) );
+	}
+
+	/**
 	 * An unknown access token does not validate.
 	 */
 	public function test_validate_unknown_access_token_returns_false(): void {

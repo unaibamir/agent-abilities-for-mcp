@@ -593,6 +593,13 @@
 				body.append( 'action', 'aafm_save_abilities' );
 				body.append( 'nonce', this.#nonce );
 				enabled.forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
+				// Send the tab's scope (the core subjects it owns) so the server
+				// merges only these and preserves every off-tab ability — e.g.
+				// enabled integration (WooCommerce/Yoast/ACF) abilities — from the
+				// persisted option. No off-tab state is trusted from the client.
+				[
+					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
+				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
 
 				if ( status ) {
 					status.textContent = this.#t( 'saving', 'Saving…' );

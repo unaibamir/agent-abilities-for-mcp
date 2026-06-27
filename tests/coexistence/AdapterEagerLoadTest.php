@@ -28,7 +28,7 @@ final class AdapterEagerLoadTest extends TestCase {
 	public function test_our_loader_is_registered_and_resolves_the_adapter(): void {
 		// The bootstrap registers our loader; assert the autoload chain is non-empty and our mapper
 		// resolves WP\MCP\Core\McpAdapter to a path inside our bundle. We do NOT assert spl_autoload_
-		// functions()[0]: other prepended Composer/Jetpack loaders sit in front by suite runtime, so a
+		// functions()[0]: other prepended Composer autoloaders sit in front by suite runtime, so a
 		// "we are at index 0" claim would be false. The real guarantee — that PHP commits to our 0.5.0
 		// copy — is covered by test_eager_load_declares_adapter_from_our_bundle().
 		$functions = (array) spl_autoload_functions();
@@ -105,5 +105,49 @@ final class AdapterEagerLoadTest extends TestCase {
 		// Inside the WP\MCP\ namespace but with no matching file: must return null so other
 		// autoloaders get a chance, never a path to a missing file.
 		$this->assertNull( aafm_adapter_class_to_path( 'WP\\MCP\\Core\\DoesNotExistAtAll' ) );
+	}
+
+	public function test_path_to_class_derives_fqcn_from_bundle_path(): void {
+		$base = '/x/vendor/wordpress/mcp-adapter/includes/';
+		$this->assertSame(
+			'WP\\MCP\\Core\\McpAdapter',
+			aafm_adapter_path_to_class( $base . 'Core/McpAdapter.php', $base, 'WP\\MCP\\' )
+		);
+		// A trailing-slash-agnostic base still resolves identically.
+		$this->assertSame(
+			'WP\\MCP\\Core\\McpAdapter',
+			aafm_adapter_path_to_class( $base . 'Core/McpAdapter.php', rtrim( $base, '/' ), 'WP\\MCP\\' )
+		);
+		// Outside the base, or not a .php file: null, so the loader falls back to a plain require.
+		$this->assertNull( aafm_adapter_path_to_class( '/other/Thing.php', $base, 'WP\\MCP\\' ) );
+		$this->assertNull( aafm_adapter_path_to_class( $base . 'Core/Readme.txt', $base, 'WP\\MCP\\' ) );
+	}
+
+	public function test_eager_require_does_not_fatal_on_foreign_predeclaration(): void {
+		$fixtures = AAFM_PLUGIN_DIR . 'tests/Fixtures/AdapterEager/';
+
+		// Simulate a sibling plugin that loaded first and already declared this WP\MCP\ class.
+		require $fixtures . 'foreign/Marker.php';
+		$this->assertSame( 'foreign', \WP\MCP\Collide\Marker::SOURCE );
+		$this->assertFalse( class_exists( 'WP\\MCP\\Fresh\\Thing', false ) );
+
+		// Running the eager pass over a bundle that ALSO declares WP\MCP\Collide\Marker must NOT
+		// fatal on redeclaration: the guard skips the colliding file and keeps the sibling's copy,
+		// while still requiring the non-colliding WP\MCP\Fresh\Thing in the same pass.
+		aafm_eager_require_adapter_dir( $fixtures . 'bundle/' );
+
+		$this->assertSame(
+			'foreign',
+			\WP\MCP\Collide\Marker::SOURCE,
+			'The already-declared class must be left untouched (no redeclaration).'
+		);
+		$this->assertTrue(
+			class_exists( 'WP\\MCP\\Fresh\\Thing', false ),
+			'A non-colliding bundled class must still be loaded.'
+		);
+
+		// And our real bundled adapter classes remain resolvable (the floor/notice fallback path
+		// stays intact rather than the whole site fataling).
+		$this->assertTrue( class_exists( \WP\MCP\Core\McpAdapter::class, false ) );
 	}
 }

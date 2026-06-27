@@ -15,6 +15,13 @@ composer_version: "2"
 web_environment:
     - WP_TESTS_DIR=/tmp/wordpress-tests-lib
 corepack_enable: false
+hooks:
+    # Point the plugin symlink at the dedicated /var/www/plugin-src mount (see
+    # docker-compose.pluginsrc.yaml) instead of the repo root, so the plugin's
+    # realpath stops escaping into the WordPress install and plugin_basename()
+    # (Query Monitor component attribution, etc.) is accurate locally. Dev only.
+    post-start:
+        - exec: ln -sfn /var/www/plugin-src /var/www/html/wp/wp-content/plugins/agent-abilities-for-mcp
 
 # Key features of DDEV's config.yaml:
 

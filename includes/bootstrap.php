@@ -103,7 +103,8 @@ function aafm_adapter_is_too_new( string $loaded_version ): bool {
 }
 
 /**
- * The version of the adapter actually loaded (whoever's copy won via Jetpack Autoloader).
+ * The version of the adapter actually loaded — whichever copy our eager load committed PHP to, or
+ * a sibling's copy that was declared before us.
  *
  * @return string|null
  */

@@ -403,8 +403,27 @@ PHP;
 			eval( 'function wc_delete_order_note( $note_id ) { return \AAFM\Tests\WcOrderStubStore::delete_note( (int) $note_id ); }' );
 		}
 		if ( ! function_exists( 'wc_create_refund' ) ) {
+			// Captures the full $args (including the per-line refund_tax map the executor builds) into
+			// WcOrderStubStore::$last_refund_args so a test can assert how a line item's refund_tax was
+			// distributed across its tax rates, then persists the refund exactly as before.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_refund( $args = array() ) { $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
+			eval( 'function wc_create_refund( $args = array() ) { \AAFM\Tests\WcOrderStubStore::$last_refund_args = $args; $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
+		}
+		// A WC_Order_Item carrying the tax map the refund executor reads via $order->get_item()->get_taxes().
+		// get_taxes() returns the real WooCommerce shape: array( 'total' => array( rate_id => amount ) ).
+		if ( ! class_exists( 'WC_Order_Item' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( 'class WC_Order_Item { private $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } public function get_taxes() { return (array) ( $this->data["taxes"] ?? array() ); } }' );
+		}
+		// Minimal stand-ins for the two WooCommerce price helpers the refund executor calls. wc_format_decimal
+		// normalises a money string (rounding to $dp when given); wc_get_price_decimals is the store precision.
+		if ( ! function_exists( 'wc_get_price_decimals' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_price_decimals() { return 2; }' );
+		}
+		if ( ! function_exists( 'wc_format_decimal' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_format_decimal( $number, $dp = false, $trim_zeros = false ) { $number = (float) $number; if ( false === $dp ) { return (string) $number; } return number_format( round( $number, (int) $dp ), (int) $dp, ".", "" ); }' );
 		}
 
 		// Customer stubs (W4-WC3). WC_Customer is defined via eval so class_exists prevents
@@ -529,6 +548,9 @@ class WC_Order {
 	public function get_total_tax() { return (string) ( $this->data['total_tax'] ?? '0.00' ); }
 	public function get_subtotal() { return (string) ( $this->data['subtotal'] ?? '0.00' ); }
 	public function get_shipping_total() { return (string) ( $this->data['shipping_total'] ?? '0.00' ); }
+	public function get_total_refunded() { return (float) ( $this->data['total_refunded'] ?? 0 ); }
+	public function get_total_tax_refunded() { return (float) ( $this->data['total_tax_refunded'] ?? 0 ); }
+	public function get_total_shipping_refunded() { return (float) ( $this->data['total_shipping_refunded'] ?? 0 ); }
 	public function get_billing_first_name() { return (string) ( $this->data['billing']['first_name'] ?? '' ); }
 	public function get_billing_last_name() { return (string) ( $this->data['billing']['last_name'] ?? '' ); }
 	public function get_billing_company() { return (string) ( $this->data['billing']['company'] ?? '' ); }
@@ -593,6 +615,7 @@ class WC_Order {
 	}
 	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
 	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
+	public function get_item( $item_id, $load_from_db = true ) { foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) { $item = (array) $item; if ( (int) ( $item['id'] ?? 0 ) === (int) $item_id ) { return new \WC_Order_Item( $item ); } } return false; }
 	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
 	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }
@@ -1371,6 +1394,45 @@ class WC_Tax {
 			return new \WP_Error( 'wc_tax', 'Tax class not found.' );
 		}
 		return false;
+	}
+
+	/**
+	 * Insert a single tax rate row and return its new id.
+	 *
+	 * The production tax abilities moved their write off a raw wpdb->insert and onto
+	 * WC_Tax::_insert_tax_rate() (the cache-busting fix). To the caller the outcome is
+	 * unchanged, so this stub performs the same single-row insert against the temp
+	 * woocommerce_tax_rates table the read helpers query, and returns the new id.
+	 *
+	 * @param array<string,mixed> $tax_rate Tax rate row fields.
+	 * @return int
+	 */
+	public static function _insert_tax_rate( array $tax_rate ): int {
+		global $wpdb;
+		$table = $wpdb->prefix . 'woocommerce_tax_rates';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->insert( $table, $tax_rate );
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Update an existing tax rate row by id.
+	 *
+	 * Mirrors the prior raw wpdb->update path the update-tax-rate ability used before it
+	 * was routed through WC_Tax for cache invalidation; the persisted columns are identical.
+	 *
+	 * @param int                 $tax_rate_id Tax rate id.
+	 * @param array<string,mixed> $tax_rate    Tax rate row fields to change.
+	 * @return void
+	 */
+	public static function _update_tax_rate( int $tax_rate_id, array $tax_rate ): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'woocommerce_tax_rates';
+		if ( empty( $tax_rate ) ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$wpdb->update( $table, $tax_rate, array( 'tax_rate_id' => $tax_rate_id ) );
 	}
 }
 PHP;

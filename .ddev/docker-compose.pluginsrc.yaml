@@ -1,0 +1,21 @@
+# Local-dev only: expose the plugin source (the repo root) at a second container
+# path that is NOT an ancestor of the WordPress install at /var/www/html/wp.
+#
+# Why this exists: the plugin is symlinked into wp/wp-content/plugins, and its
+# symlink target is the repo root, which also contains the throwaway wp/ install.
+# WordPress core's wp_register_plugin_realpath() then records
+#   agent-abilities-for-mcp => /var/www/html
+# in $wp_plugin_paths, and because every file in the install lives under
+# /var/www/html, plugin_basename() rewrites ALL of them into our plugin. Tools
+# that lean on plugin_basename() (Query Monitor's "Queries by Component", etc.)
+# then blame our plugin for every other component's queries. This is a symlink
+# artifact of the dev environment only; a real wordpress.org install is a normal
+# directory with realpath == path, so no such entry is created.
+#
+# The post-start hook in config.yaml repoints the plugin symlink at the mount
+# below, so the recorded realpath root (/var/www/plugin-src) only matches our own
+# files and never the WordPress install. Nothing here ships to wp.org.
+services:
+  web:
+    volumes:
+      - "../:/var/www/plugin-src"

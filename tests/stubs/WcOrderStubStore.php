@@ -110,6 +110,14 @@ class WcOrderStubStore {
 	public static array $last_query_args = array();
 
 	/**
+	 * The full args from the most recent wc_create_refund() call, so a test can assert how a line
+	 * item's refund_tax was distributed across its tax rates before it was handed to WooCommerce.
+	 *
+	 * @var array<string,mixed>
+	 */
+	public static array $last_refund_args = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -127,6 +135,7 @@ class WcOrderStubStore {
 		self::$delete_refund_should_fail = false;
 		self::$add_note_should_fail      = false;
 		self::$last_query_args           = array();
+		self::$last_refund_args          = array();
 	}
 
 	/**

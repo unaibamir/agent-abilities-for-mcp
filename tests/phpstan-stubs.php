@@ -440,12 +440,42 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		/** @return array<int,\WC_Order_Refund> */
 		public function get_refunds() { return array(); }
 		/**
+		 * Return a single order line item by id.
+		 *
+		 * @param int  $item_id      Order item id.
+		 * @param bool $load_from_db Whether to re-read the item from the DB.
+		 * @return \WC_Order_Item|false
+		 */
+		public function get_item( $item_id, $load_from_db = true ) { return false; }
+		/** @return float */
+		public function get_total_refunded() { return 0.0; }
+		/** @return float */
+		public function get_total_tax_refunded() { return 0.0; }
+		/** @return float */
+		public function get_total_shipping_refunded() { return 0.0; }
+		/**
 		 * @param bool $force
 		 * @return bool
 		 */
 		public function delete( $force = false ) { return false; }
 		/** @return int */
 		public function save() { return 0; }
+	}
+}
+
+if ( ! class_exists( 'WC_Order_Item' ) ) {
+	/**
+	 * Stub WC_Order_Item for PHPStan — mirrors the getters the order abilities call.
+	 */
+	class WC_Order_Item {
+		/** @return int */
+		public function get_id() { return 0; }
+		/**
+		 * Return the item's tax data, keyed by 'total' (and 'subtotal') => [ rate_id => amount ].
+		 *
+		 * @return array<string,array<int,string>>
+		 */
+		public function get_taxes() { return array(); }
 	}
 }
 
@@ -522,6 +552,25 @@ if ( ! function_exists( 'wc_create_refund' ) ) {
 	 */
 	function wc_create_refund( $args = array() ) {
 		return new \WP_Error();
+	}
+}
+if ( ! function_exists( 'wc_format_decimal' ) ) {
+	/**
+	 * @param string|float|int $number
+	 * @param int|false        $dp
+	 * @param bool             $trim_zeros
+	 * @return string
+	 */
+	function wc_format_decimal( $number, $dp = false, $trim_zeros = false ) {
+		return (string) $number;
+	}
+}
+if ( ! function_exists( 'wc_get_price_decimals' ) ) {
+	/**
+	 * @return int
+	 */
+	function wc_get_price_decimals() {
+		return 2;
 	}
 }
 if ( ! class_exists( 'WC_Customer' ) ) {
@@ -862,6 +911,23 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @return bool|\WP_Error
 		 */
 		public static function delete_tax_class_by( string $field, string $value ): bool|\WP_Error { return false; }
+
+		/**
+		 * Insert a single tax rate row and return its new id.
+		 *
+		 * @param array<string,mixed> $tax_rate Tax rate row fields.
+		 * @return int
+		 */
+		public static function _insert_tax_rate( array $tax_rate ): int { return 0; }
+
+		/**
+		 * Update an existing tax rate row by id.
+		 *
+		 * @param int                 $tax_rate_id Tax rate id.
+		 * @param array<string,mixed> $tax_rate    Tax rate row fields.
+		 * @return void
+		 */
+		public static function _update_tax_rate( int $tax_rate_id, array $tax_rate ): void {}
 	}
 }
 if ( ! class_exists( 'WC_Payment_Gateway' ) ) {

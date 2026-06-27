@@ -12,10 +12,6 @@ class ComposerStaticInit69289e23de81730519983250b8283b6a
             'WP\\McpSchema\\' => 13,
             'WP\\MCP\\' => 7,
         ),
-        'A' =>
-        array (
-            'Automattic\\Jetpack\\Autoloader\\' => 30,
-        ),
     );
 
     public static $prefixDirsPsr4 = array (
@@ -27,18 +23,9 @@ class ComposerStaticInit69289e23de81730519983250b8283b6a
         array (
             0 => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes',
         ),
-        'Automattic\\Jetpack\\Autoloader\\' =>
-        array (
-            0 => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src',
-        ),
     );
 
     public static $classMap = array (
-        'Automattic\\Jetpack\\Autoloader\\AutoloadFileWriter' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/AutoloadFileWriter.php',
-        'Automattic\\Jetpack\\Autoloader\\AutoloadGenerator' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/AutoloadGenerator.php',
-        'Automattic\\Jetpack\\Autoloader\\AutoloadProcessor' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/AutoloadProcessor.php',
-        'Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/CustomAutoloaderPlugin.php',
-        'Automattic\\Jetpack\\Autoloader\\ManifestGenerator' => __DIR__ . '/..' . '/automattic/jetpack-autoloader/src/ManifestGenerator.php',
         'Composer\\InstalledVersions' => __DIR__ . '/..' . '/composer/InstalledVersions.php',
         'WP\\MCP\\Abilities\\DiscoverAbilitiesAbility' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/DiscoverAbilitiesAbility.php',
         'WP\\MCP\\Abilities\\ExecuteAbilityAbility' => __DIR__ . '/..' . '/wordpress/mcp-adapter/includes/Abilities/ExecuteAbilityAbility.php',

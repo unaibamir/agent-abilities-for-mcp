@@ -13,6 +13,10 @@
 	     WordPress bootstrap, so they use fwrite()/curl directly and a single-file class — WPCS does
 	     not apply. They are export-ignored from the build and never ship. -->
 	<exclude-pattern>*/bin/*</exclude-pattern>
+	<!-- The adapter eager-load fixtures deliberately declare classes in the FOREIGN WP\MCP\
+	     namespace (and one is an intentional duplicate of another) to reproduce a sibling plugin's
+	     pre-declaration of an adapter class. They are throwaway test fixtures, not shipped code. -->
+	<exclude-pattern>*/tests/Fixtures/AdapterEager/*</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>

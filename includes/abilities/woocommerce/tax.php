@@ -148,14 +148,17 @@ function aafm_wc_tax_rate_shape( array $row ): array {
  */
 function aafm_wc_get_all_tax_rates(): array {
 	global $wpdb;
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+	$table = $wpdb->prefix . 'woocommerce_tax_rates';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct read of WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
 	$rows = $wpdb->get_results(
-		"SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
-		        tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
-		        tax_rate_compound AS compound, tax_rate_shipping AS shipping,
-		        tax_rate_order AS `order`, tax_rate_class AS class
-		 FROM {$wpdb->prefix}woocommerce_tax_rates
-		 ORDER BY tax_rate_order, tax_rate_id",
+		$wpdb->prepare(
+			'SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
+			tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
+			tax_rate_compound AS compound, tax_rate_shipping AS shipping,
+			tax_rate_order AS `order`, tax_rate_class AS class
+			FROM %i ORDER BY tax_rate_order, tax_rate_id',
+			$table
+		),
 		ARRAY_A
 	);
 	if ( ! is_array( $rows ) ) {
@@ -173,12 +176,19 @@ function aafm_wc_get_all_tax_rates(): array {
 function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
 	global $wpdb;
 	$table = $wpdb->prefix . 'woocommerce_tax_rates';
-	$sql   = "SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
-		tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
-		tax_rate_compound AS compound, tax_rate_shipping AS shipping,
-		tax_rate_order AS `order`, tax_rate_class AS class
-		FROM `{$table}` WHERE tax_rate_id = %d"; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
-	$row   = $wpdb->get_row( $wpdb->prepare( $sql, $rate_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- direct read of WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct read of WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
+	$row = $wpdb->get_row(
+		$wpdb->prepare(
+			'SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
+			tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
+			tax_rate_compound AS compound, tax_rate_shipping AS shipping,
+			tax_rate_order AS `order`, tax_rate_class AS class
+			FROM %i WHERE tax_rate_id = %d',
+			$table,
+			$rate_id
+		),
+		ARRAY_A
+	);
 	if ( ! is_array( $row ) ) {
 		return null;
 	}
@@ -348,7 +358,11 @@ function aafm_args_wc_create_tax_rate(): array {
 			'additionalProperties' => false,
 			'required'             => array( 'rate' ),
 			'properties'           => array(
-				'rate'     => array( 'type' => 'string' ),
+				'rate'     => array(
+					'type'        => 'string',
+					'pattern'     => '^\\d+(\\.\\d{1,4})?$',
+					'description' => 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").',
+				),
 				'country'  => array(
 					'type'        => 'string',
 					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
@@ -392,22 +406,47 @@ function aafm_args_wc_create_tax_rate(): array {
 }
 
 /**
+ * Normalise a user-supplied tax rate to a clean decimal string, rejecting non-numeric values.
+ *
+ * The input schema constrains 'rate' to a numeric pattern, but a value that slips past validation
+ * would be stored verbatim and then silently evaluate to ~0% at checkout. This rejects anything
+ * non-numeric and routes valid values through wc_format_decimal() so the stored figure matches
+ * WooCommerce's own normalisation (localised separators handled, precision preserved).
+ *
+ * @param mixed $raw Raw rate value from input.
+ * @return string|\WP_Error Clean decimal string, or WP_Error when the value is not numeric.
+ */
+function aafm_wc_normalize_tax_rate( $raw ): string|\WP_Error {
+	$value = trim( (string) $raw );
+	if ( '' === $value || ! is_numeric( $value ) ) {
+		return new \WP_Error(
+			'aafm_invalid_tax_rate',
+			__( 'Tax rate must be a numeric value (for example "8.25").', 'agent-abilities-for-mcp' )
+		);
+	}
+	return function_exists( 'wc_format_decimal' ) ? (string) wc_format_decimal( $value ) : $value;
+}
+
+/**
  * Execute aafm/wc-create-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( '\WC_Tax' ) ) {
 		return aafm_generic_error();
 	}
 
-	global $wpdb;
-	$table = $wpdb->prefix . 'woocommerce_tax_rates';
-	$data  = array(
+	$rate = aafm_wc_normalize_tax_rate( $input['rate'] ?? '' );
+	if ( is_wp_error( $rate ) ) {
+		return $rate;
+	}
+
+	$data = array(
 		'tax_rate_country'  => isset( $input['country'] ) ? sanitize_text_field( (string) $input['country'] ) : '',
 		'tax_rate_state'    => isset( $input['state'] ) ? sanitize_text_field( (string) $input['state'] ) : '',
-		'tax_rate'          => sanitize_text_field( (string) $input['rate'] ),
+		'tax_rate'          => $rate,
 		'tax_rate_name'     => isset( $input['name'] ) ? sanitize_text_field( (string) $input['name'] ) : '',
 		'tax_rate_priority' => isset( $input['priority'] ) ? absint( $input['priority'] ) : 1,
 		'tax_rate_compound' => isset( $input['compound'] ) ? ( (bool) $input['compound'] ? 1 : 0 ) : 0,
@@ -416,22 +455,20 @@ function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
 		'tax_rate_class'    => isset( $input['class'] ) ? sanitize_title( (string) $input['class'] ) : '',
 	);
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-	$ok = $wpdb->insert( $table, $data, array( '%s', '%s', '%s', '%s', '%d', '%d', '%d', '%d', '%s' ) );
-	if ( false === $ok ) {
-		return aafm_generic_error();
-	}
-
-	$new_id = (int) $wpdb->insert_id;
+	// Route through WC_Tax rather than a raw $wpdb->insert: _insert_tax_rate() writes the same
+	// single woocommerce_tax_rates row, but also invalidates the 'taxes' cache group and fires the
+	// woocommerce_tax_rate_added action. A direct insert leaves WC's cached rates stale, so checkout
+	// keeps charging the old rate until the cache happens to clear (mirrors shipping.php's fix).
+	$new_id = (int) \WC_Tax::_insert_tax_rate( $data );
 	if ( $new_id <= 0 ) {
 		return aafm_generic_error();
 	}
 
-	$rate = aafm_wc_get_tax_rate_by_id( $new_id );
-	if ( null === $rate ) {
+	$rate_out = aafm_wc_get_tax_rate_by_id( $new_id );
+	if ( null === $rate_out ) {
 		return aafm_generic_error();
 	}
-	return $rate;
+	return $rate_out;
 }
 
 // =============================================================================
@@ -457,7 +494,11 @@ function aafm_args_wc_update_tax_rate(): array {
 					'type'    => 'integer',
 					'minimum' => 1,
 				),
-				'rate'     => array( 'type' => 'string' ),
+				'rate'     => array(
+					'type'        => 'string',
+					'pattern'     => '^\\d+(\\.\\d{1,4})?$',
+					'description' => 'Tax rate percentage as a decimal string, up to 4 decimal places (e.g. "8.25").',
+				),
 				'country'  => array(
 					'type'        => 'string',
 					'description' => 'ISO 3166-1 alpha-2 country code (e.g. "US", "GB"). An empty string means the rate applies to all countries.',
@@ -507,7 +548,7 @@ function aafm_args_wc_update_tax_rate(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
-	if ( ! aafm_integration_active( 'woocommerce' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( '\WC_Tax' ) ) {
 		return aafm_generic_error();
 	}
 
@@ -517,53 +558,45 @@ function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
 		return new \WP_Error( 'aafm_not_found', __( 'Tax rate not found.', 'agent-abilities-for-mcp' ) );
 	}
 
-	global $wpdb;
-	$table  = $wpdb->prefix . 'woocommerce_tax_rates';
 	$fields = array();
-	$format = array();
 
 	if ( array_key_exists( 'rate', $input ) ) {
-		$fields['tax_rate'] = sanitize_text_field( (string) $input['rate'] );
-		$format[]           = '%s';
+		$rate = aafm_wc_normalize_tax_rate( $input['rate'] );
+		if ( is_wp_error( $rate ) ) {
+			return $rate;
+		}
+		$fields['tax_rate'] = $rate;
 	}
 	if ( array_key_exists( 'country', $input ) ) {
 		$fields['tax_rate_country'] = sanitize_text_field( (string) $input['country'] );
-		$format[]                   = '%s';
 	}
 	if ( array_key_exists( 'state', $input ) ) {
 		$fields['tax_rate_state'] = sanitize_text_field( (string) $input['state'] );
-		$format[]                 = '%s';
 	}
 	if ( array_key_exists( 'name', $input ) ) {
 		$fields['tax_rate_name'] = sanitize_text_field( (string) $input['name'] );
-		$format[]                = '%s';
 	}
 	if ( array_key_exists( 'priority', $input ) ) {
 		$fields['tax_rate_priority'] = absint( $input['priority'] );
-		$format[]                    = '%d';
 	}
 	if ( array_key_exists( 'compound', $input ) ) {
 		$fields['tax_rate_compound'] = (bool) $input['compound'] ? 1 : 0;
-		$format[]                    = '%d';
 	}
 	if ( array_key_exists( 'shipping', $input ) ) {
 		$fields['tax_rate_shipping'] = (bool) $input['shipping'] ? 1 : 0;
-		$format[]                    = '%d';
 	}
 	if ( array_key_exists( 'order', $input ) ) {
 		$fields['tax_rate_order'] = absint( $input['order'] );
-		$format[]                 = '%d';
 	}
 	if ( array_key_exists( 'class', $input ) ) {
 		$fields['tax_rate_class'] = sanitize_title( (string) $input['class'] );
-		$format[]                 = '%s';
 	}
 
 	if ( ! empty( $fields ) ) {
-		$ok = $wpdb->update( $table, $fields, array( 'tax_rate_id' => $rate_id ), $format, array( '%d' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct write to WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
-		if ( false === $ok ) {
-			return aafm_generic_error();
-		}
+		// Route through WC_Tax so the write invalidates the 'taxes' cache group and fires
+		// woocommerce_tax_rate_updated. A raw $wpdb->update would leave WC's cached rates stale,
+		// so checkout could keep charging the old rate (mirrors shipping.php's cache fix).
+		\WC_Tax::_update_tax_rate( $rate_id, $fields );
 	}
 
 	$updated = aafm_wc_get_tax_rate_by_id( $rate_id );

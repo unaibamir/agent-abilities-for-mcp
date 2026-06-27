@@ -347,6 +347,19 @@ final class HelpersTest extends TestCase {
 		$this->assertFalse( aafm_hard_blocked_meta_key( 'subtitle' ) );
 	}
 
+	/**
+	 * Defense in depth: a mixed-case spelling of a protected key (wp_Capabilities, Session_Tokens)
+	 * must be hard-blocked just like its canonical lowercase form, for both the post-meta and the
+	 * user-meta floor.
+	 */
+	public function test_hard_block_is_case_insensitive(): void {
+		$this->assertTrue( aafm_hard_blocked_meta_key( 'wp_Capabilities' ), 'mixed-case prefixed capabilities key must be blocked (post meta).' );
+		$this->assertTrue( aafm_hard_blocked_meta_key( 'Session_Tokens' ), 'mixed-case builtin denylist key must be blocked (post meta).' );
+
+		$this->assertTrue( aafm_hard_blocked_user_meta_key( 'wp_Capabilities' ), 'mixed-case prefixed capabilities key must be blocked (user meta).' );
+		$this->assertTrue( aafm_hard_blocked_user_meta_key( 'WP_User_Level' ), 'mixed-case user_level key must be blocked (user meta).' );
+	}
+
 	public function test_hard_block_filter_can_add_but_not_remove(): void {
 		add_filter( 'aafm_hard_blocked_meta_keys', static fn( $k ) => array_merge( $k, array( 'company_revenue' ) ) );
 		$this->assertTrue( aafm_hard_blocked_meta_key( 'company_revenue' ) );

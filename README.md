@@ -1,11 +1,11 @@
 # Agent Abilities for MCP — MCP Server for AI Agents
 
-Connect Claude, Cursor and AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
+Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
 
 | | |
 |---|---|
 | **Contributors** | unaibamir |
-| **Tags** | mcp, mcp-server, ai-agent, woocommerce |
+| **Tags** | mcp, chatgpt, ai-agent, woocommerce, content-management |
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
@@ -16,7 +16,7 @@ Connect Claude, Cursor and AI agents to your WordPress site as a scoped, least-p
 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by Anthropic.
+Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
 Everything is off until you turn it on, the agent only ever acts as the scoped user you bind it to, and every call is logged and re-checked before it runs. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 

@@ -108,36 +108,28 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 /**
  * Validate an access token and return the user it belongs to.
  *
- * The raw token is hashed and looked up by token_hash. A token validates only
- * when it is active and its expires_at is still in the future.
+ * Delegates the token lookup to aafm_oauth_get_access_token_row() so the active/unexpired predicate
+ * lives in exactly one place, then re-enforces client deactivation — matching the live request path
+ * in validator.php. A token validates only when it is active, unexpired, AND its owning client has
+ * not been deactivated; so disabling a compromised client invalidates its live access tokens here
+ * too, not just on the REST path.
  *
  * @param string $raw The raw access token presented by the client.
- * @return int|false The wp_user_id on success, or false when expired, inactive, or unknown.
+ * @return int|false The wp_user_id on success, or false when expired, inactive, deactivated, or unknown.
  */
 function aafm_oauth_validate_access_token( string $raw ) {
-	global $wpdb;
-	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
-	$now   = gmdate( 'Y-m-d H:i:s', time() );
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$user_id = $wpdb->get_var(
-		$wpdb->prepare(
-			// Keep this WHERE clause in sync with aafm_oauth_get_access_token_row() in validator.php — the two must never disagree on the active/unexpired predicate.
-			'SELECT wp_user_id FROM %i
-			 WHERE token_hash = %s
-			   AND is_active = 1
-			   AND expires_at > %s',
-			$table,
-			hash( 'sha256', $raw ),
-			$now
-		)
-	);
-
-	if ( null === $user_id ) {
+	$row = aafm_oauth_get_access_token_row( $raw );
+	if ( null === $row ) {
 		return false;
 	}
 
-	return (int) $user_id;
+	// Re-enforce client deactivation: a token already in a client's hands keeps working unless its
+	// owning client is re-checked, so a deactivated client's live tokens must stop validating.
+	if ( aafm_oauth_client_is_deactivated( (string) ( $row['client_id'] ?? '' ) ) ) {
+		return false;
+	}
+
+	return (int) $row['wp_user_id'];
 }
 
 /**

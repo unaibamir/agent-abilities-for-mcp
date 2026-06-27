@@ -230,8 +230,11 @@ function aafm_query_activity( array $args ): array {
 	$params[] = $per_page;
 	$params[] = $offset;
 
-	// Bind the table identifier via the leading %i placeholder. The %s fragments in
-	// {$where} are still interpolated literals (no variables), so its ignores stay.
+	// Bind the table identifier via the leading %i placeholder, so it is the first arg to
+	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders — their values
+	// (status, ability) were pushed onto $params above and are substituted by prepare(), never
+	// interpolated literals. The only interpolation into the SQL string is the static {$where}
+	// scaffolding (the "1=1 AND status = %s …" shape), which carries no user input.
 	array_unshift( $params, $table );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared

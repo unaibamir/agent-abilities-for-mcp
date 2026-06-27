@@ -303,8 +303,10 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 			'client_id'                  => $result['client_id'],
 			'client_name'                => $result['client_name'],
 			'redirect_uris'              => $result['redirect_uris'],
-			'grant_types'                => $grant_types,
-			'response_types'             => $response_types,
+			// Echo the FILTERED grant/response types the server actually registered (only the
+			// supported set), not the raw client-supplied values.
+			'grant_types'                => $result['grant_types'],
+			'response_types'             => $result['response_types'],
 			'token_endpoint_auth_method' => 'none',
 		),
 		201

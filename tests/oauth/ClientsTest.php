@@ -64,6 +64,50 @@ class ClientsTest extends TestCase {
 	}
 
 	/**
+	 * Only authorization_code+refresh_token and the `code` response type are implemented, so
+	 * unknown client-supplied grant_types/response_types must be filtered out at registration —
+	 * not stored or echoed back. The return value and the stored row both carry the filtered set.
+	 */
+	public function test_filters_unknown_grant_and_response_types(): void {
+		aafm_install_oauth_tables();
+
+		$res = aafm_oauth_register_client(
+			array(
+				'redirect_uris'  => array( 'https://app.example/cb' ),
+				'grant_types'    => array( 'authorization_code', 'client_credentials', 'password' ),
+				'response_types' => array( 'code', 'token', 'id_token' ),
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'authorization_code' ), $res['grant_types'], 'unknown grant types are filtered out.' );
+		$this->assertSame( array( 'code' ), $res['response_types'], 'unknown response types are filtered out.' );
+
+		$row = $this->fetch_client( $res['client_id'] );
+		$this->assertNotNull( $row );
+		$this->assertSame( array( 'authorization_code' ), json_decode( (string) $row['grant_types'], true ), 'the filtered set is what gets persisted.' );
+		$this->assertSame( array( 'code' ), json_decode( (string) $row['response_types'], true ) );
+	}
+
+	/**
+	 * When a client supplies ONLY unsupported grant types, registration falls back to the default
+	 * supported set rather than persisting an empty list.
+	 */
+	public function test_falls_back_to_default_grant_types_when_all_unsupported(): void {
+		aafm_install_oauth_tables();
+
+		$res = aafm_oauth_register_client(
+			array(
+				'redirect_uris' => array( 'https://app.example/cb' ),
+				'grant_types'   => array( 'client_credentials' ),
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( array( 'authorization_code', 'refresh_token' ), $res['grant_types'] );
+	}
+
+	/**
 	 * A plain http non-localhost redirect is rejected.
 	 */
 	public function test_rejects_insecure_redirect(): void {

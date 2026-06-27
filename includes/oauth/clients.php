@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  *     @type string[] $grant_types                Optional. Defaults to authorization_code + refresh_token.
  *     @type string[] $response_types             Optional. Defaults to code.
  * }
- * @return array{client_id:string,client_name:string,redirect_uris:string[]}|\WP_Error
+ * @return array{client_id:string,client_name:string,redirect_uris:string[],grant_types:string[],response_types:string[]}|\WP_Error
  */
 function aafm_oauth_register_client( array $req ) {
 	$redirect_uris = isset( $req['redirect_uris'] ) && is_array( $req['redirect_uris'] )
@@ -57,13 +57,28 @@ function aafm_oauth_register_client( array $req ) {
 		}
 	}
 
-	$client_name    = isset( $req['client_name'] ) ? sanitize_text_field( (string) $req['client_name'] ) : '';
-	$grant_types    = isset( $req['grant_types'] ) && is_array( $req['grant_types'] )
-		? array_values( array_map( 'sanitize_text_field', $req['grant_types'] ) )
-		: array( 'authorization_code', 'refresh_token' );
+	$client_name = isset( $req['client_name'] ) ? sanitize_text_field( (string) $req['client_name'] ) : '';
+
+	// Only authorization_code + refresh_token (and the `code` response type) are implemented, so
+	// filter any client-supplied grant_types/response_types down to that supported set rather than
+	// storing and echoing back arbitrary values. An empty result (the client asked for nothing we
+	// support) falls back to the default set.
+	$supported_grants    = array( 'authorization_code', 'refresh_token' );
+	$supported_responses = array( 'code' );
+
+	$grant_types = isset( $req['grant_types'] ) && is_array( $req['grant_types'] )
+		? array_values( array_intersect( array_map( 'sanitize_text_field', $req['grant_types'] ), $supported_grants ) )
+		: $supported_grants;
+	if ( empty( $grant_types ) ) {
+		$grant_types = $supported_grants;
+	}
+
 	$response_types = isset( $req['response_types'] ) && is_array( $req['response_types'] )
-		? array_values( array_map( 'sanitize_text_field', $req['response_types'] ) )
-		: array( 'code' );
+		? array_values( array_intersect( array_map( 'sanitize_text_field', $req['response_types'] ), $supported_responses ) )
+		: $supported_responses;
+	if ( empty( $response_types ) ) {
+		$response_types = $supported_responses;
+	}
 
 	$client_id = bin2hex( random_bytes( 16 ) );
 
@@ -91,9 +106,11 @@ function aafm_oauth_register_client( array $req ) {
 	}
 
 	return array(
-		'client_id'     => $client_id,
-		'client_name'   => $client_name,
-		'redirect_uris' => $redirect_uris,
+		'client_id'      => $client_id,
+		'client_name'    => $client_name,
+		'redirect_uris'  => $redirect_uris,
+		'grant_types'    => $grant_types,
+		'response_types' => $response_types,
 	);
 }
 

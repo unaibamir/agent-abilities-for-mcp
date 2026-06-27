@@ -97,6 +97,52 @@ final class IntegrationsTabTest extends TestCase {
 		);
 	}
 
+	public function test_active_card_shows_the_real_enabled_count(): void {
+		// Regression guard for the count header bug: the enabled tally was hardcoded to the literal
+		// 0, so an ACTIVE integration with abilities switched on still read "0 / N". Force WooCommerce
+		// active (the same seam production detection passes through), enable a known subset of its
+		// abilities, and assert the WooCommerce card header reports that real count — not "0 /".
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		// Flush so the live registry rebuilds WITH the WooCommerce rows: aafm_get_enabled_abilities()
+		// only honors enabled names that still exist in the live registry, so the WC abilities must be
+		// registered for the enabled subset to count.
+		aafm_registry_cache_should_flush( true );
+
+		// Enable a known subset of WooCommerce's abilities, derived from the manifest so the test is
+		// robust to the catalog growing. Three is enough to prove a NON-ZERO count distinct from total.
+		$wc             = aafm_integration_manifest()['woocommerce'];
+		$wc_names       = array_column( aafm_integration_ability_manifest()['woocommerce'], 'name' );
+		$enabled_subset = array_slice( $wc_names, 0, 3 );
+		$this->assertCount( 3, $enabled_subset, 'WooCommerce should expose at least three abilities to enable.' );
+		update_option( 'aafm_enabled_abilities', $enabled_subset );
+
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+
+		// Slice the WooCommerce card's own <summary> so the assertion can't match another card's count.
+		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
+		$this->assertNotFalse( $wc_open, 'The WooCommerce card should render.' );
+		$summary_open  = strpos( $html, '<summary class="aafm-card-head', $wc_open );
+		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
+		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
+
+		// The header reports the REAL enabled count (3), the total, and the read/write tallies — the
+		// exact format the fix produces. n is 3 (> 0), proving the count is computed, not the literal 0.
+		$this->assertStringContainsString(
+			sprintf( '3 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			$summary
+		);
+		// And it must NOT have regressed to the hardcoded "0 / <total>".
+		$this->assertStringNotContainsString(
+			sprintf( '0 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			$summary
+		);
+	}
+
 	public function test_inactive_card_still_renders_its_ability_rows_disabled(): void {
 		// The whole point of the descriptor: an inactive host shows every ability it WOULD expose,
 		// fully readable but disabled, so the operator can see what activating the plugin unlocks.

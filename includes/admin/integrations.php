@@ -172,6 +172,20 @@ function aafm_render_integrations_tab(): void {
 
 		$counts = aafm_integration_manifest()[ $slug ] ?? null;
 
+		// The ENABLED count is computed from the saved option, exactly like the Abilities tab:
+		// count how many of this integration's ability names the operator has turned on. Count
+		// against the same manifest set that backs the total/read/write tallies ($descriptor),
+		// so the enabled figure can never exceed the denominator shown beside it.
+		if ( null !== $counts ) {
+			$enabled_in_card = 0;
+			foreach ( $descriptor[ $slug ] ?? array() as $manifest_row ) {
+				if ( in_array( (string) $manifest_row['name'], $enabled, true ) ) {
+					++$enabled_in_card;
+				}
+			}
+			$counts['enabled'] = $enabled_in_card;
+		}
+
 		// The <summary> IS the card head: icon + label + status pill + count. A real <summary>
 		// toggles on click and on Enter/Space natively, so the accordion stays keyboard-accessible.
 		echo '<summary class="aafm-card-head">';
@@ -187,8 +201,9 @@ function aafm_render_integrations_tab(): void {
 				'<p class="aafm-integration-count">%s</p>',
 				esc_html(
 					sprintf(
-						/* translators: 1: total abilities, 2: read count, 3: write count. */
-						__( '0 / %1$d · %2$d read, %3$d write', 'agent-abilities-for-mcp' ),
+						/* translators: 1: enabled abilities, 2: total abilities, 3: read count, 4: write count. */
+						__( '%1$d / %2$d · %3$d read, %4$d write', 'agent-abilities-for-mcp' ),
+						(int) $counts['enabled'],
 						(int) $counts['total'],
 						(int) $counts['read'],
 						(int) $counts['write']

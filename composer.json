@@ -32,11 +32,6 @@
   "autoload": {
     "classmap": [ "includes/" ]
   },
-  "autoload-dev": {
-    "psr-4": {
-      "AAFM\\Tests\\": "tests/"
-    }
-  },
   "scripts": {
     "phpcs": "phpcs",
     "phpcbf": "phpcbf",

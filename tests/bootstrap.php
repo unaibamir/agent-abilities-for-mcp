@@ -7,6 +7,27 @@
 
 declare( strict_types=1 );
 
+// Autoload the AAFM\Tests\ helper/base classes (e.g. AAFM\Tests\TestCase). This used to be
+// served by Composer's autoload-dev map, but that map is intentionally absent from composer.json:
+// the bundled Jetpack autoloader unconditionally folds the root package's dev autoload into its
+// generated classmap, which leaked the test classes — and tests/phpstan-stubs.php's global
+// shims (WC_Payment_Gateways, ACF, …) — into the shipped jetpack_autoload_classmap.php. A
+// self-contained PSR-4 autoloader here keeps the suite working without that coupling.
+spl_autoload_register(
+	static function ( string $class_name ): void {
+		$prefix = 'AAFM\\Tests\\';
+		if ( 0 !== strncmp( $class_name, $prefix, strlen( $prefix ) ) ) {
+			return;
+		}
+
+		$relative = substr( $class_name, strlen( $prefix ) );
+		$file     = __DIR__ . '/' . str_replace( '\\', '/', $relative ) . '.php';
+		if ( is_readable( $file ) ) {
+			require_once $file;
+		}
+	}
+);
+
 $_tests_dir = getenv( 'WP_TESTS_DIR' ) ?: '/tmp/wordpress-tests-lib';
 
 require_once $_tests_dir . '/includes/functions.php';

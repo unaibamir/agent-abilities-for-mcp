@@ -85,11 +85,9 @@ function aafm_mcp_protocol_version(): string {
 function aafm_activity_count(): int {
 	global $wpdb;
 	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
-	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table = esc_sql( aafm_activity_log_table() );
-
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	// never user input; the %i identifier placeholder passes it through $wpdb->prepare().
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', aafm_activity_log_table() ) );
 
 	return max( 0, (int) $count );
 }
@@ -107,13 +105,11 @@ function aafm_activity_count(): int {
  */
 function aafm_recent_agent_count(): int {
 	global $wpdb;
-	// The table name is an internal constant ($wpdb->prefix . 'aafm_activity_log'),
-	// never user input; esc_sql() makes that explicit for the static analyzers.
-	$table  = esc_sql( aafm_activity_log_table() );
+	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-	$count = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT principal_user_id) FROM {$table} WHERE created_at >= %s", $cutoff ) );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT principal_user_id) FROM %i WHERE created_at >= %s', $table, $cutoff ) );
 
 	return max( 0, (int) $count );
 }

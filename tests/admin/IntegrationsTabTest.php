@@ -31,8 +31,24 @@ final class IntegrationsTabTest extends TestCase {
 		// WooProductsTest defines a WooCommerce marker class process-wide (a class cannot be
 		// undefined), so once that suite has run real WC detection reports active. Pin the
 		// aafm_woocommerce_active seam off — the same seam production detection passes through — so
-		// the "Not installed" state stays deterministic regardless of test order.
+		// each pinned card's status stays deterministic regardless of test order.
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+
+		// Derive the status pill each pinned-off card should render from the real on-disk probe,
+		// under the same forced-inactive seams the render passes through — never hardcode
+		// "Not installed". This WP test install shares the developer's wp-content, so a host plugin
+		// file (e.g. wordpress-seo/wp-seo.php) can be physically present but inactive; that is the
+		// CORRECT "installed_inactive" → "Inactive" state. Asserting "Not installed" unconditionally
+		// would assert a false premise about this box (it would only hold on a clean install with no
+		// host plugin files), not a bug in the tab. Compute the expectation while the seams are
+		// still active so it matches what the render observes.
+		$expected_pills = array();
+		foreach ( array( 'yoast', 'rankmath', 'aioseo', 'woocommerce' ) as $slug ) {
+			$status = aafm_integration_status( $slug );
+			$this->assertNotSame( 'active', $status, "Forcing {$slug} inactive must defeat any leaked detection stub." );
+			$expected_pills[ 'not_installed' === $status ? 'Not installed' : 'Inactive' ] = true;
+		}
+
 		ob_start();
 		aafm_render_integrations_tab();
 		$html = (string) ob_get_clean();
@@ -48,8 +64,11 @@ final class IntegrationsTabTest extends TestCase {
 		}
 		// The security disclaimer appears in the header.
 		$this->assertStringContainsString( 'aafm-integrations-disclaimer', $html );
-		// Detected status: host plugins absent → "Not installed".
-		$this->assertStringContainsString( 'Not installed', $html );
+		// Detected status: each pinned-off card renders the status pill the box actually warrants
+		// ("Not installed" on a clean install, "Inactive" where the host file is present-but-off).
+		foreach ( array_keys( $expected_pills ) as $pill_label ) {
+			$this->assertStringContainsString( $pill_label, $html );
+		}
 		// Zero Dashicons (inline SVG only — the project icon rule).
 		$this->assertStringNotContainsString( 'dashicons', $html );
 	}
@@ -75,6 +94,52 @@ final class IntegrationsTabTest extends TestCase {
 		$this->assertStringContainsString(
 			sprintf( '0 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
 			$html
+		);
+	}
+
+	public function test_active_card_shows_the_real_enabled_count(): void {
+		// Regression guard for the count header bug: the enabled tally was hardcoded to the literal
+		// 0, so an ACTIVE integration with abilities switched on still read "0 / N". Force WooCommerce
+		// active (the same seam production detection passes through), enable a known subset of its
+		// abilities, and assert the WooCommerce card header reports that real count — not "0 /".
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		// Flush so the live registry rebuilds WITH the WooCommerce rows: aafm_get_enabled_abilities()
+		// only honors enabled names that still exist in the live registry, so the WC abilities must be
+		// registered for the enabled subset to count.
+		aafm_registry_cache_should_flush( true );
+
+		// Enable a known subset of WooCommerce's abilities, derived from the manifest so the test is
+		// robust to the catalog growing. Three is enough to prove a NON-ZERO count distinct from total.
+		$wc             = aafm_integration_manifest()['woocommerce'];
+		$wc_names       = array_column( aafm_integration_ability_manifest()['woocommerce'], 'name' );
+		$enabled_subset = array_slice( $wc_names, 0, 3 );
+		$this->assertCount( 3, $enabled_subset, 'WooCommerce should expose at least three abilities to enable.' );
+		update_option( 'aafm_enabled_abilities', $enabled_subset );
+
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		remove_filter( 'aafm_integration_active_woocommerce', '__return_true' );
+		aafm_registry_cache_should_flush( true );
+
+		// Slice the WooCommerce card's own <summary> so the assertion can't match another card's count.
+		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
+		$this->assertNotFalse( $wc_open, 'The WooCommerce card should render.' );
+		$summary_open  = strpos( $html, '<summary class="aafm-card-head', $wc_open );
+		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
+		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
+
+		// The header reports the REAL enabled count (3), the total, and the read/write tallies — the
+		// exact format the fix produces. n is 3 (> 0), proving the count is computed, not the literal 0.
+		$this->assertStringContainsString(
+			sprintf( '3 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			$summary
+		);
+		// And it must NOT have regressed to the hardcoded "0 / <total>".
+		$this->assertStringNotContainsString(
+			sprintf( '0 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			$summary
 		);
 	}
 
@@ -105,17 +170,43 @@ final class IntegrationsTabTest extends TestCase {
 	}
 
 	public function test_status_helper_reports_not_installed_when_host_files_absent(): void {
-		// Neither Yoast nor WooCommerce ships its host file in this WP install, and neither is
-		// active, so each reports not_installed. The SEO slices' stubs define the detection markers
-		// (WPSEO_VERSION etc.) process-wide, so pin the Yoast seam off to keep this status
-		// deterministic regardless of test order.
+		// not_installed is the file-driven branch: with the host inactive AND no candidate host file
+		// under WP_PLUGIN_DIR, the helper reports not_installed. Force each active seam off — the same
+		// seam production detection passes through — so a leaked in-process stub can never flip
+		// detection back to 'active' and mask this branch: the SEO slices define WPSEO_VERSION etc.
+		// process-wide and WooProductsTest defines a WC marker class, and neither can be undefined.
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
-		// WooProductsTest defines a WooCommerce marker class process-wide, so pin the WC seam off too
-		// (the same seam production detection passes through) to keep the not_installed status
-		// deterministic regardless of test order.
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertSame( 'not_installed', aafm_integration_status( 'woocommerce' ) );
-		$this->assertSame( 'not_installed', aafm_integration_status( 'yoast' ) );
+
+		// The expected status is derived from the real on-disk probe, never hardcoded: this WP test
+		// install shares the developer's wp-content, so it can physically carry an INACTIVE copy of a
+		// host plugin (e.g. wordpress-seo/wp-seo.php is present here). When the file is present,
+		// installed_inactive is the CORRECT answer — hardcoding not_installed there would assert a
+		// false premise about the environment, not a bug in the helper.
+		foreach ( array( 'woocommerce', 'yoast' ) as $slug ) {
+			$present = false;
+			foreach ( aafm_integration_cards()[ $slug ]['plugins'] as $file ) {
+				if ( aafm_integration_plugin_file_exists( $file ) ) {
+					$present = true;
+					break;
+				}
+			}
+			$status = aafm_integration_status( $slug );
+			// With the active seam forced off the status is file-driven, never 'active' — this is the
+			// leaked-stub regression this test guards against.
+			$this->assertNotSame( 'active', $status, "Forcing {$slug} inactive must defeat any leaked detection stub." );
+			$this->assertSame(
+				$present ? 'installed_inactive' : 'not_installed',
+				$status,
+				"The {$slug} status must follow on-disk host-file presence when the host is inactive."
+			);
+		}
+
+		// Anchor the not_installed branch deterministically, independent of which host plugins happen
+		// to be physically installed: an unknown slug has no candidate host files, the degenerate case
+		// of "all candidate files absent", so it must always report not_installed.
+		$this->assertSame( 'not_installed', aafm_integration_status( 'aafm-no-such-integration' ) );
+
 		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 	}

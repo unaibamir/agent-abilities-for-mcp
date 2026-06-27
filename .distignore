@@ -32,7 +32,7 @@
 # Dev-only Composer dependencies. The release build runs `composer install --no-dev`,
 # so these are normally absent when the tree is deployed; listed here as a backstop in
 # case a dev install is ever staged for the build. The runtime deps that DO ship live in
-# vendor/automattic, vendor/wordpress, vendor/jetpack-autoloader, and vendor/composer.
+# vendor/wordpress and vendor/composer.
 /vendor/bin
 /vendor/dealerdirect
 /vendor/doctrine

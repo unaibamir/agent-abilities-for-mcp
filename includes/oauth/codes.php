@@ -98,14 +98,14 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; all values are bound.
-			"UPDATE {$table}
+			'UPDATE %i
 			 SET used_at = %s
 			 WHERE code_hash = %s
 			   AND used_at IS NULL
 			   AND expires_at > %s
 			   AND client_id = %s
-			   AND redirect_uri = %s",
+			   AND redirect_uri = %s',
+			$table,
 			$used_at,
 			$hash,
 			$now,
@@ -124,8 +124,8 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant.
-			"SELECT * FROM {$table} WHERE code_hash = %s",
+			'SELECT * FROM %i WHERE code_hash = %s',
+			$table,
 			$hash
 		),
 		ARRAY_A
@@ -158,8 +158,8 @@ function aafm_oauth_revoke_client_codes( string $client_id ): int {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	return (int) $wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; the value is bound.
-			"DELETE FROM {$table} WHERE client_id = %s",
+			'DELETE FROM %i WHERE client_id = %s',
+			$table,
 			$client_id
 		)
 	);
@@ -182,8 +182,8 @@ function aafm_oauth_revoke_user_client_codes( int $user_id, string $client_id ):
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	return (int) $wpdb->query(
 		$wpdb->prepare(
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is an internal constant; values are bound.
-			"DELETE FROM {$table} WHERE wp_user_id = %d AND client_id = %s",
+			'DELETE FROM %i WHERE wp_user_id = %d AND client_id = %s',
+			$table,
 			$user_id,
 			$client_id
 		)

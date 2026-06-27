@@ -171,7 +171,7 @@ add_action( 'init', 'aafm_oauth_handle_authorize' );
  * @return void
  */
 function aafm_bootstrap() {
-	require_once AAFM_PLUGIN_DIR . 'vendor/autoload_packages.php';
+	require_once AAFM_PLUGIN_DIR . 'vendor/autoload.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/helpers.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';

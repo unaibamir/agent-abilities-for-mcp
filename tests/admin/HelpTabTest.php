@@ -124,7 +124,11 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'No external calls', $html );
 		$this->assertStringContainsString( 'dedicated low-privilege user', $html );
 		$this->assertStringContainsString( 'Two locks on every ability', $html );
-		$this->assertStringContainsString( 'trash, not destroy', $html );
+		// The trash-vs-delete distinction: trash is recoverable, delete (and every media/user
+		// removal) is permanent. The copy was reworded to draw this line explicitly.
+		$this->assertStringContainsString( 'Trash and permanent delete are different abilities.', $html );
+		$this->assertStringContainsString( 'where you can restore it', $html );
+		$this->assertStringContainsString( 'every media or user deletion, is permanent', $html );
 		$this->assertStringContainsString( 'argument KEYS only', $html );
 	}
 

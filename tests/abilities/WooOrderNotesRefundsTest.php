@@ -455,6 +455,59 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( $reason, $res['reason'], 'Refund reason must be returned verbatim (PII-adjacent, under disclaimer).' );
 	}
 
+	/**
+	 * The per-line refund_total/refund_tax are only `type: string` in the schema (no non-negative
+	 * pattern), so a malformed amount can reach execute. A negative line amount must be rejected
+	 * BEFORE wc_create_refund() is ever called.
+	 */
+	public function test_create_order_refund_rejects_negative_line_amount(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 1,
+						'refund_total' => '-5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a negative per-line refund_total must be rejected.' );
+		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must not run on a bad refund amount.' );
+	}
+
+	/**
+	 * A non-numeric per-line refund amount must likewise be rejected before wc_create_refund().
+	 */
+	public function test_create_order_refund_rejects_non_numeric_line_amount(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 1,
+						'refund_total' => '0.00',
+						'refund_tax'   => 'not-a-number',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a non-numeric per-line refund_tax must be rejected.' );
+		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must not run on a bad refund amount.' );
+	}
+
 	public function test_create_order_refund_unknown_order_returns_error(): void {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
@@ -756,5 +809,207 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( 802, $res['id'] );
 		$this->assertSame( '6.50', $res['amount'] );
 		$this->assertSame( 'Second refund delta.', $res['reason'] );
+	}
+
+	// =========================================================================
+	// Per-line refund_tax distribution across tax rates
+	// =========================================================================
+
+	/**
+	 * Seed an order whose single line item carries the given tax map, and return the line item id.
+	 *
+	 * The tax map is keyed by rate id => tax amount string, mirroring what
+	 * WC_Order_Item::get_taxes()['total'] returns in real WooCommerce.
+	 *
+	 * @param int               $order_id     Order id to seed.
+	 * @param int               $line_item_id Line item id the refund will target.
+	 * @param array<int,string> $rate_totals  Map of tax rate id => line tax amount string.
+	 * @return void
+	 */
+	private function seed_order_with_taxed_line_item( int $order_id, int $line_item_id, array $rate_totals ): void {
+		WcOrderStubStore::seed(
+			$order_id,
+			array(
+				'status' => 'processing',
+				'items'  => array(
+					array(
+						'id'         => $line_item_id,
+						'name'       => 'Taxed Widget',
+						'product_id' => 101,
+						'quantity'   => 1,
+						'subtotal'   => '40.00',
+						'total'      => '40.00',
+						'taxes'      => array( 'total' => $rate_totals ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * A line item taxed under several rates gets its refund_tax split proportionally to each rate's
+	 * share of the line tax, with the rounding remainder assigned to the largest-share rate. The
+	 * parts must sum back to exactly the requested refund_tax.
+	 */
+	public function test_create_order_refund_distributes_tax_proportionally_across_rates(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		// Line tax of 8.00 split 6.00 (rate 5) + 2.00 (rate 8); refund 4.00 of tax.
+		$this->seed_order_with_taxed_line_item(
+			6001,
+			10,
+			array(
+				5 => '6.00',
+				8 => '2.00',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 6001,
+				'amount'     => '40.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 10,
+						'refund_total' => '40.00',
+						'refund_tax'   => '4.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$line_items = WcOrderStubStore::$last_refund_args['line_items'] ?? array();
+		$this->assertArrayHasKey( 10, $line_items, 'Refund must carry the targeted line item keyed by its id.' );
+		$this->assertArrayHasKey( 'refund_tax', $line_items[10], 'A taxed line must emit a refund_tax map.' );
+
+		$refund_tax = $line_items[10]['refund_tax'];
+		// rate 8 is 2.00 / 8.00 = 25% of 4.00 = 1.00; rate 5 (largest share) absorbs the rest = 3.00.
+		$this->assertSame( '1.00', $refund_tax[8], 'The 25%-share rate gets a proportional 1.00.' );
+		$this->assertSame( '3.00', $refund_tax[5], 'The largest-share rate gets the remaining 3.00.' );
+		// The distributed parts reconcile exactly to the requested refund_tax.
+		$this->assertSame( 4.0, array_sum( array_map( 'floatval', $refund_tax ) ) );
+	}
+
+	/**
+	 * A single-rate line gets the full requested refund_tax on that one rate.
+	 */
+	public function test_create_order_refund_single_rate_gets_full_amount(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		$this->seed_order_with_taxed_line_item( 6002, 20, array( 7 => '5.00' ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 6002,
+				'amount'     => '40.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 20,
+						'refund_total' => '40.00',
+						'refund_tax'   => '2.50',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$refund_tax = WcOrderStubStore::$last_refund_args['line_items'][20]['refund_tax'] ?? array();
+		$this->assertSame( array( 7 => '2.50' ), $refund_tax, 'A single-rate line takes the whole requested refund_tax.' );
+	}
+
+	/**
+	 * A line whose total tax is zero emits no refund_tax key (avoids dividing by zero / a bogus map).
+	 */
+	public function test_create_order_refund_zero_line_tax_emits_no_refund_tax(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		// A rate row exists but the line tax is 0.00 — there is nothing to distribute.
+		$this->seed_order_with_taxed_line_item( 6003, 30, array( 9 => '0.00' ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 6003,
+				'amount'     => '40.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 30,
+						'refund_total' => '40.00',
+						'refund_tax'   => '1.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$line = WcOrderStubStore::$last_refund_args['line_items'][30] ?? array();
+		$this->assertArrayHasKey( 'refund_total', $line );
+		$this->assertArrayNotHasKey( 'refund_tax', $line, 'A zero-tax line must not emit a refund_tax map.' );
+	}
+
+	/**
+	 * Regression: many equal rates with a small refund_tax must never produce a negative part.
+	 *
+	 * With six EQUAL rates and a 0.04 refund_tax, naive per-rate rounding rounds five shares up to
+	 * 0.01 (sum 0.05) and leaves the balancing rate at round(0.04 - 0.05, 2) = -0.01 — a negative
+	 * refund_tax WooCommerce can reject. The integer-unit largest-remainder allocation must keep
+	 * every part >= 0 and reconcile the parts to exactly the requested refund_tax.
+	 */
+	public function test_create_order_refund_tax_distribution_never_negative_and_sums_exactly(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		$this->seed_order_with_taxed_line_item(
+			6004,
+			40,
+			array(
+				11 => '1.00',
+				12 => '1.00',
+				13 => '1.00',
+				14 => '1.00',
+				15 => '1.00',
+				16 => '1.00',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 6004,
+				'amount'     => '40.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 40,
+						'refund_total' => '40.00',
+						'refund_tax'   => '0.04',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$refund_tax = WcOrderStubStore::$last_refund_args['line_items'][40]['refund_tax'] ?? array();
+		$this->assertNotEmpty( $refund_tax, 'A taxed line must emit a refund_tax map.' );
+
+		// (a) No allocated part is negative.
+		foreach ( $refund_tax as $rate_id => $amount ) {
+			$this->assertGreaterThanOrEqual( 0.0, (float) $amount, "rate {$rate_id} must not be negative." );
+		}
+
+		// (b) The parts reconcile to exactly the requested refund_tax.
+		$this->assertSame( 0.04, round( array_sum( array_map( 'floatval', $refund_tax ) ), 2 ) );
+
+		// (c) The map is keyed by the real tax rate ids supplied on the line.
+		$this->assertSame(
+			array( 11, 12, 13, 14, 15, 16 ),
+			array_keys( $refund_tax ),
+			'refund_tax must be keyed by the real tax rate ids.'
+		);
 	}
 }

@@ -199,22 +199,33 @@ function aafm_exec_get_comments( array $input ): array {
 		);
 	}
 
-	// total is the count for the same status+post filter, BEFORE the site-wide visibility
-	// post-filter above. For a post-scoped query (post_id given) the post is already gated, so
-	// total is exact; for the whole-site unprivileged listing it counts approved comments and
-	// may exceed the visible rows. The post-scoped case is the common one and pages correctly.
-	$total = (int) get_comments(
-		array(
-			'post_id' => $post_id,
-			'status'  => 'approve',
-			'count'   => true,
-		)
+	$result = array(
+		'comments' => aafm_redact_comments( $comments ),
 	);
 
-	return array(
-		'comments' => aafm_redact_comments( $comments ),
-		'total'    => $total,
-	);
+	// `total` is the count for the same status+post filter, computed in the DB BEFORE the
+	// site-wide visibility post-filter above. It is only safe to expose when it already
+	// matches what the caller may see:
+	// - a post-scoped query (post_id given) is gated by the permission callback, so the
+	// count is exact for that post; and
+	// - a moderate_comments caller sees every comment anyway.
+	// For the whole-site UNPRIVILEGED listing the DB count includes approved comments on
+	// hidden/private/password-protected posts the caller cannot read, so reporting it would
+	// leak the existence and volume of comments on content they have no access to. Recomputing
+	// an exact post-filtered total would mean loading every approved comment site-wide (a
+	// performance/DoS concern), so `total` is simply omitted for that branch — it is optional
+	// in the output schema.
+	if ( $post_id > 0 || current_user_can( 'moderate_comments' ) ) {
+		$result['total'] = (int) get_comments(
+			array(
+				'post_id' => $post_id,
+				'status'  => 'approve',
+				'count'   => true,
+			)
+		);
+	}
+
+	return $result;
 }
 
 /**

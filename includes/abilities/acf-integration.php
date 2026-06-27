@@ -508,8 +508,12 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
  * @return bool
  */
 function aafm_perm_acf_post( array $input ): bool {
-	$id = absint( $input['post_id'] ?? 0 );
-	return $id > 0 && get_post( $id ) instanceof WP_Post && current_user_can( 'edit_post', $id );
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = $id > 0 ? get_post( $id ) : null;
+	// Delegate to the shared content-edit gate (not a bare edit_post): it enforces the operator's
+	// post-type exposure allowlist AND the map_meta_cap===true fail-open guard, so ACF fields on a
+	// non-exposed or non-mapped type are refused exactly as the core content writes are.
+	return $post instanceof WP_Post && aafm_can_edit_post_object( $post );
 }
 
 /**

@@ -414,7 +414,7 @@ function aafm_render_settings_tab(): void {
 	echo '<section class="aafm-section aafm-card aafm-danger">';
 	echo '<div class="aafm-card-head">';
 	echo '<span class="aafm-card-head-ic">';
-	echo aafm_icon( 'warning' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'warning' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">' . esc_html__( 'Danger zone', 'agent-abilities-for-mcp' ) . '</h3></div>';
 	echo '</div>';

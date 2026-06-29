@@ -57,7 +57,7 @@ function aafm_get_notice_html( string $variant, string $message, array $args = a
 		'<div class="aafm-notice aafm-notice-%1$s%2$s"><span class="aafm-notice-ic">%3$s</span><div class="aafm-notice-body">%4$s</div></div>',
 		esc_attr( $variant ),
 		esc_attr( $inline ),
-		aafm_icon( $icon_name ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		wp_kses( aafm_icon( $icon_name ), aafm_svg_allowed_html() ),
 		$body
 	);
 }
@@ -71,5 +71,5 @@ function aafm_get_notice_html( string $variant, string $message, array $args = a
  * @return void
  */
 function aafm_render_notice( string $variant, string $message, array $args = array() ): void {
-	echo aafm_get_notice_html( $variant, $message, $args ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped inside the helper.
+	echo wp_kses( aafm_get_notice_html( $variant, $message, $args ), aafm_admin_allowed_html() );
 }

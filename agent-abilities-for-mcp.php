@@ -160,6 +160,10 @@ add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
 // into a hard auth failure on unrelated REST routes.
 add_filter( 'rest_authentication_errors', 'aafm_oauth_rest_authentication_errors', 5 );
 
+// wp_kses allowlist helpers — loaded unconditionally so they are available to the
+// OAuth consent page (rendered on the front end, before aafm_bootstrap()).
+require_once AAFM_PLUGIN_DIR . 'includes/admin/kses.php';
+
 // Authorization endpoint + consent screen: served off init at ?aafm_oauth=authorize.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/authorize.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/consent-template.php';

@@ -56,13 +56,16 @@ function aafm_render_section( array $args ): void {
 			? ''
 			: sprintf( ' <span class="aafm-count-badge">%s</span>', esc_html( $badge ) );
 
-		printf(
-			'<details class="aafm-section aafm-section--collapsible"%1$s%2$s><summary>%3$s%4$s</summary><div class="aafm-section-body">%5$s</div></details>',
-			$id_attr, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr'd above.
-			esc_attr( $open_attr ),
-			esc_html( $title ),
-			$badge_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
-			$body // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by the caller (leaf-escape convention).
+		echo wp_kses(
+			sprintf(
+				'<details class="aafm-section aafm-section--collapsible"%1$s%2$s><summary>%3$s%4$s</summary><div class="aafm-section-body">%5$s</div></details>',
+				$id_attr,
+				esc_attr( $open_attr ),
+				esc_html( $title ),
+				$badge_html,
+				$body
+			),
+			aafm_admin_allowed_html()
 		);
 		return;
 	}
@@ -74,14 +77,17 @@ function aafm_render_section( array $args ): void {
 		? ''
 		: sprintf( '<p class="aafm-card-head-desc">%s</p>', esc_html( $description ) );
 
-	printf(
-		'<section class="aafm-section aafm-card"%1$s><div class="aafm-card-head">%2$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%3$s</h3>%4$s</div>%5$s</div><div class="aafm-card-pad aafm-section-body">%6$s</div></section>',
-		$id_attr, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_attr'd above.
-		$icon_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG from aafm_icon().
-		esc_html( $title ),
-		$desc_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
-		$pill, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-built pill HTML, escaped by the caller.
-		$body // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-escaped by the caller (leaf-escape convention).
+	echo wp_kses(
+		sprintf(
+			'<section class="aafm-section aafm-card"%1$s><div class="aafm-card-head">%2$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%3$s</h3>%4$s</div>%5$s</div><div class="aafm-card-pad aafm-section-body">%6$s</div></section>',
+			$id_attr,
+			$icon_html,
+			esc_html( $title ),
+			$desc_html,
+			$pill,
+			$body
+		),
+		aafm_admin_allowed_html()
 	);
 }
 
@@ -113,11 +119,14 @@ function aafm_render_set_row( array $args ): void {
 		? ''
 		: sprintf( '<p class="help">%s</p>', esc_html( $help ) );
 
-	printf(
-		'<div class="aafm-set-row"><div class="aafm-set-label">%1$s%2$s</div><div class="aafm-set-control">%3$s%4$s</div></div>',
-		esc_html( $label ),
-		$opt_html, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
-		$control, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-built control HTML, escaped by the caller.
-		$help_html // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- esc_html'd above.
+	echo wp_kses(
+		sprintf(
+			'<div class="aafm-set-row"><div class="aafm-set-label">%1$s%2$s</div><div class="aafm-set-control">%3$s%4$s</div></div>',
+			esc_html( $label ),
+			$opt_html,
+			$control,
+			$help_html
+		),
+		aafm_admin_allowed_html()
 	);
 }

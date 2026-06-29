@@ -5,8 +5,8 @@
  * Each icon is a static literal copied verbatim from the approved design mockups
  * (.claude/design-mockups/*). They replace core Dashicons in admin output so the
  * rendered UI is a pixel-faithful match for the mockups. Every returned string is
- * a constant — there is no dynamic data in it — so callers echo it through the
- * existing phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped pattern.
+ * a constant — there is no dynamic data in it. Callers wrap the return value with
+ * wp_kses( aafm_icon( … ), aafm_svg_allowed_html() ) at the echo site.
  *
  * @package AgentAbilitiesForMCP
  */

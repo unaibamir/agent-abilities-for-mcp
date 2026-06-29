@@ -755,20 +755,23 @@ function aafm_render_admin_page(): void {
 
 	echo '<nav class="nav-tab-wrapper">';
 	foreach ( $tabs as $slug => $label ) {
-		printf(
-			'<a href="%s" class="nav-tab %s">%s %s</a>',
-			esc_url(
-				add_query_arg(
-					array(
-						'page' => 'agent-abilities-for-mcp',
-						'tab'  => $slug,
-					),
-					admin_url( 'admin.php' )
-				)
+		echo wp_kses(
+			sprintf(
+				'<a href="%s" class="nav-tab %s">%s %s</a>',
+				esc_url(
+					add_query_arg(
+						array(
+							'page' => 'agent-abilities-for-mcp',
+							'tab'  => $slug,
+						),
+						admin_url( 'admin.php' )
+					)
+				),
+				esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
+				aafm_icon( $slug ),
+				esc_html( $label )
 			),
-			esc_attr( $active === $slug ? 'nav-tab-active' : '' ),
-			aafm_icon( $slug ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-			esc_html( $label )
+			aafm_admin_allowed_html()
 		);
 	}
 	echo '</nav>';
@@ -934,7 +937,7 @@ function aafm_render_abilities_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Total abilities', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'abilities' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'abilities' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $ability_total ) ) );
@@ -943,7 +946,7 @@ function aafm_render_abilities_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Enabled', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf(
@@ -1573,7 +1576,7 @@ function aafm_render_activity_tab(): void {
 	echo '<th>' . esc_html__( 'Arg keys', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '</tr></thead><tbody>';
 
-	echo aafm_activity_rows_html( $rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- each cell is escaped inside the helper.
+	echo wp_kses( aafm_activity_rows_html( $rows ), aafm_admin_allowed_html() );
 
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
@@ -1676,9 +1679,9 @@ function aafm_activity_rows_html( array $rows ): string {
  */
 function aafm_render_help_entry( string $summary, string $body ): void {
 	echo '<details class="aafm-help-entry"><summary>';
-	echo aafm_icon( 'help' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'help' ), aafm_svg_allowed_html() );
 	echo esc_html( $summary ) . '</summary><div class="aafm-help-body">';
-	echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $body is built locally and run through wp_kses by the caller.
+	echo wp_kses( $body, aafm_admin_allowed_html() );
 	echo '</div></details>';
 }
 

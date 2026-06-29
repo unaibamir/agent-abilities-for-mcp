@@ -218,7 +218,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<summary class="aafm-setup-top">';
 	if ( $is_complete ) {
 		echo '<span class="aafm-setup-ic" aria-hidden="true">';
-		echo aafm_icon( 'success' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		echo wp_kses( aafm_icon( 'success' ), aafm_svg_allowed_html() );
 		echo '</span>';
 		echo '<h2>' . esc_html__( 'Setup complete, steps below', 'agent-abilities-for-mcp' ) . '</h2>';
 	} else {
@@ -271,7 +271,7 @@ function aafm_render_dashboard_tab(): void {
 		printf( '<div class="aafm-step %s">', esc_attr( $state_cls ) );
 		if ( $is_done ) {
 			echo '<span class="aafm-sidx">';
-			echo aafm_icon( 'check' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			echo wp_kses( aafm_icon( 'check' ), aafm_svg_allowed_html() );
 			echo '</span>';
 		} else {
 			printf( '<span class="aafm-sidx">%s</span>', esc_html( (string) $step_num ) );
@@ -281,11 +281,14 @@ function aafm_render_dashboard_tab(): void {
 		printf( '<p>%s</p>', esc_html( (string) $step['desc'] ) );
 		// The active step gets a primary CTA with a trailing arrow; other to-do steps don't.
 		if ( 'aafm-step-active' === $state_cls ) {
-			printf(
-				'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
-				esc_url( (string) $step['href'] ),
-				esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
-				aafm_icon( 'arrow-right' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+			echo wp_kses(
+				sprintf(
+					'<p class="aafm-step-act"><a class="aafm-btn aafm-btn-primary aafm-btn-sm" href="%1$s">%2$s %3$s</a></p>',
+					esc_url( (string) $step['href'] ),
+					esc_html__( 'Go to step', 'agent-abilities-for-mcp' ),
+					aafm_icon( 'arrow-right' )
+				),
+				aafm_admin_allowed_html()
 			);
 		}
 		echo '</div>';
@@ -308,7 +311,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Enabled abilities', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'bolt' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf(
@@ -344,7 +347,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Recent agents (24h)', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'recent' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'recent' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $recent ) ) );
@@ -356,7 +359,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Audit log', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'audit' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'audit' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf(
@@ -387,7 +390,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
 	echo '<span class="stat-ic">';
-	echo aafm_icon( 'groups' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'groups' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
 	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( count( $candidates ) ) ) );
@@ -420,7 +423,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<section class="aafm-card aafm-card-endpoint">';
 	echo '<div class="aafm-card-head">';
 	echo '<span class="icon">';
-	echo aafm_icon( 'endpoint' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'endpoint' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '<h2>' . esc_html__( 'MCP endpoint', 'agent-abilities-for-mcp' ) . '</h2>';
 	// Permalink-mode info pill on the right, like the mockup.
@@ -434,12 +437,15 @@ function aafm_render_dashboard_tab(): void {
 	);
 	echo '</div>';
 	echo '<div class="aafm-card-pad">';
-	printf(
-		'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
-		esc_html( $endpoint ),
-		esc_attr( $endpoint ),
-		aafm_icon( 'copy' ), // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
-		esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+	echo wp_kses(
+		sprintf(
+			'<div class="aafm-field-mono"><code class="aafm-endpoint">%1$s</code> <button type="button" class="aafm-btn aafm-btn-secondary aafm-copy" data-copy="%2$s">%3$s<span class="aafm-copy-label">%4$s</span></button></div>',
+			esc_html( $endpoint ),
+			esc_attr( $endpoint ),
+			aafm_icon( 'copy' ),
+			esc_html__( 'Copy', 'agent-abilities-for-mcp' )
+		),
+		aafm_admin_allowed_html()
 	);
 	echo '<p class="description">' . esc_html__( 'Point your MCP client here. The Connection tab builds the full client config for you.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
@@ -449,7 +455,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '<section class="aafm-card aafm-card-versions">';
 	echo '<div class="aafm-card-head">';
 	echo '<span class="icon">';
-	echo aafm_icon( 'clock' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+	echo wp_kses( aafm_icon( 'clock' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '<h2>' . esc_html__( 'Versions', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '</div>';

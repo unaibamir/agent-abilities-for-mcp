@@ -80,12 +80,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 		? $view['hidden_inputs']
 		: array();
 
-	$lang       = esc_attr( get_bloginfo( 'language' ) );
-	$initials   = esc_html( aafm_oauth_site_initials( $site_name ) );
 	$plain_site = esc_html( $site_name );
-
-	/* translators: 1: client/app name, 2: site name. */
-	$title = esc_html( sprintf( __( 'Authorize %1$s · %2$s', 'agent-abilities-for-mcp' ), $client_name, $site_name ) );
 
 	/*
 	 * Headline, safe-by-construction: the client name is the only untrusted input and is
@@ -145,12 +140,13 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	);
 
 	echo '<!DOCTYPE html>';
-	echo '<html lang="' . $lang . '">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+	echo '<html lang="' . esc_attr( get_bloginfo( 'language' ) ) . '">';
 	echo '<head>';
 	echo '<meta charset="utf-8">';
 	echo '<meta name="viewport" content="width=device-width, initial-scale=1">';
 	echo '<meta name="referrer" content="no-referrer">';
-	echo '<title>' . $title . '</title>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $title is esc_html() above.
+	/* translators: 1: client/app name, 2: site name. */
+	echo '<title>' . esc_html( sprintf( __( 'Authorize %1$s · %2$s', 'agent-abilities-for-mcp' ), $client_name, $site_name ) ) . '</title>';
 	// Register and flush the consent stylesheet through the enqueue API. This page builds
 	// its own <head> and exits (no wp_head), so we print the queued handle here directly;
 	// the CSP allows style-src 'self' for the resulting same-origin <link>.
@@ -165,36 +161,36 @@ function aafm_oauth_render_consent_page( array $view ): void {
 
 	// Header: logo, eyebrow, headline.
 	echo '<div class="card-head">';
-	echo $mark_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG markup.
+	echo wp_kses( $mark_svg, aafm_svg_allowed_html() );
 	echo '<p class="eyebrow">' . esc_html__( 'Authorize connection', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '<h1>' . $headline . '</h1>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $headline pre-escaped by construction.
+	echo '<h1>' . wp_kses( $headline, aafm_admin_allowed_html() ) . '</h1>';
 	echo '</div>';
 
 	// Client -> site connect row (decorative; the names are stated in the headline + note).
 	echo '<div class="connect-row" aria-hidden="true">';
-	echo '<span class="avatar client">' . $client_glyph . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG.
-	echo '<span class="flow">' . $flow_svg . '<span>' . esc_html__( 'connect', 'agent-abilities-for-mcp' ) . '</span></span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
-	echo '<span class="avatar site">' . $initials . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- $initials esc_html() above.
+	echo '<span class="avatar client">' . wp_kses( $client_glyph, aafm_svg_allowed_html() ) . '</span>';
+	echo '<span class="flow">' . wp_kses( $flow_svg, aafm_svg_allowed_html() ) . '<span>' . esc_html__( 'connect', 'agent-abilities-for-mcp' ) . '</span></span>';
+	echo '<span class="avatar site">' . esc_html( aafm_oauth_site_initials( $site_name ) ) . '</span>';
 	echo '</div>';
 
 	// "Acting as" note.
-	echo '<div class="acting">' . $acting_icon . '<p>' . $acting . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + $acting pre-escaped by construction.
+	echo wp_kses( '<div class="acting">' . $acting_icon . '<p>' . $acting . '</p></div>', aafm_admin_allowed_html() );
 
 	// Governance guarantees.
 	echo '<div class="guarantees">';
 	echo '<h2>' . esc_html__( 'How this stays governed', 'agent-abilities-for-mcp' ) . '</h2>';
 	echo '<ul class="trust">';
 	foreach ( $guarantees as $row ) {
-		echo '<li>' . $tick_svg . '<span class="txt"><b>' . esc_html( $row[0] ) . '</b> ' . esc_html( $row[1] ) . '</span></li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped strings.
+		echo '<li>' . wp_kses( $tick_svg, aafm_admin_allowed_html() ) . '<span class="txt"><b>' . esc_html( $row[0] ) . '</b> ' . esc_html( $row[1] ) . '</span></li>';
 	}
 	echo '</ul>';
 	echo '</div>';
 
 	// Decision form: primary Approve, secondary Deny. One POST, both submit buttons.
 	echo '<form method="post" action="' . esc_url( $action_url ) . '">';
-	echo $nonce_field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-rendered nonce markup.
+	echo wp_kses( $nonce_field, aafm_admin_allowed_html() );
 	foreach ( $hidden_inputs as $input ) {
-		echo $input; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pre-rendered, attribute-escaped input.
+		echo wp_kses( $input, aafm_admin_allowed_html() );
 	}
 	printf(
 		'<button type="submit" name="aafm_oauth_decision" value="approve" class="aafm-btn aafm-btn-primary">%s</button>',
@@ -208,7 +204,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 
 	echo '</div>'; // .card
 
-	echo '<p class="foot">' . $shield_svg . esc_html__( 'Secured by Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label.
+	echo '<p class="foot">' . wp_kses( $shield_svg, aafm_svg_allowed_html() ) . esc_html__( 'Secured by Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '</main>';
 	echo '</body>';

@@ -121,9 +121,12 @@ function aafm_render_integrations_tab(): void {
 	echo '<p class="aafm-page-lede">' . esc_html__( 'Connect AI agents to the plugins you already run. An integration\'s abilities show up here only while its plugin is active, and each one stays off until you turn it on.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	echo '<div class="aafm-integrations-disclaimer">';
-	echo aafm_get_notice_html( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped inside the helper.
-		'warning',
-		__( 'These integrations let an agent read and write real data on your site, including personal data through WooCommerce and ACF: customer names, emails, addresses, order details. What an agent can actually touch is still bounded by the WordPress role of the account it connects as, and by the abilities you switch on below. Everything it does is recorded in the activity log. Turn on only what you trust the connected agent to handle.', 'agent-abilities-for-mcp' )
+	echo wp_kses(
+		aafm_get_notice_html(
+			'warning',
+			__( 'These integrations let an agent read and write real data on your site, including personal data through WooCommerce and ACF: customer names, emails, addresses, order details. What an agent can actually touch is still bounded by the WordPress role of the account it connects as, and by the abilities you switch on below. Everything it does is recorded in the activity log. Turn on only what you trust the connected agent to handle.', 'agent-abilities-for-mcp' )
+		),
+		aafm_admin_allowed_html()
 	);
 	echo '</div>';
 
@@ -190,10 +193,10 @@ function aafm_render_integrations_tab(): void {
 		// toggles on click and on Enter/Space natively, so the accordion stays keyboard-accessible.
 		echo '<summary class="aafm-card-head">';
 		echo '<span class="icon">';
-		echo aafm_icon( $card['icon'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static literal SVG.
+		echo wp_kses( aafm_icon( $card['icon'] ), aafm_svg_allowed_html() );
 		echo '</span>';
 		echo '<h2>' . esc_html( $card['label'] ) . '</h2>';
-		echo aafm_integration_status_pill( $status ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built and escaped in the helper.
+		echo wp_kses( aafm_integration_status_pill( $status ), aafm_admin_allowed_html() );
 
 		echo '<span class="abilities-count">';
 		if ( null !== $counts ) {

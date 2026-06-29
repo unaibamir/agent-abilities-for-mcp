@@ -75,10 +75,22 @@ function aafm_oauth_field_too_long( string $value ): bool {
 }
 
 /**
- * Register the three OAuth REST routes.
+ * Register the three public OAuth 2.0 REST routes.
  *
- * Hooked on `rest_api_init`. All routes accept POST only and authenticate via the
- * grant, so each uses `__return_true` as its permission_callback.
+ * Hooked on `rest_api_init`. These endpoints are publicly reachable by design — the
+ * OAuth 2.0 framework and its extension RFCs require them to be open before any
+ * client has obtained credentials:
+ *
+ *   /register — Dynamic Client Registration (RFC 7591). The callback inspects the
+ *               supplied client metadata from the JSON request body.
+ *   /token    — Token endpoint (RFC 6749 §3.2). The callback validates the client
+ *               credentials and grant parameters from the request body.
+ *   /revoke   — Token Revocation (RFC 7009). The callback validates the token and
+ *               caller identity from the request body.
+ *
+ * `permission_callback` must be `__return_true` for all three: a gate at the routing
+ * layer would block the request before any callback can read the grant or credentials.
+ * All authentication and authorization happen inside each callback.
  *
  * @return void
  */
@@ -91,6 +103,7 @@ function aafm_oauth_register_rest_routes(): void {
 		array(
 			'methods'             => 'POST',
 			'callback'            => 'aafm_oauth_rest_register',
+			// Public OAuth endpoint (RFC 7591 DCR); client metadata validated inside the callback.
 			'permission_callback' => '__return_true',
 		)
 	);
@@ -101,6 +114,7 @@ function aafm_oauth_register_rest_routes(): void {
 		array(
 			'methods'             => 'POST',
 			'callback'            => 'aafm_oauth_rest_token',
+			// Public OAuth endpoint (RFC 6749 §3.2); credentials + grant validated inside the callback.
 			'permission_callback' => '__return_true',
 		)
 	);
@@ -111,6 +125,7 @@ function aafm_oauth_register_rest_routes(): void {
 		array(
 			'methods'             => 'POST',
 			'callback'            => 'aafm_oauth_rest_revoke',
+			// Public OAuth endpoint (RFC 7009); token + caller identity validated inside the callback.
 			'permission_callback' => '__return_true',
 		)
 	);

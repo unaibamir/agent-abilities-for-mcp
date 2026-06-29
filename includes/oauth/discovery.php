@@ -283,6 +283,9 @@ function aafm_oauth_maybe_serve_well_known(): void {
 	header( 'Cache-Control: no-store' );
 	header( 'Content-Type: application/json; charset=utf-8' );
 	status_header( 200 );
+	// Standalone RFC 8414 / RFC 9728 well-known metadata endpoint: emits a JSON document,
+	// not HTML. $metadata is a plugin-built, constant-shaped array with no user-supplied
+	// values; wp_json_encode() is the correct safe serializer for this context.
 	echo wp_json_encode( $metadata );
 	exit;
 }

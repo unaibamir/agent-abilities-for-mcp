@@ -1,33 +1,51 @@
 name: Release
 
-# Step 2 of the release flow. Fires when a "Release X.Y.Z" commit lands on main
-# (i.e. when the PR opened by .github/workflows/release-prepare.yml is merged).
-# It tags the version, builds a versioned production zip, creates the GitHub
-# Release with the changelog as notes, and deploys to the wordpress.org SVN repo.
+# Publishes a new version to wordpress.org when a "Release X.Y.Z" commit lands on
+# main (i.e. when the develop -> main Release PR merges). Merging to main IS the
+# release: it tags the version, builds the production zip, deploys to the
+# wordpress.org SVN repo, and creates the GitHub Release (notes = the readme
+# changelog block for this version).
 #
-# DORMANT for SVN until the plugin is approved on wordpress.org AND these repo
-# secrets are set:
-#   - SVN_USERNAME : your wordpress.org account username
-#   - SVN_PASSWORD : your wordpress.org account password
-# Until SVN_PASSWORD exists the wp.org deploy step is skipped, so the tag, zip,
-# and GitHub Release still happen. Before going live, repin the 10up action
-# below from @stable to a commit SHA.
+# main is branch-protected, so only an authorized, reviewed merge can trigger a
+# release. That branch protection is the gate; there is no separate publish click.
+#
+# It only fires on a real, prepared release: the plugin header version has no tag
+# yet AND readme.txt already carries a changelog block for it. A normal commit or
+# a bare version bump does nothing.
+#
+# Required repo secrets for the SVN step (Settings -> Secrets and variables -> Actions):
+#   SVN_USERNAME : your wordpress.org account username (case-sensitive)
+#   SVN_PASSWORD : the DEDICATED SVN password from your profile, NOT your
+#                  wordpress.org login password. Set/retrieve it at
+#                  https://profiles.wordpress.org/me/profile/edit/group/3/?screen=svn-password
+# Without SVN_PASSWORD the SVN step is skipped (the tag, zip, and GitHub Release
+# still happen), so nothing breaks before the secret is added.
+#
+# workflow_dispatch is a typed escape hatch for the FIRST launch (1.0.0 is already
+# tagged, so the push path would skip it) or a re-deploy: run it and type the
+# already-tagged version to ship it by hand.
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'First launch / re-deploy: exact already-tagged version to ship (e.g. 1.0.0).'
+        required: true
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: release-publish
+  group: wporg-release
   cancel-in-progress: false
 
 jobs:
   publish:
-    name: Tag, build, and publish
+    name: Tag, build, and publish to wordpress.org
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write   # push the tag and create the GitHub Release
     env:
@@ -38,27 +56,42 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: true
 
       - name: Resolve version and changelog
         id: rel
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          HEADER="$(grep -E '^\s*\*\s*Version:' agent-abilities-for-mcp.php | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+            if [ "$VERSION" != "$HEADER" ]; then
+              echo "::error::Dispatched version $VERSION does not match the plugin header $HEADER. Refusing to deploy."
+              exit 1
+            fi
+          else
+            VERSION="$HEADER"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          # Publish only when this is a fresh, prepared release: no tag yet AND the
-          # changelog block for this version is already in readme.txt. This fires
-          # after the Release PR merges, regardless of the merge strategy, and never
-          # on a bare version bump (no changelog block yet) or a normal commit.
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "Tag $VERSION already exists; nothing to publish."
+
+          # A humanized changelog block for this version must already be in readme.txt.
+          # This is written by hand in the Release PR; the automation only consumes it.
+          if ! grep -qF "= $VERSION =" readme.txt; then
+            echo "No changelog block for $VERSION in readme.txt; not a prepared release. Skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          if ! grep -qF "= $VERSION =" readme.txt; then
-            echo "No changelog block for $VERSION in readme.txt yet; not a prepared release."
+
+          # On a normal push, never re-publish a version that is already tagged.
+          # (Use workflow_dispatch to intentionally re-deploy an existing tag.)
+          if [ "${{ github.event_name }}" = "push" ] && git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "Tag $VERSION already exists; nothing to publish on push."
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
+
           # Extract this version's block from the readme changelog for the release notes.
           awk -v ver="= $VERSION =" '
             $0=="== Changelog ==" {inlog=1; next}
@@ -69,29 +102,19 @@ jobs:
           ' readme.txt | sed '/./,$!d' > release-notes.md
           echo "Release notes:"; cat release-notes.md
 
-      - name: Create and push tag
+      - name: Create and push tag (if missing)
         if: steps.rel.outputs.skip != 'true'
         run: |
           set -euo pipefail
           VERSION="${{ steps.rel.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$VERSION" -m "$VERSION"
-          git push origin "$VERSION"
-
-      - name: Set up PHP
-        if: steps.rel.outputs.skip != 'true'
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
-        with:
-          php-version: '8.3'
-          coverage: none
-          tools: composer:v2
-
-      - name: Install Composer dependencies (production)
-        if: steps.rel.outputs.skip != 'true'
-        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
-        with:
-          composer-options: '--no-dev --optimize-autoloader'
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "Tag $VERSION already exists; reusing it."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$VERSION" -m "$VERSION"
+            git push origin "$VERSION"
+          fi
 
       - name: Build versioned zip
         if: steps.rel.outputs.skip != 'true'
@@ -99,17 +122,20 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           mkdir -p build
-          # git archive honors .gitattributes export-ignore, so dev files stay out.
+          # git archive reads the tagged commit tree and honors .gitattributes
+          # export-ignore, so dev files and dev-only vendor dirs stay out. The
+          # runtime vendor (vendor/composer, vendor/wordpress) is committed and ships.
           git archive --format=zip --prefix=agent-abilities-for-mcp/ \
             "${{ steps.rel.outputs.version }}" \
             -o "build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip"
 
-      - name: Deploy to WordPress.org
+      - name: Deploy to WordPress.org SVN
         if: ${{ steps.rel.outputs.skip != 'true' && env.SVN_PASSWORD != '' }}
-        uses: 10up/action-wordpress-plugin-deploy@stable
+        uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
         env:
           SLUG: agent-abilities-for-mcp
           VERSION: ${{ steps.rel.outputs.version }}
+          ASSETS_DIR: .wordpress-org
         with:
           generate-zip: false
 

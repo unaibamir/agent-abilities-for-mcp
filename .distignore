@@ -11,6 +11,9 @@
 /bin
 /wp
 /public
+/build
+/release-notes.md
+/node_modules
 /CLAUDE.md
 /CONTRIBUTING.md
 /.mcp.json

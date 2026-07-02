@@ -8,6 +8,7 @@
 # Build artifacts
 /build/
 *.zip
+/release-notes.md
 
 # PHPUnit caches
 /.phpunit.cache/

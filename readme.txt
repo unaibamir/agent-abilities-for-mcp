@@ -8,7 +8,7 @@ Stable tag: 1.0.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
+Turn WordPress into an MCP server for AI agents. Connect Claude, Cursor, and VS Code over the Model Context Protocol. Off by default and audited.
 
 == Description ==
 

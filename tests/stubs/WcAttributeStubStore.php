@@ -218,7 +218,7 @@ class WcAttributeStubStore {
 	 * Permanently delete an attribute by id.
 	 *
 	 * Returns false when $fail_delete is set (simulates a WC data-store failure without
-	 * actually removing the row — so a subsequent get() still finds the attribute).
+	 * actually removing the row - so a subsequent get() still finds the attribute).
 	 *
 	 * @param int $id Attribute id.
 	 * @return bool True on success, false on simulated failure or when id is unknown.

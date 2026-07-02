@@ -147,8 +147,8 @@ final class RevisionsTest extends TestCase {
 	/**
 	 * A restore whose underlying write fails must surface the generic error, never a false
 	 * {restored:true}. wp_restore_post_revision() returns the wp_update_post() result, which is
-	 * falsy (0/false/null) on failure and — per its documented int|false|null contract being
-	 * incomplete — may be a WP_Error. A WP_Error is a truthy object, so the old falsy-only guard
+	 * falsy (0/false/null) on failure and - per its documented int|false|null contract being
+	 * incomplete - may be a WP_Error. A WP_Error is a truthy object, so the old falsy-only guard
 	 * would have reported success for a failed write and the audit layer would have logged it as
 	 * one. We force the restore write to fail (via wp_insert_post_empty_content, which makes
 	 * wp_update_post bail), then assert the guard returns a WP_Error.
@@ -350,8 +350,8 @@ final class RevisionsTest extends TestCase {
 	}
 
 	/**
-	 * A revision of a password-protected parent post must withhold the body and excerpt —
-	 * rendered AND content_format=raw — and must not leak the body through a diff. A normal
+	 * A revision of a password-protected parent post must withhold the body and excerpt -
+	 * rendered AND content_format=raw - and must not leak the body through a diff. A normal
 	 * post still returns its body (the Wave-1 enrichment).
 	 */
 	public function test_get_revision_withholds_body_for_password_protected_parent(): void {
@@ -515,7 +515,7 @@ final class RevisionsTest extends TestCase {
 		$rev_a = array_shift( $revs );
 		$b     = self::factory()->post->create( array( 'post_author' => $author ) );
 
-		// $b is editable, but $rev_a is a revision of $a, not $b — must be rejected by perm AND exec.
+		// $b is editable, but $rev_a is a revision of $a, not $b - must be rejected by perm AND exec.
 		$this->assertFalse(
 			aafm_perm_delete_revision(
 				array(

@@ -38,7 +38,7 @@ class TokensTest extends TestCase {
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
 	 * form, so each DB test must call aafm_install_oauth_tables() first and read
-	 * the row back — the temporary table is invisible to `SHOW TABLES`.
+	 * the row back - the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $access_raw Raw access token.
 	 * @return array<string,mixed>|null
@@ -99,7 +99,7 @@ class TokensTest extends TestCase {
 	}
 
 	/**
-	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens —
+	 * T1-7: when the row insert fails, mint returns a WP_Error rather than phantom tokens -
 	 * a client must never get a successful token response for a grant that was never stored.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {
@@ -119,7 +119,7 @@ class TokensTest extends TestCase {
 
 	/**
 	 * Minting returns a prefixed access token plus a refresh token and stores
-	 * only their SHA-256 hashes — never the raw values.
+	 * only their SHA-256 hashes - never the raw values.
 	 */
 	public function test_mint_returns_tokens_and_stores_hashes_not_raw(): void {
 		aafm_install_oauth_tables();
@@ -154,7 +154,7 @@ class TokensTest extends TestCase {
 
 	/**
 	 * A valid, unexpired access token whose owning OAuth client has been deactivated must stop
-	 * validating — matching the live REST path, which re-checks client deactivation so disabling a
+	 * validating - matching the live REST path, which re-checks client deactivation so disabling a
 	 * compromised client kills its already-issued access tokens immediately.
 	 */
 	public function test_validate_fails_when_owning_client_is_deactivated(): void {
@@ -193,7 +193,7 @@ class TokensTest extends TestCase {
 	 * An expired access token does not validate.
 	 *
 	 * Expiry is simulated by writing a past UTC timestamp directly onto the
-	 * transaction-isolated temporary row — no sleeping.
+	 * transaction-isolated temporary row - no sleeping.
 	 */
 	public function test_validate_expired_access_token_returns_false(): void {
 		aafm_install_oauth_tables();
@@ -283,7 +283,7 @@ class TokensTest extends TestCase {
 
 	/**
 	 * Replaying a consumed refresh token is rejected AND revokes the whole
-	 * lineage — the legitimate second-generation access token goes inactive.
+	 * lineage - the legitimate second-generation access token goes inactive.
 	 */
 	public function test_rotate_refresh_reuse_detection_revokes_chain(): void {
 		aafm_install_oauth_tables();
@@ -314,7 +314,7 @@ class TokensTest extends TestCase {
 	 * An expired refresh token is rejected and does not mint a successor.
 	 *
 	 * Expiry is simulated by writing a past UTC refresh_expires_at directly onto
-	 * the transaction-isolated temporary row — no sleeping. The single minted row
+	 * the transaction-isolated temporary row - no sleeping. The single minted row
 	 * must remain the only one, proving rotation bailed before minting.
 	 */
 	public function test_rotate_refresh_expired_token_returns_error_and_does_not_mint(): void {
@@ -452,13 +452,13 @@ class TokensTest extends TestCase {
 		$gen2 = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 		$this->assertIsArray( $gen2 );
 
-		// Only the newest generation's row is still active — each rotation consumes
+		// Only the newest generation's row is still active - each rotation consumes
 		// the row it rotated from, deactivating that generation's access token too.
 		// So before the replay, gen2 is live while gen0 and gen1 are already
 		// inactive (their rows were consumed). The replay must still kill gen2.
 		$this->assertSame( (int) $ctx['wp_user_id'], aafm_oauth_validate_access_token( $gen2['access_token'] ) );
 
-		// Replay the MIDDLE (gen1) refresh token — already consumed by the gen2 rotation.
+		// Replay the MIDDLE (gen1) refresh token - already consumed by the gen2 rotation.
 		$replay = aafm_oauth_rotate_refresh( $gen1['refresh_token'], $ctx['client_id'] );
 		$this->assertInstanceOf( WP_Error::class, $replay );
 

@@ -23,7 +23,7 @@ final class CptWritesTest extends TestCase {
 	private const CPT = 'aafm_book';
 
 	/**
-	 * An eligible CPT that is NOT added to the allowlist — proves the deny path.
+	 * An eligible CPT that is NOT added to the allowlist - proves the deny path.
 	 *
 	 * @var string
 	 */
@@ -110,7 +110,7 @@ final class CptWritesTest extends TestCase {
 		$this->assertArrayHasKey( 'post', $out );
 		$this->assertSame( self::CPT, get_post_type( $out['post']['id'] ) );
 		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
-		// Author is forced to the current agent user — never spoofed.
+		// Author is forced to the current agent user - never spoofed.
 		$this->assertSame( $user_id, (int) get_post_field( 'post_author', $out['post']['id'] ) );
 	}
 
@@ -118,7 +118,7 @@ final class CptWritesTest extends TestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $user_id );
 
-		// CPT_DENIED is eligible but NOT in the allowlist — permission must be false.
+		// CPT_DENIED is eligible but NOT in the allowlist - permission must be false.
 		$this->assertFalse(
 			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
 				array(
@@ -194,7 +194,7 @@ final class CptWritesTest extends TestCase {
 		$user_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $user_id );
 
-		// A post of the NON-allowlisted CPT — even an admin must be denied.
+		// A post of the NON-allowlisted CPT - even an admin must be denied.
 		$post_id = self::factory()->post->create(
 			array(
 				'post_type'   => self::CPT_DENIED,
@@ -433,7 +433,7 @@ final class CptWritesTest extends TestCase {
 		$user->add_cap( 'edit_published_aafm_ledgers' );
 		wp_set_current_user( $user_id );
 
-		// CREATE: behaves per its cap gate — the agent holds the primitive, so it is allowed.
+		// CREATE: behaves per its cap gate - the agent holds the primitive, so it is allowed.
 		$this->assertTrue(
 			wp_get_ability( 'aafm/create-cpt-item' )->check_permissions(
 				array(
@@ -443,7 +443,7 @@ final class CptWritesTest extends TestCase {
 			)
 		);
 
-		// UPDATE: denied on the same type — aafm_can_edit_post_object() refuses non-mapped types
+		// UPDATE: denied on the same type - aafm_can_edit_post_object() refuses non-mapped types
 		// because a degraded per-object edit_post check can fail open.
 		$post_id = self::factory()->post->create(
 			array(

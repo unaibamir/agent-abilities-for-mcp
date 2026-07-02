@@ -24,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Whether a validation WP_Error may be handed back to the client's redirect_uri.
  *
- * "Local" errors (unknown client, unregistered redirect_uri) must never redirect —
+ * "Local" errors (unknown client, unregistered redirect_uri) must never redirect -
  * the redirect target is itself untrusted. They carry the 'aafm_local' error-data
  * flag and render a local page. Every other validation error is a proper OAuth error
  * that is safe to return to the (already-validated) redirect_uri.
@@ -251,7 +251,7 @@ function aafm_oauth_read_authorize_params(): array {
  * Reduce a validated redirect_uri to its bare origin (scheme://host[:port]).
  *
  * Used to scope the consent CSP's form-action to the one approved client origin. Only
- * the scheme, host, and explicit non-default port are kept — never the path or query —
+ * the scheme, host, and explicit non-default port are kept - never the path or query -
  * so the CSP source is a clean origin and nothing the client can otherwise control
  * leaks into the header. Returns '' if the URI cannot be parsed into scheme+host.
  *
@@ -284,7 +284,7 @@ function aafm_oauth_redirect_uri_origin( string $redirect_uri ): string {
  *
  * The form-action directive governs not only where the form may POST but also where the
  * resulting response may REDIRECT. The consent form POSTs same-origin, but on Approve the server
- * answers with a 302 to the client's external redirect_uri — a cross-origin hop the
+ * answers with a 302 to the client's external redirect_uri - a cross-origin hop the
  * browser blocks against a bare 'self'. So when a validated client origin is supplied
  * it is added to form-action ('self' <origin>), permitting the redirect to exactly that
  * one approved origin and nothing else. Local error pages pass no origin and stay at
@@ -572,8 +572,8 @@ function aafm_oauth_handle_authorize(): void {
 	$user_id = get_current_user_id();
 
 	if ( $is_post ) {
-		// Default-deny: only an explicit 'approve' grants a code. Treat anything else —
-		// a blank field, 'deny', or any unexpected value — as a denial and hand
+		// Default-deny: only an explicit 'approve' grants a code. Treat anything else -
+		// a blank field, 'deny', or any unexpected value - as a denial and hand
 		// access_denied back to the client. An allow-list (not a 'deny'-only check) is
 		// what makes a malformed consent decision fail CLOSED instead of falling through
 		// to approval.

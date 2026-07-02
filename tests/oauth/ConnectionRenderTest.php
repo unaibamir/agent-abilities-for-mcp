@@ -68,7 +68,7 @@ class ConnectionRenderTest extends TestCase {
 
 		$html = $this->render_connection_tab();
 
-		// Heading is always shown — the content switches to a short notice.
+		// Heading is always shown - the content switches to a short notice.
 		$this->assertStringContainsString( 'Connect with OAuth', $html );
 		$this->assertStringContainsString( 'OAuth is turned off', $html );
 

@@ -2,14 +2,14 @@
 /**
  * OAuth access and refresh tokens.
  *
- * Mints access/refresh token pairs and stores only their SHA-256 hashes — the
+ * Mints access/refresh token pairs and stores only their SHA-256 hashes - the
  * raw values are returned once and never persisted in clear. Refresh tokens
  * rotate on every use: redeeming a refresh token deactivates it and issues a
  * fresh pair whose refresh_parent_id links back to the consumed row.
  *
  * Replaying a consumed (inactive) refresh token triggers reuse detection: the
- * entire lineage — every row reachable up the parent links and down the child
- * links — is revoked, so a stolen-then-replayed token kills the live session.
+ * entire lineage - every row reachable up the parent links and down the child
+ * links - is revoked, so a stolen-then-replayed token kills the live session.
  *
  * Every secret is matched by a DB lookup on an indexed SHA-256 hex column
  * (WHERE token_hash = %s), never by an in-PHP comparison of raw values.
@@ -50,7 +50,7 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  * Mint an access/refresh token pair and store only their hashes.
  *
  * Access token is prefixed `aafm_oat_`; the refresh token has no prefix. Both
- * raw values are returned to the caller once and never stored in clear — only
+ * raw values are returned to the caller once and never stored in clear - only
  * their SHA-256 hashes are persisted, alongside the binding context.
  *
  * @param array<string,mixed> $ctx {
@@ -92,7 +92,7 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d' )
 	);
 
-	// A failed insert means there is no persisted token row — never return a token pair for it,
+	// A failed insert means there is no persisted token row - never return a token pair for it,
 	// or the client gets a successful token response it can never use.
 	if ( false === $inserted ) {
 		return new WP_Error( 'server_error', __( 'The access token could not be issued.', 'agent-abilities-for-mcp' ) );
@@ -109,7 +109,7 @@ function aafm_oauth_mint_tokens( array $ctx ) {
  * Validate an access token and return the user it belongs to.
  *
  * Delegates the token lookup to aafm_oauth_get_access_token_row() so the active/unexpired predicate
- * lives in exactly one place, then re-enforces client deactivation — matching the live request path
+ * lives in exactly one place, then re-enforces client deactivation - matching the live request path
  * in validator.php. A token validates only when it is active, unexpired, AND its owning client has
  * not been deactivated; so disabling a compromised client invalidates its live access tokens here
  * too, not just on the REST path.
@@ -216,7 +216,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// the row consumed without a persisted successor (which would lock the user
 	// out). The InnoDB engine is implied by the table's get_charset_collate().
 	// The WP test harness already wraps each test in its own transaction, so this
-	// nested START/COMMIT is effectively a no-op there — it does not break test
+	// nested START/COMMIT is effectively a no-op there - it does not break test
 	// isolation.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( 'START TRANSACTION' );
@@ -226,7 +226,7 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	// here, but exactly one UPDATE flips is_active 1 -> 0 and affects a row; the
 	// loser affects none. $wpdb->update() returns the affected-row count (or false
 	// on error). Anything other than exactly one consumed row means we did not win
-	// the race (or the query failed) — roll back and reject without minting.
+	// the race (or the query failed) - roll back and reject without minting.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$consumed = $wpdb->update(
 		$table,
@@ -371,7 +371,7 @@ function aafm_oauth_revoke_user_client_tokens( int $user_id, string $client_id )
  * DOWN the child links to every descendant, deactivating each row we touch.
  * Both walks are bounded by AAFM_OAUTH_CHAIN_MAX_HOPS so a corrupt link can
  * never spin forever. After this runs, no token anywhere in the lineage
- * validates — which is the whole point of reuse detection.
+ * validates - which is the whole point of reuse detection.
  *
  * @param int $seed_id Any row id belonging to the lineage to revoke.
  * @return void
@@ -384,7 +384,7 @@ function aafm_oauth_revoke_chain( int $seed_id ): void {
 	$ids = array( $seed_id );
 
 	// Track whether either walk hit the hop cap. A cap hit means the lineage was longer than
-	// AAFM_OAUTH_CHAIN_MAX_HOPS and the tail was NOT revoked — surface that rather than silently
+	// AAFM_OAUTH_CHAIN_MAX_HOPS and the tail was NOT revoked - surface that rather than silently
 	// truncating the revocation, so an operator can investigate (and the cap can be raised).
 	$cap_hit = false;
 

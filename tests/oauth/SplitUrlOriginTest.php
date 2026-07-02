@@ -3,7 +3,7 @@
  * Split-URL origin consistency guard for the OAuth surface.
  *
  * Some installs set the WordPress Address (site_url()) to a different host than
- * the Site Address (home_url()) — a back-end on admin.example, a front-end on
+ * the Site Address (home_url()) - a back-end on admin.example, a front-end on
  * www.example. The OAuth issuer, the protected-resource indicator, and the
  * validator's audience check must all resolve to the SAME origin regardless, or a
  * token minted under the split config would fail its audience binding and never
@@ -91,7 +91,7 @@ class SplitUrlOriginTest extends TestCase {
 	 *
 	 * Mints a token scoped to aafm_endpoint_url() (the same source the code mint
 	 * uses), then asserts the validator's audience check passes against the stored
-	 * resource — proving mint-time and validate-time agree on the origin even when
+	 * resource - proving mint-time and validate-time agree on the origin even when
 	 * site_url() points elsewhere.
 	 */
 	public function test_token_minted_under_split_url_validates(): void {

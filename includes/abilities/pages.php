@@ -60,7 +60,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-page'] = array(
 		'label'        => __( 'Delete page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a page, bypassing the Trash. This cannot be undone - use trash-page to remove a page recoverably instead.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -134,7 +134,7 @@ function aafm_args_get_pages(): array {
 }
 
 /**
- * Execute aafm/get-pages — delegates to the post query with post_type forced to page.
+ * Execute aafm/get-pages - delegates to the post query with post_type forced to page.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -267,7 +267,7 @@ function aafm_perm_publish_pages(): bool {
 }
 
 /**
- * Execute aafm/create-page — type pinned to 'page', status forced to 'publish'.
+ * Execute aafm/create-page - type pinned to 'page', status forced to 'publish'.
  *
  * Delegates to the shared aafm_insert_post(), which never threads post_author
  * (so authorship is forced to the agent user) and sanitizes title/content.
@@ -335,7 +335,7 @@ function aafm_perm_update_page( array $input ): bool {
 }
 
 /**
- * Execute aafm/update-page — pins to the page type, then reuses the post updater.
+ * Execute aafm/update-page - pins to the page type, then reuses the post updater.
  *
  * The id must resolve to an existing page; a non-page id is rejected so the
  * ability can never be used to edit a post (or any other type) by ID confusion.
@@ -406,7 +406,7 @@ function aafm_perm_trash_page( array $input ): bool {
 }
 
 /**
- * Execute aafm/trash-page — wp_trash_post only (recoverable), never wp_delete_post.
+ * Execute aafm/trash-page - wp_trash_post only (recoverable), never wp_delete_post.
  *
  * The id must resolve to an existing page; a non-page id is rejected so the
  * ability can never trash a post by ID confusion.
@@ -482,7 +482,7 @@ function aafm_perm_delete_page( array $input ): bool {
 }
 
 /**
- * Execute aafm/delete-page — delegates to the single sanctioned force-delete executor
+ * Execute aafm/delete-page - delegates to the single sanctioned force-delete executor
  * with the page type pinned, so pages.php never calls wp_delete_post directly (one call
  * site, in posts.php).
  *

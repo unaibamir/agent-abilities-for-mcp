@@ -3,7 +3,7 @@
  * WooCommerce customer abilities: wc-list-customers, wc-get-customer, wc-create-customer,
  * wc-update-customer.
  *
- * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
+ * WooCommerce is not installed in the DDEV test environment - every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcCustomerStubStore. The seed_wc_customers()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
@@ -255,7 +255,7 @@ final class WooCustomersTest extends TestCase {
 	/**
 	 * Real WooCommerce wc_create_customer() returns an int user id (or WP_Error), not a
 	 * WC_Customer object. A successful create must return the rich shape exactly once and
-	 * leave a single customer behind — no false error on the success path, no duplicate.
+	 * leave a single customer behind - no false error on the success path, no duplicate.
 	 */
 	public function test_create_customer_int_return_is_success_no_duplicate(): void {
 		WcCustomerStubStore::reset();
@@ -273,7 +273,7 @@ final class WooCustomersTest extends TestCase {
 		$this->assertGreaterThan( 0, $first['id'] );
 		$this->assertSame( 'Int', $first['first_name'] );
 
-		// Exactly one customer exists after a single create — no duplicate spawned on the
+		// Exactly one customer exists after a single create - no duplicate spawned on the
 		// success path (the inverted check used to create then return an error).
 		$after_one = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $after_one );
@@ -304,7 +304,7 @@ final class WooCustomersTest extends TestCase {
 
 	/**
 	 * Nested-smuggle via billing.role must be rejected by the closed billing schema before the
-	 * executor runs — the billing sub-object carries additionalProperties:false.
+	 * executor runs - the billing sub-object carries additionalProperties:false.
 	 */
 	public function test_create_customer_nested_smuggle_billing_role_is_rejected(): void {
 		$this->acting_as( 'administrator' );
@@ -313,7 +313,7 @@ final class WooCustomersTest extends TestCase {
 				'email'   => 'smuggle@example.com',
 				'billing' => array(
 					'first_name' => 'Eve',
-					'role'       => 'administrator', // Smuggled field — must be rejected.
+					'role'       => 'administrator', // Smuggled field - must be rejected.
 				),
 			)
 		);
@@ -330,7 +330,7 @@ final class WooCustomersTest extends TestCase {
 				'email'    => 'smuggle2@example.com',
 				'shipping' => array(
 					'first_name' => 'Eve',
-					'role'       => 'administrator', // Smuggled field — must be rejected.
+					'role'       => 'administrator', // Smuggled field - must be rejected.
 				),
 			)
 		);
@@ -606,7 +606,7 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	// =========================================================================
-	// FIX-9: update field-isolation — billing-only and shipping-only patches.
+	// FIX-9: update field-isolation - billing-only and shipping-only patches.
 	// =========================================================================
 
 	/**

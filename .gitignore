@@ -1,4 +1,4 @@
-# WordPress test environment (DDEV docroot) — not part of the plugin
+# WordPress test environment (DDEV docroot) - not part of the plugin
 /wp/
 
 # Dependencies
@@ -27,7 +27,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Local DB dumps & tool scratch — never part of the plugin
+# Local DB dumps & tool scratch - never part of the plugin
 *.sql
 /.scratch/
 /docs/
@@ -35,9 +35,9 @@ Thumbs.db
 /.firecrawl/
 /.github/release-notes.md
 
-# Note: .ddev/ is intentionally committed — it is shareable, version-controlled config.
+# Note: .ddev/ is intentionally committed - it is shareable, version-controlled config.
 
-# QA evidence screenshots — scratch, never part of the plugin
+# QA evidence screenshots - scratch, never part of the plugin
 /public/
 
 # Python bytecode cache

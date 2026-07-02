@@ -107,7 +107,7 @@ final class SearchTest extends TestCase {
 		$types = array_column( $out['results'], 'type' );
 		$this->assertContains( 'post', $types );
 		$this->assertNotContains( 'aafm_book', $types );
-		// total comes from found_posts AFTER the containment narrowing — no private-count leak.
+		// total comes from found_posts AFTER the containment narrowing - no private-count leak.
 		$this->assertSame( 1, $out['total'] );
 	}
 

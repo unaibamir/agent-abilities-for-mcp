@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — product reads and writes (sub-slice W4-WC1a).
+ * WooCommerce integration abilities - product reads and writes (sub-slice W4-WC1a).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,7 +48,7 @@ function aafm_register_wc_products_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce product registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -139,7 +139,7 @@ function aafm_redact_wc_product( \WC_Product $product ): array {
 /**
  * The full single-product shape: the lean fields plus description, short_description, prices, stock,
  * images, attributes (a key=>value-ish map cast to object so an empty one encodes as {}), variation
- * ids, and tags. Never a filesystem path — images are attachment ids, not file paths.
+ * ids, and tags. Never a filesystem path - images are attachment ids, not file paths.
  *
  * @param \WC_Product $product Product.
  * @return array<string,mixed>
@@ -198,7 +198,7 @@ function aafm_wc_attribute_shape( $attribute ): array {
 }
 
 /**
- * The shared output_schema properties for the full single-product shape — the exact field set
+ * The shared output_schema properties for the full single-product shape - the exact field set
  * aafm_rich_wc_product() emits. Reused by the get/create/update output_schemas so all three stay in
  * lockstep with the rich assembler. `attributes` is an object (an empty map encodes as {}); the
  * list-shaped fields are arrays of integers.

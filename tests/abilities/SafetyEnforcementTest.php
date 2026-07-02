@@ -166,7 +166,7 @@ final class SafetyEnforcementTest extends TestCase {
 		);
 		$ability = wp_get_ability( 'aafm/rl-off-probe' );
 
-		// Many calls, all allowed — off means no token consumption, identical to today.
+		// Many calls, all allowed - off means no token consumption, identical to today.
 		for ( $i = 0; $i < 5; $i++ ) {
 			$this->assertTrue( $ability->check_permissions( array() ) );
 		}
@@ -193,8 +193,8 @@ final class SafetyEnforcementTest extends TestCase {
 
 		// Simulate discovery: call the RAW permission the way the tools/list filter does.
 		$raw = aafm_remember_raw_permission( 'aafm/rl-disc-probe' );
-		$this->assertTrue( (bool) $raw( array() ) ); // discovery visibility check — must NOT consume a token.
-		$this->assertTrue( (bool) $raw( array() ) ); // again — still no token.
+		$this->assertTrue( (bool) $raw( array() ) ); // discovery visibility check - must NOT consume a token.
+		$this->assertTrue( (bool) $raw( array() ) ); // again - still no token.
 
 		// Now the FIRST real (decorated) call still has its full allowance of 1.
 		$ability = wp_get_ability( 'aafm/rl-disc-probe' );
@@ -221,7 +221,7 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_off_create_post_still_publishes(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '0' ); // OFF (default) — no behavior change.
+		update_option( 'aafm_force_draft', '0' ); // OFF (default) - no behavior change.
 		$out = aafm_exec_create_post( array( 'title' => 'Published Hello' ) );
 		$this->assertSame( 'publish', $out['post']['status'] );
 	}
@@ -268,7 +268,7 @@ final class SafetyEnforcementTest extends TestCase {
 	public function test_force_draft_off_update_to_publish_still_publishes(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );
-		update_option( 'aafm_force_draft', '0' ); // OFF (default) — update may publish.
+		update_option( 'aafm_force_draft', '0' ); // OFF (default) - update may publish.
 		$id  = self::factory()->post->create(
 			array(
 				'post_status' => 'draft',
@@ -294,7 +294,7 @@ final class SafetyEnforcementTest extends TestCase {
 				'post_author' => $uid,
 			)
 		);
-		// No 'status' in the input — force-draft must not retro-unpublish an edit-only update.
+		// No 'status' in the input - force-draft must not retro-unpublish an edit-only update.
 		$out = aafm_exec_update_post(
 			array(
 				'post_id' => $id,

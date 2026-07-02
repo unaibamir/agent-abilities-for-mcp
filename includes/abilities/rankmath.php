@@ -52,7 +52,7 @@ function aafm_register_rankmath_full_definitions( array $registry ): array {
 
 /**
  * The Rank Math registry rows, keyed by ability name. The single source of truth for these
- * abilities' label, description, group, risk, and args builder — consumed by both the host-guarded
+ * abilities' label, description, group, risk, and args builder - consumed by both the host-guarded
  * live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -288,7 +288,7 @@ function aafm_args_rankmath_update_post(): array {
  * Execute aafm/rankmath-update-post.
  *
  * Writes the text/URL fields, then robots: split the CSV, validate each token against the allowlist,
- * and write the ARRAY (update_post_meta serializes it) — never a raw string, which Rank Math would
+ * and write the ARRAY (update_post_meta serializes it) - never a raw string, which Rank Math would
  * not honor. Returns the refreshed read shape.
  *
  * @param array<string,mixed> $input Validated input.

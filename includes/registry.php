@@ -1,6 +1,6 @@
 <?php
 /**
- * Static ability registry — the single source of truth for the UI and the MCP server.
+ * Static ability registry - the single source of truth for the UI and the MCP server.
  *
  * EXTENSION POINTS (the single discoverability anchor for third-party developers):
  *
@@ -61,13 +61,13 @@ function aafm_get_abilities_registry(): array {
  *
  * The live aafm_get_abilities_registry() is host-gated: an integration contributes its rows only
  * while its host plugin is active, so on a site without WooCommerce the live registry has no
- * WC rows. That gating is correct for registration — actual wp_register_ability() must only fire for
- * active hosts — but the catalog still "counts" inactive integrations, and the Integrations tab and
+ * WC rows. That gating is correct for registration - actual wp_register_ability() must only fire for
+ * active hosts - but the catalog still "counts" inactive integrations, and the Integrations tab and
  * the manifest need every integration's label/description even when its host is off.
  *
  * This view answers that need WITHOUT touching the registration path. It starts from the live
  * registry, then overlays every integration's definitions from the unguarded
- * 'aafm_abilities_registry_integrations' filter — each integration file contributes its rows there
+ * 'aafm_abilities_registry_integrations' filter - each integration file contributes its rows there
  * with NO host guard. For an active host the overlay is identical to what the live registry already
  * holds; for an inactive host it adds the rows the guard withheld. The registration walk
  * (aafm_register_enabled_abilities()) reads aafm_get_abilities_registry(), never this, so an inactive
@@ -170,7 +170,7 @@ function aafm_registry_cache_should_flush_full(): bool {
  * remove an 'aafm_abilities_registry' filter mid-run can force one rebuild.
  *
  * Internally this bumps a monotonic flush generation (aafm_registry_flush_generation()) so that BOTH
- * memoized views — the live registry and the full view — each observe the flush exactly once. The
+ * memoized views - the live registry and the full view - each observe the flush exactly once. The
  * historical signature is preserved: pass true to raise a flush, call with no argument to peek at
  * whether the live registry is currently behind the generation. Callers should prefer
  * aafm_flush_registry_cache(); this stays public because existing tests call it as

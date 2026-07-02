@@ -121,7 +121,7 @@ final class PostTypesSaveTest extends TestCase {
 	}
 
 	public function test_privacy_policy_content_registers_our_suggested_text(): void {
-		// Prove the callback actually contributes suggested privacy text — not just that
+		// Prove the callback actually contributes suggested privacy text - not just that
 		// it is wired. wp_add_privacy_policy_content guards on is_admin() + admin_init, so
 		// stand up that context the canonical way (set_current_screen) before invoking.
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';

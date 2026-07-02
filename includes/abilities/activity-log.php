@@ -3,9 +3,9 @@
  * Read-only activity-log ability.
  *
  * Surfaces the plugin's OWN audit table (every ability execute + denial) to an agent,
- * gated on manage_options — the same bar the admin Dashboard activity panel sits behind.
+ * gated on manage_options - the same bar the admin Dashboard activity panel sits behind.
  * It returns each row's id, ability name, status, acting user id + login, the argument
- * KEYS that were passed (never values — values are never logged), and the timestamp. It
+ * KEYS that were passed (never values - values are never logged), and the timestamp. It
  * deliberately OMITS source_ip: a network address is PII the admin panel does not show, so
  * it is never handed to an agent. Read-only: there is no write/clear ability here.
  *
@@ -90,7 +90,7 @@ function aafm_args_get_activity_log(): array {
  * Execute aafm/get-activity-log.
  *
  * Passes the (validated) filters straight to aafm_query_activity(), which caps per_page at
- * 200 and orders most-recent-first, then redacts each row to the safe field set — never
+ * 200 and orders most-recent-first, then redacts each row to the safe field set - never
  * source_ip.
  *
  * @param array<string,mixed> $input Validated input.

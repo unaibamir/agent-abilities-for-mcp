@@ -3,7 +3,7 @@
  * WooCommerce coupon abilities: wc-list-coupons, wc-get-coupon, wc-create-coupon,
  * wc-update-coupon.
  *
- * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
+ * WooCommerce is not installed in the DDEV test environment - every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcCouponStubStore. The seed_wc_coupons()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *

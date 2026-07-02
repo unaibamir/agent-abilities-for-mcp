@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
 function aafm_integration_cards(): array {
 	// One neutral glyph for every card: the integration "plug" icon. Each card already carries
 	// its own name, status pill, and ability count, so the icon only needs to read as "an
-	// integration" — not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
+	// integration" - not classify it. Deliberately NOT the 'abilities'/'bolt' glyph, which means
 	// "enabled" elsewhere in this UI; reusing it here would imply a state the icon doesn't track.
 	return array(
 		'yoast'       => array(
@@ -61,9 +61,9 @@ function aafm_integration_cards(): array {
 /**
  * The detected status of an integration on this site.
  *
- * 'active'             — host plugin active (aafm_integration_active() true).
- * 'installed_inactive' — a candidate host plugin file is present but not active.
- * 'not_installed'      — no candidate host plugin file is present.
+ * 'active'             - host plugin active (aafm_integration_active() true).
+ * 'installed_inactive' - a candidate host plugin file is present but not active.
+ * 'not_installed'      - no candidate host plugin file is present.
  *
  * @param string $slug Integration slug.
  * @return string One of 'active' | 'installed_inactive' | 'not_installed'.
@@ -140,7 +140,7 @@ function aafm_render_integrations_tab(): void {
 	// only renders integration toggles. Rather than carrying off-tab abilities forward as
 	// client-side hidden inputs (which a stale tab or a tamper could drop or flip), it declares
 	// the subjects it OWNS via aafm_scope[]. The server preserves every persisted ability outside
-	// that scope from the stored option and only updates the in-scope ones — see
+	// that scope from the stored option and only updates the in-scope ones - see
 	// aafm_resolve_scoped_enabled_input().
 	$integration_subjects = array_keys( aafm_integration_cards() );
 	foreach ( $integration_subjects as $scope_subject ) {
@@ -164,7 +164,7 @@ function aafm_render_integrations_tab(): void {
 			? ( $descriptor[ $slug ] ?? array() )
 			: ( $by_subject[ $slug ] ?? ( $descriptor[ $slug ] ?? array() ) );
 
-		// Each card is a native <details> accordion (collapsed by default — no open attribute), so
+		// Each card is a native <details> accordion (collapsed by default - no open attribute), so
 		// the whole section is the toggle. The card classes ride on the <details> so the existing
 		// .aafm-integration-{slug} hooks and .is-disabled muting still apply.
 		printf(
@@ -289,7 +289,7 @@ function aafm_integration_status_note( string $slug, string $status ): string {
  *
  * A search box plus an All / Read Only / Write toggle group, modelled on the reference MCP
  * client's tool filter. The controls are scoped to this card by data-card and drive admin.js's
- * per-card filter, which toggles row visibility only — the buttons are type="button" and the
+ * per-card filter, which toggles row visibility only - the buttons are type="button" and the
  * search input is not an aafm_abilities[] field, so neither interferes with the form submit.
  *
  * @param string $slug Integration slug.
@@ -339,14 +339,14 @@ function aafm_render_integration_filter( string $slug ): void {
  *
  * The toggle markup mirrors the Abilities tab exactly so the shared save handler binds to the
  * same name="aafm_abilities[]" inputs. The bulk control is a type="button" (never a nested form),
- * per the Wave-0 nested-form lesson. The list renders directly inside the card's accordion body —
+ * per the Wave-0 nested-form lesson. The list renders directly inside the card's accordion body -
  * the section <details> is the only collapsible now, so there is no inner sub-collapsible.
  *
  * @param string                         $slug        Integration slug.
  * @param array<int,array<string,mixed>> $rows        This integration's ability rows.
  * @param array<int,string>              $enabled     Enabled ability names.
  * @param array<string,string>           $disclosures Disclosure map.
- * @param bool                           $disabled    True when the host is inactive — rows render
+ * @param bool                           $disabled    True when the host is inactive - rows render
  *                                                    read-only and never submit.
  * @return void
  */
@@ -382,14 +382,14 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
  *
  * Extracted so both the flat list and the SEO sub-section loops share identical markup.
  *
- * The disclosure hint is resolved the same way for active and inactive rows — prefer the
- * aafm_ability_disclosures() line for this ability name, fall back to the row's own description —
+ * The disclosure hint is resolved the same way for active and inactive rows - prefer the
+ * aafm_ability_disclosures() line for this ability name, fall back to the row's own description -
  * so the descriptor never carries its own copy of the disclosure text.
  *
  * @param array<string,mixed>  $ability     Ability data row.
  * @param array<int,string>    $enabled     Enabled ability names.
  * @param array<string,string> $disclosures Disclosure map.
- * @param bool                 $disabled    True when the host is inactive — the checkbox renders
+ * @param bool                 $disabled    True when the host is inactive - the checkbox renders
  *                                          disabled (so it never submits) and the row carries
  *                                          aria-disabled, while staying fully readable.
  * @return void
@@ -400,7 +400,7 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
 
 	// Per-ability id on the title <h4>, used as the checkbox's accessible name via
-	// aria-labelledby — without it a screen reader announces the bare toggle as just
+	// aria-labelledby - without it a screen reader announces the bare toggle as just
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-int-ability-title-' . sanitize_key( $name );
 

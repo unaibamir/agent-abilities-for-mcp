@@ -4,7 +4,7 @@
  * base64-hardened (no URL fetch, byte-sniffed mime allowlist, SVG rejected,
  * size-capped, filename sanitized, WordPress owns the path).
  *
- * This is the single most dangerous ability in the catalog — file upload is
+ * This is the single most dangerous ability in the catalog - file upload is
  * exactly where competitors shipped SSRF, arbitrary-file-write, and RCE CVEs.
  * Every §6.2 control carries an explicit regression test here.
  *
@@ -39,7 +39,7 @@ final class MediaWriteTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
-		// simulated by pushing the action name onto $wp_current_filter — the idiom WP
+		// simulated by pushing the action name onto $wp_current_filter - the idiom WP
 		// core's own ability test trait uses. do_action() on the core hook trips the
 		// WPCS non-prefixed-hookname sniff (Phase 1 carried issue).
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
@@ -104,7 +104,7 @@ final class MediaWriteTest extends TestCase {
 		$owner = self::factory()->user->create( array( 'role' => 'author' ) );
 		$post  = self::factory()->post->create( array( 'post_author' => $owner ) );
 
-		$this->acting_as( 'author' ); // a different author — cannot edit someone else's post.
+		$this->acting_as( 'author' ); // a different author - cannot edit someone else's post.
 		$this->assertFalse(
 			wp_get_ability( 'aafm/set-featured-image' )->check_permissions(
 				array(
@@ -233,7 +233,7 @@ final class MediaWriteTest extends TestCase {
 		$this->assertSame( 'image/png', get_post_mime_type( $attachment_id ) );
 		$this->assertSame( 'a single pixel', get_post_meta( $attachment_id, '_wp_attachment_image_alt', true ) );
 
-		// The output is the redacted media shape — public URL only, never an
+		// The output is the redacted media shape - public URL only, never an
 		// absolute server path or the raw _wp_attached_file value.
 		$this->assertArrayHasKey( 'media', $out );
 		$this->assertArrayHasKey( 'url', $out['media'] );
@@ -276,7 +276,7 @@ final class MediaWriteTest extends TestCase {
 
 	/**
 	 * (b) A .php payload is rejected on its real (non-image) bytes and NO file is
-	 * written — even though the caller named it shell.php with image intent.
+	 * written - even though the caller named it shell.php with image intent.
 	 */
 	public function test_upload_media_rejects_php_payload_and_writes_nothing(): void {
 		$this->acting_as( 'author' );
@@ -312,7 +312,7 @@ final class MediaWriteTest extends TestCase {
 
 
 	/**
-	 * The supplied .jpg name is NOT trusted — PNG bytes are stored as the real
+	 * The supplied .jpg name is NOT trusted - PNG bytes are stored as the real
 	 * type (png), proving the declared extension/mime can't drive the write.
 	 */
 	public function test_upload_media_normalizes_to_the_real_type_not_the_name(): void {
@@ -335,7 +335,7 @@ final class MediaWriteTest extends TestCase {
 	}
 
 	/**
-	 * (d) A path-traversal filename is neutralized — the file lands inside the
+	 * (d) A path-traversal filename is neutralized - the file lands inside the
 	 * uploads dir under a sanitized name, never outside it.
 	 */
 	public function test_upload_media_neutralizes_path_traversal_filename(): void {
@@ -357,7 +357,7 @@ final class MediaWriteTest extends TestCase {
 		// The realpath stays confined to the uploads basedir (no traversal escape).
 		$this->assertStringStartsWith( $basedir, $file );
 		$this->assertStringNotContainsString( '..', $file );
-		// The basename was sanitized — no traversal segments survive.
+		// The basename was sanitized - no traversal segments survive.
 		$this->assertSame( basename( $file ), wp_basename( $file ) );
 		$this->assertStringContainsString( 'evil', basename( $file ) );
 		$instance = get_post( $attachment_id );

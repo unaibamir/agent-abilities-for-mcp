@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — global product attribute taxonomy reads and writes (sub-slice W4-WC1c).
+ * WooCommerce integration abilities - global product attribute taxonomy reads and writes (sub-slice W4-WC1c).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_attributes_full_definitions( array $registry ): array 
 
 /**
  * The WooCommerce product attribute registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_attributes_registry_definitions(): array {
 	return array(
-		// Global product attributes (sub-slice W4-WC1c) — the attribute taxonomy surface reached through
+		// Global product attributes (sub-slice W4-WC1c) - the attribute taxonomy surface reached through
 		// wc_get_attribute_taxonomies() / wc_create_attribute() / wc_update_attribute() / wc_delete_attribute().
 		// Every ability gates on the flat, object-independent manage_woocommerce capability and falls through
 		// to its real permission_callback at discovery, so none needs a server.php case.
@@ -93,8 +93,8 @@ function aafm_wc_attributes_registry_definitions(): array {
 // Global product attributes (sub-slice W4-WC1c)
 // =============================================================================
 //
-// These abilities manage GLOBAL product attribute taxonomies — the
-// wc_get_attribute_taxonomies() surface — not per-product attributes. Each is
+// These abilities manage GLOBAL product attribute taxonomies - the
+// wc_get_attribute_taxonomies() surface - not per-product attributes. Each is
 // object-independent and gates on manage_woocommerce, so none needs a server.php
 // case; all fall through to the real permission_callback at discovery.
 //
@@ -206,7 +206,7 @@ function aafm_args_wc_list_product_attributes(): array {
 /**
  * Execute aafm/wc-list-product-attributes.
  *
- * Takes no input (the global attribute list is unscoped and unpaged), so it declares no parameter —
+ * Takes no input (the global attribute list is unscoped and unpaged), so it declares no parameter -
  * matching the no-arg read execs elsewhere (e.g. aafm_exec_list_themes).
  *
  * @return array<string,mixed>

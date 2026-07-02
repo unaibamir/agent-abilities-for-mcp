@@ -37,7 +37,7 @@ final class MetadataTest extends TestCase {
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {
-		// Reading our own bundled readme from a local path — not a remote fetch.
+		// Reading our own bundled readme from a local path - not a remote fetch.
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/^Stable tag:\s*(.+)$/m', $readme, $matches ) );

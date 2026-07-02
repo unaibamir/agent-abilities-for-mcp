@@ -52,7 +52,7 @@ final class YoastTest extends TestCase {
 	/**
 	 * The SEO per-object gate must honor the operator's post-type exposure allowlist: a public,
 	 * map_meta_cap CPT the admin CAN edit but which is NOT exposed (only post/page are on by
-	 * default) is refused — SEO meta on a non-exposed type is out of scope, exactly as the core
+	 * default) is refused - SEO meta on a non-exposed type is out of scope, exactly as the core
 	 * content writes refuse it. A normal post stays allowed for the same admin.
 	 */
 	public function test_seo_gate_denies_a_non_exposed_cpt(): void {

@@ -2,7 +2,7 @@
 /**
  * User read abilities: list_users gating + redaction.
  *
- * This is the most PII-sensitive read in the catalog — competitors leaked user
+ * This is the most PII-sensitive read in the catalog - competitors leaked user
  * data here. The tests prove a low-privilege caller is denied (and audited). Email
  * is exposed by a locked decision (gated upstream by list_users + audited), but the
  * output never carries the login or the password hash.
@@ -26,7 +26,7 @@ final class UsersReadTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
-		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-users' ) );
@@ -54,7 +54,7 @@ final class UsersReadTest extends TestCase {
 
 	/**
 	 * A denied user-enumeration attempt writes a `denied` audit row via the
-	 * registration wrapper's permission decorator — proven on the live path.
+	 * registration wrapper's permission decorator - proven on the live path.
 	 */
 	public function test_denied_enumeration_is_audited(): void {
 		$this->acting_as( 'subscriber' );
@@ -68,7 +68,7 @@ final class UsersReadTest extends TestCase {
 	/**
 	 * LOCKED reversal (47- line 144): user email IS exposed in the redacted shape
 	 * now, gated upstream by list_users + audited. Login and the password hash stay
-	 * stripped — those are NEVER returned. Builds a user with a known email/login and
+	 * stripped - those are NEVER returned. Builds a user with a known email/login and
 	 * asserts the email is present while login/hash are absent, and that the per-row
 	 * shape carries the safe whitelist (id, display_name, email, roles, post_count).
 	 */
@@ -180,7 +180,7 @@ final class UsersReadTest extends TestCase {
 		$this->assertLessThanOrEqual(
 			$small_cost + 2,
 			$large_cost,
-			'get-users query count scaled with the number of users — the N+1 count is back.'
+			'get-users query count scaled with the number of users - the N+1 count is back.'
 		);
 	}
 

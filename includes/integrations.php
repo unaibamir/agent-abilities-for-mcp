@@ -199,7 +199,7 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
  * own filter for the same reason the SEO sub-detection is: the PHPUnit suite stubs the ACF host
  * API by defining get_field() (and friends) process-wide, and a defined function can never be
  * undefined. So the host-inactive registry test cannot flip detection back off by removing the
- * aafm_integration_active_acf force filter alone — real detection would still see the stubbed
+ * aafm_integration_active_acf force filter alone - real detection would still see the stubbed
  * get_field and report ACF active. Driving this seam to false through aafm_acf_active lets that
  * test force detection OFF deterministically, mirroring how aafm_seo_active_plugin is pinned.
  * Production passes the real detection through unchanged.
@@ -227,7 +227,7 @@ function aafm_acf_active(): bool {
  * WooCommerce marker class process-wide, and a defined class can never be undefined. So a test that
  * needs WooCommerce reported INACTIVE (the host-absent default, the tab "Not installed" state)
  * cannot flip detection back off by removing the aafm_integration_active_woocommerce force filter
- * alone — real detection would still see the stubbed class and report WooCommerce active. Driving
+ * alone - real detection would still see the stubbed class and report WooCommerce active. Driving
  * this seam to false through aafm_woocommerce_active lets those tests force detection OFF
  * deterministically, mirroring how aafm_acf_active and aafm_seo_active_plugin are pinned.
  * Production passes the real detection through unchanged.

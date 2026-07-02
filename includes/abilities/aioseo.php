@@ -3,7 +3,7 @@
  * AIOSEO / All in One SEO abilities (Wave 5): aioseo-get-post, aioseo-update-post, aioseo-get-head.
  *
  * Registers ONLY when AIOSEO is active (aafm_integration_active('aioseo')). AIOSEO v4+ keeps post
- * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta — the _aioseo_* meta keys are WPML-compat
+ * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta - the _aioseo_* meta keys are WPML-compat
  * shadow copies that AIOSEO does not honor on write. So reads and writes go through AIOSEO's own
  * Post model: AIOSEO\Plugin\Common\Models\Post::getPost($id) returns the row, set the public props,
  * ->save() writes the row through AIOSEO's ORM. This NEVER runs raw SQL and NEVER writes the
@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_aioseo_full_d
 // on plugins_loaded (so a load-time activity check could miss AIOSEO); the callback's own
 // function_exists('aioseo') + aioseo()->head guards make it inert until AIOSEO is genuinely
 // present. Under the PHPUnit stubs aioseo() returns a bare stdClass with no ->head, so this passes
-// through and the test stub's own filter supplies the canned head — production and test wiring
+// through and the test stub's own filter supplies the canned head - production and test wiring
 // never collide.
 add_filter( 'aafm_seo_rendered_head', 'aafm_aioseo_rendered_head', 10, 3 );
 
@@ -36,7 +36,7 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_aioseo_rendered_head', 10, 3 );
  *
  * AIOSEO exposes no string-returning per-post head API: its head is emitted on wp_head via
  * aioseo()->head->output(), which echoes against the queried object. So this renders inside a
- * controlled, fully restored singular query for the post — snapshot the main-query globals, build a
+ * controlled, fully restored singular query for the post - snapshot the main-query globals, build a
  * throwaway singular WP_Query for the post, buffer output(), then restore the originals (including
  * the global $post) exactly. Honors $source (passthrough unless 'aioseo') and guards the API
  * defensively: a missing aioseo()->head, an error, or empty output all fall back to the passed
@@ -145,7 +145,7 @@ function aafm_register_aioseo_full_definitions( array $registry ): array {
 
 /**
  * The All in One SEO registry rows, keyed by ability name. The single source of truth for these
- * abilities' label, description, group, risk, and args builder — consumed by both the host-guarded
+ * abilities' label, description, group, risk, and args builder - consumed by both the host-guarded
  * live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -394,7 +394,7 @@ function aafm_args_aioseo_update_post(): array {
  * Execute aafm/aioseo-update-post.
  *
  * Loads the model for the post, sets the allowlisted props (esc_url_raw on URL props,
- * sanitize_text_field on text, bool on robots), then ->save() — AIOSEO's own ORM writes the
+ * sanitize_text_field on text, bool on robots), then ->save() - AIOSEO's own ORM writes the
  * custom-table row. A prop absent on the installed model version is skipped rather than set (so the
  * write never invents a property). Returns the refreshed read shape.
  *

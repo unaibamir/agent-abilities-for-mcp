@@ -5,7 +5,7 @@
  * wc-list-shipping-methods, wc-get-shipping-method, wc-create-shipping-method,
  * wc-update-shipping-method.
  *
- * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
+ * WooCommerce is not installed in the DDEV test environment - every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcShippingStubStore. The seed_wc_shipping()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
@@ -90,7 +90,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * List rows carry the lean shape only: id, zone_name, zone_order — no zone_locations.
+	 * List rows carry the lean shape only: id, zone_name, zone_order - no zone_locations.
 	 */
 	public function test_list_shipping_zones_lean_shape(): void {
 		$this->acting_as( 'administrator' );
@@ -286,7 +286,7 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * Lists methods for a seeded zone — zone 1 (Europe) has 2 methods.
+	 * Lists methods for a seeded zone - zone 1 (Europe) has 2 methods.
 	 */
 	public function test_list_shipping_methods_for_zone(): void {
 		$this->acting_as( 'administrator' );
@@ -322,7 +322,7 @@ final class WooShippingTest extends TestCase {
 
 	/**
 	 * A shipping method's settings can hold carrier API keys / account credentials / license
-	 * keys. Those must be redacted in the returned shape — including secrets nested in a
+	 * keys. Those must be redacted in the returned shape - including secrets nested in a
 	 * sub-array and secrets under an unconventional key name.
 	 */
 	public function test_get_shipping_method_redacts_secrets(): void {

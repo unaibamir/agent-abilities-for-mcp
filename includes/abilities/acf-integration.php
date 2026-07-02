@@ -1,6 +1,6 @@
 <?php
 /**
- * ACF / SCF integration abilities — hydrated custom-field reads and writes (slice W4-A).
+ * ACF / SCF integration abilities - hydrated custom-field reads and writes (slice W4-A).
  *
  * Registers ONLY when ACF (or its Secure Custom Fields fork) is active
  * (aafm_integration_active('acf')); a host-inactive site contributes zero entries to the
@@ -8,7 +8,7 @@
  * update_field() so a field's Return Format and storage are honoured. Every per-object ability
  * gates on the object's own edit capability: post fields on edit_post($id), term fields on
  * edit_term($term_id), user fields on edit_user($user_id). User fields may include a
- * user_email-type field; that PII is returned as-is under the disclaimer — the edit_user gate,
+ * user_email-type field; that PII is returned as-is under the disclaimer - the edit_user gate,
  * default-OFF, and audit are the governance, NOT a redactor (mirrors the Wave-2 "user email
  * exposed by default" locked decision).
  *
@@ -53,7 +53,7 @@ function aafm_register_acf_full_definitions( array $registry ): array {
 
 /**
  * The ACF registry rows, keyed by ability name. The single source of truth for these abilities'
- * label, description, group, risk, and args builder — consumed by both the host-guarded live
+ * label, description, group, risk, and args builder - consumed by both the host-guarded live
  * registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -189,7 +189,7 @@ function aafm_args_acf_list_field_groups(): array {
 /**
  * Execute aafm/acf-list-field-groups.
  *
- * Walks every field group and its fields, returning only the discovery shape (key, label, type) —
+ * Walks every field group and its fields, returning only the discovery shape (key, label, type) -
  * never a stored value. Guards each ACF call with function_exists so the ability never fatals if
  * the host API shape changes.
  *
@@ -234,7 +234,7 @@ function aafm_exec_acf_list_field_groups( array $input ) {
  * Read every hydrated ACF value for an object selector, keyed by field key.
  *
  * Uses ACF's get_fields() so each value honours its field's Return Format. An object with no ACF
- * data yields an empty map (get_fields returns false/empty). PII is returned as-is — the per-object
+ * data yields an empty map (get_fields returns false/empty). PII is returned as-is - the per-object
  * edit gate is the governance.
  *
  * @param int|string $selector ACF object selector (post id, "term_{id}", "user_{id}").
@@ -360,7 +360,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 			if ( $is_cont && $def ) {
 				// A repeater/group/flexible-content level. Numeric keys are row indices that
 				// keep the same container def; string keys are sub-field names whose own def
-				// drives their sanitizing — so a URL sub-field is esc_url_raw'd at depth.
+				// drives their sanitizing - so a URL sub-field is esc_url_raw'd at depth.
 				$child_def          = is_string( $sub_key ) ? aafm_acf_sub_field_def( $def, (string) $sub_key ) : $def;
 				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $child_def, false, (string) $sub_key );
 			} else {
@@ -402,11 +402,11 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 /**
  * Map an ACF selector type to the hard-block denylist that the dedicated meta abilities enforce.
  *
- * User fields are gated by the user-scoped floor (aafm_hard_blocked_user_meta_key — the CVE-class
+ * User fields are gated by the user-scoped floor (aafm_hard_blocked_user_meta_key - the CVE-class
  * control that blocks capability/session/app-password/2FA keys); post and term fields both reuse
  * the post-agnostic floor (aafm_hard_blocked_meta_key), mirroring how aafm_validate_term_meta_key()
  * itself reuses that same post-agnostic hard-block. This is the SAME denylist the meta and user-meta
- * write abilities use — it is reused here, never reinvented.
+ * write abilities use - it is reused here, never reinvented.
  *
  * @param string $key           The effective meta key ACF would store under.
  * @param string $selector_type One of 'post', 'term', 'user'.
@@ -423,7 +423,7 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
- * Every key is gated up front, before any write lands — two floors, both required:
+ * Every key is gated up front, before any write lands - two floors, both required:
  *
  *   1. The key MUST resolve to a real, defined ACF field (acf_get_field() returns an array, not
  *      false). This is the privilege-escalation fix: for an UNRESOLVED key, ACF's update_field()
@@ -440,7 +440,7 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
  *      tokens, application passwords, 2FA keys, …) can never be written through this path either.
  *
  * A single offending key rejects the whole request with a generic WP_Error before any update_field()
- * runs — matching this function's existing fail-fast, single-generic-error convention (the verify
+ * runs - matching this function's existing fail-fast, single-generic-error convention (the verify
  * step below already returns aafm_generic_error() on the first non-persisting write) and avoiding a
  * partial write when any key in the map is rejected. Legitimate, defined fields are written and
  * verified exactly as before.
@@ -452,7 +452,7 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
  *
  * @param array<string,mixed> $fields        Caller field map: field key => raw value.
  * @param int|string          $selector      ACF object selector.
- * @param string              $selector_type One of 'post', 'term', 'user' — selects the denylist.
+ * @param string              $selector_type One of 'post', 'term', 'user' - selects the denylist.
  * @return array<string,mixed>|\WP_Error The refreshed hydrated values, or a WP_Error when a key is
  *                                       refused or a write did not persist.
  */
@@ -462,14 +462,14 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 	}
 
 	// Floor pass: reject the whole request before writing anything if any key is not a defined ACF
-	// field, or its effective meta key is hard-blocked. Fail-closed — if acf_get_field() is somehow
+	// field, or its effective meta key is hard-blocked. Fail-closed - if acf_get_field() is somehow
 	// unavailable while update_field() exists, no key can resolve and every write is refused.
 	foreach ( $fields as $field_key => $raw ) {
 		unset( $raw );
 		$field_key = (string) $field_key;
 		$def       = function_exists( 'acf_get_field' ) ? acf_get_field( $field_key ) : false;
 		if ( ! is_array( $def ) || empty( $def['key'] ) ) {
-			return aafm_generic_error(); // Unresolved key — the update_field() raw-meta fallback path.
+			return aafm_generic_error(); // Unresolved key - the update_field() raw-meta fallback path.
 		}
 		foreach ( array( $field_key, (string) ( $def['name'] ?? '' ) ) as $candidate ) {
 			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
@@ -483,8 +483,8 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		update_field( (string) $field_key, $clean, $selector );
 
 		// Verify the write persisted. A failed update_field() stores nothing, so the read-back
-		// will not equal the value we intended. Read the RAW (unformatted) value — get_field()'s
-		// third arg false — because the formatted read diverges from the stored value for whole
+		// will not equal the value we intended. Read the RAW (unformatted) value - get_field()'s
+		// third arg false - because the formatted read diverges from the stored value for whole
 		// field families (image/file return an array or URL while storing an attachment ID, date
 		// pickers reformat, relationship/post-object return objects); comparing the formatted
 		// shape would flag those successful writes as failures. Compare normalized JSON so
@@ -576,7 +576,7 @@ function aafm_exec_acf_get_post_fields( array $input ) {
 	return array(
 		'post_id' => $id,
 		// Cast the top-level map so an empty fields set JSON-encodes to "{}" (object) per the
-		// schema, never "[]". Only the top level — nested repeater/relationship arrays stay lists.
+		// schema, never "[]". Only the top level - nested repeater/relationship arrays stay lists.
 		'fields'  => (object) aafm_acf_read_fields( $id ),
 	);
 }
@@ -900,7 +900,7 @@ function aafm_args_acf_get_user_fields(): array {
  * Execute aafm/acf-get-user-fields.
  *
  * Returns the hydrated user ACF values AS-IS. A user_email-type field's value (PII) is included,
- * not stripped — the edit_user gate, default-OFF state, and audit are the governance, mirroring the
+ * not stripped - the edit_user gate, default-OFF state, and audit are the governance, mirroring the
  * locked "user email exposed by default" decision. No projection removes it.
  *
  * @param array<string,mixed> $input Validated input.

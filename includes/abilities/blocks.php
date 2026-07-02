@@ -7,7 +7,7 @@
  * allowlist) refuse it. These abilities gate per-object directly on the wp_block edit/delete
  * meta caps (edit_block/delete_block) instead, with edit_posts/delete_posts as the
  * object-independent discovery floor. Block markup is hardened with wp_kses_post() before
- * insert — verified to PRESERVE Gutenberg block delimiters and their JSON attributes.
+ * insert - verified to PRESERVE Gutenberg block delimiters and their JSON attributes.
  *
  * delete-block uses the Trash (wp_trash_post), guarded against trash-disabled sites, so no
  * force-delete primitive is added.
@@ -84,7 +84,7 @@ function aafm_perm_blocks_floor(): bool {
  * Object-independent floor for CREATING a block: the caller can publish posts.
  *
  * The create-block write forces post_status=publish, and wp_insert_post() does no capability check
- * of its own — so gating only on edit_posts would let a Contributor (edit_posts WITHOUT
+ * of its own - so gating only on edit_posts would let a Contributor (edit_posts WITHOUT
  * publish_posts) mint a published synced wp_block they could never create in wp-admin. Require
  * publish_posts so the ability matches the editor capability the published-block write needs.
  *
@@ -296,7 +296,7 @@ function aafm_args_create_block(): array {
  * Execute create-block: kses-harden the markup, force the type, let the author default.
  *
  * The type is forced to wp_block from our own args; post_author is omitted so wp_insert_post
- * defaults it to the current (agent) user — neither can be spoofed through input. The markup
+ * defaults it to the current (agent) user - neither can be spoofed through input. The markup
  * is sanitized with wp_kses_post() (which preserves Gutenberg block delimiters), then the
  * whole array is wp_slash()'d once because the insert functions expect slashed data.
  *

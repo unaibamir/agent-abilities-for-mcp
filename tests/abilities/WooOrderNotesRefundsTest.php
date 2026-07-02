@@ -3,10 +3,10 @@
  * WooCommerce order notes and order refunds abilities (W4-WC2.3).
  *
  * Covers:
- *   Group B — wc-list-order-notes / wc-create-order-note
- *   Group C — wc-list-order-refunds / wc-get-order-refund / wc-create-order-refund
+ *   Group B - wc-list-order-notes / wc-create-order-note
+ *   Group C - wc-list-order-refunds / wc-get-order-refund / wc-create-order-refund
  *
- * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
+ * WooCommerce is not installed in the DDEV test environment - every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcOrderStubStore and the per-test note/refund stores
  * added by this slice.
  *
@@ -82,7 +82,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// GROUP B — order notes
+	// GROUP B - order notes
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
@@ -277,7 +277,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// GROUP C — order refunds
+	// GROUP C - order refunds
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
@@ -434,7 +434,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
-	 * Refund reason is PII-adjacent and is returned as-is — must not be stripped.
+	 * Refund reason is PII-adjacent and is returned as-is - must not be stripped.
 	 * It is returned under the Integrations security disclaimer.
 	 */
 	public function test_create_order_refund_reason_is_returned_verbatim(): void {
@@ -593,7 +593,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertInstanceOf(
 			WP_Error::class,
 			$res,
-			'line_items[].meta_data smuggle must be rejected — nested sub-schema is closed (MED-4).'
+			'line_items[].meta_data smuggle must be rejected - nested sub-schema is closed (MED-4).'
 		);
 	}
 
@@ -680,7 +680,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	// =========================================================================
-	// Additional coverage — empty lists, round-trips, id-fidelity
+	// Additional coverage - empty lists, round-trips, id-fidelity
 	// =========================================================================
 
 	// -------------------------------------------------------------------------
@@ -929,7 +929,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );
 
-		// A rate row exists but the line tax is 0.00 — there is nothing to distribute.
+		// A rate row exists but the line tax is 0.00 - there is nothing to distribute.
 		$this->seed_order_with_taxed_line_item( 6003, 30, array( 9 => '0.00' ) );
 
 		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
@@ -957,7 +957,7 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	 * Regression: many equal rates with a small refund_tax must never produce a negative part.
 	 *
 	 * With six EQUAL rates and a 0.04 refund_tax, naive per-rate rounding rounds five shares up to
-	 * 0.01 (sum 0.05) and leaves the balancing rate at round(0.04 - 0.05, 2) = -0.01 — a negative
+	 * 0.01 (sum 0.05) and leaves the balancing rate at round(0.04 - 0.05, 2) = -0.01 - a negative
 	 * refund_tax WooCommerce can reject. The integer-unit largest-remainder allocation must keep
 	 * every part >= 0 and reconcile the parts to exactly the requested refund_tax.
 	 */

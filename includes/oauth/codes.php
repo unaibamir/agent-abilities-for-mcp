@@ -26,7 +26,7 @@ if ( ! defined( 'AAFM_OAUTH_CODE_TTL' ) ) {
  *
  * Generates a 64-character hex code (32 random bytes), persists the SHA-256 hash
  * along with the binding context, and returns the raw code. The raw value is the
- * one and only copy handed to the caller — it is never stored or logged in clear.
+ * one and only copy handed to the caller - it is never stored or logged in clear.
  *
  * @param array<string,mixed> $ctx {
  *     Code binding context.
@@ -63,7 +63,7 @@ function aafm_oauth_mint_code( array $ctx ) {
 		array( '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
 	);
 
-	// A failed insert means there is no persisted grant — never return a code for it, or the
+	// A failed insert means there is no persisted grant - never return a code for it, or the
 	// client redirects with a code that can never be redeemed.
 	if ( false === $inserted ) {
 		return new \WP_Error( 'server_error', __( 'The authorization code could not be issued.', 'agent-abilities-for-mcp' ) );
@@ -80,7 +80,7 @@ function aafm_oauth_mint_code( array $ctx ) {
  * that UPDATE affects no rows (already used, expired, or a client/redirect
  * mismatch) redemption fails. On a successful UPDATE the row is read back and
  * returned. The UPDATE-then-check ordering is what makes replay safe under
- * concurrent requests — a SELECT-then-UPDATE would race.
+ * concurrent requests - a SELECT-then-UPDATE would race.
  *
  * @param string $raw          The raw authorization code presented by the client.
  * @param string $client_id    The client_id presented at the token endpoint.

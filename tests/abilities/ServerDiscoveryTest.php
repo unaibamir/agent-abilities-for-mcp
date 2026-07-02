@@ -5,7 +5,7 @@
  * Several abilities gate execution on a per-object capability that needs an id from the
  * input (e.g. edit_post( $post_id )). The tools/list visibility check runs with EMPTY
  * input, so a naive "can call with empty input" test hid those tools from fully capable
- * users — they became undiscoverable. The discovery layer uses an object-independent
+ * users - they became undiscoverable. The discovery layer uses an object-independent
  * predicate so a capable user SEES the tool, while the real permission_callback still
  * runs at execute time and still denies on objects the user can't act on.
  *
@@ -99,7 +99,7 @@ final class ServerDiscoveryTest extends TestCase {
 
 	public function test_capable_user_discovers_per_object_post_tools(): void {
 		// An editor holds edit_posts / delete_posts / moderate_comments and edit_pages /
-		// delete_pages — the floor caps the per-object branches refine — so they must SEE
+		// delete_pages - the floor caps the per-object branches refine - so they must SEE
 		// every per-object tool in tools/list even though no object id is supplied.
 		$this->acting_as( 'editor' );
 
@@ -117,7 +117,7 @@ final class ServerDiscoveryTest extends TestCase {
 	public function test_administrator_discovers_governed_post_meta_tools(): void {
 		// Governed post-meta gates on per-object edit_post (reads included). An administrator
 		// holds edit_posts, so the coarse discovery floor passes and all three meta tools must
-		// appear in the real tools/list the adapter filter produces — the ship-blocker check.
+		// appear in the real tools/list the adapter filter produces - the ship-blocker check.
 		$this->acting_as( 'administrator' );
 
 		$names = $this->visible_tool_names();
@@ -177,7 +177,7 @@ final class ServerDiscoveryTest extends TestCase {
 
 	public function test_subscriber_does_not_discover_write_tools(): void {
 		// A subscriber lacks edit_posts / delete_posts / moderate_comments and the page caps,
-		// so the discovery predicate denies — none of the per-object WRITE tools appear.
+		// so the discovery predicate denies - none of the per-object WRITE tools appear.
 		$this->acting_as( 'subscriber' );
 
 		$names = $this->visible_tool_names();
@@ -191,7 +191,7 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	public function test_discover_helper_falls_back_for_general_cap_abilities(): void {
-		// For abilities with no per-object branch, discovery is the plain empty-input check —
+		// For abilities with no per-object branch, discovery is the plain empty-input check -
 		// behavior is unchanged. create-post gates on publish_posts: editor yes, subscriber no.
 		$this->acting_as( 'editor' );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-post' ) );

@@ -3,7 +3,7 @@
  * Admin UI for Agent Abilities for MCP.
  *
  * Every value that comes back from an AJAX response is treated as untrusted and reaches
- * the DOM through textContent only — this file never assigns innerHTML, so there is no
+ * the DOM through textContent only - this file never assigns innerHTML, so there is no
  * raw-HTML sink to audit. All requests carry the admin nonce and same-origin credentials.
  */
 ( () => {
@@ -93,7 +93,7 @@
 		 * lives on the matching .aafm-quickstart-card's data-config, so the unix block
 		 * is taken verbatim from there. Clients differ only by the JSON root key
 		 * (VS Code uses "servers"; everyone else uses "mcpServers"), so the windows
-		 * block — which has no per-client payload in the markup — is reconciled by
+		 * block - which has no per-client payload in the markup - is reconciled by
 		 * rewriting just that root key. Both updates touch textContent / data-copy
 		 * only, never innerHTML.
 		 *
@@ -103,7 +103,7 @@
 		 */
 		#applyRootKey( text, client ) {
 			const wanted = 'vscode' === client ? 'servers' : 'mcpServers';
-			// Rewrite only a "servers"/"mcpServers" that is acting as an OBJECT KEY — i.e.
+			// Rewrite only a "servers"/"mcpServers" that is acting as an OBJECT KEY - i.e.
 			// immediately followed by a colon and an opening brace (allowing whitespace).
 			// Matching the key role rather than the bare token means an arbitrary server
 			// name or value that happens to contain the word "servers" is never rewritten.
@@ -130,7 +130,7 @@
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
-					// Search within the fallback root only — never touch OAuth elements.
+					// Search within the fallback root only - never touch OAuth elements.
 					const searchRoot = root ?? document;
 					const source = searchRoot.querySelector(
 						`.aafm-quickstart-card[data-client="${ client }"]`
@@ -198,7 +198,7 @@
 		 * sequence (tabindex 0) at a time, the rest are -1. Left/Up selects the
 		 * previous tab, Right/Down the next (both wrap), Home/End jump to the ends.
 		 * Each keyboard move calls activate() so the matching panel shows and moves
-		 * focus to the now-current tab — automatic activation, the common pattern
+		 * focus to the now-current tab - automatic activation, the common pattern
 		 * for a small static tab set.
 		 *
 		 * @param {NodeListOf<HTMLElement>|Array<HTMLElement>} tabs     The tab buttons, in DOM order.
@@ -285,7 +285,7 @@
 
 			// The closest container that holds this tab's sibling tabs and snippet blocks.
 			// The OAuth OS tabs sit in .aafm-oauth-picker, but the OAuth snippet blocks live
-			// in the sibling .aafm-oauth-panels — both inside .aafm-oauth-card, so scope to
+			// in the sibling .aafm-oauth-panels - both inside .aafm-oauth-card, so scope to
 			// the card to reach the snippets while staying clear of the App-Password fallback
 			// (a sibling, not nested).
 			const containerOf = ( tab ) =>
@@ -469,7 +469,7 @@
 		 * Scoped to each .aafm-integration-card: the search query and the chosen risk are
 		 * ANDed, and matching is done against each row's data-risk plus its textContent (label,
 		 * name, and hint are all server-rendered text, so reading textContent is safe). Hiding
-		 * is via the `hidden` attribute only — no markup is built from data, so there is no
+		 * is via the `hidden` attribute only - no markup is built from data, so there is no
 		 * HTML sink. The filter works the same on inactive cards (the rows are disabled but
 		 * still in the DOM). Filter controls never touch the form submit.
 		 */
@@ -550,7 +550,7 @@
 				);
 				// Send the tab's scope (the integration subjects it owns) so the
 				// server merges only these and preserves every off-tab ability from
-				// the persisted option — no off-tab state is trusted from the client.
+				// the persisted option - no off-tab state is trusted from the client.
 				[
 					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
 				].forEach( ( i ) => body.append( 'aafm_scope[]', i.value ) );
@@ -594,8 +594,8 @@
 				body.append( 'nonce', this.#nonce );
 				enabled.forEach( ( v ) => body.append( 'aafm_abilities[]', v ) );
 				// Send the tab's scope (the core subjects it owns) so the server
-				// merges only these and preserves every off-tab ability — e.g.
-				// enabled integration (WooCommerce/Yoast/ACF) abilities — from the
+				// merges only these and preserves every off-tab ability - e.g.
+				// enabled integration (WooCommerce/Yoast/ACF) abilities - from the
 				// persisted option. No off-tab state is trusted from the client.
 				[
 					...form.querySelectorAll( 'input[name="aafm_scope[]"]' ),
@@ -670,7 +670,7 @@
 			// Exposed and Deny share one Save button and are now persisted in a single request,
 			// matching the user-meta/term-meta single-handler pattern. The previous split (two
 			// actions, two handlers) let the deny-list save fail silently inside an empty
-			// catch{} while the exposed-list handler still printed "Saved" — so a dropped deny
+			// catch{} while the exposed-list handler still printed "Saved" - so a dropped deny
 			// list read as success. One request + one status assignment removes that gap.
 			btn.addEventListener( 'click', async () => {
 				const status = root.querySelector( '.aafm-meta-keys-status' );
@@ -834,10 +834,10 @@
 				}
 				if ( status ) {
 					if ( ! json?.success ) {
-						// A failed save never wrote anything — say so plainly.
+						// A failed save never wrote anything - say so plainly.
 						status.textContent = this.#t(
 							'settingsNotSaved',
-							'Could not save — your previous settings are still in effect.'
+							'Could not save - your previous settings are still in effect.'
 						);
 					} else {
 						const dropped = Number( json.data?.aafm_ip_dropped ?? 0 );
@@ -854,7 +854,7 @@
 							status.textContent = this.#format(
 								this.#t(
 									'allowlistDropped',
-									'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.'
+									'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.'
 								),
 								dropped
 							);
@@ -926,7 +926,7 @@
 				} else {
 					// On a duplicate username the server returns the existing user's edit URL;
 					// show the friendly message plus a real "Edit user" link built via the DOM
-					// (textContent + href only — never innerHTML), so nothing untrusted is parsed.
+					// (textContent + href only - never innerHTML), so nothing untrusted is parsed.
 					status.textContent = json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' );
 					const editUrl = json?.data?.edit_url;
 					if ( editUrl ) {
@@ -957,7 +957,7 @@
 					status.textContent = this.#format(
 						this.#t(
 							'connectionOk',
-							'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.'
+							'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.'
 						),
 						json.data.http_code,
 						json.data.admin_tool_count
@@ -1032,7 +1032,7 @@
 			// In-flight guard. Rapid Next/filter clicks fire overlapping requests whose
 			// responses can arrive out of order; a stale page would then clobber the newest.
 			// Each load() bumps a token and only the request holding the latest token is
-			// allowed to render — older responses are dropped.
+			// allowed to render - older responses are dropped.
 			let loadToken = 0;
 
 			const load = async ( page, filter ) => {
@@ -1185,7 +1185,7 @@
 		 * Wire the OAuth management tables' Revoke buttons (Registered clients +
 		 * Active grants). Clicks are delegated off the .aafm-oauth-manage container so
 		 * a single listener covers both tables. Each revoke confirms first, then POSTs
-		 * the nonce-checked AJAX action; on success the row is updated in place — the
+		 * the nonce-checked AJAX action; on success the row is updated in place - the
 		 * client's Status pill flips to Revoked and its button is removed, and a grant
 		 * row is removed entirely. Every DOM change is textContent / class / attribute
 		 * only, never innerHTML, so the response is never an HTML sink.

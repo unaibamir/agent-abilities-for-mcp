@@ -2,7 +2,7 @@
 /**
  * End-to-end OAuth 2.1 handshake integration test.
  *
- * Walks the whole chain the way a real MCP client does — register a public client,
+ * Walks the whole chain the way a real MCP client does - register a public client,
  * mint an authorization code the way the authorize POST does, exchange it at the
  * token endpoint over REST, then prove the minted bearer resolves to the approving
  * WordPress user AND that that resolved identity drives per-user MCP tool
@@ -57,7 +57,7 @@ class HandshakeTest extends TestCase {
 
 		// The REST dispatch path reports a production environment; relax the HTTPS
 		// requirement the documented agent-dev way so the token handler runs over the
-		// test's plain-HTTP request instead of short-circuiting with a 400 — the same
+		// test's plain-HTTP request instead of short-circuiting with a 400 - the same
 		// documented override RestEndpointsTest uses.
 		if ( ! defined( 'AAFM_OAUTH_ALLOW_HTTP' ) ) {
 			define( 'AAFM_OAUTH_ALLOW_HTTP', true );
@@ -75,7 +75,7 @@ class HandshakeTest extends TestCase {
 		// Contribute the two fixtures to the static registry so aafm_get_enabled_abilities()
 		// and the tools/list filter can map tool names back to abilities. The registry
 		// catalog is memoized, and parent::set_up() flushed it BEFORE this filter was
-		// attached, so flush once more now that the filter is in place — otherwise the
+		// attached, so flush once more now that the filter is in place - otherwise the
 		// next read returns the production catalog without our fixtures and the
 		// enabled-abilities intersection drops them.
 		add_filter( 'aafm_abilities_registry', array( $this, 'register_fixture_registry' ) );
@@ -262,8 +262,8 @@ class HandshakeTest extends TestCase {
 	 * aafm_filter_mcp_tools_list() is the exact callback the adapter fires on the
 	 * mcp_adapter_tools_list hook at request time, and it decides visibility solely
 	 * from the resolved current user (via aafm_user_can_discover_ability). We invoke
-	 * that same callback directly against Tool DTO stubs — the canonical harness used
-	 * by ServerToolsTest — so the assertion exercises the real visibility logic the
+	 * that same callback directly against Tool DTO stubs - the canonical harness used
+	 * by ServerToolsTest - so the assertion exercises the real visibility logic the
 	 * live route would, for whatever user wp_set_current_user() has established.
 	 *
 	 * @return array<int,string> Sanitized tool names the current user may discover.
@@ -308,9 +308,9 @@ class HandshakeTest extends TestCase {
 	 *
 	 * Proves the OAuth-resolved identity drives per-user MCP tool visibility, the
 	 * same as an Application Password. The editor is chosen deliberately: its
-	 * discoverable set is a STRICT SUBSET of the enabled abilities — it can discover
+	 * discoverable set is a STRICT SUBSET of the enabled abilities - it can discover
 	 * aafm/pub-read (permission __return_true) but NOT aafm/admin-write (manage_options,
-	 * which an editor lacks) — so the subset assertion is meaningful.
+	 * which an editor lacks) - so the subset assertion is meaningful.
 	 *
 	 * Note on the tools/list leg: the adapter's tools/list filter resolves visibility
 	 * from the CURRENT user, not by re-reading the bearer (the bearer feeds the
@@ -320,7 +320,7 @@ class HandshakeTest extends TestCase {
 	 * aafm_oauth_resolve_current_user, and (6) running the real tools/list filter AS
 	 * $uid (see visible_tool_names()) yields exactly the editor's bounded set.
 	 * Together they prove the OAuth-resolved uid produces the correct per-user tool set
-	 * — which is the integration guarantee under test.
+	 * - which is the integration guarantee under test.
 	 */
 	public function test_full_handshake_resolves_user_and_lists_their_tools(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
@@ -345,7 +345,7 @@ class HandshakeTest extends TestCase {
 		$this->assertGreaterThan( 0, $data['expires_in'], 'expires_in must be a positive lifetime' );
 		$access_token = (string) $data['access_token'];
 
-		// (5) The minted bearer resolves to the approving user on determine_current_user —
+		// (5) The minted bearer resolves to the approving user on determine_current_user -
 		// but only on the MCP route (the resolver is scoped there, not site-wide).
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash -- snapshot of a server superglobal, restored verbatim after the assertion.
 		$prev_uri                      = $_SERVER['REQUEST_URI'] ?? null;
@@ -399,7 +399,7 @@ class HandshakeTest extends TestCase {
 	}
 
 	/**
-	 * T1-8: deactivating a client blocks redemption of a code minted before deactivation —
+	 * T1-8: deactivating a client blocks redemption of a code minted before deactivation -
 	 * is_active is otherwise only checked at authorize-time.
 	 */
 	public function test_deactivated_client_cannot_redeem_code(): void {

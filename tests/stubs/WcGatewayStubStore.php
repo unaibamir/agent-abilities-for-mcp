@@ -112,7 +112,7 @@ class WcGatewayStubStore {
 	 * Persist an update_option() call on a gateway setting.
 	 *
 	 * Mirrors WordPress update_option()/WC_Settings_API semantics: the return value reflects whether
-	 * the stored value CHANGED — false when the new value equals the existing one (no write needed)
+	 * the stored value CHANGED - false when the new value equals the existing one (no write needed)
 	 * or when the gateway is unknown, true when a different value was written. The value is persisted
 	 * whenever it differs. When $force_save_failure is set, the write is rejected outright (value not
 	 * persisted) to simulate a genuine persistence failure for read-back verification tests.
@@ -132,7 +132,7 @@ class WcGatewayStubStore {
 		}
 		$existing = self::$gateways[ $gateway_id ]['settings'][ $key ] ?? null;
 		if ( $existing === $value ) {
-			// Unchanged — WordPress update_option() returns false but the stored value already holds it.
+			// Unchanged - WordPress update_option() returns false but the stored value already holds it.
 			return false;
 		}
 		self::$gateways[ $gateway_id ]['settings'][ $key ] = $value;

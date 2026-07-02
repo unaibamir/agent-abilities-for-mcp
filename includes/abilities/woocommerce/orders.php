@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — order, order-note, and order-refund reads and writes (sub-slice W4-WC2).
+ * WooCommerce integration abilities - order, order-note, and order-refund reads and writes (sub-slice W4-WC2).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_orders_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce order registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_orders_registry_definitions(): array {
 	return array(
-		// Orders (sub-slice W4-WC2) — list is lean (no PII), get returns full billing/shipping PII
+		// Orders (sub-slice W4-WC2) - list is lean (no PII), get returns full billing/shipping PII
 		// under the Integrations security disclaimer. Both gate on the flat, object-independent
 		// manage_woocommerce capability and fall through to that callback at discovery (no server.php
 		// case). PII exposure in wc-get-order is intentional: the revised WC PII stance in spec 48-
@@ -63,7 +63,7 @@ function aafm_wc_orders_registry_definitions(): array {
 		// audited, not stripped.
 		'aafm/wc-list-orders'         => array(
 			'label'        => __( 'List WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean - no billing or shipping details. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -79,7 +79,7 @@ function aafm_wc_orders_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_get_order',
 		),
 
-		// Order writes (sub-slice W4-WC2.2) — create, update, focused status-only update.
+		// Order writes (sub-slice W4-WC2.2) - create, update, focused status-only update.
 		'aafm/wc-create-order'        => array(
 			'label'        => __( 'Create WooCommerce order', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Creates a WooCommerce order from optional status, customer id, billing, shipping, and line items. Returns the full order shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -173,7 +173,7 @@ function aafm_wc_get_order_object( int $id ): ?\WC_Order {
 
 /**
  * The lean list shape for an order: id, number, status, total, currency, date_created,
- * customer_id. No billing/shipping/PII in list rows — lean for payload economy.
+ * customer_id. No billing/shipping/PII in list rows - lean for payload economy.
  *
  * @param \WC_Order $order Order.
  * @return array<string,mixed>
@@ -193,7 +193,7 @@ function aafm_redact_wc_order( \WC_Order $order ): array {
 /**
  * The full single-order shape including customer billing/shipping PII.
  *
- * PII (billing email, phone, full address) is returned as-is — this is intentional per the
+ * PII (billing email, phone, full address) is returned as-is - this is intentional per the
  * revised WC PII stance in spec 48-: full PII on order reads, under the Integrations security
  * disclaimer, gated by manage_woocommerce and audited. Do NOT strip or opt-in-gate it.
  *
@@ -228,7 +228,7 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 		}
 	}
 
-	// Billing address — full PII under the disclaimer; cast to (object) so empty map encodes as {}.
+	// Billing address - full PII under the disclaimer; cast to (object) so empty map encodes as {}.
 	$billing_raw = array(
 		'first_name' => (string) $order->get_billing_first_name(),
 		'last_name'  => (string) $order->get_billing_last_name(),
@@ -247,7 +247,7 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 	// empty maps are cast to (object) so they encode as {} rather than [].
 	$billing_out = empty( $billing ) ? (object) array() : $billing;
 
-	// Shipping address — no email/phone (those are billing-only).
+	// Shipping address - no email/phone (those are billing-only).
 	$shipping_raw = array(
 		'first_name' => (string) $order->get_shipping_first_name(),
 		'last_name'  => (string) $order->get_shipping_last_name(),
@@ -352,7 +352,7 @@ function aafm_args_wc_list_orders(): array {
  *
  * Queries orders via wc_get_orders() with paginate=>true to get the grand total separate from
  * the page slice. Each order in the result is mapped through aafm_redact_wc_order() which
- * returns only the lean fields — no billing/shipping/PII in list rows.
+ * returns only the lean fields - no billing/shipping/PII in list rows.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -505,7 +505,7 @@ function aafm_args_wc_get_order(): array {
 /**
  * Execute aafm/wc-get-order.
  *
- * Resolves the order id through wc_get_order() — not the product wc_get_product(). An unknown
+ * Resolves the order id through wc_get_order() - not the product wc_get_product(). An unknown
  * id or a non-WC_Order return falls through to aafm_generic_error(). The full shape including
  * customer billing/shipping PII is assembled by aafm_rich_wc_order().
  *
@@ -1078,13 +1078,13 @@ function aafm_exec_wc_update_order_status( array $input ) {
  *          wc-create-order-refund (W)
  *
  * All gate on aafm_wc_perm() (manage_woocommerce). Every delete uses the
- * WooCommerce object's own ->delete() or wc_delete_order_note() — none is a
+ * WooCommerce object's own ->delete() or wc_delete_order_note() - none is a
  * wp_delete_post/wp_delete_comment literal so the SecurityRegressionTest stays green.
  * --------------------------------------------------------------------------
  */
 
 // ============================================================================
-// Group B — order notes
+// Group B - order notes
 // ============================================================================
 
 /**
@@ -1133,7 +1133,7 @@ function aafm_wc_redact_note( object $note ): array {
 }
 
 // ---------------------------------------------------------------------------
-// Shared output-property helpers — notes and refunds.
+// Shared output-property helpers - notes and refunds.
 // Used by both list and get schemas so they stay in lockstep.
 // ---------------------------------------------------------------------------
 
@@ -1325,7 +1325,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
 }
 
 // ============================================================================
-// Group C — order refunds
+// Group C - order refunds
 // ============================================================================
 
 /**
@@ -1577,7 +1577,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		'reason'   => $reason,
 	);
 
-	// Pass line_items through when provided — wc_create_refund() accepts them.
+	// Pass line_items through when provided - wc_create_refund() accepts them.
 	if ( ! empty( $input['line_items'] ) && is_array( $input['line_items'] ) ) {
 		$line_items = array();
 		foreach ( $input['line_items'] as $item ) {

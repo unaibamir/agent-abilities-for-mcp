@@ -53,7 +53,7 @@ final class CatalogTest extends TestCase {
 		// plugin is active, and the host plugins are not installed on the test site. Force
 		// all three active so later slices' integration abilities are counted here. The
 		// registry is memoized (includes/registry.php static $cache), so the flush is
-		// MANDATORY — a force filter added without it is a no-op against the cached
+		// MANDATORY - a force filter added without it is a no-op against the cached
 		// host-inactive registry. After the Wave 5 Slice D WooCommerce cut (15 abilities removed), the count is 153.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
@@ -88,7 +88,7 @@ final class CatalogTest extends TestCase {
 		$this->assertCount(
 			153,
 			$registry,
-			'The catalog must contain exactly 153 abilities — 76 reads + 77 writes.'
+			'The catalog must contain exactly 153 abilities - 76 reads + 77 writes.'
 		);
 	}
 
@@ -103,7 +103,7 @@ final class CatalogTest extends TestCase {
 		$expected = self::READS;
 		sort( $expected );
 
-		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 76 reads — no drift.' );
+		$this->assertSame( $expected, $reads, 'The reads group must be exactly the 76 reads - no drift.' );
 		$this->assertCount( count( self::READS ), $reads, 'Exactly 76 read abilities.' );
 	}
 
@@ -118,14 +118,14 @@ final class CatalogTest extends TestCase {
 		$expected = self::WRITES;
 		sort( $expected );
 
-		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 77 writes — no drift.' );
+		$this->assertSame( $expected, $writes, 'The writes group must be exactly the 77 writes - no drift.' );
 		$this->assertCount( count( self::WRITES ), $writes, 'Exactly 77 write abilities.' );
 	}
 
 	public function test_catalog_is_only_reads_plus_writes_no_extras(): void {
 		$registry = aafm_get_abilities_registry();
 
-		// Every catalog key is one of the known names — no stray ability slipped in.
+		// Every catalog key is one of the known names - no stray ability slipped in.
 		$known = array_merge( self::READS, self::WRITES );
 		foreach ( array_keys( $registry ) as $name ) {
 			$this->assertContains( $name, $known, $name . ' is not one of the 153 sanctioned abilities.' );
@@ -182,14 +182,14 @@ final class CatalogTest extends TestCase {
 				$name . ' does not map to a legal MCP tool name'
 			);
 
-			// Closed input_schema — additionalProperties:false is the first anti-escalation layer.
+			// Closed input_schema - additionalProperties:false is the first anti-escalation layer.
 			$input = $ability->get_input_schema();
 			$this->assertIsArray( $input );
 			$this->assertNotEmpty( $input, $name . ' has no input_schema' );
 			$this->assertArrayHasKey( 'additionalProperties', $input, $name . ' input_schema is not closed' );
 			$this->assertFalse( $input['additionalProperties'], $name . ' allows additionalProperties (open schema)' );
 
-			// output_schema is required by core — present and non-empty.
+			// output_schema is required by core - present and non-empty.
 			$output = $ability->get_output_schema();
 			$this->assertIsArray( $output );
 			$this->assertNotEmpty( $output, $name . ' has no output_schema' );
@@ -203,7 +203,7 @@ final class CatalogTest extends TestCase {
 			$annotations = wp_get_ability( $name )->get_meta_item( 'annotations' );
 			$this->assertIsArray( $annotations, $name . ' has no annotations' );
 
-			// A write is NEVER readonly — that would be a lie to the agent.
+			// A write is NEVER readonly - that would be a lie to the agent.
 			$this->assertFalse(
 				$annotations['readonly'] ?? true,
 				$name . ' is dishonestly annotated readonly:true (it is a write)'

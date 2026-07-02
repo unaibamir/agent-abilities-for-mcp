@@ -86,7 +86,7 @@ final class AcfTest extends TestCase {
 		$this->assertSame( 'field_1', $res['field_groups'][0]['fields'][0]['key'] );
 		$this->assertSame( 'Headline', $res['field_groups'][0]['fields'][0]['label'] );
 		$this->assertSame( 'text', $res['field_groups'][0]['fields'][0]['type'] );
-		// Discovery shape only — never any stored VALUE.
+		// Discovery shape only - never any stored VALUE.
 		$json = (string) wp_json_encode( $res );
 		$this->assertStringNotContainsString( 'Hello', $json, 'list-field-groups must not expose stored values.' );
 	}
@@ -95,7 +95,7 @@ final class AcfTest extends TestCase {
 		// HIGH-2: assert at the REGISTRY level (not via aafm_user_can_discover_ability, which leaks
 		// through the process-wide raw-permission $store once any test registered the set). The
 		// stub_acf() helper defines get_field() process-wide, so real detection still reports ACF
-		// active after removing the force filter — pin it off through the aafm_acf_active seam.
+		// active after removing the force filter - pin it off through the aafm_acf_active seam.
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_acf' );
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
@@ -123,7 +123,7 @@ final class AcfTest extends TestCase {
 	/**
 	 * The ACF post gate must honor the operator's post-type exposure allowlist: a public,
 	 * map_meta_cap CPT the admin CAN edit but which is NOT exposed (only post/page are on by
-	 * default) is refused — ACF fields on a non-exposed type are out of scope, exactly as the
+	 * default) is refused - ACF fields on a non-exposed type are out of scope, exactly as the
 	 * core content writes refuse it. A normal post stays allowed for the same admin.
 	 */
 	public function test_acf_post_gate_denies_a_non_exposed_cpt(): void {
@@ -181,7 +181,7 @@ final class AcfTest extends TestCase {
 		$this->assertSame( 'Updated headline', ( (array) $res['fields'] )['field_1'] );
 
 		// LOW-1: pin the selector like the term/user tests so a broken post selector can't pass via
-		// the stub's global seed merge — the write must land under the post-id bucket specifically.
+		// the stub's global seed merge - the write must land under the post-id bucket specifically.
 		$this->assertSame(
 			'Updated headline',
 			\AAFM\Tests\AcfStubStore::value( 'field_1', $post_id ),
@@ -686,7 +686,7 @@ final class AcfTest extends TestCase {
 
 	/**
 	 * MEDIUM: a link-typed field carries a structured array {title,url,target}. The recursive
-	 * sanitizer must NOT esc_url_raw the plain-text members — the title must survive intact and the
+	 * sanitizer must NOT esc_url_raw the plain-text members - the title must survive intact and the
 	 * url must be preserved as a URL.
 	 */
 	public function test_update_post_fields_link_type_preserves_title_and_url(): void {
@@ -790,7 +790,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * TF-1: the genuine-failure detection from T2-1 still holds for a formatted field — when
+	 * TF-1: the genuine-failure detection from T2-1 still holds for a formatted field - when
 	 * update_field() stores nothing, the write still returns the generic error.
 	 */
 	public function test_update_post_fields_formatted_field_real_failure_still_errors(): void {
@@ -816,7 +816,7 @@ final class AcfTest extends TestCase {
 
 	/**
 	 * T1-6: a repeater whose sub_fields include a URL subfield must run that nested leaf through
-	 * esc_url_raw, not the plain-text sanitizer — otherwise a javascript: scheme stored in a
+	 * esc_url_raw, not the plain-text sanitizer - otherwise a javascript: scheme stored in a
 	 * repeater row survives to be rendered by a theme. The plain-text sub_field round-trips
 	 * intact, and the structured shape is preserved.
 	 */
@@ -880,7 +880,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post — a <script> is dropped while a
+	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post - a <script> is dropped while a
 	 * benign <strong> is kept (the policy stated in the build log).
 	 */
 	public function test_update_post_fields_wysiwyg_strips_script_keeps_strong(): void {
@@ -987,7 +987,7 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
-	 * SECURITY: an unknown field key (no ACF definition — acf_get_field returns false) is REJECTED.
+	 * SECURITY: an unknown field key (no ACF definition - acf_get_field returns false) is REJECTED.
 	 *
 	 * The old behavior sanitized an unresolved key as text and wrote it. That was the
 	 * privilege-escalation primitive: an unresolved key fell through update_field() to a raw
@@ -1015,7 +1015,7 @@ final class AcfTest extends TestCase {
 	 * MEDIUM-2: the user-field abilities route to the edit_users discovery floor in server.php (the
 	 * only ACF floor differing from edit_posts). An editor (edit_posts, NOT edit_users) discovers
 	 * the post-field ability but NOT the user-field one; an admin discovers both. Discovery-helper
-	 * use is correct here — this is the positive floor proof, distinct from the registry-level
+	 * use is correct here - this is the positive floor proof, distinct from the registry-level
 	 * host-inactive test.
 	 */
 	public function test_user_fields_discovery_respects_the_edit_users_floor(): void {

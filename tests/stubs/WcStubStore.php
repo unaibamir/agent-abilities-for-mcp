@@ -39,7 +39,7 @@ class WcStubStore {
 	public static int $next_id = 1000;
 
 	/**
-	 * When true, delete() refuses to remove the row and reports failure — modelling a WC
+	 * When true, delete() refuses to remove the row and reports failure - modelling a WC
 	 * data-store delete failure so the delete-failure path is exercisable.
 	 *
 	 * @var bool
@@ -94,7 +94,7 @@ class WcStubStore {
 	 * Persist a product's data (create when id is 0/absent, else update), returning the id.
 	 *
 	 * When the row carries a parent_id (a variation), the parent product's children list is kept in
-	 * sync so a following $parent->get_children() returns the new id — mirroring how a real variable
+	 * sync so a following $parent->get_children() returns the new id - mirroring how a real variable
 	 * product owns its variations.
 	 *
 	 * @param array<string,mixed> $data Product data, including 'id' (0 to create).

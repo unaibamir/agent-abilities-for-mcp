@@ -115,7 +115,7 @@ final class RegistryTest extends TestCase {
 	public function test_removed_unified_seo_abilities_are_gone_and_a_stale_enabled_key_is_harmless(): void {
 		// Wave 5 removed the unified seo-* abilities in favour of the per-plugin sets. Even with every
 		// SEO host force-active, the old names must be absent from the registry, and a stale enabled
-		// option entry for one of them must resolve cleanly (intersected away) rather than fatal —
+		// option entry for one of them must resolve cleanly (intersected away) rather than fatal -
 		// the migration-safety guarantee, no migration code needed.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );

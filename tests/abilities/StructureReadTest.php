@@ -21,7 +21,7 @@ final class StructureReadTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
-		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
@@ -89,7 +89,7 @@ final class StructureReadTest extends TestCase {
 		$this->assertArrayHasKey( 'url', $out['site'] );
 		$this->assertArrayHasKey( 'tagline', $out['site'] );
 
-		// The site descriptor is EXACTLY the whitelist — nothing else leaks.
+		// The site descriptor is EXACTLY the whitelist - nothing else leaks.
 		$this->assertSame(
 			array( 'name', 'tagline', 'url', 'language' ),
 			array_keys( $out['site'] )

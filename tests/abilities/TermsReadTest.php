@@ -22,7 +22,7 @@ final class TermsReadTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
-		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-terms' ) );

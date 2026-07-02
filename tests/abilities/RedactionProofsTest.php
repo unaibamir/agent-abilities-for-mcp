@@ -3,7 +3,7 @@
  * Negative redaction proofs: assert the DANGEROUS fields are ABSENT from every
  * agent-facing shape, not merely that the safe fields are present.
  *
- * The competitor CVEs this plugin exists to avoid were leaks — emails, logins,
+ * The competitor CVEs this plugin exists to avoid were leaks - emails, logins,
  * password hashes, IPs, absolute paths, post passwords, WP/PHP versions, the
  * admin email. Each redactor here is asserted to omit those keys and to not
  * carry their values anywhere in the serialized payload.

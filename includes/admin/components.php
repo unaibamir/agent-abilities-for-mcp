@@ -2,7 +2,7 @@
 /**
  * Reusable admin section + set-row render helpers (the shared component layer).
  *
- * These are STRUCTURAL wrappers only — they never sanitize the body/control/pill
+ * These are STRUCTURAL wrappers only - they never sanitize the body/control/pill
  * markup; the call site escapes its own leaves (the file's established
  * leaf-escape convention, mirrored from includes/admin/notices.php). Do NOT pass
  * raw user data as `body`, `control`, or `pill`: those args are echoed verbatim.
@@ -25,7 +25,7 @@ defined( 'ABSPATH' ) || exit;
  * (title + optional badge) and a `.aafm-section-body` body, honoring `open` only
  * when `collapsible` is true.
  *
- * STRUCTURAL ONLY: `body`/`pill` are echoed verbatim — the caller must have
+ * STRUCTURAL ONLY: `body`/`pill` are echoed verbatim - the caller must have
  * escaped them. `title`/`description` are escaped here with esc_html.
  *
  * Recognised $args keys: `id` (wrapper id attribute), `title` (heading, escaped),
@@ -96,7 +96,7 @@ function aafm_render_section( array $args ): void {
  * sub-label) beside a `.aafm-set-control` (the pre-built control markup), with an
  * optional `.help` element below.
  *
- * STRUCTURAL ONLY: `control` is echoed verbatim — the caller owns its escaping.
+ * STRUCTURAL ONLY: `control` is echoed verbatim - the caller owns its escaping.
  * `label`/`opt`/`help` are escaped here with esc_html.
  *
  * Recognised $args keys: `label` (row label, escaped), `opt` (optional sub-label

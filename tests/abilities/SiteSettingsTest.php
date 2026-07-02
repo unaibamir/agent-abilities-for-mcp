@@ -4,7 +4,7 @@
  *
  * The update-site-settings ability is the most dangerous write in the catalog: a careless
  * implementation could change siteurl/home/admin_email and lock out or take over a
- * site. These tests are the containment proof — the allowlist excludes every
+ * site. These tests are the containment proof - the allowlist excludes every
  * takeover-class key, the closed schema plus the server-side allowlist reject any
  * smuggled key, and the integer bounds are clamped server-side so a 0 or 99 can never
  * be persisted.
@@ -110,8 +110,8 @@ final class SiteSettingsTest extends TestCase {
 
 	/**
 	 * Headline containment proof: a takeover-class key smuggled alongside a legitimate one
-	 * must reject the WHOLE call (fail-closed), and the site's real takeover settings —
-	 * siteurl, home, admin_email, default_role, users_can_register — must be unchanged.
+	 * must reject the WHOLE call (fail-closed), and the site's real takeover settings -
+	 * siteurl, home, admin_email, default_role, users_can_register - must be unchanged.
 	 * A leak here is a site takeover or lockout.
 	 */
 	public function test_update_site_settings_contains_every_takeover_key(): void {
@@ -201,7 +201,7 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * A non-scalar value is refused outright before any write — the agent can never store a
+	 * A non-scalar value is refused outright before any write - the agent can never store a
 	 * structure, and the execute degrades on its OWN generic error, not the API safety net.
 	 */
 	public function test_update_site_settings_rejects_a_non_scalar_value(): void {
@@ -220,7 +220,7 @@ final class SiteSettingsTest extends TestCase {
 
 	/**
 	 * A malformed timezone_string is normalized by WordPress's own sanitize_option (which
-	 * update_option fires) — it must not be stored as the bogus value. Documents that
+	 * update_option fires) - it must not be stored as the bogus value. Documents that
 	 * containment leans on core sanitize_option for the keys core validates.
 	 */
 	public function test_update_site_settings_normalizes_a_malformed_timezone(): void {

@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — payment gateway reads and writes (sub-slice W4-WC7).
+ * WooCommerce integration abilities - payment gateway reads and writes (sub-slice W4-WC7).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,7 +48,7 @@ function aafm_register_wc_gateways_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce payment gateway registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -85,7 +85,7 @@ function aafm_wc_gateways_registry_definitions(): array {
 }
 
 // =============================================================================
-// WC7 helpers — redaction + gateway shape
+// WC7 helpers - redaction + gateway shape
 // =============================================================================
 
 /**
@@ -363,7 +363,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 
 	// Each setting persists immediately through WC_Payment_Gateway::update_option(). That method
 	// returns WordPress's update_option() result, which is false when the new value already equals
-	// the stored value (no write needed) — NOT only on failure. So a return-value gate would falsely
+	// the stored value (no write needed) - NOT only on failure. So a return-value gate would falsely
 	// error on unchanged values. Instead, apply each write and verify the desired end-state by
 	// reading the value back; only a genuine read-back mismatch is a failure.
 	$desired = array();

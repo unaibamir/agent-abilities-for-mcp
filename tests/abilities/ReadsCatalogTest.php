@@ -3,7 +3,7 @@
  * Phase 3 milestone: asserts the full read catalog registers with the canonical
  * read-ability shape and that nothing is enabled by default.
  *
- * This is the drift-catcher for the reads — if any read ability is missing, misnamed,
+ * This is the drift-catcher for the reads - if any read ability is missing, misnamed,
  * miscategorized, or registered without an input/output schema, permission callback,
  * or the readonly/non-destructive annotations, this test fails loudly here rather than
  * letting the gap reach the MCP server.
@@ -71,7 +71,7 @@ final class ReadsCatalogTest extends TestCase {
 		$this->assertSame(
 			$expected,
 			$reads,
-			'The read group must be exactly the 76 reads — no more, no fewer.'
+			'The read group must be exactly the 76 reads - no more, no fewer.'
 		);
 		$this->assertCount( count( self::READS ), $reads, 'The read catalog ships exactly 76 read abilities.' );
 	}
@@ -113,7 +113,7 @@ final class ReadsCatalogTest extends TestCase {
 			$this->assertArrayHasKey( 'additionalProperties', $input, $name . ' input_schema is not closed' );
 			$this->assertFalse( $input['additionalProperties'], $name . ' allows additionalProperties' );
 
-			// output_schema is required by core — must be present and non-empty.
+			// output_schema is required by core - must be present and non-empty.
 			$output = $ability->get_output_schema();
 			$this->assertIsArray( $output );
 			$this->assertNotEmpty( $output, $name . ' has no output_schema' );
@@ -130,7 +130,7 @@ final class ReadsCatalogTest extends TestCase {
 		$this->register_all_reads();
 
 		// Anonymous (no current user) must pass through the wrapped permission_callback
-		// and resolve to a real boolean/WP_Error — never a fatal, never a pass-by-absence.
+		// and resolve to a real boolean/WP_Error - never a fatal, never a pass-by-absence.
 		wp_set_current_user( 0 );
 
 		foreach ( self::READS as $name ) {
@@ -149,7 +149,7 @@ final class ReadsCatalogTest extends TestCase {
 	public function test_disabled_reads_are_never_registered(): void {
 		// The Abilities API registry is a process-wide singleton with no per-test reset, so a
 		// prior test in this run may have left these registered. Clear them first, then prove
-		// that a registration pass with an EMPTY enabled-list re-registers none of them —
+		// that a registration pass with an EMPTY enabled-list re-registers none of them -
 		// the actual product guarantee ("never registered, not merely hidden").
 		foreach ( self::READS as $name ) {
 			if ( wp_has_ability( $name ) ) {

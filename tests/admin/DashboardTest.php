@@ -197,9 +197,9 @@ final class DashboardTest extends TestCase {
 		update_option( 'aafm_enabled_abilities', array() );
 		$steps = aafm_setup_steps();
 		$this->assertCount( 3, $steps );
-		$this->assertFalse( $steps[0]['done'] ); // Abilities — none enabled.
-		$this->assertFalse( $steps[1]['done'] ); // Connect — no grant, no agent user.
-		$this->assertFalse( $steps[2]['done'] ); // First call — no activity.
+		$this->assertFalse( $steps[0]['done'] ); // Abilities - none enabled.
+		$this->assertFalse( $steps[1]['done'] ); // Connect - no grant, no agent user.
+		$this->assertFalse( $steps[2]['done'] ); // First call - no activity.
 	}
 
 	public function test_connect_step_done_via_agent_user(): void {

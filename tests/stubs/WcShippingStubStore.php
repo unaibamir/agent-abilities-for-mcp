@@ -116,7 +116,7 @@ class WcShippingStubStore {
 	 *
 	 * The production enabled toggle in aafm_exec_wc_update_shipping_method() runs a direct
 	 * $wpdb->update() against this table (no core API exists for the is_enabled column), so a
-	 * real table is created here — mirroring how WcTaxStubStore backs the tax-rate queries — and
+	 * real table is created here - mirroring how WcTaxStubStore backs the tax-rate queries - and
 	 * the stub WC_Shipping_Method constructor reads is_enabled back from it. Call from the
 	 * shipping test set_up after seeding the in-memory store.
 	 *

@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — shipping zone and method reads and writes (sub-slice W4-WC5).
+ * WooCommerce integration abilities - shipping zone and method reads and writes (sub-slice W4-WC5).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_shipping_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce shipping registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_shipping_registry_definitions(): array {
 	return array(
-		// Shipping zones (sub-slice W4-WC5) — zone and method management gated on manage_woocommerce.
+		// Shipping zones (sub-slice W4-WC5) - zone and method management gated on manage_woocommerce.
 		'aafm/wc-list-shipping-zones'    => array(
 			'label'        => __( 'List WooCommerce shipping zones', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists WooCommerce shipping zones with their id, name, and order. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -92,7 +92,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 			'args_builder' => 'aafm_args_wc_update_shipping_zone',
 		),
 
-		// Shipping methods (sub-slice W4-WC5) — always scoped to a zone.
+		// Shipping methods (sub-slice W4-WC5) - always scoped to a zone.
 		'aafm/wc-list-shipping-methods'  => array(
 			'label'        => __( 'List WooCommerce shipping methods', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -133,7 +133,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 }
 
 // =============================================================================
-// SHIPPING ZONES — helpers
+// SHIPPING ZONES - helpers
 // =============================================================================
 
 /**
@@ -498,7 +498,7 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
 }
 
 // =============================================================================
-// SHIPPING METHODS — helpers
+// SHIPPING METHODS - helpers
 // =============================================================================
 
 /**
@@ -865,7 +865,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		update_option( $method->get_instance_option_key(), $instance_settings );
 	}
 
-	// Persist the enabled flag. For a zone method this is NOT an instance setting — it
+	// Persist the enabled flag. For a zone method this is NOT an instance setting - it
 	// lives in the is_enabled column of the woocommerce_shipping_zone_methods table, keyed
 	// by instance_id. WC core toggles it with a direct $wpdb->update() and then bumps the
 	// shipping transient version; there is no higher-level API for this column.

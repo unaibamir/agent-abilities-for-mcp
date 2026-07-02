@@ -299,7 +299,7 @@ if ( ! function_exists( 'wc_delete_attribute' ) ) {
 
 if ( ! class_exists( 'WC_Order' ) ) {
 	/**
-	 * Stub WC_Order for PHPStan — mirrors the getters the order abilities call.
+	 * Stub WC_Order for PHPStan - mirrors the getters the order abilities call.
 	 */
 	class WC_Order {
 		/**
@@ -465,7 +465,7 @@ if ( ! class_exists( 'WC_Order' ) ) {
 
 if ( ! class_exists( 'WC_Order_Item' ) ) {
 	/**
-	 * Stub WC_Order_Item for PHPStan — mirrors the getters the order abilities call.
+	 * Stub WC_Order_Item for PHPStan - mirrors the getters the order abilities call.
 	 */
 	class WC_Order_Item {
 		/** @return int */
@@ -510,7 +510,7 @@ if ( ! function_exists( 'wc_get_orders' ) ) {
 if ( ! function_exists( 'wc_get_order' ) ) {
 	/**
 	 * Real WooCommerce returns a WC_Order_Refund when given a refund post id, so the
-	 * stub return type includes it — the refund resolver's instanceof check needs it.
+	 * stub return type includes it - the refund resolver's instanceof check needs it.
 	 *
 	 * @param int|false $id
 	 * @return \WC_Order|\WC_Order_Refund|false

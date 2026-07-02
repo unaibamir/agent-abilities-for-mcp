@@ -119,7 +119,7 @@ def main():
     head_v = header_version(php)
     const_v = const_version(php)
     if head_v != const_v:
-        fail(f"version mismatch: header is {head_v} but AAFM_VERSION is {const_v} — fix the PHP file")
+        fail(f"version mismatch: header is {head_v} but AAFM_VERSION is {const_v} - fix the PHP file")
 
     version = args.version or head_v
     if args.version and args.version != head_v and not args.dry_run:
@@ -142,7 +142,7 @@ def main():
     print("--------------------------")
 
     if args.dry_run:
-        print("(dry run — no files written)")
+        print("(dry run - no files written)")
         return
 
     # 1) readme.txt: sync Stable tag.

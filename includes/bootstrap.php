@@ -15,7 +15,7 @@ use WP\MCP\Core\McpAdapter;
  * The MCP server's REST namespace. Single source for the four sites that need the route
  * literal (discovery, validator, connection, server). Splitting namespace from route keeps
  * the value byte-identical to what create_server() registers and what aafm_endpoint_url()
- * builds — the OAuth audience binding (hash_equals on the endpoint URL) is byte-sensitive.
+ * builds - the OAuth audience binding (hash_equals on the endpoint URL) is byte-sensitive.
  */
 if ( ! defined( 'AAFM_MCP_NAMESPACE' ) ) {
 	define( 'AAFM_MCP_NAMESPACE', 'agent-abilities-for-mcp' );
@@ -60,7 +60,7 @@ function aafm_mcp_rest_route(): string {
  * range [floor, next-minor) and warns the operator otherwise.
  *
  * After the eager-load fix (see adapter-loader.php), our bundled copy is the one in use
- * whenever we load before the conflicting sibling — and because we sort alphabetically first
+ * whenever we load before the conflicting sibling - and because we sort alphabetically first
  * as "agent-abilities-for-mcp", that is the normal case. We deliberately OVERRIDE any
  * later-loading sibling's copy of ANY version (older or newer); the trade is that a sibling
  * bundling a newer adapter is forced onto our version, which is acceptable because the
@@ -103,7 +103,7 @@ function aafm_adapter_is_too_new( string $loaded_version ): bool {
 }
 
 /**
- * The version of the adapter actually loaded — whichever copy our eager load committed PHP to, or
+ * The version of the adapter actually loaded - whichever copy our eager load committed PHP to, or
  * a sibling's copy that was declared before us.
  *
  * @return string|null
@@ -240,7 +240,7 @@ function aafm_notice_adapter_too_new(): void {
  * Reflects the loaded WP\MCP\Core\McpAdapter class file path, finds which plugin folder under
  * WP_PLUGIN_DIR contains it, then reads that plugin's header name via get_plugins(). Returns an
  * empty string when the class is absent, the file is outside the plugins directory, or no plugin
- * header can be matched — the caller then uses the generic wording.
+ * header can be matched - the caller then uses the generic wording.
  *
  * @return string Plugin display name, or '' when it cannot be resolved.
  */

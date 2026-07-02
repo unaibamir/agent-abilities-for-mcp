@@ -120,7 +120,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-post']     = array(
 		'label'        => __( 'Delete post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'content',
@@ -221,7 +221,7 @@ function aafm_exec_get_posts( array $input ) {
 
 	// Resolve the read-private capability from the post type's own cap map so a page
 	// query is gated by read_private_pages (and a custom type by its own cap), not the
-	// post default — get-pages delegates here with post_type pinned to 'page'.
+	// post default - get-pages delegates here with post_type pinned to 'page'.
 	$type_object = get_post_type_object( $type );
 	$private_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->read_private_posts : 'read_private_posts';
 	$can_private = current_user_can( $private_cap );
@@ -268,7 +268,7 @@ function aafm_exec_get_posts( array $input ) {
 }
 
 /**
- * Args for aafm/count-posts — total plus per-status breakdown, optional post_type.
+ * Args for aafm/count-posts - total plus per-status breakdown, optional post_type.
  *
  * @return array<string,mixed>
  */
@@ -309,7 +309,7 @@ function aafm_args_count_posts(): array {
  * refused. wp_count_posts() returns an object keyed by status; expose every status in
  * by_status, and a `total` of ACTIVE (non-trashed) items only.
  *
- * `total` deliberately excludes the `trash` and `auto-draft` statuses — trash is recoverable
+ * `total` deliberately excludes the `trash` and `auto-draft` statuses - trash is recoverable
  * removed content and auto-draft is abandoned editor scratch, neither of which is a live item.
  * This matches the non-trash "active" total convention used by the WooCommerce count siblings
  * (wc-count-products / wc-count-coupons / wc-count-orders). The per-status breakdown in
@@ -328,7 +328,7 @@ function aafm_exec_count_posts( array $input ) {
 	$non_active = array( 'trash', 'auto-draft' );
 
 	// Pass the 'readable' perm so counts respect the caller's read capability. On its own,
-	// though, 'readable' only restricts the `private` status — wp_count_posts() still hands
+	// though, 'readable' only restricts the `private` status - wp_count_posts() still hands
 	// back draft/pending/future/trash counts to any reader, leaking how many unpublished
 	// items exist under this read-only gate. So layer a capability check on top of it.
 	$counts = (array) wp_count_posts( $type, 'readable' );
@@ -453,7 +453,7 @@ function aafm_exec_get_post( array $input ) {
  * Shared content input schema for post/page writes.
  *
  * The schema is closed (additionalProperties:false) so callers cannot smuggle
- * post_author, post_type, meta_input, or other privileged fields — anything not
+ * post_author, post_type, meta_input, or other privileged fields - anything not
  * declared here is rejected by the Abilities API before execute runs.
  *
  * @param bool $require_title Whether title is required.
@@ -506,7 +506,7 @@ function aafm_write_content_schema( bool $require_title ): array {
  * Starts from the shared post/page schema (so CPT items inherit the exact C2 enrichment
  * surface: title/content/excerpt/status/slug/featured_media/terms/meta) and adds a
  * REQUIRED post_type string. The schema stays closed (additionalProperties:false) so the
- * agent still cannot smuggle post_author, meta_input, or any other privileged field — the
+ * agent still cannot smuggle post_author, meta_input, or any other privileged field - the
  * only privileged field exposed is post_type, which the execute path re-validates against
  * the read allowlist + eligibility floor.
  *
@@ -518,7 +518,7 @@ function aafm_write_cpt_content_schema( bool $require_title ): array {
 	$schema['properties']['post_type'] = array(
 		'type'        => 'string',
 		'minLength'   => 1,
-		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
+		'description' => __( 'Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs.', 'agent-abilities-for-mcp' ),
 	);
 	$required                          = $schema['required'] ?? array();
 	$required[]                        = 'post_type';
@@ -573,7 +573,7 @@ function aafm_perm_publish_posts(): bool {
 /**
  * Insert a post with a forced status and type, returning the redacted post.
  *
- * Anti-escalation: post_author is never threaded from input — wp_insert_post
+ * Anti-escalation: post_author is never threaded from input - wp_insert_post
  * defaults it to the current (agent) user, so a caller cannot spoof authorship.
  * post_type and post_status are forced by the caller of this function, never by
  * the agent's input. Title is sanitized with sanitize_text_field and content with
@@ -634,7 +634,7 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 }
 
 /**
- * Execute aafm/create-draft — status is ALWAYS draft regardless of input.
+ * Execute aafm/create-draft - status is ALWAYS draft regardless of input.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
@@ -881,7 +881,7 @@ function aafm_exec_update_post( array $input ) {
 		}
 		// Mirror the create-path force-draft guard: when the operator has force-draft on,
 		// an explicit request for a public status is coerced to 'draft'. This only fires on
-		// an explicit public-status request — an edit-only update with no 'status' field never
+		// an explicit public-status request - an edit-only update with no 'status' field never
 		// reaches here, so force-draft can never retro-unpublish an already-published post.
 		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
 		if ( aafm_force_draft() && in_array( $status, $public_statuses, true ) ) {
@@ -953,7 +953,7 @@ function aafm_args_replace_in_post(): array {
 }
 
 /**
- * Permission for aafm/replace-in-post: per-object edit_post on the target post — the
+ * Permission for aafm/replace-in-post: per-object edit_post on the target post - the
  * established edit chokepoint. Reuses aafm_can_edit_post_object (floor + allowlist +
  * map_meta_cap + current_user_can edit_post).
  *
@@ -969,10 +969,10 @@ function aafm_perm_replace_in_post( array $input ): bool {
 /**
  * Execute aafm/replace-in-post.
  *
- * Literal str_replace (no regex — avoids ReDoS/injection). Counts occurrences of the
+ * Literal str_replace (no regex - avoids ReDoS/injection). Counts occurrences of the
  * search term BEFORE replacing. The replaced body is run through wp_kses_post so an agent
  * cannot inject script even via the replacement string, then written with
- * wp_update_post( wp_slash(...) ). Only post_content is written — status is never touched,
+ * wp_update_post( wp_slash(...) ). Only post_content is written - status is never touched,
  * so this inherits nothing status-related and can never publish/unpublish. A search term
  * that does not occur is a no-op (replacements:0) returning the unchanged post, not an error.
  *
@@ -1063,7 +1063,7 @@ function aafm_args_update_cpt_item(): array {
 /**
  * Permission for aafm/update-cpt-item: per-object edit on a type that clears the floor+allowlist
  * AND is map_meta_cap (via aafm_can_edit_post_object), plus the type's publish cap when the
- * request asks to publish. The post_id resolves the type, so no post_type arg is needed here —
+ * request asks to publish. The post_id resolves the type, so no post_type arg is needed here -
  * editing is per-object and the object knows its own type.
  *
  * @param array<string,mixed> $input Input.
@@ -1154,7 +1154,7 @@ function aafm_perm_trash_post( array $input ): bool {
 }
 
 /**
- * Execute aafm/trash-post — wp_trash_post only (recoverable), never wp_delete_post.
+ * Execute aafm/trash-post - wp_trash_post only (recoverable), never wp_delete_post.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
@@ -1222,11 +1222,11 @@ function aafm_perm_delete_post( array $input ): bool {
 /**
  * The single sanctioned force-delete executor: the only wp_delete_post(...,true) call site
  * in the abilities layer. delete-page delegates here with the page type pinned, so pages.php
- * never force-deletes directly — proven by SecurityRegressionTest::test_no_force_delete_in_source,
+ * never force-deletes directly - proven by SecurityRegressionTest::test_no_force_delete_in_source,
  * which sanctions only this file. Callers must have already capability-checked the id.
  *
  * Naming note: "force_delete" mirrors WordPress's own `wp_delete_post( $id, $force_delete = true )`
- * argument — it means "bypass the Trash and delete permanently," NOT "bypass the capability
+ * argument - it means "bypass the Trash and delete permanently," NOT "bypass the capability
  * guard." The permission callback (aafm_perm_delete_post / aafm_perm_delete_page) has already
  * run before any caller reaches here; this function performs no capability check of its own.
  *
@@ -1250,7 +1250,7 @@ function aafm_force_delete_post( int $id, string $expected_type = '' ) {
 }
 
 /**
- * Execute aafm/delete-post — force-deletes through the single shared executor.
+ * Execute aafm/delete-post - force-deletes through the single shared executor.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error

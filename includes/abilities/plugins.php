@@ -6,7 +6,7 @@
  * catalog. It gates on activate_plugins (the capability WordPress puts on the Plugins
  * screen) and returns, per plugin, the relative basename (e.g. akismet/akismet.php), the
  * name, the version, and whether it is active. It never returns an absolute filesystem
- * path — get_plugins() keys are already relative to the plugins directory, so no part of
+ * path - get_plugins() keys are already relative to the plugins directory, so no part of
  * the server's directory layout is disclosed.
  *
  * @package AgentAbilitiesForMCP
@@ -27,7 +27,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_plugins_definitions' );
 function aafm_register_plugins_definitions( array $registry ): array {
 	$registry['aafm/list-plugins'] = array(
 		'label'        => __( 'List plugins', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists installed plugins with their name, version, and active state. Read-only — it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists installed plugins with their name, version, and active state. Read-only - it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -86,7 +86,7 @@ function aafm_args_list_plugins(): array {
  *
  * Returns the installed-plugin inventory. Each entry exposes the RELATIVE basename
  * (get_plugins() keys are relative to the plugins directory), the name, the version, and
- * the active state — never an absolute filesystem path.
+ * the active state - never an absolute filesystem path.
  *
  * @return array<string,mixed>
  */
@@ -96,7 +96,7 @@ function aafm_exec_list_plugins(): array {
 	$out = array();
 	foreach ( get_plugins() as $file => $data ) {
 		$out[] = array(
-			'plugin'  => $file, // Relative basename (e.g. akismet/akismet.php) — never an absolute path.
+			'plugin'  => $file, // Relative basename (e.g. akismet/akismet.php) - never an absolute path.
 			'name'    => isset( $data['Name'] ) ? (string) $data['Name'] : '',
 			'version' => isset( $data['Version'] ) ? (string) $data['Version'] : '',
 			'active'  => is_plugin_active( $file ),

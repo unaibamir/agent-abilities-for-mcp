@@ -38,7 +38,7 @@ class CodesTest extends TestCase {
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
 	 * form, so each DB test must call aafm_install_oauth_tables() first and read
-	 * the row back — the temporary table is invisible to `SHOW TABLES`.
+	 * the row back - the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $code_hash Value to match against the code_hash column.
 	 * @return int
@@ -72,7 +72,7 @@ class CodesTest extends TestCase {
 	}
 
 	/**
-	 * T1-7: when the row insert fails, mint returns a WP_Error rather than a phantom code —
+	 * T1-7: when the row insert fails, mint returns a WP_Error rather than a phantom code -
 	 * a client must never get a successful redirect for a grant that was never persisted.
 	 */
 	public function test_mint_returns_error_when_insert_fails(): void {
@@ -129,7 +129,7 @@ class CodesTest extends TestCase {
 	 * An expired code cannot be redeemed.
 	 *
 	 * Expiry is simulated by writing a past UTC timestamp directly onto the
-	 * transaction-isolated temporary row — no sleeping.
+	 * transaction-isolated temporary row - no sleeping.
 	 */
 	public function test_redeem_expired_code_fails(): void {
 		aafm_install_oauth_tables();

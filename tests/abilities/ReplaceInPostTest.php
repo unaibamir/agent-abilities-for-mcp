@@ -65,7 +65,7 @@ final class ReplaceInPostTest extends TestCase {
 		);
 
 		$this->assertSame( 0, $out['replacements'] );
-		// A no-op is NOT an error — it returns the unchanged post.
+		// A no-op is NOT an error - it returns the unchanged post.
 		$this->assertSame( 'unchanged body', get_post( $id )->post_content );
 	}
 
@@ -127,7 +127,7 @@ final class ReplaceInPostTest extends TestCase {
 			)
 		);
 
-		// Body changed; status stayed draft — replace touches only content.
+		// Body changed; status stayed draft - replace touches only content.
 		$this->assertSame( 'draft', get_post( $id )->post_status );
 		$this->assertStringContainsString( 'beta', get_post( $id )->post_content );
 	}

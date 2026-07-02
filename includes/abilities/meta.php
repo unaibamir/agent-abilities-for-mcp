@@ -133,7 +133,7 @@ function aafm_perm_get_post_meta( array $input ): bool {
 /**
  * Execute aafm/get-post-meta.
  *
- * Re-validates the key (defence in depth — the permission callback already gated it),
+ * Re-validates the key (defence in depth - the permission callback already gated it),
  * then reads a single value. Non-scalar values are refused so a serialized array/object
  * can never be dumped to the agent.
  *
@@ -199,7 +199,7 @@ function aafm_args_get_all_post_meta(): array {
 /**
  * Permission for aafm/get-all-post-meta: per-object edit_post only.
  *
- * Unlike the single get-post-meta gate, there is no meta_key to validate here — the bulk
+ * Unlike the single get-post-meta gate, there is no meta_key to validate here - the bulk
  * read iterates the allowlist itself. So this checks the post is editable by the agent
  * (the same Unit 1 per-object resolver), and the execute body enforces the key allowlist
  * and scalar-only floor for each value.
@@ -217,7 +217,7 @@ function aafm_perm_get_all_post_meta( array $input ): bool {
  * Execute aafm/get-all-post-meta.
  *
  * Returns each exposed post-meta key's single scalar value. The candidate set is the
- * literal allowlist, or — when the allow-`*` wildcard is set — the post's own stored meta
+ * literal allowlist, or - when the allow-`*` wildcard is set - the post's own stored meta
  * keys, so the bulk reader matches the single get-post-meta reader under allow-all. Every
  * candidate is re-validated through aafm_validate_meta_key() (hard-block -> deny -> allow/`*`),
  * so protected, denied, and deny-`*` keys are never returned. Keys with no value, or whose
@@ -413,7 +413,7 @@ function aafm_perm_delete_post_meta( array $input ): bool {
 /**
  * Execute aafm/delete-post-meta.
  *
- * Re-validates the key (defence in depth — the permission callback already gated it),
+ * Re-validates the key (defence in depth - the permission callback already gated it),
  * then removes every value of that key. delete_post_meta() with no value arg deletes
  * all values of the key, which is the intended destructive behaviour here.
  *

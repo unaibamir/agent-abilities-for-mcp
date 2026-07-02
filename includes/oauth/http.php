@@ -21,7 +21,7 @@ if ( ! defined( 'AAFM_OAUTH_RATE_WINDOW' ) ) {
  * Whether OAuth endpoints must be served over HTTPS.
  *
  * HTTPS is mandatory in production. It is relaxed only on a local or development
- * environment, or when the AAFM_OAUTH_ALLOW_HTTP override constant is set true —
+ * environment, or when the AAFM_OAUTH_ALLOW_HTTP override constant is set true -
  * both intended for local agent development against http://localhost.
  *
  * @return bool True when HTTPS is required, false when plain HTTP is tolerated.

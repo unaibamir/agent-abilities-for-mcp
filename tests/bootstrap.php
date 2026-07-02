@@ -9,7 +9,7 @@ declare( strict_types=1 );
 
 // Autoload the AAFM\Tests\ helper/base classes (e.g. AAFM\Tests\TestCase). This is deliberately
 // NOT served by a Composer autoload-dev map: keeping the test PSR-4 mapping out of composer.json
-// avoids any tooling folding the dev autoload (and tests/phpstan-stubs.php's global shims —
+// avoids any tooling folding the dev autoload (and tests/phpstan-stubs.php's global shims -
 // WC_Payment_Gateways, ACF, …) into the shipped production autoloader/classmap. A self-contained
 // PSR-4 autoloader here keeps the suite working without that coupling.
 spl_autoload_register(

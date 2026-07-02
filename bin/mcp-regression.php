@@ -26,11 +26,11 @@
  *   regardless of detection.
  *
  *   In remote mode the harness also refuses, by default, to create anything it could not clean up purely
- *   over MCP: terms (no delete-term ability) and reusable blocks (delete-block only trashes — there is no
+ *   over MCP: terms (no delete-term ability) and reusable blocks (delete-block only trashes - there is no
  *   MCP force-delete) are SKIPped rather than left as orphans; read-path term tests against pre-existing
  *   terms still run. Escape hatches close the remaining remote gaps without the bridge: the meta write
  *   paths run over pure MCP when the operator names an allowlisted key (--meta-key / --term-meta-key /
- *   --user-meta-key) — term-meta is exercised against the EXISTING category 1 so no term is created — and
+ *   --user-meta-key) - term-meta is exercised against the EXISTING category 1 so no term is created - and
  *   CPT/template coverage auto-discovers an agent-writable type / a custom template from the remote's own
  *   config. The term create/update lifecycle (--remote-terms) and the reusable-block lifecycle
  *   (--remote-blocks) stay opt-in because neither can be fully cleaned over MCP; each leaves one warned
@@ -66,12 +66,12 @@
  *   --verbose        Print every request and response.
  *
  * Note: against a REMOTE target the post-/term-/user-meta, CPT, and template write paths run only when
- * the matching config actually exists on that site — supplied explicitly via --meta-key / --term-meta-key /
+ * the matching config actually exists on that site - supplied explicitly via --meta-key / --term-meta-key /
  * --user-meta-key / --cpt / --template-id, or auto-discovered (writable CPT via get-post-types, custom
  * template via list-templates). When neither a flag nor a discovered fixture is available, the check SKIPs
  * with a clear reason. Every remote write path is snapshot-safe and leaves zero residue; the exceptions are
  * the two opt-in lifecycles: the reusable-block lifecycle (--remote-blocks) leaves one trashed wp_block, and
- * the term create/update lifecycle (--remote-terms) leaves one orphan category term — both warned at the
+ * the term create/update lifecycle (--remote-terms) leaves one orphan category term - both warned at the
  * end, because neither delete-block (only trashes, no MCP force-delete) nor a delete-term ability (none
  * exists) can finish the cleanup over the wire.
  *
@@ -91,7 +91,7 @@ if ( 'cli' !== PHP_SAPI ) {
 
 /**
  * Thrown by fatal() to abort the current run. Catchable on purpose: a transport
- * fatal that fires DURING cleanup (e.g. the endpoint is unreachable — the exact
+ * fatal that fires DURING cleanup (e.g. the endpoint is unreachable - the exact
  * case cleanup exists to handle) must not exit() and skip the remaining
  * restores. The top-level bootstrap catches it for the normal-run path; the
  * per-step guards in cleanup()/flush_pending_restores() (and call_quiet()) swallow
@@ -101,7 +101,7 @@ final class AAFM_Fatal extends \Exception {}
 
 /**
  * Tiny client + assertion harness for the MCP endpoint. Single class keeps the
- * file self-contained — no autoloader, no WordPress bootstrap.
+ * file self-contained - no autoloader, no WordPress bootstrap.
  */
 final class AAFM_Mcp_Regression {
 
@@ -152,7 +152,7 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Cached result of cli_targets_endpoint(): does the local DDEV WP-CLI bridge reach the --url
 	 * target? null = not yet probed. true = "local mode" (bridge usable). false = "remote mode"
-	 * (bridge NEVER touched — fixture setup/cleanup that needs it is skipped, and a remote run cannot
+	 * (bridge NEVER touched - fixture setup/cleanup that needs it is skipped, and a remote run cannot
 	 * mutate the local site). Forced to false by --no-cli/--remote.
 	 */
 	private ?bool $cli_targets_endpoint = null;
@@ -162,8 +162,8 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Pending option restores, keyed by option name => prior snapshot (or null when the snapshot
-	 * could not be read). Registered BEFORE an option is mutated so that cleanup() — which runs on
-	 * shutdown, including after fatal() exits mid-test — can put every mutated option back to its
+	 * could not be read). Registered BEFORE an option is mutated so that cleanup() - which runs on
+	 * shutdown, including after fatal() exits mid-test - can put every mutated option back to its
 	 * exact prior state. A clean inline restore de-registers its entry; whatever remains is the set
 	 * cleanup() must repair.
 	 *
@@ -538,11 +538,11 @@ final class AAFM_Mcp_Regression {
 		$this->record( $section, 'get-revision returns a revision body', ! $one['isError'] && isset( $rev_doc['content'] ) ? 'PASS' : 'FAIL', "rev={$latest_id}" );
 
 		// Restore is verified body-first, not by a fixed marker. The original 'alpha' publish
-		// state is NOT guaranteed to exist as a stored revision — WordPress captures revisions on
+		// state is NOT guaranteed to exist as a stored revision - WordPress captures revisions on
 		// update, so a short edit chain can leave only the post-update bodies (e.g. 'delta', then
 		// 'omega') in history with no 'alpha' revision at all. The old test restored end($revs)
 		// and asserted the live body contained 'alpha', which fails whenever no alpha revision
-		// exists or the list ordering differs. Instead: pick the OLDEST revision id (lowest id —
+		// exists or the list ordering differs. Instead: pick the OLDEST revision id (lowest id -
 		// ordering-independent), capture its actual raw body via get-revision, restore THAT
 		// revision, and assert the live post body now equals the revision's captured body. This
 		// proves the restore round-trips whatever the revision genuinely holds.
@@ -697,9 +697,9 @@ final class AAFM_Mcp_Regression {
 	 * the user-meta family's `key`); update returns {term_id,meta_key,value}, delete returns
 	 * {deleted}.
 	 *
-	 * The term-meta allowlist is FILTER-only (aafm_allowed_term_meta_keys) — there is no option to
+	 * The term-meta allowlist is FILTER-only (aafm_allowed_term_meta_keys) - there is no option to
 	 * snapshot/restore. The write path is exercised by dropping a temporary mu-plugin that adds one
-	 * test key (and the ACF field group for test_acf_lifecycle), then removing it — a reversible code
+	 * test key (and the ACF field group for test_acf_lifecycle), then removing it - a reversible code
 	 * drop-in, not a live-state mutation. The probe (an unlisted key MUST be refused) is the
 	 * governance PASS and runs regardless of whether the write path can be configured.
 	 */
@@ -707,11 +707,11 @@ final class AAFM_Mcp_Regression {
 		$section  = 'Terms (full)';
 		$meta_key = 'aafm_regression_tm';
 
-		// There is NO delete-term MCP tool — created terms are swept host-side via the local WP-CLI
+		// There is NO delete-term MCP tool - created terms are swept host-side via the local WP-CLI
 		// bridge. In remote mode that bridge can't reach the target, so creating a term here would
 		// orphan it on the remote site. By default, run the read paths against the pre-existing
 		// category 1 instead (no fixture created), then either exercise the term-meta write path against
-		// that EXISTING term (when --term-meta-key names an allowlisted key — pure MCP, snapshot-safe, no
+		// that EXISTING term (when --term-meta-key names an allowlisted key - pure MCP, snapshot-safe, no
 		// term created) or SKIP it. --remote-terms opts in to the full create/update lifecycle anyway,
 		// accepting one warned orphan category term that cannot be removed over the wire.
 		if ( ! $this->cli_targets_endpoint() ) {
@@ -827,15 +827,15 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Exercise the term-meta write path against the EXISTING category 1 ("Uncategorized") over pure MCP
 	 * (no WP-CLI bridge), snapshot-safe. Category 1 is a real pre-existing term, so the meta key MUST be
-	 * snapshotted and restored exactly: assert absent first, write, verify, delete, confirm gone — and if
+	 * snapshotted and restored exactly: assert absent first, write, verify, delete, confirm gone - and if
 	 * it was somehow present before, restore the prior value. Only this one meta key on the term is ever
 	 * touched, and only when --term-meta-key names it; the term itself is never created or modified.
 	 *
 	 * The harness cannot know the supplied key is allowlisted on a given target, so a refused write is a
-	 * handled SKIP, not a crash — passing a non-allowlisted key on a remote stays clean.
+	 * handled SKIP, not a crash - passing a non-allowlisted key on a remote stays clean.
 	 */
 	private function exercise_term_meta_on_existing( string $section, string $meta_key ): void {
-		$existing_term = 1; // Uncategorized — present on every install. Never created/deleted here.
+		$existing_term = 1; // Uncategorized - present on every install. Never created/deleted here.
 
 		// Snapshot the prior value so a pre-existing meta is restored exactly (expected absent).
 		$snap        = $this->call_data( 'get-term-meta', [ 'taxonomy' => 'category', 'term_id' => $existing_term, 'meta_key' => $meta_key ] );
@@ -886,7 +886,7 @@ final class AAFM_Mcp_Regression {
 	 * moderation steps assert that posture: get-pending-comments must list it while it is
 	 * held, moderate-comment(approve) must flip it to 'approved', and delete-comment cleans
 	 * up permanently. Comment shape (aafm_redact_comment): id, post_id, author_name, content,
-	 * status, date_gmt, parent — never email or IP.
+	 * status, date_gmt, parent - never email or IP.
 	 */
 	private function test_comments_lifecycle(): void {
 		$section = 'Comments';
@@ -978,11 +978,11 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Full user CRUD lifecycle on a throwaway user. Never touches the agent user or any
-	 * pre-existing account — only the one created here, carrying the AAFM-REGRESSION marker
+	 * pre-existing account - only the one created here, carrying the AAFM-REGRESSION marker
 	 * in both login and email so purge_orphans() can sweep a leak.
 	 *
 	 * User shape (aafm_rich_user): id, display_name, email, roles, post_count, registered,
-	 * bio — never login or password hash. delete-user requires a reassign target; the agent
+	 * bio - never login or password hash. delete-user requires a reassign target; the agent
 	 * user is the reassignment recipient (its content is never the victim's).
 	 */
 	private function test_users_lifecycle(): void {
@@ -1037,7 +1037,7 @@ final class AAFM_Mcp_Regression {
 		// delete-user: reassign the victim's content to an existing OTHER user (never the victim
 		// itself), confirm removal, then drop it from cleanup tracking. The target is resolved via the
 		// MCP get-users tool so it works in every auth mode (Application Password and --bearer) and
-		// against remote sites — not the local-only WP-CLI bridge.
+		// against remote sites - not the local-only WP-CLI bridge.
 		$reassign = $this->reassign_target_user( $user_id );
 		if ( $reassign <= 0 || $reassign === $user_id ) {
 			$this->record( $section, 'delete-user removes the user', 'SKIP', 'no distinct reassign target available' );
@@ -1088,7 +1088,7 @@ final class AAFM_Mcp_Regression {
 
 		// An explicit --user-meta-key override wins: exercise the write path against the throwaway user
 		// over pure MCP (no WP-CLI bridge), assuming the operator already allowlisted the key on the
-		// target. Snapshot-safe by construction — the user is created blank this run and deleted in
+		// target. Snapshot-safe by construction - the user is created blank this run and deleted in
 		// cleanup, so the key starts absent and dies with the user. A refused write is a handled SKIP.
 		$umk = (string) ( $this->opts['user-meta-key'] ?? '' );
 
@@ -1204,8 +1204,8 @@ final class AAFM_Mcp_Regression {
 		//   2. Local mode: the fixtures mu-plugin registers + allowlists a throwaway type
 		//      ('aafm_regression_cpt': public, show_in_rest, map_meta_cap, capability_type post so the
 		//      admin agent can create/edit/publish it).
-		//   3. Remote mode: auto-discover an agent-writable type from get-post-types — the first item with
-		//      writable===true that is not post/page — and exercise the lifecycle against it. If none is
+		//   3. Remote mode: auto-discover an agent-writable type from get-post-types - the first item with
+		//      writable===true that is not post/page - and exercise the lifecycle against it. If none is
 		//      writable, SKIP with a clear reason rather than register a permanent type.
 		$cpt      = (string) ( $this->opts['cpt'] ?? '' );
 		$override = '' !== $cpt;
@@ -1441,7 +1441,7 @@ final class AAFM_Mcp_Regression {
 		// update-template refuses by design. In LOCAL mode, drop one throwaway database-backed (source
 		// 'custom') template host-side via the WP-CLI bridge so the write path is genuinely exercised,
 		// then re-read the listing so $editable is the real ability-returned shape (it carries the wp_id).
-		// The template post is tracked and force-deleted in cleanup() — never a pre-existing template.
+		// The template post is tracked and force-deleted in cleanup() - never a pre-existing template.
 		// On a remote target the bridge is unavailable, so there is nothing to seed: $editable stays null
 		// when no custom template already exists, and the write path SKIPs below.
 		if ( null === $editable && '' === $template_override ) {
@@ -1463,7 +1463,7 @@ final class AAFM_Mcp_Regression {
 		$this->record( $section, 'get-template reads one template body', ( isset( $tpl['id'] ) && array_key_exists( 'content', $tpl ) ) ? 'PASS' : 'FAIL', "id={$read_id}" );
 
 		// update-template (write): only a database-backed template can be edited. Theme-file
-		// templates have no backing post and are refused by design — that is not a failure here,
+		// templates have no backing post and are refused by design - that is not a failure here,
 		// so SKIP with the reason when none is database-backed.
 		if ( null === $editable ) {
 			$reason = $this->cli_targets_endpoint()
@@ -1551,7 +1551,7 @@ final class AAFM_Mcp_Regression {
 	private function test_media_lifecycle(): void {
 		$section = 'Media';
 
-		// Minimal valid 1x1 PNG (transparent), base64-encoded — finfo sniffs it as image/png.
+		// Minimal valid 1x1 PNG (transparent), base64-encoded - finfo sniffs it as image/png.
 		$png_b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 
 		$baseline = (int) ( $this->call_data( 'count-media', [] )['total'] ?? 0 );
@@ -1764,7 +1764,7 @@ final class AAFM_Mcp_Regression {
 	private function test_blocks_lifecycle(): void {
 		$section = 'Blocks';
 
-		// delete-block only TRASHES (wp_trash_post) — there is no MCP force-delete for wp_block, so a
+		// delete-block only TRASHES (wp_trash_post) - there is no MCP force-delete for wp_block, so a
 		// created block can only be permanently removed host-side via the local WP-CLI bridge. In remote
 		// mode that bridge can't reach the target, so create-block would leave a trashed orphan we cannot
 		// clean up over the wire. By default SKIP the whole block lifecycle rather than orphan a trashed
@@ -1822,7 +1822,7 @@ final class AAFM_Mcp_Regression {
 
 		// delete-block: trash it (recoverable), confirm status flipped. In local mode cleanup force-purges
 		// the trashed block via WP-CLI. In --remote-blocks mode there is no MCP force-delete, so the trash
-		// move is the documented terminal state — record it as the trashed id so the run warns at the end.
+		// move is the documented terminal state - record it as the trashed id so the run warns at the end.
 		$db     = $this->call( 'delete-block', [ 'block_id' => $block_id ] );
 		$del_ok = ! $db['isError'] && 'trash' === (string) ( $db['data']['status'] ?? '' );
 		$this->record( $section, 'delete-block moves the block to the trash', $del_ok ? 'PASS' : 'FAIL', 'status=' . ( $db['data']['status'] ?? '?' ) );
@@ -1839,7 +1839,7 @@ final class AAFM_Mcp_Regression {
 	 * mu-plugin (the same one the term-meta write path uses) that registers ONE text field
 	 * (aafm_reg_text / field key field_aafm_reg_text) on post + category + user. That makes the full
 	 * round-trip exercisable on throwaway fixtures: a throwaway post, the created category term, and a
-	 * throwaway user. Field values are snapshot-free — each fixture is created blank by this run and
+	 * throwaway user. Field values are snapshot-free - each fixture is created blank by this run and
 	 * deleted in cleanup(), so writing a field value mutates only throwaway objects. The mu-plugin is
 	 * removed at the end (reversible code drop-in, not a live-state change).
 	 *
@@ -1875,7 +1875,7 @@ final class AAFM_Mcp_Regression {
 		}
 
 		// Install the fixtures mu-plugin so a field group exists to read/write. Without it the host is
-		// active but there is no field group, so the value round-trips cannot be proven — SKIP with a
+		// active but there is no field group, so the value round-trips cannot be proven - SKIP with a
 		// clear reason rather than fabricate a permanent field group.
 		if ( ! $this->install_fixture_plugin() ) {
 			$this->record( $section, 'ACF field reads/writes (no field group)', 'SKIP', 'could not install the fixtures mu-plugin to register a throwaway field group' );
@@ -1964,7 +1964,7 @@ final class AAFM_Mcp_Regression {
 	 *     then exercises acf get/update against a THROWAWAY post and user (created blank by this run,
 	 *     deleted in cleanup), snapshotting the field via MCP and restoring it via MCP afterwards.
 	 *
-	 * No WP-CLI bridge is touched and no live object is mutated — only throwaway fixtures, whose own
+	 * No WP-CLI bridge is touched and no live object is mutated - only throwaway fixtures, whose own
 	 * field values are written then created-fresh-and-deleted anyway. The term path is intentionally
 	 * omitted on remote: creating a category term to host a field has no MCP delete (it would orphan).
 	 */
@@ -2028,7 +2028,7 @@ final class AAFM_Mcp_Regression {
 				}
 				$this->record( $section, 'acf post-field read/write round-trips (existing group)', ( ! $wrote['isError'] && $present ) ? 'PASS' : 'FAIL', '' );
 			}
-			// The post is a throwaway deleted in cleanup, so the written field value dies with it — no
+			// The post is a throwaway deleted in cleanup, so the written field value dies with it - no
 			// restore needed.
 		}
 
@@ -2088,7 +2088,7 @@ final class AAFM_Mcp_Regression {
 				$this->line( '' );
 				$this->line( '--keep set; leaving fixtures: posts=' . implode( ',', $this->created_posts ) . ' pages=' . implode( ',', $this->created_pages ) . ' comments=' . implode( ',', $this->created_comments ) . ' users=' . implode( ',', $this->created_users ) . ' media=' . implode( ',', $this->created_media ) . ' menus=' . implode( ',', $this->created_menus ) . ' menu_items=' . implode( ',', $this->created_menu_items ) . ' blocks=' . implode( ',', $this->created_blocks ) . ' terms=' . implode( ',', $this->created_terms ) . ' templates=' . implode( ',', $this->created_templates ) );
 			}
-			// Still remove the temporary fixtures mu-plugin even under --keep — it is a code drop-in,
+			// Still remove the temporary fixtures mu-plugin even under --keep - it is a code drop-in,
 			// not a fixture object, and must never be left behind. Guarded so removal can't be skipped.
 			try {
 				$this->remove_fixture_plugin();
@@ -2097,9 +2097,9 @@ final class AAFM_Mcp_Regression {
 			}
 			return;
 		}
-		// Every sub-step below is individually guarded so one failure — most importantly a transport
+		// Every sub-step below is individually guarded so one failure - most importantly a transport
 		// fatal() (now throwable) when the MCP endpoint is unreachable, the exact case this path exists
-		// to survive — can never skip the remaining deletions, the host-side WP-CLI restores, or the
+		// to survive - can never skip the remaining deletions, the host-side WP-CLI restores, or the
 		// mu-plugin removal. call_quiet() already swallows \Throwable; the host-side WP-CLI sub-steps
 		// (ddev_wp/delete_db_template) and the get-users lookup in reassign_target_user() get their own
 		// try/catch here. WP-CLI restores do not depend on the HTTP endpoint, so they still run when it
@@ -2132,8 +2132,8 @@ final class AAFM_Mcp_Regression {
 		}
 		// Reusable blocks: the ability only TRASHES (recoverable by design), so a trashed wp_block
 		// still carries the marker. There is no MCP force-delete for wp_block (it is outside the
-		// content allowlist), so finish the purge host-side via WP-CLI — same DDEV bridge used for
-		// option snapshot/restore — to leave zero AAFM-REGRESSION objects.
+		// content allowlist), so finish the purge host-side via WP-CLI - same DDEV bridge used for
+		// option snapshot/restore - to leave zero AAFM-REGRESSION objects.
 		foreach ( $this->created_blocks as $id ) {
 			$this->call_quiet( 'delete-block', [ 'block_id' => $id ] );
 			try {
@@ -2152,7 +2152,7 @@ final class AAFM_Mcp_Regression {
 			}
 		}
 		// Terms: there is NO delete-term MCP tool, so the created category terms are removed host-side
-		// via WP-CLI. Re-confirm the name carries the marker before deleting — never touch a term we
+		// via WP-CLI. Re-confirm the name carries the marker before deleting - never touch a term we
 		// did not create.
 		foreach ( $this->created_terms as $id ) {
 			try {
@@ -2179,7 +2179,7 @@ final class AAFM_Mcp_Regression {
 			}
 		}
 		// The temporary fixtures mu-plugin (term-meta allowlist + ACF field group) must never outlive
-		// the run — remove it regardless of whether the test path installed it. Host-side WP-CLI, so it
+		// the run - remove it regardless of whether the test path installed it. Host-side WP-CLI, so it
 		// runs even when the HTTP endpoint is down; guarded so nothing can leave it behind.
 		try {
 			$this->remove_fixture_plugin();
@@ -2200,7 +2200,7 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Find and permanently delete any leftover fixtures whose title carries the
-	 * fixture prefix — orphans from a run that died before cleanup. Searches posts
+	 * fixture prefix - orphans from a run that died before cleanup. Searches posts
 	 * and pages across every status.
 	 */
 	private function purge_orphans(): void {
@@ -2330,7 +2330,7 @@ final class AAFM_Mcp_Regression {
 	/**
 	 * Host-side sweep for marked category terms. delete-term has no MCP ability, so leaked throwaway
 	 * terms are found by their marker NAME via `wp term list` and removed with `wp term delete`. Each
-	 * candidate's name is re-confirmed to carry the fixture prefix before deletion — never touch a
+	 * candidate's name is re-confirmed to carry the fixture prefix before deletion - never touch a
 	 * term this harness did not create.
 	 *
 	 * @return int Count of terms deleted.
@@ -2358,13 +2358,13 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Create a database-backed wp_template post for the active (block) theme, host-side via WP-CLI,
-	 * and return its block-template id ({stylesheet}//{slug}) — or null on failure.
+	 * and return its block-template id ({stylesheet}//{slug}) - or null on failure.
 	 *
 	 * update-template only edits a template that has a backing post (source 'custom', wp_id set);
 	 * a fresh block-theme install has only theme-FILE templates, which the ability refuses by design.
 	 * This drops one throwaway custom template (marker in its title) so the write path is exercisable,
 	 * tracked in $created_templates and force-deleted in cleanup()/purge. The post id is parsed back so
-	 * cleanup can delete exactly the post this created — never a pre-existing template.
+	 * cleanup can delete exactly the post this created - never a pre-existing template.
 	 *
 	 * @return array{id:string,post_id:int}|null
 	 */
@@ -2401,7 +2401,7 @@ final class AAFM_Mcp_Regression {
 
 	/**
 	 * Force-delete a tracked DB-backed template post host-side, re-confirming its title carries the
-	 * fixture prefix first — never touch a template this harness did not create.
+	 * fixture prefix first - never touch a template this harness did not create.
 	 */
 	private function delete_db_template( int $post_id ): void {
 		$title = $this->ddev_wp( [ 'post', 'get', (string) $post_id, '--field=post_title' ] );
@@ -2443,7 +2443,7 @@ final class AAFM_Mcp_Regression {
 	 * The term-meta allowlist (aafm_allowed_term_meta_keys) and ACF field groups are FILTER/code
 	 * configuration, not options, so they cannot be set over WP-CLI option writes. To exercise the
 	 * term-meta write path and the ACF field round-trips, a tiny mu-plugin is dropped into the WP
-	 * install for the duration of the run and removed afterwards — a reversible code drop-in that
+	 * install for the duration of the run and removed afterwards - a reversible code drop-in that
 	 * touches no live data. It registers exactly one allowlisted term-meta key and one throwaway ACF
 	 * text field on post + category + user.
 	 * ------------------------------------------------------------------- */
@@ -2463,7 +2463,7 @@ final class AAFM_Mcp_Regression {
 			return true;
 		}
 		// Remote mode: the bridge would drop the mu-plugin onto the LOCAL DDEV site, not the --url
-		// target — useless for the test and a forbidden mutation of the local site. Refuse so callers
+		// target - useless for the test and a forbidden mutation of the local site. Refuse so callers
 		// SKIP the fixture-dependent write paths.
 		if ( ! $this->cli_targets_endpoint() ) {
 			return false;
@@ -2484,7 +2484,7 @@ add_filter( 'aafm_allowed_post_types', function ( $types ) { $types[] = 'aafm_re
 // A throwaway, agent-writable custom post type. public + show_in_rest clears the eligibility floor;
 // capability_type 'post' + map_meta_cap reuses the administrator's edit/publish/delete_post caps (so the
 // mcp-agent admin can create, edit, publish, and delete it) and satisfies the update path's map_meta_cap
-// requirement. Not registered as a real content type anywhere else — it dies with this mu-plugin.
+// requirement. Not registered as a real content type anywhere else - it dies with this mu-plugin.
 add_action( 'init', function () {
 	register_post_type( 'aafm_regression_cpt', array(
 		'label'           => 'AAFM Regression CPT',
@@ -2550,13 +2550,13 @@ PHP;
 
 	/**
 	 * Resolve a reassign target for delete-user over the MCP API itself (transport-agnostic),
-	 * so it works in EVERY auth mode — Application Password (--user) AND --bearer — and against
+	 * so it works in EVERY auth mode - Application Password (--user) AND --bearer - and against
 	 * remote sites, neither of which the WP-CLI bridge can serve. Calls get-users and returns the
 	 * id of the first existing user that is NOT the throwaway fixture being deleted ($exclude_id),
 	 * preferring an administrator when the role is visible in the response (any valid target is
-	 * harmless — a freshly created throwaway user owns no content). Cached after the first lookup.
+	 * harmless - a freshly created throwaway user owns no content). Cached after the first lookup.
 	 *
-	 * Returns 0 when no other user exists (which never happens in practice — the agent account
+	 * Returns 0 when no other user exists (which never happens in practice - the agent account
 	 * itself is always present); callers degrade to a SKIP rather than create an uncleanable user.
 	 *
 	 * @param int $exclude_id A user id to never return (the fixture about to be deleted).
@@ -2611,7 +2611,7 @@ PHP;
 			if ( ! ctype_digit( $id ) ) {
 				continue;
 			}
-			// Re-confirm the title carries the marker before deleting — never touch a block we did not create.
+			// Re-confirm the title carries the marker before deleting - never touch a block we did not create.
 			$title = $this->ddev_wp( [ 'post', 'get', $id, '--field=post_title' ] );
 			if ( null === $title || false === strpos( $title, self::FIXTURE_PREFIX ) ) {
 				continue;
@@ -2628,12 +2628,12 @@ PHP;
 	 * probe. This is the single gate for every `ddev`/`ddev wp`/`ddev exec` usage: true = "local mode"
 	 * (the bridge talks to the same site the harness is testing, so fixture setup/cleanup through it is
 	 * safe and meaningful); false = "remote mode" (the bridge would hit the local DDEV site, NOT the
-	 * --url target — so we must never touch it, both to avoid mutating the local site and because the
+	 * --url target - so we must never touch it, both to avoid mutating the local site and because the
 	 * fixtures would land on the wrong site).
 	 *
 	 * Detection: --no-cli/--remote forces false. Otherwise run `ddev wp option get home` once; if
 	 * `ddev` is missing or errors, false. Compare the host of that URL to the host of the harness's
-	 * --url endpoint — true only when they match.
+	 * --url endpoint - true only when they match.
 	 */
 	private function cli_targets_endpoint(): bool {
 		if ( null !== $this->cli_targets_endpoint ) {
@@ -2651,7 +2651,7 @@ PHP;
 
 		// Probe the DDEV site's own URL. shell_exec returns null when `ddev` is unavailable or the
 		// command fails; either way the bridge is unusable for this target. WP-CLI can emit PHP
-		// notices ahead of the value, so scan EVERY output line for a URL whose host matches — never
+		// notices ahead of the value, so scan EVERY output line for a URL whose host matches - never
 		// assume the value is the whole (possibly multi-line) blob.
 		$home    = shell_exec( 'ddev wp option get home 2>/dev/null' );
 		$siteurl = shell_exec( 'ddev wp option get siteurl 2>/dev/null' );
@@ -2889,14 +2889,14 @@ PHP;
 		try {
 			$this->call( $short, $args );
 		} catch ( \Throwable $e ) {
-			// Ignore — cleanup is best-effort.
+			// Ignore - cleanup is best-effort.
 		}
 	}
 
 	private function resolve_tool( string $short ): string {
 		// Prefer the plugin's canonical tool. Integration abilities share the same `aafm-`
 		// prefix (e.g. `aafm-aioseo-get-post`, `aafm-rankmath-update-post`) and can sort BEFORE
-		// the canonical `aafm-<short>` in the alphabetically-sorted tool list — `a` < `g`/`u` — so
+		// the canonical `aafm-<short>` in the alphabetically-sorted tool list - `a` < `g`/`u` - so
 		// the plain str_ends_with() suffix match below would shadow `aafm-get-post` with the
 		// integration tool and call the wrong one. Pin the exact canonical name first.
 		$canonical = 'aafm-' . $short;
@@ -3063,10 +3063,10 @@ PHP;
 	/**
 	 * Record a default-deny governance probe (an unlisted meta key MUST be refused).
 	 *
-	 * A refused write is always a PASS — governance honored. An ACCEPTED write only proves a bug
+	 * A refused write is always a PASS - governance honored. An ACCEPTED write only proves a bug
 	 * when we know the target is default-deny, which holds in LOCAL mode with no override key (the
-	 * fixtures bridge controls the allowlist there). When access is opened — an override key was
-	 * supplied, or the target is remote and may run allow-all (`*`) — an accepted write is the
+	 * fixtures bridge controls the allowlist there). When access is opened - an override key was
+	 * supplied, or the target is remote and may run allow-all (`*`) - an accepted write is the
 	 * operator's own configuration, not a regression, so it is a SKIP rather than a FAIL.
 	 */
 	private function record_default_deny_probe( string $section, string $label, bool $refused, bool $override ): void {
@@ -3125,7 +3125,7 @@ PHP;
 	/**
 	 * Print a prominent warning when the --remote-blocks path left one or more wp_block posts in the
 	 * remote's Trash. delete-block only trashes and there is no MCP force-delete for wp_block on a remote
-	 * target, so these cannot be removed over the wire — the operator must empty the Trash (or run
+	 * target, so these cannot be removed over the wire - the operator must empty the Trash (or run
 	 * `wp post delete <id> --force`) to finish the cleanup. Never let a trashed block pass silently.
 	 */
 	private function warn_remote_trashed_blocks(): void {

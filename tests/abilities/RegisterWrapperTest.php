@@ -91,7 +91,7 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertSame( array( 'ok' => true ), $result );
 
 		$rows = aafm_query_activity( array() );
-		$this->assertCount( 1, $rows ); // started row updated in place — not a second row.
+		$this->assertCount( 1, $rows ); // started row updated in place - not a second row.
 		$this->assertSame( 'success', $rows[0]['status'] );
 		$this->assertSame( 'aafm/echo-ok', $rows[0]['ability'] );
 		$this->assertSame( 'foo', $rows[0]['arg_keys'] ); // keys, not values.
@@ -122,7 +122,7 @@ final class RegisterWrapperTest extends TestCase {
 
 	/**
 	 * T3-4: a permission callback returning a non-true, non-false value (null) is still a
-	 * denial — the WP Abilities API admits only true — so it must be audited as denied.
+	 * denial - the WP Abilities API admits only true - so it must be audited as denied.
 	 */
 	public function test_null_permission_return_is_logged_as_denied(): void {
 		$this->acting_as( 'subscriber' );

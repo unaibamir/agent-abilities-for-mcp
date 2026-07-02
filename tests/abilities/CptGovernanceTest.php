@@ -260,7 +260,7 @@ final class CptGovernanceTest extends TestCase {
 	}
 
 	public function test_closed_schema_rejects_smuggled_fields(): void {
-		// Part 1 — the static shape: the write schema is additionalProperties:false, so
+		// Part 1 - the static shape: the write schema is additionalProperties:false, so
 		// post_type / post_author / meta_input are not declared.
 		$schema = aafm_write_content_schema( true );
 		$this->assertFalse( $schema['additionalProperties'] );
@@ -268,7 +268,7 @@ final class CptGovernanceTest extends TestCase {
 		$this->assertArrayNotHasKey( 'post_author', $schema['properties'] );
 		$this->assertArrayNotHasKey( 'meta_input', $schema['properties'] );
 
-		// Part 2 — runtime proof that the smuggle is INERT, not just that the constant says so.
+		// Part 2 - runtime proof that the smuggle is INERT, not just that the constant says so.
 		// Observed Abilities-API behaviour in this version: a call carrying an undeclared field
 		// is REJECTED with a WP_Error before the execute callback runs (it does not silently
 		// strip + proceed). This matches PostsWriteTest's create-post smuggle assertions.

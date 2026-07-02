@@ -1,4 +1,4 @@
-/* Agent Abilities for MCP — admin settings page (Direction A).
+/* Agent Abilities for MCP - admin settings page (Direction A).
    Tokens live on :root; every component is scoped under .aafm-wrap so it
    never leaks into core admin chrome. WP-native neutrals, single accent. */
 
@@ -158,7 +158,7 @@
 		dd { margin: 0; font-weight: 600; }
 	}
 
-	/* ---------- Progress bar (setup card) — ported from app.css .progress ---------- */
+	/* ---------- Progress bar (setup card) - ported from app.css .progress ---------- */
 	.aafm-progress {
 		inline-size: 130px;
 		block-size: 7px;
@@ -196,7 +196,7 @@
 		}
 
 		/* Leading status dot. Rendered from CSS (::before) so the markup stays
-		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> — no dot
+		   a bare <span class="aafm-pill aafm-pill-VARIANT">word</span> - no dot
 		   element needed. --aafm-dot is set per variant below; falls back to
 		   currentColor so the dot is always visible. */
 		--aafm-dot: currentColor;
@@ -445,7 +445,7 @@
 		}
 	}
 
-	/* ---------- Notices (notices.php — restyle only, markup unchanged) ---------- */
+	/* ---------- Notices (notices.php - restyle only, markup unchanged) ---------- */
 	.aafm-notice {
 		display: flex;
 		gap: 11px;
@@ -516,7 +516,7 @@
 		}
 	}
 
-	/* ---------- Tabs (top nav — restyle core .nav-tab to underline-active) ---------- */
+	/* ---------- Tabs (top nav - restyle core .nav-tab to underline-active) ---------- */
 	.nav-tab-wrapper {
 		display: flex;
 		flex-wrap: wrap;
@@ -575,7 +575,7 @@
 		}
 	}
 
-	/* ---------- Sub-tabs (abilities subject nav — pill style) ---------- */
+	/* ---------- Sub-tabs (abilities subject nav - pill style) ---------- */
 	.aafm-subject-tabs,
 	.aafm-subtabs {
 		display: flex;
@@ -1500,7 +1500,7 @@
 
 	/* One save affordance across every form tab: whether the Save sits in the sticky
 	   .aafm-savebar (Abilities/Integrations) or on an inline <p> (Settings, the post-type
-	   and meta-key selectors), its status text reads the same — muted, with the same
+	   and meta-key selectors), its status text reads the same - muted, with the same
 	   leading gap from the button. */
 	.aafm-save-status,
 	.aafm-user-status,
@@ -1570,11 +1570,11 @@
 					color: var(--aafm-accent);
 				}
 
-				/* Right-aligned chevron affordance — the same solid-triangle shape used by
+				/* Right-aligned chevron affordance - the same solid-triangle shape used by
 				   every other disclosure in this UI (the integration cards, the abilities
 				   details, and the dashboard setup panel), so there is one chevron shape
 				   across the admin. Points up by default; rotates 180deg when open.
-				   CSS-only — the <details>/<summary> semantics and focus ring stay native. */
+				   CSS-only - the <details>/<summary> semantics and focus ring stay native. */
 				&::after {
 					content: "";
 					flex: 0 0 auto;
@@ -1686,8 +1686,8 @@
 	}
 
 	/* ---------- Per-client quickstarts ---------- */
-	/* The per-client config cards stay in the DOM — the picker reads each card's
-	   data-config and the snippet tests reference them — but the redesigned
+	/* The per-client config cards stay in the DOM - the picker reads each card's
+	   data-config and the snippet tests reference them - but the redesigned
 	   Connection tab surfaces only the single primary codeblock for the selected
 	   client, so the expanded grid and its reveal toggle are hidden. */
 	.aafm-quickstarts {

@@ -85,7 +85,7 @@ trait IntegrationStubs {
 	/**
 	 * Define the minimal AIOSEO host surface: the aioseo() marker function so detection reports AIOSEO
 	 * active, a stateful AIOSEO\Plugin\Common\Models\Post model backed by AioseoStubStore (so a write
-	 * through getPost->set->save round-trips on a following getPost — the real-model code path), and a
+	 * through getPost->set->save round-trips on a following getPost - the real-model code path), and a
 	 * rendered-head filter so the aioseo-get-head ability returns a non-empty string.
 	 *
 	 * @return void
@@ -321,7 +321,7 @@ PHP;
 		}
 		if ( ! function_exists( 'wc_get_product' ) ) {
 			// Fix Code MED-1: return a WC_Product_Variation when the stored row is a variation
-			// (type=variation), else a base WC_Product — mirroring real WooCommerce, so
+			// (type=variation), else a base WC_Product - mirroring real WooCommerce, so
 			// aafm_wc_get_variation()'s instanceof WC_Product_Variation branch is the exercised path.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_product( $id = false ) { $id = (int) $id; if ( ! \AAFM\Tests\WcStubStore::exists( $id ) ) { return false; } $row = \AAFM\Tests\WcStubStore::get( $id ); return ( "variation" === ( $row["type"] ?? "" ) ) ? new \WC_Product_Variation( $id ) : new \WC_Product( $id ); }' );
@@ -371,9 +371,9 @@ PHP;
 			eval( 'function wc_get_orders( $args = array() ) { return \AAFM\Tests\WcOrderStubStore::query( $args ); }' );
 		}
 		// NOTE: wc_get_order() is also defined above for products (returns WC_Product). WooCommerce
-		// uses the same function name for both — in real WC, wc_get_order() returns a WC_Order when
+		// uses the same function name for both - in real WC, wc_get_order() returns a WC_Order when
 		// the post type is shop_order. Since the stubs are process-wide, if wc_get_product() has
-		// already defined wc_get_order for products (it hasn't — wc_get_order is NOT the same as
+		// already defined wc_get_order for products (it hasn't - wc_get_order is NOT the same as
 		// wc_get_product), we define wc_get_order separately here. The product stubs use
 		// wc_get_product(); orders use wc_get_order().
 		if ( ! function_exists( 'wc_get_order' ) ) {
@@ -1238,7 +1238,7 @@ class WC_Shipping_Method {
 			$this->settings     = (array) ( $stored['settings'] ?? array() );
 			// The production code persists instance settings as a WP option keyed by
 			// get_instance_option_key() (core update_option()), exactly as WC does. Merge that
-			// option over the seeded settings so a write round-trips on the next read — this is
+			// option over the seeded settings so a write round-trips on the next read - this is
 			// what WC_Settings_API::init_settings() does on construct.
 			$option = get_option( $this->get_instance_option_key() );
 			if ( is_array( $option ) ) {
@@ -1495,7 +1495,7 @@ class WC_Payment_Gateway {
 
 	/**
 	 * Mirrors WC_Settings_API::update_option(): writes the value, then returns WordPress
-	 * update_option()'s result, which is false when the value was unchanged (no write needed) —
+	 * update_option()'s result, which is false when the value was unchanged (no write needed) -
 	 * NOT only on failure. The new value is persisted to in-memory settings either way.
 	 *
 	 * @param string $key

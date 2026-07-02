@@ -50,7 +50,7 @@ final class ClientSnippetTest extends TestCase {
 		$this->assertArrayHasKey( 'mcpServers', $claude );
 		$this->assertArrayNotHasKey( 'servers', $claude );
 
-		// VS Code reads .vscode/mcp.json under a "servers" key — proves $client is used.
+		// VS Code reads .vscode/mcp.json under a "servers" key - proves $client is used.
 		$this->assertArrayHasKey( 'servers', $vscode );
 		$this->assertArrayNotHasKey( 'mcpServers', $vscode );
 

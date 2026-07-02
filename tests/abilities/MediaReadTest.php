@@ -21,7 +21,7 @@ final class MediaReadTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
-		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-media', 'aafm/get-media-item', 'aafm/count-media' ) );
@@ -92,7 +92,7 @@ final class MediaReadTest extends TestCase {
 		$this->assertStringNotContainsString( $uploads['basedir'], $json );
 		$this->assertStringNotContainsString( ABSPATH, $json );
 
-		// The raw relative _wp_attached_file path is internal — not surfaced.
+		// The raw relative _wp_attached_file path is internal - not surfaced.
 		$this->assertStringNotContainsString( '_wp_attached_file', $json );
 
 		// No author email/login fields ride along on the attachment record.
@@ -310,7 +310,7 @@ final class MediaReadTest extends TestCase {
 
 	public function test_media_discovery_floors(): void {
 		// Reads: same floor as get-media (upload_files OR edit_posts). The reads have NO
-		// discovery override — like get-media itself, they fall through to their real,
+		// discovery override - like get-media itself, they fall through to their real,
 		// object-independent permission_callback, which already answers correctly here.
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
@@ -319,7 +319,7 @@ final class MediaReadTest extends TestCase {
 		$this->acting_as( 'author' );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/get-media-item' ) );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-media' ) );
-		// Writes: object-independent authoring floor — author can upload/edit, so discoverable.
+		// Writes: object-independent authoring floor - author can upload/edit, so discoverable.
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-media' ) );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
 

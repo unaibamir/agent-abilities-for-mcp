@@ -87,7 +87,7 @@ abstract class TestCase extends WP_UnitTestCase {
 	 *
 	 * Core's wp_register_ability()/wp_register_ability_category() refuse to run unless
 	 * their gated init action is doing_action(); simulate that by pushing the action
-	 * name onto $wp_current_filter — the idiom WP core's own ability test trait uses.
+	 * name onto $wp_current_filter - the idiom WP core's own ability test trait uses.
 	 * We do NOT call do_action() on the core hook directly: that trips the WPCS
 	 * NonPrefixedHooknameFound sniff (Phase 1 carried issue).
 	 *

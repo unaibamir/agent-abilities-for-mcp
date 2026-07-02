@@ -4,19 +4,19 @@
  *
  * Exposes the WordPress nav-menu core API: list every menu, read one menu's metadata by id,
  * and list the items inside a menu (reads); create/rename/delete a menu and create/update/
- * delete a menu item (writes). Every ability gates on edit_theme_options — the capability
+ * delete a menu item (writes). Every ability gates on edit_theme_options - the capability
  * WordPress puts on the Appearance > Menus screen, so an agent is held to the same bar a human
  * editor is.
  *
  * The permission is object-INDEPENDENT: WordPress has no per-menu capability (a menu is a
  * nav_menu term, and the whole Menus screen sits behind one site-wide cap). So the discovery
- * layer falls through to this callback with no per-object case in server.php — there is
+ * layer falls through to this callback with no per-object case in server.php - there is
  * nothing to scope per menu id, reads and writes alike.
  *
  * The destructive writes are PERMANENT: navigation menus and their items have no Trash, so
  * wp_delete_nav_menu() removes a menu and all its items outright, and a menu item (a
  * nav_menu_item post) is deleted with no recoverable copy. Neither uses a force-delete
- * trash-bypass flag in our source — wp_delete_post() is called with no second argument, which
+ * trash-bypass flag in our source - wp_delete_post() is called with no second argument, which
  * deletes the trash-less nav_menu_item directly without matching the banned ,true pattern.
  *
  * @package AgentAbilitiesForMCP
@@ -114,7 +114,7 @@ function aafm_register_menus_definitions( array $registry ): array {
  * Shared permission for the whole menus/themes family: edit_theme_options.
  *
  * This is the cap WordPress gates the Appearance screens (Menus, Themes, Customize) behind.
- * It is DEFINED EXACTLY ONCE here — menus.php loads before any later themes ability, which
+ * It is DEFINED EXACTLY ONCE here - menus.php loads before any later themes ability, which
  * must reuse this callback and never redefine it. The check is object-independent (WordPress
  * has no per-menu capability), so discovery falls through to it with no server.php case.
  *
@@ -280,7 +280,7 @@ function aafm_args_list_menu_items(): array {
  * Execute aafm/list-menu-items.
  *
  * Returns the items in the menu, each redacted to the menu-relevant fields. An unknown or
- * empty menu yields an empty items list — wp_get_nav_menu_items() returns false for a bad id,
+ * empty menu yields an empty items list - wp_get_nav_menu_items() returns false for a bad id,
  * which is treated as no items.
  *
  * @param array<string,mixed> $input Validated input.
@@ -424,7 +424,7 @@ function aafm_exec_update_menu( array $input ) {
 /**
  * Args for aafm/delete-menu.
  *
- * Closed schema: just the menu id. This is the disclosed destructive menu ability — deleting a
+ * Closed schema: just the menu id. This is the disclosed destructive menu ability - deleting a
  * menu permanently removes it AND every item inside it (nav menus have no Trash).
  *
  * @return array<string,mixed>
@@ -663,7 +663,7 @@ function aafm_exec_update_menu_item( array $input ) {
 /**
  * Args for aafm/delete-menu-item.
  *
- * Closed schema: just the item id. This is a disclosed destructive write — a menu item has no
+ * Closed schema: just the item id. This is a disclosed destructive write - a menu item has no
  * Trash, so removing it is permanent.
  *
  * @return array<string,mixed>

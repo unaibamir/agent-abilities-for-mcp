@@ -128,7 +128,7 @@ function aafm_exec_search_content( array $input ) {
 
 	// read_private_posts is a deliberate FLOOR gate here, NOT the per-type cap that get-posts
 	// derives from each object. The per-type filter below is what actually contains cross-type
-	// private leakage. Do not "harmonize" this with get-posts' per-object cap — that would
+	// private leakage. Do not "harmonize" this with get-posts' per-object cap - that would
 	// loosen the floor and let a caller through who can't privately read any exposed type.
 	$status = aafm_validate_post_status( (string) ( $input['status'] ?? 'publish' ), current_user_can( 'read_private_posts' ) );
 	if ( is_wp_error( $status ) ) {

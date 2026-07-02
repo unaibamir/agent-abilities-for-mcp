@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — tax rate and tax class reads and writes (sub-slice W4-WC6).
+ * WooCommerce integration abilities - tax rate and tax class reads and writes (sub-slice W4-WC6).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,7 +48,7 @@ function aafm_register_wc_tax_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce tax registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -775,7 +775,7 @@ function aafm_exec_wc_create_tax_class( array $input ): array|\WP_Error {
 
 	// WC_Tax::create_tax_class() returns the CANONICAL stored slug in $result['slug'], which WC may
 	// have de-duplicated (e.g. a second "Reduced rate" becomes "reduced-rate-1"). Always report that
-	// slug so the response is the real lookup key. Only when WC omits it do we fall back — to the
+	// slug so the response is the real lookup key. Only when WC omits it do we fall back - to the
 	// requested slug if one was given, else the name-derived slug (B12: the old code fell back to
 	// sanitize_title($name) unconditionally, which dropped an explicit slug and could mismatch the
 	// de-duplicated slug WC actually stored).

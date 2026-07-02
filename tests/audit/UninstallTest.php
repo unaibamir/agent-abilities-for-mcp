@@ -77,7 +77,7 @@ final class UninstallTest extends TestCase {
 
 	/**
 	 * Uninstall must delete the FULL configuration option set, not just the hardcoded
-	 * enabled-abilities literal — this proves the pre-existing leak fix (aafm_allowed_meta_keys
+	 * enabled-abilities literal - this proves the pre-existing leak fix (aafm_allowed_meta_keys
 	 * plus the Slice C options all survived uninstall before). It must also drop the
 	 * detected-keys transient, the only outside-config-list row in the same defect class.
 	 *

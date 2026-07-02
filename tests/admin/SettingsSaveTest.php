@@ -62,7 +62,7 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	public function test_settings_sanitizer_reports_all_invalid_collapses_to_empty(): void {
-		// All-invalid input collapses to an empty (allow-all) list — the dangerous case.
+		// All-invalid input collapses to an empty (allow-all) list - the dangerous case.
 		$out = aafm_sanitize_settings_input(
 			array(
 				'aafm_ip_allowlist' => "garbage\nnot-an-ip\n10.0.0.0/99",

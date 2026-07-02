@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — coupon reads and writes (sub-slice W4-WC4).
+ * WooCommerce integration abilities - coupon reads and writes (sub-slice W4-WC4).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_coupons_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce coupon registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_coupons_registry_definitions(): array {
 	return array(
-		// Coupons (sub-slice W4-WC4) — discount/promotion management gated on manage_woocommerce.
+		// Coupons (sub-slice W4-WC4) - discount/promotion management gated on manage_woocommerce.
 		'aafm/wc-list-coupons'  => array(
 			'label'        => __( 'List WooCommerce coupons', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists WooCommerce coupons with their id, code, amount, discount type, expiry date, and usage count, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),

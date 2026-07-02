@@ -128,7 +128,7 @@ final class WooAttributesTest extends TestCase {
 
 	public function test_create_attribute_requires_name(): void {
 		$this->acting_as( 'administrator' );
-		// No 'name' key — schema requires it.
+		// No 'name' key - schema requires it.
 		$res = wp_get_ability( 'aafm/wc-create-product-attribute' )->execute( array( 'type' => 'select' ) );
 		$this->assertInstanceOf( WP_Error::class, $res, 'name is required on create.' );
 	}

@@ -1,17 +1,23 @@
 name: Prepare Release
 
-# Step 1 of the release flow. Click "Run workflow" (from the Actions tab, the
-# GitHub mobile app, or `gh workflow run`) to open a Release PR that:
+# Optional helper for step 1 of the release flow. Run it (Actions tab, GitHub
+# mobile app, or `gh workflow run` -- ideally from the develop branch) to open a
+# Release PR into main that:
 #   - syncs the readme `Stable tag` to the plugin header version, and
-#   - generates the changelog from git history into readme.txt + README.md
-#     (plus an Upgrade Notice stub).
-# Review and edit the changelog in that PR, then merge it. Merging lands a
-# "Release X.Y.Z" commit on main, which triggers .github/workflows/release.yml
-# (step 2: tag, versioned zip, GitHub Release, and — once SVN secrets exist —
-# the wordpress.org deploy).
+#   - drops a DRAFT changelog generated from git history into readme.txt +
+#     README.md (plus an Upgrade Notice stub).
+#
+# IMPORTANT: the generated changelog is a raw draft of commit subjects. Rewrite it
+# into a proper, human changelog (what the version actually delivers, in plain
+# prose) in that PR BEFORE merging -- we do not ship raw commit messages.
+#
+# Merging the PR into main IS the release: it lands a "Release X.Y.Z" commit that
+# triggers .github/workflows/release.yml, which tags the version, builds the zip,
+# creates the GitHub Release, and deploys to the wordpress.org SVN repo. main is
+# branch-protected, so only an authorized merge can publish.
 #
 # The plugin header `Version:` is the single source of truth. Bump it (and the
-# matching AAFM_VERSION constant) and merge that change BEFORE running this.
+# matching AAFM_VERSION constant) on develop BEFORE running this.
 
 on:
   workflow_dispatch: {}
@@ -65,12 +71,12 @@ jobs:
             echo "Automated release prep for **v$VERSION**."
             echo
             echo "- readme \`Stable tag\` synced to $VERSION"
-            echo "- changelog generated into readme.txt + README.md + Upgrade Notice"
+            echo "- **draft** changelog generated into readme.txt + README.md + Upgrade Notice"
             echo
-            echo "Review and edit the changelog below if needed, then **merge to publish**."
-            echo "Merging tags \`$VERSION\`, builds the versioned zip, creates the GitHub Release, and (once SVN secrets exist) deploys to wordpress.org."
+            echo "**Rewrite the draft changelog into proper human prose before merging** -- we do not ship raw commit subjects."
+            echo "Merging to main tags \`$VERSION\`, builds the zip, creates the GitHub Release, and deploys to the wordpress.org SVN repo. main is branch-protected, so only an authorized merge publishes."
             echo
-            echo "### Generated changelog"
+            echo "### Draft changelog (humanize me)"
             echo
             cat .github/release-notes.md
           } > /tmp/pr-body.md

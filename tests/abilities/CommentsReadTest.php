@@ -21,7 +21,7 @@ final class CommentsReadTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions, simulated
-		// by pushing the action name onto $wp_current_filter — the idiom WP core's own
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
 		// ability test trait uses. wp_register_ability() refuses to run otherwise.
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
@@ -147,7 +147,7 @@ final class CommentsReadTest extends TestCase {
 	/**
 	 * Phase 3 review P1: get-comments leaked approved comment bodies on non-public
 	 * posts. A read-only caller passing the id of a private/draft post must be
-	 * DENIED before any of that post's approved comment bodies are returned —
+	 * DENIED before any of that post's approved comment bodies are returned -
 	 * get-comments needs the same per-object visibility gate the post itself has.
 	 */
 	public function test_get_comments_denies_subscriber_on_non_public_post(): void {

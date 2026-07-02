@@ -13,8 +13,8 @@ use AAFM\Tests\TestCase;
 
 /**
  * Verifies aafm_oauth_cleanup() deletes expired authorization codes and dead
- * (inactive, past-grace) access-token rows while leaving live tokens — and rows
- * still inside the reuse-detection grace window — untouched.
+ * (inactive, past-grace) access-token rows while leaving live tokens - and rows
+ * still inside the reuse-detection grace window - untouched.
  */
 class CleanupTest extends TestCase {
 

@@ -332,8 +332,8 @@ function aafm_perm_add_post_terms( array $input ): bool {
  *
  * APPEND semantics (distinct from the REPLACE-on-update path in the post writes): the
  * fourth arg to wp_set_post_terms() is true, so existing terms are preserved. Term ids are
- * validated through the SAME reusable validator the enrichment path uses — taxonomy public
- * allow-list + assign_terms cap + term-exists-in-this-taxonomy — so a cross-taxonomy or
+ * validated through the SAME reusable validator the enrichment path uses - taxonomy public
+ * allow-list + assign_terms cap + term-exists-in-this-taxonomy - so a cross-taxonomy or
  * nonexistent id, or a missing assign_terms cap, is rejected before the write.
  *
  * @param array<string,mixed> $input Validated input.
@@ -377,7 +377,7 @@ function aafm_exec_add_post_terms( array $input ) {
  * Per-object term-edit gate shared by get/update/delete term-meta: the term must be readable
  * + key-allowlisted (aafm_validate_term_meta_request) AND the current user must hold
  * edit_term on that specific term. Term meta can hold private data, so even the read gates on
- * edit_term here — mirroring how the post-meta family gates get/update/delete on edit_post.
+ * edit_term here - mirroring how the post-meta family gates get/update/delete on edit_post.
  *
  * @param array<string,mixed> $input Ability input.
  * @return bool
@@ -639,7 +639,7 @@ function aafm_perm_delete_term_meta( array $input ): bool {
  * Execute aafm/delete-term-meta.
  *
  * Re-validates taxonomy/term/key (defence in depth), then removes every value of that key.
- * delete_term_meta() with no value arg deletes all values of the key — the intended
+ * delete_term_meta() with no value arg deletes all values of the key - the intended
  * destructive behaviour.
  *
  * @param array<string,mixed> $input Validated input.
@@ -660,7 +660,7 @@ function aafm_exec_delete_term_meta( array $input ) {
  * WordPress maps each taxonomy to its own primitive (category -> manage_categories,
  * post_tag -> manage_post_tags, and likewise for custom public taxonomies), and
  * wp_insert_term / wp_update_term do no internal capability check. So the gate has
- * to resolve the taxonomy named in the input and check its real manage_terms cap —
+ * to resolve the taxonomy named in the input and check its real manage_terms cap -
  * a hardcoded manage_categories would let someone who can only manage categories
  * write tags on a config that decouples those caps. The taxonomy is validated
  * against the public allow-list first; an unknown/internal one is denied outright.

@@ -6,8 +6,8 @@
  * AIOSEO is not installed on the test site, so the fixture forces the aioseo predicate active and
  * defines the minimal host signal (the aioseo() marker function + a stateful
  * AIOSEO\Plugin\Common\Models\Post model backed by AioseoStubStore + the rendered-head filter) via
- * stub_aioseo(). AIOSEO keeps post SEO in a custom table, reached through the Post model — never
- * post meta — so the read/write go through getPost()->set->save(), and the tests prove the write
+ * stub_aioseo(). AIOSEO keeps post SEO in a custom table, reached through the Post model - never
+ * post meta - so the read/write go through getPost()->set->save(), and the tests prove the write
  * targets the model store, never the _aioseo_* shadow meta, and never raw SQL.
  *
  * @package AgentAbilitiesForMCP

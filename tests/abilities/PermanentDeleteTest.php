@@ -83,7 +83,7 @@ final class PermanentDeleteTest extends TestCase {
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-page' ) );
 
 		// A contributor holds the coarse delete_posts floor (exactly like trash-post), so it
-		// discovers delete-post — per-object delete_post still denies it on others' content at
+		// discovers delete-post - per-object delete_post still denies it on others' content at
 		// execute time (proven above). It lacks the page delete cap, so delete-page stays hidden.
 		$this->acting_as( 'contributor' );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-post' ) );

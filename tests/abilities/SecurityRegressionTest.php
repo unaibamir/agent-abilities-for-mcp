@@ -5,8 +5,8 @@
  * Every competitor in this space shipped at least one critical CVE-class flaw. This
  * suite maps each competitor flaw class to a structural absence or a proven mitigation
  * in OUR catalog, with one focused test (or group) per class. If a future change
- * reintroduces any class — a missing gate, an over-broad permission, a dangerous
- * primitive, a dishonest annotation, an open schema — the matching test fails.
+ * reintroduces any class - a missing gate, an over-broad permission, a dangerous
+ * primitive, a dishonest annotation, an open schema - the matching test fails.
  *
  * Flaw classes covered (spec §6.3 / note 08):
  *   - Privilege escalation        → low-priv caller denied every high-cap write + audited
@@ -96,7 +96,7 @@ final class SecurityRegressionTest extends TestCase {
 			);
 			$this->assertFalse(
 				true === $result,
-				$name . ' allowed a bare subscriber — privilege escalation.'
+				$name . ' allowed a bare subscriber - privilege escalation.'
 			);
 		}
 
@@ -127,7 +127,7 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: AUTHOR / TYPE SPOOFING.
 	 *
-	 * Caller-supplied post_author/post_type cannot escalate — the closed schema rejects
+	 * Caller-supplied post_author/post_type cannot escalate - the closed schema rejects
 	 * them before execute (stronger than ignore-at-execute).
 	 */
 	public function test_author_and_type_spoofing_is_rejected_by_closed_schema(): void {
@@ -174,7 +174,7 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: SSRF.
 	 *
-	 * The upload-media ability accepts base64 ONLY — no URL/remote-fetch input exists.
+	 * The upload-media ability accepts base64 ONLY - no URL/remote-fetch input exists.
 	 * Asserted structurally (no url-like field) and reinforced by the closed schema.
 	 */
 	public function test_ssrf_upload_media_has_no_url_input(): void {
@@ -189,7 +189,7 @@ final class SecurityRegressionTest extends TestCase {
 			$this->assertNotContains(
 				$forbidden,
 				$props,
-				"upload-media exposes a '{$forbidden}' input — reopens the SSRF class."
+				"upload-media exposes a '{$forbidden}' input - reopens the SSRF class."
 			);
 		}
 		// Closed schema means even a smuggled url is rejected before execute.
@@ -208,7 +208,7 @@ final class SecurityRegressionTest extends TestCase {
 				$this->assertNotContains(
 					$forbidden,
 					$props,
-					"{$name} accepts a '{$forbidden}' source field — SSRF surface."
+					"{$name} accepts a '{$forbidden}' source field - SSRF surface."
 				);
 			}
 		}
@@ -311,8 +311,8 @@ final class SecurityRegressionTest extends TestCase {
 			)
 		);
 		// list-plugins is the sanctioned exception to the 'plugin' needle. It is a READ-ONLY
-		// inventory (name, version, active state, relative basename) gated on activate_plugins —
-		// the capability WordPress puts on the Plugins screen — default-OFF, audited, and
+		// inventory (name, version, active state, relative basename) gated on activate_plugins -
+		// the capability WordPress puts on the Plugins screen - default-OFF, audited, and
 		// closed-schema. There is deliberately NO activate/deactivate ability in the catalog, so
 		// the 'plugin' needle still bans a generic plugin-management surface (e.g.
 		// aafm/activate-plugin, aafm/manage-plugins). list-plugins never changes a plugin.
@@ -326,7 +326,7 @@ final class SecurityRegressionTest extends TestCase {
 		// trip no needle, so they need no sanction.
 		$sanctioned = array_merge( $sanctioned, array( 'aafm/get-active-theme', 'aafm/list-themes' ) );
 		// acf-update-user-fields trips the update-user needle but is an ACF custom-field write
-		// gated per-object on edit_user($id), default-OFF, audited, closed-schema — it never
+		// gated per-object on edit_user($id), default-OFF, audited, closed-schema - it never
 		// touches the role/account surface the needle bans. The closed top-level schema accepts
 		// only user_id + a fields object, so a smuggled role/login/capabilities key is rejected
 		// before execute, and the field map values are type-sanitized. A generic user-write surface
@@ -357,7 +357,7 @@ final class SecurityRegressionTest extends TestCase {
 		$this->acting_as( 'administrator' );
 
 		// A clean payload with a smuggled freeform field (e.g. meta_input / option) must be
-		// rejected by the closed schema before execute — nothing arbitrary reaches the DB.
+		// rejected by the closed schema before execute - nothing arbitrary reaches the DB.
 		$result = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'      => 'ok',
@@ -391,7 +391,7 @@ final class SecurityRegressionTest extends TestCase {
 			if ( 'php' !== $file->getExtension() ) {
 				continue;
 			}
-			// Reading our own bundled source for a static scan — not a remote fetch.
+			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src  = (string) file_get_contents( $file->getPathname() );
 			$path = str_replace( '\\', '/', $file->getPathname() );
@@ -428,20 +428,20 @@ final class SecurityRegressionTest extends TestCase {
 	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
 	 * filed under "Destructive (permanent)") that force-deletes through the single
 	 * aafm_force_delete_post() executor in posts.php. aafm/delete-page does NOT call
-	 * the primitive itself — it delegates to that same executor with the page type
-	 * pinned — so pages.php never force-deletes directly and there is exactly one
+	 * the primitive itself - it delegates to that same executor with the page type
+	 * pinned - so pages.php never force-deletes directly and there is exactly one
 	 * wp_delete_post(...,true) call site in the whole abilities layer. The recoverable
 	 * trash-post/trash-page abilities remain for the undoable path.
 	 *
 	 * Comments are another sanctioned exception. aafm/delete-comment is an explicit,
 	 * separately-disclosed destructive ability (risk=destructive, in DESTRUCTIVE_WRITES,
 	 * filed under "Destructive (permanent)") that uses wp_delete_comment(...,true) by
-	 * design — moderators routinely purge spam permanently, and aafm/moderate-comment
+	 * design - moderators routinely purge spam permanently, and aafm/moderate-comment
 	 * still offers the recoverable 'trash' path. That single call is allowed only in
 	 * includes/abilities/comments.php.
 	 *
 	 * Media is the last. aafm/delete-media is the disclosed destructive media ability
-	 * (risk=destructive) that uses wp_delete_attachment(...,true) by design — an
+	 * (risk=destructive) that uses wp_delete_attachment(...,true) by design - an
 	 * attachment has no Trash path, so removing a media file is inherently permanent.
 	 * That single call is allowed only in includes/abilities/media.php.
 	 *
@@ -463,7 +463,7 @@ final class SecurityRegressionTest extends TestCase {
 			if ( 'php' !== $file->getExtension() ) {
 				continue;
 			}
-			// Reading our own bundled source for a static scan — not a remote fetch.
+			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src  = (string) file_get_contents( $file->getPathname() );
 			$path = str_replace( '\\', '/', $file->getPathname() );
@@ -514,7 +514,7 @@ final class SecurityRegressionTest extends TestCase {
 		);
 
 		foreach ( $sources as $path ) {
-			// Reading our own bundled source for a static scan — not a remote fetch.
+			// Reading our own bundled source for a static scan - not a remote fetch.
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			$src = (string) file_get_contents( $path );
 			$this->assertStringContainsString(
@@ -546,7 +546,7 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: PII / USER ENUMERATION.
 	 *
-	 * The get-users read requires the list_users cap — the same gate WP puts on the
+	 * The get-users read requires the list_users cap - the same gate WP puts on the
 	 * user-list admin screen.
 	 */
 	public function test_user_enumeration_requires_list_users_cap(): void {

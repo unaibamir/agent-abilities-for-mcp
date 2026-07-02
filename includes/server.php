@@ -15,7 +15,7 @@ defined( 'ABSPATH' ) || exit;
  * CONFIRMED against the vendored 0.5.0 source (Phase 0.5.2): the adapter converts '/' -> '-'
  * and keeps hyphens, producing names in the charset ^[A-Za-z0-9_.-]+$. So `aafm/get-posts`
  * becomes `aafm-get-posts`. Removing the slash is the hard blocker we care about; the few
- * client surfaces that also dislike hyphens (some ChatGPT Apps) are a v1.x follow-up — Claude,
+ * client surfaces that also dislike hyphens (some ChatGPT Apps) are a v1.x follow-up - Claude,
  * Cursor, and Windsurf (our v1 targets) accept hyphenated tool names.
  *
  * @param string $ability_name Ability name, e.g. "aafm/get-posts".
@@ -30,7 +30,7 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  *
  * IMPORTANT (corrected on the live path in Phase 2.4): create_server() runs inside
  * mcp_adapter_init at rest_api_init priority 15, and on the adapter's streamable-HTTP
- * transport the Application Password user is NOT resolved yet at that point — the request
+ * transport the Application Password user is NOT resolved yet at that point - the request
  * is still anonymous. So this list can only decide WHICH abilities exist, not which the
  * connection may call. Per-connection capability filtering happens later, at request time,
  * in aafm_filter_mcp_tools_list() on the adapter's `mcp_adapter_tools_list` hook, where the
@@ -50,7 +50,7 @@ function aafm_build_server_tools( array $enabled ): array {
 		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
 		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
 		// the user is anonymous here, so this is a no-op and the request-time filter does the
-		// real work — belt and suspenders, never advertising more than the catalog.
+		// real work - belt and suspenders, never advertising more than the catalog.
 		if ( is_user_logged_in() ) {
 			if ( ! aafm_user_can_discover_ability( $name ) ) {
 				continue;
@@ -66,7 +66,7 @@ function aafm_build_server_tools( array $enabled ): array {
  *
  * Uses the raw callback stashed at registration (aafm_remember_raw_permission) so a
  * list-time visibility check never writes a denied audit row. Unknown abilities (no
- * stashed callback) are treated as not-callable — fail closed.
+ * stashed callback) are treated as not-callable - fail closed.
  *
  * @param string              $ability_name Ability name, e.g. "aafm/trash-post".
  * @param array<string,mixed> $input        Input to pass to the permission callback.
@@ -92,7 +92,7 @@ function aafm_user_can_call_ability( string $ability_name, array $input = array(
  * discovery; the per-object permission_callback is left untouched and still runs as the
  * hard EXECUTE-time gate (and still denies + audits on objects the user can't act on).
  *
- * Returns null for abilities that have no per-object branch — those fall back to the
+ * Returns null for abilities that have no per-object branch - those fall back to the
  * normal empty-input callable check, which is already correct for them.
  *
  * Page caps are derived from the 'page' post-type object so the mapping stays correct
@@ -110,22 +110,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
 			return static fn(): bool => current_user_can( 'read' );
 
 		// aafm/get-user gates on list_users (object-independent), so it needs no case
-		// here — it falls through to its real permission_callback with empty input,
+		// here - it falls through to its real permission_callback with empty input,
 		// which is the correct answer (same as the get-users list sibling).
 
 		// aafm/get-site-settings and aafm/update-site-settings both gate on manage_options
-		// (object-independent, no per-object branch), so neither needs a case — each falls
+		// (object-independent, no per-object branch), so neither needs a case - each falls
 		// through to its real permission_callback with empty input, which is the correct
 		// answer. Discovery is proven in SiteSettingsTest (an admin sees them, an editor
 		// does not). Documented here so a future maintainer doesn't add a redundant case.
 
 		// aafm/get-activity-log gates on manage_options (object-independent, no per-object
-		// branch), so it needs no case — it falls through to its real permission_callback
+		// branch), so it needs no case - it falls through to its real permission_callback
 		// with empty input, the correct answer. Proven in ActivityLogTest.
 
 		// All menu abilities (reads AND writes) gate on the object-independent
 		// edit_theme_options capability, so none needs a server.php case; proven in MenusTest.
-		// WordPress has no per-menu capability, so there is nothing to scope per id — each menu
+		// WordPress has no per-menu capability, so there is nothing to scope per id - each menu
 		// ability falls through to its real permission_callback with empty input, which is the
 		// correct discovery answer for reads and writes alike.
 
@@ -139,14 +139,14 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		// Reusable-block reads/writes: get-block, update-block, and delete-block gate
 		// per-object on edit_post/delete_post on the wp_block id, which is false with empty
-		// input at discovery — so use the object-independent edit_posts/delete_posts floor;
+		// input at discovery - so use the object-independent edit_posts/delete_posts floor;
 		// the per-object permission_callback refines at execute. list-blocks and create-block
 		// gate on the object-independent edit_posts floor directly, so they need no case here
 		// (they fall through to aafm_perm_blocks_floor, the correct answer).
 		//
 		// Per-plugin SEO integrations (Yoast / Rank Math / AIOSEO): every *-get-post / *-update-post
 		// / *-get-schema / *-update-schema gates per-object on edit_post($id) (SEO data is post
-		// content), false with empty input — so discovery uses the object-independent edit_posts
+		// content), false with empty input - so discovery uses the object-independent edit_posts
 		// floor, refined per-object at execute. The *-get-head abilities have their own
 		// edit_posts-floor permission_callback, so they need no case here: each falls through to that
 		// callback with empty input (the per-object edit_post refinement runs inside its execute).
@@ -191,7 +191,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// wc-list-shipping-methods, wc-get-shipping-method,
 		// wc-create-shipping-method, wc-update-shipping-method)
 		// gates on the object-independent manage_woocommerce capability, so NONE needs a
-		// server.php case — each falls through to its real permission_callback with empty
+		// server.php case - each falls through to its real permission_callback with empty
 		// input, the correct discovery answer. Proven in WooProductsTest / WooVariationsTest /
 		// WooAttributesTest / WooOrdersTest / WooOrderNotesRefundsTest / WooCustomersTest /
 		// WooCouponsTest / WooShippingTest (admin discovers, editor does not).
@@ -203,7 +203,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 			return static fn(): bool => current_user_can( 'delete_posts' );
 
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
-		// which is false with empty input — so the per-object permission_callback would
+		// which is false with empty input - so the per-object permission_callback would
 		// hide the tool from every capable admin at discovery. Use the object-independent
 		// floor (edit_users / delete_users) so a capable admin can SEE the tool; the
 		// per-object permission_callback still re-checks the specific user at execute time.
@@ -231,7 +231,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Governed post-meta (get/update/delete + bulk read): all gate on per-object
-		// edit_post (reads included — meta can hold private data), so discovery uses the
+		// edit_post (reads included - meta can hold private data), so discovery uses the
 		// same edit_posts floor as update-post, refined per-object at execute time.
 		case 'aafm/get-post-meta':
 		case 'aafm/get-all-post-meta':
@@ -239,7 +239,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-post-meta':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
-		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) —
+		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) -
 		// reads included, since user meta can hold private data. The user id is unknown at
 		// discovery (empty input), so use the object-independent edit_users floor, refined
 		// per-object at execute time. Mirrors the post-meta family.
@@ -270,7 +270,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
-		// Revisions: list/get/restore all gate per-object on edit_post on the parent — reads
+		// Revisions: list/get/restore all gate per-object on edit_post on the parent - reads
 		// included, since a revision can hold content from when the post was private. Discovery
 		// uses the same edit_posts floor as update-post, refined per-object at execute.
 		case 'aafm/list-revisions':
@@ -281,7 +281,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		// Media writes: the attachment id is unknown at discovery (empty input), so use an
 		// object-independent authoring floor. The reads (get-media-item/count-media) need NO
-		// case — like get-media they fall through to their object-independent permission_callback.
+		// case - like get-media they fall through to their object-independent permission_callback.
 		// The execute-time permission_callback still enforces per-object edit_post/delete_post
 		// on the specific attachment.
 		case 'aafm/update-media':
@@ -293,8 +293,8 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/add-post-terms':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
-		// Term-meta read/write/delete gate per-object on the term (edit_term — the read
-		// included, since term meta can hold private data) — the term id is unknown at
+		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
+		// included, since term meta can hold private data) - the term id is unknown at
 		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.
 		// Mirrors the post-meta family (get/update/delete-post-meta).
 		case 'aafm/get-term-meta':
@@ -335,7 +335,7 @@ function aafm_user_can_discover_ability( string $ability_name ): bool {
  *
  * The adapter does NOT permission-filter tools/list itself (Phase 0.5.2); it exposes the
  * `mcp_adapter_tools_list` filter (since 0.5.0) which fires while the JSON-RPC method is
- * dispatched — by then the Application Password user IS resolved. We drop any Tool DTO whose
+ * dispatched - by then the Application Password user IS resolved. We drop any Tool DTO whose
  * backing ability the current user cannot DISCOVER (an object-independent check), so a
  * connection only sees tools it could plausibly use, while the per-object permission_callback
  * still re-checks the specific object at execute time. Non-AAFM tools (no matching enabled
@@ -411,7 +411,7 @@ function aafm_transport_permission_callback( $request ) {
  * Drop the unimplemented `resources` and `prompts` capabilities from the initialize response.
  *
  * The adapter advertises prompts/resources/tools capabilities by default, but this plugin only
- * implements tools — every ability is a tool, and there is no resource or prompt provider. A
+ * implements tools - every ability is a tool, and there is no resource or prompt provider. A
  * truthful capability set keeps a client from issuing resources/list or prompts/list calls that
  * could only error. Rebuilds the DTO from its array form with the two unimplemented keys removed,
  * leaving `tools` intact. Defensive: any non-DTO/non-array shape is returned untouched.

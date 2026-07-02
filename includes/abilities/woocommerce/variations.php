@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — product variation reads and writes (sub-slice W4-WC1b).
+ * WooCommerce integration abilities - product variation reads and writes (sub-slice W4-WC1b).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_variations_full_definitions( array $registry ): array 
 
 /**
  * The WooCommerce product variation registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_variations_registry_definitions(): array {
 	return array(
-		// Variations (sub-slice W4-WC1b) — a variable product's child variations, parent_id-scoped.
+		// Variations (sub-slice W4-WC1b) - a variable product's child variations, parent_id-scoped.
 		'aafm/wc-list-product-variations'  => array(
 			'label'        => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -105,7 +105,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 /*
  * --------------------------------------------------------------------------
- * Variations (sub-slice W4-WC1b) — a variable product's child variations.
+ * Variations (sub-slice W4-WC1b) - a variable product's child variations.
  *
  * A variation is parent_id-scoped: list takes the parent product id and returns its children; get /
  * create / update / delete operate on a single variation by its own id. Everything flows through the
@@ -137,7 +137,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	}
 	// A variation id that resolved to a plain WC_Product (the parent or another type) still yields a
 	// genuine WC_Product_Variation when constructed directly. This branch also gives PHPStan a
-	// concrete WC_Product_Variation return so the declared return type is not seen as unused — under
+	// concrete WC_Product_Variation return so the declared return type is not seen as unused - under
 	// the live WooCommerce types wc_get_product() already returns the variation above, making this a
 	// belt-and-braces fallback rather than a second code path.
 	if ( $variation instanceof \WC_Product && 'variation' === $variation->get_type() && class_exists( 'WC_Product_Variation' ) ) {
@@ -145,7 +145,7 @@ function aafm_wc_get_variation( int $id ): ?\WC_Product_Variation {
 	}
 	// Anything else at this id (a non-variation product, or false) is not a valid variation
 	// target. A variation-type product is always returned as a WC_Product_Variation by
-	// wc_get_product(), so the instanceof check above already covers it — there is no separate
+	// wc_get_product(), so the instanceof check above already covers it - there is no separate
 	// "WC_Product whose type is variation" case to handle (B11).
 	return null;
 }
@@ -171,7 +171,7 @@ function aafm_redact_wc_variation( \WC_Product_Variation $variation ): array {
 /**
  * The full single-variation shape: the lean fields plus description, prices, stock, image, and the
  * variation's chosen attribute values (a flat name=>value map cast to object so an empty one encodes
- * as {}). Never a filesystem path — the image is an attachment id, not a file path.
+ * as {}). Never a filesystem path - the image is an attachment id, not a file path.
  *
  * @param \WC_Product_Variation $variation Variation.
  * @return array<string,mixed>
@@ -200,7 +200,7 @@ function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
 }
 
 /**
- * The shared output_schema properties for the full single-variation shape — the exact field set
+ * The shared output_schema properties for the full single-variation shape - the exact field set
  * aafm_rich_wc_variation() emits. Reused by the get/create/update output_schemas so all three stay in
  * lockstep with the rich assembler. `attributes` is an object (an empty map encodes as {}).
  *
@@ -383,7 +383,7 @@ function aafm_exec_wc_get_product_variation( array $input ) {
  *
  * MEDIUM-4: the one nested structure here is `attributes`, a free-key map of attribute name => chosen
  * value. It is closed to string values only (`additionalProperties` is a string sub-schema), so a
- * smuggled NESTED structure (an object/array value) is rejected before execute — the flat-map
+ * smuggled NESTED structure (an object/array value) is rejected before execute - the flat-map
  * equivalent of additionalProperties:false on a fixed object. The top-level schema layered on top is
  * also closed by each args builder.
  *

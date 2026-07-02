@@ -2,7 +2,7 @@
 /**
  * Governed user-meta surface: the auth-key deny-list (CVE-class), the default-deny
  * allowlist, the user-scoped value sanitizer, and the get/update/delete-user-meta
- * abilities. The deny-list is the headline guarantee — session tokens, application
+ * abilities. The deny-list is the headline guarantee - session tokens, application
  * passwords, capability/user-level keys, and 2FA/reset keys can never be read,
  * written, or deleted, even when a filter tries to allowlist them.
  *
@@ -157,7 +157,7 @@ final class UserMetaTest extends TestCase {
 
 	/**
 	 * The CVE-class guarantee: a deny-listed auth/capability key can be neither READ, WRITTEN,
-	 * nor DELETED — even by an administrator, and even when a filter tries to allowlist it.
+	 * nor DELETED - even by an administrator, and even when a filter tries to allowlist it.
 	 * A leak here is an account-takeover primitive, so prove all three verbs on every key.
 	 */
 	public function test_denylist_keys_cannot_be_read_written_or_deleted_even_when_allowlisted(): void {
@@ -214,7 +214,7 @@ final class UserMetaTest extends TestCase {
 
 	/**
 	 * M3 scalar-guard: an allowlisted key whose stored value is a serialized ARRAY must not
-	 * leak its structure through the read — the reader refuses rather than dumping the array.
+	 * leak its structure through the read - the reader refuses rather than dumping the array.
 	 */
 	public function test_get_user_meta_scalar_guards_a_serialized_array_value(): void {
 		add_filter( 'aafm_allowed_user_meta_keys', static fn() => array( 'twitter' ) );

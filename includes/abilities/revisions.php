@@ -5,7 +5,7 @@
  * (Unit 1 per-object resolver). list-revisions stays metadata-only (the lean redactor
  * never returns post_content). get-revision additionally returns the revision body and
  * excerpt (Wave 1 enrichment) for a normal post, but withholds the body, excerpt, and
- * diff when the parent post is password-protected — see aafm_get_revision_payload().
+ * diff when the parent post is password-protected - see aafm_get_revision_payload().
  *
  * @package AgentAbilitiesForMCP
  */
@@ -25,7 +25,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_revisions_definitions' );
 function aafm_register_revisions_definitions( array $registry ): array {
 	$registry['aafm/list-revisions']   = array(
 		'label'        => __( 'List revisions', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'List the revisions of a post the agent can edit (metadata only — no body content).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'List the revisions of a post the agent can edit (metadata only - no body content).', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',
@@ -135,7 +135,7 @@ function aafm_perm_list_revisions( array $input ): bool {
  *
  * Returns the post's revisions newest-first, paginated, each reduced to the
  * metadata-only shape by aafm_redact_revision(). Autosaves are included (both are
- * post_type=revision); that is intentional — the redactor exposes no body regardless.
+ * post_type=revision); that is intentional - the redactor exposes no body regardless.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -313,11 +313,11 @@ function aafm_perm_restore_revision( array $input ): bool {
  * Execute aafm/restore-revision.
  *
  * Restores the post to the named revision via wp_restore_post_revision(), which first
- * snapshots the current state as a fresh revision — making the restore reversible. The
+ * snapshots the current state as a fresh revision - making the restore reversible. The
  * validator guarantees the revision belongs to the named parent before any write.
  *
  * On failure, wp_restore_post_revision() may return null/false (nothing restored) OR the
- * WP_Error bubbled up from the underlying wp_update_post() — its documented int|false|null
+ * WP_Error bubbled up from the underlying wp_update_post() - its documented int|false|null
  * return is incomplete. A WP_Error is a truthy object, so a falsy-only guard would treat a
  * failed write as success; we reject WP_Error and any non-positive int and surface the
  * generic error instead.
@@ -387,7 +387,7 @@ function aafm_args_delete_revision(): array {
 }
 
 /**
- * Permission for aafm/delete-revision: the SAME gate as restore — parent editable AND
+ * Permission for aafm/delete-revision: the SAME gate as restore - parent editable AND
  * the revision genuinely belongs to that parent. An agent that cannot edit the parent
  * cannot delete its revisions, and a revision_id that is not a child of the named
  * post_id is rejected.
@@ -409,12 +409,12 @@ function aafm_perm_delete_revision( array $input ): bool {
  *
  * Permanently removes one revision via wp_delete_post_revision(). The validator
  * guarantees the revision belongs to the named parent before any delete. The live post
- * is never touched — this prunes change history only.
+ * is never touched - this prunes change history only.
  *
  * wp_delete_post_revision() returns WP_Post|false|null|0|WP_Error: false/null/0 when
  * nothing was deleted, the deleted WP_Post on success, and a WP_Error bubbled up from
- * wp_delete_post(). A WP_Error is a truthy object, so — mirroring aafm_exec_restore_revision
- * — we reject WP_Error and any falsy return and surface the generic error instead.
+ * wp_delete_post(). A WP_Error is a truthy object, so - mirroring aafm_exec_restore_revision
+ * - we reject WP_Error and any falsy return and surface the generic error instead.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error

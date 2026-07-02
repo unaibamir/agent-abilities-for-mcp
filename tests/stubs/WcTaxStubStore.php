@@ -8,7 +8,7 @@
  *
  * Tax rates are backed by a real temp table (woocommerce_tax_rates) created in the test DB so
  * that the production $wpdb direct-query helpers work without modification. Tax classes are
- * backed by a plain static array — WC_Tax::get_tax_classes() / create / delete are intercepted
+ * backed by a plain static array - WC_Tax::get_tax_classes() / create / delete are intercepted
  * by the WC_Tax eval stub.
  *
  * @package AgentAbilitiesForMCP
@@ -46,7 +46,7 @@ class WcTaxStubStore {
 	public static bool $force_delete_failure = false;
 
 	/**
-	 * Clear all class state. Does NOT touch the temp DB table — call drop/create for that.
+	 * Clear all class state. Does NOT touch the temp DB table - call drop/create for that.
 	 *
 	 * @return void
 	 */

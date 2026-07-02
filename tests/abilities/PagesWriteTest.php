@@ -26,7 +26,7 @@ final class PagesWriteTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
-		// simulated by pushing the action name onto $wp_current_filter — the idiom
+		// simulated by pushing the action name onto $wp_current_filter - the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
@@ -59,7 +59,7 @@ final class PagesWriteTest extends TestCase {
 	}
 
 	public function test_create_page_publish_is_split_from_edit(): void {
-		// A contributor can edit_posts/pages but not publish — create-page is gated
+		// A contributor can edit_posts/pages but not publish - create-page is gated
 		// by publish_pages, so the contributor is denied.
 		$this->acting_as( 'contributor' );
 		$this->assertFalse(
@@ -120,7 +120,7 @@ final class PagesWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
-		// 2) A clean create pins the type to 'page' regardless — the agent has no say.
+		// 2) A clean create pins the type to 'page' regardless - the agent has no say.
 		$out = wp_get_ability( 'aafm/create-page' )->execute(
 			array(
 				'title'   => 'Ordinary page',
@@ -160,7 +160,7 @@ final class PagesWriteTest extends TestCase {
 	}
 
 	public function test_update_page_publish_requires_publish_pages(): void {
-		// An editor can edit AND publish pages — both allowed.
+		// An editor can edit AND publish pages - both allowed.
 		$this->acting_as( 'editor' );
 		$page = self::factory()->post->create(
 			array(
@@ -227,7 +227,7 @@ final class PagesWriteTest extends TestCase {
 		wp_get_ability( 'aafm/trash-page' )->execute( array( 'page_id' => $page ) );
 
 		$this->assertSame( 'trash', get_post_status( $page ) );
-		// Still recoverable — not permanently deleted.
+		// Still recoverable - not permanently deleted.
 		$this->assertInstanceOf( WP_Post::class, get_post( $page ) );
 	}
 

@@ -109,7 +109,7 @@ final class SafetyTest extends TestCase {
 		// IPv4 /20 -> mask 255.255.240.0; remainder 4 bits in the 3rd byte (0xF0).
 		$this->assertTrue( aafm_cidr_match( '192.168.16.5', '192.168.16.0/20' ) );    // 0x10 & 0xF0 == 0x10
 		$this->assertTrue( aafm_cidr_match( '192.168.31.255', '192.168.16.0/20' ) );  // top of the /20 block.
-		$this->assertFalse( aafm_cidr_match( '192.168.32.5', '192.168.16.0/20' ) );   // 0x20 & 0xF0 != 0x10 — just outside
+		$this->assertFalse( aafm_cidr_match( '192.168.32.5', '192.168.16.0/20' ) );   // 0x20 & 0xF0 != 0x10 - just outside
 		// IPv4 /28 -> last-nibble boundary (0xF0 in the 4th byte).
 		$this->assertTrue( aafm_cidr_match( '10.0.0.5', '10.0.0.0/28' ) );
 		$this->assertFalse( aafm_cidr_match( '10.0.0.20', '10.0.0.0/28' ) );          // .20 = 0x14, outside .0/28

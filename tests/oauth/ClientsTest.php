@@ -22,7 +22,7 @@ class ClientsTest extends TestCase {
 	 *
 	 * The WordPress test suite rewrites plugin `CREATE TABLE` to its `TEMPORARY`
 	 * form, so each DB test must call aafm_install_oauth_tables() first and then
-	 * select the row back — the temporary table is invisible to `SHOW TABLES`.
+	 * select the row back - the temporary table is invisible to `SHOW TABLES`.
 	 *
 	 * @param string $client_id The public client identifier.
 	 * @return array<string,mixed>|null
@@ -65,7 +65,7 @@ class ClientsTest extends TestCase {
 
 	/**
 	 * Only authorization_code+refresh_token and the `code` response type are implemented, so
-	 * unknown client-supplied grant_types/response_types must be filtered out at registration —
+	 * unknown client-supplied grant_types/response_types must be filtered out at registration -
 	 * not stored or echoed back. The return value and the stored row both carry the filtered set.
 	 */
 	public function test_filters_unknown_grant_and_response_types(): void {
@@ -208,7 +208,7 @@ class ClientsTest extends TestCase {
 	 * A redirect URI carrying a CRLF sequence is rejected.
 	 *
 	 * The wp_parse_url() call strips control characters before parsing, so the host
-	 * would validate clean while the raw string we persist still carries the CR/LF —
+	 * would validate clean while the raw string we persist still carries the CR/LF -
 	 * a header-splitting / open-redirect seed. Registration must reject it outright.
 	 */
 	public function test_rejects_crlf_in_redirect_uri(): void {

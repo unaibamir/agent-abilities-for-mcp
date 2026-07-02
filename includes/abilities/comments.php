@@ -166,7 +166,7 @@ function aafm_perm_get_comments( array $input ): bool {
  *
  * Returns APPROVED comments only. The status filter is pinned server-side so a
  * low-privilege caller can never reach a pending, spam, or trashed comment body
- * through this ability — unapproved bodies are only available via
+ * through this ability - unapproved bodies are only available via
  * aafm/get-pending-comments, which requires moderate_comments.
  *
  * @param array<string,mixed> $input Validated input.
@@ -189,7 +189,7 @@ function aafm_exec_get_comments( array $input ): array {
 	// comment whose parent post they cannot read. A caller who can moderate comments
 	// already sees every comment in the dashboard, so the post-filter only applies to
 	// everyone else. This mirrors the per-object visibility guard in
-	// aafm_perm_get_comments() for the site-wide branch — "approved" is not "public"
+	// aafm_perm_get_comments() for the site-wide branch - "approved" is not "public"
 	// when the parent post is private, draft, or password-protected.
 	if ( $post_id <= 0 && ! current_user_can( 'moderate_comments' ) ) {
 		$comments = array_filter(
@@ -213,7 +213,7 @@ function aafm_exec_get_comments( array $input ): array {
 	// hidden/private/password-protected posts the caller cannot read, so reporting it would
 	// leak the existence and volume of comments on content they have no access to. Recomputing
 	// an exact post-filtered total would mean loading every approved comment site-wide (a
-	// performance/DoS concern), so `total` is simply omitted for that branch — it is optional
+	// performance/DoS concern), so `total` is simply omitted for that branch - it is optional
 	// in the output schema.
 	if ( $post_id > 0 || current_user_can( 'moderate_comments' ) ) {
 		$result['total'] = (int) get_comments(
@@ -280,7 +280,7 @@ function aafm_redact_comments( $comments ): array {
 /**
  * Args for aafm/get-comment.
  *
- * One comment by id, returned in the same redacted shape as the list reads — never
+ * One comment by id, returned in the same redacted shape as the list reads - never
  * the author email or IP. The read is gated by the parent post's visibility, exactly
  * like aafm/get-comments, so an approved comment on a hidden post never leaks.
  *
@@ -326,7 +326,7 @@ function aafm_args_get_comment(): array {
  * A comment is only as visible as the post it belongs to. Approved comments on a
  * public, non-password-protected post are readable by any logged-in caller; every
  * other comment (pending, spam, trash, or on a hidden post) requires the caller to
- * be able to read that post AND to moderate/edit the comment — the same posture as
+ * be able to read that post AND to moderate/edit the comment - the same posture as
  * aafm/get-comments, refined to a single object. A missing comment default-denies
  * so the ability can't be used to probe for ids.
  *
@@ -341,7 +341,7 @@ function aafm_perm_get_comment( array $input ): bool {
 
 	$comment = get_comment( $id );
 	if ( ! $comment instanceof WP_Comment ) {
-		// Default-deny on a missing comment so the ability can't probe for ids —
+		// Default-deny on a missing comment so the ability can't probe for ids -
 		// the same posture as aafm_perm_get_comments() for a missing target post.
 		return false;
 	}
@@ -389,7 +389,7 @@ function aafm_exec_get_comment( array $input ) {
  *  - The comment is created PENDING (comment_approved '0'); a human or
  *    aafm/moderate-comment approves it. An agent never auto-publishes.
  *  - comment_post_ID must resolve to a real post. Optional parent must be a real
- *    comment ON THE SAME POST. comments_open() is deliberately not required —
+ *    comment ON THE SAME POST. comments_open() is deliberately not required -
  *    moderators add to closed threads in the dashboard and the cap floor gates abuse.
  *
  * @return array<string,mixed>
@@ -467,7 +467,7 @@ function aafm_perm_create_comment(): bool {
  *    an agent should never auto-publish its own comment.
  *  - wp_insert_comment() bypasses wp_allow_comment()'s duplicate / flood / disallowed-key
  *    checks. That is acceptable here precisely because the caller already holds
- *    moderate_comments — this is a moderation action, not an anonymous public submission.
+ *    moderate_comments - this is a moderation action, not an anonymous public submission.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -486,7 +486,7 @@ function aafm_exec_create_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// An optional parent must be a real comment on the SAME post — no cross-post threading.
+	// An optional parent must be a real comment on the SAME post - no cross-post threading.
 	if ( $parent > 0 ) {
 		$parent_comment = get_comment( $parent );
 		if ( ! $parent_comment instanceof WP_Comment || (int) $parent_comment->comment_post_ID !== $post_id ) {
@@ -499,7 +499,7 @@ function aafm_exec_create_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Author identity is the agent user — never free-form input. Status is pending.
+	// Author identity is the agent user - never free-form input. Status is pending.
 	// wp_slash() the strings: wp_insert_comment() expects slashed data and unslashes
 	// internally, matching the post-writer convention elsewhere in the plugin.
 	$commentdata = array(
@@ -514,7 +514,7 @@ function aafm_exec_create_comment( array $input ) {
 		'comment_type'         => 'comment',
 		// Present but empty: wp_filter_comment() reads these keys, and we never record
 		// the agent's IP/user-agent for an agent-authored comment. Neither is ever
-		// returned — the response is built by aafm_redact_comment().
+		// returned - the response is built by aafm_redact_comment().
 		'comment_author_IP'    => '',
 		'comment_agent'        => '',
 	);
@@ -632,7 +632,7 @@ function aafm_exec_get_pending_comments( array $input ): array {
 /**
  * Args for aafm/moderate-comment.
  *
- * Moderation only — this write never edits the comment content or author. The
+ * Moderation only - this write never edits the comment content or author. The
  * action is constrained to a closed allowlist by the input schema, and again at
  * execute, so an arbitrary status can never be set.
  *
@@ -699,7 +699,7 @@ function aafm_perm_moderate_comment_obj( array $input ): bool {
  * Execute aafm/moderate-comment.
  *
  * Applies one moderation action from the closed allowlist. Destructive actions
- * are trash/spam only — both recoverable — never a permanent wp_delete_comment.
+ * are trash/spam only - both recoverable - never a permanent wp_delete_comment.
  * The action is re-validated here so the switch's default branch hard-fails any
  * value that somehow bypassed the schema.
  *
@@ -801,8 +801,8 @@ function aafm_args_update_comment(): array {
 /**
  * Per-object edit gate shared by update-comment and delete-comment.
  *
- * The site-wide moderate_comments cap is the floor — the same posture as
- * aafm_perm_moderate_comment_obj() — so a low-cap user who happens to be able to
+ * The site-wide moderate_comments cap is the floor - the same posture as
+ * aafm_perm_moderate_comment_obj() - so a low-cap user who happens to be able to
  * edit their own comment can never reach these writes. On top of the floor the caller
  * must be able to edit the specific comment (edit_comment maps through the parent
  * post's edit caps), so a moderator can't touch a comment they couldn't edit in the
@@ -837,7 +837,7 @@ function aafm_exec_update_comment( array $input ) {
 	}
 
 	// wp_update_comment() unslashes internally, so the content is slashed on the way in
-	// to match the post-writer convention. Only comment_content is written — never the
+	// to match the post-writer convention. Only comment_content is written - never the
 	// post id, author, email, or IP.
 	$ok = wp_update_comment(
 		array(
@@ -860,7 +860,7 @@ function aafm_exec_update_comment( array $input ) {
 /**
  * Args for aafm/delete-comment.
  *
- * PERMANENT delete (wp_delete_comment with force=true) — this bypasses the Trash and
+ * PERMANENT delete (wp_delete_comment with force=true) - this bypasses the Trash and
  * cannot be undone. It is deliberately distinct from aafm/moderate-comment's 'trash'
  * action, which is recoverable. risk=destructive, destructive:true, and the disclosure
  * states the permanence plainly. The moderate_comments floor plus per-object

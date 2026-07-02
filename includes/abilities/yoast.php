@@ -24,7 +24,7 @@ add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_yoast_full_de
 // on plugins_loaded (so a load-time activity check could miss Yoast); the callback's own
 // function_exists('YoastSEO') guard makes it inert until Yoast is genuinely present. Under the
 // PHPUnit stubs YoastSEO() is undefined, so this passes through and the test stub's own filter
-// supplies the canned head — production and test wiring never collide.
+// supplies the canned head - production and test wiring never collide.
 add_filter( 'aafm_seo_rendered_head', 'aafm_yoast_rendered_head', 10, 3 );
 
 /**
@@ -32,7 +32,7 @@ add_filter( 'aafm_seo_rendered_head', 'aafm_yoast_rendered_head', 10, 3 );
  *
  * Honors $source: returns the passed-through $head untouched unless $source is 'yoast', so a site
  * running multiple SEO plugins never has Yoast answer for another plugin's head. Guards the real
- * Yoast API (YoastSEO() and the for_post->get_head->html chain) defensively — any missing piece or
+ * Yoast API (YoastSEO() and the for_post->get_head->html chain) defensively - any missing piece or
  * thrown error falls back to the passed-through $head rather than fataling.
  *
  * @param string $head   Head markup accumulated so far (passthrough default).
@@ -96,7 +96,7 @@ function aafm_register_yoast_full_definitions( array $registry ): array {
 
 /**
  * The Yoast registry rows, keyed by ability name. The single source of truth for these abilities'
- * label, description, group, risk, and args builder — consumed by both the host-guarded live
+ * label, description, group, risk, and args builder - consumed by both the host-guarded live
  * registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>

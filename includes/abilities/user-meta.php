@@ -3,7 +3,7 @@
  * Governed user-meta abilities (read + write + delete). Every operation passes the same
  * two gates: the target user must be editable by the agent (per-object edit_user($id)) AND
  * the key must clear the auth-key hard-block + the default-deny allowlist
- * (aafm_validate_user_meta_key). The hard-block is CVE-class — session tokens, application
+ * (aafm_validate_user_meta_key). The hard-block is CVE-class - session tokens, application
  * passwords, capability/user-level keys, and 2FA/reset keys can never be read, written, or
  * deleted, even when a filter tries to allowlist them.
  *
@@ -223,7 +223,7 @@ function aafm_perm_user_meta_access( array $input ): bool {
 /**
  * Execute aafm/get-user-meta.
  *
- * Re-validates the key (defence in depth — the permission callback already gated it),
+ * Re-validates the key (defence in depth - the permission callback already gated it),
  * confirms the user exists, then reads a single value. Non-scalar values are refused so a
  * serialized array/object stored under an allowlisted key can never leak its structure (M3).
  *
@@ -288,7 +288,7 @@ function aafm_exec_update_user_meta( array $input ) {
 /**
  * Execute aafm/delete-user-meta.
  *
- * Re-validates the key (defence in depth — the permission callback already gated it),
+ * Re-validates the key (defence in depth - the permission callback already gated it),
  * then removes every value of that key. delete_user_meta() with no value arg deletes all
  * values of the key, which is the intended destructive behaviour here.
  *

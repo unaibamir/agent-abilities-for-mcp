@@ -18,7 +18,7 @@ defined( 'ABSPATH' ) || exit;
 function aafm_validate_post_type( string $type ) {
 	$type = sanitize_key( $type );
 
-	// The hard floor (public, non-internal) runs first and is independent of the allowlist —
+	// The hard floor (public, non-internal) runs first and is independent of the allowlist -
 	// it rejects attachment/revision/internal types even if one is forced into the option.
 	if ( ! aafm_post_type_is_eligible( $type ) ) {
 		return new WP_Error( 'aafm_invalid_post_type', __( 'Unsupported post type.', 'agent-abilities-for-mcp' ) );
@@ -184,7 +184,7 @@ function aafm_allowed_meta_keys(): array {
 	 */
 	$filtered = (array) apply_filters( 'aafm_allowed_meta_keys', $stored );
 
-	// '*' is a wildcard SENTINEL, never a literal key — strip it here so the literal
+	// '*' is a wildcard SENTINEL, never a literal key - strip it here so the literal
 	// enumeration never contains it. The star is surfaced separately via
 	// aafm_meta_allow_has_star(), which the validator reads.
 	return array_values(
@@ -243,8 +243,8 @@ function aafm_meta_deny_has_star(): bool {
  * Validate a meta key against the absolute precedence chain: hard-block -> deny -> allow/`*`.
  *
  * A key is exposed only when ALL hold (computed hard-block FIRST so every reject is the same
- * generic error — no oracle distinguishing the reject reason):
- *   - it is non-empty and NOT hard-blocked (floor 1, absolute — survives `*` and explicit allow);
+ * generic error - no oracle distinguishing the reject reason):
+ *   - it is non-empty and NOT hard-blocked (floor 1, absolute - survives `*` and explicit allow);
  *   - the deny-`*` kill switch is off AND the key is not in the explicit deny list (floor 2);
  *   - the allow-`*` wildcard is set OR the key is in the explicit allow list (floor 3).
  *
@@ -271,7 +271,7 @@ function aafm_validate_meta_key( string $key ) {
  * the agent can never store a serialized structure. Strings are plain-text sanitized (meta
  * is not rendered as post content); the result is then run through sanitize_meta so any
  * registered sanitize_callback still applies. The object subtype ('post') is passed so the
- * per-key sanitize_post_meta_{$key} callback actually fires — the 3-arg form skips it.
+ * per-key sanitize_post_meta_{$key} callback actually fires - the 3-arg form skips it.
  * Whatever the callback returns is re-asserted as scalar before it can be stored or returned,
  * so a callback that coerces the value into an array/object is refused (defence in depth,
  * symmetric with the scalar-only read path).
@@ -296,12 +296,12 @@ function aafm_sanitize_meta_value( string $key, $value ) {
 
 /**
  * Default-deny term-meta allowlist (option-backed, with the legacy filter layered on as a
- * UNION). Empty by default — opt-in via the aafm_exposed_term_meta_keys option (admin textarea)
+ * UNION). Empty by default - opt-in via the aafm_exposed_term_meta_keys option (admin textarea)
  * and/or the aafm_allowed_term_meta_keys filter (Wave-4 SEO integrations populate the filter).
  *
  * Merge order (must not change): option base -> filter UNION -> re-floor the merged set against
  * the post-meta hard-block (shared) -> strip the `*` sentinel -> de-dupe. The option base is
- * passed as the filter's default, then array_merge'd back, so the filter can only ADD keys — a
+ * passed as the filter's default, then array_merge'd back, so the filter can only ADD keys - a
  * legacy or malicious filter that returns [] yields option ∪ [] = option and can never shrink an
  * admin's exposed list, and a filter that adds a protected/auth key is a no-op (re-floored after).
  *
@@ -321,7 +321,7 @@ function aafm_allowed_term_meta_keys(): array {
 	$filtered = (array) apply_filters( 'aafm_allowed_term_meta_keys', $base );
 	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
 
-	// '*' is a wildcard SENTINEL, never a literal key — strip it here (surfaced separately via
+	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
 	// aafm_term_meta_allow_has_star()), and re-floor the merged set against the hard-block.
 	return array_values(
 		array_unique(
@@ -379,8 +379,8 @@ function aafm_term_meta_deny_has_star(): bool {
  *
  * Mirrors aafm_validate_meta_key() but term-scoped (reuses the post-agnostic hard-block floor,
  * aafm_hard_blocked_meta_key). A key is exposed only when ALL hold (hard-block computed FIRST so
- * every reject is the same generic error — no oracle distinguishing the reject reason):
- *   - it is non-empty and NOT hard-blocked (floor 1, absolute — survives `*` and explicit allow);
+ * every reject is the same generic error - no oracle distinguishing the reject reason):
+ *   - it is non-empty and NOT hard-blocked (floor 1, absolute - survives `*` and explicit allow);
  *   - the deny-`*` kill switch is off AND the key is not in the explicit deny list (floor 2);
  *   - the allow-`*` wildcard is set OR the key is in the explicit allow list (floor 3).
  *
@@ -433,7 +433,7 @@ function aafm_sanitize_term_meta_value( string $key, $value ) {
  * and the capability/user-level keys, including the multisite per-blog forms
  * ({$prefix}_capabilities / {$prefix}2_user_level). The aafm_hard_blocked_user_meta_keys
  * filter may ADD blocks, never remove them (built-ins are re-merged after). This is the
- * CVE-class control — a leak of any of these keys is an account-takeover primitive.
+ * CVE-class control - a leak of any of these keys is an account-takeover primitive.
  *
  * Mirrors aafm_hard_blocked_meta_key() but is user-scoped (the 'user' protected subtype and
  * the user-specific auth/2FA denylist differ from the post-meta floor).
@@ -487,12 +487,12 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 
 /**
  * Default-deny user-meta allowlist (option-backed, with the legacy filter layered on as a
- * UNION). Empty by default — opt-in via the aafm_exposed_user_meta_keys option (admin textarea)
+ * UNION). Empty by default - opt-in via the aafm_exposed_user_meta_keys option (admin textarea)
  * and/or the aafm_allowed_user_meta_keys filter.
  *
  * Merge order (must not change): option base -> filter UNION -> re-floor the merged set against
  * the user hard-block -> strip the `*` sentinel -> de-dupe. The option base is passed as the
- * filter's default, then array_merge'd back, so the filter can only ADD keys — a legacy or
+ * filter's default, then array_merge'd back, so the filter can only ADD keys - a legacy or
  * malicious filter that returns [] yields option ∪ [] = option and can never shrink an admin's
  * exposed list, and a filter that adds a protected/auth key is a no-op (re-floored after).
  *
@@ -512,7 +512,7 @@ function aafm_allowed_user_meta_keys(): array {
 	$filtered = (array) apply_filters( 'aafm_allowed_user_meta_keys', $base );
 	$merged   = array_merge( $base, array_map( 'strval', $filtered ) );
 
-	// '*' is a wildcard SENTINEL, never a literal key — strip it here (surfaced separately via
+	// '*' is a wildcard SENTINEL, never a literal key - strip it here (surfaced separately via
 	// aafm_user_meta_allow_has_star()), and re-floor the merged set against the user hard-block.
 	return array_values(
 		array_unique(
@@ -568,8 +568,8 @@ function aafm_user_meta_deny_has_star(): bool {
 /**
  * The fixed v1 allowlist of site settings agents may read and write.
  *
- * It deliberately EXCLUDES every takeover/lockout-class key — siteurl, home, admin_email,
- * default_role, users_can_register — because changing any of them could take over or lock
+ * It deliberately EXCLUDES every takeover/lockout-class key - siteurl, home, admin_email,
+ * default_role, users_can_register - because changing any of them could take over or lock
  * out the whole site. A filter may NARROW this set (remove keys), but the excluded keys are
  * re-stripped with array_diff() AFTER the filter runs, so a rogue filter can never widen the
  * list back to a dangerous key.
@@ -581,7 +581,7 @@ function aafm_allowed_site_settings(): array {
 	$never = array( 'siteurl', 'home', 'admin_email', 'default_role', 'users_can_register' );
 
 	/**
-	 * Filters the site settings exposed to AI agents. The set can only be NARROWED — the
+	 * Filters the site settings exposed to AI agents. The set can only be NARROWED - the
 	 * takeover-class keys in $never are re-stripped after this filter, so a rogue filter
 	 * that tries to add one is a no-op.
 	 *
@@ -597,8 +597,8 @@ function aafm_allowed_site_settings(): array {
  *
  * Mirrors aafm_validate_meta_key() but user-scoped (the user hard-block + error code differ).
  * A key is exposed only when ALL hold (hard-block computed FIRST so every reject is the same
- * generic error — no oracle):
- *   - it is non-empty and NOT hard-blocked (floor 1, absolute — a user auth/capability key can
+ * generic error - no oracle):
+ *   - it is non-empty and NOT hard-blocked (floor 1, absolute - a user auth/capability key can
  *     never be re-admitted by `*` or an explicit exposed entry);
  *   - the deny-`*` kill switch is off AND the key is not in the explicit deny list (floor 2);
  *   - the exposed-`*` wildcard is set OR the key is in the exposed list (floor 3).
@@ -627,7 +627,7 @@ function aafm_validate_user_meta_key( string $key ) {
  * then run through sanitize_meta() with the 'user' object type so any registered
  * sanitize_user_meta_{$key} callback fires; the result is re-asserted as scalar.
  *
- * Mirrors aafm_sanitize_term_meta_value() but is user-scoped — the live
+ * Mirrors aafm_sanitize_term_meta_value() but is user-scoped - the live
  * aafm_sanitize_meta_value() hardwires the 'post' subtype and CANNOT be reused here.
  *
  * @param string $key   User-meta key (already validated/allowlisted by the caller).
@@ -678,7 +678,7 @@ function aafm_validate_term_meta_request( array $input ) {
  * The Tier-1 cap keys (edit_post, delete_post, publish_posts, read_private_posts) are
  * guaranteed present on ->cap across every registration style. `mapped` reflects
  * map_meta_cap: when false, per-object edit_post/delete_post checks degrade to a bare
- * singular primitive with no author/status containment — the footgun the write gates refuse.
+ * singular primitive with no author/status containment - the footgun the write gates refuse.
  *
  * @param string $type Post type slug.
  * @return array{object: ?WP_Post_Type, mapped: bool}
@@ -721,7 +721,7 @@ function aafm_can_read_post_object( WP_Post $post ): bool {
  * Type must clear the floor AND the allowlist AND be map_meta_cap===true (Q5 write-safety).
  * For a non-mapped type the write is refused outright rather than trusting a degraded
  * per-object cap that can fail OPEN. For post/page (mapped) this resolves to today's
- * current_user_can( 'edit_post'/'edit_page', $id ) — zero behaviour change.
+ * current_user_can( 'edit_post'/'edit_page', $id ) - zero behaviour change.
  *
  * @param WP_Post $post Target object.
  * @return bool
@@ -732,7 +732,7 @@ function aafm_can_edit_post_object( WP_Post $post ): bool {
 }
 
 /**
- * Whether the current user may remove a single object through the content abilities —
+ * Whether the current user may remove a single object through the content abilities -
  * covers both trashing and permanent deletion. The delete_post meta-cap gate is the same
  * for either path, so the trash/page abilities and the permanent delete-post/delete-page
  * abilities share this check.
@@ -786,7 +786,7 @@ function aafm_validate_taxonomy( string $taxonomy ) {
  * Enforces, in order: the taxonomy clears the public allow-list (aafm_validate_taxonomy);
  * the current (agent) user holds that taxonomy's assign_terms cap; every ID is a positive
  * integer; every ID is an EXISTING term that belongs to THIS taxonomy (rejects nonexistent
- * and cross-taxonomy IDs). Pure — performs no writes — so the caller can validate the whole
+ * and cross-taxonomy IDs). Pure - performs no writes - so the caller can validate the whole
  * enrichment payload before mutating anything.
  *
  * @param string           $taxonomy Requested taxonomy slug.
@@ -827,7 +827,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
  * Edit access to the PARENT post is already enforced by the calling ability's
  * permission gate (create holds edit_posts/publish_posts; update runs
  * aafm_can_edit_post_object), and set_post_thumbnail writes _thumbnail_id on that
- * parent — so the only new check here is that the id is genuinely an attachment.
+ * parent - so the only new check here is that the id is genuinely an attachment.
  *
  * @param mixed $attachment_id Candidate attachment id.
  * @return int|WP_Error The sanitized attachment id, or a generic error.
@@ -835,7 +835,7 @@ function aafm_validate_term_ids_for_taxonomy( string $taxonomy, array $term_ids 
 function aafm_validate_featured_attachment_id( $attachment_id ) {
 	$id  = absint( $attachment_id );
 	$att = $id ? get_post( $id ) : null;
-	// Must be a real attachment AND an image — the dedicated set-featured-image ability
+	// Must be a real attachment AND an image - the dedicated set-featured-image ability
 	// also requires wp_attachment_is_image(), so this enrichment path agrees with it and
 	// rejects non-image attachments (PDFs, audio, video, etc.).
 	if ( ! $att instanceof WP_Post || 'attachment' !== $att->post_type || ! wp_attachment_is_image( $id ) ) {
@@ -879,8 +879,8 @@ function aafm_validate_meta_payload( array $meta ) {
  *
  * Returns a normalized bundle of ALREADY-VALIDATED data ready for
  * aafm_apply_write_enrichment(), or the first WP_Error. Absent fields are normalized to
- * empty so the apply step is a no-op for them. Validating everything here — before any row
- * is mutated — is what makes the write reject bad input cleanly: a bad taxonomy/term/
+ * empty so the apply step is a no-op for them. Validating everything here - before any row
+ * is mutated - is what makes the write reject bad input cleanly: a bad taxonomy/term/
  * attachment/meta key aborts the whole call rather than half-applying. ('slug' is NOT handled
  * here; it is folded into the postarr by the create/update path so it lands in the same atomic
  * row write.)
@@ -929,12 +929,12 @@ function aafm_validate_write_enrichment( array $input ) {
  *
  * This step is NOT transactional and does NOT roll back the post row. Because every value in
  * the bundle was already checked by aafm_validate_write_enrichment(), the apply cannot fail
- * ON BAD INPUT — there is no malformed taxonomy/term/attachment/meta left to reject. It can
+ * ON BAD INPUT - there is no malformed taxonomy/term/attachment/meta left to reject. It can
  * still encounter a late, environmental failure (a save_post hook, or a TOCTOU race that
  * deletes a just-validated term), and when it does the post row stays written: the create/
  * update has already committed the core fields before this runs.
  *
- * DELIBERATE CHOICE — term-assignment WP_Errors are accepted, not surfaced. wp_set_post_terms()
+ * DELIBERATE CHOICE - term-assignment WP_Errors are accepted, not surfaced. wp_set_post_terms()
  * can return a WP_Error (e.g. a concurrent term-insert race). The lean-write contract treats
  * the post as already saved and the enrichment as recoverable by simply re-calling the write,
  * so this function ignores that return value rather than failing the whole call after the row
@@ -942,13 +942,13 @@ function aafm_validate_write_enrichment( array $input ) {
  *
  * @param int                                                                              $post_id Target post id.
  * @param array{terms:array<string,list<int>>,featured_media:int,meta:array<string,mixed>} $bundle  Validated bundle.
- * @return null Always null — enrichment outcomes are not surfaced (see DELIBERATE CHOICE above).
+ * @return null Always null - enrichment outcomes are not surfaced (see DELIBERATE CHOICE above).
  */
 function aafm_apply_write_enrichment( int $post_id, array $bundle ) {
 	foreach ( $bundle['terms'] as $taxonomy => $ids ) {
 		// Replace, not append ($append=false): the documented contract is that `terms`
 		// REPLACES existing terms for that taxonomy. A WP_Error return (term-insert race)
-		// is intentionally not surfaced — see the DELIBERATE CHOICE note above.
+		// is intentionally not surfaced - see the DELIBERATE CHOICE note above.
 		wp_set_post_terms( $post_id, $ids, $taxonomy );
 	}
 
@@ -986,7 +986,7 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 	if ( in_array( $status, $private_statuses, true ) && $can_read_private ) {
 		return $status;
 	}
-	// 'any', 'trash', 'auto-draft', 'inherit', and unknown values are always rejected —
+	// 'any', 'trash', 'auto-draft', 'inherit', and unknown values are always rejected -
 	// this is the no-`status=any`-widening guard.
 	return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
 }
@@ -1110,14 +1110,14 @@ function aafm_rich_post_output_properties(): array {
  * Assemble the enriched, agent-facing post shape: the lean redactor base plus
  * content, excerpt, terms, author, featured image, and allowlisted meta.
  *
- * Read access is the caller's responsibility — every getter that calls this has
+ * Read access is the caller's responsibility - every getter that calls this has
  * already cleared its permission_callback. This helper only shapes data.
  *
- * SECURITY: a password-protected post never exposes its body here — no raw or
+ * SECURITY: a password-protected post never exposes its body here - no raw or
  * rendered `content`, and no body-derived excerpt (Tasks 2-3). The single-post
  * read gate does not inspect post_password, so this is the chokepoint.
  *
- * Note: rendered output is best-effort — an MCP request has no full post context
+ * Note: rendered output is best-effort - an MCP request has no full post context
  * (no setup_postdata / loop), so a third-party the_content filter that reads
  * get_the_ID()/$GLOBALS['post'] may behave oddly; content_format=raw returns the
  * deterministic stored markup.
@@ -1136,7 +1136,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	$format          = isset( $options['content_format'] ) && 'raw' === $options['content_format'] ? 'raw' : 'rendered';
 	$include_content = ! array_key_exists( 'include_content', $options ) || (bool) $options['include_content'];
 
-	// SECURITY: a password-protected post must never expose its body — not the raw
+	// SECURITY: a password-protected post must never expose its body - not the raw
 	// stored markup, not the rendered HTML, and not a body-derived excerpt. The
 	// single-post read gate (aafm_can_read_post_object) admits any public-status
 	// post without inspecting post_password, so this is the only place the body is
@@ -1149,7 +1149,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 	// A manual excerpt is always safe to surface. For a protected post we read the
 	// stored excerpt directly: get_the_excerpt() returns core's "no excerpt because
 	// this is a protected post" placeholder on a protected post, so it cannot be
-	// used here. Without a manual excerpt, fall back to '' — never derive an excerpt
+	// used here. Without a manual excerpt, fall back to '' - never derive an excerpt
 	// from the body ($rendered is already '' when $is_protected, so the auto-excerpt
 	// branch can only run for non-protected posts).
 	if ( has_excerpt( $post ) ) {
@@ -1213,7 +1213,7 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
  * email by default, gated upstream by list_users + audited. Login and the password
  * hash are NEVER returned. Pass $post_count to use a pre-computed count (e.g. batched
  * via count_many_users_posts() over the whole listing) and avoid a per-user COUNT(*).
- * When null, the count is resolved individually — fine for single-user shapes.
+ * When null, the count is resolved individually - fine for single-user shapes.
  *
  * @param WP_User|false $user       User object.
  * @param int|null      $post_count Pre-computed post count, or null to resolve here.
@@ -1255,7 +1255,7 @@ function aafm_rich_user( $user, ?int $post_count = null ): array {
 }
 
 /**
- * Reduce a comment to a safe shape — no email, no IP.
+ * Reduce a comment to a safe shape - no email, no IP.
  *
  * @param WP_Comment|null $comment Comment object.
  * @return array<string,mixed>
@@ -1318,7 +1318,7 @@ function aafm_redact_media( WP_Post $attachment ): array {
  *
  * Intentionally NOT folded into aafm_redact_media(): that redactor stays lean for
  * the get-media LIST, which must not carry this extra weight. As with the lean
- * shape, the absolute server file path and uploader PII are never exposed — only
+ * shape, the absolute server file path and uploader PII are never exposed - only
  * the public URL(s).
  *
  * @param WP_Post $attachment Attachment post.
@@ -1365,7 +1365,7 @@ function aafm_media_item_payload( WP_Post $attachment ): array {
 
 /**
  * Reduce a revision to a safe, metadata-only shape. Deliberately omits post_content,
- * excerpt, and link — the plugin never exposes raw bodies; revision diffs/content are a
+ * excerpt, and link - the plugin never exposes raw bodies; revision diffs/content are a
  * post-launch change-history concern.
  *
  * @param WP_Post $revision Revision post.
@@ -1389,12 +1389,12 @@ function aafm_redact_revision( WP_Post $revision ): array {
  * must never carry body content.
  *
  * SECURITY: when the parent post is password-protected, the body, excerpt, and diff are
- * withheld — the metadata shape still returns, but content is '' for both rendered and
+ * withheld - the metadata shape still returns, but content is '' for both rendered and
  * content_format=raw, and diff is null. This matches aafm_rich_post()'s chokepoint for
  * live content getters so a protected body can't leak through revision history. For a
  * normal (non-protected) post the Wave-1 enrichment is unchanged.
  *
- * Note: rendered output is best-effort — an MCP request has no full post context
+ * Note: rendered output is best-effort - an MCP request has no full post context
  * (no setup_postdata / loop), so a third-party the_content filter that reads
  * get_the_ID()/$GLOBALS['post'] may behave oddly; content_format=raw returns the
  * deterministic stored markup.
@@ -1473,7 +1473,7 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
 }
 
 /**
- * A single generic error returned to callers — never leaks internal detail.
+ * A single generic error returned to callers - never leaks internal detail.
  *
  * @return WP_Error
  */
@@ -1532,7 +1532,7 @@ function aafm_get_block_object( int $id ): ?WP_Post {
 }
 
 /**
- * Lean reusable-block shape for LIST endpoints — no markup (payload guard).
+ * Lean reusable-block shape for LIST endpoints - no markup (payload guard).
  *
  * @param WP_Post|null $block Block post.
  * @return array<string,mixed>
@@ -1554,7 +1554,7 @@ function aafm_redact_block( $block ): array {
  * Rich single-block shape: the lean redactor PLUS the raw block markup and creation date.
  *
  * Intentionally NOT folded into aafm_redact_block(): the list stays lean. The content is the
- * stored block markup (Gutenberg delimiters preserved) — the point of a reusable block.
+ * stored block markup (Gutenberg delimiters preserved) - the point of a reusable block.
  *
  * @param WP_Post|null $block Block post.
  * @return array<string,mixed>
@@ -1571,7 +1571,7 @@ function aafm_rich_block( $block ): array {
 
 /**
  * JSON-schema property fragment describing the rich single-block output shape.
- * Mirrors what aafm_rich_block() actually returns — every key, with its type — so the
+ * Mirrors what aafm_rich_block() actually returns - every key, with its type - so the
  * create/get/update-block output_schema declares the full shape in one place rather than
  * under-describing it as just id + content.
  *
@@ -1592,7 +1592,7 @@ function aafm_rich_block_output_properties(): array {
 /**
  * Safe shape for a nav menu (a wp_term in the nav_menu taxonomy).
  *
- * Returns only id, name, slug, and the item count — the same metadata the admin Menus
+ * Returns only id, name, slug, and the item count - the same metadata the admin Menus
  * screen shows in its dropdown. No taxonomy internals (term_taxonomy_id, parent, …) leak.
  *
  * @param mixed $menu A WP_Term in the nav_menu taxonomy (as returned by the nav-menu API).
@@ -1612,7 +1612,7 @@ function aafm_redact_menu( $menu ): array {
 
 /**
  * JSON-schema property fragment for one menu in the list-menus output.
- * Mirrors what aafm_redact_menu() returns — every key, with its type — so the list-menus
+ * Mirrors what aafm_redact_menu() returns - every key, with its type - so the list-menus
  * output_schema can describe its array element shape instead of leaving it open.
  *
  * @return array<string,mixed>
@@ -1632,7 +1632,7 @@ function aafm_menu_output_properties(): array {
  * Exposes only what an agent needs to understand a menu link: its id, title, URL, and the
  * object it points at (type/object/object_id), plus the hierarchy fields (parent, order).
  * The URL runs through esc_url_raw() so only a clean, allowed-scheme URL is ever handed back.
- * No author, no raw post fields — the decorated object carries the whole underlying post, so
+ * No author, no raw post fields - the decorated object carries the whole underlying post, so
  * the redactor whitelists the menu-relevant keys rather than passing it through.
  *
  * @param mixed $item A decorated nav menu item object (from wp_get_nav_menu_items()).
@@ -1656,7 +1656,7 @@ function aafm_redact_menu_item( $item ): array {
 
 /**
  * JSON-schema property fragment for one menu item in the list-menu-items output.
- * Mirrors what aafm_redact_menu_item() returns — every key, with its type — so the
+ * Mirrors what aafm_redact_menu_item() returns - every key, with its type - so the
  * list-menu-items output_schema can describe its array element shape instead of leaving it open.
  *
  * @return array<string,mixed>
@@ -1676,7 +1676,7 @@ function aafm_menu_item_output_properties(): array {
 
 /**
  * JSON-schema property fragment for one block template in the list-templates output.
- * Mirrors what aafm_redact_template() returns — every key, with its type — so the list-templates
+ * Mirrors what aafm_redact_template() returns - every key, with its type - so the list-templates
  * output_schema can describe its array element shape instead of leaving it open.
  *
  * @return array<string,mixed>

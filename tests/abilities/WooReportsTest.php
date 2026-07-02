@@ -205,7 +205,7 @@ final class WooReportsTest extends TestCase {
 
 	/**
 	 * T2-5: a seeded completed order with line items produces a non-empty, correct top-sellers
-	 * row — product ids come from order ITEM data, not shop_order post meta.
+	 * row - product ids come from order ITEM data, not shop_order post meta.
 	 */
 	public function test_get_top_sellers_aggregates_order_line_items(): void {
 		\AAFM\Tests\WcOrderStubStore::reset();
@@ -534,7 +534,7 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * A secret nested under a benign parent key must be redacted at depth — shallow,
+	 * A secret nested under a benign parent key must be redacted at depth - shallow,
 	 * top-level-only redaction leaks credentials stored inside a sub-array.
 	 */
 	public function test_get_payment_gateway_redacts_nested_secret(): void {

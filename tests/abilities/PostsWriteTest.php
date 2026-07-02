@@ -25,7 +25,7 @@ final class PostsWriteTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
-		// simulated by pushing the action name onto $wp_current_filter — the idiom
+		// simulated by pushing the action name onto $wp_current_filter - the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
@@ -104,7 +104,7 @@ final class PostsWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
-		// 2) On a clean call, authorship is forced to the current (agent) user —
+		// 2) On a clean call, authorship is forced to the current (agent) user -
 		// wp_insert_post defaults post_author to the current user; we never thread it.
 		$out     = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
@@ -131,7 +131,7 @@ final class PostsWriteTest extends TestCase {
 		);
 		$this->assertInstanceOf( WP_Error::class, $rejected );
 
-		// 2) A clean create pins the type to 'post' regardless — the agent has no say.
+		// 2) A clean create pins the type to 'post' regardless - the agent has no say.
 		$out = wp_get_ability( 'aafm/create-post' )->execute(
 			array(
 				'title'   => 'Ordinary post',
@@ -230,7 +230,7 @@ final class PostsWriteTest extends TestCase {
 		wp_get_ability( 'aafm/trash-post' )->execute( array( 'post_id' => $post ) );
 
 		$this->assertSame( 'trash', get_post_status( $post ) );
-		// Still recoverable — not permanently deleted.
+		// Still recoverable - not permanently deleted.
 		$this->assertInstanceOf( WP_Post::class, get_post( $post ) );
 	}
 
@@ -256,7 +256,7 @@ final class PostsWriteTest extends TestCase {
 			$props['meta']['additionalProperties']['type']
 		);
 
-		// Schema stays closed — the first anti-escalation layer.
+		// Schema stays closed - the first anti-escalation layer.
 		$this->assertFalse( aafm_write_content_schema( true )['additionalProperties'] );
 	}
 
@@ -583,7 +583,7 @@ final class PostsWriteTest extends TestCase {
 		unregister_taxonomy( 'aafm_gated_tax' );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		// The gate denied before the write — the post's terms in that taxonomy are unchanged.
+		// The gate denied before the write - the post's terms in that taxonomy are unchanged.
 		$this->assertSame( array(), $assigned );
 	}
 

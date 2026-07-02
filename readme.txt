@@ -1,4 +1,4 @@
-=== Agent Abilities for MCP — MCP Server for AI Agents ===
+=== Agent Abilities for MCP - MCP Server for AI Agents ===
 Contributors: unaibamir
 Tags: mcp, chatgpt, ai-agent, woocommerce, content-management
 Requires at least: 6.9

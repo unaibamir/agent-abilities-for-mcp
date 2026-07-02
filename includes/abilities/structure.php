@@ -117,7 +117,7 @@ function aafm_args_get_taxonomies(): array {
 /**
  * Execute aafm/get-taxonomies.
  *
- * Returns PUBLIC taxonomies only — private/internal object types (e.g. nav_menu,
+ * Returns PUBLIC taxonomies only - private/internal object types (e.g. nav_menu,
  * link_category) are never exposed.
  *
  * @return array<string,mixed>
@@ -165,7 +165,7 @@ function aafm_args_get_post_types(): array {
 /**
  * Execute aafm/get-post-types.
  *
- * Returns PUBLIC post types only — internal types (revision, nav_menu_item, etc.)
+ * Returns PUBLIC post types only - internal types (revision, nav_menu_item, etc.)
  * are never exposed.
  *
  * @return array<string,mixed>
@@ -236,7 +236,7 @@ function aafm_args_get_site_info(): array {
  * SECURITY-CRITICAL redaction. Returns ONLY the whitelisted, non-sensitive
  * descriptor below. It deliberately NEVER discloses: the WordPress version, PHP
  * version, server software, any filesystem path, the admin email, debug status,
- * or the installed plugin/theme list — the exact fields competitor plugins leaked.
+ * or the installed plugin/theme list - the exact fields competitor plugins leaked.
  *
  * @return array<string,mixed>
  */

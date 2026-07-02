@@ -189,7 +189,7 @@ final class CatalogFixture {
 	);
 
 	/**
-	 * The writes whose action is destruction — recoverable (trash / spam) or permanent
+	 * The writes whose action is destruction - recoverable (trash / spam) or permanent
 	 * (force-delete of posts/pages/media/revisions/meta, comment purge, user-meta removal,
 	 * and user removal/creation). These MUST be annotated destructive:true. Every other write
 	 * is destructive:false.
@@ -213,7 +213,7 @@ final class CatalogFixture {
 	 *
 	 * wc-delete-product is permanent: it removes a WooCommerce product through the WC data store
 	 * (bypassing the Trash), so the agent is told the removal cannot be undone. wc-delete-product-
-	 * variation is permanent on the same basis — it removes a single product variation through the WC
+	 * variation is permanent on the same basis - it removes a single product variation through the WC
 	 * data store with no recoverable Trash.
 	 *
 	 * @var string[]

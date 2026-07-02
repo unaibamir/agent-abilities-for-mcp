@@ -4,7 +4,7 @@
  *
  * The manifest reports per-integration totals independent of whether the host plugin is
  * active, so an Integrations card for an inactive host can show "0 / N". Its per-slug totals,
- * summed with the core (non-integration) count, must equal the catalog-lock total — a drift
+ * summed with the core (non-integration) count, must equal the catalog-lock total - a drift
  * catcher so a future ability addition that skips the manifest fails loudly here.
  *
  * @package AgentAbilitiesForMCP
@@ -20,7 +20,7 @@ final class IntegrationManifestTest extends TestCase {
 
 	public function test_manifest_reports_woocommerce_totals_without_the_host_active(): void {
 		// WooCommerce is NOT installed on the test site, yet the static manifest still reports
-		// its totals (that is the whole point — the card can show "0 / 52" while inactive).
+		// its totals (that is the whole point - the card can show "0 / 52" while inactive).
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
 
 		$manifest = aafm_integration_manifest();
@@ -79,7 +79,7 @@ final class IntegrationManifestTest extends TestCase {
 		$this->assertSame(
 			count( $registry ),
 			$core + $manifest_total,
-			'Manifest integration totals plus the core count must equal the live catalog total — drift detected.'
+			'Manifest integration totals plus the core count must equal the live catalog total - drift detected.'
 		);
 		$this->assertSame( 153, $core + $manifest_total );
 
@@ -94,7 +94,7 @@ final class IntegrationManifestTest extends TestCase {
 	}
 
 	public function test_descriptor_counts_drive_the_manifest(): void {
-		// The manifest is no longer a second hand-kept tally — its per-slug counts derive from the
+		// The manifest is no longer a second hand-kept tally - its per-slug counts derive from the
 		// descriptor, so a descriptor row added or removed moves the count automatically.
 		$descriptor = aafm_integration_ability_manifest();
 		$manifest   = aafm_integration_manifest();
@@ -127,8 +127,8 @@ final class IntegrationManifestTest extends TestCase {
 
 	public function test_descriptor_matches_the_live_registry_when_hosts_are_active(): void {
 		// With every host force-active the registry holds the full integration surface. The
-		// descriptor must describe exactly that set per slug — same ability names, same risks,
-		// same count — so the static descriptor can never silently drift from the real abilities.
+		// descriptor must describe exactly that set per slug - same ability names, same risks,
+		// same count - so the static descriptor can never silently drift from the real abilities.
 		add_filter( 'aafm_integration_active_yoast', '__return_true' );
 		add_filter( 'aafm_integration_active_rankmath', '__return_true' );
 		add_filter( 'aafm_integration_active_aioseo', '__return_true' );
@@ -149,7 +149,7 @@ final class IntegrationManifestTest extends TestCase {
 		}
 
 		foreach ( $descriptor as $slug => $rows ) {
-			$this->assertArrayHasKey( $slug, $live, "No live registry rows for {$slug} — descriptor describes a phantom set." );
+			$this->assertArrayHasKey( $slug, $live, "No live registry rows for {$slug} - descriptor describes a phantom set." );
 			$this->assertSame(
 				count( $live[ $slug ] ),
 				count( $rows ),

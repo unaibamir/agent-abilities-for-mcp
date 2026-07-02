@@ -171,7 +171,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
-	 * A valid id that is NOT a variation — the variable parent itself (500) or a simple product —
+	 * A valid id that is NOT a variation - the variable parent itself (500) or a simple product -
 	 * must be rejected by get/update/delete. aafm_wc_get_variation() returns null for a non-variation
 	 * product, so each surface returns a WP_Error. (Fix Code MED-2.)
 	 */
@@ -247,7 +247,7 @@ final class WooVariationsTest extends TestCase {
 	public function test_wc_variation_abilities_absent_when_host_inactive(): void {
 		// Mirror WooProductsTest: assert at the REGISTRY level. stub_woocommerce() defines class
 		// WooCommerce process-wide, so real detection still reports WC active after removing the force
-		// filter — pin it off through the aafm_woocommerce_active seam.
+		// filter - pin it off through the aafm_woocommerce_active seam.
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
@@ -424,7 +424,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	public function test_list_variations_total_is_grand_count_not_page_count(): void {
-		// Fix API LOW-1 / Code LOW-2: a parent with 3 children, paged at per_page:1 — one row on the
+		// Fix API LOW-1 / Code LOW-2: a parent with 3 children, paged at per_page:1 - one row on the
 		// page, but total is the grand child count (3), not the page length.
 		$this->reset_integration_stubs();
 		$this->force_integration( 'woocommerce' );
@@ -444,7 +444,7 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	public function test_update_variation_empty_patch_is_a_noop(): void {
-		// Fix API LOW-2: an update carrying only variation_id (no other fields) is a valid no-op — it
+		// Fix API LOW-2: an update carrying only variation_id (no other fields) is a valid no-op - it
 		// returns the rich shape (not a WP_Error) and a seeded field survives untouched.
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute( array( 'variation_id' => 601 ) );
@@ -545,7 +545,7 @@ final class WooVariationsTest extends TestCase {
 		$this->assertTrue( $res['deleted'] );
 		$this->assertSame( 601, $res['id'] );
 
-		// Gone — a following read finds nothing, and the parent no longer lists it.
+		// Gone - a following read finds nothing, and the parent no longer lists it.
 		$this->assertFalse( WcStubStore::exists( 601 ) );
 		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
 		$this->assertInstanceOf( WP_Error::class, $read, 'A deleted variation can no longer be read.' );

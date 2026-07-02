@@ -148,10 +148,10 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'cleared'                  => __( 'Cleared', 'agent-abilities-for-mcp' ),
 				'error'                    => __( 'Error', 'agent-abilities-for-mcp' ),
 				'requestFailed'            => __( 'Request failed.', 'agent-abilities-for-mcp' ),
-				'settingsNotSaved'         => __( 'Could not save — your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
+				'settingsNotSaved'         => __( 'Could not save - your previous settings are still in effect.', 'agent-abilities-for-mcp' ),
 				'allowlistEmptied'         => __( 'Saved, but every line was dropped as invalid. The allowlist is now empty, so connections from anywhere are allowed.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: number of allowlist lines that were dropped as invalid. */
-				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist.', 'agent-abilities-for-mcp' ),
+				'allowlistDropped'         => __( 'Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist.', 'agent-abilities-for-mcp' ),
 				/* translators: %d: the new agent user's numeric ID. */
 				'userCreated'              => __( 'Created user #%d. Now create its Application Password under Users → Profile.', 'agent-abilities-for-mcp' ),
 				'editUser'                 => __( 'Edit user', 'agent-abilities-for-mcp' ),
@@ -160,7 +160,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'loadingPage'              => __( 'Loading…', 'agent-abilities-for-mcp' ),
 				'noActivity'               => __( 'No activity recorded yet.', 'agent-abilities-for-mcp' ),
 				/* translators: 1: HTTP status code, 2: number of tools visible in the admin view. */
-				'connectionOk'             => __( 'Reachable (HTTP %1$s) — %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
+				'connectionOk'             => __( 'Reachable (HTTP %1$s) - %2$s tool(s) in your admin view.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: HTTP status code returned by the endpoint. */
 				'connectionNoTools'        => __( 'Endpoint answered HTTP %s but did not return a tool list.', 'agent-abilities-for-mcp' ),
 				/* translators: %s: error message returned by the server. */
@@ -187,7 +187,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
  * Sanitize posted ability toggles down to known registry keys.
  *
  * The result is intersected with the live registry, so a stale, unknown, or smuggled
- * key can never enable anything — only abilities that actually exist are honored.
+ * key can never enable anything - only abilities that actually exist are honored.
  *
  * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
  * @return array<int,string>
@@ -212,7 +212,7 @@ function aafm_sanitize_enabled_input( array $posted ): array {
  * OUTSIDE the posted scope is preserved verbatim, and only the in-scope abilities are taken from
  * the POST. A tampered or missing hidden input for an off-tab ability therefore cannot flip it.
  *
- * When no scope is posted (the Abilities tab), the posted list replaces the option in full — the
+ * When no scope is posted (the Abilities tab), the posted list replaces the option in full - the
  * unchanged legacy behavior.
  *
  * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
@@ -337,7 +337,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
  * Parse the denied-post-meta textarea into a clean list.
  *
  * Mirrors aafm_sanitize_allowed_meta_keys_input() but for the DENY list: it KEEPS the `*`
- * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys — denying an already
+ * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys - denying an already
  * hard-blocked key is a harmless no-op, and the deny list must be able to name anything an
  * admin wants refused. Splits on newlines, trims, sanitize_text_field (never sanitize_key,
  * which would strip `*`), drops empties, and de-duplicates.
@@ -363,7 +363,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
  *
  * Mirrors the allow-list sanitizer but for user meta and KEEPS the `*` wildcard. Splits on
  * newlines, trims, sanitize_text_field (never sanitize_key, which would strip `*`), drops
- * empties and any hard-blocked user key (best-effort — aafm_allowed_user_meta_keys() re-floors
+ * empties and any hard-blocked user key (best-effort - aafm_allowed_user_meta_keys() re-floors
  * anyway), and de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -411,7 +411,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
  * Mirrors aafm_sanitize_exposed_user_meta_keys_input() but term-scoped (the term/post-meta
  * hard-block applies). KEEPS the `*` wildcard, splits on newlines, trims, sanitize_text_field
  * (never sanitize_key, which would strip `*`), drops empties and any hard-blocked key
- * (best-effort — aafm_allowed_term_meta_keys() re-floors anyway), and de-duplicates.
+ * (best-effort - aafm_allowed_term_meta_keys() re-floors anyway), and de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
  * @return list<string>
@@ -454,7 +454,7 @@ function aafm_sanitize_denied_term_meta_keys_input( array $posted ): array {
 
 /**
  * Sample up to 50 distinct, non-hard-blocked meta keys present on posts of the allowlisted
- * types — the "Detected on your exposed types" chip source for the selector.
+ * types - the "Detected on your exposed types" chip source for the selector.
  *
  * One read-only, prepared query (dynamic IN of bound %s placeholders for the exposed types),
  * filtered against the hard-block, sliced to 50, cached 5 minutes in a best-effort transient.
@@ -615,7 +615,7 @@ function aafm_ajax_clear_log(): void {
  * into the DOM. The incoming filter is sanitized against the known set (all|success|error|denied)
  * and mapped to a query status; the page number is clamped to the filtered total. Returns the
  * rendered <tr> HTML (every cell escaped by aafm_activity_rows_html()) plus the paging state the
- * JS needs to update the pager. Read-only — never touches state.
+ * JS needs to update the pager. Read-only - never touches state.
  *
  * @return void
  */
@@ -902,7 +902,7 @@ function aafm_site_subgroups(): array {
  * Render the Abilities tab: subject sub-tabs, each split Reads then Writes, all OFF by default.
  *
  * This is presentation only. Every checkbox across every sub-tab lives inside the one
- * form, so hidden panels still submit — the saved option stays a flat list of enabled
+ * form, so hidden panels still submit - the saved option stays a flat list of enabled
  * ability names regardless of which sub-tab was visible at save time.
  *
  * @return void
@@ -926,7 +926,7 @@ function aafm_render_abilities_tab(): void {
 		}
 	}
 
-	// Stats box — sits between the page nav and the sub-tabs, reusing the dashboard .aafm-stat
+	// Stats box - sits between the page nav and the sub-tabs, reusing the dashboard .aafm-stat
 	// markup. Total reads the single source of truth (core + every integration manifest total),
 	// the same function the Dashboard uses, so the two tabs can never disagree. Enabled counts
 	// what the operator has turned on, labelled "of N".
@@ -969,7 +969,7 @@ function aafm_render_abilities_tab(): void {
 	// This form and the Integrations tab both save through the same aafm_save_abilities action, but
 	// each only renders the toggles for the subjects it owns. Declare the core subjects this form
 	// owns via aafm_scope[] so the server preserves every persisted ability OUTSIDE that scope (the
-	// integration abilities — WooCommerce, Yoast, ACF) from the stored option instead of treating a
+	// integration abilities - WooCommerce, Yoast, ACF) from the stored option instead of treating a
 	// save here as a full replace that drops them. Mirrors the Integrations form; resolved by
 	// aafm_resolve_scoped_enabled_input(). $subjects is already the core subjects that have abilities.
 	foreach ( array_keys( $subjects ) as $scope_subject ) {
@@ -988,13 +988,13 @@ function aafm_render_abilities_tab(): void {
 
 	// Expand the subject list into the display tabs that actually render. Every subject maps to one
 	// display tab using its own slug, except 'site', which is split into the six site groups from
-	// aafm_site_subgroups() — each becomes its own top-level chip + panel, taking the place the
+	// aafm_site_subgroups() - each becomes its own top-level chip + panel, taking the place the
 	// single "Site & structure" chip used to hold (after 'media'). This is presentation only: no
 	// ability's registry subject changes (the catalog-lock tests pin those). Each display tab is
 	// { slug, label, rows } where rows are the ability entries to render under it.
 	$display_tabs = aafm_abilities_display_tabs( $subjects, $by_subject, $registry );
 
-	// Sub-tab bar — pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
+	// Sub-tab bar - pill style (.aafm-subtabs); .aafm-subject-tab stays the JS hook the
 	// toggle binds to and data-subject is the display-tab slug so panel switching keeps working.
 	// Full WAI-ARIA tabs pattern: each tab carries a stable id + aria-controls pointing at its
 	// panel, roving tabindex (only the active tab is in the tab sequence), and the JS adds
@@ -1103,7 +1103,7 @@ function aafm_render_abilities_tab(): void {
 			echo '</div>';
 		}
 
-		// Rendered after the ability tables as a layout choice — the meta selector belongs below
+		// Rendered after the ability tables as a layout choice - the meta selector belongs below
 		// the abilities it governs. No test depends on this placement: the panel-structure test
 		// slices to the next subject panel (or the form's save status), not a bare </div>.
 		if ( 'content' === $slug ) {
@@ -1125,14 +1125,14 @@ function aafm_render_abilities_tab(): void {
 	echo '</form>';
 
 	// Future: per-connection / per-client ability allowlist scoping is a separate roadmapped
-	// feature — it would filter $enabled per principal here rather than at render time.
+	// feature - it would filter $enabled per principal here rather than at render time.
 }
 
 /**
  * Render one ability checkbox row.
  *
  * Shared by the flat Reads/Writes view and the site sub-group view so both produce identical
- * markup. The <input> keeps its exact name/value/checked() contract — the save handler and its
+ * markup. The <input> keeps its exact name/value/checked() contract - the save handler and its
  * tests bind to that, not to this markup.
  *
  * @param array<string,mixed>  $ability     The registry entry, with its 'name' key set.
@@ -1146,7 +1146,7 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	$hint = (string) ( $disclosures[ $name ] ?? ( $ability['description'] ?? '' ) );
 
 	// Per-ability id on the title <h4>, used as the checkbox's accessible name via
-	// aria-labelledby — otherwise a screen reader announces the bare toggle as just
+	// aria-labelledby - otherwise a screen reader announces the bare toggle as just
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-ability-title-' . sanitize_key( $name );
 
@@ -1182,7 +1182,7 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
  * Expand the subject list into the ordered display tabs the Abilities tab renders.
  *
  * Each Abilities-tab subject maps to one display tab keyed by its own slug, EXCEPT 'site', which is
- * split into the six groups from aafm_site_subgroups() — each becomes its own display tab (chip +
+ * split into the six groups from aafm_site_subgroups() - each becomes its own display tab (chip +
  * panel), inserted where the single "Site & structure" chip used to sit. This is presentation only:
  * no ability's registry subject changes. A group's rows are pulled from the full registry by name,
  * so an ability mapped in by name from another subject (Search's search-content, registry subject
@@ -1317,7 +1317,7 @@ function aafm_render_post_types_selector(): void {
 			esc_html( $type ),
 			$mapped
 				? esc_html__( 'Allowed', 'agent-abilities-for-mcp' )
-				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only — writes need map_meta_cap', 'agent-abilities-for-mcp' ) . '</span>',
+				: '<span class="aafm-badge aafm-badge-read">' . esc_html__( 'read-only - writes need map_meta_cap', 'agent-abilities-for-mcp' ) . '</span>',
 			$rest ? esc_html__( 'yes', 'agent-abilities-for-mcp' ) : esc_html__( 'no', 'agent-abilities-for-mcp' ),
 			esc_attr(
 				sprintf(
@@ -1331,7 +1331,7 @@ function aafm_render_post_types_selector(): void {
 
 	echo '</tbody></table>';
 	echo '</div>'; // .aafm-table-wrap
-	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
+	aafm_render_notice( 'warning', __( 'Exposed types are still gated by that type\'s capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person\'s name in the title would make that name readable.', 'agent-abilities-for-mcp' ) );
 	echo '<p><button type="button" id="aafm-post-types-save" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save content types', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-post-types-status" aria-live="polite"></span></p>';
 	echo '</div>';
 }
@@ -1354,7 +1354,7 @@ function aafm_render_meta_keys_selector(): void {
 	$detected = aafm_detected_meta_keys();
 
 	// The getters strip the '*' sentinel, so surface it in the textareas when the wildcard is
-	// set — otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
+	// set - otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
 	if ( aafm_meta_allow_has_star() ) {
 		array_unshift( $allowed, '*' );
 	}
@@ -1424,7 +1424,7 @@ function aafm_render_user_meta_keys_selector(): void {
 	$denied  = aafm_denied_user_meta_keys();
 
 	// The getters strip the '*' sentinel, so surface it in the textareas when the wildcard is
-	// set — otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
+	// set - otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
 	if ( aafm_user_meta_allow_has_star() ) {
 		array_unshift( $exposed, '*' );
 	}
@@ -1475,7 +1475,7 @@ function aafm_render_term_meta_keys_selector(): void {
 	$denied  = aafm_denied_term_meta_keys();
 
 	// The getters strip the '*' sentinel, so surface it in the textareas when the wildcard is
-	// set — otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
+	// set - otherwise the box renders empty and a re-save would silently wipe allow-all/deny-all.
 	if ( aafm_term_meta_allow_has_star() ) {
 		array_unshift( $exposed, '*' );
 	}
@@ -1531,7 +1531,7 @@ function aafm_render_activity_tab(): void {
 	echo '<div class="aafm-activity">';
 	wp_nonce_field( 'aafm_admin', 'aafm_log_nonce' );
 
-	// Status filter — server-side: each button re-queries page 1 with its status (admin.js).
+	// Status filter - server-side: each button re-queries page 1 with its status (admin.js).
 	echo '<div class="aafm-activity-toolbar">';
 	echo '<div class="aafm-seg" role="group" aria-label="' . esc_attr__( 'Filter by status', 'agent-abilities-for-mcp' ) . '">';
 	echo '<button type="button" class="aafm-seg-btn is-active on" data-filter="all" aria-pressed="true">' . esc_html__( 'All', 'agent-abilities-for-mcp' ) . '</button>';
@@ -1670,7 +1670,7 @@ function aafm_activity_rows_html( array $rows ): string {
  * Render a single troubleshooting entry as a native <details> accordion.
  *
  * The question (summary) and body are pre-built, escaped HTML fragments. Bodies may
- * carry inline <code>, <p>, <ul>/<li>, <strong>, and <a> built by the caller — each
+ * carry inline <code>, <p>, <ul>/<li>, <strong>, and <a> built by the caller - each
  * passed through wp_kses() with a tight allowed-tags list so nothing else slips in.
  *
  * @param string $summary Plain-text question shown in the <summary>.
@@ -1738,7 +1738,7 @@ function aafm_render_help_tab(): void {
 
 	echo '<p class="description aafm-help-intro">' . esc_html__( 'Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case.', 'agent-abilities-for-mcp' ) . '</p>';
 
-	// Section 1 — Connecting.
+	// Section 1 - Connecting.
 	echo '<div class="aafm-acc-group">';
 	echo '<h2>' . esc_html__( 'Connecting', 'agent-abilities-for-mcp' ) . '</h2>';
 
@@ -1791,7 +1791,7 @@ function aafm_render_help_tab(): void {
 		aafm_render_help_entry(
 			__( 'A redirect is breaking the request (trailing slash or http to https)', 'agent-abilities-for-mcp' ),
 			wp_kses(
-				'<p>' . esc_html__( 'A 301 redirect — adding or removing a trailing slash, or forcing http to https — can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'agent-abilities-for-mcp' ) . '</p>'
+				'<p>' . esc_html__( 'A 301 redirect - adding or removing a trailing slash, or forcing http to https - can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem.', 'agent-abilities-for-mcp' ) . '</p>'
 				. '<p>' . esc_html__( 'Use the exact endpoint URL the Connection tab shows, with the right scheme (https) and no extra trailing slash, so no redirect is triggered. If your server force-redirects http to https, make sure the config URL already starts with https so the POST is never redirected.', 'agent-abilities-for-mcp' ) . '</p>',
 				$inline
 			)
@@ -1801,17 +1801,17 @@ function aafm_render_help_tab(): void {
 		aafm_render_help_entry(
 			__( 'Test the endpoint yourself with curl', 'agent-abilities-for-mcp' ),
 			wp_kses(
-				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and — if it fails — which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'agent-abilities-for-mcp' ) . '</p>'
+				'<p>' . esc_html__( 'This one-liner sends a real MCP "initialize" call to your endpoint with the agent user\'s Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and - if it fails - which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):', 'agent-abilities-for-mcp' ) . '</p>'
 				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/wp-json/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
 				. '<p>' . esc_html__( 'If your permalinks are plain, use the index.php form instead:', 'agent-abilities-for-mcp' ) . '</p>'
 				. aafm_help_copy_line( 'curl -i -X POST "https://example.com/index.php?rest_route=/agent-abilities-for-mcp/mcp" -u "mcp-agent:XXXX XXXX XXXX XXXX XXXX XXXX" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d \'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl-probe","version":"1.0"}}}\'' )
 				. '<p><strong>' . esc_html__( 'How to read the result (the HTTP status on the first line):', 'agent-abilities-for-mcp' ) . '</strong></p>'
 				. '<ul>'
-				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working — if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
-				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> — ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '200', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '401', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '403 / 406 / 429', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above).', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '404', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab.', 'agent-abilities-for-mcp' ) . '</li>'
+				. '<li><strong>' . esc_html__( '5xx', 'agent-abilities-for-mcp' ) . '</strong> - ' . esc_html__( 'a server-side error: check your PHP error log and the host status.', 'agent-abilities-for-mcp' ) . '</li>'
 				. '</ul>',
 				$inline
 			)
@@ -1822,7 +1822,7 @@ function aafm_render_help_tab(): void {
 			__( 'Windows: my client config won\'t start', 'agent-abilities-for-mcp' ),
 			wp_kses(
 				'<p>' . esc_html__( 'Windows MCP clients cannot spawn the npx shim by its name alone. The launcher has to be wrapped so the command resolves:', 'agent-abilities-for-mcp' ) . ' <code>cmd /c npx …</code></p>'
-				. '<p>' . esc_html__( 'You do not need to hand-edit anything — switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'agent-abilities-for-mcp' ) . '</p>',
+				. '<p>' . esc_html__( 'You do not need to hand-edit anything - switch to the "Windows" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly.', 'agent-abilities-for-mcp' ) . '</p>',
 				$inline
 			)
 		);
@@ -1832,9 +1832,9 @@ function aafm_render_help_tab(): void {
 		__( 'My local or staging site won\'t connect (self-signed certificate)', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust, so the proxy refuses the TLS handshake. For local testing only, you can tell Node to accept it. The Connection tab already adds this for you when it detects a local site.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'Quick (least safe) — add this to the config env block:', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'Quick (least safe) - add this to the config env block:', 'agent-abilities-for-mcp' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_TLS_REJECT_UNAUTHORIZED": "0"' )
-			. '<p>' . esc_html__( 'Better — point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'Better - point Node at your local CA instead of disabling verification entirely (for example mkcert\'s rootCA.pem):', 'agent-abilities-for-mcp' ) . '</p>'
 			. aafm_help_copy_line( '"NODE_EXTRA_CA_CERTS": "/path/to/rootCA.pem"' )
 			. aafm_help_copy_line( '"NODE_USE_SYSTEM_CA": "1"' )
 			. '<p><strong>' . esc_html__( 'Never use any of these on a production site.', 'agent-abilities-for-mcp' ) . '</strong></p>',
@@ -1855,7 +1855,7 @@ function aafm_render_help_tab(): void {
 
 	echo '</div>';
 
-	// Section 2 — Authentication.
+	// Section 2 - Authentication.
 	echo '<div class="aafm-acc-group">';
 	echo '<h2>' . esc_html__( 'Authentication', 'agent-abilities-for-mcp' ) . '</h2>';
 
@@ -1864,7 +1864,7 @@ function aafm_render_help_tab(): void {
 		__( 'The "Authorization header reaches WordPress" diagnostic fails', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Apache (.htaccess) — either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
+			. '<p><strong>' . esc_html__( 'Apache (.htaccess) - either of these:', 'agent-abilities-for-mcp' ) . '</strong></p>'
 			. aafm_help_copy_line( 'SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1' )
 			. aafm_help_copy_line( 'RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]' )
 			. '<p><strong>' . esc_html__( 'Nginx / FastCGI:', 'agent-abilities-for-mcp' ) . '</strong></p>'
@@ -1878,16 +1878,16 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'The Application Passwords option is missing from my profile', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https — so it hides the option.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https - so it hides the option.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly detects https. Forwarding the standard X-Forwarded-Proto header from the proxy is the usual fix.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production — the credential would travel unencrypted.', 'agent-abilities-for-mcp' ) . '</strong></p>',
+			. '<p><strong>' . esc_html__( 'Do not enable Application Passwords over genuine plaintext HTTP in production - the credential would travel unencrypted.', 'agent-abilities-for-mcp' ) . '</strong></p>',
 			$inline
 		)
 	);
 
 	echo '</div>';
 
-	// Section 3 — Abilities & permissions.
+	// Section 3 - Abilities & permissions.
 	echo '<div class="aafm-acc-group">';
 	echo '<h2>' . esc_html__( 'Abilities & permissions', 'agent-abilities-for-mcp' ) . '</h2>';
 
@@ -1896,7 +1896,7 @@ function aafm_render_help_tab(): void {
 		__( 'My agent sees fewer tools than I expected', 'agent-abilities-for-mcp' ),
 		wp_kses(
 			'<p>' . esc_html__( 'This is intentional least-privilege behaviour. Each connection is filtered by the agent user\'s own capabilities, so the agent only ever sees abilities its role allows: reads need read capabilities; writes need the matching edit, publish, moderate, or manage capabilities.', 'agent-abilities-for-mcp' ) . '</p>'
-			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do — keep it to what the agent genuinely needs.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do - keep it to what the agent genuinely needs.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);
@@ -1951,7 +1951,7 @@ function aafm_render_help_tab(): void {
 
 	echo '</div>';
 
-	// Section 4 — Clients, privacy & limits.
+	// Section 4 - Clients, privacy & limits.
 	echo '<div class="aafm-acc-group">';
 	echo '<h2>' . esc_html__( 'Clients, privacy & limits', 'agent-abilities-for-mcp' ) . '</h2>';
 
@@ -1966,7 +1966,7 @@ function aafm_render_help_tab(): void {
 			. '<li><strong>' . esc_html__( 'Cursor:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add the block to its MCP config (~/.cursor/mcp.json, or Settings → MCP) and reload.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Windsurf:', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'add it under its MCP / plugins config (mcp_config.json) and refresh the server list.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>'
-			. '<p>' . esc_html__( 'Copy the config straight from Connection → Step 2 — do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'Copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab\'s "Windows" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p><strong>' . esc_html__( 'The hosted ChatGPT and Gemini apps cannot connect in this release.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Their web connectors expect a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet, so they cannot reach the proxy the way the clients above do. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
@@ -1978,11 +1978,11 @@ function aafm_render_help_tab(): void {
 		wp_kses(
 			'<p>' . esc_html__( 'The plugin is built to be safe by default. In plain terms:', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<ul>'
-			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site — the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password — not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'No external calls.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'It never phones home. Your credentials and your content never leave the site - the AI client connects in to you, not the other way round.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'A dedicated low-privilege user.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user\'s role, so you set its ceiling.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Two locks on every ability.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'An ability works only if you explicitly enabled it on the Abilities tab AND the agent user\'s capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Trash and permanent delete are different abilities.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent.', 'agent-abilities-for-mcp' ) . '</li>'
-			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'agent-abilities-for-mcp' ) . '</li>'
+			. '<li><strong>' . esc_html__( 'Everything is logged, values are not.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'Every call - including denied ones - is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '<li><strong>' . esc_html__( 'Optional extra guardrails.', 'agent-abilities-for-mcp' ) . '</strong> ' . esc_html__( 'The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want.', 'agent-abilities-for-mcp' ) . '</li>'
 			. '</ul>',
 			$inline
@@ -1993,7 +1993,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'What does the plugin log, and does it call out to anything?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'The plugin makes no external calls — nothing about your site or its content is sent anywhere.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'The plugin makes no external calls - nothing about your site or its content is sent anywhere.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

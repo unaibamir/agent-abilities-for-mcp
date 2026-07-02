@@ -7,7 +7,7 @@
  * stylesheet (assets/consent.css) through the enqueue API (wp_enqueue_style +
  * wp_print_styles), allowed under style-src 'self'; the <svg> logo is inlined (no
  * external image fetch under img-src data:). There is no JavaScript at all and no
- * inline style block — system fonts only — so it renders under the strict consent
+ * inline style block - system fonts only - so it renders under the strict consent
  * CSP set in includes/oauth/authorize.php.
  *
  * @package AgentAbilitiesForMCP
@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * Multibyte-safe. When the name has no whitespace-delimited words to abbreviate (for example a
  * name made only of separators), it falls back to the first character of the trimmed name, and
- * only when even that is empty to a neutral globe glyph (🌐) — a recognisable "a website" mark,
+ * only when even that is empty to a neutral globe glyph (🌐) - a recognisable "a website" mark,
  * rather than the old bare middle dot which read as a missing/placeholder character.
  *
  * @param string $site_name The site display name.
@@ -54,7 +54,7 @@ function aafm_oauth_site_initials( string $site_name ): string {
 		return function_exists( 'mb_strtoupper' ) ? mb_strtoupper( $first ) : strtoupper( $first );
 	}
 
-	return "\xF0\x9F\x8C\x90"; // U+1F310 GLOBE WITH MERIDIANS — neutral "a website" mark.
+	return "\xF0\x9F\x8C\x90"; // U+1F310 GLOBE WITH MERIDIANS - neutral "a website" mark.
 }
 
 /**
@@ -95,10 +95,10 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	);
 
 	// "Acting as" note. The bold phrase and the username chip are pre-escaped HTML
-	// substituted into an escaped translation string — same safe-by-construction pattern.
+	// substituted into an escaped translation string - same safe-by-construction pattern.
 	$acting = sprintf(
 		/* translators: 1: bolded phrase "as your WordPress account", 2: the username chip. */
-		esc_html__( 'The agent acts %1$s %2$s — it can do what your account is permitted to do, nothing more.', 'agent-abilities-for-mcp' ),
+		esc_html__( 'The agent acts %1$s %2$s - it can do what your account is permitted to do, nothing more.', 'agent-abilities-for-mcp' ),
 		'<strong>' . esc_html__( 'as your WordPress account', 'agent-abilities-for-mcp' ) . '</strong>',
 		'<span class="who">' . esc_html( $user_login ) . '</span>'
 	);

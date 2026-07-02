@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Agent Abilities for MCP — MCP Server for AI Agents
+ * Plugin Name:       Agent Abilities for MCP - MCP Server for AI Agents
  * Plugin URI:        https://github.com/unaibamir/agent-abilities-for-mcp
  * Description:       Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
  * Version:           1.0.0
@@ -33,8 +33,8 @@ define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 // whichever copy is declared first wins site-wide. A sibling shipping an older copy via a plain
 // Composer autoloader (confirmed: Rank Math SEO 0.4.1) can win that race and trip our floor check,
 // killing our /mcp route. We MUST run our own 0.5.0 (0.4.1 lacks the per-connection capability
-// gate). A prepended autoloader alone is not enough — later plugins' Composer autoloaders also
-// prepend and leapfrog ours — so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
+// gate). A prepended autoloader alone is not enough - later plugins' Composer autoloaders also
+// prepend and leapfrog ours - so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
 // bundle now, during the plugin-include phase. Because plugin folders load alphabetically and we
 // sort first as "agent-abilities-for-mcp", this runs before any conflicting sibling's file, so PHP
 // commits to our copy and later siblings transparently use it. The prepended autoloader (still
@@ -129,7 +129,7 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
-// Seed the OAuth toggles to "on" at activation (add_option only — never clobbers a saved value).
+// Seed the OAuth toggles to "on" at activation (add_option only - never clobbers a saved value).
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 
 // Surface the transport's 401 challenge (resource_metadata) as a real
@@ -160,7 +160,7 @@ add_filter( 'determine_current_user', 'aafm_oauth_resolve_current_user', 20 );
 // into a hard auth failure on unrelated REST routes.
 add_filter( 'rest_authentication_errors', 'aafm_oauth_rest_authentication_errors', 5 );
 
-// wp_kses allowlist helpers — loaded unconditionally so they are available to the
+// wp_kses allowlist helpers - loaded unconditionally so they are available to the
 // OAuth consent page (rendered on the front end, before aafm_bootstrap()).
 require_once AAFM_PLUGIN_DIR . 'includes/admin/kses.php';
 

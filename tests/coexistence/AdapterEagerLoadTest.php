@@ -29,8 +29,8 @@ final class AdapterEagerLoadTest extends TestCase {
 		// The bootstrap registers our loader; assert the autoload chain is non-empty and our mapper
 		// resolves WP\MCP\Core\McpAdapter to a path inside our bundle. We do NOT assert spl_autoload_
 		// functions()[0]: other prepended Composer autoloaders sit in front by suite runtime, so a
-		// "we are at index 0" claim would be false. The real guarantee — that PHP commits to our 0.5.0
-		// copy — is covered by test_eager_load_declares_adapter_from_our_bundle().
+		// "we are at index 0" claim would be false. The real guarantee - that PHP commits to our 0.5.0
+		// copy - is covered by test_eager_load_declares_adapter_from_our_bundle().
 		$functions = (array) spl_autoload_functions();
 		$this->assertNotEmpty( $functions );
 

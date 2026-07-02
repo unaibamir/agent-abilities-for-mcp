@@ -68,7 +68,7 @@ final class ResetPluginTest extends TestCase {
 
 	/**
 	 * Reset wipes all configuration and empties the activity log, but must never delete the
-	 * agent user or content the agent created — that is the whole contract of the feature.
+	 * agent user or content the agent created - that is the whole contract of the feature.
 	 */
 	public function test_reset_clears_config_and_log_but_preserves_user_and_content(): void {
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );

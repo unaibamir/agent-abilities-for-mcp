@@ -3,7 +3,7 @@
  * WooCommerce order read abilities: aafm/wc-list-orders (lean, no PII in list rows) and
  * aafm/wc-get-order (full shape including customer billing/shipping PII under the disclaimer).
  *
- * WooCommerce is not installed in the DDEV test environment — every WC host function and class is
+ * WooCommerce is not installed in the DDEV test environment - every WC host function and class is
  * provided by the IntegrationStubs trait backed by WcOrderStubStore. The stub_wc_orders() helper
  * resets and seeds the store per test so each test starts with a clean, known state.
  *
@@ -100,7 +100,7 @@ final class WooOrdersTest extends TestCase {
 		$this->assertArrayHasKey( 'date_created', $row );
 		$this->assertArrayHasKey( 'customer_id', $row );
 
-		// PII keys MUST NOT appear in list rows — list is lean for payload economy.
+		// PII keys MUST NOT appear in list rows - list is lean for payload economy.
 		$this->assertArrayNotHasKey( 'billing', $row );
 		$this->assertArrayNotHasKey( 'email', $row );
 		$this->assertArrayNotHasKey( 'phone', $row );
@@ -278,7 +278,7 @@ final class WooOrdersTest extends TestCase {
 	/**
 	 * PII-exposure proof: billing email and phone are PRESENT (intentional, not an accidental leak).
 	 *
-	 * This is the inverse of the redaction-proof tests elsewhere — here we assert that customer
+	 * This is the inverse of the redaction-proof tests elsewhere - here we assert that customer
 	 * PII is deliberately exposed under the Integrations security disclaimer, gated by
 	 * manage_woocommerce, and audited. Never add a default-strip or an opt-in gate here.
 	 */
@@ -287,7 +287,7 @@ final class WooOrdersTest extends TestCase {
 		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		// The billing email MUST be the seeded value — not stripped, not redacted.
+		// The billing email MUST be the seeded value - not stripped, not redacted.
 		$this->assertSame(
 			'billing@example.com',
 			$res['billing']['email'],

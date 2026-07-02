@@ -86,8 +86,8 @@ class SettingsTest extends TestCase {
 	}
 
 	/**
-	 * The rendered Settings tab gains the two OAuth switch rows — each a checkbox of
-	 * the right name inside an .aafm-switch label — without disturbing the existing
+	 * The rendered Settings tab gains the two OAuth switch rows - each a checkbox of
+	 * the right name inside an .aafm-switch label - without disturbing the existing
 	 * controls. Asserting the force-draft checkbox, the reset hook, and the danger
 	 * card still render proves the additive change left the prior markup intact.
 	 */

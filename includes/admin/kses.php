@@ -4,8 +4,8 @@
  * OAuth consent page.
  *
  * Two functions:
- *   aafm_svg_allowed_html()   – inline SVG only (icons + consent-page logos).
- *   aafm_admin_allowed_html() – SVG set merged with every HTML element used in
+ *   aafm_svg_allowed_html()   - inline SVG only (icons + consent-page logos).
+ *   aafm_admin_allowed_html() - SVG set merged with every HTML element used in
  *                               admin UI: forms, tables, buttons, structural
  *                               wrappers, and every ARIA / data-* attribute the
  *                               plugin uses.
@@ -28,7 +28,7 @@ defined( 'ABSPATH' ) || exit;
  * SVGs in the OAuth consent page, including radialGradient / linearGradient with
  * fill="url(#id)" and stroke="url(#id)" gradient references.
  *
- * All attribute names are lowercase — wp_kses normalises attribute names to
+ * All attribute names are lowercase - wp_kses normalises attribute names to
  * lowercase before comparing against this map, so mixed-case keys such as
  * "viewBox" would never match.
  *

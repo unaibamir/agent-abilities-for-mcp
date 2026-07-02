@@ -3,14 +3,14 @@
  * OAuth bearer-token validation at the WordPress auth layer.
  *
  * Resolves a presented OAuth access token to its approving WordPress user on the
- * `determine_current_user` filter — the same layer Application Passwords resolve
+ * `determine_current_user` filter - the same layer Application Passwords resolve
  * on. Once a user is resolved here, the adapter's transport gate (which only
  * checks is_user_logged_in()) lets the request through under that identity.
  *
  * The resolver is deliberately narrow: it only ever acts on a bearer credential
  * that carries the `aafm_oat_` access-token prefix, and only when no earlier
- * filter has already resolved a user. Every other auth path — App Passwords,
- * cookies, foreign bearer schemes, no auth at all — is returned untouched. A
+ * filter has already resolved a user. Every other auth path - App Passwords,
+ * cookies, foreign bearer schemes, no auth at all - is returned untouched. A
  * present-but-invalid OAuth token never hard-fails the request; it simply fails
  * to resolve a user, and the transport gate issues its own 401 downstream.
  *
@@ -32,7 +32,7 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  * Resolve an OAuth bearer token to the WordPress user that approved it.
  *
  * Hooked on `determine_current_user`. Returns the incoming `$user_id` unchanged
- * in every case except a valid, audience-bound OAuth access token — see the
+ * in every case except a valid, audience-bound OAuth access token - see the
  * file header for why each guard exists.
  *
  * @param int|false $user_id The user id resolved so far (false if none yet). Left
@@ -85,7 +85,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 
 	// 7. Resolve the token to its row in a single indexed lookup. The row
 	// resolver already gates on (active + unexpired), so a null row covers
-	// every present-but-invalid case — unknown, inactive, expired — and a
+	// every present-but-invalid case - unknown, inactive, expired - and a
 	// present-but-invalid OAuth token simply fails to resolve a user rather
 	// than hard-failing the request.
 	$row = aafm_oauth_get_access_token_row( $credential );
@@ -100,7 +100,7 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 	}
 
 	// 9. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
-	// already in a client's hands keeps working unless its owning client is re-checked here —
+	// already in a client's hands keeps working unless its owning client is re-checked here -
 	// so disabling a compromised client invalidates its live access tokens immediately.
 	if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
 		return $user_id;
@@ -134,7 +134,7 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 
 	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
 	// expected path from rest_url() so a site installed under a path prefix (e.g.
-	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison — a
+	// https://example.com/blog) keeps that prefix (/blog/wp-json/...) in the comparison - a
 	// hardcoded /wp-json/... literal never matches there.
 	$request_uri = isset( $_SERVER['REQUEST_URI'] )
 		? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) )
@@ -155,7 +155,7 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 	}
 
 	// When pretty permalinks are off, rest_url() returns the plain ?rest_route= form, whose path
-	// component collapses to .../index.php and carries no route — that case is the rest_route branch
+	// component collapses to .../index.php and carries no route - that case is the rest_route branch
 	// above. Only treat the rest_url() path as the pretty target when it actually ends with the MCP
 	// route. Otherwise reconstruct the expected pretty path from the install's home-path prefix so a
 	// subdirectory install still matches even with plain permalinks pretty-routing through.
@@ -209,8 +209,8 @@ function aafm_oauth_read_bearer_token(): ?string {
 /**
  * Fetch a full access-token row by the SHA-256 hash of the raw token.
  *
- * Returns the same row that {@see aafm_oauth_validate_access_token()} matches —
- * active and unexpired — so the two functions always agree: a token that
+ * Returns the same row that {@see aafm_oauth_validate_access_token()} matches -
+ * active and unexpired - so the two functions always agree: a token that
  * validates also returns a row here, and one that does not validate returns
  * null. The row carries at least `resource` (the audience) and `wp_user_id`.
  *
@@ -225,7 +225,7 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
-			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php — the two must never disagree on the active/unexpired predicate.
+			// Keep this WHERE clause in sync with aafm_oauth_validate_access_token() in tokens.php - the two must never disagree on the active/unexpired predicate.
 			'SELECT * FROM %i
 			 WHERE token_hash = %s
 			   AND is_active = 1
@@ -245,7 +245,7 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
  *
  * Registered so a present-but-invalid `aafm_oat_` token can never let some other
  * code path convert "we didn't resolve a user" into a hard failure on unrelated
- * routes. It returns the incoming value verbatim — null stays null, a WP_Error
+ * routes. It returns the incoming value verbatim - null stays null, a WP_Error
  * comes back untouched.
  *
  * @param WP_Error|true|null $errors The current authentication error state.

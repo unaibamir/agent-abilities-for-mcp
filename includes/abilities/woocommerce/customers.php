@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — customer reads and writes (sub-slice W4-WC3).
+ * WooCommerce integration abilities - customer reads and writes (sub-slice W4-WC3).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,14 +48,14 @@ function aafm_register_wc_customers_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce customer registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
  */
 function aafm_wc_customers_registry_definitions(): array {
 	return array(
-		// Customers (sub-slice W4-WC3) — PII-exposing abilities gated on manage_woocommerce.
+		// Customers (sub-slice W4-WC3) - PII-exposing abilities gated on manage_woocommerce.
 		'aafm/wc-list-customers'  => array(
 			'label'        => __( 'List WooCommerce customers', 'agent-abilities-for-mcp' ),
 			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
@@ -98,7 +98,7 @@ function aafm_wc_customers_registry_definitions(): array {
 // =============================================================================
 // WC3 -- Customers: list, get, create, update
 // All abilities gate on the flat, object-independent manage_woocommerce cap
-// (aafm_wc_perm). None needs a server.php case — they fall through at discovery.
+// (aafm_wc_perm). None needs a server.php case - they fall through at discovery.
 // Customer PII (email, billing phone, billing/shipping addresses) is returned in
 // full under the Integrations security disclaimer (aafm_woocommerce_disclaimer).
 // =============================================================================
@@ -119,7 +119,7 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
 		return null;
 	}
 	// WooCommerce exposes no wc_get_customer() helper; instantiate WC_Customer directly. A
-	// non-existent id leaves the object empty, so get_id() returns 0 — treat that as "not found".
+	// non-existent id leaves the object empty, so get_id() returns 0 - treat that as "not found".
 	// WC_Customer's constructor already catches the data-store "Invalid customer" exception and
 	// zeroes the id, but guard the call so any other WC version/edge case returns not-found rather
 	// than surfacing a raw exception.
@@ -178,7 +178,7 @@ function aafm_wc_customer_shipping_properties(): array {
  * The shared writable customer properties (create + update input schemas).
  *
  * Both billing{} and shipping{} carry additionalProperties:false (MEDIUM-4 closed-schema
- * security control): any key outside the declared set — e.g. billing.role — is rejected by
+ * security control): any key outside the declared set - e.g. billing.role - is rejected by
  * the Abilities API before the executor runs, so a nested-smuggle attack cannot bypass the
  * field-level sanitise layer.
  *
@@ -304,7 +304,7 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
 /**
  * Apply validated write-input fields to a WC_Customer instance (shared by create + update).
  *
- * Only keys present in $input are applied — missing keys are not zeroed — so update is a true
+ * Only keys present in $input are applied - missing keys are not zeroed - so update is a true
  * partial PATCH and create only sets what was provided.
  *
  * @param \WC_Customer        $customer Customer object to mutate.
@@ -433,7 +433,7 @@ function aafm_args_wc_list_customers(): array {
  * Execute aafm/wc-list-customers.
  *
  * Queries customers via wc_get_customers() (real WooCommerce) or WcCustomerStubStore (tests).
- * Each customer is mapped through the lean aafm_redact_wc_customer() shape — no addresses.
+ * Each customer is mapped through the lean aafm_redact_wc_customer() shape - no addresses.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -579,7 +579,7 @@ function aafm_exec_wc_create_customer( array $input ) {
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	$username = sanitize_user( (string) ( $input['username'] ?? $email ) );
 
-	// wc_create_new_customer() returns the new user id as an int, or a WP_Error — never a
+	// wc_create_new_customer() returns the new user id as an int, or a WP_Error - never a
 	// WC_Customer object. Treat any non-positive / WP_Error result as a failure so a real
 	// create error can't be misread as success (and a real success can't be misread as a
 	// failure after the account is already persisted).

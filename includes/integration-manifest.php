@@ -5,7 +5,7 @@
  * Integration abilities register only while their host plugin is active, so a live registry walk
  * cannot tell you how many abilities WooCommerce "would" expose on a site where it is not
  * installed. aafm_integration_ability_manifest() holds the full per-ability picture independent of
- * host activation, and aafm_integration_manifest() DERIVES the per-slug counts from it — one source
+ * host activation, and aafm_integration_manifest() DERIVES the per-slug counts from it - one source
  * of truth, no second hand-kept tally to drift. It is the count contract for the integration
  * surface, alongside aafm_available_ability_count() for the whole catalog.
  *
@@ -22,11 +22,11 @@ defined( 'ABSPATH' ) || exit;
  *
  * This is the part of the integration surface that CANNOT be derived from the registry alone:
  *  - `name` fixes the per-slug order and the membership set (which abilities belong to which host),
- *    so the Integrations tab can render every ability — disabled — for an inactive host.
+ *    so the Integrations tab can render every ability - disabled - for an inactive host.
  *  - `risk` drives the per-slug read/write/destructive counts (aafm_integration_manifest()), which are
  *    test-locked, so it stays explicit here rather than being read back.
  *
- * The label and description are NOT held here anymore — aafm_integration_ability_manifest() hydrates
+ * The label and description are NOT held here anymore - aafm_integration_ability_manifest() hydrates
  * them from the registry (the single source of truth) per slug, so there is no second copy to drift.
  *
  * KEEP IN LOCKSTEP WITH THE REGISTRY. IntegrationManifestTest force-activates every host and asserts
@@ -338,14 +338,14 @@ function aafm_integration_ability_order(): array {
  * host plugin is active: { name, label, risk, description } in registry order. Integration abilities
  * register only while their host plugin is active, so a live registry walk cannot describe (or count)
  * an integration whose host is inactive. This descriptor holds the full picture independent of host
- * activation: it lets the Integrations tab render every ability — disabled — for an inactive host,
+ * activation: it lets the Integrations tab render every ability - disabled - for an inactive host,
  * and lets aafm_integration_manifest() DERIVE the counts from one source instead of a second
  * hand-kept tally.
  *
  * The `name` order and the `risk` come from aafm_integration_ability_order(); the `label` and
  * `description` are hydrated from the registry's guard-independent full view
  * (aafm_get_abilities_registry_full()), so the registry is the single source of truth for those two
- * strings — no second copy to keep in sync. The render layer still prefers the matching
+ * strings - no second copy to keep in sync. The render layer still prefers the matching
  * aafm_ability_disclosures() line over `description` at render time, mirroring the active-path hint
  * logic so there is one disclosure source of truth.
  *
@@ -372,8 +372,8 @@ function aafm_integration_ability_manifest(): array {
  * Per-integration ability counts, independent of whether the host plugin is active.
  *
  * DERIVED from aafm_integration_ability_manifest(): total is the row count, and read / write /
- * destructive are the per-risk tallies. The return shape is unchanged — each slug maps to
- * {total, read, write, destructive}, total === read + write + destructive — so every caller
+ * destructive are the per-risk tallies. The return shape is unchanged - each slug maps to
+ * {total, read, write, destructive}, total === read + write + destructive - so every caller
  * (aafm_available_ability_count(), the Dashboard and Abilities counts, the Integrations card) is
  * untouched by the source change. The slugs match the integration subjects used in the registry
  * and the Integrations cards (see aafm_integration_cards()).
@@ -414,7 +414,7 @@ function aafm_integration_manifest(): array {
  *
  * The single source of truth the Dashboard and the Abilities tab both read for "available /
  * total", so the two views can never disagree. It is the count of core (non-integration)
- * abilities — taken from the live registry, which always holds every core ability — plus every
+ * abilities - taken from the live registry, which always holds every core ability - plus every
  * integration's manifest total, so an inactive integration still contributes its full count.
  *
  * @return int

@@ -74,7 +74,7 @@ final class CommentsCrudTest extends TestCase {
 
 	public function test_get_comment_missing_id_is_denied_at_the_permission_layer(): void {
 		// A comment id that resolves to nothing must default-deny at check_permissions(),
-		// not merely error inside execute — so the ability can't probe for valid ids.
+		// not merely error inside execute - so the ability can't probe for valid ids.
 		$this->acting_as( 'editor' );
 		$this->assertFalse(
 			wp_get_ability( 'aafm/get-comment' )->check_permissions( array( 'comment_id' => 999999 ) )
@@ -288,7 +288,7 @@ final class CommentsCrudTest extends TestCase {
 			),
 			$out
 		);
-		// Force delete bypasses trash — the row is gone, not recoverable.
+		// Force delete bypasses trash - the row is gone, not recoverable.
 		$this->assertNull( get_comment( $comment ) );
 	}
 
@@ -304,7 +304,7 @@ final class CommentsCrudTest extends TestCase {
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
 		$this->assertContains( 'aafm/delete-comment', $abilities );
-		// And the comment still exists — the denied call never touched it.
+		// And the comment still exists - the denied call never touched it.
 		$this->assertInstanceOf( WP_Comment::class, get_comment( $comment ) );
 	}
 

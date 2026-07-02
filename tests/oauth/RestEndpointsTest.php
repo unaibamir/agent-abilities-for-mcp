@@ -26,7 +26,7 @@ class RestEndpointsTest extends TestCase {
 		parent::set_up();
 
 		// The REST dispatch path reports a production environment, so relax the
-		// HTTPS requirement the way a local agent-dev operator would — this is the
+		// HTTPS requirement the way a local agent-dev operator would - this is the
 		// documented override, exercised here so the handlers run over the test's
 		// plain-HTTP request instead of short-circuiting with a 400.
 		if ( ! defined( 'AAFM_OAUTH_ALLOW_HTTP' ) ) {
@@ -348,7 +348,7 @@ class RestEndpointsTest extends TestCase {
 		$client_id = $this->register_client( $redirect );
 		$code      = $this->mint_code( $client_id, $redirect, $challenge );
 
-		// A 5000-character verifier — far outside the RFC 7636 43-128 window.
+		// A 5000-character verifier - far outside the RFC 7636 43-128 window.
 		$overlong = str_repeat( 'a', 5000 );
 
 		$response = $this->token_code_request( $client_id, $code, $redirect, $overlong );
@@ -372,7 +372,7 @@ class RestEndpointsTest extends TestCase {
 		$client_id = $this->register_client( $redirect );
 		$code      = $this->mint_code( $client_id, $redirect, $challenge );
 
-		// 10 characters — below the RFC 7636 minimum of 43.
+		// 10 characters - below the RFC 7636 minimum of 43.
 		$response = $this->token_code_request( $client_id, $code, $redirect, 'short12345' );
 
 		$this->assertSame( 400, $response->get_status() );
@@ -475,7 +475,7 @@ class RestEndpointsTest extends TestCase {
 			);
 		}
 
-		// Persisted literal boolean false: seed the row on, then toggle it off —
+		// Persisted literal boolean false: seed the row on, then toggle it off -
 		// WordPress only stores a literal false when the option already exists.
 		add_option( 'aafm_oauth_dcr_enabled', '1' );
 		update_option( 'aafm_oauth_dcr_enabled', false );

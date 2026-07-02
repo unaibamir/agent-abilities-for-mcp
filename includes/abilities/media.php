@@ -69,7 +69,7 @@ function aafm_register_media_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-media']       = array(
 		'label'        => __( 'Delete media', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete an attachment — the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete an attachment - the file and library entry are removed and cannot be recovered.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'media',
@@ -179,7 +179,7 @@ function aafm_exec_get_media( array $input ): array {
 }
 
 /**
- * Args for aafm/get-media-item — one attachment by id, rich shape.
+ * Args for aafm/get-media-item - one attachment by id, rich shape.
  *
  * @return array<string,mixed>
  */
@@ -218,7 +218,7 @@ function aafm_args_get_media_item(): array {
 }
 
 /**
- * Execute aafm/get-media-item — rich shape by attachment id.
+ * Execute aafm/get-media-item - rich shape by attachment id.
  *
  * The id must resolve to a real attachment; anything else returns a generic error.
  * The absolute server file path and uploader PII are never returned.
@@ -237,7 +237,7 @@ function aafm_exec_get_media_item( array $input ) {
 }
 
 /**
- * Args for aafm/count-media — total plus per-mime breakdown, optional mime filter.
+ * Args for aafm/count-media - total plus per-mime breakdown, optional mime filter.
  *
  * @return array<string,mixed>
  */
@@ -273,7 +273,7 @@ function aafm_args_count_media(): array {
 }
 
 /**
- * Execute aafm/count-media — wp_count_attachments() returns counts keyed by mime
+ * Execute aafm/count-media - wp_count_attachments() returns counts keyed by mime
  * type; sum for the total. An optional mime_type narrows the breakdown to one type.
  *
  * @param array<string,mixed> $input Validated input.
@@ -305,7 +305,7 @@ function aafm_exec_count_media( array $input ): array {
 /**
  * Args for aafm/set-featured-image.
  *
- * Sets a post's thumbnail to an EXISTING attachment id only — never a URL, so
+ * Sets a post's thumbnail to an EXISTING attachment id only - never a URL, so
  * there is no fetch path and no SSRF surface. The closed input schema rejects
  * any field other than the two ids.
  *
@@ -356,7 +356,7 @@ function aafm_args_set_featured_image(): array {
  * modified_gmt, so it is gated exactly like update-post/trash-post: the target type
  * must clear the eligibility floor AND the default-deny allowlist AND be
  * map_meta_cap===true, then the per-object edit cap is checked. A bare
- * current_user_can('edit_post') is NOT enough — on a non-mapped type it degrades to a
+ * current_user_can('edit_post') is NOT enough - on a non-mapped type it degrades to a
  * singular primitive that can fail open. The denial is audited by the registration
  * wrapper before any change is attempted.
  *
@@ -370,7 +370,7 @@ function aafm_perm_set_featured_image( array $input ): bool {
 }
 
 /**
- * Execute aafm/set-featured-image — by existing IMAGE attachment id only.
+ * Execute aafm/set-featured-image - by existing IMAGE attachment id only.
  *
  * The attachment id must resolve to an attachment that is genuinely an image
  * (wp_attachment_is_image), so a PDF/zip/other attachment id can't be smuggled
@@ -391,7 +391,7 @@ function aafm_exec_set_featured_image( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// The id must be a real attachment AND a real image — not a PDF or a plain post.
+	// The id must be a real attachment AND a real image - not a PDF or a plain post.
 	if ( $att_id <= 0 || 'attachment' !== get_post_type( $att_id ) || ! wp_attachment_is_image( $att_id ) ) {
 		return aafm_generic_error();
 	}
@@ -479,19 +479,19 @@ function aafm_upload_allowlist(): array {
 }
 
 /**
- * Execute aafm/upload-media — base64 only, byte-sniffed, allow-listed, SVG
+ * Execute aafm/upload-media - base64 only, byte-sniffed, allow-listed, SVG
  * rejected, size-capped, filename sanitized, WordPress owns the path.
  *
  * Hardening (§6.2):
  * - NO URL fetch path exists, so the SSRF class is eliminated outright; the only
  *   input is inline base64 bytes the caller supplies.
  * - The real MIME is derived from the DECODED BYTES (finfo), never the supplied
- *   filename, extension, or any client mime — and must be on the raster-image
+ *   filename, extension, or any client mime - and must be on the raster-image
  *   allow-list. SVG and executable payloads fail this gate and no file is written.
  * - The filename is sanitized (sanitize_file_name) and rebuilt with the canonical
  *   extension for the real type; traversal segments cannot survive.
  * - wp_upload_bits() writes the bytes inside the uploads dir under WordPress's
- *   control — never a raw file_put_contents to a caller-chosen path.
+ *   control - never a raw file_put_contents to a caller-chosen path.
  * - A second wp_check_filetype_and_ext() check on the written file guards against
  *   ext<->contents disagreement; a mismatch deletes the file and errors.
  * - The decoded size is capped at wp_max_upload_size() before any write.
@@ -501,7 +501,7 @@ function aafm_upload_allowlist(): array {
  */
 function aafm_exec_upload_media( array $input ) {
 	$payload = isset( $input['data_base64'] ) ? (string) $input['data_base64'] : '';
-	// Decoding the caller-supplied upload payload — the bytes are sniffed against a
+	// Decoding the caller-supplied upload payload - the bytes are sniffed against a
 	// strict image allow-list below, never executed; the strict flag rejects junk.
 	// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode
 	$decoded = base64_decode( $payload, true );
@@ -570,7 +570,7 @@ function aafm_exec_upload_media( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Return the redacted media shape — public URL only, never an absolute path.
+	// Return the redacted media shape - public URL only, never an absolute path.
 	return array(
 		'attachment_id' => (int) $attachment_id,
 		'media'         => aafm_redact_media( $attachment ),
@@ -628,7 +628,7 @@ function aafm_args_update_media(): array {
  * Attachments are a _builtin post type, so they are NOT eligible for the CPT
  * chokepoint (aafm_can_edit_post_object / aafm_validate_post_type require
  * public && !_builtin and fail-closed for ALL attachments). map_meta_cap resolves
- * edit_post correctly for attachments, so we check it directly — after confirming
+ * edit_post correctly for attachments, so we check it directly - after confirming
  * the id is a real attachment. The denial is audited by the registration wrapper.
  *
  * @param array<string,mixed> $input Input.
@@ -643,7 +643,7 @@ function aafm_perm_update_media( array $input ): bool {
 }
 
 /**
- * Execute aafm/update-media — title/alt/caption/description, at least one required.
+ * Execute aafm/update-media - title/alt/caption/description, at least one required.
  *
  * Re-confirms the target is a real attachment the caller can edit (defense in depth),
  * sanitizes each field, and returns the rich media shape.
@@ -763,7 +763,7 @@ function aafm_perm_delete_media( array $input ): bool {
 }
 
 /**
- * Execute aafm/delete-media — permanent delete via wp_delete_attachment( $id, true ).
+ * Execute aafm/delete-media - permanent delete via wp_delete_attachment( $id, true ).
  *
  * Re-confirms the target is a real attachment the caller can delete (defense in
  * depth). wp_delete_attachment returns WP_Post on success, or false|null on failure;

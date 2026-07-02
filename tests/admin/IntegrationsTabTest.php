@@ -1,6 +1,6 @@
 <?php
 /**
- * Wave 4: the Integrations admin tab shell — registered in the tab nav, renders one
+ * Wave 4: the Integrations admin tab shell - registered in the tab nav, renders one
  * card per integration with a detected status and the security disclaimer header,
  * reuses the shared design system, and ships zero Dashicons.
  *
@@ -23,19 +23,19 @@ final class IntegrationsTabTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		// The SEO slices' stubs define WPSEO_VERSION / a RankMath class / an aioseo() function
 		// process-wide (none can be undefined), so once those suites run real SEO detection reports
-		// active. Pin each per-plugin seam off — the same seam production detection passes through —
+		// active. Pin each per-plugin seam off - the same seam production detection passes through -
 		// so the "Not installed" state is deterministic here.
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
 		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
 		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
 		// WooProductsTest defines a WooCommerce marker class process-wide (a class cannot be
 		// undefined), so once that suite has run real WC detection reports active. Pin the
-		// aafm_woocommerce_active seam off — the same seam production detection passes through — so
+		// aafm_woocommerce_active seam off - the same seam production detection passes through - so
 		// each pinned card's status stays deterministic regardless of test order.
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 
 		// Derive the status pill each pinned-off card should render from the real on-disk probe,
-		// under the same forced-inactive seams the render passes through — never hardcode
+		// under the same forced-inactive seams the render passes through - never hardcode
 		// "Not installed". This WP test install shares the developer's wp-content, so a host plugin
 		// file (e.g. wordpress-seo/wp-seo.php) can be physically present but inactive; that is the
 		// CORRECT "installed_inactive" → "Inactive" state. Asserting "Not installed" unconditionally
@@ -69,7 +69,7 @@ final class IntegrationsTabTest extends TestCase {
 		foreach ( array_keys( $expected_pills ) as $pill_label ) {
 			$this->assertStringContainsString( $pill_label, $html );
 		}
-		// Zero Dashicons (inline SVG only — the project icon rule).
+		// Zero Dashicons (inline SVG only - the project icon rule).
 		$this->assertStringNotContainsString( 'dashicons', $html );
 	}
 
@@ -101,7 +101,7 @@ final class IntegrationsTabTest extends TestCase {
 		// Regression guard for the count header bug: the enabled tally was hardcoded to the literal
 		// 0, so an ACTIVE integration with abilities switched on still read "0 / N". Force WooCommerce
 		// active (the same seam production detection passes through), enable a known subset of its
-		// abilities, and assert the WooCommerce card header reports that real count — not "0 /".
+		// abilities, and assert the WooCommerce card header reports that real count - not "0 /".
 		$this->acting_as( 'administrator' );
 		add_filter( 'aafm_integration_active_woocommerce', '__return_true' );
 		// Flush so the live registry rebuilds WITH the WooCommerce rows: aafm_get_enabled_abilities()
@@ -130,7 +130,7 @@ final class IntegrationsTabTest extends TestCase {
 		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
 		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
 
-		// The header reports the REAL enabled count (3), the total, and the read/write tallies — the
+		// The header reports the REAL enabled count (3), the total, and the read/write tallies - the
 		// exact format the fix produces. n is 3 (> 0), proving the count is computed, not the literal 0.
 		$this->assertStringContainsString(
 			sprintf( '3 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
@@ -165,14 +165,14 @@ final class IntegrationsTabTest extends TestCase {
 		// The inactive rows carry the disabled attribute (so they never submit) and aria-disabled.
 		$this->assertStringContainsString( 'disabled', $html );
 		$this->assertStringContainsString( 'aria-disabled="true"', $html );
-		// The old empty-state copy is gone for good — there is always a list now.
+		// The old empty-state copy is gone for good - there is always a list now.
 		$this->assertStringNotContainsString( 'No abilities are available for this integration yet.', $html );
 	}
 
 	public function test_status_helper_reports_not_installed_when_host_files_absent(): void {
 		// not_installed is the file-driven branch: with the host inactive AND no candidate host file
-		// under WP_PLUGIN_DIR, the helper reports not_installed. Force each active seam off — the same
-		// seam production detection passes through — so a leaked in-process stub can never flip
+		// under WP_PLUGIN_DIR, the helper reports not_installed. Force each active seam off - the same
+		// seam production detection passes through - so a leaked in-process stub can never flip
 		// detection back to 'active' and mask this branch: the SEO slices define WPSEO_VERSION etc.
 		// process-wide and WooProductsTest defines a WC marker class, and neither can be undefined.
 		add_filter( 'aafm_yoast_active', '__return_false', 99 );
@@ -181,7 +181,7 @@ final class IntegrationsTabTest extends TestCase {
 		// The expected status is derived from the real on-disk probe, never hardcoded: this WP test
 		// install shares the developer's wp-content, so it can physically carry an INACTIVE copy of a
 		// host plugin (e.g. wordpress-seo/wp-seo.php is present here). When the file is present,
-		// installed_inactive is the CORRECT answer — hardcoding not_installed there would assert a
+		// installed_inactive is the CORRECT answer - hardcoding not_installed there would assert a
 		// false premise about the environment, not a bug in the helper.
 		foreach ( array( 'woocommerce', 'yoast' ) as $slug ) {
 			$present = false;
@@ -192,7 +192,7 @@ final class IntegrationsTabTest extends TestCase {
 				}
 			}
 			$status = aafm_integration_status( $slug );
-			// With the active seam forced off the status is file-driven, never 'active' — this is the
+			// With the active seam forced off the status is file-driven, never 'active' - this is the
 			// leaked-stub regression this test guards against.
 			$this->assertNotSame( 'active', $status, "Forcing {$slug} inactive must defeat any leaked detection stub." );
 			$this->assertSame(
@@ -219,8 +219,8 @@ final class IntegrationsTabTest extends TestCase {
 		//
 		// The AcfTest fixture defines a get_field stub process-wide (a defined function cannot be
 		// undefined), so once that suite has run, real ACF detection reports active and the status
-		// helper would say 'active'. Pin the aafm_acf_active seam off — the same seam production
-		// detection passes through — so the status falls through to the file-present probe, keeping
+		// helper would say 'active'. Pin the aafm_acf_active seam off - the same seam production
+		// detection passes through - so the status falls through to the file-present probe, keeping
 		// this status deterministic regardless of test order.
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
 
@@ -241,7 +241,7 @@ final class IntegrationsTabTest extends TestCase {
 		try {
 			$this->assertSame( 'installed_inactive', aafm_integration_status( 'acf' ) );
 		} finally {
-			// Remove only what this test created — never delete a file the install already shipped.
+			// Remove only what this test created - never delete a file the install already shipped.
 			if ( ! $pre_existing && file_exists( $fixture ) ) {
 				wp_delete_file( $fixture );
 			}
@@ -288,7 +288,7 @@ final class IntegrationsTabTest extends TestCase {
 		// The status note is re-enabled and renders in the accordion content.
 		$this->assertStringContainsString( 'aafm-integration-note', $html );
 
-		// The inner "Abilities X/Y" sub-collapsible is gone — the section accordion replaces it.
+		// The inner "Abilities X/Y" sub-collapsible is gone - the section accordion replaces it.
 		$this->assertStringNotContainsString( 'aafm-abilities-details', $html );
 	}
 

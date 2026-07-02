@@ -24,7 +24,7 @@ final class CommentsWriteTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
-		// simulated by pushing the action name onto $wp_current_filter — the idiom WP
+		// simulated by pushing the action name onto $wp_current_filter - the idiom WP
 		// core's own ability test trait uses. do_action() on the core hook trips the
 		// WPCS non-prefixed-hookname sniff (Phase 1 carried issue).
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );

@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — sales reports and entity counts (sub-slice W4-WC7).
+ * WooCommerce integration abilities - sales reports and entity counts (sub-slice W4-WC7).
  *
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
@@ -48,7 +48,7 @@ function aafm_register_wc_reports_full_definitions( array $registry ): array {
 
 /**
  * The WooCommerce reports registry rows, keyed by ability name. The single source of truth for
- * these abilities' label, description, group, risk, and args builder — consumed by both the
+ * these abilities' label, description, group, risk, and args builder - consumed by both the
  * host-guarded live registration callback and the unguarded full-view callback.
  *
  * @return array<string,array<string,mixed>>
@@ -547,7 +547,7 @@ function aafm_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs
 	$private = (int) ( $counts->private ?? 0 );
 	$pending = (int) ( $counts->pending ?? 0 );
 	$trash   = (int) ( $counts->trash ?? 0 );
-	// total counts ACTIVE (non-trashed) products only — trash is reported as its own line but is
+	// total counts ACTIVE (non-trashed) products only - trash is reported as its own line but is
 	// deliberately excluded from total, the shared count convention across the count siblings (B4).
 	return array(
 		'publish' => $publish,

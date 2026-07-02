@@ -26,7 +26,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  * - aafm_force_draft: a plain bool from presence of the field (unchecked checkbox -> false).
  * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present,
  *   '0' when absent. The OAuth readers default on and treat every falsy stored form as off, so
- *   the off state must be the literal '0' string — a PHP bool false would not store as false on
+ *   the off state must be the literal '0' string - a PHP bool false would not store as false on
  *   a never-created option, leaving the toggle stuck on.
  * - aafm_ip_allowlist: split on newlines, trimmed, blanks dropped, and every surviving line
  *   must clear aafm_is_valid_ip_or_cidr(). Invalid lines are dropped (fail-closed), so a
@@ -71,11 +71,11 @@ function aafm_sanitize_settings_input( array $posted ): array {
 /**
  * Count how many submitted allowlist lines are invalid and would be dropped on save.
  *
- * Mirrors the sanitizer's line handling — split on newlines, trim, drop blanks — then counts
+ * Mirrors the sanitizer's line handling - split on newlines, trim, drop blanks - then counts
  * the non-blank lines that fail aafm_is_valid_ip_or_cidr(). Counting invalid lines explicitly
  * (rather than diffing submitted vs. kept counts) keeps a duplicate-but-valid line from being
  * miscounted as a drop. The result drives the save-time warning so an admin who pastes only
- * garbage — collapsing the list to empty, which means allow-all — is told instead of seeing a
+ * garbage - collapsing the list to empty, which means allow-all - is told instead of seeing a
  * bare "Saved".
  *
  * @param string $raw Raw newline-separated allowlist text as posted.
@@ -101,7 +101,7 @@ function aafm_count_dropped_ip_lines( string $raw ): int {
  * Nonce + manage_options gated. The sanitizer bounds every value, so the stored options are
  * always safe. The cleaned values (with the allowlist as both an array and a newline string
  * for the textarea) are echoed back, along with a count of dropped invalid IP lines, so the UI
- * can warn when lines were silently removed — including the dangerous case where every line is
+ * can warn when lines were silently removed - including the dangerous case where every line is
  * invalid and the list collapses to empty (allow-all).
  *
  * @return void
@@ -145,14 +145,14 @@ function aafm_ajax_save_settings(): void {
 /**
  * Every option key that a plugin reset clears.
  *
- * This is the single source of truth for "what a reset clears" — the enabled abilities, the
+ * This is the single source of truth for "what a reset clears" - the enabled abilities, the
  * exposed post types and meta keys, and the safety controls. It deliberately excludes the
  * activity log (its own table) and anything outside the plugin's own option namespace, and it
  * never lists users or content.
  *
  * One configuration option is intentionally NOT listed here: `aafm_delete_data_on_uninstall`.
  * That flag governs whether uninstall wipes the site's data, so a "reset to defaults" must not
- * silently flip the operator's data-retention choice — it is preserved across a reset by design.
+ * silently flip the operator's data-retention choice - it is preserved across a reset by design.
  * Because of that omission this is the reset set, not literally every stored option. Keep it in
  * sync when a new resettable configuration option is introduced.
  *
@@ -211,7 +211,7 @@ function aafm_uninstall_site_data(): void {
  * Deletes every configuration option (so each setting falls back to its safe default), empties the
  * activity log, and empties the four OAuth data tables (clients, codes, access tokens, consents).
  * It deliberately does NOT touch the agent user, its Application Passwords, or any content the
- * agent created (posts, terms, media, etc.) — this clears the plugin's own configuration, audit
+ * agent created (posts, terms, media, etc.) - this clears the plugin's own configuration, audit
  * trail, and OAuth state only. The activity-log and OAuth tables themselves are kept (rows cleared)
  * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
@@ -229,7 +229,7 @@ function aafm_reset_plugin(): void {
  * AJAX: reset the plugin to defaults.
  *
  * Nonce + manage_options gated, mirroring the other admin actions. The destructive scope is fixed
- * server-side (config options + activity log only) — there is no client-supplied target, so a
+ * server-side (config options + activity log only) - there is no client-supplied target, so a
  * tampered request can never widen what gets deleted. The browser confirms intent before calling.
  *
  * @return void
@@ -286,7 +286,7 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
-	// IP allowlist — the control bundles the textarea plus the lockout warning notice.
+	// IP allowlist - the control bundles the textarea plus the lockout warning notice.
 	ob_start();
 	aafm_render_notice(
 		'warning',
@@ -305,7 +305,7 @@ function aafm_render_settings_tab(): void {
 	);
 
 	// Force draft. The toggle switch wraps the checkbox; the <input> keeps its exact
-	// name/value/checked() contract — the save handler and its tests bind to that, not this markup.
+	// name/value/checked() contract - the save handler and its tests bind to that, not this markup.
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
@@ -368,7 +368,7 @@ function aafm_render_settings_tab(): void {
 
 	// Enable OAuth. The row title and the sentence label each carry an id, and the checkbox
 	// points at both with aria-labelledby, so the toggle's accessible name is the title plus the
-	// descriptive sentence. The sentence <label for> stays put — it is the existing single
+	// descriptive sentence. The sentence <label for> stays put - it is the existing single
 	// association, not a second one, so the redundant-`for` defect cannot recur. The set-row
 	// label carries the title id here so the existing aria-labelledby reference resolves.
 	echo '<div class="aafm-set-row">';
@@ -405,7 +405,7 @@ function aafm_render_settings_tab(): void {
 	echo '<p><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
 	echo '</form>';
 
-	// Danger zone — a destructive, irreversible reset. Sits outside the settings <form> so the
+	// Danger zone - a destructive, irreversible reset. Sits outside the settings <form> so the
 	// button (type=button, wired in admin.js with a confirm step) never submits the form. It uses
 	// the shared .aafm-section .aafm-card classes for spacing parity, plus the .aafm-danger
 	// red-accent modifier the component does not emit, so the markup is hand-rolled rather than
@@ -423,7 +423,7 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-set-label">' . esc_html__( 'Reset plugin', 'agent-abilities-for-mcp' ) . '<span class="opt">' . esc_html__( 'Cannot be undone', 'agent-abilities-for-mcp' ) . '</span></div>';
 	echo '<div class="aafm-set-control">';
 	echo '<button type="button" id="aafm-reset-plugin" class="button button-link-delete">' . esc_html__( 'Reset plugin to defaults', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-reset-status" aria-live="polite"></span>';
-	echo '<p class="help">' . esc_html__( 'Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="help">' . esc_html__( 'Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '</div>';

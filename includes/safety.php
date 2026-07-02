@@ -42,7 +42,7 @@ function aafm_rate_limit_per_min(): int {
  *
  * Keyed by the authenticated principal's user id and the current GMT-minute, so
  * each user gets an independent window that naturally rolls over every minute.
- * The transient TTL is 120s — longer than a single minute so the bucket survives
+ * The transient TTL is 120s - longer than a single minute so the bucket survives
  * its own window, while the GMT-minute embedded in the key is what actually rolls
  * the counter to a fresh bucket on the next minute.
  *
@@ -220,7 +220,7 @@ function aafm_is_valid_ip_or_cidr( string $line ): bool {
  * Whether an IP is permitted by the allowlist.
  *
  * An empty allowlist is the neutral default and permits everyone. A non-empty
- * allowlist restricts access to matching entries only — and because every entry
+ * allowlist restricts access to matching entries only - and because every entry
  * is checked through {@see aafm_cidr_match()}, a list made up entirely of
  * invalid entries matches nothing and therefore blocks (fail-closed).
  *

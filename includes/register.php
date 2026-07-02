@@ -107,7 +107,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// Per-principal rate gate. Discovery (tools/list) is exempt automatically: it
 		// uses the raw permission stored above, which never enters this decorated closure
 		// and so never consumes a token. With the limit off (default) aafm_rate_limit_consume()
-		// returns true, making this block a no-op — the path stays identical to today.
+		// returns true, making this block a no-op - the path stays identical to today.
 		$p = $principal();
 		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume( $p['principal_user_id'] ) ) {
 			aafm_log_activity(
@@ -145,7 +145,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	$args['execute_callback'] = static function ( $input = null ) use ( $original_execute, $name, $principal ) {
 		$arg_keys = is_array( $input ) ? array_keys( $input ) : array();
 
-		// One row at 'started' (intent), then updated in place with the real outcome —
+		// One row at 'started' (intent), then updated in place with the real outcome -
 		// one row per call, not two. A crash mid-execute leaves a visible 'started' row.
 		$row_id = aafm_log_activity(
 			array_merge(

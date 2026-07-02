@@ -1,4 +1,4 @@
-# Agent Abilities for MCP — MCP Server for AI Agents
+# Agent Abilities for MCP - MCP Server for AI Agents
 
 Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
 

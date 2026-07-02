@@ -21,7 +21,7 @@ final class MetaPrecedenceTest extends TestCase {
 
 	/**
 	 * Set both meta-key options directly. Transaction rollback isolates each test, and the
-	 * suite runs against the isolated test DB — the live DDEV option store is never touched.
+	 * suite runs against the isolated test DB - the live DDEV option store is never touched.
 	 *
 	 * @param array<int,string> $allow Allow option value.
 	 * @param array<int,string> $deny  Deny option value.
@@ -33,7 +33,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 1 — hard-block beats `*`.
+	 * Row 1 - hard-block beats `*`.
 	 */
 	public function test_hard_block_beats_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array() );
@@ -41,7 +41,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 2 — hard-block beats an explicit allow entry.
+	 * Row 2 - hard-block beats an explicit allow entry.
 	 */
 	public function test_hard_block_beats_explicit_allow(): void {
 		$this->set_meta_options( array( 'session_tokens' ), array() );
@@ -49,7 +49,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 3 — deny beats allow.
+	 * Row 3 - deny beats allow.
 	 */
 	public function test_deny_beats_explicit_allow(): void {
 		$this->set_meta_options( array( 'foo' ), array( 'foo' ) );
@@ -57,7 +57,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 4 — deny beats `*`: the denied key is rejected, a sibling under `*` stays exposed.
+	 * Row 4 - deny beats `*`: the denied key is rejected, a sibling under `*` stays exposed.
 	 */
 	public function test_deny_beats_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array( 'foo' ) );
@@ -66,7 +66,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 5 — deny-`*` wins even when allow-`*` is set (deny-all kill switch).
+	 * Row 5 - deny-`*` wins even when allow-`*` is set (deny-all kill switch).
 	 */
 	public function test_deny_star_wins_even_with_allow_star(): void {
 		$this->set_meta_options( array( '*' ), array( '*' ) );
@@ -74,7 +74,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 6 — default-empty = default-deny.
+	 * Row 6 - default-empty = default-deny.
 	 */
 	public function test_default_empty_is_default_deny(): void {
 		$this->set_meta_options( array(), array() );
@@ -82,7 +82,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 7 — `*` exposes a normal key.
+	 * Row 7 - `*` exposes a normal key.
 	 */
 	public function test_allow_star_exposes_normal_key(): void {
 		$this->set_meta_options( array( '*' ), array() );
@@ -90,7 +90,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Trailing whitespace — trim() runs before floor-1, so padding cannot smuggle a
+	 * Trailing whitespace - trim() runs before floor-1, so padding cannot smuggle a
 	 * hard-blocked key past the strict in_array hard-block; a normal key trims and exposes.
 	 */
 	public function test_trailing_whitespace_cannot_smuggle_blocked_and_trims_normal(): void {
@@ -100,7 +100,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * The bare `*` sentinel is never an addressable key — even when allow=['*']. Reject it
+	 * The bare `*` sentinel is never an addressable key - even when allow=['*']. Reject it
 	 * with the SAME generic error code so the validator never hands `'*'` to a meta op.
 	 */
 	public function test_wildcard_sentinel_is_not_an_addressable_key(): void {
@@ -111,7 +111,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Oracle — rows 1, 3, 5, 6 all return the SAME error code, so deny / not-allowed /
+	 * Oracle - rows 1, 3, 5, 6 all return the SAME error code, so deny / not-allowed /
 	 * hard-block / deny-all are indistinguishable to a caller.
 	 */
 	public function test_all_reject_modes_share_one_error_code(): void {
@@ -136,7 +136,7 @@ final class MetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Bulk-loop `*` symmetry pin — under allow=['*'] the get-all-post-meta bulk reader
+	 * Bulk-loop `*` symmetry pin - under allow=['*'] the get-all-post-meta bulk reader
 	 * enumerates the post's OWN stored scalar meta, matching the single get-post-meta reader
 	 * and the write path. Deny-`*` still wins (deny beats allow), so a deny-all kill switch
 	 * returns an empty map even with allow-`*` set.

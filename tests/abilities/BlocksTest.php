@@ -73,9 +73,9 @@ final class BlocksTest extends TestCase {
 
 	/**
 	 * Enumeration scope: a contributor who owns block A but not block B (another author's)
-	 * must see A and NOT B in list-blocks — the list is scoped to blocks the caller can edit.
+	 * must see A and NOT B in list-blocks - the list is scoped to blocks the caller can edit.
 	 * A contributor holds edit_posts (clears the floor) but lacks edit_others_posts, so
-	 * map_meta_cap denies edit_post on a block they do not own — the same refinement the M-1
+	 * map_meta_cap denies edit_post on a block they do not own - the same refinement the M-1
 	 * gate relies on, applied here as a row filter so enumeration matches per-object access.
 	 */
 	public function test_list_blocks_scopes_to_blocks_the_caller_can_edit(): void {
@@ -148,7 +148,7 @@ final class BlocksTest extends TestCase {
 	}
 
 	/**
-	 * Create-block force-publishes the wp_block, and wp_insert_post() does no capability check —
+	 * Create-block force-publishes the wp_block, and wp_insert_post() does no capability check -
 	 * so the gate must require publish_posts. A Contributor holds edit_posts but NOT publish_posts
 	 * (they cannot publish in wp-admin either) and must be denied; an Editor is allowed.
 	 */
@@ -188,11 +188,11 @@ final class BlocksTest extends TestCase {
 	}
 
 	/**
-	 * M-1: prove the per-object gate REFINES the coarse floor — a user who clears the
+	 * M-1: prove the per-object gate REFINES the coarse floor - a user who clears the
 	 * edit_posts discovery floor but lacks edit_block on a SPECIFIC block is denied at execute.
 	 * (The subscriber case above only exercises the floor; this exercises the per-object
 	 * refinement.) A contributor holds edit_posts but, lacking edit_others_posts, cannot edit
-	 * a block they do not own — so map_meta_cap denies edit_block on this id.
+	 * a block they do not own - so map_meta_cap denies edit_block on this id.
 	 */
 	public function test_update_block_per_object_gate_denies_without_edit_block_on_the_id(): void {
 		$this->register_blocks();

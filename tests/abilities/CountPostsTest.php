@@ -126,7 +126,7 @@ final class CountPostsTest extends TestCase {
 
 	public function test_rejects_non_allowlisted_type(): void {
 		$this->acting_as( 'editor' );
-		// 'attachment' is public-but-internal — never eligible, never allowlisted.
+		// 'attachment' is public-but-internal - never eligible, never allowlisted.
 		$out = aafm_exec_count_posts( array( 'post_type' => 'attachment' ) );
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}

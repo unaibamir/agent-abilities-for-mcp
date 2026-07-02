@@ -5,7 +5,7 @@
  * list) and the output is reduced to a safe whitelist with no login or password hash.
  *
  * The writes (create/update/delete-user) are the most security-sensitive in the whole
- * catalog. create-user forces the site default role server-side — never a caller-chosen
+ * catalog. create-user forces the site default role server-side - never a caller-chosen
  * role, so an agent can never mint an admin. update-user gates any role change behind
  * promote_users and refuses to demote the sole remaining administrator. delete-user
  * requires a reassign target and refuses to delete the current user or the last admin.
@@ -214,7 +214,7 @@ function aafm_perm_list_users(): bool {
  *
  * Lists users redacted to id, display name, email, roles, and post count. Login,
  * password hash, registration date, IP, capabilities, and meta are never
- * returned — only the safe whitelist produced by aafm_redact_user().
+ * returned - only the safe whitelist produced by aafm_redact_user().
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -268,7 +268,7 @@ function aafm_exec_get_users( array $input ): array {
  * Args for aafm/create-user.
  *
  * Closed schema: username + email required; display_name/first_name/last_name/password
- * optional. There is deliberately NO role field — the role is forced to the site default
+ * optional. There is deliberately NO role field - the role is forced to the site default
  * server-side so an agent can never request an elevated role.
  *
  * @return array<string,mixed>
@@ -326,7 +326,7 @@ function aafm_args_create_user(): array {
  * Permission for aafm/create-user: the create_users capability.
  *
  * Object-independent (no per-object branch), so discovery can fall through to this
- * callback with empty input — it is the correct answer at both discovery and execute.
+ * callback with empty input - it is the correct answer at both discovery and execute.
  *
  * @return bool
  */
@@ -360,7 +360,7 @@ function aafm_exec_create_user( array $input ) {
 		: wp_generate_password( AAFM_GENERATED_PASSWORD_LENGTH, true );
 
 	// Invariant: an agent can never mint a privileged account here. The role is forced to the
-	// site default and never caller-chosen — but the default_role option is itself attacker- or
+	// site default and never caller-chosen - but the default_role option is itself attacker- or
 	// misconfiguration-controlled, so trusting it blindly breaks the invariant (a site whose
 	// default_role is 'administrator' would mint admins). Resolve it against what the CURRENT
 	// user may actually hand out: it must be a real role, never 'administrator', and present in
@@ -371,7 +371,7 @@ function aafm_exec_create_user( array $input ) {
 	$default_role = '' !== $default_role ? $default_role : 'subscriber';
 
 	// get_editable_roles() lives in wp-admin/includes/user.php, not loaded in a REST/MCP
-	// request — pull it in (mirrors the delete path's require below).
+	// request - pull it in (mirrors the delete path's require below).
 	if ( ! function_exists( 'get_editable_roles' ) ) {
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 	}
@@ -481,7 +481,7 @@ function aafm_perm_update_user( array $input ): bool {
  */
 function aafm_count_administrators( int $max = 2 ): int {
 	// The default ceiling is 2: the only question every caller asks is "is this the LAST
-	// administrator?", and finding 2 already answers "no" — counting the rest is wasted work.
+	// administrator?", and finding 2 already answers "no" - counting the rest is wasted work.
 	$admins = get_users(
 		array(
 			'role'   => 'administrator',
@@ -499,13 +499,13 @@ function aafm_count_administrators( int $max = 2 ): int {
  * In this plugin the sole caller passes AAFM_LAST_ADMIN_LOCK: it serializes the last-
  * administrator guard shared by update-user (role demote) and delete-user, so a concurrent
  * demote and delete cannot both pass the "is this the last admin?" pre-check and orphan the
- * site. The helper itself is generic — the name parameter is what scopes the lock.
+ * site. The helper itself is generic - the name parameter is what scopes the lock.
  *
  * The last-admin guards are a check-then-mutate pair; without serialization two concurrent
  * demote/delete calls can both pass the count check and orphan the site (no administrator).
  * GET_LOCK gives a cross-connection advisory lock so the check and the mutation run as one
  * critical section. If the lock can't be acquired (timeout, or a backend without GET_LOCK such
- * as SQLite), the callback still runs — the pre-check remains as the best-effort floor, so this
+ * as SQLite), the callback still runs - the pre-check remains as the best-effort floor, so this
  * never makes the guard weaker than before, only stronger when the lock is available.
  *
  * @template T
@@ -540,7 +540,7 @@ function aafm_with_named_lock( string $name, callable $callback ) {
  * Edits the safe profile fields by id. A role change is honored ONLY when the caller can
  * promote_users (the admin cap WP gates the role dropdown behind) and the target role is
  * a real role. Reviewer note M2: a role change that would demote the SOLE remaining
- * administrator is refused — a lockout is as damaging as deleting the last admin. Uses
+ * administrator is refused - a lockout is as damaging as deleting the last admin. Uses
  * core wp_update_user().
  *
  * @param array<string,mixed> $input Validated input.
@@ -570,10 +570,10 @@ function aafm_exec_update_user( array $input ) {
 	$demotes_admin = false;
 	if ( isset( $input['role'] ) ) {
 		// A role assignment must clear every gate WP core enforces in wp-admin and the REST
-		// users controller — not just the global promote_users cap. Core additionally requires
+		// users controller - not just the global promote_users cap. Core additionally requires
 		// the per-target promote_user meta cap (so a delegated manager can only promote users
 		// they may edit) AND membership in get_editable_roles() (so the editable_roles filter
-		// can forbid a role — e.g. block a user-manager from handing out administrator). Without
+		// can forbid a role - e.g. block a user-manager from handing out administrator). Without
 		// both, promote_users alone would let an agent assign any existing role, including one
 		// the site has deliberately put out of reach.
 		$role = sanitize_key( (string) $input['role'] );
@@ -584,7 +584,7 @@ function aafm_exec_update_user( array $input ) {
 			return aafm_generic_error();
 		}
 		// get_editable_roles() lives in wp-admin/includes/user.php, which is not loaded in a
-		// REST/MCP request — pull it in (mirrors the delete path's require below and core's own
+		// REST/MCP request - pull it in (mirrors the delete path's require below and core's own
 		// guard in WP_REST_Users_Controller::check_role_update()).
 		if ( ! function_exists( 'get_editable_roles' ) ) {
 			require_once ABSPATH . 'wp-admin/includes/user.php';
@@ -634,7 +634,7 @@ function aafm_exec_update_user( array $input ) {
  *
  * Closed schema: user_id required; reassign_to optional IN THE SCHEMA so the execute body
  * can refuse a missing target with the orphaned-content message rather than a bare schema
- * rejection. The reassign is mandatory in practice — the execute callback rejects when it
+ * rejection. The reassign is mandatory in practice - the execute callback rejects when it
  * is absent.
  *
  * @return array<string,mixed>
@@ -696,8 +696,8 @@ function aafm_perm_delete_user( array $input ): bool {
  * Permanently removes a user via core wp_delete_user(), reassigning their content to
  * another existing user. Three guards: a reassign target is mandatory and must exist and
  * differ from the victim; the current user can never delete themselves; the last
- * administrator can never be deleted (a lockout guard). Uses wp_delete_user() — never raw
- * SQL — which lives in wp-admin/includes/user.php.
+ * administrator can never be deleted (a lockout guard). Uses wp_delete_user() - never raw
+ * SQL - which lives in wp-admin/includes/user.php.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error

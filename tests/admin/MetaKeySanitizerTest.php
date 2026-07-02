@@ -19,7 +19,7 @@ use AAFM\Tests\TestCase;
 final class MetaKeySanitizerTest extends TestCase {
 
 	/**
-	 * Deny post-meta — keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
+	 * Deny post-meta - keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_meta_keys_sanitizer_keeps_star_and_blocked(): void {
 		$out = aafm_sanitize_denied_meta_keys_input(
@@ -29,7 +29,7 @@ final class MetaKeySanitizerTest extends TestCase {
 	}
 
 	/**
-	 * Exposed user-meta — keeps `*`, splits/trims/de-dupes, drops empties.
+	 * Exposed user-meta - keeps `*`, splits/trims/de-dupes, drops empties.
 	 */
 	public function test_exposed_user_meta_keys_sanitizer_keeps_star(): void {
 		$out = aafm_sanitize_exposed_user_meta_keys_input(
@@ -39,7 +39,7 @@ final class MetaKeySanitizerTest extends TestCase {
 	}
 
 	/**
-	 * Deny user-meta — keeps `*`, keeps a hard-blocked auth key (no strip), trims, de-dupes.
+	 * Deny user-meta - keeps `*`, keeps a hard-blocked auth key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_user_meta_keys_sanitizer_keeps_star_and_blocked(): void {
 		$out = aafm_sanitize_denied_user_meta_keys_input(
@@ -49,7 +49,7 @@ final class MetaKeySanitizerTest extends TestCase {
 	}
 
 	/**
-	 * Exposed term-meta — keeps `*`, drops a hard-blocked key, trims, de-dupes.
+	 * Exposed term-meta - keeps `*`, drops a hard-blocked key, trims, de-dupes.
 	 */
 	public function test_exposed_term_meta_keys_sanitizer_keeps_star_drops_blocked(): void {
 		$out = aafm_sanitize_exposed_term_meta_keys_input(
@@ -59,7 +59,7 @@ final class MetaKeySanitizerTest extends TestCase {
 	}
 
 	/**
-	 * Deny term-meta — keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
+	 * Deny term-meta - keeps `*`, keeps a hard-blocked key (no strip), trims, de-dupes.
 	 */
 	public function test_denied_term_meta_keys_sanitizer_keeps_star_and_blocked(): void {
 		$out = aafm_sanitize_denied_term_meta_keys_input(

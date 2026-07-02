@@ -21,7 +21,7 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// a client_id and (wp_user_id, client_id) index on codes for the code GC and the
 	// revoke-by-client/grant code deletes; and a created_at index on clients for the
 	// abandoned-client reaper. Bumping the version makes aafm_maybe_upgrade_oauth_tables()
-	// re-run dbDelta so existing installs pick the change up (additive — indexes only).
+	// re-run dbDelta so existing installs pick the change up (additive - indexes only).
 	define( 'AAFM_OAUTH_SCHEMA_VERSION', '5' );
 }
 
@@ -227,8 +227,8 @@ function aafm_oauth_cleanup(): void {
  * Delete Dynamic-Client-Registration rows that were never used and are past a TTL.
  *
  * The DCR endpoint is public (the OAuth grant is the auth), so a client row is created before
- * any human approves it. A client that registered but no one ever consented to — and that holds
- * no token rows of any state — is dead weight. This removes such rows once they are older than
+ * any human approves it. A client that registered but no one ever consented to - and that holds
+ * no token rows of any state - is dead weight. This removes such rows once they are older than
  * the TTL (default 7 days), keeping a generous window for a legitimate register-then-approve
  * flow that spans a session. A client with at least one consent OR any token row is kept, so a
  * live or revoked-but-historical client is never reaped. Deletes the matching codes too.

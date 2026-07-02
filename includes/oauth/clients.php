@@ -118,9 +118,9 @@ function aafm_oauth_register_client( array $req ) {
  * Whether a client row exists for this id but has been deactivated (is_active = 0).
  *
  * Used to re-enforce a client deactivation AFTER authorize-time, at code redemption, refresh
- * rotation, and bearer validation — so disabling a compromised client stops its already-issued
+ * rotation, and bearer validation - so disabling a compromised client stops its already-issued
  * tokens, its refresh rotation, and the redemption of a code minted before deactivation. Returns
- * false when no row exists at all, so synthetic client ids (never registered) are not blocked —
+ * false when no row exists at all, so synthetic client ids (never registered) are not blocked -
  * only a known-and-disabled client is.
  *
  * @param string $client_id The client identifier carried by a code/token row.
@@ -186,7 +186,7 @@ function aafm_oauth_validate_redirect_uri( string $uri ): bool {
 
 	// Reject C0 control characters and DEL (CR, LF, TAB, NUL, …) anywhere in the URI.
 	// wp_parse_url() strips these before parsing, so the host would validate clean while
-	// the raw string we persist still carries the control chars — a header-splitting /
+	// the raw string we persist still carries the control chars - a header-splitting /
 	// open-redirect seed. Validate the exact bytes we store.
 	if ( preg_match( '/[\x00-\x1F\x7F]/', $uri ) ) {
 		return false;

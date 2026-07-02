@@ -1,6 +1,6 @@
 <?php
 /**
- * WooCommerce integration abilities — shared cross-domain helpers.
+ * WooCommerce integration abilities - shared cross-domain helpers.
  *
  * Loaded FIRST among the WooCommerce domain files so the helpers below exist before any
  * domain file references them. Holds only the truly cross-cutting helpers used across products,
@@ -19,8 +19,8 @@ defined( 'ABSPATH' ) || exit;
  * the manage_woocommerce capability (the cap WordPress puts on the WooCommerce admin screens).
  *
  * Used as each ability's permission_callback directly. Because it takes no object id, the abilities
- * are object-independent and fall through to this callback at discovery with empty input — the
- * correct discovery answer — so none needs a server.php case.
+ * are object-independent and fall through to this callback at discovery with empty input - the
+ * correct discovery answer - so none needs a server.php case.
  *
  * @return bool
  */
@@ -46,7 +46,7 @@ function aafm_wc_sanitize_price( $value ): string {
  * WooCommerce date getters (get_date_created, get_date_paid, …) return a WC_DateTime instance at
  * runtime, but their PHPStan signature is typed as string|object|null because WC_DateTime is not
  * present in the static-analysis stubs. This helper accepts all three variants and always returns
- * a string or null — avoiding unsafe casts on raw object|null values.
+ * a string or null - avoiding unsafe casts on raw object|null values.
  *
  * @param string|object|null $date Raw date value from a WC_Order getter.
  * @return string|null

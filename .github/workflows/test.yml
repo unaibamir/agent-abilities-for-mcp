@@ -159,7 +159,7 @@ jobs:
       - name: Run PHPUnit
         run: vendor/bin/phpunit
 
-  # Single gating check that fans in the whole suite — this is the context to
+  # Single gating check that fans in the whole suite - this is the context to
   # require in branch protection, so the matrix can change without re-wiring.
   test-result:
     name: Test Suite Result

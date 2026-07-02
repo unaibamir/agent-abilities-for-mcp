@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit tests for aafm_rich_post() — the enriched post-assembly helper.
+ * Unit tests for aafm_rich_post() - the enriched post-assembly helper.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -312,7 +312,7 @@ final class RichPostTest extends TestCase {
 
 			// The hand-authored excerpt IS safe to surface.
 			$this->assertSame( 'Safe summary', $shape['excerpt'], "manual excerpt must survive ({$format})" );
-			// The body, however, never appears — no content key, no password.
+			// The body, however, never appears - no content key, no password.
 			$this->assertArrayNotHasKey( 'content', $shape, "content must be omitted for a protected post ({$format})" );
 			$this->assertStringNotContainsString( 'SECRETBODY', $json, "body leaked ({$format})" );
 			$this->assertStringNotContainsString( 'TopSecretPass123', $json, "password leaked ({$format})" );

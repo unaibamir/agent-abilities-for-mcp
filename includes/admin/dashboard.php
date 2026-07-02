@@ -11,7 +11,7 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Users that hold at least one application password — the accounts an MCP agent
+ * Users that hold at least one application password - the accounts an MCP agent
  * could authenticate as. Bounded to a sane page; exposes only id/login/roles and
  * an admin flag, never email, display name, or any password material.
  *
@@ -98,7 +98,7 @@ function aafm_activity_count(): int {
  *
  * This is recent-principal activity read back from the audit log, NOT a live socket or
  * connection count. created_at is stored as a UTC ('mysql', true) datetime string, so the
- * cutoff is computed with gmdate() and the query counts every distinct principal at once —
+ * cutoff is computed with gmdate() and the query counts every distinct principal at once -
  * no page cap, so it never undercounts on a busy site.
  *
  * @return int Number of distinct principals active in the last 24 hours.
@@ -127,12 +127,12 @@ function aafm_has_oauth_grant(): bool {
 }
 
 /**
- * The three setup steps, each derived from real, observable site state — never a
+ * The three setup steps, each derived from real, observable site state - never a
  * faked "connected" signal. Step done-ness comes straight from the data helpers:
  *
- *   [0] abilities are enabled — aafm_enabled_ability_count() > 0
- *   [1] agent is connected    — aafm_has_oauth_grant() || aafm_agent_user_candidates() non-empty
- *   [2] a call has been made  — aafm_activity_count() > 0 (logged for real)
+ *   [0] abilities are enabled - aafm_enabled_ability_count() > 0
+ *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_agent_user_candidates() non-empty
+ *   [2] a call has been made  - aafm_activity_count() > 0 (logged for real)
  *
  * The zero-based index is the contract callers rely on: $steps[0] is always the
  * abilities step, $steps[1] is always the connect step.
@@ -178,7 +178,7 @@ function aafm_setup_steps(): array {
  *
  * The checklist reflects real, observable state from aafm_setup_steps(); when all three
  * steps are done it collapses into a single "all set" success notice. The stat grid and
- * cards reuse the same counts the page already computes — enabled abilities, recent agent
+ * cards reuse the same counts the page already computes - enabled abilities, recent agent
  * activity (read from the audit log, not live connections), audit-log size, and agent
  * users, with an inline warning when an agent user can manage the site. Nothing here
  * changes state. The page shell (heading and lede) is rendered by page.php, not here.
@@ -188,7 +188,7 @@ function aafm_setup_steps(): array {
 function aafm_render_dashboard_tab(): void {
 	$endpoint = aafm_endpoint_url();
 	$enabled  = aafm_enabled_ability_count();
-	// Single source of truth for "available / total" — counts the full catalog (core + every
+	// Single source of truth for "available / total" - counts the full catalog (core + every
 	// integration's manifest total) so an inactive integration still contributes its count and
 	// the Dashboard never disagrees with the Abilities tab.
 	$total         = aafm_available_ability_count();
@@ -209,7 +209,7 @@ function aafm_render_dashboard_tab(): void {
 	// Setup steps are always rendered inside a collapsible <details class="aafm-setup">. While any
 	// step is pending the panel is open (the open attribute) with a "Finish setting up" summary, a
 	// progress bar, and the X-of-Y count. Once every step is done the panel collapses (no open
-	// attribute) into a "Setup complete" recap — the steps stay available behind the summary, and
+	// attribute) into a "Setup complete" recap - the steps stay available behind the summary, and
 	// the old standalone success notice is dropped so there is no notice-plus-gap to clean up.
 	$is_complete = $done_count === $step_total;
 	$open_attr   = $is_complete ? '' : ' open';
@@ -302,7 +302,7 @@ function aafm_render_dashboard_tab(): void {
 	echo '</div>'; // .aafm-setup-steps
 	echo '</details>';
 
-	// Stat grid — four cards reusing the counts computed above. The compact mockup
+	// Stat grid - four cards reusing the counts computed above. The compact mockup
 	// treatment: a value line plus a .stat-sub and/or a small pill, no embedded notices.
 	echo '<div class="aafm-stat-grid">';
 
@@ -419,7 +419,7 @@ function aafm_render_dashboard_tab(): void {
 	// Lower row: endpoint + versions.
 	echo '<div class="aafm-stat-grid aafm-dashboard-lower">';
 
-	// Endpoint card — keeps the existing aafm-copy button + data-copy contract (admin.js binds to it).
+	// Endpoint card - keeps the existing aafm-copy button + data-copy contract (admin.js binds to it).
 	echo '<section class="aafm-card aafm-card-endpoint">';
 	echo '<div class="aafm-card-head">';
 	echo '<span class="icon">';

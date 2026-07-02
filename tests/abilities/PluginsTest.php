@@ -4,7 +4,7 @@
  *
  * The list-plugins ability is the single read-only ability in this slice. It gates on the
  * activate_plugins capability (the bar WordPress puts on the Plugins screen) and returns
- * a per-plugin inventory of relative basename, name, version, and active state — never an
+ * a per-plugin inventory of relative basename, name, version, and active state - never an
  * absolute filesystem path. The no-path-leak assertion is the load-bearing guarantee.
  *
  * @package AgentAbilitiesForMCP

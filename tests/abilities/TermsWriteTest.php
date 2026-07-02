@@ -24,7 +24,7 @@ final class TermsWriteTest extends TestCase {
 		aafm_clear_activity_log();
 
 		// Register categories + enabled abilities inside their gated init actions,
-		// simulated by pushing the action name onto $wp_current_filter — the idiom
+		// simulated by pushing the action name onto $wp_current_filter - the idiom
 		// WP core's own ability test trait uses. wp_register_ability() refuses to run
 		// otherwise, and do_action() on the core hook trips the WPCS non-prefixed-
 		// hookname sniff (Phase 1 carried issue).
@@ -57,7 +57,7 @@ final class TermsWriteTest extends TestCase {
 		// manage_post_tags back into manage_categories, so they can't be separated;
 		// a custom taxonomy is where the distinction is real.) wp_insert_term does no
 		// internal cap check, so the gate must resolve the named taxonomy's real
-		// manage_terms cap rather than hardcoding manage_categories — otherwise an
+		// manage_terms cap rather than hardcoding manage_categories - otherwise an
 		// actor who can only manage categories could write into the custom taxonomy.
 		register_taxonomy(
 			'aafm_genre',

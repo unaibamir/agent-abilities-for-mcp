@@ -2,7 +2,7 @@
 /**
  * Tests for the OAuth WWW-Authenticate challenge attached to the MCP 401.
  *
- * The transport's 401 stays a plain WP_Error — the bundled adapter discards any
+ * The transport's 401 stays a plain WP_Error - the bundled adapter discards any
  * WP_Error data before WordPress dispatches the response, so the challenge cannot
  * ride on a data key. Instead the rest_post_dispatch filter re-derives the
  * condition (OAuth on, 401, MCP route) and sets the header on the live response.
@@ -136,7 +136,7 @@ final class ChallengeTest extends TestCase {
 
 	/**
 	 * Real path: a 401 on the MCP route, OAuth enabled, gets the WWW-Authenticate
-	 * header set by the dispatch filter — derived from route + status, not a data key.
+	 * header set by the dispatch filter - derived from route + status, not a data key.
 	 */
 	public function test_filter_sets_header_on_mcp_401_when_oauth_enabled(): void {
 		wp_set_current_user( 0 );
@@ -149,7 +149,7 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
-	 * Negative: a 401 on an unrelated route never gets the header — the filter must
+	 * Negative: a 401 on an unrelated route never gets the header - the filter must
 	 * not slap the beacon on every 401 across the site.
 	 */
 	public function test_filter_ignores_401_on_non_mcp_route(): void {
@@ -176,7 +176,7 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
-	 * Negative: MCP route, 401, but OAuth disabled — no header.
+	 * Negative: MCP route, 401, but OAuth disabled - no header.
 	 */
 	public function test_filter_ignores_mcp_401_when_oauth_disabled(): void {
 		update_option( 'aafm_oauth_enabled', '0' );
@@ -189,7 +189,7 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
-	 * The filter leaves a non-WP_REST_Response alone — no header is invented and the
+	 * The filter leaves a non-WP_REST_Response alone - no header is invented and the
 	 * value is returned untouched.
 	 */
 	public function test_filter_ignores_non_rest_response(): void {
@@ -203,8 +203,8 @@ final class ChallengeTest extends TestCase {
 	/**
 	 * Integration through the registered hook: an unauthenticated dispatch to the
 	 * MCP route yields a 401, and running that 401 through the rest_post_dispatch
-	 * filter chain — the exact apply_filters() core fires in WP_REST_Server::serve_request()
-	 * — sets the WWW-Authenticate header. This proves the filter is wired on the hook
+	 * filter chain - the exact apply_filters() core fires in WP_REST_Server::serve_request()
+	 * - sets the WWW-Authenticate header. This proves the filter is wired on the hook
 	 * in the plugin bootstrap (not just callable in isolation) and that it matches the
 	 * live route. (rest_do_request() itself does not apply rest_post_dispatch, so the
 	 * filter chain is invoked the way the real HTTP entry point does.)

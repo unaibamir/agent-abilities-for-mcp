@@ -110,7 +110,7 @@ final class ConnectionTest extends TestCase {
 		$snippet = aafm_client_snippet( 'claude', 'mcp-agent' );
 		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );
 		$this->assertStringContainsString( 'mcp-agent', $snippet );
-		// The wizard never embeds a real secret — only the paste placeholder.
+		// The wizard never embeds a real secret - only the paste placeholder.
 		$this->assertStringContainsString( 'PASTE-APPLICATION-PASSWORD-HERE', $snippet );
 	}
 
@@ -235,7 +235,7 @@ final class ConnectionTest extends TestCase {
 	public function test_connection_tab_shows_the_endpoint_once_with_oauth_on(): void {
 		// OAuth on (the default) used to render the endpoint twice: once in the OAuth card
 		// and once in the standalone endpoint card. The endpoint label is now shown exactly
-		// once — in the canonical endpoint card.
+		// once - in the canonical endpoint card.
 		update_option( 'aafm_oauth_enabled', '1' );
 		$html = $this->render_connection_tab();
 
@@ -267,7 +267,7 @@ final class ConnectionTest extends TestCase {
 		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
 		remove_filter( 'aafm_site_is_local', '__return_true' );
 		$this->assertStringContainsString( 'NODE_EXTRA_CA_CERTS', $snippet );
-		// Path is machine-specific — placeholder only, never a hardcoded real path.
+		// Path is machine-specific - placeholder only, never a hardcoded real path.
 		$this->assertStringContainsString( 'PATH-TO-YOUR-mkcert-rootCA.pem', $snippet );
 	}
 
@@ -350,7 +350,7 @@ final class ConnectionTest extends TestCase {
 		$ap_start = strpos( $html, 'aafm-app-password-fallback' );
 		$this->assertNotFalse( $ap_start, 'App-Password fallback wrapper not found in rendered HTML.' );
 
-		// The two sections must be structurally separate — AP fallback follows OAuth card.
+		// The two sections must be structurally separate - AP fallback follows OAuth card.
 		$this->assertGreaterThan( $oauth_start, $ap_start, 'App-Password fallback must come after the OAuth card.' );
 
 		// Extract the OAuth card region (up to where the app-password fallback starts).
@@ -360,7 +360,7 @@ final class ConnectionTest extends TestCase {
 		$this->assertStringNotContainsString(
 			'WP_API_PASSWORD',
 			$oauth_region,
-			'OAuth card must not contain WP_API_PASSWORD — OAuth needs no stored secret.'
+			'OAuth card must not contain WP_API_PASSWORD - OAuth needs no stored secret.'
 		);
 		$this->assertStringNotContainsString(
 			'PASTE-APPLICATION-PASSWORD-HERE',
@@ -387,7 +387,7 @@ final class ConnectionTest extends TestCase {
 	 * OS toggle has something to switch to.
 	 *
 	 * Locks the regression where the OS-tab handler was scoped to .aafm-oauth-picker, which
-	 * holds only the tabs — the snippets live in the sibling .aafm-oauth-panels, so a Windows
+	 * holds only the tabs - the snippets live in the sibling .aafm-oauth-panels, so a Windows
 	 * user on the recommended OAuth path was shown the macOS/Linux command. Asserting both
 	 * variants render (npx for unix, cmd for windows) proves the toggle has valid targets in
 	 * the card the JS now scopes to (.aafm-oauth-card).
@@ -413,7 +413,7 @@ final class ConnectionTest extends TestCase {
 
 	/**
 	 * Regression guard: the <details> wrapper for the App-Password fallback must be
-	 * balanced — the number of <details> opens in the fallback region must equal the
+	 * balanced - the number of <details> opens in the fallback region must equal the
 	 * number of </details> closes in that region.
 	 *
 	 * Finds the full <details ...aafm-app-password-fallback...> tag so the region

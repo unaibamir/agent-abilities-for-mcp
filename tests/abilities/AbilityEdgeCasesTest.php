@@ -197,7 +197,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 	public function test_get_comments_whole_site_listing_excludes_comments_on_hidden_posts(): void {
 		// A subscriber paging the whole-site approved listing (no post_id) must see
 		// comments on PUBLIC posts but never an approved comment whose parent post is
-		// private/draft — "approved" is not "public" when the post itself is hidden.
+		// private/draft - "approved" is not "public" when the post itself is hidden.
 		$public_post = self::factory()->post->create( array( 'post_status' => 'publish' ) );
 		self::factory()->comment->create(
 			array(
@@ -279,7 +279,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 				'post_status' => 'publish',
 			)
 		);
-		// 'trash' is never an allow-listed status for the updater — execute must error
+		// 'trash' is never an allow-listed status for the updater - execute must error
 		// rather than silently route the post to trash via the status field.
 		$out = wp_get_ability( 'aafm/update-post' )->execute(
 			array(
@@ -321,7 +321,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		remove_action( 'post_updated', $nuke, 10 );
 
 		$this->assertInstanceOf( WP_Error::class, $out );
-		// Must be the plugin's own clean generic error — not the Abilities API's
+		// Must be the plugin's own clean generic error - not the Abilities API's
 		// 'ability_callback_exception' wrapper, which would mean a raw TypeError
 		// escaped the execute callback.
 		$this->assertSame( 'aafm_error', $out->get_error_code() );
@@ -389,7 +389,7 @@ final class AbilityEdgeCasesTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		// A non-empty payload that base64-decodes to plain text (not an image). It
 		// passes the schema's minLength and strict base64 decode, then fails the
-		// byte-sniffed image allow-list — no file is written.
+		// byte-sniffed image allow-list - no file is written.
 		$before = count(
 			get_posts(
 				array(

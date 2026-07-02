@@ -4,7 +4,7 @@
  *
  * Exposes the three public OAuth HTTP routes under the
  * `agent-abilities-for-mcp/oauth` namespace. Each route's permission_callback is
- * `__return_true` — the OAuth grant itself is the authentication, not a WordPress
+ * `__return_true` - the OAuth grant itself is the authentication, not a WordPress
  * capability. The handlers gate on the feature toggles, enforce the HTTPS policy,
  * and rate-limit before doing any work, then delegate the cryptographic and
  * storage logic to the clients/codes/tokens modules. Every success response
@@ -77,15 +77,15 @@ function aafm_oauth_field_too_long( string $value ): bool {
 /**
  * Register the three public OAuth 2.0 REST routes.
  *
- * Hooked on `rest_api_init`. These endpoints are publicly reachable by design — the
+ * Hooked on `rest_api_init`. These endpoints are publicly reachable by design - the
  * OAuth 2.0 framework and its extension RFCs require them to be open before any
  * client has obtained credentials:
  *
- *   /register — Dynamic Client Registration (RFC 7591). The callback inspects the
+ *   /register - Dynamic Client Registration (RFC 7591). The callback inspects the
  *               supplied client metadata from the JSON request body.
- *   /token    — Token endpoint (RFC 6749 §3.2). The callback validates the client
+ *   /token    - Token endpoint (RFC 6749 §3.2). The callback validates the client
  *               credentials and grant parameters from the request body.
- *   /revoke   — Token Revocation (RFC 7009). The callback validates the token and
+ *   /revoke   - Token Revocation (RFC 7009). The callback validates the token and
  *               caller identity from the request body.
  *
  * `permission_callback` must be `__return_true` for all three: a gate at the routing
@@ -234,7 +234,7 @@ function aafm_oauth_rest_require_https() {
 }
 
 /**
- * POST /register — dynamic client registration (RFC 7591).
+ * POST /register - dynamic client registration (RFC 7591).
  *
  * Gated on both the OAuth and DCR toggles (404 when either is off), HTTPS-only in
  * production, and rate-limited. Delegates validation and storage to
@@ -331,7 +331,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 }
 
 /**
- * POST /token — the authorization_code and refresh_token grants.
+ * POST /token - the authorization_code and refresh_token grants.
  *
  * Gated on the OAuth toggle (404 when off), HTTPS-only in production, and
  * rate-limited. Dispatches on grant_type: authorization_code redeems the code and
@@ -416,7 +416,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 		return $invalid_grant;
 	}
 
-	// A deactivated client cannot redeem a code minted before it was disabled — is_active is
+	// A deactivated client cannot redeem a code minted before it was disabled - is_active is
 	// only checked at authorize-time otherwise, so re-check it here.
 	if ( aafm_oauth_client_is_deactivated( $client_id ) ) {
 		return $invalid_grant;
@@ -476,7 +476,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 		);
 	}
 
-	// aafm_oauth_rotate_refresh() manages its own transaction — never wrap it.
+	// aafm_oauth_rotate_refresh() manages its own transaction - never wrap it.
 	$tokens = aafm_oauth_rotate_refresh( $refresh_token, $client_id );
 	if ( is_wp_error( $tokens ) ) {
 		return aafm_oauth_rest_error(
@@ -510,7 +510,7 @@ function aafm_oauth_rest_token_response( array $tokens ): WP_REST_Response {
 }
 
 /**
- * POST /revoke — token revocation (RFC 7009).
+ * POST /revoke - token revocation (RFC 7009).
  *
  * Gated on the OAuth toggle (404 when off), HTTPS-only in production, and
  * rate-limited. Always returns 200 with an empty body regardless of whether the

@@ -6,7 +6,7 @@
  * Rank Math is not installed on the test site, so the fixture forces the rankmath predicate active
  * and defines the minimal host signal (a RankMath marker class + the rendered-head filter) via
  * stub_rankmath(). The abilities read/write rank_math_* post meta with core get_post_meta/
- * update_post_meta — including the serialized robots array and the dynamic per-type schema keys.
+ * update_post_meta - including the serialized robots array and the dynamic per-type schema keys.
  *
  * @package AgentAbilitiesForMCP
  */

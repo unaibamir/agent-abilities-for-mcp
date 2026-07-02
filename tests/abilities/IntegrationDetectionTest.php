@@ -22,7 +22,7 @@ final class IntegrationDetectionTest extends TestCase {
 
 	public function test_host_absent_means_inactive_by_default(): void {
 		// None of the host plugins is installed on the test site, so all three SEO plugins are
-		// inactive. Yoast keys on a constant, Rank Math on a class, AIOSEO on a function — none of
+		// inactive. Yoast keys on a constant, Rank Math on a class, AIOSEO on a function - none of
 		// which the bare test site defines (a prior SEO suite may define the markers process-wide,
 		// so pin each seam off, the same seam production detection passes through, to assert the
 		// host-absent default deterministically).
@@ -37,15 +37,15 @@ final class IntegrationDetectionTest extends TestCase {
 		remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
 		// ACF detection keys on function_exists('get_field'); the AcfTest fixture defines a get_field
 		// stub process-wide (and a defined function cannot be undefined), so once that suite has run,
-		// real ACF detection legitimately reports active here. Pin the aafm_acf_active seam off — the
-		// same seam production detection passes through — to assert the host-absent default.
+		// real ACF detection legitimately reports active here. Pin the aafm_acf_active seam off - the
+		// same seam production detection passes through - to assert the host-absent default.
 		add_filter( 'aafm_acf_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'acf' ) );
 		remove_filter( 'aafm_acf_active', '__return_false', 99 );
 		// WooCommerce detection keys on class_exists('WooCommerce'); the WooProductsTest fixture
 		// defines a WooCommerce marker class process-wide (and a defined class cannot be undefined),
 		// so once that suite has run real WC detection legitimately reports active here. Pin the
-		// aafm_woocommerce_active seam off — the same seam production detection passes through — to
+		// aafm_woocommerce_active seam off - the same seam production detection passes through - to
 		// assert the host-absent default.
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
 		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );

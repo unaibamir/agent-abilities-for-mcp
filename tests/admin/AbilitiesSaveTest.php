@@ -196,7 +196,7 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
-		// Every Abilities-tab subject that has at least one ability must get a sub-tab — except the
+		// Every Abilities-tab subject that has at least one ability must get a sub-tab - except the
 		// 'site' subject, which is no longer one chip: it is split into the six display tabs from
 		// aafm_site_subgroups() (see test_site_groups_render_as_six_sub_tab_chips). Integration
 		// subjects render on the Integrations tab, so they are excluded here too.
@@ -234,7 +234,7 @@ final class AbilitiesSaveTest extends TestCase {
 		// and its checkboxes must sit inside that panel (not in another subject's panel). The panel
 		// runs from its own open to the next subject panel's open (or, if content is the last panel,
 		// the abilities form's save-status span), so slice on that boundary rather than the first
-		// </div> — the notice component and the meta selector both nest <div>s inside the panel,
+		// </div> - the notice component and the meta selector both nest <div>s inside the panel,
 		// which a naive first-</div> slice would catch. The fallback keys off aafm-save-status,
 		// which the form renders exactly once after every panel, rather than the shared
 		// aafm-btn-primary class that also marks the post-types and meta-keys save buttons.
@@ -265,7 +265,7 @@ final class AbilitiesSaveTest extends TestCase {
 		aafm_render_abilities_tab();
 		$html = (string) ob_get_clean();
 
-		// The single "Site & structure" chip is gone — its six groups are top-level chips now.
+		// The single "Site & structure" chip is gone - its six groups are top-level chips now.
 		$this->assertStringNotContainsString( 'Site &amp; structure', $html );
 		$this->assertStringNotContainsString( 'Site & structure', $html );
 		// And there is no longer a single site panel: each group is its own display tab.
@@ -292,7 +292,7 @@ final class AbilitiesSaveTest extends TestCase {
 		// Every chip carries a count badge (same markup as the other subject chips).
 		$this->assertStringContainsString( '<span class="count">', $bar );
 
-		// The old in-tab sub-group headings are gone — these are tabs now.
+		// The old in-tab sub-group headings are gone - these are tabs now.
 		$this->assertStringNotContainsString( 'aafm-subsection-head', $html );
 	}
 
@@ -341,7 +341,7 @@ final class AbilitiesSaveTest extends TestCase {
 	}
 
 	public function test_site_subgroup_split_is_presentation_only(): void {
-		// The registry subject of a themes ability is unchanged — the 6-way split is purely a
+		// The registry subject of a themes ability is unchanged - the 6-way split is purely a
 		// rendering grouping, not a re-subjecting of the catalog.
 		$registry = aafm_get_abilities_registry();
 		$this->assertSame( 'site', (string) $registry['aafm/get-active-theme']['subject'] );
@@ -354,7 +354,7 @@ final class AbilitiesSaveTest extends TestCase {
 		// aafm_site_subgroups() does NOT have to list every site ability: anything it omits
 		// falls into the rendered "Other" group, and test_site_panel_splits_into_named_subgroups
 		// already proves no site ability vanishes from the panel. So the real contract here is
-		// narrower — the known structure abilities each have an explicit home in the map.
+		// narrower - the known structure abilities each have an explicit home in the map.
 		$mapped = array();
 		foreach ( aafm_site_subgroups() as $group ) {
 			foreach ( $group['abilities'] as $ability_name ) {

@@ -461,7 +461,7 @@ class AuthorizeTest extends TestCase {
 	/**
 	 * The consent CSP allows the resulting cross-origin redirect: when the validated
 	 * client origin is supplied, form-action carries BOTH 'self' and that origin, never
-	 * the path. This is the fix for the form-action redirect block — without the origin
+	 * the path. This is the fix for the form-action redirect block - without the origin
 	 * the browser aborts the 302 to the client and the code never arrives.
 	 */
 	public function test_consent_csp_form_action_includes_validated_client_origin(): void {
@@ -484,7 +484,7 @@ class AuthorizeTest extends TestCase {
 	/**
 	 * When the consent stylesheet is offloaded to a different origin (CDN / separate asset
 	 * host via plugins_url), 'self' alone would block it, so the CSP adds exactly that one
-	 * asset origin to style-src — never a wildcard, and only when it differs from the page.
+	 * asset origin to style-src - never a wildcard, and only when it differs from the page.
 	 */
 	public function test_consent_csp_allows_offloaded_stylesheet_origin(): void {
 		$cdn = static function () {
@@ -496,7 +496,7 @@ class AuthorizeTest extends TestCase {
 
 		// The offloaded origin is whitelisted alongside 'self' so the stylesheet can load.
 		$this->assertStringContainsString( "style-src 'self' https://cdn.example.net;", $csp );
-		// Only the bare origin — never the path, never a wildcard.
+		// Only the bare origin - never the path, never a wildcard.
 		$this->assertStringNotContainsString( '/consent.css', $csp );
 		$this->assertStringNotContainsString( '*', $csp );
 	}

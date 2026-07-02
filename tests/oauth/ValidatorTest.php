@@ -16,8 +16,8 @@ use WP_Error;
 
 /**
  * Verifies that a valid `aafm_oat_` bearer resolves to the approving user on the
- * determine_current_user filter, while every non-OAuth path — App Passwords,
- * already-resolved users, foreign bearers, expired/wrong-audience tokens — is
+ * determine_current_user filter, while every non-OAuth path - App Passwords,
+ * already-resolved users, foreign bearers, expired/wrong-audience tokens - is
  * left byte-for-byte unchanged.
  */
 class ValidatorTest extends TestCase {
@@ -162,7 +162,7 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * A valid aafm_oat_ token authenticates on the MCP route but NOT on an unrelated core
-	 * REST route — the MCP token must never become a site-wide WP bearer credential.
+	 * REST route - the MCP token must never become a site-wide WP bearer credential.
 	 */
 	public function test_token_does_not_resolve_off_mcp_route(): void {
 		$uid    = self::factory()->user->create();
@@ -208,7 +208,7 @@ class ValidatorTest extends TestCase {
 	/**
 	 * TF-2: on a subdirectory install (site under a path prefix like /blog), the pretty-permalink
 	 * MCP path is /blog/wp-json/agent-abilities-for-mcp/mcp. The route guard must derive the
-	 * expected path from rest_url(), which carries that prefix, so a valid token still resolves —
+	 * expected path from rest_url(), which carries that prefix, so a valid token still resolves -
 	 * a hardcoded /wp-json/... literal would never match.
 	 */
 	public function test_token_resolves_on_subdirectory_install(): void {
@@ -264,7 +264,7 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * Where HTTPS is required (production) and the request is plain http, a valid token does
-	 * not resolve — the validator enforces the same HTTPS policy as the other OAuth paths.
+	 * not resolve - the validator enforces the same HTTPS policy as the other OAuth paths.
 	 */
 	public function test_token_does_not_resolve_over_plain_http_when_https_required(): void {
 		if ( ! aafm_oauth_https_required() ) {
@@ -287,7 +287,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * T1-8: deactivating a client invalidates its live access tokens — a bearer whose owning
+	 * T1-8: deactivating a client invalidates its live access tokens - a bearer whose owning
 	 * client is disabled no longer resolves a user, even on the MCP route.
 	 */
 	public function test_bearer_does_not_resolve_for_deactivated_client(): void {
@@ -323,7 +323,7 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * The bearer is read from the FastCGI-only REDIRECT_HTTP_AUTHORIZATION key
-	 * when HTTP_AUTHORIZATION is absent — a valid token there resolves its user.
+	 * when HTTP_AUTHORIZATION is absent - a valid token there resolves its user.
 	 */
 	public function test_resolves_bearer_from_redirect_http_authorization(): void {
 		$uid    = self::factory()->user->create();
@@ -341,7 +341,7 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * FROZEN INVARIANT: a non-aafm_oat_ bearer is left untouched — App Passwords
+	 * FROZEN INVARIANT: a non-aafm_oat_ bearer is left untouched - App Passwords
 	 * and every other scheme resolve undisturbed.
 	 */
 	public function test_ignores_non_aafm_bearer(): void {
@@ -418,7 +418,7 @@ class ValidatorTest extends TestCase {
 
 	/**
 	 * With no Authorization header at all, the incoming value passes through
-	 * unchanged — for both a falsey and a non-zero incoming user id.
+	 * unchanged - for both a falsey and a non-zero incoming user id.
 	 */
 	public function test_no_bearer_returns_incoming_value(): void {
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
@@ -525,7 +525,7 @@ class ValidatorTest extends TestCase {
 	 * diverge the check silently fails and every valid bearer resolves no user.
 	 *
 	 * This also verifies that aafm_endpoint_url() does not fatal when $wp_rewrite is
-	 * null — the regression that caused HTTP 500 on the first claude.ai OAuth connect.
+	 * null - the regression that caused HTTP 500 on the first claude.ai OAuth connect.
 	 */
 	public function test_endpoint_url_is_consistent_with_null_wp_rewrite(): void {
 		// Capture the URL while $wp_rewrite IS available (mint-time path).

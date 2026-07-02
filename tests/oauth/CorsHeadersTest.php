@@ -47,7 +47,7 @@ final class CorsHeadersTest extends TestCase {
 	}
 
 	/**
-	 * The core defaults survive — the filter is additive, never a replacement.
+	 * The core defaults survive - the filter is additive, never a replacement.
 	 */
 	public function test_exposed_headers_preserve_core_defaults(): void {
 		$headers = aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
@@ -89,7 +89,7 @@ final class CorsHeadersTest extends TestCase {
 	}
 
 	/**
-	 * Both filters return a list keyed from zero — Access-Control header builders
+	 * Both filters return a list keyed from zero - Access-Control header builders
 	 * implode the values, but a clean integer-indexed list is the contract.
 	 */
 	public function test_filters_return_reindexed_lists(): void {

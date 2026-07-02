@@ -2,7 +2,7 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Agent Abilities for MCP — MCP Server for AI Agents 1.0.0\n"
+"Project-Id-Version: Agent Abilities for MCP - MCP Server for AI Agents 1.0.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/html\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,7 +16,7 @@ msgstr ""
 
 #. Plugin Name of the plugin
 #: agent-abilities-for-mcp.php
-msgid "Agent Abilities for MCP — MCP Server for AI Agents"
+msgid "Agent Abilities for MCP - MCP Server for AI Agents"
 msgstr ""
 
 #. Plugin URI of the plugin
@@ -290,7 +290,7 @@ msgid "Delete media"
 msgstr ""
 
 #: includes/abilities/media.php:72
-msgid "Permanently delete an attachment — the file and library entry are removed and cannot be recovered."
+msgid "Permanently delete an attachment - the file and library entry are removed and cannot be recovered."
 msgstr ""
 
 #: includes/abilities/media.php:509
@@ -469,7 +469,7 @@ msgid "Delete page"
 msgstr ""
 
 #: includes/abilities/pages.php:63
-msgid "Permanently delete a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead."
+msgid "Permanently delete a page, bypassing the Trash. This cannot be undone - use trash-page to remove a page recoverably instead."
 msgstr ""
 
 #: includes/abilities/plugins.php:29
@@ -478,7 +478,7 @@ msgstr ""
 
 #: includes/abilities/plugins.php:30
 #: includes/admin/disclosures.php:51
-msgid "Lists installed plugins with their name, version, and active state. Read-only — it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability."
+msgid "Lists installed plugins with their name, version, and active state. Read-only - it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability."
 msgstr ""
 
 #: includes/abilities/posts.php:42
@@ -566,11 +566,11 @@ msgid "Delete post"
 msgstr ""
 
 #: includes/abilities/posts.php:123
-msgid "Permanently delete a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead."
+msgid "Permanently delete a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead."
 msgstr ""
 
 #: includes/abilities/posts.php:503
-msgid "Slug of an agent-writable custom content type. Not every public type is writable — only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs."
+msgid "Slug of an agent-writable custom content type. Not every public type is writable - only types the operator has exposed to agents are accepted; others are rejected. Call aafm/get-post-types and use the writable flag to find valid slugs."
 msgstr ""
 
 #: includes/abilities/posts.php:578
@@ -636,7 +636,7 @@ msgid "List revisions"
 msgstr ""
 
 #: includes/abilities/revisions.php:28
-msgid "List the revisions of a post the agent can edit (metadata only — no body content)."
+msgid "List the revisions of a post the agent can edit (metadata only - no body content)."
 msgstr ""
 
 #: includes/abilities/revisions.php:35
@@ -1047,7 +1047,7 @@ msgid "List WooCommerce orders"
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:66
-msgid "Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean — no billing or shipping details. Requires the manage-WooCommerce capability."
+msgid "Lists WooCommerce orders with their id, number, status, total, currency, date, and customer id, plus a total count. List rows are lean - no billing or shipping details. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:74
@@ -1696,7 +1696,7 @@ msgid "Recommended"
 msgstr ""
 
 #: includes/admin/connection.php:769
-msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval — no secret to copy or store."
+msgid "Paste your site's MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to copy or store."
 msgstr ""
 
 #: includes/admin/connection.php:775
@@ -1773,7 +1773,7 @@ msgid "Generate an Application Password for the agent user (Users → Profile �
 msgstr ""
 
 #: includes/admin/connection.php:1017
-msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above."
+msgid "On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above."
 msgstr ""
 
 #: includes/admin/connection.php:1019
@@ -1798,7 +1798,7 @@ msgid "Check the endpoint is reachable"
 msgstr ""
 
 #: includes/admin/connection.php:1064
-msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools."
+msgid "This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools."
 msgstr ""
 
 #: includes/admin/connection.php:1071
@@ -2154,7 +2154,7 @@ msgid "Lists WooCommerce orders with their id, number, status, total, currency, 
 msgstr ""
 
 #: includes/admin/disclosures.php:80
-msgid "Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address — including email and phone — and the shipping address. Customer PII (email, phone, full address) is returned under the Integrations security disclaimer and is always gated by the manage-WooCommerce capability. Requires the manage-WooCommerce capability."
+msgid "Reads one WooCommerce order by id: line items, totals, status, dates, customer note, and the full customer billing address - including email and phone - and the shipping address. Customer PII (email, phone, full address) is returned under the Integrations security disclaimer and is always gated by the manage-WooCommerce capability. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:83
@@ -2354,7 +2354,7 @@ msgid "Removes an allowlisted meta key and all its values from a term you can ed
 msgstr ""
 
 #: includes/admin/disclosures.php:148
-msgid "Permanently deletes a comment. This bypasses the Trash and cannot be undone — use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment."
+msgid "Permanently deletes a comment. This bypasses the Trash and cannot be undone - use moderate-comment to trash a comment recoverably instead. Requires edit access to that comment."
 msgstr ""
 
 #: includes/admin/disclosures.php:149
@@ -2370,11 +2370,11 @@ msgid "Removes an allowlisted user meta key from a user the agent can edit. This
 msgstr ""
 
 #: includes/admin/disclosures.php:152
-msgid "Permanently deletes a post, bypassing the Trash. This cannot be undone — use trash-post to remove a post recoverably instead. Requires delete access to that post. Off by default."
+msgid "Permanently deletes a post, bypassing the Trash. This cannot be undone - use trash-post to remove a post recoverably instead. Requires delete access to that post. Off by default."
 msgstr ""
 
 #: includes/admin/disclosures.php:153
-msgid "Permanently deletes a page, bypassing the Trash. This cannot be undone — use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default."
+msgid "Permanently deletes a page, bypassing the Trash. This cannot be undone - use trash-page to remove a page recoverably instead. Requires delete access to that page. Off by default."
 msgstr ""
 
 #: includes/admin/disclosures.php:154
@@ -2382,7 +2382,7 @@ msgid "Writes a small allowlist of site settings only (name, tagline, timezone, 
 msgstr ""
 
 #: includes/admin/disclosures.php:155
-msgid "Permanently deletes a navigation menu and all of its items. This cannot be undone — menus have no Trash. Requires the edit-theme-options capability."
+msgid "Permanently deletes a navigation menu and all of its items. This cannot be undone - menus have no Trash. Requires the edit-theme-options capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:156
@@ -2426,7 +2426,7 @@ msgid "Returns a sales summary (total sales, order count, net sales, average ord
 msgstr ""
 
 #: includes/admin/disclosures.php:178
-msgid "Returns the top-selling products for a period (week, month, or year) ordered by quantity sold. Returns product id, name, and quantity only — no pricing data. Requires the manage-WooCommerce capability."
+msgid "Returns the top-selling products for a period (week, month, or year) ordered by quantity sold. Returns product id, name, and quantity only - no pricing data. Requires the manage-WooCommerce capability."
 msgstr ""
 
 #: includes/admin/disclosures.php:179
@@ -2610,7 +2610,7 @@ msgid "Request failed."
 msgstr ""
 
 #: includes/admin/page.php:151
-msgid "Could not save — your previous settings are still in effect."
+msgid "Could not save - your previous settings are still in effect."
 msgstr ""
 
 #: includes/admin/page.php:152
@@ -2620,7 +2620,7 @@ msgstr ""
 #. translators: %d: number of allowlist lines that were dropped as invalid.
 #: includes/admin/page.php:154
 #, php-format
-msgid "Saved. Dropped %d line(s) that were not a valid IP or range — check the allowlist."
+msgid "Saved. Dropped %d line(s) that were not a valid IP or range - check the allowlist."
 msgstr ""
 
 #. translators: %d: the new agent user's numeric ID.
@@ -2648,7 +2648,7 @@ msgstr ""
 #. translators: 1: HTTP status code, 2: number of tools visible in the admin view.
 #: includes/admin/page.php:163
 #, php-format
-msgid "Reachable (HTTP %1$s) — %2$s tool(s) in your admin view."
+msgid "Reachable (HTTP %1$s) - %2$s tool(s) in your admin view."
 msgstr ""
 
 #. translators: %s: HTTP status code returned by the endpoint.
@@ -2849,7 +2849,7 @@ msgid "Allowed"
 msgstr ""
 
 #: includes/admin/page.php:1304
-msgid "read-only — writes need map_meta_cap"
+msgid "read-only - writes need map_meta_cap"
 msgstr ""
 
 #: includes/admin/page.php:1305
@@ -2867,7 +2867,7 @@ msgid "Expose %s to agents"
 msgstr ""
 
 #: includes/admin/page.php:1318
-msgid "Exposed types are still gated by that type's capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive — for example, a type that stores a person's name in the title would make that name readable."
+msgid "Exposed types are still gated by that type's capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person's name in the title would make that name readable."
 msgstr ""
 
 #: includes/admin/page.php:1319
@@ -3097,7 +3097,7 @@ msgid "A redirect is breaking the request (trailing slash or http to https)"
 msgstr ""
 
 #: includes/admin/page.php:1751
-msgid "A 301 redirect — adding or removing a trailing slash, or forcing http to https — can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem."
+msgid "A 301 redirect - adding or removing a trailing slash, or forcing http to https - can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem."
 msgstr ""
 
 #: includes/admin/page.php:1752
@@ -3109,7 +3109,7 @@ msgid "Test the endpoint yourself with curl"
 msgstr ""
 
 #: includes/admin/page.php:1761
-msgid "This one-liner sends a real MCP \"initialize\" call to your endpoint with the agent user's Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and — if it fails — which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):"
+msgid "This one-liner sends a real MCP \"initialize\" call to your endpoint with the agent user's Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and - if it fails - which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):"
 msgstr ""
 
 #: includes/admin/page.php:1763
@@ -3125,7 +3125,7 @@ msgid "200"
 msgstr ""
 
 #: includes/admin/page.php:1767
-msgid "reachable and authenticated; the body is a JSON-RPC result. Everything is working — if the AI client still fails, the block is on its side (see the 403/406/429 entry above)."
+msgid "reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above)."
 msgstr ""
 
 #: includes/admin/page.php:1768
@@ -3169,7 +3169,7 @@ msgid "Windows MCP clients cannot spawn the npx shim by its name alone. The laun
 msgstr ""
 
 #: includes/admin/page.php:1782
-msgid "You do not need to hand-edit anything — switch to the \"Windows\" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly."
+msgid "You do not need to hand-edit anything - switch to the \"Windows\" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly."
 msgstr ""
 
 #: includes/admin/page.php:1789
@@ -3181,11 +3181,11 @@ msgid "Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust
 msgstr ""
 
 #: includes/admin/page.php:1792
-msgid "Quick (least safe) — add this to the config env block:"
+msgid "Quick (least safe) - add this to the config env block:"
 msgstr ""
 
 #: includes/admin/page.php:1794
-msgid "Better — point Node at your local CA instead of disabling verification entirely (for example mkcert's rootCA.pem):"
+msgid "Better - point Node at your local CA instead of disabling verification entirely (for example mkcert's rootCA.pem):"
 msgstr ""
 
 #: includes/admin/page.php:1797
@@ -3221,7 +3221,7 @@ msgid "Some hosts and reverse proxies strip the Authorization header before it r
 msgstr ""
 
 #: includes/admin/page.php:1824
-msgid "Apache (.htaccess) — either of these:"
+msgid "Apache (.htaccess) - either of these:"
 msgstr ""
 
 #: includes/admin/page.php:1827
@@ -3237,7 +3237,7 @@ msgid "The Application Passwords option is missing from my profile"
 msgstr ""
 
 #: includes/admin/page.php:1838
-msgid "WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https — so it hides the option."
+msgid "WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https - so it hides the option."
 msgstr ""
 
 #: includes/admin/page.php:1839
@@ -3245,7 +3245,7 @@ msgid "Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly 
 msgstr ""
 
 #: includes/admin/page.php:1840
-msgid "Do not enable Application Passwords over genuine plaintext HTTP in production — the credential would travel unencrypted."
+msgid "Do not enable Application Passwords over genuine plaintext HTTP in production - the credential would travel unencrypted."
 msgstr ""
 
 #: includes/admin/page.php:1849
@@ -3261,7 +3261,7 @@ msgid "This is intentional least-privilege behaviour. Each connection is filtere
 msgstr ""
 
 #: includes/admin/page.php:1856
-msgid "To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do — keep it to what the agent genuinely needs."
+msgid "To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do - keep it to what the agent genuinely needs."
 msgstr ""
 
 #: includes/admin/page.php:1863
@@ -3373,7 +3373,7 @@ msgid "add it under its MCP / plugins config (mcp_config.json) and refresh the s
 msgstr ""
 
 #: includes/admin/page.php:1926
-msgid "Copy the config straight from Connection → Step 2 — do not hand-build it. On Windows, use that tab's \"Windows\" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above."
+msgid "Copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab's \"Windows\" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above."
 msgstr ""
 
 #: includes/admin/page.php:1927
@@ -3397,7 +3397,7 @@ msgid "No external calls."
 msgstr ""
 
 #: includes/admin/page.php:1938
-msgid "It never phones home. Your credentials and your content never leave the site — the AI client connects in to you, not the other way round."
+msgid "It never phones home. Your credentials and your content never leave the site - the AI client connects in to you, not the other way round."
 msgstr ""
 
 #: includes/admin/page.php:1939
@@ -3405,7 +3405,7 @@ msgid "A dedicated low-privilege user."
 msgstr ""
 
 #: includes/admin/page.php:1939
-msgid "The agent authenticates as its own separate WordPress user via an Application Password — not as you, and not as an administrator. You choose that user's role, so you set its ceiling."
+msgid "The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user's role, so you set its ceiling."
 msgstr ""
 
 #: includes/admin/page.php:1940
@@ -3413,7 +3413,7 @@ msgid "Two locks on every ability."
 msgstr ""
 
 #: includes/admin/page.php:1940
-msgid "An ability works only if you explicitly enabled it on the Abilities tab AND the agent user's capabilities allow it. The default is nothing enabled — the agent starts with zero abilities until you turn them on."
+msgid "An ability works only if you explicitly enabled it on the Abilities tab AND the agent user's capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on."
 msgstr ""
 
 #: includes/admin/page.php:1941
@@ -3429,7 +3429,7 @@ msgid "Everything is logged, values are not."
 msgstr ""
 
 #: includes/admin/page.php:1942
-msgid "Every call — including denied ones — is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it."
+msgid "Every call - including denied ones - is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it."
 msgstr ""
 
 #: includes/admin/page.php:1943
@@ -3445,7 +3445,7 @@ msgid "What does the plugin log, and does it call out to anything?"
 msgstr ""
 
 #: includes/admin/page.php:1953
-msgid "The plugin makes no external calls — nothing about your site or its content is sent anywhere."
+msgid "The plugin makes no external calls - nothing about your site or its content is sent anywhere."
 msgstr ""
 
 #: includes/admin/page.php:1954
@@ -3605,7 +3605,7 @@ msgid "Reset plugin to defaults"
 msgstr ""
 
 #: includes/admin/settings.php:425
-msgid "Clears every plugin setting — enabled abilities, exposed content types and meta keys, and all safety controls — and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
+msgid "Clears every plugin setting - enabled abilities, exposed content types and meta keys, and all safety controls - and empties the activity log. Your agent user and anything it created (posts and other content) are left untouched. This cannot be undone."
 msgstr ""
 
 #: includes/bootstrap.php:157
@@ -3778,7 +3778,7 @@ msgstr ""
 #. translators: 1: bolded phrase "as your WordPress account", 2: the username chip.
 #: includes/oauth/consent-template.php:106
 #, php-format
-msgid "The agent acts %1$s %2$s — it can do what your account is permitted to do, nothing more."
+msgid "The agent acts %1$s %2$s - it can do what your account is permitted to do, nothing more."
 msgstr ""
 
 #: includes/oauth/consent-template.php:107

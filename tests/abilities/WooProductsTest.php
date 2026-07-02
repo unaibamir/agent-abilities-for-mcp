@@ -90,7 +90,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_list_products_filters_by_status_and_totals_only_matches(): void {
 		// One publish + one draft. Filtering to draft returns only the draft, and `total` counts only
-		// the matching rows — not every product in the store.
+		// the matching rows - not every product in the store.
 		$this->stub_woocommerce(
 			array(
 				array(
@@ -243,7 +243,7 @@ final class WooProductsTest extends TestCase {
 		// HIGH-2: assert at the REGISTRY level (not via aafm_user_can_discover_ability, which leaks
 		// through the process-wide raw-permission $store once any test registered the set). The
 		// stub_woocommerce() helper defines class WooCommerce process-wide, so real detection still
-		// reports WC active after removing the force filter — pin it off through aafm_woocommerce_active.
+		// reports WC active after removing the force filter - pin it off through aafm_woocommerce_active.
 		$this->reset_integration_stubs();
 		remove_all_filters( 'aafm_integration_active_woocommerce' );
 		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
@@ -422,7 +422,7 @@ final class WooProductsTest extends TestCase {
 
 	public function test_create_then_get_round_trips_the_regular_price(): void {
 		// regular_price runs through aafm_wc_sanitize_price; assert the clean decimal reads back, and
-		// that the stub mirrors it into price (regular only — sale price is left alone).
+		// that the stub mirrors it into price (regular only - sale price is left alone).
 		$this->acting_as( 'administrator' );
 		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
@@ -543,7 +543,7 @@ final class WooProductsTest extends TestCase {
 		$this->assertTrue( $res['deleted'] );
 		$this->assertSame( 101, $res['id'] );
 
-		// Gone — a following read finds nothing.
+		// Gone - a following read finds nothing.
 		$this->assertFalse( \AAFM\Tests\WcStubStore::exists( 101 ) );
 		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
 		$this->assertInstanceOf( WP_Error::class, $read, 'A deleted product can no longer be read.' );

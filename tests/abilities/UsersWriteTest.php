@@ -58,7 +58,7 @@ final class UsersWriteTest extends TestCase {
 	/**
 	 * An empty-string default_role option (get_option's fallback only fires when the option
 	 * is ABSENT) must still floor to subscriber, never create a roleless user. The option
-	 * change lives inside the test transaction — the suite rolls it back.
+	 * change lives inside the test transaction - the suite rolls it back.
 	 */
 	public function test_create_user_floors_empty_default_role_to_subscriber(): void {
 		$this->acting_as( 'administrator' );
@@ -78,7 +78,7 @@ final class UsersWriteTest extends TestCase {
 	/**
 	 * The invariant "an agent can never mint an admin" must hold even when the site's
 	 * default_role option is itself elevated. A misconfigured (or maliciously set)
-	 * default_role of 'administrator' must NOT pass straight to wp_insert_user — the
+	 * default_role of 'administrator' must NOT pass straight to wp_insert_user - the
 	 * resolved role floors to subscriber. The option change lives inside the test
 	 * transaction, which the suite rolls back.
 	 */
@@ -136,7 +136,7 @@ final class UsersWriteTest extends TestCase {
 	 * Role escalation guard: promote_users alone is not enough. WP core (the REST users
 	 * controller and wp-admin) also requires the target role to be in get_editable_roles(),
 	 * which the editable_roles filter can prune. A capable administrator whose editable_roles
-	 * has had 'administrator' removed must be refused when assigning that role — proving the
+	 * has had 'administrator' removed must be refused when assigning that role - proving the
 	 * ability honors the same delegation boundary core does, not just the global cap.
 	 */
 	public function test_update_user_rejects_role_excluded_by_editable_roles(): void {
@@ -178,7 +178,7 @@ final class UsersWriteTest extends TestCase {
 	public function test_update_user_cannot_demote_the_last_administrator(): void {
 		$admin = $this->acting_as( 'administrator' );
 		// The WP test fixture seeds its own administrator (user 1), so reduce the
-		// admin count to exactly one — the acting admin — before the demotion attempt.
+		// admin count to exactly one - the acting admin - before the demotion attempt.
 		foreach ( get_users(
 			array(
 				'role'   => 'administrator',
@@ -205,7 +205,7 @@ final class UsersWriteTest extends TestCase {
 			'fixture must leave exactly one admin.'
 		);
 
-		// Demoting the sole remaining admin to editor would leave the site with no admin — refuse it.
+		// Demoting the sole remaining admin to editor would leave the site with no admin - refuse it.
 		$res = wp_get_ability( 'aafm/update-user' )->execute(
 			array(
 				'user_id' => $admin,
@@ -302,7 +302,7 @@ final class UsersWriteTest extends TestCase {
 	 * The actor must be capable (delete_users + delete_user) but must NOT be the victim,
 	 * and the victim must be the sole remaining administrator. We grant the actor
 	 * delete_users on a non-admin role so the administrator-role count sees only the
-	 * victim — exercising the last-admin branch, never the self branch.
+	 * victim - exercising the last-admin branch, never the self branch.
 	 */
 	public function test_delete_user_cannot_delete_the_sole_remaining_admin_when_actor_is_not_the_victim(): void {
 		// Normalize the fixture to exactly one administrator: the victim.
@@ -353,7 +353,7 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
-	 * Every sibling write slice proves a denied call writes a 'denied' audit row — the
+	 * Every sibling write slice proves a denied call writes a 'denied' audit row - the
 	 * wrapper's denial logging is the accountability contract. Pin it for the three user
 	 * writes: a subscriber (no create_users/edit_user/delete_user) is refused at the
 	 * permission layer and each refusal lands in the activity log as 'denied'.

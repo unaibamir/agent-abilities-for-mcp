@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  *
  * `get_option( $key, $default )` returns $default whenever the stored value is
  * strictly === false, so a truthy default would read a literal boolean-false
- * "off" switch as on — fail-open on a public token surface. Defaulting to '1'
+ * "off" switch as on - fail-open on a public token surface. Defaulting to '1'
  * and treating every falsy stored form as off closes that gap: the option is on
  * only when it was never set or holds a genuinely truthy value.
  *
@@ -74,7 +74,7 @@ function aafm_oauth_seed_default_options(): void {
 	// aafm_oauth_enabled() gates the CORS filters at bootstrap and the .well-known handler on
 	// parse_request, and aafm_oauth_request_targets_mcp_route() consults it on
 	// determine_current_user. They must stay autoloaded ('yes', the add_option default) so those
-	// hot-path reads never trigger a separate query — switching them to autoload 'no' would be a
+	// hot-path reads never trigger a separate query - switching them to autoload 'no' would be a
 	// per-request regression, not an improvement.
 	add_option( 'aafm_oauth_enabled', '1', '', true );
 	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
@@ -138,9 +138,9 @@ function aafm_oauth_challenge_header(): string {
  *
  * The bundled adapter discards a permission_callback's WP_Error (it logs the error
  * and returns bare false), so WordPress core manufactures its own rest_forbidden
- * 401 with no challenge data — the header can't ride on the WP_Error. This
+ * 401 with no challenge data - the header can't ride on the WP_Error. This
  * rest_post_dispatch filter therefore RE-DERIVES the condition from the request and
- * response: OAuth enabled, a 401 status (logged-out for this route — a logged-in but
+ * response: OAuth enabled, a 401 status (logged-out for this route - a logged-in but
  * unauthorized request is a 403 and must not get the beacon), and the MCP route.
  *
  * The MCP route is '/agent-abilities-for-mcp/mcp', mirroring create_server() in

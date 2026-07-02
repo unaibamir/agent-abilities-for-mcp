@@ -29,7 +29,7 @@ class AioseoStubStore {
 	public static array $rows = array();
 
 	/**
-	 * When true, the model's save() reports failure and stores nothing — modelling an AIOSEO
+	 * When true, the model's save() reports failure and stores nothing - modelling an AIOSEO
 	 * custom-table save failure so the write-failure path is exercisable.
 	 *
 	 * @var bool

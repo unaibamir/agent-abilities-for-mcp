@@ -3,7 +3,7 @@
  *
  * Static, self-contained stylesheet for the standalone consent page rendered by
  * includes/oauth/consent-template.php. The page renders outside wp-admin (custom
- * headers + exit), so admin.css is never enqueued — this file is linked directly
+ * headers + exit), so admin.css is never enqueued - this file is linked directly
  * under the consent CSP (style-src 'self').
  *
  * The token VALUES below are kept in lockstep with the admin palette in

@@ -23,7 +23,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 
 	/**
 	 * Set both term-meta options directly. Transaction rollback isolates each test, and the
-	 * suite runs against the isolated test DB — the live DDEV option store is never touched.
+	 * suite runs against the isolated test DB - the live DDEV option store is never touched.
 	 *
 	 * @param array<int,string> $exposed Exposed option value.
 	 * @param array<int,string> $deny    Deny option value.
@@ -35,7 +35,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 1 — hard-block beats `*` (an auth key can never leak under allow-all).
+	 * Row 1 - hard-block beats `*` (an auth key can never leak under allow-all).
 	 */
 	public function test_hard_block_beats_allow_star(): void {
 		$this->set_term_meta_options( array( '*' ), array() );
@@ -43,7 +43,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 2 — hard-block beats an explicit allow entry.
+	 * Row 2 - hard-block beats an explicit allow entry.
 	 */
 	public function test_hard_block_beats_explicit_allow(): void {
 		$this->set_term_meta_options( array( 'session_tokens' ), array() );
@@ -51,7 +51,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 3 — deny beats allow.
+	 * Row 3 - deny beats allow.
 	 */
 	public function test_deny_beats_explicit_allow(): void {
 		$this->set_term_meta_options( array( 'foo' ), array( 'foo' ) );
@@ -59,7 +59,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 4 — deny beats `*`: the denied key is rejected, a sibling under `*` stays exposed.
+	 * Row 4 - deny beats `*`: the denied key is rejected, a sibling under `*` stays exposed.
 	 */
 	public function test_deny_beats_allow_star(): void {
 		$this->set_term_meta_options( array( '*' ), array( 'foo' ) );
@@ -68,7 +68,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 5 — deny-`*` wins even when allow-`*` is set (deny-all kill switch).
+	 * Row 5 - deny-`*` wins even when allow-`*` is set (deny-all kill switch).
 	 */
 	public function test_deny_star_wins_even_with_allow_star(): void {
 		$this->set_term_meta_options( array( '*' ), array( '*' ) );
@@ -76,7 +76,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 6 — default-empty = default-deny.
+	 * Row 6 - default-empty = default-deny.
 	 */
 	public function test_default_empty_is_default_deny(): void {
 		$this->set_term_meta_options( array(), array() );
@@ -84,7 +84,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Row 7 — `*` exposes a normal key.
+	 * Row 7 - `*` exposes a normal key.
 	 */
 	public function test_allow_star_exposes_normal_key(): void {
 		$this->set_term_meta_options( array( '*' ), array() );
@@ -92,7 +92,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Trailing whitespace — trim() runs before floor-1, so padding cannot smuggle a
+	 * Trailing whitespace - trim() runs before floor-1, so padding cannot smuggle a
 	 * hard-blocked key past the strict in_array hard-block; a normal key trims and exposes.
 	 */
 	public function test_trailing_whitespace_cannot_smuggle_blocked_and_trims_normal(): void {
@@ -102,7 +102,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * The bare `*` sentinel is never an addressable key — even when exposed=['*']. Reject it
+	 * The bare `*` sentinel is never an addressable key - even when exposed=['*']. Reject it
 	 * with the SAME generic error code so the validator never hands `'*'` to a term-meta op.
 	 */
 	public function test_wildcard_sentinel_is_not_an_addressable_key(): void {
@@ -113,7 +113,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Oracle — rows 1, 3, 5, 6 all return the SAME error code, so deny / not-allowed /
+	 * Oracle - rows 1, 3, 5, 6 all return the SAME error code, so deny / not-allowed /
 	 * hard-block / deny-all are indistinguishable to a caller.
 	 */
 	public function test_all_reject_modes_share_one_error_code(): void {
@@ -138,7 +138,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * UNION — a legacy filter returning [] cannot shrink the option-backed exposed list, so
+	 * UNION - a legacy filter returning [] cannot shrink the option-backed exposed list, so
 	 * a key set only in the option stays exposed.
 	 */
 	public function test_filter_returning_empty_cannot_shrink_option_exposure(): void {
@@ -149,7 +149,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * UNION — the filter ADDS to the option base: a key only the filter contributes and a
+	 * UNION - the filter ADDS to the option base: a key only the filter contributes and a
 	 * key only the option contributes are BOTH exposed.
 	 */
 	public function test_filter_unions_with_option_base(): void {
@@ -161,7 +161,7 @@ final class TermMetaPrecedenceTest extends TestCase {
 	}
 
 	/**
-	 * Hard-block stays absolute under the filter — a filter that tries to add an auth key
+	 * Hard-block stays absolute under the filter - a filter that tries to add an auth key
 	 * cannot re-admit it (re-floored against the hard-block on the merged set).
 	 */
 	public function test_filter_cannot_re_admit_hard_blocked_key(): void {

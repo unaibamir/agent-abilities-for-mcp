@@ -4,8 +4,8 @@
  *
  * Exposes the WordPress block-theme surface: read the active theme and the installed theme
  * list, list and read block templates, update a database block template's markup, and read the
- * resolved global styles and settings (theme.json). Every ability gates on edit_theme_options —
- * the capability WordPress puts on the Appearance screens — reusing aafm_perm_edit_theme_options()
+ * resolved global styles and settings (theme.json). Every ability gates on edit_theme_options -
+ * the capability WordPress puts on the Appearance screens - reusing aafm_perm_edit_theme_options()
  * from menus.php (loaded first); this file never redefines it, which would be a fatal redeclare.
  *
  * The permission is object-INDEPENDENT (there is no per-template/per-theme capability), so the
@@ -15,7 +15,7 @@
  * No filesystem path is ever returned: the reads use get_stylesheet()/get_template() and the
  * theme header fields, never get_stylesheet_directory(). update-template refuses theme-FILE
  * templates (which have no backing post) and only ever edits a wp_template post's content, which
- * is kses-hardened first — block delimiters survive, scripts are stripped.
+ * is kses-hardened first - block delimiters survive, scripts are stripped.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -124,7 +124,7 @@ function aafm_args_get_active_theme(): array {
 /**
  * Execute aafm/get-active-theme.
  *
- * Returns the active theme's header fields and slugs only — never a filesystem directory.
+ * Returns the active theme's header fields and slugs only - never a filesystem directory.
  * stylesheet is the active (child) slug; template is the parent slug (same as stylesheet for a
  * non-child theme).
  *
@@ -225,7 +225,7 @@ function aafm_template_type( array $input ): string {
 }
 
 /**
- * Safe shape for one block template — id, slug, title, type, and source only.
+ * Safe shape for one block template - id, slug, title, type, and source only.
  *
  * No markup here (the list stays lean); get-template adds content. source is theme|custom: a
  * theme-FILE template ('theme') has no backing post, a database-overridden one is 'custom'.
@@ -411,11 +411,11 @@ function aafm_args_update_template(): array {
  * Execute aafm/update-template.
  *
  * Resolves the template by id (unknown id → generic error), then refuses any template that lives
- * only as a THEME FILE — those have no backing wp_template post, so editing them is not allowed
+ * only as a THEME FILE - those have no backing wp_template post, so editing them is not allowed
  * (we never write theme files).
  *
  * B-1 (load-bearing): a theme-file template's wp_id is UNSET (effectively null), not 0, and
- * 0 === null is false in PHP — so a naive `0 === $wp_id` guard would let a file template fall
+ * 0 === null is false in PHP - so a naive `0 === $wp_id` guard would let a file template fall
  * through to wp_update_post(['ID'=>null,...]), which inserts a stray post. The cast-then-compare
  * below ((int)($wp_id ?? 0) <= 0) catches both the unset/null and the literal 0 case.
  *

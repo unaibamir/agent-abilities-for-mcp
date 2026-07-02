@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) || exit;
  * Both branches MUST produce byte-identical output so the RFC 8707 audience
  * hash_equals() check in the validator passes regardless of which branch ran at
  * token-mint time versus token-check time. The reconstruction branch uses
- * get_option('permalink_structure') — which never touches $wp_rewrite — to decide
+ * get_option('permalink_structure') - which never touches $wp_rewrite - to decide
  * between the pretty-permalink (/wp-json/) and plain-permalink (?rest_route=) forms,
  * matching exactly what rest_url() would have returned.
  *
@@ -38,7 +38,7 @@ function aafm_endpoint_url(): string {
 
 	// $wp_rewrite is not yet available. Reconstruct without touching it.
 	// get_option('permalink_structure') returns '' on plain permalinks, a non-empty
-	// template (e.g. '/%postname%/') on pretty permalinks — same information $wp_rewrite
+	// template (e.g. '/%postname%/') on pretty permalinks - same information $wp_rewrite
 	// would expose, but available before $wp_rewrite is instantiated.
 	$permalink_structure = (string) get_option( 'permalink_structure', '' );
 
@@ -145,7 +145,7 @@ function aafm_diagnostic_checks(): array {
  * Create a dedicated low-privilege user for the agent.
  *
  * The agent connects as this user over an Application Password, so its reach is bounded
- * by the subscriber role — least privilege by construction, no custom auth code.
+ * by the subscriber role - least privilege by construction, no custom auth code.
  *
  * @param string $login Desired login.
  * @return array{user_id:int}|WP_Error
@@ -157,7 +157,7 @@ function aafm_create_agent_user( string $login ) {
 	}
 	$existing_id = username_exists( $login );
 	if ( $existing_id ) {
-		// The user is already there — hand back a friendly message plus the existing user's
+		// The user is already there - hand back a friendly message plus the existing user's
 		// id and edit link so the caller can offer "Edit user" instead of a dead-end error.
 		return new WP_Error(
 			'aafm_user_exists',
@@ -186,13 +186,13 @@ function aafm_create_agent_user( string $login ) {
 /**
  * Build a copy-paste client config snippet pre-pointed at the scoped agent user.
  *
- * The snippet never contains a real secret — it carries a paste placeholder so the
+ * The snippet never contains a real secret - it carries a paste placeholder so the
  * operator drops in the Application Password they generate through WordPress core.
  *
  * Two shapes are produced from the same data:
  *
- * - unix    — `npx` is launched directly (macOS, Linux).
- * - windows — the launcher is wrapped in `cmd /c` because Windows MCP clients
+ * - unix    - `npx` is launched directly (macOS, Linux).
+ * - windows - the launcher is wrapped in `cmd /c` because Windows MCP clients
  *             cannot spawn the `npx` shim by name.
  *
  * On a local install (see {@see aafm_site_is_local()}) the env block also carries
@@ -200,8 +200,8 @@ function aafm_create_agent_user( string $login ) {
  * certificate during local testing. Production snippets never include it.
  *
  * Per-client shaping: most clients read the server map under an `mcpServers` key, so
- * that is the default. VS Code is the exception — its `.vscode/mcp.json` uses a `servers`
- * key — so a client of 'vscode' switches the top-level wrapper. The proxy package, env
+ * that is the default. VS Code is the exception - its `.vscode/mcp.json` uses a `servers`
+ * key - so a client of 'vscode' switches the top-level wrapper. The proxy package, env
  * block, local-cert handling, and Windows handling stay identical across every client.
  *
  * @param string $client   Target client slug (see {@see aafm_quickstart_clients()}).
@@ -300,7 +300,7 @@ function aafm_quickstart_note( string $client ): string {
  * Build a copy-paste config snippet for the OAuth bridge path.
  *
  * Like {@see aafm_client_snippet()}, but for the OAuth connection method.  The
- * agent connects over the browser-based OAuth approval flow — no stored secret
+ * agent connects over the browser-based OAuth approval flow - no stored secret
  * is ever needed, so the snippet carries only the endpoint URL (via mcp-remote)
  * and never any `WP_API_*` env vars.
  *
@@ -495,7 +495,7 @@ function aafm_ajax_oauth_revoke_grant(): void {
  * This is an honest reachability probe, NOT an impersonation of the agent. It self-calls
  * the endpoint using the current admin's cookie plus a fresh REST nonce, so it confirms
  * the route is registered, reachable, and replies to `tools/list`. The tool count it
- * reports is the ADMIN's view — the agent connects as the low-privilege user over an
+ * reports is the ADMIN's view - the agent connects as the low-privilege user over an
  * Application Password and will usually see fewer tools. The response is labeled so it
  * never implies "this is what your agent will see," and it never sends or logs the
  * Application Password.
@@ -510,8 +510,8 @@ function aafm_ajax_test_connection(): void {
 
 	// Forward only the current admin's WordPress auth cookies on the self-call (admin-eye
 	// reachability check). The self-request is same-origin and already nonce + cap gated, but it
-	// should carry just what the auth handshake needs — the logged-in/auth/secure-auth cookies plus
-	// the session test cookie — not the operator's entire cookie jar (analytics, third-party, etc.).
+	// should carry just what the auth handshake needs - the logged-in/auth/secure-auth cookies plus
+	// the session test cookie - not the operator's entire cookie jar (analytics, third-party, etc.).
 	$auth_cookie_names = array();
 	foreach ( array( 'LOGGED_IN_COOKIE', 'AUTH_COOKIE', 'SECURE_AUTH_COOKIE', 'TEST_COOKIE' ) as $cookie_const ) {
 		if ( defined( $cookie_const ) ) {
@@ -741,10 +741,10 @@ function aafm_format_admin_datetime( string $utc ): string {
  * Render the Connection tab.
  *
  * Layout (OAuth-first):
- *   1. Endpoint card — single canonical endpoint display.
- *   2. OAuth card (Recommended) — guided browser-approval flow when OAuth is enabled;
+ *   1. Endpoint card - single canonical endpoint display.
+ *   2. OAuth card (Recommended) - guided browser-approval flow when OAuth is enabled;
  *      a short notice when it is turned off.
- *   3. App-Password fallback — the existing three-step wizard wrapped in a <details>
+ *   3. App-Password fallback - the existing three-step wizard wrapped in a <details>
  *      element, collapsed by default when OAuth is on, open when OAuth is off.
  *
  * @return void
@@ -783,7 +783,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval — no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
@@ -904,7 +904,7 @@ function aafm_render_connection_tab(): void {
 		aafm_render_oauth_management();
 
 	} else {
-		// OAuth is off — short notice instead of the picker.
+		// OAuth is off - short notice instead of the picker.
 		echo '<p class="sub">' . esc_html__(
 			'OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below.',
 			'agent-abilities-for-mcp'
@@ -1052,7 +1052,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 
 	// Windows / certificate notices.
-	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves — use the Windows tab above.', 'agent-abilities-for-mcp' );
+	$windows_note = __( 'On Windows the launcher is wrapped in <code>cmd /c</code> so the <code>npx</code> command resolves - use the Windows tab above.', 'agent-abilities-for-mcp' );
 
 	$cert_note = __( 'If your site uses a self-signed or locally-trusted certificate (DDEV, Local, Valet), Node rejects it by default; add <code>"NODE_TLS_REJECT_UNAUTHORIZED": "0"</code> to <code>env</code> for local testing only, never on a production site.', 'agent-abilities-for-mcp' );
 	if ( $is_local ) {
@@ -1102,7 +1102,7 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-step aafm-conn-step">';
 	echo '<div class="aafm-step-head"><span class="aafm-sidx">3</span><div>';
 	echo '<h2>' . esc_html__( 'Check the endpoint is reachable', 'agent-abilities-for-mcp' ) . '</h2>';
-	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view — your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '<p class="sub">' . esc_html__( 'This confirms the endpoint answers from your server. It checks as the current admin, so the tool count shown is your view - your agent connects as the low-privilege user above and will usually see fewer tools.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
 	echo '<div class="aafm-step-rail"><div class="aafm-card">';

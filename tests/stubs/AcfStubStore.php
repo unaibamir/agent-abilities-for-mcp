@@ -40,7 +40,7 @@ class AcfStubStore {
 	/**
 	 * The seeded current-object values: field key => value.
 	 *
-	 * NOTE: seed values are GLOBAL, not per-object — every object selector reads the same seed (only
+	 * NOTE: seed values are GLOBAL, not per-object - every object selector reads the same seed (only
 	 * recorded WRITES are bucketed per selector). Reads are therefore not object-isolated in this
 	 * stub; tests that need to prove a write landed under a specific selector assert on value().
 	 *
@@ -56,7 +56,7 @@ class AcfStubStore {
 	public static array $written = array();
 
 	/**
-	 * When true, record() refuses to store and returns false — modelling an update_field()
+	 * When true, record() refuses to store and returns false - modelling an update_field()
 	 * failure so the write-failure path is exercisable.
 	 *
 	 * @var bool
@@ -77,7 +77,7 @@ class AcfStubStore {
 	}
 
 	/**
-	 * The groups with their 'fields' stripped — the shape acf_get_field_groups() returns.
+	 * The groups with their 'fields' stripped - the shape acf_get_field_groups() returns.
 	 *
 	 * @return array<int,array<string,mixed>>
 	 */

@@ -110,7 +110,7 @@ function aafm_source_ip(): string {
 }
 
 /**
- * Write one activity row. Records argument KEYS only — never values.
+ * Write one activity row. Records argument KEYS only - never values.
  *
  * @param array<string,mixed> $record {
  *     Activity record.
@@ -231,7 +231,7 @@ function aafm_query_activity( array $args ): array {
 	$params[] = $offset;
 
 	// Bind the table identifier via the leading %i placeholder, so it is the first arg to
-	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders — their values
+	// $wpdb->prepare(). The %s fragments in {$where} are BOUND placeholders - their values
 	// (status, ability) were pushed onto $params above and are substituted by prepare(), never
 	// interpolated literals. The only interpolation into the SQL string is the static {$where}
 	// scaffolding (the "1=1 AND status = %s …" shape), which carries no user input.
@@ -290,7 +290,7 @@ function aafm_clear_activity_log(): void {
  * Loops aafm_config_option_names() (the canonical config list) rather than a single
  * hardcoded option, so a newly added option is cleaned up automatically and none leaks on
  * uninstall. uninstall.php requires includes/admin/settings.php so that list is defined here.
- * Only this plugin's own options, transient, and table are touched — never another plugin's data.
+ * Only this plugin's own options, transient, and table are touched - never another plugin's data.
  *
  * @return void
  */
@@ -301,7 +301,7 @@ function aafm_uninstall_site(): void {
 			delete_option( $option );
 		}
 	} else {
-		// Defensive fallback if settings.php was not loaded — never leave the core option behind.
+		// Defensive fallback if settings.php was not loaded - never leave the core option behind.
 		delete_option( 'aafm_enabled_abilities' );
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).

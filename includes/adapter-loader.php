@@ -6,7 +6,7 @@
  * WP\MCP\ namespace. PHP can hold only one WP\MCP\Core\McpAdapter declaration per request, so
  * whichever plugin's autoloader declares it first wins for the whole site. A plugin shipping an
  * older copy via a plain Composer autoloader (confirmed: Rank Math SEO bundles 0.4.1) can win
- * that race, and our floor check then rejects the loaded version — so our /mcp route never
+ * that race, and our floor check then rejects the loaded version - so our /mcp route never
  * registers (site-wide 404 for our endpoint).
  *
  * Our copy is 0.5.0 and we MUST run it: 0.4.1 lacks the mcp_adapter_tools_list filter, our
@@ -22,7 +22,7 @@
  * MAINTENANCE: when the bundled wordpress/mcp-adapter is updated, re-verify
  * aafm_adapter_namespace_map() against each bundled package's composer.json PSR-4 map (the adapter
  * AND the php-mcp-schema package it depends on), and re-check the /includes/Cli/ skip in
- * aafm_eager_load_adapter() — confirm it still covers the WP-CLI-only classes, and whether any new
+ * aafm_eager_load_adapter() - confirm it still covers the WP-CLI-only classes, and whether any new
  * runtime-only directory needs the same skip treatment.
  *
  * @package AgentAbilitiesForMCP
@@ -38,7 +38,7 @@ defined( 'ABSPATH' ) || exit;
  * The adapter (WP\MCP\) declares method return types in the schema package (WP\McpSchema\), so
  * PHP's covariance check needs the schema classes available the moment an adapter class is
  * declared. Both packages are bundled by siblings under these shared namespaces, so we must be
- * able to resolve — and win — both. Order does not matter here: the two prefixes are mutually
+ * able to resolve - and win - both. Order does not matter here: the two prefixes are mutually
  * exclusive (WP\McpSchema\ does not start with WP\MCP\, which requires a trailing backslash).
  *
  * @return array<string, string> Map of namespace prefix (with trailing separators) to base dir.
@@ -78,8 +78,8 @@ function aafm_adapter_class_to_path( string $class_name ): ?string {
 		$file = $base . str_replace( '\\', '/', $relative ) . '.php';
 
 		// The file must exist and resolve to a real path strictly inside the base directory.
-		// If realpath() returns false — e.g. an open_basedir restriction blocks the path, or the
-		// vendor symlink is broken — we return null and the plugin degrades safely to the
+		// If realpath() returns false - e.g. an open_basedir restriction blocks the path, or the
+		// vendor symlink is broken - we return null and the plugin degrades safely to the
 		// floor/notice fallback in bootstrap.php rather than fataling on a bogus require.
 		$real_file = realpath( $file );
 		$real_base = realpath( $base );
@@ -143,8 +143,8 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
  * McpAdapter is first referenced a sibling's copy may resolve first. The race is settled
  * deterministically by aafm_eager_load_adapter() (below), which declares our classes outright.
  * This autoloader's real job is to (a) satisfy declaration-time interface/trait dependencies
- * pulled in during that eager load — it is the only WP\MCP\ autoloader registered that early, so
- * no foreign copy can answer those — and (b) cover installs with no conflicting sibling at all.
+ * pulled in during that eager load - it is the only WP\MCP\ autoloader registered that early, so
+ * no foreign copy can answer those - and (b) cover installs with no conflicting sibling at all.
  *
  * @return void
  */
@@ -185,7 +185,7 @@ function aafm_register_adapter_autoloader(): void {
  * all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase, makes PHP commit to our
  * copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is identical across 0.4.1 and 0.5.0 (0.5.0 is an additive superset), so a
- * 0.4.1-expecting consumer keeps working — and we keep the per-connection capability gate that
+ * 0.4.1-expecting consumer keeps working - and we keep the per-connection capability gate that
  * 0.4.1 lacks.
  *
  * One recursive require_once pass is sufficient: if a class file references a not-yet-declared
@@ -197,10 +197,10 @@ function aafm_register_adapter_autoloader(): void {
  * by the REST /mcp path.
  *
  * Cost is negligible: aafm_init_mcp() already calls McpAdapter::instance() on every request, which
- * loads the adapter anyway — eager-loading the remaining sibling classes in the same phase adds
+ * loads the adapter anyway - eager-loading the remaining sibling classes in the same phase adds
  * only a handful of require_once calls on already-bundled files.
  *
- * Inverse-version trade: this override is version-agnostic — it forces ANY later-loading sibling
+ * Inverse-version trade: this override is version-agnostic - it forces ANY later-loading sibling
  * (older OR newer copy) onto our 0.5.0, since PHP commits to whichever copy is declared first. The
  * floor/upper-bound check and "too old"/"too new" notices in bootstrap.php are the fallback for the
  * residual case where an incompatible copy is declared by a plugin that loads BEFORE us.
@@ -231,7 +231,7 @@ function aafm_eager_load_adapter(): void {
  * unconditional require_once would throw a non-catchable "Cannot declare class … already in use"
  * fatal and white-screen the whole site before bootstrap.php's floor notice can render. So before
  * requiring a file we derive the class it declares and skip it when that class/interface/trait
- * already exists — making the eager load idempotent against foreign pre-declaration and letting the
+ * already exists - making the eager load idempotent against foreign pre-declaration and letting the
  * floor/notice fallback take over instead of fataling.
  *
  * @param string $base PSR-4 base directory for the WP\MCP\ namespace, with trailing slash.

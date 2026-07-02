@@ -7,12 +7,12 @@
  * It is contained four ways: (1) a fixed allowlist (aafm_allowed_site_settings) that excludes
  * every takeover-class key and is re-stripped after any filter, (2) a closed input schema,
  * (3) a fail-closed execute that re-checks every submitted key against the allowlist and
- * rejects the WHOLE call the moment one is not on it — it never falls back to a raw
+ * rejects the WHOLE call the moment one is not on it - it never falls back to a raw
  * update_option(), and (4) a non-scalar value (array/object) is refused outright before any
  * write, so a structure can never be stored. The two integer settings are clamped into their
  * legal ranges server-side so a 0 or a 99 can never be persisted.
  *
- * Both abilities gate on manage_options — site settings are administrator data, so the
+ * Both abilities gate on manage_options - site settings are administrator data, so the
  * read is held to the same bar WordPress puts on the Settings screen.
  *
  * @package AgentAbilitiesForMCP
@@ -118,7 +118,7 @@ function aafm_exec_get_site_settings(): array {
  *
  * The schema is closed at the top level (additionalProperties:false) and the nested
  * settings object is validated server-side against the allowlist. The ability is
- * annotated destructive:true — a settings change is permanent and site-wide.
+ * annotated destructive:true - a settings change is permanent and site-wide.
  *
  * @return array<string,mixed>
  */
@@ -159,7 +159,7 @@ function aafm_args_update_site_settings(): array {
  * Execute aafm/update-site-settings.
  *
  * Fail-closed: every submitted key is checked against the allowlist BEFORE any write, and
- * a single non-allowlisted key rejects the whole call — there is no partial apply and no
+ * a single non-allowlisted key rejects the whole call - there is no partial apply and no
  * raw update_option() of an arbitrary key. A non-scalar value (array/object) is likewise
  * refused outright before any write, so a structure can never be stored. Values are sanitized
  * per type; the two integers are clamped into their legal ranges server-side (posts_per_page
@@ -193,7 +193,7 @@ function aafm_exec_update_site_settings( array $input ) {
 
 	// Scalar-only with a string-type guard: a non-scalar value (array/object) is refused outright,
 	// and a boolean is refused for the string-typed settings (sending true/false for a name or
-	// format is almost always a mistake and would silently store "1"/"" — B10). The two integer
+	// format is almost always a mistake and would silently store "1"/"" - B10). The two integer
 	// settings DO accept a boolean, since the int clamp turns it into a sane 0/1 in range.
 	$integer_keys = array( 'posts_per_page', 'start_of_week' );
 	foreach ( $settings as $key => $value ) {
@@ -227,7 +227,7 @@ function aafm_exec_update_site_settings( array $input ) {
  * Sanitize and clamp one allowlisted site-setting value by its type.
  *
  * Note absint() is deliberately NOT used for the integer bounds: it returns the ABSOLUTE value,
- * so absint('-3') is 3, not 0 — it would silently flip a negative into a live limit. The
+ * so absint('-3') is 3, not 0 - it would silently flip a negative into a live limit. The
  * floor/cap form (min(max, max(floor, (int) $raw))) clamps correctly. The string settings
  * run through sanitize_text_field.
  *

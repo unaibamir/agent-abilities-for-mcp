@@ -24,7 +24,7 @@ final class HelpersTest extends TestCase {
 	public function test_post_type_allowlist_rejects_unknown_or_private(): void {
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'nav_menu_item' ) );
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'totally_fake' ) );
-		// `attachment` is public AND built-in. It must never pass the content floor —
+		// `attachment` is public AND built-in. It must never pass the content floor -
 		// media has its own redacted path; the content abilities must not touch it.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_type( 'attachment' ) );
 		// Other built-in internal types stay rejected even though some are queryable.
@@ -52,7 +52,7 @@ final class HelpersTest extends TestCase {
 				'label'  => 'Secret',
 			)
 		);
-		// attachment is public AND built-in — the one public-but-internal case.
+		// attachment is public AND built-in - the one public-but-internal case.
 		$this->assertFalse( aafm_post_type_is_eligible( 'attachment' ) );
 		$this->assertFalse( aafm_post_type_is_eligible( 'revision' ) );
 		$this->assertFalse( aafm_post_type_is_eligible( 'nav_menu_item' ) );
@@ -190,7 +190,7 @@ final class HelpersTest extends TestCase {
 		);
 		update_option( 'aafm_allowed_post_types', array( 'aafm_unmapped' ) );
 
-		// Grant an administrator the bare singular caps — the footgun would let this through.
+		// Grant an administrator the bare singular caps - the footgun would let this through.
 		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		$role  = get_role( 'administrator' );
 		$role->add_cap( 'edit_aafm_unmapped' );
@@ -256,7 +256,7 @@ final class HelpersTest extends TestCase {
 	}
 
 	public function test_status_guard_blocks_any_and_widening(): void {
-		// 'any' must never resolve to a usable status — this is the royal-mcp bypass.
+		// 'any' must never resolve to a usable status - this is the royal-mcp bypass.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_status( 'any', false ) );
 		// A low-priv caller cannot request private content.
 		$this->assertInstanceOf( WP_Error::class, aafm_validate_post_status( 'private', false ) );

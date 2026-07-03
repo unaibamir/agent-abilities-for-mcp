@@ -210,7 +210,15 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 == Changelog ==
 
 = 1.0.0 =
-* Initial release. 153 governed abilities: 83 across WordPress core (reads and guarded writes for posts, pages, terms, comments, media, users, post meta, revisions, blocks, templates, and site structure, plus a search that spans every post type), and 70 from auto-detected integrations for WooCommerce, Advanced Custom Fields, Yoast, Rank Math, and All in One SEO. Built on the WordPress Abilities API and the official MCP Adapter, with no custom transport. Connect over OAuth in the browser or with a least-privilege Application Password user. Everything off by default, two-layer capability gating, per-connection tool filtering, optional safety controls (rate limit, IP allowlist, force-draft, title-length cap), an audit log that records denials, and a guided connection screen with diagnostics.
+
+* Initial release.
+* 153 governed abilities: 83 across WordPress core (reads and guarded writes for posts, pages, terms, comments, media, users, post meta, revisions, blocks, templates, and site structure, plus a search that spans every post type) and 70 from auto-detected integrations for WooCommerce, Advanced Custom Fields, Yoast, Rank Math, and All in One SEO.
+* Built on the WordPress Abilities API and the official MCP Adapter, with no custom transport.
+* Connect over OAuth in the browser, or with a least-privilege Application Password user.
+* Everything off by default, with two-layer capability gating and per-connection tool filtering.
+* Optional safety controls: rate limit, IP allowlist, force-to-draft, and title-length cap.
+* Audit log that records every call, denied attempts included.
+* Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
 

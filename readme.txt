@@ -16,8 +16,6 @@ Agent Abilities for MCP is a WordPress plugin that turns your site into a govern
 
 Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
-Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
-
 = 🛡️ Least-privilege access by design =
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
@@ -61,9 +59,29 @@ Version 1.0.0 ships **153 governed abilities: 83 across WordPress core and 70 fr
 
 More integrations are planned.
 
-= 🔌 Connect Claude, Cursor and other MCP clients =
+= 🔌 Supported AI platforms =
 
-Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI, some directly and some through the open-source `mcp-remote` bridge that runs on your own machine. With OAuth you paste the endpoint URL and approve once in the browser; with an Application Password you point a low-privilege user at the endpoint. Hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector that the underlying adapter does not serve natively yet.
+Your AI client connects in to your site over MCP. The plugin never calls out to any AI provider, so there is no model API key to add and nothing extra to pay for.
+
+* **Anthropic Claude:** works today through Claude Desktop, Claude Code, and other MCP-capable Claude clients.
+* **Google Gemini:** works today through the Gemini CLI.
+* **Any Model Context Protocol client:** anything that speaks MCP can connect, directly or through the open-source `mcp-remote` bridge that runs on your own machine.
+
+The hosted ChatGPT and Gemini apps are not supported yet. They expect a streamable HTTP/SSE remote connector that the underlying MCP Adapter does not serve natively yet. The clients listed below all work today.
+
+= 🧩 Compatible clients and frameworks =
+
+Connect any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL and approve once in the browser; with an Application Password you point a dedicated low-privilege user at the endpoint.
+
+* **Desktop AI apps:** Claude Desktop.
+* **AI code editors and IDEs:** Claude Code, Cursor, VS Code, and Windsurf.
+* **Command line:** Gemini CLI.
+* **AI agent frameworks:** any MCP-compatible framework can call your enabled abilities as tools.
+* **Bridged clients:** clients that cannot open a remote MCP connection on their own use the open-source `mcp-remote` or `@automattic/mcp-wordpress-remote` bridge, which runs on your own machine and talks only to your site and your local client.
+
+= ⚖️ Disclaimer =
+
+Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
 == Installation ==
 

@@ -13,6 +13,16 @@
 			"step": "login",
 			"username": "admin",
 			"password": "password"
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "agent-abilities-for-mcp"
+			},
+			"options": {
+				"activate": true
+			}
 		}
 	]
 }

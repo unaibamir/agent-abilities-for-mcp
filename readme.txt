@@ -76,6 +76,10 @@ Connect any MCP client that can reach your endpoint: Claude Desktop, Claude Code
 
 == Frequently Asked Questions ==
 
+= How do I connect an AI agent to my WordPress site? =
+
+Install and activate the plugin, then open the Agent Abilities for MCP screen and turn on the abilities you want, since everything starts off. Copy your site's MCP endpoint from the Connection tab and add it to your AI client. The simplest path is OAuth: paste the endpoint and approve the connection once in the browser. If your client cannot use OAuth, point a dedicated low-privilege user at an Application Password instead. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI all connect today, some directly and some through the mcp-remote bridge that runs on your own machine.
+
 = Does the agent get admin access? =
 
 No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each ability also re-checks the user's capability before it runs, so a connection can never call a tool its user is not allowed to use.
@@ -99,6 +103,10 @@ Yes. Agent Abilities for MCP is free on WordPress.org, with no paid tier, no API
 = Does it work with my other plugins? =
 
 Yes, for a set of supported plugins. When one is active, Agent Abilities for MCP adds abilities for it under the same rules as the core: detected automatically, off until you turn them on, capability-gated, and logged. Version 1.0.0 covers WooCommerce, Advanced Custom Fields, and SEO (Yoast, Rank Math, and All in One SEO). The WooCommerce and ACF abilities can read and write real customer and order data, including personal data such as names, emails, and addresses, so they sit behind a clear notice in the admin and stay off until you switch them on. More integrations are planned.
+
+= Can an AI agent manage my WooCommerce store? =
+
+Yes, when WooCommerce is active. The plugin adds WooCommerce abilities for reading and writing products, orders, and customers, so an AI agent can help run your store through this MCP server for WooCommerce. Those abilities reach real customer and order data, including personal data such as names, emails, and addresses, so they stay off until you enable them and sit behind a clear notice in the admin, under the same least-privilege and audit-logging rules as everything else.
 
 = Is this the same as the WordPress Abilities API, or the official MCP adapter? =
 

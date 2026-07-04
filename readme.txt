@@ -1,6 +1,6 @@
 === Agent Abilities for MCP - MCP Server for AI Agents ===
 Contributors: unaibamir
-Tags: mcp, chatgpt, ai-agent, woocommerce, content-management
+Tags: mcp, chatgpt, ai-assistant, woocommerce, abilities
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0

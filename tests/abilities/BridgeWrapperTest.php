@@ -128,6 +128,26 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( array( 'demo/echo', '42' ), aafm_get_enabled_bridged_abilities() );
 	}
 
+	public function test_bridge_pass_is_hooked_after_late_foreign_registrations(): void {
+		// A foreign plugin may register its ability at a later-than-native priority (e.g. 20).
+		// The bridge pass must run AFTER those, so the whole foreign registry exists when it
+		// walks it. Prove the wired priority is later than a typical late foreign registration.
+		$priority = has_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities' );
+		$this->assertNotFalse( $priority, 'The bridge pass must be hooked on wp_abilities_api_init.' );
+		$this->assertGreaterThan(
+			20,
+			$priority,
+			'The bridge pass must run after late (priority 20) foreign registrations.'
+		);
+
+		// Behavioral proof: a foreign ability that becomes available only once the late pass has
+		// run is still bridged when our pass executes after it.
+		$this->register_foreign( true );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo' ) );
+		$this->register_wrappers();
+		$this->assertTrue( wp_has_ability( 'aafm-bridge/demo-echo' ) );
+	}
+
 	/**
 	 * Register two foreign abilities whose slugs normalize to the SAME wrapper name.
 	 *

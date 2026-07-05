@@ -222,9 +222,12 @@ function aafm_bootstrap() {
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
-	// Bridged wrappers register AFTER native abilities (priority 11) on the same init pass, so
-	// the aafm-reads/aafm-writes categories and native slugs already exist when they run.
-	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities', 11 );
+	// Bridged wrappers register at PHP_INT_MAX on the same init pass so EVERY foreign ability is
+	// already in the registry when the bridge walks it - including ones a foreign plugin hooks at
+	// a later-than-native priority (e.g. 20). A fixed low priority (11) would run before those and
+	// silently fail to bridge them on every request. This still lands well before the MCP server
+	// builds its tool list (mcp_adapter_init on rest_api_init:15), and after native registration.
+	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities', PHP_INT_MAX );
 
 	// Registered unconditionally: admin_init only fires on admin requests (where
 	// includes/admin/page.php is loaded), so this is behavior-identical to gating it

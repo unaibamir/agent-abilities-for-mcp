@@ -221,6 +221,9 @@ function aafm_bootstrap() {
 
 	add_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	// Bridged wrappers register AFTER native abilities (priority 11) on the same init pass, so
+	// the aafm-reads/aafm-writes categories and native slugs already exist when they run.
+	add_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities', 11 );
 
 	// Registered unconditionally: admin_init only fires on admin requests (where
 	// includes/admin/page.php is loaded), so this is behavior-identical to gating it

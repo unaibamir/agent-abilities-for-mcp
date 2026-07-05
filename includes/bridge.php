@@ -174,3 +174,78 @@ function aafm_discover_foreign_abilities(): array {
 	unset( $group );
 	return $groups;
 }
+
+/**
+ * The foreign slugs the operator has enabled for bridging (sanitized, de-duplicated).
+ *
+ * Reads option aafm_enabled_bridged_abilities, kept SEPARATE from aafm_enabled_abilities so a
+ * foreign plugin deactivating can never corrupt the native enabled list.
+ *
+ * @return array<int,string>
+ */
+function aafm_get_enabled_bridged_abilities(): array {
+	$stored = get_option( 'aafm_enabled_bridged_abilities', array() );
+	if ( ! is_array( $stored ) ) {
+		return array();
+	}
+	return array_values( array_unique( array_filter( array_map( 'strval', $stored ) ) ) );
+}
+
+/**
+ * Register a governed wrapper for every enabled + currently-registered foreign ability.
+ *
+ * Runs on the abilities-init action, AFTER native registration. For each enabled foreign slug
+ * whose ability is live, registers aafm-bridge/<slug> through aafm_register_ability_with_log()
+ * so it inherits audit + rate-limit + gating. Permission and execute re-resolve the LIVE foreign
+ * ability at call time (never a captured object), so a re-registered foreign ability is honored.
+ * Idempotent: a wrapper already registered is skipped; an enabled-but-missing foreign slug (host
+ * plugin inactive) is skipped silently.
+ *
+ * @return void
+ */
+function aafm_register_enabled_bridged_abilities(): void {
+	if ( ! function_exists( 'wp_get_ability' ) ) {
+		return;
+	}
+	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+		$wrapper = aafm_bridge_tool_name( $foreign_slug );
+		if ( function_exists( 'wp_has_ability' ) && wp_has_ability( $wrapper ) ) {
+			continue; // Idempotent.
+		}
+		$foreign = wp_get_ability( $foreign_slug );
+		if ( ! $foreign instanceof WP_Ability ) {
+			continue; // Host plugin inactive / slug gone.
+		}
+		$risk = aafm_bridge_risk( $foreign );
+
+		aafm_register_ability_with_log(
+			$wrapper,
+			array(
+				'label'               => method_exists( $foreign, 'get_label' ) ? (string) $foreign->get_label() : $foreign_slug,
+				'description'         => ( method_exists( $foreign, 'get_description' ) ? (string) $foreign->get_description() : '' ) . ' (bridged: ' . $foreign_slug . ')',
+				'category'            => $risk['readonly'] ? 'aafm-reads' : 'aafm-writes',
+				'input_schema'        => aafm_bridge_input_schema( $foreign ),
+				'meta'                => array(
+					'annotations' => array(
+						'readonly'    => $risk['readonly'],
+						'destructive' => $risk['destructive'],
+					),
+				),
+				'permission_callback' => static function ( $input = null ) use ( $foreign_slug ) {
+					$live = wp_get_ability( $foreign_slug );
+					if ( ! $live instanceof WP_Ability ) {
+						return false;
+					}
+					return true === $live->check_permissions( is_array( $input ) ? $input : array() );
+				},
+				'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
+					$live = wp_get_ability( $foreign_slug );
+					if ( ! $live instanceof WP_Ability ) {
+						return new WP_Error( 'aafm_bridge_missing', __( 'The bridged ability is no longer available.', 'agent-abilities-for-mcp' ) );
+					}
+					return $live->execute( is_array( $input ) ? $input : array() );
+				},
+			)
+		);
+	}
+}

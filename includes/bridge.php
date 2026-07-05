@@ -218,11 +218,13 @@ function aafm_register_enabled_bridged_abilities(): void {
 		}
 		$risk = aafm_bridge_risk( $foreign );
 
+		$label = (string) $foreign->get_label();
+
 		aafm_register_ability_with_log(
 			$wrapper,
 			array(
-				'label'               => method_exists( $foreign, 'get_label' ) ? (string) $foreign->get_label() : $foreign_slug,
-				'description'         => ( method_exists( $foreign, 'get_description' ) ? (string) $foreign->get_description() : '' ) . ' (bridged: ' . $foreign_slug . ')',
+				'label'               => '' !== $label ? $label : $foreign_slug,
+				'description'         => (string) $foreign->get_description() . ' (bridged: ' . $foreign_slug . ')',
 				'category'            => $risk['readonly'] ? 'aafm-reads' : 'aafm-writes',
 				'input_schema'        => aafm_bridge_input_schema( $foreign ),
 				'meta'                => array(

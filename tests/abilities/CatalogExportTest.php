@@ -82,4 +82,25 @@ final class CatalogExportTest extends TestCase {
 		$this->assertTrue( $demo['abilities'][0]['readonly'] );
 		$this->assertSame( 'read', $demo['abilities'][0]['risk'] );
 	}
+
+	public function test_include_native_appends_our_own_abilities(): void {
+		$cat   = aafm_build_catalog( true );
+		$names = wp_list_pluck( $cat['plugins'], 'namespace' );
+		$this->assertContains( 'aafm', $names, '--include-native must append the native aafm group.' );
+
+		$native = current( array_filter( $cat['plugins'], static fn( $p ) => 'aafm' === $p['namespace'] ) );
+		$this->assertGreaterThan( 0, $native['ability_count'] );
+		$this->assertNotEmpty( $native['abilities'] );
+
+		$first = $native['abilities'][0];
+		$this->assertStringStartsWith( 'aafm/', $first['slug'] );
+		$this->assertSame( aafm_mcp_tool_name( $first['slug'] ), $first['mcp_tool_name'] );
+		$this->assertArrayHasKey( 'risk', $first );
+	}
+
+	public function test_default_export_excludes_native_group(): void {
+		$cat   = aafm_build_catalog( false );
+		$names = wp_list_pluck( $cat['plugins'], 'namespace' );
+		$this->assertNotContains( 'aafm', $names, 'Foreign-only by default.' );
+	}
 }

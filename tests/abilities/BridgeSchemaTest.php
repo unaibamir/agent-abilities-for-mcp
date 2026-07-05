@@ -79,6 +79,45 @@ final class BridgeSchemaTest extends TestCase {
 		$this->assertSame( 'object', $out['type'] );
 	}
 
+	public function test_empty_items_serialize_as_object(): void {
+		$out = aafm_normalize_json_schema(
+			array(
+				'type'  => 'array',
+				'items' => array(),
+			)
+		);
+		$this->assertStringContainsString( '"items":{}', (string) wp_json_encode( $out ) );
+	}
+
+	public function test_empty_additional_properties_serialize_as_object(): void {
+		$out = aafm_normalize_json_schema(
+			array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => array(),
+			)
+		);
+		$this->assertStringContainsString( '"additionalProperties":{}', (string) wp_json_encode( $out ) );
+	}
+
+	public function test_tuple_items_are_recursed_per_element(): void {
+		$out = aafm_normalize_json_schema(
+			array(
+				'type'  => 'array',
+				'items' => array(
+					array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					array( 'type' => 'string' ),
+				),
+			)
+		);
+		// The empty properties INSIDE the first tuple element must be coerced to {}.
+		$this->assertStringContainsString( '"properties":{}', (string) wp_json_encode( $out ) );
+		$this->assertSame( 'string', $out['items'][1]['type'] );
+	}
+
 	public function test_non_empty_properties_untouched(): void {
 		$in  = array(
 			'type'       => 'object',

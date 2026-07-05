@@ -15,13 +15,12 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Build the aafm.catalog/v1 dataset from discovered foreign abilities.
  *
- * @param bool $include_native Reserved for a future --include-native that appends our own aafm/*
- *                             registry; foreign discovery is the exporter's primary job.
+ * @param bool $include_native When true, append our own aafm/* registry as an extra group under
+ *                             the "aafm" namespace. Default false - foreign discovery is the
+ *                             exporter's primary job (the website already has the native inventory).
  * @return array<string,mixed>
  */
 function aafm_build_catalog( bool $include_native = false ): array {
-	unset( $include_native );
-
 	$plugins = array();
 	foreach ( aafm_discover_foreign_abilities() as $ns => $group ) {
 		$abilities = array();
@@ -49,6 +48,13 @@ function aafm_build_catalog( bool $include_native = false ): array {
 		);
 	}
 
+	if ( $include_native ) {
+		$native = aafm_build_native_catalog_group();
+		if ( ! empty( $native['abilities'] ) ) {
+			$plugins[] = $native;
+		}
+	}
+
 	return array(
 		'schema'    => 'aafm.catalog/v1',
 		'generated' => gmdate( 'c' ),
@@ -57,6 +63,44 @@ function aafm_build_catalog( bool $include_native = false ): array {
 			'plugin_version' => defined( 'AAFM_VERSION' ) ? AAFM_VERSION : '',
 		),
 		'plugins'   => $plugins,
+	);
+}
+
+/**
+ * Build the "aafm" native-abilities group for the catalog (the --include-native payload).
+ *
+ * Reads our own registry (aafm_get_abilities_registry()) and maps each row to the same ability
+ * record shape as the foreign groups. risk drives readonly/destructive; the MCP tool name is the
+ * plain aafm-<name> sanitization (native abilities are not bridged, so there is no aafm-bridge- prefix).
+ *
+ * @return array<string,mixed>
+ */
+function aafm_build_native_catalog_group(): array {
+	$abilities = array();
+	foreach ( aafm_get_abilities_registry() as $name => $entry ) {
+		$name        = (string) $name;
+		$risk        = (string) ( $entry['risk'] ?? 'write' );
+		$abilities[] = array(
+			'slug'                 => $name,
+			'label'                => (string) ( $entry['label'] ?? $name ),
+			'description'          => (string) ( $entry['description'] ?? '' ),
+			'risk'                 => $risk,
+			'readonly'             => 'read' === $risk,
+			'destructive'          => 'destructive' === $risk,
+			'input_schema_summary' => array(),
+			'mcp_tool_name'        => aafm_mcp_tool_name( $name ),
+		);
+	}
+	usort(
+		$abilities,
+		static fn( array $a, array $b ): int => strcasecmp( (string) $a['label'], (string) $b['label'] )
+	);
+
+	return array(
+		'namespace'     => 'aafm',
+		'label'         => __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),
+		'ability_count' => count( $abilities ),
+		'abilities'     => $abilities,
 	);
 }
 

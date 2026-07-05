@@ -53,6 +53,9 @@
 			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
 			this.#bindSaveIntegrations();
+			this.#bindSaveBridge();
+			this.#bindBridgeFilter();
+			this.#bindBridgeConfirm();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
 			this.#bindSaveUserMetaKeys();
@@ -573,6 +576,165 @@
 					status.textContent = json?.success
 						? this.#t( 'saved', 'Saved' )
 						: this.#t( 'errorSaving', 'Error saving' );
+				}
+			} );
+		}
+
+		/**
+		 * Save the "Abilities from other plugins" toggles. Posts to its OWN action
+		 * (aafm_save_bridged_abilities) with its own bridged_abilities[] field, so it never
+		 * touches the native enabled-abilities option.
+		 */
+		#bindSaveBridge() {
+			const form = document.querySelector( '#aafm-bridge-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.addEventListener( 'submit', async ( e ) => {
+				e.preventDefault();
+				const status = form.querySelector( '.aafm-save-status' );
+				const enabled = [
+					...form.querySelectorAll(
+						'input[name="bridged_abilities[]"]:checked'
+					),
+				].map( ( i ) => i.value );
+
+				const body = new URLSearchParams();
+				body.append( 'action', 'aafm_save_bridged_abilities' );
+				body.append( 'nonce', this.#nonce );
+				enabled.forEach( ( v ) =>
+					body.append( 'bridged_abilities[]', v )
+				);
+
+				if ( status ) {
+					status.textContent = this.#t( 'saving', 'Saving…' );
+				}
+				let json;
+				try {
+					const res = await fetch( this.#ajaxUrl, {
+						method: 'POST',
+						body,
+						credentials: 'same-origin',
+					} );
+					json = await res.json();
+				} catch {
+					json = { success: false };
+				}
+				if ( status ) {
+					status.textContent = json?.success
+						? this.#t( 'saved', 'Saved' )
+						: this.#t( 'errorSaving', 'Error saving' );
+				}
+			} );
+		}
+
+		/**
+		 * Global search + All/Read Only/Write filter for the bridge directory.
+		 *
+		 * Unlike the per-card integrations filter, this one filter drives every row across all
+		 * groups: the query and the chosen risk are ANDed against each row's data-risk plus its
+		 * textContent (server-rendered text), and any group (<details>) that contains a match is
+		 * auto-opened so results are not hidden inside a collapsed card. "write" groups both write
+		 * and destructive; hiding is via the hidden attribute only, so there is no HTML sink.
+		 */
+		#bindBridgeFilter() {
+			const filter = document.querySelector( '#aafm-bridge-filter' );
+			const form = document.querySelector( '#aafm-bridge-form' );
+			if ( ! filter || ! form ) {
+				return;
+			}
+			const search = filter.querySelector( '.aafm-integration-search' );
+			const riskButtons = filter.querySelectorAll( '.aafm-filter-btn' );
+			const rows = form.querySelectorAll( '.aafm-ability-row' );
+			const groups = form.querySelectorAll( '.aafm-integration-card' );
+
+			let query = '';
+			let risk = 'all';
+
+			const apply = () => {
+				rows.forEach( ( row ) => {
+					const rowRisk = row.dataset.risk ?? 'read';
+					const riskOk =
+						'all' === risk ||
+						( 'read' === risk && 'read' === rowRisk ) ||
+						( 'write' === risk && 'read' !== rowRisk );
+					const textOk =
+						'' === query ||
+						row.textContent.toLowerCase().includes( query );
+					row.hidden = ! ( riskOk && textOk );
+				} );
+				// Auto-open groups that contain a visible row (only while filtering).
+				const filtering = '' !== query || 'all' !== risk;
+				groups.forEach( ( group ) => {
+					if ( ! filtering ) {
+						return;
+					}
+					const hasMatch = [
+						...group.querySelectorAll( '.aafm-ability-row' ),
+					].some( ( r ) => ! r.hidden );
+					if ( hasMatch ) {
+						group.open = true;
+					}
+				} );
+			};
+
+			if ( search ) {
+				search.addEventListener( 'input', () => {
+					query = search.value.trim().toLowerCase();
+					apply();
+				} );
+			}
+			riskButtons.forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					risk = btn.dataset.filterRisk ?? 'all';
+					riskButtons.forEach( ( b ) => {
+						const on = b === btn;
+						b.classList.toggle( 'is-active', on );
+						b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+					} );
+					apply();
+				} );
+			} );
+		}
+
+		/**
+		 * Destructive-ability confirm for the bridge directory: an inline reveal, never a JS
+		 * modal. Flipping a destructive switch on shows the row's .aafm-bridge-confirm strip;
+		 * "Enable anyway" keeps it on and hides the strip, "Cancel" flips the switch back off.
+		 */
+		#bindBridgeConfirm() {
+			const form = document.querySelector( '#aafm-bridge-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.querySelectorAll(
+				'input[name="bridged_abilities[]"][data-destructive="1"]'
+			).forEach( ( box ) => {
+				const row = box.closest( '.aafm-ability-row' );
+				const confirm = row?.querySelector( '.aafm-bridge-confirm' );
+				if ( ! confirm ) {
+					return;
+				}
+				const yes = confirm.querySelector( '.aafm-bridge-confirm-yes' );
+				const no = confirm.querySelector( '.aafm-bridge-confirm-no' );
+
+				box.addEventListener( 'change', () => {
+					if ( box.checked ) {
+						confirm.hidden = false;
+					} else {
+						confirm.hidden = true;
+					}
+				} );
+				if ( yes ) {
+					yes.addEventListener( 'click', () => {
+						confirm.hidden = true;
+					} );
+				}
+				if ( no ) {
+					no.addEventListener( 'click', () => {
+						box.checked = false;
+						confirm.hidden = true;
+					} );
 				}
 			} );
 		}

@@ -16,7 +16,7 @@ final class MenuStructureTest extends TestCase {
 	public function test_admin_tabs_map_has_expected_slugs(): void {
 		$tabs = aafm_admin_tabs();
 		$this->assertSame(
-			array( 'dashboard', 'connection', 'abilities', 'integrations', 'settings', 'activity', 'help' ),
+			array( 'dashboard', 'connection', 'abilities', 'integrations', 'bridge', 'settings', 'activity', 'help' ),
 			array_keys( $tabs )
 		);
 		$this->assertSame( 'Dashboard', $tabs['dashboard'] );

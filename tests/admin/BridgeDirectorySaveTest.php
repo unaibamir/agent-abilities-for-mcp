@@ -123,6 +123,26 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertNotContains( 'evil/not-real', $saved ); // Allowlist rejects unknown.
 	}
 
+	public function test_save_preserves_enabled_but_unavailable_slugs(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		// An orphan slug: enabled earlier, but its host plugin is now inactive so it is not
+		// among the currently-discoverable abilities and its (disabled) checkbox is not posted.
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo', 'ghost/gone' ) );
+		$this->intercept_die();
+		$nonce                      = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']             = $nonce;
+		$_REQUEST['nonce']          = $nonce;
+		$_POST['bridged_abilities'] = array( 'demo/echo', 'evil/not-real' );
+
+		$json = $this->run_handler( 'aafm_ajax_save_bridged_abilities' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$saved = get_option( 'aafm_enabled_bridged_abilities' );
+		$this->assertContains( 'demo/echo', $saved );
+		$this->assertContains( 'ghost/gone', $saved, 'An enabled-but-unavailable slug must survive an unrelated save.' );
+		$this->assertNotContains( 'evil/not-real', $saved, 'An unknown submitted slug is still rejected.' );
+	}
+
 	public function test_save_requires_capability(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->intercept_die();

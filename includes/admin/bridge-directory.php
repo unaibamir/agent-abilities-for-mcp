@@ -344,12 +344,19 @@ function aafm_ajax_save_bridged_abilities(): void {
 	}
 
 	$allowed = array_values( array_unique( array_intersect( $submitted, $available ) ) );
-	update_option( 'aafm_enabled_bridged_abilities', $allowed );
+
+	// Enabled slugs whose host plugin is currently inactive are not in $available and their
+	// disabled checkboxes are never posted, so an unrelated save would silently drop them and
+	// reactivating the host would not restore the bridge. Union those orphans back in so an
+	// enabled-but-unavailable ability survives every save until it is explicitly turned off.
+	$orphans = array_diff( aafm_get_enabled_bridged_abilities(), $available );
+	$enabled = array_values( array_unique( array_merge( $allowed, $orphans ) ) );
+	update_option( 'aafm_enabled_bridged_abilities', $enabled );
 
 	wp_send_json_success(
 		array(
-			'enabled' => $allowed,
-			'count'   => count( $allowed ),
+			'enabled' => $enabled,
+			'count'   => count( $enabled ),
 		)
 	);
 }

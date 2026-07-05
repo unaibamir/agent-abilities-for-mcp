@@ -62,6 +62,26 @@ function aafm_build_server_tools( array $enabled ): array {
 }
 
 /**
+ * The full set of ability names the server should advertise: native enabled + bridged wrappers.
+ *
+ * The bridged wrapper names (aafm-bridge/<slug>) are derived from the enabled foreign slugs.
+ * aafm_build_server_tools() skips any name with no registered WP_Ability, so a wrapper that
+ * failed to register (host plugin inactive) is naturally excluded downstream.
+ *
+ * @return array<int,string>
+ */
+function aafm_all_server_ability_names(): array {
+	$native  = function_exists( 'aafm_get_enabled_abilities' ) ? aafm_get_enabled_abilities() : array();
+	$bridged = array();
+	if ( function_exists( 'aafm_get_enabled_bridged_abilities' ) ) {
+		foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+			$bridged[] = aafm_bridge_tool_name( $foreign_slug );
+		}
+	}
+	return array_values( array_unique( array_merge( $native, $bridged ) ) );
+}
+
+/**
  * Whether the current user passes an ability's UNDECORATED permission callback.
  *
  * Uses the raw callback stashed at registration (aafm_remember_raw_permission) so a
@@ -458,7 +478,7 @@ function aafm_register_mcp_server( $adapter ): void {
 		return;
 	}
 
-	$tools = aafm_build_server_tools( aafm_get_enabled_abilities() );
+	$tools = aafm_build_server_tools( aafm_all_server_ability_names() );
 
 	// Per-connection capability gate at request time (the user is anonymous here; see
 	// aafm_build_server_tools()). Priority 5 so it runs before any consumer reordering.

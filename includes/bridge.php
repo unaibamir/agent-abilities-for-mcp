@@ -51,6 +51,27 @@ function aafm_normalize_json_schema( $schema ): array {
 const AAFM_SCHEMA_MAX_DEPTH = 30;
 
 /**
+ * Whether an array has sequential integer keys starting at 0 (a list / tuple).
+ *
+ * A PHP 8.0-safe stand-in for array_is_list() (8.1+), used to tell tuple-form JSON Schema
+ * `items` (a list of subschemas) from a single-subschema object.
+ *
+ * @param array<int|string,mixed> $arr Array to test.
+ * @return bool
+ */
+function aafm_bridge_is_list( array $arr ): bool {
+	$expected = 0;
+	foreach ( $arr as $key => $unused ) {
+		unset( $unused );
+		if ( $key !== $expected ) {
+			return false;
+		}
+		++$expected;
+	}
+	return true;
+}
+
+/**
  * Recursively coerce empty associative object-containers to stdClass.
  *
  * Walks the object-keyed schema containers (properties, patternProperties, $defs, definitions),
@@ -85,9 +106,23 @@ function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 		}
 	}
 	foreach ( array( 'items', 'additionalProperties' ) as $key ) {
-		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {
-			$node[ $key ] = aafm_normalize_schema_node( $node[ $key ], $next );
+		if ( ! array_key_exists( $key, $node ) || ! is_array( $node[ $key ] ) ) {
+			continue; // A boolean additionalProperties (true/false) is left as-is.
 		}
+		// An empty array here is a schema container, not a list: emit {} so it stays a valid
+		// (empty) schema. additionalProperties: [] in particular is invalid JSON Schema.
+		if ( array() === $node[ $key ] ) {
+			$node[ $key ] = new stdClass();
+			continue;
+		}
+		// Tuple-form items (a list of subschemas, one per position) recurse per element.
+		if ( 'items' === $key && aafm_bridge_is_list( $node[ $key ] ) ) {
+			foreach ( $node[ $key ] as $i => $sub ) {
+				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub, $next );
+			}
+			continue;
+		}
+		$node[ $key ] = aafm_normalize_schema_node( $node[ $key ], $next );
 	}
 	foreach ( array( 'allOf', 'anyOf', 'oneOf' ) as $key ) {
 		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {

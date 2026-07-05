@@ -192,6 +192,27 @@ function aafm_get_enabled_bridged_abilities(): array {
 }
 
 /**
+ * Record or read wrapper-name collisions from the last registration pass.
+ *
+ * Two distinct foreign slugs can normalize to the SAME aafm-bridge/<slug> wrapper (e.g.
+ * "foo/bar-baz" and "foo/bar_baz" both become "aafm-bridge/foo-bar-baz"). Only the first
+ * slug claims the wrapper; the loser is skipped and recorded here so the admin directory can
+ * flag it inline instead of losing it silently. Passing an array replaces the store (the
+ * registration pass writes its result once); calling with no argument reads it.
+ *
+ * @param array<string,array{wrapper:string,winner:string}>|null $collisions Map keyed by the
+ *        losing foreign slug, or null to read.
+ * @return array<string,array{wrapper:string,winner:string}>
+ */
+function aafm_bridge_collisions( ?array $collisions = null ): array {
+	static $store = array();
+	if ( null !== $collisions ) {
+		$store = $collisions;
+	}
+	return $store;
+}
+
+/**
  * Register a governed wrapper for every enabled + currently-registered foreign ability.
  *
  * Runs on the abilities-init action, AFTER native registration. For each enabled foreign slug
@@ -207,16 +228,34 @@ function aafm_register_enabled_bridged_abilities(): void {
 	if ( ! function_exists( 'wp_get_ability' ) ) {
 		return;
 	}
+	$claimed    = array();
+	$collisions = array();
 	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
 		$wrapper = aafm_bridge_tool_name( $foreign_slug );
+
+		// A DIFFERENT foreign slug already mapped to this wrapper name this pass: the normalizer
+		// collapsed both to the same slug. Skip the loser and record it so the admin can surface
+		// the clash rather than losing it silently behind the idempotency guard below.
+		if ( isset( $claimed[ $wrapper ] ) ) {
+			$collisions[ $foreign_slug ] = array(
+				'wrapper' => $wrapper,
+				'winner'  => $claimed[ $wrapper ],
+			);
+			continue;
+		}
+
 		if ( function_exists( 'wp_has_ability' ) && wp_has_ability( $wrapper ) ) {
-			continue; // Idempotent.
+			// Already registered (idempotent re-fire, or an earlier claimant). Remember the
+			// owner so a later same-pass slug mapping here is still flagged as a collision.
+			$claimed[ $wrapper ] = $foreign_slug;
+			continue;
 		}
 		$foreign = wp_get_ability( $foreign_slug );
 		if ( ! $foreign instanceof WP_Ability ) {
 			continue; // Host plugin inactive / slug gone.
 		}
-		$risk = aafm_bridge_risk( $foreign );
+		$claimed[ $wrapper ] = $foreign_slug;
+		$risk                = aafm_bridge_risk( $foreign );
 
 		$label = (string) $foreign->get_label();
 
@@ -250,4 +289,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 			)
 		);
 	}
+
+	// Publish this pass's collisions so the admin directory can flag any losing slug.
+	aafm_bridge_collisions( $collisions );
 }

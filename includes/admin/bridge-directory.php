@@ -77,6 +77,8 @@ function aafm_render_bridge_directory(): void {
 	);
 	echo '</div>';
 
+	aafm_render_bridge_collision_notice();
+
 	// One global search + risk filter across every group. Bound by admin.js #bindBridgeFilter,
 	// which iterates rows across all groups and auto-opens groups that contain a match.
 	aafm_render_bridge_filter();
@@ -96,6 +98,41 @@ function aafm_render_bridge_directory(): void {
 	echo '</form>';
 
 	echo '</div>'; // .aafm-bridge
+}
+
+/**
+ * Warn inline when two enabled foreign slugs normalized to the same wrapper name.
+ *
+ * The registration pass records any losing slug in aafm_bridge_collisions() and skips it so the
+ * winner's wrapper is not overwritten. Surfacing it here keeps the clash from vanishing: the
+ * operator can see which enabled ability did not become a tool, and why.
+ *
+ * @return void
+ */
+function aafm_render_bridge_collision_notice(): void {
+	$collisions = function_exists( 'aafm_bridge_collisions' ) ? aafm_bridge_collisions() : array();
+	if ( empty( $collisions ) ) {
+		return;
+	}
+
+	$lines = array();
+	foreach ( $collisions as $loser => $info ) {
+		$lines[] = sprintf(
+			/* translators: 1: skipped ability slug, 2: winning ability slug, 3: shared MCP tool name. */
+			__( '"%1$s" was skipped because it maps to the same tool name as "%2$s" (%3$s).', 'agent-abilities-for-mcp' ),
+			(string) $loser,
+			(string) ( $info['winner'] ?? '' ),
+			(string) ( $info['wrapper'] ?? '' )
+		);
+	}
+
+	$message = __( 'Some enabled abilities share a normalized tool name and could not all be bridged:', 'agent-abilities-for-mcp' )
+		. ' ' . implode( ' ', $lines );
+
+	echo wp_kses(
+		aafm_get_notice_html( 'warning', $message ),
+		aafm_admin_allowed_html()
+	);
 }
 
 /**

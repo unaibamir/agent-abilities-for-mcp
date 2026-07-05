@@ -124,8 +124,40 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	public function test_enabled_slugs_accessor_sanitizes(): void {
-		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo', 'demo/echo', '', 42 ) );
-		$this->assertSame( array( 'demo/echo', '42' ), aafm_get_enabled_bridged_abilities() );
+		// A polluted option must yield ONLY valid foreign strings, never fatal, and never let a
+		// native aafm/* or aafm-bridge/* slug through (which would bridge ourselves).
+		update_option(
+			'aafm_enabled_bridged_abilities',
+			array(
+				'demo/echo',
+				'demo/echo',        // Duplicate.
+				'',                 // Empty.
+				42,                 // Non-string scalar.
+				array( 'x' ),       // Array.
+				new \stdClass(),    // Object without __toString - would fatal strval().
+				'aafm/get-posts',   // Our own namespace.
+				'aafm-bridge/demo-echo', // Our wrapper namespace.
+			)
+		);
+		$this->assertSame( array( 'demo/echo' ), aafm_get_enabled_bridged_abilities() );
+	}
+
+	public function test_registration_never_bridges_a_native_namespace(): void {
+		// Even a polluted option must never register an aafm-bridge/aafm-* wrapper.
+		$this->register_foreign( true );
+		update_option(
+			'aafm_enabled_bridged_abilities',
+			array( 'demo/echo', 'aafm/get-posts', 'aafm-bridge/demo-echo' )
+		);
+		$this->register_wrappers();
+
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			$this->assertStringStartsNotWith(
+				'aafm-bridge/aafm',
+				(string) $slug,
+				'A native namespace must never be bridged.'
+			);
+		}
 	}
 
 	public function test_bridge_pass_is_hooked_after_late_foreign_registrations(): void {

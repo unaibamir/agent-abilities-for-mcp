@@ -205,7 +205,33 @@ function aafm_get_enabled_bridged_abilities(): array {
 	if ( ! is_array( $stored ) ) {
 		return array();
 	}
-	return array_values( array_unique( array_filter( array_map( 'strval', $stored ) ) ) );
+
+	$clean = array();
+	// Keep only non-empty strings. array_map('strval', ...) would FATAL on an object with no
+	// __toString, so filter to strings first rather than coercing arbitrary values.
+	foreach ( array_filter( $stored, 'is_string' ) as $slug ) {
+		if ( '' === $slug || aafm_bridge_is_native_namespace( $slug ) ) {
+			continue; // Never bridge our own aafm/* abilities or aafm-bridge/* wrappers.
+		}
+		$clean[] = $slug;
+	}
+
+	return array_values( array_unique( $clean ) );
+}
+
+/**
+ * Whether a slug lives in one of our own namespaces (aafm or aafm-bridge).
+ *
+ * Guards the enabled-bridged list and the registration walk so a polluted option can never
+ * bridge one of our native abilities back onto itself as aafm-bridge/aafm-*.
+ *
+ * @param string $slug Ability slug, e.g. "woocommerce/list-products".
+ * @return bool
+ */
+function aafm_bridge_is_native_namespace( string $slug ): bool {
+	$pos = strpos( $slug, '/' );
+	$ns  = false !== $pos ? substr( $slug, 0, $pos ) : '';
+	return 'aafm' === $ns || 'aafm-bridge' === $ns;
 }
 
 /**
@@ -248,6 +274,11 @@ function aafm_register_enabled_bridged_abilities(): void {
 	$claimed    = array();
 	$collisions = array();
 	foreach ( aafm_get_enabled_bridged_abilities() as $foreign_slug ) {
+		// Belt-and-suspenders: never register a wrapper for one of our own namespaces even if the
+		// option was polluted past the accessor's guard.
+		if ( aafm_bridge_is_native_namespace( $foreign_slug ) ) {
+			continue;
+		}
 		$wrapper = aafm_bridge_tool_name( $foreign_slug );
 
 		// A DIFFERENT foreign slug already mapped to this wrapper name this pass: the normalizer

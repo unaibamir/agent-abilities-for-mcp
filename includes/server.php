@@ -371,9 +371,13 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 		return $tools;
 	}
 
-	// Map our enabled abilities to their sanitized MCP tool names once.
+	// Map every server ability - native AND bridged wrappers - to its sanitized MCP tool
+	// name once. Bridged wrappers must be gated here too: their raw permission (delegating
+	// to the foreign ability) was stashed at registration, so aafm_user_can_discover_ability()
+	// resolves the wrapper name and fails closed for an incapable connection. Building the map
+	// from natives only would let a wrapper bypass this request-time capability check.
 	$enabled_by_tool_name = array();
-	foreach ( aafm_get_enabled_abilities() as $ability_name ) {
+	foreach ( aafm_all_server_ability_names() as $ability_name ) {
 		$enabled_by_tool_name[ aafm_mcp_tool_name( $ability_name ) ] = $ability_name;
 	}
 

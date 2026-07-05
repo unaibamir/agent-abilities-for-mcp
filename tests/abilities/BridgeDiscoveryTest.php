@@ -14,6 +14,18 @@ use AAFM\Tests\TestCase;
 
 final class BridgeDiscoveryTest extends TestCase {
 
+	public function tear_down(): void {
+		// The abilities registry persists across tests; drop the demo fixture so it never
+		// leaks into a later suite that asserts on the discovered set.
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			$slug = (string) $slug;
+			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
+				wp_unregister_ability( $slug );
+			}
+		}
+		parent::tear_down();
+	}
+
 	/**
 	 * Register a throwaway category and a foreign ability inside the gated init actions.
 	 *

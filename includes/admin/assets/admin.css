@@ -792,6 +792,25 @@
 		max-inline-size: 80ch;
 	}
 
+	/* ---------- Bridge directory (Abilities from other plugins) ---------- */
+	/* Destructive rows borrow the existing red accent - no new token. */
+	.aafm-ability-row.is-destructive {
+		border-inline-start: 3px solid var(--aafm-red);
+		padding-inline-start: 15px;
+	}
+
+	/* The inline destructive confirm strip: reuses the .aafm-notice-inline component; this
+	   only lays out the actions beneath it. */
+	.aafm-bridge-confirm {
+		margin-block: 8px 0;
+
+		.aafm-bridge-confirm-actions {
+			display: flex;
+			gap: 8px;
+			margin-block: 8px 0;
+		}
+	}
+
 	/* ---------- Integration cards (Integrations tab) ---------- */
 	.aafm-integrations {
 		.aafm-integrations-disclaimer {

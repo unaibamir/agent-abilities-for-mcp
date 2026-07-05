@@ -703,6 +703,7 @@ function aafm_admin_tabs(): array {
 		'connection'   => __( 'Connection', 'agent-abilities-for-mcp' ),
 		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
 		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
+		'bridge'       => __( 'Abilities from other plugins', 'agent-abilities-for-mcp' ),
 		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
 		'help'         => __( 'Help', 'agent-abilities-for-mcp' ),
@@ -785,6 +786,9 @@ function aafm_render_admin_page(): void {
 			break;
 		case 'integrations':
 			aafm_render_integrations_tab();
+			break;
+		case 'bridge':
+			aafm_render_bridge_directory();
 			break;
 		case 'settings':
 			aafm_render_settings_tab();

@@ -44,6 +44,41 @@ final class BridgeSchemaTest extends TestCase {
 		$this->assertStringContainsString( '"meta":{"type":"object","properties":{}}', (string) wp_json_encode( $out ) );
 	}
 
+	public function test_deeply_nested_schema_normalizes_without_unbounded_recursion(): void {
+		// A hostile/buggy foreign schema could nest far beyond any real need. Build one well past
+		// the depth cap and assert normalization returns rather than exhausting the stack.
+		$schema = array(
+			'type'       => 'object',
+			'properties' => array(),
+		);
+		$node   = &$schema;
+		for ( $i = 0; $i < 200; $i++ ) {
+			$node['properties']['child'] = array(
+				'type'       => 'object',
+				'properties' => array(),
+			);
+			$node                        = &$node['properties']['child'];
+		}
+		unset( $node );
+
+		$out = aafm_normalize_json_schema( $schema );
+		$this->assertIsArray( $out );
+		$this->assertSame( 'object', $out['type'] );
+	}
+
+	public function test_self_referential_schema_terminates(): void {
+		// A cyclic reference would recurse forever without the depth cap. The cap terminates it.
+		$schema                       = array(
+			'type'       => 'object',
+			'properties' => array(),
+		);
+		$schema['properties']['loop'] = &$schema;
+
+		$out = aafm_normalize_json_schema( $schema );
+		$this->assertIsArray( $out );
+		$this->assertSame( 'object', $out['type'] );
+	}
+
 	public function test_non_empty_properties_untouched(): void {
 		$in  = array(
 			'type'       => 'object',

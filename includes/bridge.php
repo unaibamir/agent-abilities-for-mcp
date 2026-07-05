@@ -37,8 +37,18 @@ function aafm_normalize_json_schema( $schema ): array {
 	if ( 'object' === $schema['type'] && ! array_key_exists( 'properties', $schema ) ) {
 		$schema['properties'] = new stdClass();
 	}
-	return aafm_normalize_schema_node( $schema );
+	return aafm_normalize_schema_node( $schema, 0 );
 }
+
+/**
+ * The maximum schema nesting depth the normalizer will recurse into.
+ *
+ * A foreign get_input_schema()/get_output_schema() is attacker-influenced: a self-referential or
+ * pathologically deep schema would otherwise recurse unbounded and fatal on every discovery/admin
+ * render. Real schemas are shallow, so 30 is far above any legitimate need and the cap doubles as
+ * a cycle breaker (a reference loop terminates once it hits the depth).
+ */
+const AAFM_SCHEMA_MAX_DEPTH = 30;
 
 /**
  * Recursively coerce empty associative object-containers to stdClass.
@@ -48,13 +58,20 @@ function aafm_normalize_json_schema( $schema ): array {
  * (allOf/anyOf/oneOf). An empty object-container becomes stdClass so it emits {}; non-empty
  * containers and genuine list schemas are left untouched.
  *
- * @param mixed $node Schema node.
+ * @param mixed $node  Schema node.
+ * @param int   $depth Current recursion depth (0 at the root).
  * @return mixed
  */
-function aafm_normalize_schema_node( $node ) {
+function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 	if ( ! is_array( $node ) ) {
 		return $node;
 	}
+	// Fail closed past the depth cap: stop recursing and hand the node back untouched. This
+	// bounds a pathologically deep foreign schema and terminates any cyclic reference.
+	if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
+		return $node;
+	}
+	$next         = $depth + 1;
 	$object_keyed = array( 'properties', 'patternProperties', '$defs', 'definitions' );
 	foreach ( $object_keyed as $key ) {
 		if ( array_key_exists( $key, $node ) ) {
@@ -62,20 +79,20 @@ function aafm_normalize_schema_node( $node ) {
 				$node[ $key ] = new stdClass();
 			} elseif ( is_array( $node[ $key ] ) ) {
 				foreach ( $node[ $key ] as $prop => $sub ) {
-					$node[ $key ][ $prop ] = aafm_normalize_schema_node( $sub );
+					$node[ $key ][ $prop ] = aafm_normalize_schema_node( $sub, $next );
 				}
 			}
 		}
 	}
 	foreach ( array( 'items', 'additionalProperties' ) as $key ) {
 		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {
-			$node[ $key ] = aafm_normalize_schema_node( $node[ $key ] );
+			$node[ $key ] = aafm_normalize_schema_node( $node[ $key ], $next );
 		}
 	}
 	foreach ( array( 'allOf', 'anyOf', 'oneOf' ) as $key ) {
 		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {
 			foreach ( $node[ $key ] as $i => $sub ) {
-				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub );
+				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub, $next );
 			}
 		}
 	}

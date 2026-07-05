@@ -180,6 +180,63 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertTrue( wp_has_ability( 'aafm-bridge/demo-echo' ) );
 	}
 
+	public function test_wrapper_copies_output_schema_and_idempotent_annotation(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/out',
+					array(
+						'label'               => 'Out',
+						'description'         => 'o',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'output_schema'       => array(
+							'type'       => 'object',
+							'properties' => array( 'ok' => array( 'type' => 'boolean' ) ),
+						),
+						'meta'                => array(
+							'annotations' => array(
+								'readonly'   => true,
+								'idempotent' => true,
+							),
+						),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/out' ) );
+		$this->register_wrappers();
+
+		$wrapper = wp_get_ability( 'aafm-bridge/demo-out' );
+		$this->assertNotNull( $wrapper );
+
+		$output = $wrapper->get_output_schema();
+		$this->assertSame( 'boolean', $output['properties']['ok']['type'], 'Output schema is copied and normalized.' );
+
+		$annotations = $wrapper->get_meta_item( 'annotations' );
+		$this->assertTrue( $annotations['idempotent'] ?? false, 'The idempotent annotation is carried across.' );
+	}
+
 	/**
 	 * Register two foreign abilities whose slugs normalize to the SAME wrapper name.
 	 *

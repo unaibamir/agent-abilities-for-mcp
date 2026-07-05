@@ -120,7 +120,7 @@ function aafm_bridge_tool_name( string $foreign_slug ): string {
  * Classify a foreign ability's risk from its annotations.
  *
  * @param \WP_Ability $ability The foreign ability.
- * @return array{risk:string,readonly:bool,destructive:bool}
+ * @return array{risk:string,readonly:bool,destructive:bool,idempotent:bool}
  */
 function aafm_bridge_risk( $ability ): array {
 	$ann = array();
@@ -129,11 +129,13 @@ function aafm_bridge_risk( $ability ): array {
 	}
 	$readonly    = ! empty( $ann['readonly'] );
 	$destructive = ! empty( $ann['destructive'] );
+	$idempotent  = ! empty( $ann['idempotent'] );
 	$risk        = $destructive ? 'destructive' : ( $readonly ? 'read' : 'write' );
 	return array(
 		'risk'        => $risk,
 		'readonly'    => $readonly,
 		'destructive' => $destructive,
+		'idempotent'  => $idempotent,
 	);
 }
 
@@ -145,6 +147,25 @@ function aafm_bridge_risk( $ability ): array {
  */
 function aafm_bridge_input_schema( $ability ): array {
 	$schema = method_exists( $ability, 'get_input_schema' ) ? $ability->get_input_schema() : array();
+	return aafm_normalize_json_schema( $schema );
+}
+
+/**
+ * The foreign ability's output schema, normalized - or null when it exposes none.
+ *
+ * Returns null (not a default object schema) when the foreign ability has no output schema, so the
+ * wrapper simply omits output_schema and inherits core's no-output-validation default. A default
+ * {type:object, properties:{}} here would instead make core validate every execute result against
+ * an empty stdClass container and fatal.
+ *
+ * @param \WP_Ability $ability The foreign ability.
+ * @return array<string,mixed>|null
+ */
+function aafm_bridge_output_schema( $ability ): ?array {
+	$schema = method_exists( $ability, 'get_output_schema' ) ? $ability->get_output_schema() : array();
+	if ( ! is_array( $schema ) || array() === $schema ) {
+		return null;
+	}
 	return aafm_normalize_json_schema( $schema );
 }
 
@@ -307,35 +328,41 @@ function aafm_register_enabled_bridged_abilities(): void {
 
 		$label = (string) $foreign->get_label();
 
-		aafm_register_ability_with_log(
-			$wrapper,
-			array(
-				'label'               => '' !== $label ? $label : $foreign_slug,
-				'description'         => (string) $foreign->get_description() . ' (bridged: ' . $foreign_slug . ')',
-				'category'            => $risk['readonly'] ? 'aafm-reads' : 'aafm-writes',
-				'input_schema'        => aafm_bridge_input_schema( $foreign ),
-				'meta'                => array(
-					'annotations' => array(
-						'readonly'    => $risk['readonly'],
-						'destructive' => $risk['destructive'],
-					),
+		$args = array(
+			'label'               => '' !== $label ? $label : $foreign_slug,
+			'description'         => (string) $foreign->get_description() . ' (bridged: ' . $foreign_slug . ')',
+			'category'            => $risk['readonly'] ? 'aafm-reads' : 'aafm-writes',
+			'input_schema'        => aafm_bridge_input_schema( $foreign ),
+			'meta'                => array(
+				'annotations' => array(
+					'readonly'    => $risk['readonly'],
+					'destructive' => $risk['destructive'],
+					'idempotent'  => $risk['idempotent'],
 				),
-				'permission_callback' => static function ( $input = null ) use ( $foreign_slug ) {
-					$live = wp_get_ability( $foreign_slug );
-					if ( ! $live instanceof WP_Ability ) {
-						return false;
-					}
-					return true === $live->check_permissions( is_array( $input ) ? $input : array() );
-				},
-				'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
-					$live = wp_get_ability( $foreign_slug );
-					if ( ! $live instanceof WP_Ability ) {
-						return new WP_Error( 'aafm_bridge_missing', __( 'The bridged ability is no longer available.', 'agent-abilities-for-mcp' ) );
-					}
-					return $live->execute( is_array( $input ) ? $input : array() );
-				},
-			)
+			),
+			'permission_callback' => static function ( $input = null ) use ( $foreign_slug ) {
+				$live = wp_get_ability( $foreign_slug );
+				if ( ! $live instanceof WP_Ability ) {
+					return false;
+				}
+				return true === $live->check_permissions( is_array( $input ) ? $input : array() );
+			},
+			'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
+				$live = wp_get_ability( $foreign_slug );
+				if ( ! $live instanceof WP_Ability ) {
+					return new WP_Error( 'aafm_bridge_missing', __( 'The bridged ability is no longer available.', 'agent-abilities-for-mcp' ) );
+				}
+				return $live->execute( is_array( $input ) ? $input : array() );
+			},
 		);
+
+		// Copy the foreign output schema only when it actually exposes one (see helper).
+		$output_schema = aafm_bridge_output_schema( $foreign );
+		if ( null !== $output_schema ) {
+			$args['output_schema'] = $output_schema;
+		}
+
+		aafm_register_ability_with_log( $wrapper, $args );
 	}
 
 	// Publish this pass's collisions so the admin directory can flag any losing slug.

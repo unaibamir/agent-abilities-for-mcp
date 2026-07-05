@@ -180,6 +180,36 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertTrue( wp_has_ability( 'aafm-bridge/demo-echo' ) );
 	}
 
+	public function test_bridged_execute_writes_activity_rows(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign( true );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo' ) );
+		$this->register_wrappers();
+
+		wp_get_ability( 'aafm-bridge/demo-echo' )->execute( array( 'v' => 'hi' ) );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/demo-echo' ) );
+		$this->assertNotEmpty( $rows, 'A bridged execute must be audited like any native ability.' );
+		$this->assertSame( 'success', (string) $rows[0]['status'], 'The outcome row records success.' );
+	}
+
+	public function test_denied_bridged_permission_writes_denied_row(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign( false ); // Foreign permission denies.
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo' ) );
+		$this->register_wrappers();
+
+		$this->assertNotTrue( wp_get_ability( 'aafm-bridge/demo-echo' )->check_permissions( array( 'v' => 'x' ) ) );
+
+		$denied = aafm_query_activity(
+			array(
+				'ability' => 'aafm-bridge/demo-echo',
+				'status'  => 'denied',
+			)
+		);
+		$this->assertNotEmpty( $denied, 'A denied bridged permission must write a denied audit row.' );
+	}
+
 	public function test_wrapper_copies_output_schema_and_idempotent_annotation(): void {
 		$this->in_action(
 			'wp_abilities_api_categories_init',

@@ -161,6 +161,7 @@ function aafm_ajax_save_settings(): void {
 function aafm_config_option_names(): array {
 	return array(
 		'aafm_enabled_abilities',
+		'aafm_enabled_bridged_abilities',
 		'aafm_allowed_post_types',
 		'aafm_allowed_meta_keys',
 		'aafm_rate_limit_per_min',

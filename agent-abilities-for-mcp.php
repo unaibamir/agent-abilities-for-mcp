@@ -182,6 +182,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integration-manifest.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bootstrap.php';
@@ -264,6 +265,10 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
+	}
+
+	if ( defined( 'WP_CLI' ) && WP_CLI ) {
+		WP_CLI::add_command( 'aafm catalog export', 'aafm_cli_catalog_export' );
 	}
 
 	aafm_init_mcp();

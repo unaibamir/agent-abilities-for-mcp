@@ -127,4 +127,71 @@ final class BridgeWrapperTest extends TestCase {
 		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo', 'demo/echo', '', 42 ) );
 		$this->assertSame( array( 'demo/echo', '42' ), aafm_get_enabled_bridged_abilities() );
 	}
+
+	/**
+	 * Register two foreign abilities whose slugs normalize to the SAME wrapper name.
+	 *
+	 * Slugs demo/a-b and demo/a--b both collapse to aafm-bridge/demo-a-b (the normalizer folds
+	 * the double dash to a single one). Both are valid core ability names (lowercase, dashes).
+	 *
+	 * @return void
+	 */
+	private function register_colliding_foreigners(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				foreach ( array( 'demo/a-b', 'demo/a--b' ) as $slug ) {
+					wp_register_ability(
+						$slug,
+						array(
+							'label'               => $slug,
+							'description'         => 'e',
+							'category'            => 'demo-things',
+							'input_schema'        => array(
+								'type'       => 'object',
+								'properties' => array(),
+							),
+							'execute_callback'    => static fn() => array(),
+							'permission_callback' => '__return_true',
+						)
+					);
+				}
+			}
+		);
+	}
+
+	public function test_normalization_collision_registers_one_and_reports_loser(): void {
+		$this->register_colliding_foreigners();
+		// demo/a-b is listed first, so it claims the wrapper; demo/a--b loses.
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/a-b', 'demo/a--b' ) );
+		$this->register_wrappers();
+
+		$this->assertTrue( wp_has_ability( 'aafm-bridge/demo-a-b' ) );
+
+		$wrappers = array_filter(
+			array_keys( wp_get_abilities() ),
+			static fn( string $slug ): bool => 0 === strncmp( $slug, 'aafm-bridge/', 12 )
+		);
+		$this->assertCount( 1, $wrappers, 'Exactly one wrapper registers for two colliding slugs.' );
+
+		$collisions = aafm_bridge_collisions();
+		$this->assertArrayHasKey( 'demo/a--b', $collisions, 'The losing slug is reported.' );
+		$this->assertSame( 'demo/a-b', $collisions['demo/a--b']['winner'] );
+		$this->assertSame( 'aafm-bridge/demo-a-b', $collisions['demo/a--b']['wrapper'] );
+		$this->assertArrayNotHasKey( 'demo/a-b', $collisions, 'The winner is not a collision.' );
+	}
 }

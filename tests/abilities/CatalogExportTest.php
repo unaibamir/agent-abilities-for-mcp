@@ -56,7 +56,7 @@ final class CatalogExportTest extends TestCase {
 							'type'       => 'object',
 							'properties' => array(),
 						),
-						'execute_callback'    => static fn( $i ) => array(),
+						'execute_callback'    => static fn() => array(),
 						'permission_callback' => '__return_true',
 						'meta'                => array( 'annotations' => array( 'readonly' => true ) ),
 					)

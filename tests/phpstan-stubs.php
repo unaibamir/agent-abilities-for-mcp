@@ -1025,4 +1025,25 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 	}
 	class_alias( 'Aafm_Phpstan_Aioseo_Post_Model', 'AIOSEO\\Plugin\\Common\\Models\\Post' );
 }
+
+if ( ! class_exists( 'WP_CLI' ) ) {
+	/**
+	 * Minimal WP-CLI signature for static analysis only. Real WP_CLI is provided by the
+	 * WP-CLI runtime, and the command is only registered behind defined( 'WP_CLI' ).
+	 */
+	class WP_CLI {
+		/**
+		 * @param string   $name     Command name.
+		 * @param callable $callable Command callback.
+		 * @param array<string,mixed> $args Registration args.
+		 * @return void
+		 */
+		public static function add_command( $name, $callable, $args = array() ) {}
+		/**
+		 * @param string $message Line to print.
+		 * @return void
+		 */
+		public static function line( $message = '' ) {}
+	}
+}
 // phpcs:enable

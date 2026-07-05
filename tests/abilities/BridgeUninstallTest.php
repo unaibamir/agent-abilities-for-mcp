@@ -2,7 +2,7 @@
 /**
  * The bridged-abilities option is cleared on reset and uninstall.
  *
- * aafm_config_option_names() is the canonical config list looped by both aafm_reset_plugin()
+ * The canonical config list aafm_config_option_names() is looped by both aafm_reset_plugin()
  * and aafm_uninstall_site() (uninstall.php), so listing the option there covers both paths.
  *
  * @package AgentAbilitiesForMCP

@@ -67,7 +67,7 @@ final class BridgeDirectorySaveTest extends TestCase {
 							'type'       => 'object',
 							'properties' => array(),
 						),
-						'execute_callback'    => static fn( $i ) => array(),
+						'execute_callback'    => static fn() => array(),
 						'permission_callback' => '__return_true',
 					)
 				);
@@ -110,8 +110,9 @@ final class BridgeDirectorySaveTest extends TestCase {
 	public function test_save_persists_only_allowlisted_slugs(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		$this->intercept_die();
-		$_POST['nonce']             = wp_create_nonce( 'aafm_admin' );
-		$_REQUEST['nonce']          = $_POST['nonce'];
+		$nonce                      = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']             = $nonce;
+		$_REQUEST['nonce']          = $nonce;
 		$_POST['bridged_abilities'] = array( 'demo/echo', 'evil/not-real' );
 
 		$json = $this->run_handler( 'aafm_ajax_save_bridged_abilities' );
@@ -125,8 +126,9 @@ final class BridgeDirectorySaveTest extends TestCase {
 	public function test_save_requires_capability(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
 		$this->intercept_die();
-		$_POST['nonce']             = wp_create_nonce( 'aafm_admin' );
-		$_REQUEST['nonce']          = $_POST['nonce'];
+		$nonce                      = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']             = $nonce;
+		$_REQUEST['nonce']          = $nonce;
 		$_POST['bridged_abilities'] = array( 'demo/echo' );
 
 		$json = $this->run_handler( 'aafm_ajax_save_bridged_abilities' );

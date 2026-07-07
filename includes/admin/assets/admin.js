@@ -56,6 +56,7 @@
 			this.#bindSaveBridge();
 			this.#bindBridgeFilter();
 			this.#bindBridgeConfirm();
+			this.#bindBridgeBulk();
 			this.#bindSavePostTypes();
 			this.#bindSaveMetaKeys();
 			this.#bindSaveUserMetaKeys();
@@ -736,6 +737,42 @@
 						confirm.hidden = true;
 					} );
 				}
+			} );
+		}
+
+		/**
+		 * Per-group Enable all / Disable all for the bridge directory. Flips every ability
+		 * checkbox inside the button's own plugin card (skipping disabled/orphan rows). Bulk
+		 * enable is a deliberate action, so it turns destructive abilities on directly and hides
+		 * any open per-row confirm strip rather than firing a modal. The save reads whatever is
+		 * checked, so no other wiring is needed.
+		 */
+		#bindBridgeBulk() {
+			const form = document.querySelector( '#aafm-bridge-form' );
+			if ( ! form ) {
+				return;
+			}
+			form.querySelectorAll( '[data-bridge-bulk]' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const group = btn.closest( 'details' );
+					if ( ! group ) {
+						return;
+					}
+					const enable = 'enable' === btn.dataset.bridgeBulk;
+					group
+						.querySelectorAll(
+							'input[name="bridged_abilities[]"]:not([disabled])'
+						)
+						.forEach( ( box ) => {
+							box.checked = enable;
+							const confirm = box
+								.closest( '.aafm-ability-row' )
+								?.querySelector( '.aafm-bridge-confirm' );
+							if ( confirm ) {
+								confirm.hidden = true;
+							}
+						} );
+				} );
 			} );
 		}
 

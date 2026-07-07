@@ -799,6 +799,13 @@
 		padding-inline-start: 15px;
 	}
 
+	/* Per-group Enable all / Disable all controls, above the ability list. */
+	.aafm-bridge-bulk {
+		display: flex;
+		gap: 8px;
+		margin-block-end: 12px;
+	}
+
 	/* The inline destructive confirm strip: reuses the .aafm-notice-inline component; this
 	   only lays out the actions beneath it. */
 	.aafm-bridge-confirm {

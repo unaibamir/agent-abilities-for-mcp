@@ -181,6 +181,23 @@ function aafm_render_bridge_filter(): void {
 }
 
 /**
+ * Turn a source namespace slug into a readable group heading.
+ *
+ * The namespace comes off the ability slug lowercased and hyphenated (e.g. "events-manager").
+ * Title-case each word for display: "events-manager" -> "Events Manager". We cannot recover a
+ * plugin's exact brand casing (e.g. "WooCommerce") from a lowercase slug, so Title Case is the
+ * honest generic transform.
+ *
+ * @param string $ns Source namespace.
+ * @return string
+ */
+function aafm_bridge_display_label( string $ns ): string {
+	$words = str_replace( array( '-', '_' ), ' ', $ns );
+	$words = trim( (string) preg_replace( '/\s+/', ' ', $words ) );
+	return '' === $words ? $ns : ucwords( $words );
+}
+
+/**
  * Render one source-plugin group (a collapsed accordion card) with its ability rows.
  *
  * @param string              $ns       Source namespace (the group key).
@@ -191,7 +208,7 @@ function aafm_render_bridge_filter(): void {
  */
 function aafm_render_bridge_group( string $ns, array $group, array $enabled, bool $disabled ): void {
 	$rows  = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
-	$label = (string) ( $group['label'] ?? $ns );
+	$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
 
 	$read  = 0;
 	$write = 0;
@@ -233,6 +250,17 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	echo '</summary>';
 
 	echo '<div class="aafm-integration-body">';
+
+	// Per-group bulk controls: flip every ability in this plugin at once. Not on the orphan
+	// group (its rows are disabled). Bulk enable is a deliberate action, so it turns on
+	// destructive abilities too without the per-row confirm; the DESTRUCTIVE badge still warns.
+	if ( ! $disabled && $rows ) {
+		echo '<div class="aafm-bridge-bulk">';
+		echo '<button type="button" class="aafm-btn aafm-btn-secondary" data-bridge-bulk="enable">' . esc_html__( 'Enable all', 'agent-abilities-for-mcp' ) . '</button> ';
+		echo '<button type="button" class="aafm-btn aafm-btn-secondary" data-bridge-bulk="disable">' . esc_html__( 'Disable all', 'agent-abilities-for-mcp' ) . '</button>';
+		echo '</div>';
+	}
+
 	echo '<div class="aafm-card aafm-ability-list">';
 	foreach ( $rows as $row ) {
 		aafm_render_bridge_ability_row( $row, $enabled, $disabled );

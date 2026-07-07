@@ -156,4 +156,22 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertFalse( (bool) ( $json['success'] ?? false ) );
 		$this->assertFalse( get_option( 'aafm_enabled_bridged_abilities', false ) );
 	}
+
+	public function test_group_label_is_title_cased(): void {
+		$this->assertSame( 'Events Manager', aafm_bridge_display_label( 'events-manager' ) );
+		$this->assertSame( 'Woocommerce', aafm_bridge_display_label( 'woocommerce' ) );
+		$this->assertSame( 'Core', aafm_bridge_display_label( 'core' ) );
+		$this->assertSame( 'My Cool Plugin', aafm_bridge_display_label( 'my_cool-plugin' ) );
+	}
+
+	public function test_directory_renders_title_case_header_and_bulk_controls(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		ob_start();
+		aafm_render_bridge_directory();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<h2>Demo</h2>', $html );          // Title-cased namespace.
+		$this->assertStringContainsString( 'data-bridge-bulk="enable"', $html );
+		$this->assertStringContainsString( 'data-bridge-bulk="disable"', $html );
+	}
 }

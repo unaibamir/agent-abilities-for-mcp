@@ -10,12 +10,31 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
+ * The top-level menu icon: a URL to the shipped monochrome brand mark.
+ *
+ * A plain URL (rendered by WordPress as an <img> in the menu) avoids inlining the SVG as
+ * an encoded data URI, which the source-tree security guard forbids. The mark is a white
+ * shield that reads on both the dark menu and the blue current-item background; the full
+ * colored logo lives on the wp.org listing and the website, not here. Falls back to a
+ * core Dashicon if the asset is somehow missing so the menu never breaks.
+ *
+ * @return string An asset URL for the brand icon, or a dashicons-* slug fallback.
+ */
+function aafm_admin_menu_icon(): string {
+	$rel = 'assets/wp-admin-icon.svg';
+	if ( ! is_readable( AAFM_PLUGIN_DIR . $rel ) ) {
+		return 'dashicons-superhero';
+	}
+	return AAFM_PLUGIN_URL . $rel;
+}
+
+/**
  * Register the admin pages as a dedicated top-level menu, one submenu per tab.
  *
  * @return void
  */
 function aafm_register_admin_menu(): void {
-	$icon = 'dashicons-superhero';
+	$icon = aafm_admin_menu_icon();
 
 	add_menu_page(
 		__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ),

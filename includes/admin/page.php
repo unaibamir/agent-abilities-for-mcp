@@ -794,6 +794,35 @@ function aafm_render_admin_page(): void {
 			aafm_admin_allowed_html()
 		);
 	}
+
+	// Right-aligned support links: quiet and permanent, no admin-wide nag. A review helps the
+	// plugin's wordpress.org standing; Get Help routes to the support forum. Both open in a new tab.
+	$ext_links = array(
+		array(
+			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/reviews/#new-post',
+			'icon'  => 'star',
+			'label' => __( 'Review', 'agent-abilities-for-mcp' ),
+		),
+		array(
+			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/',
+			'icon'  => 'lifebuoy',
+			'label' => __( 'Get Help', 'agent-abilities-for-mcp' ),
+		),
+	);
+	echo '<span class="aafm-nav-ext-group">';
+	foreach ( $ext_links as $ext ) {
+		echo wp_kses(
+			sprintf(
+				'<a href="%1$s" class="aafm-nav-ext" target="_blank" rel="noopener noreferrer">%2$s %3$s<span class="screen-reader-text">%4$s</span></a>',
+				esc_url( $ext['href'] ),
+				aafm_icon( $ext['icon'] ),
+				esc_html( $ext['label'] ),
+				esc_html__( '(opens in a new tab)', 'agent-abilities-for-mcp' )
+			),
+			aafm_admin_allowed_html()
+		);
+	}
+	echo '</span>';
 	echo '</nav>';
 
 	switch ( $active ) {

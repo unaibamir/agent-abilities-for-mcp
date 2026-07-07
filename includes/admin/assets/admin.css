@@ -573,6 +573,48 @@
 			font-weight: 600;
 			background: transparent;
 		}
+
+		/* Right-aligned external links (Review / Get Help), styled like muted tabs
+		   without the active underline; pushed to the right edge of the flex nav. */
+		.aafm-nav-ext-group {
+			margin-inline-start: auto;
+			display: inline-flex;
+			align-items: center;
+			gap: 2px;
+		}
+
+		.aafm-nav-ext {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			margin: 0 0 -1px;
+			padding: 10px 12px;
+			border-block-end: 2px solid transparent;
+			color: var(--aafm-text-muted);
+			text-decoration: none;
+			font-weight: 500;
+			font-size: 13.5px;
+			line-height: 1.4;
+			transition: color 0.15s ease;
+
+			svg {
+				inline-size: 16px;
+				block-size: 16px;
+				opacity: 0.85;
+			}
+
+			&:hover,
+			&:focus {
+				color: var(--aafm-accent);
+				background: transparent;
+			}
+
+			&:focus-visible {
+				box-shadow: var(--aafm-ring);
+				border-radius: var(--aafm-radius-sm);
+				outline: none;
+			}
+		}
 	}
 
 	/* ---------- Sub-tabs (abilities subject nav - pill style) ---------- */

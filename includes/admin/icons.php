@@ -38,6 +38,10 @@ function aafm_icon( string $name ): string {
 		'activity'              => '<path d="M4 6h16M4 12h16M4 18h16"/>',
 		'help'                  => '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .8-1 1.7M12 17h.01"/>',
 
+		// Right-aligned nav links (review + support).
+		'star'                  => '<path d="M12 4.3l2.3 4.7 5.2.8-3.8 3.6.9 5.1-4.6-2.4-4.6 2.4.9-5.1L4.5 9.8l5.2-.8L12 4.3Z"/>',
+		'lifebuoy'              => '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="m5.6 5.6 3.2 3.2M15.2 15.2l3.2 3.2M18.4 5.6l-3.2 3.2M8.8 15.2l-3.2 3.2"/>',
+
 		// Dashboard card / inline icons.
 		'endpoint'              => '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
 		'clock'                 => '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/>',

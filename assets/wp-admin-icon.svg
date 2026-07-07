@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 512 512" role="img" aria-label="Agent Abilities for MCP">
+  <title>Agent Abilities for MCP</title>
+  <!-- Admin-menu mark: monochrome white shield + check (no colored square, which would
+       blend into WordPress's blue selected-item background). Reads on both the dark menu
+       and the blue current-item states. The full colored logo lives on the wp.org listing
+       (animated GIF) and the website. Geometry is the favicon shield scaled x16. -->
+  <g transform="scale(16)">
+    <path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linejoin="round"/>
+    <path d="m11.6 15.6 3 3 6-6.4" fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

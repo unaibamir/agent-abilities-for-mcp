@@ -804,6 +804,8 @@
 		display: flex;
 		gap: 8px;
 		margin-block-end: 12px;
+		padding-block: 14px;
+		padding-inline: 18px;
 	}
 
 	/* The inline destructive confirm strip: reuses the .aafm-notice-inline component; this

@@ -179,6 +179,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/registry.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/helpers.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/safety.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';

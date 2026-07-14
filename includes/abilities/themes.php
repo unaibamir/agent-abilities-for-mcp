@@ -383,7 +383,10 @@ function aafm_args_update_template(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'template_id' => array( 'type' => 'string' ),
-				'content'     => array( 'type' => 'string' ),
+				'content'     => array(
+					'type'        => 'string',
+					'description' => aafm_write_content_description(),
+				),
 				'type'        => array(
 					'type' => 'string',
 					'enum' => array( 'wp_template', 'wp_template_part' ),
@@ -440,7 +443,16 @@ function aafm_exec_update_template( array $input ) {
 	}
 
 	$content = wp_kses_post( (string) ( $input['content'] ?? '' ) );
-	$result  = wp_update_post(
+
+	// Template content is pure Gutenberg block markup edited in the Site Editor, which runs the
+	// same JS save() re-validation as the post editor. Guard it: strict mode blocks the write,
+	// warn mode rides the warnings back on the response.
+	$guard = aafm_block_guard_evaluate( $content );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
+
+	$result = wp_update_post(
 		wp_slash(
 			array(
 				'ID'           => $wp_id,
@@ -459,7 +471,7 @@ function aafm_exec_update_template( array $input ) {
 	}
 	$out            = aafm_redact_template( $refreshed );
 	$out['content'] = (string) $refreshed->content;
-	return $out;
+	return aafm_block_with_warnings( $out, $guard['warnings'] );
 }
 
 /**

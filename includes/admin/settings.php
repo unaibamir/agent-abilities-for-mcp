@@ -33,15 +33,16 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_delete_data_on_uninstall:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
 	$title = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_max_title_len'] ?? 0 ) ) );
 	// Retention has its own tighter ceiling (ten years); 0 keeps every entry forever.
-	$retention = min( 3650, max( 0, (int) ( $posted['aafm_log_retention_days'] ?? 30 ) ) );
-	$draft     = ! empty( $posted['aafm_force_draft'] );
-	$delete_on = ! empty( $posted['aafm_delete_data_on_uninstall'] );
+	$retention   = min( 3650, max( 0, (int) ( $posted['aafm_log_retention_days'] ?? 30 ) ) );
+	$draft       = ! empty( $posted['aafm_force_draft'] );
+	$block_guard = ! empty( $posted['aafm_block_guard_strict'] );
+	$delete_on   = ! empty( $posted['aafm_delete_data_on_uninstall'] );
 
 	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
 	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
@@ -61,6 +62,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_max_title_len'            => $title,
 		'aafm_log_retention_days'       => $retention,
 		'aafm_force_draft'              => $draft,
+		'aafm_block_guard_strict'       => $block_guard,
 		'aafm_delete_data_on_uninstall' => $delete_on,
 		'aafm_oauth_enabled'            => $oauth,
 		'aafm_oauth_dcr_enabled'        => $oauth_dcr,
@@ -121,6 +123,7 @@ function aafm_ajax_save_settings(): void {
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
 	update_option( 'aafm_log_retention_days', $clean['aafm_log_retention_days'] );
 	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
+	update_option( 'aafm_block_guard_strict', $clean['aafm_block_guard_strict'] );
 	update_option( 'aafm_delete_data_on_uninstall', $clean['aafm_delete_data_on_uninstall'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
@@ -132,6 +135,7 @@ function aafm_ajax_save_settings(): void {
 			'aafm_max_title_len'            => $clean['aafm_max_title_len'],
 			'aafm_log_retention_days'       => $clean['aafm_log_retention_days'],
 			'aafm_force_draft'              => $clean['aafm_force_draft'],
+			'aafm_block_guard_strict'       => $clean['aafm_block_guard_strict'],
 			'aafm_delete_data_on_uninstall' => $clean['aafm_delete_data_on_uninstall'],
 			'aafm_oauth_enabled'            => $clean['aafm_oauth_enabled'],
 			'aafm_oauth_dcr_enabled'        => $clean['aafm_oauth_dcr_enabled'],
@@ -168,6 +172,7 @@ function aafm_config_option_names(): array {
 		'aafm_max_title_len',
 		'aafm_log_retention_days',
 		'aafm_force_draft',
+		'aafm_block_guard_strict',
 		'aafm_oauth_enabled',
 		'aafm_oauth_dcr_enabled',
 		'aafm_ip_allowlist',
@@ -313,6 +318,17 @@ function aafm_render_settings_tab(): void {
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
 				. '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
 			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
+	// Strict block validation. Same toggle-switch contract as force draft; the <input>
+	// name/value/checked() is what the save handler and its tests bind to, not this markup.
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Strict block validation', 'agent-abilities-for-mcp' ),
+			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-block-guard-strict" name="aafm_block_guard_strict" value="1" ' . checked( aafm_block_guard_is_strict(), true, false ) . '><span class="aafm-switch-track"></span></label> '
+				. '<label for="aafm-block-guard-strict">' . esc_html__( 'Reject an agent write when its block markup would show as invalid content in the editor.', 'agent-abilities-for-mcp' ) . '</label>',
+			'help'    => __( 'When this is off (the default), a write with questionable block markup still saves, and the agent is sent a warning so it can fix its next attempt. Turn it on to refuse the write instead, so nothing that could look broken in the editor is ever stored.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

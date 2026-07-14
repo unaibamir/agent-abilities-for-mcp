@@ -13,6 +13,7 @@ performance_mode: none
 use_dns_when_possible: true
 composer_version: "2"
 web_environment:
+    - WP_DEBUG=true
     - WP_TESTS_DIR=/tmp/wordpress-tests-lib
 corepack_enable: false
 hooks:

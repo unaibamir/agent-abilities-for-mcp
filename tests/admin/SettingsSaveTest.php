@@ -142,6 +142,68 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertStringContainsString( 'id="aafm-settings-form"', $html );
 	}
 
+	/**
+	 * The Settings save handler (#bindSaveSettings in admin.js) builds its POST body field by
+	 * field rather than serializing the whole form, so every checkbox has to be forwarded
+	 * explicitly. It once forwarded only force-draft, delete-on-uninstall, and the numeric
+	 * fields, leaving out the OAuth, DCR, and strict-block toggles. Because the server reads an
+	 * absent checkbox as off, that omission made every save silently write those three toggles
+	 * off - so turning OAuth on and saving left it off on reload. This locks the payload contract
+	 * so a dropped checkbox is caught here instead of on a live site.
+	 */
+	public function test_settings_save_script_forwards_every_checkbox(): void {
+		$path = AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js';
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a bundled static asset from disk in a test, not a remote URL.
+		$js = (string) file_get_contents( $path );
+
+		// Isolate the settings-save handler so a field forwarded by a different handler cannot
+		// mask a regression here.
+		// Anchor on the method definition token ('() {'), not the bare call site 'this.#bind…();'.
+		$start = strpos( $js, '#bindSaveSettings() {' );
+		$end   = strpos( $js, '#bindMetaChips() {' );
+		$this->assertNotFalse( $start, '#bindSaveSettings handler not found in admin.js.' );
+		$this->assertNotFalse( $end, 'Could not bound the #bindSaveSettings handler.' );
+		$handler = substr( $js, (int) $start, (int) $end - (int) $start );
+
+		foreach (
+			array(
+				'aafm_oauth_enabled',
+				'aafm_oauth_dcr_enabled',
+				'aafm_block_guard_strict',
+			) as $field
+		) {
+			$this->assertStringContainsString(
+				"body.append( '" . $field . "', '1' )",
+				$handler,
+				$field . ' is not forwarded by the settings save handler, so saving would reset it off.'
+			);
+		}
+	}
+
+	/**
+	 * Server-side round-trip contract behind the fix above: with the checkbox present the
+	 * sanitizer keeps the toggle on; with it absent (the payload the pre-fix script sent) it
+	 * coerces off. Documents both sides of the failure mode so the "absent -> off" semantics is
+	 * not accidentally loosened while fixing the payload.
+	 */
+	public function test_settings_sanitizer_round_trips_oauth_and_block_guard_toggles(): void {
+		$on = aafm_sanitize_settings_input(
+			array(
+				'aafm_oauth_enabled'      => '1',
+				'aafm_oauth_dcr_enabled'  => '1',
+				'aafm_block_guard_strict' => '1',
+			)
+		);
+		$this->assertSame( '1', $on['aafm_oauth_enabled'] );
+		$this->assertSame( '1', $on['aafm_oauth_dcr_enabled'] );
+		$this->assertTrue( $on['aafm_block_guard_strict'] );
+
+		$off = aafm_sanitize_settings_input( array() );
+		$this->assertSame( '0', $off['aafm_oauth_enabled'] );
+		$this->assertSame( '0', $off['aafm_oauth_dcr_enabled'] );
+		$this->assertFalse( $off['aafm_block_guard_strict'] );
+	}
+
 	public function test_is_valid_ip_or_cidr_accepts_and_rejects(): void {
 		$this->assertTrue( aafm_is_valid_ip_or_cidr( '10.0.0.1' ) );
 		$this->assertTrue( aafm_is_valid_ip_or_cidr( '192.168.0.0/24' ) );

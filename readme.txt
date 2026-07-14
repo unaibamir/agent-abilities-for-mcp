@@ -18,6 +18,10 @@ Agent Abilities for MCP is a WordPress plugin that turns your site into a govern
 
 Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
 
+Prefer to watch first? Here is a short walkthrough of the plugin in action.
+
+[youtube https://www.youtube.com/watch?v=Raih7X4QgP0]
+
 **Quick links:** [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [GitHub](https://github.com/unaibamir/agent-abilities-for-mcp)
 
 = 🛡️ Least-privilege access by design =

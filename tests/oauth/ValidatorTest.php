@@ -593,4 +593,88 @@ class ValidatorTest extends TestCase {
 			$GLOBALS['wp_rewrite'] = $saved_rewrite;
 		}
 	}
+
+	/**
+	 * The rest_route query var is AUTHORITATIVE over the request path. WordPress dispatches on
+	 * $_GET['rest_route'] when present, so a request whose path IS the MCP route but whose
+	 * rest_route points at an unrelated core route (e.g. /wp/v2/users/me) must NOT be classified as
+	 * MCP-targeted - otherwise an audience-bound aafm_oat_ token would resolve a user for a route
+	 * WordPress actually dispatches elsewhere, turning it into a general credential.
+	 */
+	public function test_rest_route_query_var_overrides_matching_path(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		// set_up() already pointed REQUEST_URI at the MCP path. Overlay a non-MCP rest_route.
+		$_GET['rest_route'] = '/wp/v2/users/me';
+		$this->assertFalse(
+			aafm_oauth_request_targets_mcp_route(),
+			'A non-MCP rest_route must win over an MCP request path.'
+		);
+		$this->assertFalse(
+			aafm_oauth_resolve_current_user( false ),
+			'A valid bearer must not resolve when rest_route dispatches to a non-MCP route.'
+		);
+
+		// Positive control: rest_route pointing at the MCP route resolves normally.
+		$_GET['rest_route'] = '/agent-abilities-for-mcp/mcp';
+		$this->assertTrue( aafm_oauth_request_targets_mcp_route() );
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * The resolver's re-entrancy guard. Steps 5-9 build site URLs, firing the home_url/rest_url
+	 * filter chain DURING user resolution. A third-party filter there that resolves the current user
+	 * would re-enter this callback; without the guard that recurses until memory is exhausted. Prove
+	 * the outer resolve still completes and the nested re-entrant call returns the incoming value
+	 * (false) rather than recursing.
+	 */
+	public function test_resolver_does_not_recurse_under_reentrant_home_url_filter(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		$nested_called = false;
+		$nested_return = 'unset';
+		$reentrant     = static function ( $url ) use ( &$nested_called, &$nested_return ) {
+			// Mimic a third-party home_url filter that resolves the current user during the
+			// resolver's own URL build. Fire exactly once; record what the nested call returns.
+			if ( ! $nested_called ) {
+				$nested_called = true;
+				$nested_return = aafm_oauth_resolve_current_user( false );
+			}
+			return $url;
+		};
+		add_filter( 'home_url', $reentrant );
+
+		try {
+			$resolved = aafm_oauth_resolve_current_user( false );
+
+			$this->assertTrue( $nested_called, 'The re-entrant home_url filter must fire during the URL build.' );
+			$this->assertFalse(
+				$nested_return,
+				'The nested re-entrant resolve must return the incoming value (false), not recurse.'
+			);
+			$this->assertSame(
+				$uid,
+				$resolved,
+				'The outer resolve must still complete under a re-entrant home_url filter.'
+			);
+		} finally {
+			remove_filter( 'home_url', $reentrant );
+		}
+	}
 }

@@ -49,64 +49,96 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		return $user_id;
 	}
 
-	// 2. Respect the operator's OAuth kill switch.
-	if ( ! aafm_oauth_enabled() ) {
-		return $user_id;
-	}
-
-	// 3. Scope strictly to the MCP REST route. An aafm_oat_ token is a credential
-	// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
-	// other route would turn an MCP token into a general credential for every route
-	// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
-	// current_user untouched, exactly as Application Passwords are. determine_current_user
-	// fires before REST routing, so the target is read from the request URI.
-	if ( ! aafm_oauth_request_targets_mcp_route() ) {
-		return $user_id;
-	}
-
-	// 4. Enforce the HTTPS policy. Where HTTPS is required, a bearer presented over
-	// plain http never resolves a user (the other OAuth paths already refuse http).
-	if ( aafm_oauth_https_required() && ! is_ssl() ) {
-		return $user_id;
-	}
-
-	// 5. Read the bearer credential from the Authorization header. Some FastCGI
-	// setups only expose it under REDIRECT_HTTP_AUTHORIZATION.
+	// 2. Read the bearer and scope to our own access tokens FIRST, before touching anything else.
+	// A request that carries no `aafm_oat_` bearer - i.e. every ordinary page view - can never
+	// resolve an OAuth user, so we return immediately. Doing this first keeps the filter a true
+	// no-op for all non-OAuth traffic: it never builds a URL (rest_url()/home_url()) or reads an
+	// option during user resolution. That matters because this runs on determine_current_user for
+	// every logged-out request - resolving a URL here would fire the site-wide home_url/rest_url
+	// filter chain during user resolution, and a third-party filter on it that reads the current
+	// user would re-enter determine_current_user and recurse into a memory-exhaustion white-screen.
 	$credential = aafm_oauth_read_bearer_token();
-	if ( null === $credential ) {
+	if ( null === $credential
+		|| 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) )
+	) {
 		return $user_id;
 	}
 
-	// 6. Scope strictly to our own access tokens. A bearer that is not ours
-	// (App Password, any other scheme) is left for its own resolver.
-	if ( 0 !== strncmp( $credential, AAFM_OAUTH_ACCESS_TOKEN_PREFIX, strlen( AAFM_OAUTH_ACCESS_TOKEN_PREFIX ) ) ) {
+	// 3. Re-entrancy guard. Everything below can build site URLs (aafm_oauth_request_targets_mcp_route()
+	// at step 5, aafm_endpoint_url() at step 8), which fire the site-wide home_url/rest_url filter
+	// chains DURING user resolution. WordPress's _wp_get_current_user() has no re-entrancy lock, so a
+	// third-party filter on those URLs that calls a current-user function would re-enter this callback
+	// and recurse until memory is exhausted (a white-screen). Once we are already resolving, a nested
+	// call resolves no OAuth user. The bearer read above stays outside the guard so bearer-less
+	// traffic is unaffected. This CANNOT deadlock a legitimate token: only a nested (re-entrant) call
+	// sees the flag set; the outer call always resets it in the finally below.
+	static $resolving = false;
+	if ( $resolving ) {
 		return $user_id;
 	}
+	$resolving = true;
 
-	// 7. Resolve the token to its row in a single indexed lookup. The row
-	// resolver already gates on (active + unexpired), so a null row covers
-	// every present-but-invalid case - unknown, inactive, expired - and a
-	// present-but-invalid OAuth token simply fails to resolve a user rather
-	// than hard-failing the request.
-	$row = aafm_oauth_get_access_token_row( $credential );
-	if ( null === $row ) {
-		return $user_id;
+	try {
+		// 4. Respect the operator's OAuth kill switch.
+		if ( ! aafm_oauth_enabled() ) {
+			return $user_id;
+		}
+
+		// 5. Bail until the plugin is fully loaded. The MCP-route match (step 6) and the audience
+		// binding (step 9) call functions defined only when aafm_bootstrap() runs on `plugins_loaded`
+		// - aafm_mcp_rest_route() (includes/bootstrap.php) and aafm_endpoint_url() (the connection
+		// module). This filter is registered at plugin-include time, so it can fire BEFORE our
+		// bootstrap when another active plugin resolves the current user during `plugins_loaded` (e.g.
+		// The Events Calendar calls wp_create_nonce() there). A fatal in a determine_current_user
+		// callback white-screens the request, so we fail closed and resolve no OAuth user until the
+		// helpers exist; the genuine MCP auth check runs later, during REST dispatch.
+		if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_endpoint_url' ) ) {
+			return $user_id;
+		}
+
+		// 6. Scope strictly to the MCP REST route. An aafm_oat_ token is a credential
+		// for the MCP endpoint, not a site-wide WP REST bearer. Resolving it on any
+		// other route would turn an MCP token into a general credential for every route
+		// that trusts is_user_logged_in()/current_user_can(). Off the MCP route we leave
+		// current_user untouched, exactly as Application Passwords are. determine_current_user
+		// fires before REST routing, so the target is read from the request URI.
+		if ( ! aafm_oauth_request_targets_mcp_route() ) {
+			return $user_id;
+		}
+
+		// 7. Enforce the HTTPS policy. Where HTTPS is required, a bearer presented over
+		// plain http never resolves a user (the other OAuth paths already refuse http).
+		if ( aafm_oauth_https_required() && ! is_ssl() ) {
+			return $user_id;
+		}
+
+		// 8. Resolve the token to its row in a single indexed lookup. The row
+		// resolver already gates on (active + unexpired), so a null row covers
+		// every present-but-invalid case - unknown, inactive, expired - and a
+		// present-but-invalid OAuth token simply fails to resolve a user rather
+		// than hard-failing the request.
+		$row = aafm_oauth_get_access_token_row( $credential );
+		if ( null === $row ) {
+			return $user_id;
+		}
+
+		// 9. Audience binding (RFC 8707): the token must have been minted for THIS
+		// endpoint. A token scoped to a different audience resolves no user here.
+		if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
+			return $user_id;
+		}
+
+		// 10. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
+		// already in a client's hands keeps working unless its owning client is re-checked here -
+		// so disabling a compromised client invalidates its live access tokens immediately.
+		if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
+			return $user_id;
+		}
+
+		return (int) $row['wp_user_id'];
+	} finally {
+		$resolving = false;
 	}
-
-	// 8. Audience binding (RFC 8707): the token must have been minted for THIS
-	// endpoint. A token scoped to a different audience resolves no user here.
-	if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
-		return $user_id;
-	}
-
-	// 9. Re-enforce client deactivation. is_active is checked at authorize-time, but a token
-	// already in a client's hands keeps working unless its owning client is re-checked here -
-	// so disabling a compromised client invalidates its live access tokens immediately.
-	if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
-		return $user_id;
-	}
-
-	return (int) $row['wp_user_id'];
 }
 
 /**
@@ -124,12 +156,17 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 	// Single-sourced in bootstrap.php (leading-slash form).
 	$mcp_route = aafm_mcp_rest_route();
 
-	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp.
+	// Plain-permalink form: ?rest_route=/agent-abilities-for-mcp/mcp. When the rest_route query var
+	// is present it is AUTHORITATIVE and we must decide solely from it, never falling through to the
+	// path check below. WordPress's WP::parse_request() gives the $_GET['rest_route'] value
+	// precedence over the URL-path-derived route, so that is the route the request is actually
+	// dispatched to. If we instead fell through and matched the URL path, a request whose path is the
+	// MCP route but whose ?rest_route= points elsewhere (e.g. ?rest_route=/wp/v2/users/me) would be
+	// misclassified as MCP-targeted while WordPress dispatches it to /wp/v2/users/me - turning an
+	// audience-bound aafm_oat_ MCP token into a general credential for that unrelated REST route.
 	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
 		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( rtrim( $rest_route, '/' ) === $mcp_route ) {
-			return true;
-		}
+		return rtrim( $rest_route, '/' ) === $mcp_route;
 	}
 
 	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the

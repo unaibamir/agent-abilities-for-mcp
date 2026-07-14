@@ -107,7 +107,7 @@ final class ConnectionTest extends TestCase {
 	}
 
 	public function test_client_snippet_points_at_endpoint_and_username(): void {
-		$snippet = aafm_client_snippet( 'claude', 'mcp-agent' );
+		$snippet = aafm_client_snippet( 'claude-code', 'mcp-agent' );
 		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );
 		$this->assertStringContainsString( 'mcp-agent', $snippet );
 		// The wizard never embeds a real secret - only the paste placeholder.
@@ -115,14 +115,14 @@ final class ConnectionTest extends TestCase {
 	}
 
 	public function test_unix_snippet_launches_npx_directly(): void {
-		$cfg    = json_decode( aafm_client_snippet( 'claude', 'mcp-agent', 'unix' ), true );
+		$cfg    = json_decode( aafm_client_snippet( 'claude-code', 'mcp-agent', 'unix' ), true );
 		$server = $cfg['mcpServers']['agent-abilities'];
 		$this->assertSame( 'npx', $server['command'] );
 		$this->assertSame( array( '-y', '@automattic/mcp-wordpress-remote@latest' ), $server['args'] );
 	}
 
 	public function test_windows_snippet_wraps_launcher_in_cmd(): void {
-		$cfg    = json_decode( aafm_client_snippet( 'claude', 'mcp-agent', 'windows' ), true );
+		$cfg    = json_decode( aafm_client_snippet( 'claude-code', 'mcp-agent', 'windows' ), true );
 		$server = $cfg['mcpServers']['agent-abilities'];
 		$this->assertSame( 'cmd', $server['command'] );
 		$this->assertSame(
@@ -133,7 +133,7 @@ final class ConnectionTest extends TestCase {
 
 	public function test_local_site_snippet_carries_tls_bypass(): void {
 		add_filter( 'aafm_site_is_local', '__return_true' );
-		$cfg = json_decode( aafm_client_snippet( 'claude', 'mcp-agent' ), true );
+		$cfg = json_decode( aafm_client_snippet( 'claude-code', 'mcp-agent' ), true );
 		remove_filter( 'aafm_site_is_local', '__return_true' );
 		$env = $cfg['mcpServers']['agent-abilities']['env'];
 		$this->assertSame( '0', $env['NODE_TLS_REJECT_UNAUTHORIZED'] );
@@ -141,7 +141,7 @@ final class ConnectionTest extends TestCase {
 
 	public function test_production_site_snippet_omits_tls_bypass(): void {
 		add_filter( 'aafm_site_is_local', '__return_false' );
-		$cfg = json_decode( aafm_client_snippet( 'claude', 'mcp-agent' ), true );
+		$cfg = json_decode( aafm_client_snippet( 'claude-code', 'mcp-agent' ), true );
 		remove_filter( 'aafm_site_is_local', '__return_false' );
 		$env = $cfg['mcpServers']['agent-abilities']['env'];
 		$this->assertArrayNotHasKey( 'NODE_TLS_REJECT_UNAUTHORIZED', $env );
@@ -241,8 +241,10 @@ final class ConnectionTest extends TestCase {
 
 		$this->assertSame( 1, substr_count( $html, 'aafm-endpoint-card' ) );
 		$this->assertSame( 1, substr_count( $html, '>MCP endpoint<' ) );
-		// And the endpoint URL itself appears once in a copyable endpoint field.
-		$this->assertSame( 1, substr_count( $html, 'aafm-field-mono' ) );
+		// The labelled endpoint card is unique. The three hosted web-app OAuth panels (ChatGPT,
+		// Claude, and Manus) each carry their own inline endpoint field to paste, and nothing else
+		// re-renders the canonical card.
+		$this->assertSame( 3, substr_count( $html, 'aafm-oauth-endpoint' ) );
 	}
 
 	public function test_connection_tab_steps_share_an_alignment_class(): void {
@@ -253,7 +255,7 @@ final class ConnectionTest extends TestCase {
 	}
 
 	public function test_oauth_client_snippet_carries_no_credentials(): void {
-		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		$snippet = aafm_oauth_client_snippet( 'claude-code', 'unix' );
 		$this->assertStringContainsString( 'mcp-remote', $snippet );
 		$this->assertStringContainsString( aafm_endpoint_url(), $snippet );
 		// OAuth = browser approval, never a stored secret.
@@ -264,7 +266,7 @@ final class ConnectionTest extends TestCase {
 
 	public function test_oauth_client_snippet_local_adds_ca_placeholder(): void {
 		add_filter( 'aafm_site_is_local', '__return_true' );
-		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		$snippet = aafm_oauth_client_snippet( 'claude-code', 'unix' );
 		remove_filter( 'aafm_site_is_local', '__return_true' );
 		$this->assertStringContainsString( 'NODE_EXTRA_CA_CERTS', $snippet );
 		// Path is machine-specific - placeholder only, never a hardcoded real path.
@@ -273,13 +275,13 @@ final class ConnectionTest extends TestCase {
 
 	public function test_oauth_client_snippet_production_omits_env(): void {
 		add_filter( 'aafm_site_is_local', '__return_false' );
-		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'unix' );
+		$snippet = aafm_oauth_client_snippet( 'claude-code', 'unix' );
 		remove_filter( 'aafm_site_is_local', '__return_false' );
 		$this->assertStringNotContainsString( 'NODE_EXTRA_CA_CERTS', $snippet );
 	}
 
 	public function test_oauth_client_snippet_windows_wraps_cmd(): void {
-		$snippet = aafm_oauth_client_snippet( 'claude-desktop', 'windows' );
+		$snippet = aafm_oauth_client_snippet( 'claude-code', 'windows' );
 		$this->assertStringContainsString( 'cmd', $snippet );
 		$this->assertStringContainsString( '/c', $snippet );
 	}
@@ -302,6 +304,102 @@ final class ConnectionTest extends TestCase {
 			$this->assertNotSame( '', aafm_oauth_client_note( $slug ), $slug );
 		}
 		$this->assertSame( '', aafm_oauth_client_note( 'does-not-exist' ) );
+	}
+
+	public function test_client_list_leads_with_the_web_apps_in_order(): void {
+		$slugs = array_keys( aafm_quickstart_clients() );
+		$this->assertSame(
+			array( 'chatgpt', 'claude', 'claude-code', 'cursor', 'vscode', 'windsurf', 'gemini-cli', 'manus', 'generic' ),
+			$slugs
+		);
+	}
+
+	public function test_chatgpt_claude_and_manus_are_oauth_native_hosted_web_apps(): void {
+		$this->assertSame( 'native', aafm_oauth_client_mode( 'chatgpt' ) );
+		$this->assertSame( 'native', aafm_oauth_client_mode( 'claude' ) );
+		// Manus is a cloud-hosted agent (OAuth-by-URL connectors, no local stdio bridge), so it is a
+		// hosted web app in native URL mode - not a bridge client.
+		$this->assertSame( 'native', aafm_oauth_client_mode( 'manus' ) );
+		$this->assertTrue( aafm_client_is_hosted_web_app( 'chatgpt' ) );
+		$this->assertTrue( aafm_client_is_hosted_web_app( 'claude' ) );
+		$this->assertTrue( aafm_client_is_hosted_web_app( 'manus' ) );
+		// A proxy client is native but not a hosted web app.
+		$this->assertFalse( aafm_client_is_hosted_web_app( 'claude-code' ) );
+	}
+
+	public function test_chatgpt_oauth_panel_shows_the_endpoint_url_not_a_stdio_snippet(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		// Slice out the ChatGPT OAuth panel (between its marker and the next panel, Claude).
+		$start = strpos( $html, 'aafm-oauth-panel" data-client="chatgpt"' );
+		$this->assertNotFalse( $start, 'ChatGPT OAuth panel not found.' );
+		$next = strpos( $html, 'aafm-oauth-panel" data-client="claude"', $start + 1 );
+		$this->assertNotFalse( $next, 'Claude OAuth panel (the next panel) not found.' );
+		$panel = substr( $html, $start, $next - $start );
+
+		// The panel offers the endpoint URL to paste...
+		$this->assertStringContainsString( esc_html( aafm_endpoint_url() ), $panel );
+		$this->assertStringContainsString( 'Developer mode', $panel );
+		// ...and never an mcp-remote stdio config (a hosted web app cannot run one).
+		$this->assertStringNotContainsString( 'mcp-remote', $panel );
+		$this->assertStringNotContainsString( 'npx', $panel );
+	}
+
+	public function test_snippet_builders_self_guard_against_hosted_web_apps(): void {
+		// Defense in depth: the config-snippet builders must never hand back an mcp-remote config
+		// for a hosted web app, even when called directly with such a slug.
+		$this->assertSame( '', aafm_client_snippet( 'chatgpt', 'mcp-agent', 'unix' ) );
+		$this->assertSame( '', aafm_client_snippet( 'chatgpt', 'mcp-agent', 'windows' ) );
+		$this->assertSame( '', aafm_client_snippet( 'claude', 'mcp-agent', 'unix' ) );
+		$this->assertSame( '', aafm_client_snippet( 'manus', 'mcp-agent', 'unix' ) );
+		$this->assertSame( '', aafm_oauth_client_snippet( 'chatgpt', 'unix' ) );
+		$this->assertSame( '', aafm_oauth_client_snippet( 'claude', 'windows' ) );
+		$this->assertSame( '', aafm_oauth_client_snippet( 'manus', 'unix' ) );
+
+		// A non-hosted client still builds a real snippet.
+		$this->assertStringContainsString( 'mcp-remote', aafm_oauth_client_snippet( 'claude-code', 'unix' ) );
+		$this->assertStringContainsString( 'mcpServers', aafm_client_snippet( 'claude-code', 'mcp-agent', 'unix' ) );
+	}
+
+	public function test_default_os_tabs_carry_is_active_without_stray_on_class(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		// The default (unix) OS tab in both the OAuth card and the App-Password fallback must carry
+		// only the class its JS handler (#bindOsTabs) manages - is-active - and never the stale 'on'
+		// token. #bindOsTabs toggles is-active only, so a leftover 'on' (which the CSS also treats as
+		// active) would keep macOS highlighted after clicking Windows. Guards render/JS desync.
+		$this->assertStringNotContainsString( 'aafm-os-tab is-active on', $html );
+		$this->assertSame( 2, substr_count( $html, 'class="aafm-os-tab is-active" data-os="unix"' ) );
+	}
+
+	public function test_app_password_grid_excludes_hosted_web_apps(): void {
+		update_option( 'aafm_oauth_enabled', '1' );
+		$html = $this->render_connection_tab();
+
+		// The App-Password mcp-remote grid must not offer a card for a hosted web app.
+		$ap_start = strpos( $html, 'id="aafm-clients"' );
+		$this->assertNotFalse( $ap_start );
+		$ap_region = substr( $html, $ap_start );
+		$this->assertStringNotContainsString( 'data-client="chatgpt"', $ap_region );
+		$this->assertStringNotContainsString( 'data-client="claude"', $ap_region );
+		$this->assertStringNotContainsString( 'data-client="manus"', $ap_region );
+		// A proxy client is still present in that grid.
+		$this->assertStringContainsString( 'data-client="claude-code"', $ap_region );
+	}
+
+	public function test_oauth_off_notice_names_the_hosted_web_apps(): void {
+		// With OAuth off, hosted web apps (ChatGPT, Claude, Manus) have no connection path at all -
+		// they cannot use the Application Password bridge - so the notice must call them out by name.
+		update_option( 'aafm_oauth_enabled', '' );
+		$html = $this->render_connection_tab();
+
+		$this->assertStringContainsString( 'aafm-oauth-off-hosted', $html );
+		$this->assertStringContainsString( 'ChatGPT', $html );
+		$this->assertStringContainsString( 'Claude', $html );
+		$this->assertStringContainsString( 'Manus', $html );
+		$this->assertStringContainsString( 'OAuth only', $html );
 	}
 
 	public function test_connection_tab_leads_with_oauth_when_enabled(): void {

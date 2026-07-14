@@ -46,7 +46,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-block'] = array(
 		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a reusable block (published immediately). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a reusable block (published immediately). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -54,7 +54,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-block'] = array(
 		'label'        => __( 'Update block', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block.", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Updates a reusable block's title or markup by id. The markup is sanitized. Requires edit access to that block. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -272,7 +272,10 @@ function aafm_args_create_block(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'title'   => array( 'type' => 'string' ),
-				'content' => array( 'type' => 'string' ),
+				'content' => array(
+					'type'        => 'string',
+					'description' => aafm_write_content_description(),
+				),
 			),
 			'required'             => array( 'title' ),
 			'additionalProperties' => false,
@@ -306,7 +309,14 @@ function aafm_args_create_block(): array {
 function aafm_exec_create_block( array $input ) {
 	$title   = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
-	$id      = wp_insert_post(
+
+	// Guard the final markup: strict mode blocks the write, warn mode rides on the response.
+	$guard = aafm_block_guard_evaluate( $content );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
+
+	$id = wp_insert_post(
 		wp_slash(
 			array(
 				'post_type'    => 'wp_block',
@@ -320,7 +330,24 @@ function aafm_exec_create_block( array $input ) {
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
 	}
-	return aafm_rich_block( get_post( (int) $id ) );
+	return aafm_block_with_warnings( aafm_rich_block( get_post( (int) $id ) ), $guard['warnings'] );
+}
+
+/**
+ * Attach content warnings to a rich-block response when the guard found any.
+ *
+ * Keeps the key off the response entirely when the markup was clean, so a well-formed block write
+ * looks exactly as it did before the guard existed.
+ *
+ * @param array<string,mixed>|WP_Error                         $response The rich-block response.
+ * @param list<array{block:string,code:string,message:string}> $warnings Guard warnings.
+ * @return array<string,mixed>|WP_Error
+ */
+function aafm_block_with_warnings( $response, array $warnings ) {
+	if ( is_array( $response ) && ! empty( $warnings ) ) {
+		$response['content_warnings'] = $warnings;
+	}
+	return $response;
 }
 
 /**
@@ -341,7 +368,10 @@ function aafm_args_update_block(): array {
 			'properties'           => array(
 				'block_id' => array( 'type' => 'integer' ),
 				'title'    => array( 'type' => 'string' ),
-				'content'  => array( 'type' => 'string' ),
+				'content'  => array(
+					'type'        => 'string',
+					'description' => aafm_write_content_description(),
+				),
 			),
 			'required'             => array( 'block_id' ),
 			'additionalProperties' => false,
@@ -373,18 +403,26 @@ function aafm_exec_update_block( array $input ) {
 	if ( null === $block ) {
 		return aafm_generic_error();
 	}
+	$guard  = array(
+		'warnings' => array(),
+		'error'    => null,
+	);
 	$update = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
 		$update['post_title'] = sanitize_text_field( (string) $input['title'] );
 	}
 	if ( isset( $input['content'] ) ) {
 		$update['post_content'] = wp_kses_post( (string) $input['content'] );
+		$guard                  = aafm_block_guard_evaluate( (string) $update['post_content'] );
+		if ( $guard['error'] instanceof WP_Error ) {
+			return $guard['error'];
+		}
 	}
 	$result = wp_update_post( wp_slash( $update ), true );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
-	return aafm_rich_block( get_post( (int) $result ) );
+	return aafm_block_with_warnings( aafm_rich_block( get_post( (int) $result ) ), $guard['warnings'] );
 }
 
 /**

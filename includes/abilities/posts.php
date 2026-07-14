@@ -64,7 +64,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-draft']    = array(
 		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -72,7 +72,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-post']     = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -80,7 +80,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-post']     = array(
 		'label'        => __( 'Update post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing post by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -104,7 +104,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-cpt-item'] = array(
 		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -112,7 +112,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-cpt-item'] = array(
 		'label'        => __( 'Update content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an item of an allowlisted custom content type by ID (publishing requires that type\'s publish capability). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -467,7 +467,10 @@ function aafm_write_content_schema( bool $require_title ): array {
 				'type'      => 'string',
 				'minLength' => 1,
 			),
-			'content'        => array( 'type' => 'string' ),
+			'content'        => array(
+				'type'        => 'string',
+				'description' => aafm_write_content_description(),
+			),
 			'excerpt'        => array( 'type' => 'string' ),
 			'status'         => array( 'type' => 'string' ),
 			'slug'           => array( 'type' => 'string' ),
@@ -618,6 +621,13 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 		}
 	}
 
+	// Guard the final, post-KSES markup for editor-invalid block content. In strict mode a
+	// mismatch aborts before anything is written; otherwise the warnings ride back on the response.
+	$guard = aafm_block_guard_evaluate( (string) $postarr['post_content'] );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
+
 	$id = wp_insert_post( wp_slash( $postarr ), true );
 	if ( is_wp_error( $id ) ) {
 		return aafm_generic_error();
@@ -630,7 +640,11 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 	// Apply the pre-validated enrichment now that the id exists.
 	aafm_apply_write_enrichment( (int) $id, $enrichment );
 
-	return array( 'post' => aafm_redact_post( $created ) );
+	$response = array( 'post' => aafm_redact_post( $created ) );
+	if ( ! empty( $guard['warnings'] ) ) {
+		$response['content_warnings'] = $guard['warnings'];
+	}
+	return $response;
 }
 
 /**
@@ -848,6 +862,10 @@ function aafm_exec_update_post( array $input ) {
 		return $enrichment;
 	}
 
+	$guard   = array(
+		'warnings' => array(),
+		'error'    => null,
+	);
 	$postarr = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
 		$title = sanitize_text_field( (string) $input['title'] );
@@ -858,6 +876,11 @@ function aafm_exec_update_post( array $input ) {
 	}
 	if ( isset( $input['content'] ) ) {
 		$postarr['post_content'] = wp_kses_post( (string) $input['content'] );
+		// Guard the final markup: strict mode blocks the write, warn mode rides on the response.
+		$guard = aafm_block_guard_evaluate( (string) $postarr['post_content'] );
+		if ( $guard['error'] instanceof WP_Error ) {
+			return $guard['error'];
+		}
 	}
 	if ( isset( $input['excerpt'] ) ) {
 		$postarr['post_excerpt'] = sanitize_text_field( (string) $input['excerpt'] );
@@ -905,7 +928,11 @@ function aafm_exec_update_post( array $input ) {
 	if ( ! $updated instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
-	return array( 'post' => aafm_redact_post( $updated ) );
+	$response = array( 'post' => aafm_redact_post( $updated ) );
+	if ( ! empty( $guard['warnings'] ) ) {
+		$response['content_warnings'] = $guard['warnings'];
+	}
+	return $response;
 }
 
 /**
@@ -1003,6 +1030,12 @@ function aafm_exec_replace_in_post( array $input ) {
 
 	$new = wp_kses_post( str_replace( $search, $replace, $content ) );
 
+	// Guard the rewritten markup so a replacement cannot silently introduce editor-invalid blocks.
+	$guard = aafm_block_guard_evaluate( $new );
+	if ( $guard['error'] instanceof WP_Error ) {
+		return $guard['error'];
+	}
+
 	$result = wp_update_post(
 		wp_slash(
 			array(
@@ -1021,10 +1054,14 @@ function aafm_exec_replace_in_post( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array(
+	$response = array(
 		'post'         => aafm_redact_post( $updated ),
 		'replacements' => $replacements,
 	);
+	if ( ! empty( $guard['warnings'] ) ) {
+		$response['content_warnings'] = $guard['warnings'];
+	}
+	return $response;
 }
 
 /**

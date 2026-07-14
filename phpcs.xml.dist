@@ -17,6 +17,10 @@
 	     namespace (and one is an intentional duplicate of another) to reproduce a sibling plugin's
 	     pre-declaration of an adapter class. They are throwaway test fixtures, not shipped code. -->
 	<exclude-pattern>*/tests/Fixtures/AdapterEager/*</exclude-pattern>
+	<!-- The standalone-plugin coexistence fixtures likewise declare classes in the FOREIGN WP\MCP\
+	     namespace (some intentionally duplicated) to reproduce the standalone mcp-adapter plugin's
+	     unguarded shell-class declaration in both load orders. Throwaway fixtures, never shipped. -->
+	<exclude-pattern>*/tests/Fixtures/AdapterShell/*</exclude-pattern>
 
 	<arg name="extensions" value="php"/>
 	<arg name="basepath" value="."/>

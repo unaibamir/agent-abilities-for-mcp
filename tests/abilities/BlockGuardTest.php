@@ -170,6 +170,45 @@ final class BlockGuardTest extends TestCase {
 	}
 
 	/**
+	 * The core/cover save() puts a structural min-height on the root (from the top-level minHeight
+	 * attribute, not a color/size support). That is legitimate output and must NOT trip Check B -
+	 * min-height is not a presentational property the guard backs as a block attribute.
+	 */
+	public function test_cover_min_height_style_is_not_flagged(): void {
+		$markup = '<!-- wp:cover {"minHeight":400} -->' . "\n"
+			. '<div class="wp-block-cover" style="min-height:400px"><span aria-hidden="true" class="wp-block-cover__background"></span><div class="wp-block-cover__inner-container"></div></div>' . "\n"
+			. '<!-- /wp:cover -->';
+
+		$this->assertSame( array(), aafm_scan_block_content( $markup ) );
+	}
+
+	/**
+	 * The core/media-text save() writes a structural grid-template-columns on the root from the
+	 * mediaWidth attribute. Like min-height it is not a color/size the guard mirrors, so it must
+	 * stay silent rather than be rejected in strict mode.
+	 */
+	public function test_media_text_grid_template_style_is_not_flagged(): void {
+		$markup = '<!-- wp:media-text {"mediaWidth":50} -->' . "\n"
+			. '<div class="wp-block-media-text is-stacked-on-mobile" style="grid-template-columns:50% auto"><figure class="wp-block-media-text__media"></figure><div class="wp-block-media-text__content"></div></div>' . "\n"
+			. '<!-- /wp:media-text -->';
+
+		$this->assertSame( array(), aafm_scan_block_content( $markup ) );
+	}
+
+	/**
+	 * The narrowed Check B still catches the real case: an inline PRESENTATIONAL style (color) on
+	 * the root with no matching block attribute is flagged.
+	 */
+	public function test_unbacked_inline_color_style_still_flagged(): void {
+		$markup = '<!-- wp:group -->' . "\n"
+			. '<div class="wp-block-group" style="color:red">X</div>' . "\n"
+			. '<!-- /wp:group -->';
+
+		$codes = wp_list_pluck( aafm_scan_block_content( $markup ), 'code' );
+		$this->assertContains( 'inline_style_without_attrs', $codes );
+	}
+
+	/**
 	 * The KSES-dropped case: an attribute declares a colour the sanitizer removed from the HTML.
 	 */
 	public function test_dropped_color_value_is_flagged(): void {

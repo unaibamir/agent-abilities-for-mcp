@@ -189,15 +189,21 @@ function aafm_inspect_block( array $block ): array {
 		}
 	}
 
-	// Check B: raw inline style on the root with nothing declared in the block attributes.
-	$has_any_style_attr = ! empty( $style_attr )
-		|| ! empty( $attrs['textColor'] )
-		|| ! empty( $attrs['backgroundColor'] )
-		|| ! empty( $attrs['gradient'] )
-		|| ! empty( $attrs['fontSize'] )
-		|| ! empty( $attrs['borderColor'] );
-	if ( '' !== $style && ! $has_any_style_attr ) {
-		$warnings[] = aafm_block_warning( $name, 'inline_style_without_attrs', '' );
+	// Check B: the root inline style declares a PRESENTATIONAL property the guard understands and
+	// mirrors as a block attribute (color, background/background-color, font-size, border-color) with
+	// no matching attribute behind it. Only these properties can cause the save() mismatch, so a
+	// structural style the guard does not back - min-height on core/cover, grid-template-columns on
+	// core/media-text, max-width - is legitimate save() output and must never trip this check.
+	if ( '' !== $style ) {
+		if ( aafm_style_declares( $style, 'color' ) && ! $has_text_color ) {
+			$warnings[] = aafm_block_warning( $name, 'inline_style_without_attrs', '' );
+		} elseif ( aafm_style_declares( $style, 'background' ) && ! $has_background ) {
+			$warnings[] = aafm_block_warning( $name, 'inline_style_without_attrs', '' );
+		} elseif ( aafm_style_declares( $style, 'font-size' ) && ! $has_custom_font && ! $has_preset_font ) {
+			$warnings[] = aafm_block_warning( $name, 'inline_style_without_attrs', '' );
+		} elseif ( aafm_style_declares( $style, 'border-color' ) && ! $has_border_color ) {
+			$warnings[] = aafm_block_warning( $name, 'inline_style_without_attrs', '' );
+		}
 	}
 
 	// Check C: an attribute declares a value the stored inline style has lost (KSES-dropped).

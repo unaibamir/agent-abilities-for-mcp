@@ -4,7 +4,7 @@ Tags: mcp, chatgpt, ai-assistant, woocommerce, abilities
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,6 +17,10 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
+
+Prefer to watch first? Here is a short walkthrough of the plugin in action.
+
+[youtube https://www.youtube.com/watch?v=Raih7X4QgP0]
 
 **Quick links:** [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [GitHub](https://github.com/unaibamir/agent-abilities-for-mcp)
 
@@ -232,6 +236,12 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.1.1 =
+
+* AI agents that write pages, posts, or templates are now steered to keep block styling in the block attributes instead of inline CSS, the mistake that made blocks show "unexpected or invalid content" in the editor.
+* Block markup is checked before it is saved, and anything that would break in the editor is flagged back to the agent to fix on its next try.
+* A new strict option under Safety controls rejects a write outright when its block markup would be invalid, off by default so existing sites are unchanged.
+
 = 1.1.0 =
 
 * Bridge abilities from your other plugins: any active plugin that registers abilities through the WordPress Abilities API can now be exposed as a governed MCP tool, opt-in per ability and off by default, on a new "Abilities from other plugins" screen grouped by the source plugin.
@@ -253,6 +263,9 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.1.1 =
+Agent-written pages, posts, and templates no longer risk showing invalid content in the block editor. An optional strict mode under Safety controls can reject bad block markup outright.
 
 = 1.1.0 =
 Bridge abilities from your other plugins as governed MCP tools, all opt-in and off by default, plus refreshed branding.

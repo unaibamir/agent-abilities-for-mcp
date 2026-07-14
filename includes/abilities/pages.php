@@ -36,7 +36,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-page'] = array(
 		'label'        => __( 'Create page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create and publish a page (requires publish_pages). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create and publish a page (requires publish_pages). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -44,7 +44,7 @@ function aafm_register_pages_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-page'] = array(
 		'label'        => __( 'Update page', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update an existing page by ID (publishing is a separate gate). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',

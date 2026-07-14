@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.1.0 |
+| **Stable tag** | 1.1.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -19,6 +19,10 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
 Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
+
+Prefer to watch first? Here is a short walkthrough of the plugin in action.
+
+[![Agent Abilities for MCP walkthrough](https://img.youtube.com/vi/Raih7X4QgP0/hqdefault.jpg)](https://www.youtube.com/watch?v=Raih7X4QgP0)
 
 Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
@@ -177,6 +181,12 @@ This plugin does not contact any external service. It registers abilities on you
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.1.1
+
+* AI agents that write pages, posts, or templates are now steered to keep block styling in the block attributes instead of inline CSS, the mistake that made blocks show "unexpected or invalid content" in the editor.
+* Block markup is checked before it is saved, and anything that would break in the editor is flagged back to the agent to fix on its next try.
+* A new strict option under Safety controls rejects a write outright when its block markup would be invalid, off by default so existing sites are unchanged.
 
 ### 1.1.0
 

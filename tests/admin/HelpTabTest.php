@@ -103,13 +103,16 @@ final class HelpTabTest extends TestCase {
 		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		// Per-client guidance beyond Claude.
+		// Per-client guidance covers the web apps and the proxy clients.
+		$this->assertStringContainsString( 'ChatGPT:', $html );
+		$this->assertStringContainsString( 'Claude:', $html );
 		$this->assertStringContainsString( 'Cursor:', $html );
 		$this->assertStringContainsString( 'Windsurf:', $html );
-		$this->assertStringContainsString( 'claude_desktop_config.json', $html );
-		// The hosted ChatGPT/Gemini apps are called out as the ones that can't connect,
-		// while Gemini CLI is noted as a working proxy client (accurate to this release).
-		$this->assertStringContainsString( 'hosted ChatGPT and Gemini apps cannot connect', $html );
+		// ChatGPT now connects via its developer-mode custom connector.
+		$this->assertStringContainsString( 'Developer mode', $html );
+		// Only the hosted Gemini app is still called out as unable to connect; Gemini CLI works
+		// as a proxy client (accurate to this release).
+		$this->assertStringContainsString( 'hosted Gemini app cannot connect', $html );
 		$this->assertStringContainsString( 'Gemini CLI', $html );
 	}
 

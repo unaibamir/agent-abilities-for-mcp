@@ -21,9 +21,10 @@
  *
  * MAINTENANCE: when the bundled wordpress/mcp-adapter is updated, re-verify
  * aafm_adapter_namespace_map() against each bundled package's composer.json PSR-4 map (the adapter
- * AND the php-mcp-schema package it depends on), and re-check the /includes/Cli/ skip in
- * aafm_eager_load_adapter() - confirm it still covers the WP-CLI-only classes, and whether any new
- * runtime-only directory needs the same skip treatment.
+ * AND the php-mcp-schema package it depends on), re-check the /includes/Cli/ skip in
+ * aafm_eager_load_adapter() - confirm it still covers the WP-CLI-only classes, and re-check the
+ * plugin-shell skip (aafm_adapter_is_plugin_shell_class()) still names the standalone plugin's
+ * bootstrap classes. Also confirm whether any new runtime-only directory needs the same treatment.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -132,6 +133,67 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
 }
 
 /**
+ * Whether a bundled FQCN is one of the standalone plugin's bootstrap-shell classes.
+ *
+ * The wordpress/mcp-adapter *plugin* (as opposed to the adapter runtime) ships two bootstrap files
+ * directly under includes/: Autoloader.php (WP\MCP\Autoloader) and Plugin.php (WP\MCP\Plugin). Its
+ * main plugin file requires includes/Autoloader.php UNCONDITIONALLY - a plain `require_once` with no
+ * class_exists guard (mcp-adapter.php -> includes/Autoloader.php:19 `final class Autoloader`). If our
+ * eager load has already declared WP\MCP\Autoloader from our bundle, that unguarded require throws a
+ * non-catchable "Cannot declare class WP\MCP\Autoloader, because the name is already in use" fatal
+ * and white-screens the whole site - in EITHER activation order, because our folder sorts first
+ * ("agent-abilities-for-mcp" < "mcp-adapter") so our eager load always runs before their require.
+ *
+ * These two classes are pure plugin scaffolding: the adapter RUNTIME that actually serves /mcp
+ * (WP\MCP\Core\*, Handlers\*, Domain\*, Transport\*, Infrastructure\*, Servers\*, Abilities\*) never
+ * references either of them, so we gain nothing by pre-declaring them and lose coexistence by doing
+ * so. We therefore skip them in the eager load: the standalone plugin's unguarded require then
+ * declares its OWN copy with no collision, while our eager load still commits PHP to our 0.5.0
+ * McpAdapter (the class that carries the per-connection capability gate). This does NOT weaken the
+ * Rank Math case: Rank Math bundles an older adapter as a plain Composer LIBRARY (lazy autoloader, no
+ * unguarded plugin-shell require) and loads after us, so our eager McpAdapter still wins that race.
+ *
+ * Two layers, allowlist first (hardened):
+ *   1. An explicit allowlist of the two classes the standalone plugin is known to declare itself -
+ *      WP\MCP\Autoloader and WP\MCP\Plugin. These are always skipped, named and self-documenting, so
+ *      the real, present coexistence case never depends on a heuristic.
+ *   2. A broad structural fallback: any OTHER direct child of WP\MCP\ (nothing after stripping
+ *      "WP\MCP\" contains a separator) is also treated as scaffolding. This keeps WSOD protection if
+ *      the standalone ever renames or adds a bootstrap-shell file we do not yet name. Every runtime
+ *      class lives in a sub-namespace (WP\MCP\Core\..., WP\MCP\Handlers\...), and the only direct
+ *      children of WP\MCP\ in our bundle are exactly the two allowlisted shell classes, so the
+ *      fallback never skips a class the /mcp path needs.
+ *
+ * A pure allowlist (dropping layer 2) would be sharper but would re-open the redeclaration WSOD for
+ * any standalone shell class not named above; the fallback is deliberately retained so coverage is
+ * never narrower than the failure mode this whole mechanism exists to prevent.
+ *
+ * @param string $fqcn Fully-qualified class name derived from a bundled file path.
+ * @return bool True when the class is a WP\MCP\ bootstrap-shell class we must not pre-declare.
+ */
+function aafm_adapter_is_plugin_shell_class( string $fqcn ): bool {
+	// Layer 1 - explicit allowlist. The standalone wordpress/mcp-adapter plugin `require_once`s these
+	// two directly under includes/, unguarded, so their names must stay free for it to declare.
+	$shell_classes = array(
+		'WP\\MCP\\Autoloader',
+		'WP\\MCP\\Plugin',
+	);
+	if ( in_array( $fqcn, $shell_classes, true ) ) {
+		return true;
+	}
+
+	// Layer 2 - structural fallback for an as-yet-unnamed direct child of WP\MCP\.
+	$prefix = 'WP\\MCP\\';
+	if ( 0 !== strncmp( $fqcn, $prefix, strlen( $prefix ) ) ) {
+		return false;
+	}
+
+	$remainder = substr( $fqcn, strlen( $prefix ) );
+
+	return '' !== $remainder && false === strpos( $remainder, '\\' );
+}
+
+/**
  * Register a prepended SPL autoloader that resolves the WP\MCP\ namespace from our bundled copy.
  *
  * Idempotent: a static guard ensures at most one loader is ever registered, no matter how many
@@ -196,6 +258,12 @@ function aafm_register_adapter_autoloader(): void {
  * exist outside a WP-CLI request, so declaring it here would fatal. Those classes are never used
  * by the REST /mcp path.
  *
+ * The standalone plugin's bootstrap-shell classes (WP\MCP\Autoloader, WP\MCP\Plugin) are also
+ * skipped: the standalone wordpress/mcp-adapter plugin `require_once`s its own includes/Autoloader.php
+ * UNCONDITIONALLY, so pre-declaring WP\MCP\Autoloader from our bundle makes that unguarded require
+ * fatal and WSOD the site whenever both plugins are active. Our runtime never touches those classes.
+ * See aafm_adapter_is_plugin_shell_class().
+ *
  * Cost is negligible: aafm_init_mcp() already calls McpAdapter::instance() on every request, which
  * loads the adapter anyway - eager-loading the remaining sibling classes in the same phase adds
  * only a handful of require_once calls on already-bundled files.
@@ -259,10 +327,21 @@ function aafm_eager_require_adapter_dir( string $base ): void {
 			continue;
 		}
 
+		$fqcn = aafm_adapter_path_to_class( $path, $base, 'WP\\MCP\\' );
+
+		// Skip the standalone plugin's bootstrap-shell classes (WP\MCP\Autoloader, WP\MCP\Plugin).
+		// Its main plugin file `require_once`s includes/Autoloader.php UNCONDITIONALLY (no guard), so
+		// if we pre-declared WP\MCP\Autoloader here PHP would fatal on their redeclaration and WSOD the
+		// site whenever both plugins are active. Our runtime never uses these classes, so not declaring
+		// them costs nothing and lets the standalone plugin coexist. See
+		// aafm_adapter_is_plugin_shell_class() for the full rationale (and the Rank Math non-regression).
+		if ( null !== $fqcn && aafm_adapter_is_plugin_shell_class( $fqcn ) ) {
+			continue;
+		}
+
 		// If a class this file declares is already in scope (a sibling that loaded before us
 		// declared its own copy), requiring our file would fatal on redeclaration. Skip it: PHP
 		// keeps the already-declared copy, and our floor/notice fallback handles a version mismatch.
-		$fqcn = aafm_adapter_path_to_class( $path, $base, 'WP\\MCP\\' );
 		if ( null !== $fqcn
 			&& ( class_exists( $fqcn, false ) || interface_exists( $fqcn, false ) || trait_exists( $fqcn, false ) )
 		) {

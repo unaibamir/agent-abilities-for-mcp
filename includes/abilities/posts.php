@@ -745,8 +745,9 @@ function aafm_perm_create_cpt_item( array $input ): bool {
 	if ( ! current_user_can( (string) $caps['object']->cap->edit_posts ) ) {
 		return false;
 	}
-	// Publish requested → require the type's publish cap too.
-	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+	// Public status requested → require the type's publish cap too. Keys on core's public-status
+	// registry, not the literal 'publish', so a custom public status is gated the same way.
+	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
 		return current_user_can( (string) $caps['object']->cap->publish_posts );
 	}
 	return true;
@@ -830,7 +831,7 @@ function aafm_perm_update_post( array $input ): bool {
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
-	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
 		$caps = aafm_type_caps( $post->post_type );
 		return $caps['object'] instanceof WP_Post_Type
 			&& current_user_can( (string) $caps['object']->cap->publish_posts );
@@ -1112,7 +1113,7 @@ function aafm_perm_update_cpt_item( array $input ): bool {
 	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
-	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
+	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
 		$caps = aafm_type_caps( $post->post_type );
 		return $caps['object'] instanceof WP_Post_Type
 			&& current_user_can( (string) $caps['object']->cap->publish_posts );

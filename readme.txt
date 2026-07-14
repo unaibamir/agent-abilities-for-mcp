@@ -236,6 +236,12 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.1.1 =
+
+* AI agents that write pages, posts, or templates are now steered to keep block styling in the block attributes instead of inline CSS, the mistake that made blocks show "unexpected or invalid content" in the editor.
+* Block markup is checked before it is saved, and anything that would break in the editor is flagged back to the agent to fix on its next try.
+* A new strict option under Safety controls rejects a write outright when its block markup would be invalid, off by default so existing sites are unchanged.
+
 = 1.1.0 =
 
 * Bridge abilities from your other plugins: any active plugin that registers abilities through the WordPress Abilities API can now be exposed as a governed MCP tool, opt-in per ability and off by default, on a new "Abilities from other plugins" screen grouped by the source plugin.
@@ -257,6 +263,9 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.1.1 =
+Agent-written pages, posts, and templates no longer risk showing invalid content in the block editor. An optional strict mode under Safety controls can reject bad block markup outright.
 
 = 1.1.0 =
 Bridge abilities from your other plugins as governed MCP tools, all opt-in and off by default, plus refreshed branding.

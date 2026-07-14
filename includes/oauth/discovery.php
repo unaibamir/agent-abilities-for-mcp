@@ -168,6 +168,16 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 		return $response;
 	}
 
+	// aafm_mcp_rest_route() is defined in bootstrap.php, which loads inside aafm_bootstrap() on
+	// `plugins_loaded`. This filter is registered at plugin-include time, so it can fire earlier:
+	// another active plugin that issues a rest_do_request() during `plugins_loaded` (before our
+	// bootstrap) and gets a 401 would reach the aafm_mcp_rest_route() call below before it exists,
+	// fataling inside a REST dispatch filter. Bail until the helper is loaded; the genuine MCP 401
+	// challenge is added later, during normal REST dispatch, once the plugin is fully loaded.
+	if ( ! function_exists( 'aafm_mcp_rest_route' ) ) {
+		return $response;
+	}
+
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
 	// The MCP route the adapter registers (single-sourced in bootstrap.php).

@@ -114,6 +114,13 @@ function aafm_oauth_mint_tokens( array $ctx ) {
  * not been deactivated; so disabling a compromised client invalidates its live access tokens here
  * too, not just on the REST path.
  *
+ * WARNING: this does NOT perform the RFC 8707 audience binding that the live request path enforces
+ * (aafm_oauth_resolve_current_user compares the token's resource against aafm_endpoint_url() before
+ * resolving a user). It answers only "is this token active, unexpired, and its client still enabled",
+ * so it MUST NEVER be used as a standalone authorization decision on the request path - a token
+ * minted for a different audience would validate here. Use aafm_oauth_resolve_current_user() for any
+ * real auth decision. This helper exists for token-lifecycle/introspection use (and tests) only.
+ *
  * @param string $raw The raw access token presented by the client.
  * @return int|false The wp_user_id on success, or false when expired, inactive, deactivated, or unknown.
  */

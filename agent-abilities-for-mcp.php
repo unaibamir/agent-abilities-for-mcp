@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Agent Abilities for MCP - MCP Server for AI Agents
- * Plugin URI:        https://github.com/unaibamir/agent-abilities-for-mcp
+ * Plugin URI:        https://agentabilitieswp.com
  * Description:       Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
  * Version:           1.2.0
  * Requires at least: 6.9

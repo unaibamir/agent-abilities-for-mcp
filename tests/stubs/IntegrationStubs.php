@@ -133,6 +133,7 @@ class Post {
 	public $twitter_description = '';
 	public $twitter_image_custom_url = '';
 	public $twitter_image_type = 'default';
+	public $twitter_use_og = true;
 	public $robots_noindex = false;
 	public $robots_nofollow = false;
 	public $robots_default = true;

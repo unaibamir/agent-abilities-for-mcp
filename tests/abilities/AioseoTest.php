@@ -331,6 +331,130 @@ final class AioseoTest extends TestCase {
 		$this->assertSame( 'default', $row['twitter_image_type'], 'A non-image write must not force twitter_image_type.' );
 	}
 
+	/**
+	 * Writing a twitter_image must turn off AIOSEO's twitter_use_og fallback, or the Twitter card
+	 * silently shows the Facebook/OG image instead of the written one. AIOSEO\Plugin\Common\Social\
+	 * Twitter::getImage() returns aioseo()->social->facebook->getImage() whenever twitter_use_og is
+	 * truthy - BEFORE it ever reads twitter_image_type - and that flag defaults truthy (useOgData).
+	 * So the H4 twitter_image_type='custom_image' flip alone is inert. This exercises the short-circuit
+	 * through the faithful resolver: pre-fix the row keeps twitter_use_og=true, so the resolver returns
+	 * the OG image (the RED), not the written twitter image; once the flip ships it returns the twitter
+	 * URL (the GREEN). A distinct og_image proves it resolves to THAT twitter image, not the OG one.
+	 */
+	public function test_aioseo_twitter_image_write_disables_use_og_so_it_renders(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$og_url = 'https://example.com/aio-og.jpg';
+		$tw_url = 'https://example.com/aio-tw.jpg';
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_image'      => $og_url,
+				'twitter_image' => $tw_url,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		// The Twitter card must render the written twitter image, not the Facebook/OG image the
+		// twitter_use_og short-circuit would otherwise substitute.
+		$this->assertSame(
+			$tw_url,
+			\AAFM\Tests\AioseoStubStore::resolve_twitter_image( $post_id ),
+			'AIOSEO must render the written twitter image; twitter_use_og must be off or it shows the OG image.'
+		);
+		$this->assertFalse(
+			(bool) \AAFM\Tests\AioseoStubStore::get( $post_id )['twitter_use_og'],
+			'Writing a twitter image must clear twitter_use_og so the twitter image renders.'
+		);
+	}
+
+	/**
+	 * Setting a twitter_title (a Twitter-specific text field) must likewise turn off twitter_use_og so
+	 * the written title renders instead of the OG title - the same M2 inertness the image write hits.
+	 */
+	public function test_aioseo_twitter_title_write_disables_use_og(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_title'      => 'OG Title',
+				'twitter_title' => 'TW Title',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertFalse(
+			(bool) \AAFM\Tests\AioseoStubStore::get( $post_id )['twitter_use_og'],
+			'Writing a twitter title must clear twitter_use_og so the twitter title renders.'
+		);
+		$this->assertSame(
+			'TW Title',
+			\AAFM\Tests\AioseoStubStore::resolve_twitter_title( $post_id ),
+			'The written twitter title must render, not the OG title.'
+		);
+	}
+
+	/**
+	 * An og-only write (no twitter field) must NOT flip twitter_use_og - the fallback stays at its
+	 * default so a post that renders OG values on Twitter keeps doing so. Guards the flip from being
+	 * over-broad and firing on writes that never touched a Twitter field.
+	 */
+	public function test_aioseo_og_only_write_leaves_twitter_use_og(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_title'      => 'OG only',
+				'og_image'      => 'https://example.com/aio-og.jpg',
+				'twitter_image' => '', // Cleared, not set: an empty twitter field must not flip the flag.
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertTrue(
+			(bool) \AAFM\Tests\AioseoStubStore::get( $post_id )['twitter_use_og'],
+			'An og-only write (or a cleared twitter field) must not flip twitter_use_og.'
+		);
+	}
+
+	/**
+	 * Regression guard for the fix itself: turning twitter_use_og off (because a twitter_image was
+	 * written) must NOT blank a Twitter title/description that was rendering from the OG value. AIOSEO's
+	 * getTitle/getDescription fall back to the Facebook/OG value when twitter_use_og is false AND the
+	 * twitter field is empty, so a card that showed the OG title before the flip still shows it after.
+	 */
+	public function test_aioseo_flipping_twitter_use_og_keeps_empty_twitter_title_rendering(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// Set an OG title and a twitter image, but leave twitter_title empty. The write flips
+		// twitter_use_og off (for the image); the empty twitter_title must still fall back to OG.
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_title'      => 'OG Title',
+				'twitter_image' => 'https://example.com/aio-tw.jpg',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertFalse(
+			(bool) \AAFM\Tests\AioseoStubStore::get( $post_id )['twitter_use_og'],
+			'The twitter image write must have flipped twitter_use_og off.'
+		);
+		$this->assertSame(
+			'OG Title',
+			\AAFM\Tests\AioseoStubStore::resolve_twitter_title( $post_id ),
+			'An empty twitter title must still fall back to the OG title after twitter_use_og is turned off.'
+		);
+	}
+
 	public function test_aioseo_no_schema_ability_registers(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-schema', $registry );

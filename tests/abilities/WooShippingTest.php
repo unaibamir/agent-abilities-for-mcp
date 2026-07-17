@@ -108,6 +108,56 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * Every seeded zone comes back with its real fields and the total matches.
+	 *
+	 * Guards the C1 regression: WC_Shipping_Zones::get_zones() has no zone_object key, so the
+	 * old reader (which kept only rows whose zone_object was a WC_Shipping_Zone) dropped every
+	 * real zone and returned {"zones":[],"total":0} on a store that actually had zones. The
+	 * stub now mirrors the real get_zones() shape, so this asserts the fix reads the row fields.
+	 */
+	public function test_list_shipping_zones_returns_seeded_zones(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-shipping-zones' )->execute( array() );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		// Two zones were seeded (Europe order 1, USA order 2); all() returns them in zone_order.
+		$this->assertSame( 2, $res['total'] );
+		$this->assertCount( 2, $res['zones'] );
+
+		$this->assertSame(
+			array(
+				'id'         => 1,
+				'zone_name'  => 'Europe',
+				'zone_order' => 1,
+			),
+			$res['zones'][0]
+		);
+		$this->assertSame(
+			array(
+				'id'         => 2,
+				'zone_name'  => 'USA',
+				'zone_order' => 2,
+			),
+			$res['zones'][1]
+		);
+	}
+
+	/**
+	 * A get_zones() row that cannot resolve to a real zone id surfaces a WP_Error, rather than
+	 * being silently skipped into a short or empty list.
+	 */
+	public function test_list_shipping_zones_unresolvable_row_is_wp_error(): void {
+		$this->acting_as( 'administrator' );
+		// A malformed row with no usable zone id (mirrors get_zones() returning junk).
+		WcShippingStubStore::$rows_override = array(
+			array( 'zone_name' => 'Broken' ),
+		);
+
+		$res = wp_get_ability( 'aafm/wc-list-shipping-zones' )->execute( array() );
+		$this->assertInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
 	 * Host-inactive: all 8 shipping abilities must be absent from the registry when WooCommerce is off.
 	 */
 	public function test_list_shipping_zones_host_inactive_absent_from_registry(): void {

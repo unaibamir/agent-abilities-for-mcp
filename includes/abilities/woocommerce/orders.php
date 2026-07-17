@@ -374,7 +374,7 @@ function aafm_exec_wc_list_orders( array $input ): array {
 	$query = wc_get_orders(
 		array(
 			'limit'    => $per_page,
-			'paged'    => $page,
+			'page'     => $page,
 			'status'   => $status,
 			'paginate' => true,
 		)

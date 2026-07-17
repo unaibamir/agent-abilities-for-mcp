@@ -420,6 +420,44 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
 }
 
 /**
+ * Normalize a value to the canonical form ACF's own storage round-trips it to, so a persisted write
+ * can be verified without demanding JSON-exact equality with the value we sent.
+ *
+ * ACF writes through update_metadata() (acf_update_value() -> acf_update_metadata_by_field()), which
+ * stores every scalar in a text column: an integer or float reads back a numeric string, boolean true
+ * reads back '1' and false reads back '' (verified against ACF 6.8.6 - the number field's update_value
+ * returns the value untouched and true_false has no update_value at all, so both land in metadata raw).
+ * A caller who sends the JSON number 42 or boolean true has therefore genuinely persisted the value
+ * even though get_field( ..., false ) then reads back '42' / '1'. Coercing BOTH the stored value and
+ * the value we wrote to this same string form lets the verify step accept a type-normalizing write as
+ * the success it is, while a value that never landed (null, or a genuinely different string) still
+ * differs. Arrays recurse so structured field values (link/image/repeater rows) compare leaf by leaf.
+ *
+ * @param mixed $value Raw value.
+ * @return mixed Canonicalized value: scalars as their stored-string form, arrays recursed, everything
+ *               else (null/object/resource) collapsed to null so it stays distinct from a real value.
+ */
+function aafm_acf_normalize_stored( $value ) {
+	if ( is_array( $value ) ) {
+		$out = array();
+		foreach ( $value as $key => $sub ) {
+			$out[ $key ] = aafm_acf_normalize_stored( $sub );
+		}
+		return $out;
+	}
+	if ( is_bool( $value ) ) {
+		return $value ? '1' : '';
+	}
+	if ( is_int( $value ) || is_float( $value ) ) {
+		return (string) $value;
+	}
+	if ( is_string( $value ) ) {
+		return $value;
+	}
+	return null;
+}
+
+/**
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
@@ -440,15 +478,19 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
  *      tokens, application passwords, 2FA keys, …) can never be written through this path either.
  *
  * A single offending key rejects the whole request with a generic WP_Error before any update_field()
- * runs - matching this function's existing fail-fast, single-generic-error convention (the verify
- * step below already returns aafm_generic_error() on the first non-persisting write) and avoiding a
- * partial write when any key in the map is rejected. Legitimate, defined fields are written and
- * verified exactly as before.
+ * runs - matching this function's single-generic-error convention (the verify step below likewise
+ * collapses any non-persisting write to one generic error) and avoiding a partial write when any key
+ * in the map is rejected. Legitimate, defined fields are written and verified exactly as before.
  *
- * After each write the stored value is read back and compared to the sanitized value written; a
- * mismatch (a failed update_field that stored nothing) surfaces as an error so a failed write is
- * never audited as a success. A no-op write of an unchanged value still matches, so it is not
- * treated as a failure.
+ * After every field is written its stored value is read back and compared to the sanitized value
+ * written, so a failed update_field() that stored nothing is never audited as a success. Two things
+ * make that comparison honest. First, it respects ACF's stored typing (aafm_acf_normalize_stored):
+ * ACF persists through update_metadata(), so a numeric value reads back a numeric string and a
+ * boolean reads back '1'/'' - demanding JSON-exact equality would wrongly fail those type-normalizing
+ * writes even though the value did persist, while a no-op write of an unchanged value still matches.
+ * Second, the loop does NOT abort on the first mismatch: every field in the map is written and
+ * verified, so one field that fails to persist can never silently skip the fields that follow it. The
+ * request reports failure only after all fields have been attempted.
  *
  * @param array<string,mixed> $fields        Caller field map: field key => raw value.
  * @param int|string          $selector      ACF object selector.
@@ -478,6 +520,7 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		}
 	}
 
+	$failed = array();
 	foreach ( $fields as $field_key => $raw ) {
 		$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
 		update_field( (string) $field_key, $clean, $selector );
@@ -487,15 +530,21 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// third arg false - because the formatted read diverges from the stored value for whole
 		// field families (image/file return an array or URL while storing an attachment ID, date
 		// pickers reformat, relationship/post-object return objects); comparing the formatted
-		// shape would flag those successful writes as failures. Compare normalized JSON so
-		// scalars and structured arrays both compare cleanly, and a same-value no-op still
-		// matches.
+		// shape would flag those successful writes as failures. Compare after normalizing both
+		// sides to ACF's stored typing (aafm_acf_normalize_stored) so a numeric or boolean value
+		// that ACF persisted as a string is still recognised as the write it is, while structured
+		// arrays and a same-value no-op both still compare cleanly. Record - do NOT return on - a
+		// mismatch, so a field that fails to persist never skips the fields still queued after it.
 		if ( function_exists( 'get_field' ) ) {
 			$stored = get_field( (string) $field_key, $selector, false );
-			if ( wp_json_encode( $stored ) !== wp_json_encode( $clean ) ) {
-				return aafm_generic_error();
+			if ( wp_json_encode( aafm_acf_normalize_stored( $stored ) ) !== wp_json_encode( aafm_acf_normalize_stored( $clean ) ) ) {
+				$failed[] = (string) $field_key;
 			}
 		}
+	}
+
+	if ( array() !== $failed ) {
+		return aafm_generic_error(); // At least one field did not persist; the write as a whole failed.
 	}
 
 	return aafm_acf_read_fields( $selector );

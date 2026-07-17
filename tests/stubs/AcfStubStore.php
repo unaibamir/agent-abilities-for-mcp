@@ -64,6 +64,15 @@ class AcfStubStore {
 	public static bool $update_should_fail = false;
 
 	/**
+	 * Field keys whose record() refuses to store (returns false), modelling an update_field()
+	 * failure on ONE specific field while its siblings persist. Lets a test prove that a single
+	 * non-persisting field does not abort the writes queued after it.
+	 *
+	 * @var string[]
+	 */
+	public static array $fail_keys = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -74,6 +83,7 @@ class AcfStubStore {
 		self::$seed_values        = array();
 		self::$written            = array();
 		self::$update_should_fail = false;
+		self::$fail_keys          = array();
 	}
 
 	/**
@@ -131,6 +141,37 @@ class AcfStubStore {
 	}
 
 	/**
+	 * Coerce a value to the form real ACF reads it back as, so the stub models storage typing rather
+	 * than echoing the written value verbatim.
+	 *
+	 * ACF writes through update_metadata(), which persists every scalar into a text column: an integer
+	 * or float reads back a numeric string, boolean true reads back '1' and false reads back ''
+	 * (ACF 6.8.6). Modelling that here is what lets a test prove the write-verify must respect ACF's
+	 * stored typing - without it, a numeric/boolean write echoes back its original PHP type and the
+	 * JSON-exact bug is invisible (exactly why it shipped). Arrays recurse so structured field values
+	 * round-trip leaf by leaf; a same-value no-op therefore still reads back equal.
+	 *
+	 * @param mixed $value Written value.
+	 * @return mixed The value as ACF's metadata storage reads it back.
+	 */
+	private static function coerce_stored( $value ) {
+		if ( is_array( $value ) ) {
+			$out = array();
+			foreach ( $value as $key => $sub ) {
+				$out[ $key ] = self::coerce_stored( $sub );
+			}
+			return $out;
+		}
+		if ( is_bool( $value ) ) {
+			return $value ? '1' : '';
+		}
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return (string) $value;
+		}
+		return $value;
+	}
+
+	/**
 	 * Record a single field write under its object selector.
 	 *
 	 * @param mixed $field_key Field key.
@@ -139,14 +180,16 @@ class AcfStubStore {
 	 * @return bool
 	 */
 	public static function record( $field_key, $value, $selector ): bool {
-		if ( self::$update_should_fail ) {
+		if ( self::$update_should_fail || in_array( (string) $field_key, self::$fail_keys, true ) ) {
 			return false; // Model an update_field() failure: nothing is stored.
 		}
 		$bucket = self::bucket( $selector );
 		if ( ! isset( self::$written[ $bucket ] ) ) {
 			self::$written[ $bucket ] = array();
 		}
-		self::$written[ $bucket ][ (string) $field_key ] = $value;
+		// Store the value AS ACF's metadata storage reads it back (numeric/boolean scalars become
+		// strings), not the raw PHP type written, so the verify path sees real ACF typing.
+		self::$written[ $bucket ][ (string) $field_key ] = self::coerce_stored( $value );
 		return true;
 	}
 

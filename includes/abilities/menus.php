@@ -639,9 +639,34 @@ function aafm_exec_update_menu_item( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$args = array();
+	// wp_update_nav_menu_item() is NOT a partial API: any menu-item field not passed is backfilled
+	// from core defaults (type -> 'custom', blank url/object/object-id/parent/classes/xfn/target and
+	// a reset order/position) and then persisted. Sending only the changed keys therefore corrupts a
+	// page/post_type item into a broken custom link. So we seed the full field set from the item's
+	// current stored values and layer the requested edit on top, leaving every unspecified field
+	// exactly as it was. Values are read from the same decorated item shape the read path uses; the
+	// slashed text fields (title/description/attr-title, per the core contract) are re-slashed.
+	// Position is read from the raw post row, not $existing->menu_order: wp_get_nav_menu_items()
+	// rewrites menu_order to a contiguous 1..N display index, so the decorated value is not the
+	// stored order and re-sending it would shuffle items in a menu with non-contiguous orders.
+	$stored_post = get_post( $item_id );
+	$args        = array(
+		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
+		'menu-item-object'      => isset( $existing->object ) ? (string) $existing->object : '',
+		'menu-item-parent-id'   => isset( $existing->menu_item_parent ) ? (int) $existing->menu_item_parent : 0,
+		'menu-item-position'    => $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0,
+		'menu-item-type'        => isset( $existing->type ) ? (string) $existing->type : 'custom',
+		'menu-item-title'       => isset( $existing->post_title ) ? wp_slash( (string) $existing->post_title ) : '',
+		'menu-item-url'         => isset( $existing->url ) ? (string) $existing->url : '',
+		'menu-item-description' => isset( $existing->post_content ) ? wp_slash( (string) $existing->post_content ) : '',
+		'menu-item-attr-title'  => isset( $existing->post_excerpt ) ? wp_slash( (string) $existing->post_excerpt ) : '',
+		'menu-item-target'      => isset( $existing->target ) ? (string) $existing->target : '',
+		'menu-item-classes'     => isset( $existing->classes ) ? implode( ' ', (array) $existing->classes ) : '',
+		'menu-item-xfn'         => isset( $existing->xfn ) ? (string) $existing->xfn : '',
+		'menu-item-status'      => isset( $existing->post_status ) ? (string) $existing->post_status : 'publish',
+	);
 	if ( isset( $input['title'] ) ) {
-		$args['menu-item-title'] = sanitize_text_field( (string) $input['title'] );
+		$args['menu-item-title'] = wp_slash( sanitize_text_field( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
 		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );

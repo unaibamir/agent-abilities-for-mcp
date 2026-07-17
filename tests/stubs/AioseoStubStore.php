@@ -70,6 +70,82 @@ class AioseoStubStore {
 	}
 
 	/**
+	 * The site-default social image AIOSEO falls back to when a source resolves to nothing (stands in
+	 * for the configured global default; any non-custom source resolves here in the stub).
+	 *
+	 * @var string
+	 */
+	public const SITE_DEFAULT_IMAGE = 'https://site.example/aioseo-site-default.png';
+
+	/**
+	 * Model AIOSEO\Plugin\Common\Social\Facebook::getImage -> Social\Image::getImage for a stored row:
+	 * the OG image renders og_image_custom_url ONLY when og_image_type is 'custom_image'; every other
+	 * source resolves to the site default here.
+	 *
+	 * @param int $id Post id.
+	 * @return string
+	 */
+	public static function resolve_facebook_image( int $id ): string {
+		$row = self::get( $id );
+		if ( 'custom_image' === (string) ( $row['og_image_type'] ?? 'default' ) ) {
+			$url = (string) ( $row['og_image_custom_url'] ?? '' );
+			return '' !== $url ? $url : self::SITE_DEFAULT_IMAGE;
+		}
+		return self::SITE_DEFAULT_IMAGE;
+	}
+
+	/**
+	 * Model AIOSEO\Plugin\Common\Social\Twitter::getImage, including the short-circuit the H4 twitter
+	 * fix must defeat: when twitter_use_og is truthy (its real default) getImage returns the
+	 * Facebook/OG image and never looks at the twitter-specific image. Only with twitter_use_og false
+	 * does a 'custom_image' twitter_image_type render twitter_image_custom_url. Faithful to Twitter.php
+	 * lines 111-124: this is the resolution the update ability's twitter_use_og flip has to unlock.
+	 *
+	 * @param int $id Post id.
+	 * @return string
+	 */
+	public static function resolve_twitter_image( int $id ): string {
+		$row = self::get( $id );
+		if ( ! empty( $row['twitter_use_og'] ) ) {
+			return self::resolve_facebook_image( $id );
+		}
+		if ( 'custom_image' === (string) ( $row['twitter_image_type'] ?? 'default' ) ) {
+			$url = (string) ( $row['twitter_image_custom_url'] ?? '' );
+			return '' !== $url ? $url : self::resolve_facebook_image( $id );
+		}
+		return self::resolve_facebook_image( $id );
+	}
+
+	/**
+	 * Model AIOSEO\Plugin\Common\Social\Facebook::getTitle for a row (simplified to the OG title the
+	 * ability writes), the value the Twitter title falls back to.
+	 *
+	 * @param int $id Post id.
+	 * @return string
+	 */
+	public static function resolve_facebook_title( int $id ): string {
+		return (string) ( self::get( $id )['og_title'] ?? '' );
+	}
+
+	/**
+	 * Model AIOSEO\Plugin\Common\Social\Twitter::getTitle (Twitter.php lines 145-154): when
+	 * twitter_use_og is truthy it returns the Facebook/OG title; when false it returns twitter_title,
+	 * falling back to the Facebook/OG title when twitter_title is empty. That empty-field fallback is
+	 * why flipping twitter_use_og off never blanks a card whose twitter title was left empty.
+	 *
+	 * @param int $id Post id.
+	 * @return string
+	 */
+	public static function resolve_twitter_title( int $id ): string {
+		$row = self::get( $id );
+		if ( ! empty( $row['twitter_use_og'] ) ) {
+			return self::resolve_facebook_title( $id );
+		}
+		$twitter_title = (string) ( $row['twitter_title'] ?? '' );
+		return '' !== $twitter_title ? $twitter_title : self::resolve_facebook_title( $id );
+	}
+
+	/**
 	 * The default column shape every row reads back with, so a fresh post reads a complete shape.
 	 *
 	 * @param int $id Post id.
@@ -93,6 +169,13 @@ class AioseoStubStore {
 			'twitter_description'      => '',
 			'twitter_image_custom_url' => '',
 			'twitter_image_type'       => 'default',
+			// Mirrors the real wp_aioseo_posts column: Post::setDynamicDefaults copies the site
+			// social->twitter->general->useOgData option, whose default is true (Options.php), so a fresh
+			// row reads twitter_use_og = true. AIOSEO's Twitter renderer then returns the Facebook/OG
+			// value and ignores the twitter-specific title/description/image until this is flipped false.
+			// The update ability flips it whenever a Twitter field is written, so the stub must carry it
+			// to catch a regression where that flip is dropped.
+			'twitter_use_og'           => true,
 			'robots_noindex'           => false,
 			'robots_nofollow'          => false,
 			// Mirrors the real wp_aioseo_posts column: a fresh row defaults to true ("use site default"),

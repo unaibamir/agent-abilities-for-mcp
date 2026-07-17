@@ -162,7 +162,7 @@ function aafm_aioseo_registry_definitions(): array {
 		),
 		'aafm/aioseo-update-post' => array(
 			'label'        => __( 'Update post SEO (All in One SEO)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's SEO fields through All in One SEO's own data store (not post meta). URL fields are sanitized as URLs. Setting a Twitter field turns off the use-OpenGraph fallback so the Twitter title, description, and image render on their own. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'aioseo',
@@ -240,6 +240,24 @@ function aafm_aioseo_robots_fields(): array {
 		'robots_noindex'  => 'robots_noindex',
 		'robots_nofollow' => 'robots_nofollow',
 	);
+}
+
+/**
+ * Whether the write carries a non-empty Twitter-specific field. AIOSEO's Twitter renderer returns
+ * the Facebook/OpenGraph value whenever twitter_use_og is truthy (its default), so a written
+ * twitter title/description/image only renders once that fallback is turned off - and only when a
+ * Twitter field is actually provided, so an og-only or unrelated write never touches it.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_aioseo_twitter_fields_provided( array $input ): bool {
+	foreach ( array( 'twitter_title', 'twitter_description', 'twitter_image' ) as $field ) {
+		if ( array_key_exists( $field, $input ) && '' !== trim( (string) $input[ $field ] ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -447,6 +465,22 @@ function aafm_exec_aioseo_update_post( array $input ) {
 			}
 		}
 	}
+	// AIOSEO's Twitter renderer short-circuits to the Facebook/OpenGraph image, title, and description
+	// whenever twitter_use_og is truthy: AIOSEO\Plugin\Common\Social\Twitter::getImage/getTitle/
+	// getDescription each `return aioseo()->social->facebook->get*()` behind `! empty( $metaData->
+	// twitter_use_og )`, BEFORE they ever read the twitter-specific column. That flag defaults truthy
+	// (Post::setDynamicDefaults copies the site social->twitter->general->useOgData option, whose
+	// default is true), so writing a twitter_image/twitter_title/twitter_description alone persists a
+	// value the Twitter card never shows - even with twitter_image_type flipped to 'custom_image'
+	// above. Turn it off whenever a non-empty Twitter field is written so the provided values render,
+	// mirroring the AIOSEO editor. Leaving twitter_title/twitter_description empty stays safe: with
+	// twitter_use_og false and the field empty, getTitle/getDescription still fall back to the
+	// Facebook/OG value (Twitter.php: `return $title ? $title : ...->facebook->getTitle()`), the same
+	// output as the truthy branch - so this never blanks a card that was rendering an OG title/desc.
+	if ( aafm_aioseo_twitter_fields_provided( $input ) && property_exists( $model, 'twitter_use_og' ) ) {
+		$model->twitter_use_og = false;
+	}
+
 	$robots_touched = false;
 	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {
 		if ( ! array_key_exists( $field, $input ) || ! property_exists( $model, $prop ) ) {

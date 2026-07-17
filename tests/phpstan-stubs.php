@@ -1019,6 +1019,8 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 		/** @var string */
 		public $twitter_image_type = 'default';
 		/** @var bool */
+		public $twitter_use_og = true;
+		/** @var bool */
 		public $robots_noindex = false;
 		/** @var bool */
 		public $robots_nofollow = false;

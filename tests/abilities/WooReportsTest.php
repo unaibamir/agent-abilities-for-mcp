@@ -168,6 +168,44 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * H7: the sales report must page through the ENTIRE in-window order history, not just the first
+	 * page. The executor loops wc_get_orders() at 200 orders/page and advances by the public `page`
+	 * query var. Before the fix it passed `paged`, which legacy (non-HPOS) order storage ignores, so
+	 * every iteration re-read page 1 (200 orders) and the do-while never terminated -- the report
+	 * either looped forever or, at best, only ever counted the first 200 orders. Seed 250 in-window
+	 * completed orders (two pages) and assert the report terminates and aggregates all 250.
+	 */
+	public function test_get_sales_report_covers_all_pages(): void {
+		$this->acting_as( 'administrator' );
+		\AAFM\Tests\WcOrderStubStore::reset();
+
+		// 250 completed orders spanning two 200-order pages, each a flat 10.00 with no tax, shipping,
+		// or refunds so the arithmetic is exact: 250 orders * 10.00 = 2500.00 gross and net.
+		for ( $i = 0; $i < 250; $i++ ) {
+			\AAFM\Tests\WcOrderStubStore::seed(
+				8100 + $i,
+				array(
+					'status'       => 'completed',
+					'total'        => '10.00',
+					'date_created' => '2021-06-15 12:00:00',
+				)
+			);
+		}
+
+		$res = aafm_exec_wc_get_sales_report(
+			array(
+				'start_date' => '2021-06-01',
+				'end_date'   => '2021-06-30',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 250, $res['order_count'], 'The report must count every in-window order across all pages, not just the first 200.' );
+		$this->assertSame( '2500.00', $res['total_sales'], 'total_sales must sum all 250 orders, proving the loop paged to exhaustion.' );
+		$this->assertSame( '2500.00', $res['net_sales'] );
+	}
+
+	/**
 	 * Sales report returns WP_Error when WooCommerce integration is inactive.
 	 */
 	public function test_get_sales_report_inactive_wc(): void {
@@ -312,6 +350,43 @@ final class WooReportsTest extends TestCase {
 		$this->assertArrayHasKey( 'date_created', $args, 'The date window must be pushed into the wc_get_orders() query.' );
 		$this->assertStringStartsWith( '>=', (string) $args['date_created'], 'The window must constrain date_created as a lower bound.' );
 		$this->assertNotSame( -1, $args['limit'] ?? null, 'The query must not load every order with limit => -1.' );
+	}
+
+	/**
+	 * H7: the top-sellers report shares the sales report's paging loop and had the same bug. It pages
+	 * wc_get_orders() at 200 orders/page via the public `page` query var; before the fix it passed
+	 * `paged`, which legacy order storage ignores, so the loop re-read page 1 forever (or only ever
+	 * aggregated the first 200 orders). Seed 250 in-window orders each selling product 101 once and
+	 * assert the aggregated quantity is 250 -- proof the loop advanced through both pages.
+	 */
+	public function test_get_top_sellers_covers_all_pages(): void {
+		\AAFM\Tests\WcOrderStubStore::reset();
+		$today = gmdate( 'Y-m-d\TH:i:s' );
+
+		// 250 completed orders (two 200-order pages), each with a single unit of product 101.
+		for ( $i = 0; $i < 250; $i++ ) {
+			\AAFM\Tests\WcOrderStubStore::seed(
+				8300 + $i,
+				array(
+					'status'       => 'completed',
+					'date_created' => $today,
+					'items'        => array(
+						array(
+							'product_id' => 101,
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+		}
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => 'year' ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertNotEmpty( $res['items'] );
+		$this->assertSame( 101, $res['items'][0]['product_id'] );
+		$this->assertSame( 250, $res['items'][0]['quantity'], 'Every in-window order must be aggregated across all pages, not just the first 200.' );
 	}
 
 	/**

@@ -227,7 +227,7 @@ class WcOrderStubStore {
 	 * full matching count before slicing). Without paginate it returns a plain array. This mirrors
 	 * the real WooCommerce wc_get_orders() paginate contract the order abilities depend on.
 	 *
-	 * @param array<string,mixed> $args Query args (status, date_created, limit, paged, paginate).
+	 * @param array<string,mixed> $args Query args (status, date_created, limit, page, paginate).
 	 * @return array<int,\WC_Order>|object
 	 */
 	public static function query( array $args = array() ) {
@@ -267,8 +267,13 @@ class WcOrderStubStore {
 
 		$limit = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
 		if ( $limit > 0 ) {
-			$paged  = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
-			$offset = ( $paged - 1 ) * $limit;
+			// wc_get_orders()'s public paging query var is `page` (WC_Order_Query maps it to WP_Query's
+			// `paged` on legacy CPT storage; `page` is the native query var on HPOS). A `paged` arg is
+			// NOT the public query var, so on legacy storage WooCommerce ignores it and never advances
+			// past page 1. Model that exactly by honoring only `page` -- honoring `paged` here would
+			// hide the legacy paging bug this stub exists to expose.
+			$page   = isset( $args['page'] ) ? max( 1, (int) $args['page'] ) : 1;
+			$offset = ( $page - 1 ) * $limit;
 			$rows   = array_slice( $rows, $offset, $limit );
 		}
 

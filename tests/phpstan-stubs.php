@@ -1009,11 +1009,15 @@ if ( ! class_exists( 'AIOSEO\\Plugin\\Common\\Models\\Post' ) ) {
 		/** @var string */
 		public $og_image_custom_url = '';
 		/** @var string */
+		public $og_image_type = 'default';
+		/** @var string */
 		public $twitter_title = '';
 		/** @var string */
 		public $twitter_description = '';
 		/** @var string */
 		public $twitter_image_custom_url = '';
+		/** @var string */
+		public $twitter_image_type = 'default';
 		/** @var bool */
 		public $robots_noindex = false;
 		/** @var bool */

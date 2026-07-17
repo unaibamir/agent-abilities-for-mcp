@@ -189,6 +189,113 @@ final class AioseoTest extends TestCase {
 		$this->assertSame( '', $res['og_image'], 'A javascript: og_image must be stripped to empty.' );
 	}
 
+	/**
+	 * Faithful mirror of AIOSEO's rendered-image resolution for a stored row, so the image tests
+	 * assert what actually lands in og:image / twitter:image, not just that a URL persisted. From the
+	 * real source: Social\Facebook::getImage():42 and Social\Twitter::getImage():117 read the image
+	 * SOURCE from the *_image_type column but treat empty/'default' as "use the site default source",
+	 * ignoring the custom URL; Social\Image::getImage():98-106 returns the *_image_custom_url ONLY for
+	 * the 'custom_image' source (and Image::getImage():113 falls back to the site default when that
+	 * custom URL is empty). Returns the URL AIOSEO would render.
+	 *
+	 * @param array<string,mixed> $row      The stored wp_aioseo_posts row.
+	 * @param string              $platform 'facebook' or 'twitter'.
+	 * @return string
+	 */
+	private function aioseo_rendered_image( array $row, string $platform ): string {
+		$site_default = 'https://site.example/aioseo-site-default.png';
+		$type_col     = 'facebook' === $platform ? 'og_image_type' : 'twitter_image_type';
+		$custom_col   = 'facebook' === $platform ? 'og_image_custom_url' : 'twitter_image_custom_url';
+
+		$type   = (string) ( $row[ $type_col ] ?? '' );
+		$source = ( '' !== $type && 'default' !== $type ) ? $type : 'site_default_source';
+		if ( 'custom_image' !== $source ) {
+			return $site_default;
+		}
+		$custom = (string) ( $row[ $custom_col ] ?? '' );
+		return '' !== $custom ? $custom : $site_default;
+	}
+
+	/**
+	 * H4: writing an og/twitter image must also set the *_image_type column to 'custom_image', or
+	 * AIOSEO never renders the URL - it stays on the site default source and the read-back is a false
+	 * confirmation. Asserted through the faithful render resolver, so the test fails on the pre-fix
+	 * write (type left at 'default' -> resolver returns the site default, not the written URL) and
+	 * passes once the type flip ships.
+	 */
+	public function test_aioseo_image_write_sets_custom_image_type_so_it_renders(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$og_url = 'https://example.com/aio-og.jpg';
+		$tw_url = 'https://example.com/aio-tw.jpg';
+
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_image'      => $og_url,
+				'twitter_image' => $tw_url,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+
+		// The render path: AIOSEO must resolve the written URL as the actual og:image / twitter:image.
+		$this->assertSame( $og_url, $this->aioseo_rendered_image( $row, 'facebook' ), 'AIOSEO must render the written og image, not the site default.' );
+		$this->assertSame( $tw_url, $this->aioseo_rendered_image( $row, 'twitter' ), 'AIOSEO must render the written twitter image, not the site default.' );
+
+		// And the gating flag reads AIOSEO's exact custom-image value.
+		$this->assertSame( 'custom_image', $row['og_image_type'], 'og_image_type must be custom_image for the URL to render.' );
+		$this->assertSame( 'custom_image', $row['twitter_image_type'], 'twitter_image_type must be custom_image for the URL to render.' );
+	}
+
+	/**
+	 * Clearing an image URL must reset its *_image_type back to 'default', so a cleared image falls
+	 * cleanly back to the site default source instead of pointing at an empty custom URL.
+	 */
+	public function test_aioseo_clearing_image_resets_type_to_default(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => 'https://example.com/aio-og.jpg',
+			)
+		);
+		$this->assertSame( 'custom_image', \AAFM\Tests\AioseoStubStore::get( $post_id )['og_image_type'] );
+
+		wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => '',
+			)
+		);
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+		$this->assertSame( '', $row['og_image_custom_url'], 'Clearing the URL must empty the custom column.' );
+		$this->assertSame( 'default', $row['og_image_type'], 'Clearing the image must reset the type to default.' );
+	}
+
+	/**
+	 * A write that touches no image field must leave the *_image_type columns untouched, so a
+	 * title-only edit never forces an image source the caller did not ask for.
+	 */
+	public function test_aioseo_non_image_write_leaves_image_type_untouched(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'title'   => 'No image here',
+			)
+		);
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+		$this->assertSame( 'default', $row['og_image_type'], 'A non-image write must not force og_image_type.' );
+		$this->assertSame( 'default', $row['twitter_image_type'], 'A non-image write must not force twitter_image_type.' );
+	}
+
 	public function test_aioseo_no_schema_ability_registers(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-schema', $registry );

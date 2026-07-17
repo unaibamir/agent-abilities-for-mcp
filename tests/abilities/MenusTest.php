@@ -157,6 +157,110 @@ final class MenusTest extends TestCase {
 		$this->assertNull( get_post( $item_id ), 'menu item removed.' );
 	}
 
+	public function test_update_menu_item_title_only_preserves_the_rest(): void {
+		// Regression pin for H6: wp_update_nav_menu_item() is not a partial API - core backfills
+		// every omitted field from defaults (menu-item-type -> 'custom', blank url/object/parent/
+		// classes/order) at wp/wp-includes/nav-menu.php and persists them. So a title-only update
+		// that sends only menu-item-title flips a page item to a custom link, blanks its url and
+		// object, flattens its parent, wipes its classes, and resets its order. update-menu-item
+		// must read the existing item and re-send its full field set so only the title changes.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Nav' );
+
+		$page_id = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_title'  => 'Target Page',
+			)
+		);
+
+		// A parent item to nest under, and the page item itself with classes and a set order.
+		$parent_id = wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'  => 'Parent',
+				'menu-item-url'    => home_url( '/parent' ),
+				'menu-item-status' => 'publish',
+			)
+		);
+		$this->assertIsInt( $parent_id );
+
+		$item_id = wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'     => 'Original Label',
+				'menu-item-type'      => 'post_type',
+				'menu-item-object'    => 'page',
+				'menu-item-object-id' => $page_id,
+				'menu-item-parent-id' => $parent_id,
+				'menu-item-classes'   => 'nav-highlight promo',
+				'menu-item-position'  => 5,
+				'menu-item-status'    => 'publish',
+			)
+		);
+		$this->assertIsInt( $item_id );
+
+		// Snapshot the stored state before the update, straight from core meta and the post row.
+		$before_type      = get_post_meta( $item_id, '_menu_item_type', true );
+		$before_object    = get_post_meta( $item_id, '_menu_item_object', true );
+		$before_object_id = (int) get_post_meta( $item_id, '_menu_item_object_id', true );
+		$before_parent    = (int) get_post_meta( $item_id, '_menu_item_menu_item_parent', true );
+		$before_classes   = (array) get_post_meta( $item_id, '_menu_item_classes', true );
+		$before_order     = (int) get_post( $item_id )->menu_order;
+
+		// The ability's read representation reindexes menu_order to a contiguous display index, so
+		// capture that separately to assert the redacted return preserves it.
+		$before_items    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$before_redacted = 0;
+		foreach ( $before_items['items'] as $listed ) {
+			if ( (int) $listed['id'] === (int) $item_id ) {
+				$before_redacted = (int) $listed['order'];
+			}
+		}
+
+		$this->assertSame( 'post_type', $before_type );
+		$this->assertSame( 'page', $before_object );
+		$this->assertSame( $page_id, $before_object_id );
+		$this->assertSame( (int) $parent_id, $before_parent );
+		$this->assertSame( array( 'nav-highlight', 'promo' ), $before_classes );
+		$this->assertSame( 5, $before_order, 'the stored menu order starts at the value we set.' );
+
+		// Title-only update through the ability.
+		$up = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $item_id,
+				'title'   => 'New Label',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $up );
+
+		// The title changed...
+		$this->assertSame( 'New Label', $up['title'], 'the title was updated.' );
+
+		// ...and nothing else did. Read the persisted meta and post row after the update.
+		$this->assertSame( $before_type, get_post_meta( $item_id, '_menu_item_type', true ), 'type survives (not flipped to custom).' );
+		$this->assertSame( $before_object, get_post_meta( $item_id, '_menu_item_object', true ), 'object survives.' );
+		$this->assertSame( $before_object_id, (int) get_post_meta( $item_id, '_menu_item_object_id', true ), 'object_id survives.' );
+		$this->assertSame( $before_parent, (int) get_post_meta( $item_id, '_menu_item_menu_item_parent', true ), 'parent survives (not flattened).' );
+		$this->assertSame( $before_classes, (array) get_post_meta( $item_id, '_menu_item_classes', true ), 'classes survive (not wiped).' );
+		$this->assertSame( $before_order, (int) get_post( $item_id )->menu_order, 'menu order survives (not reset).' );
+
+		// The redacted return reflects the same preserved shape.
+		$this->assertSame( 'post_type', $up['type'], 'returned type is the page item, not custom.' );
+		$this->assertSame( 'page', $up['object'], 'returned object survives.' );
+		$this->assertSame( $page_id, (int) $up['object_id'], 'returned object_id survives.' );
+		$this->assertSame( (int) $parent_id, (int) $up['parent'], 'returned parent survives.' );
+		$this->assertSame( $before_redacted, (int) $up['order'], 'returned order (display index) survives.' );
+		// A post_type item derives its url from the object, so it must resolve to the page permalink,
+		// never the empty url a custom-link flip would leave behind.
+		$this->assertSame( get_permalink( $page_id ), $up['url'], 'url resolves to the page permalink.' );
+	}
+
 	public function test_delete_menu_item_rejects_arbitrary_post_id(): void {
 		// Regression pin: delete-menu-item resolves the post first and rejects any id whose
 		// post_type is not nav_menu_item. Without that guard, an edit_theme_options user could

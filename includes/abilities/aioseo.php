@@ -430,13 +430,21 @@ function aafm_exec_aioseo_update_post( array $input ) {
 
 		// A custom social image renders ONLY when its *_image_type column reads 'custom_image'.
 		// That column defaults to 'default' (AIOSEO\Plugin\Common\Models\Post::getDefaults), which
-		// makes AIOSEO\Plugin\Common\Social\Facebook/Twitter::getImage ignore the custom URL and fall
-		// back to the site default image source. So writing og_image_custom_url/twitter_image_custom_url
-		// alone persists a URL that never appears in og:image/twitter:image. Flip the type to
-		// 'custom_image' whenever a non-empty image URL is written (mirroring the AIOSEO editor), and
-		// back to 'default' when the caller clears it, so the read-back and the live tag agree.
+		// makes AIOSEO\Plugin\Common\Social\Image::getImage ignore the custom URL and fall back to the
+		// site default image source. So writing og_image_custom_url/twitter_image_custom_url alone
+		// persists a URL that never appears in og:image/twitter:image. Flip the type to 'custom_image'
+		// whenever a non-empty image URL is written (mirroring the AIOSEO editor). When the caller
+		// clears the URL, ONLY reset a type that currently reads 'custom_image' (it would otherwise
+		// point at the now-empty custom URL) - a type naming any other AIOSEO source (featured, attach,
+		// content, author, auto; see Image::getImage) is left untouched, so clearing a custom URL never
+		// silently swaps a rendered featured/attachment image for the site default.
 		if ( isset( $spec['type_prop'] ) && property_exists( $model, $spec['type_prop'] ) ) {
-			$model->{$spec['type_prop']} = '' !== $model->$prop ? 'custom_image' : 'default';
+			$type_prop = $spec['type_prop'];
+			if ( '' !== $model->$prop ) {
+				$model->$type_prop = 'custom_image';
+			} elseif ( 'custom_image' === $model->$type_prop ) {
+				$model->$type_prop = 'default';
+			}
 		}
 	}
 	$robots_touched = false;

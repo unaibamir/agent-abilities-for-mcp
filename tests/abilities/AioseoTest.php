@@ -278,6 +278,41 @@ final class AioseoTest extends TestCase {
 	}
 
 	/**
+	 * Clearing an image URL must NOT flip a non-custom image source (featured/attach/content/author/
+	 * auto) to 'default'. AIOSEO reads the live og:image/twitter:image from whichever source the
+	 * *_image_type column names (see Image::getImage()); only 'custom_image' pulls from the custom URL.
+	 * So an agent sending og_image='' to clear a custom URL it never set must leave a post that renders
+	 * its featured image on 'featured' - resetting to 'default' would silently swap the live tag to the
+	 * site default. Only 'custom_image' (which points at the now-empty URL) may fall back to 'default'.
+	 */
+	public function test_aioseo_clearing_image_leaves_a_non_custom_type_untouched(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// Seed a post whose social images render from non-custom sources (the AIOSEO editor default
+		// for a post with a featured image / attachments), with no custom URL set.
+		\AAFM\Tests\AioseoStubStore::save(
+			$post_id,
+			array(
+				'og_image_type'      => 'featured',
+				'twitter_image_type' => 'attach',
+			)
+		);
+
+		wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_image'      => '',
+				'twitter_image' => '',
+			)
+		);
+
+		$row = \AAFM\Tests\AioseoStubStore::get( $post_id );
+		$this->assertSame( 'featured', $row['og_image_type'], 'Clearing an unset custom URL must not flip a featured source to default.' );
+		$this->assertSame( 'attach', $row['twitter_image_type'], 'Clearing an unset custom URL must not flip an attach source to default.' );
+	}
+
+	/**
 	 * A write that touches no image field must leave the *_image_type columns untouched, so a
 	 * title-only edit never forces an image source the caller did not ask for.
 	 */

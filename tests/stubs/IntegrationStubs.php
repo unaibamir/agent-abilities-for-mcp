@@ -1095,8 +1095,10 @@ PHP;
 	/**
 	 * Seed the WcShippingStubStore with default zone and method fixtures for WC5 tests.
 	 *
-	 * Seeds zone 1 (Europe) and zone 2 (USA) with two methods each. Zone 0 (Rest of World)
-	 * is always present via the store; seed it here so list tests see it. Call after
+	 * Seeds zone 1 (Europe) and zone 2 (USA) with two methods each. Zone 0 (Rest of World) is
+	 * seeded so the get-shipping-zone zone_id=0 path resolves, but - like real WooCommerce, whose
+	 * get_zones() selects only rows from the woocommerce_shipping_zones table - it is NOT returned
+	 * by WC_Shipping_Zones::get_zones(), so it never appears in the list output. Call after
 	 * stub_wc_shipping() (which resets the store), and before registering shipping abilities.
 	 *
 	 * @return void
@@ -1201,8 +1203,13 @@ PHP;
 			eval( $this->aafm_wc_shipping_method_class_source() );
 		}
 		if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
+			// Mirrors real WC_Shipping_Zones::get_zones(): each row is the zone's get_data()
+			// (id, zone_name, zone_order, zone_locations) merged with zone_id,
+			// formatted_zone_location, and shipping_methods, keyed by zone id. There is NO
+			// zone_object key - the earlier stub fabricated one, which is exactly what hid the
+			// production bug that read $zone_data['zone_object'].
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Shipping_Zones { public static function get_zones( $args = array() ) { $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); $z = new \WC_Shipping_Zone( $zone_id ); $out[$zone_id] = array_merge( $row, array( "zone_object" => $z ) ); } return $out; } }' );
+			eval( 'class WC_Shipping_Zones { public static function get_zones( $context = "admin" ) { if ( is_array( \AAFM\Tests\WcShippingStubStore::$rows_override ) ) { return \AAFM\Tests\WcShippingStubStore::$rows_override; } $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); if ( $zone_id < 1 ) { continue; } $z = new \WC_Shipping_Zone( $zone_id ); $data = $z->get_data(); $data["zone_id"] = $zone_id; $data["formatted_zone_location"] = ""; $data["shipping_methods"] = $z->get_shipping_methods( false ); $out[$zone_id] = $data; } return $out; } }' );
 		}
 	}
 

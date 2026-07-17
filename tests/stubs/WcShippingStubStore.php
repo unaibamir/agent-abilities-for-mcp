@@ -68,6 +68,15 @@ class WcShippingStubStore {
 	public static bool $force_delete_failure = false;
 
 	/**
+	 * When set to an array, WC_Shipping_Zones::get_zones() returns it verbatim instead of
+	 * building rows from the store. Lets a test feed a malformed row (e.g. one with no
+	 * resolvable zone id) so the list ability's WP_Error branch is exercisable.
+	 *
+	 * @var array<int|string,mixed>|null
+	 */
+	public static ?array $rows_override = null;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -79,6 +88,7 @@ class WcShippingStubStore {
 		self::$next_instance_id     = 1;
 		self::$force_save_failure   = false;
 		self::$force_delete_failure = false;
+		self::$rows_override        = null;
 	}
 
 	// =========================================================================

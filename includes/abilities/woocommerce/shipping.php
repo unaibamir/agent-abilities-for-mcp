@@ -169,6 +169,26 @@ function aafm_redact_wc_shipping_zone( \WC_Shipping_Zone $zone ): array {
 }
 
 /**
+ * Build the lean zone-list row from a WC_Shipping_Zones::get_zones() row.
+ *
+ * WC_Shipping_Zones::get_zones() hands back each zone as its get_data() array merged with a few
+ * extra keys, not a zone object, so the lean fields are read straight off the row. The zone id is
+ * resolved by the caller (the array is keyed by it) and passed in so an unresolvable row can be
+ * rejected first.
+ *
+ * @param array<string,mixed> $row     One row from WC_Shipping_Zones::get_zones().
+ * @param int                 $zone_id Resolved zone id for the row.
+ * @return array<string,mixed>
+ */
+function aafm_redact_wc_shipping_zone_row( array $row, int $zone_id ): array {
+	return array(
+		'id'         => $zone_id,
+		'zone_name'  => (string) ( $row['zone_name'] ?? '' ),
+		'zone_order' => (int) ( $row['zone_order'] ?? 0 ),
+	);
+}
+
+/**
  * Build the full zone shape: id, name, order, and zone_locations.
  *
  * @param \WC_Shipping_Zone $zone Zone object.
@@ -294,13 +314,22 @@ function aafm_exec_wc_list_shipping_zones( array $input ) { // phpcs:ignore Gene
 		return aafm_generic_error();
 	}
 
+	// WC_Shipping_Zones::get_zones() returns each zone as its get_data() array (id, zone_name,
+	// zone_order, zone_locations) merged with zone_id, formatted_zone_location, and
+	// shipping_methods, keyed by zone id. There is NO zone object on the row - the lean list
+	// fields are read straight off it. A row that carries no usable zone id is a data error, not
+	// a reason to silently drop a real zone into an empty list.
 	$zones_raw = \WC_Shipping_Zones::get_zones();
 	$rows      = array();
-	foreach ( $zones_raw as $zone_data ) {
-		$zone_obj = $zone_data['zone_object'] ?? null;
-		if ( $zone_obj instanceof \WC_Shipping_Zone ) {
-			$rows[] = aafm_redact_wc_shipping_zone( $zone_obj );
+	foreach ( $zones_raw as $zone_key => $zone_data ) {
+		if ( ! is_array( $zone_data ) ) {
+			return aafm_generic_error();
 		}
+		$zone_id = (int) ( $zone_data['id'] ?? $zone_data['zone_id'] ?? $zone_key );
+		if ( $zone_id < 1 ) {
+			return aafm_generic_error();
+		}
+		$rows[] = aafm_redact_wc_shipping_zone_row( $zone_data, $zone_id );
 	}
 
 	return array(

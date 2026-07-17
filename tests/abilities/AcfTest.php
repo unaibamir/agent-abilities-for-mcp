@@ -815,6 +815,165 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * Seed a group of three typed fields, then re-register.
+	 *
+	 * @param array<int,array<string,string>> $fields Field defs (each with key/name/label/type).
+	 * @return void
+	 */
+	private function stub_acf_fields( array $fields ): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_multi',
+						'title'  => 'Multi',
+						'fields' => $fields,
+					),
+				),
+			)
+		);
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+	}
+
+	/**
+	 * H2: a numeric field and a boolean field, plus a following text field, all written in one call.
+	 *
+	 * Real ACF stores through update_metadata(), so a numeric value reads back a numeric string and a
+	 * true_false reads back '1'/'' (ACF 6.8.6). The old verify demanded JSON-exact equality against the
+	 * value written, so a type-normalized numeric/boolean write - which DID persist - was reported as a
+	 * generic error, and because the loop returned on that first mismatch the fields after it were never
+	 * written at all. This proves the fix: every field persists AND the request reports success.
+	 *
+	 * RED against the pre-fix exact-equality + early-return: the numeric field is first, so its string
+	 * read-back trips the JSON mismatch, the request returns a WP_Error, and the boolean + text fields
+	 * are never written.
+	 */
+	public function test_update_post_fields_numeric_boolean_and_following_field_all_persist(): void {
+		$this->stub_acf_fields(
+			array(
+				array(
+					'key'   => 'field_num',
+					'name'  => 'num',
+					'label' => 'Count',
+					'type'  => 'number',
+				),
+				array(
+					'key'   => 'field_bool',
+					'name'  => 'flag',
+					'label' => 'Flag',
+					'type'  => 'true_false',
+				),
+				array(
+					'key'   => 'field_text',
+					'name'  => 'note',
+					'label' => 'Note',
+					'type'  => 'text',
+				),
+			)
+		);
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_num'  => 42,
+					'field_bool' => true,
+					'field_text' => 'lands last',
+				),
+			)
+		);
+
+		// A numeric/boolean write that ACF type-normalizes still persisted, so it must report success.
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A numeric/boolean write that ACF stores as a string must report success, not a generic error.'
+		);
+
+		// All three landed - the loop did not abort on the numeric field's string read-back.
+		$this->assertSame(
+			'42',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_num', $post_id ),
+			'The numeric field must persist.'
+		);
+		$this->assertSame(
+			'1',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_bool', $post_id ),
+			'The boolean field must persist (stored as ACF stores it: "1").'
+		);
+		$this->assertSame(
+			'lands last',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_text', $post_id ),
+			'The field queued after the numeric/boolean fields must still be written.'
+		);
+	}
+
+	/**
+	 * H2: a field whose write genuinely does not persist must NOT silently skip the fields queued after
+	 * it. The whole request still reports failure (one field did not land), but the following field is
+	 * written all the same - the loop attempts every field before failing.
+	 *
+	 * RED against the pre-fix early-return: the failing field is first, so the pre-fix loop returns on
+	 * its mismatch and the following field is never written; the "still lands" assertion then fails.
+	 */
+	public function test_update_post_fields_one_failing_field_does_not_skip_the_following_fields(): void {
+		$this->stub_acf_fields(
+			array(
+				array(
+					'key'   => 'field_fail',
+					'name'  => 'fail',
+					'label' => 'Fails',
+					'type'  => 'text',
+				),
+				array(
+					'key'   => 'field_after',
+					'name'  => 'after',
+					'label' => 'After',
+					'type'  => 'text',
+				),
+			)
+		);
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// The first field genuinely stores nothing; the second must still be written.
+		\AAFM\Tests\AcfStubStore::$fail_keys = array( 'field_fail' );
+		$res                                 = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_fail'  => 'never lands',
+					'field_after' => 'still lands',
+				),
+			)
+		);
+		\AAFM\Tests\AcfStubStore::$fail_keys = array();
+
+		// The request as a whole fails because one field did not persist.
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A field that does not persist must fail the request.'
+		);
+		$this->assertNull(
+			\AAFM\Tests\AcfStubStore::value( 'field_fail', $post_id ),
+			'The genuinely-failing field must not have persisted.'
+		);
+
+		// ...but the field queued AFTER the failing one was still written - no early abort.
+		$this->assertSame(
+			'still lands',
+			(string) \AAFM\Tests\AcfStubStore::value( 'field_after', $post_id ),
+			'A single failing field must not skip the fields queued after it.'
+		);
+	}
+
+	/**
 	 * T1-6: a repeater whose sub_fields include a URL subfield must run that nested leaf through
 	 * esc_url_raw, not the plain-text sanitizer - otherwise a javascript: scheme stored in a
 	 * repeater row survives to be rendered by a theme. The plain-text sub_field round-trips

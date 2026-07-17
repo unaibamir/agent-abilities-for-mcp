@@ -184,6 +184,28 @@ function aafm_yoast_robots_keys(): array {
 }
 
 /**
+ * The canonical meaning of Yoast's robots_noindex enum, matching Yoast's own storage.
+ *
+ * Yoast stores 1 = noindex, 2 = index, 0 = the post-type/site default. This is the reverse of the
+ * intuitive ordering, so it is the single source of truth for the schema description and is asserted
+ * against Yoast's real semantics in the tests. Verified against wordpress-seo:
+ * inc/class-wpseo-meta.php (the meta-robots-noindex options: 1 = No-index, 2 = Index) and
+ * src/builders/indexable-post-builder.php::get_robots_noindex (1 -> noindex true, 2 -> index false).
+ *
+ * PHP casts the numeric string keys to ints; callers stringify them (array_map('strval', ...)) for
+ * the string-typed enum.
+ *
+ * @return array<int,string> Enum value => human meaning.
+ */
+function aafm_yoast_robots_noindex_meaning(): array {
+	return array(
+		'0' => 'use the site default',
+		'1' => 'noindex',
+		'2' => 'index',
+	);
+}
+
+/**
  * Read every Yoast field for a post into the unified output shape.
  *
  * @param int $id Post id.
@@ -293,10 +315,19 @@ function aafm_args_yoast_update_post(): array {
 	foreach ( array_keys( aafm_yoast_fields() ) as $field ) {
 		$properties[ $field ] = array( 'type' => 'string' );
 	}
+	$noindex_meaning = aafm_yoast_robots_noindex_meaning();
+	$noindex_pairs   = array();
+	foreach ( $noindex_meaning as $value => $meaning ) {
+		$noindex_pairs[] = $value . ' = ' . $meaning;
+	}
 	$properties['robots_noindex']  = array(
 		'type'        => 'string',
-		'enum'        => array( '0', '1', '2' ),
-		'description' => __( 'Yoast noindex directive: 0 = use the site default, 1 = index, 2 = noindex.', 'agent-abilities-for-mcp' ),
+		'enum'        => array_map( 'strval', array_keys( $noindex_meaning ) ),
+		'description' => sprintf(
+			/* translators: %s: the enum "value = meaning" pairs, e.g. "0 = use the site default, 1 = noindex, 2 = index". */
+			__( 'Yoast noindex directive, matching Yoast\'s own storage: %s.', 'agent-abilities-for-mcp' ),
+			implode( ', ', $noindex_pairs )
+		),
 	);
 	$properties['robots_nofollow'] = array(
 		'type'        => 'string',

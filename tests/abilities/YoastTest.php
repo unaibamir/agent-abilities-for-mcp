@@ -226,6 +226,64 @@ final class YoastTest extends TestCase {
 		$this->assertSame( '', get_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', true ), 'An out-of-enum noindex must be dropped.' );
 	}
 
+	/**
+	 * Yoast's real interpretation of the stored _yoast_wpseo_meta-robots-noindex value, mirrored from
+	 * wordpress-seo/src/builders/indexable-post-builder.php::get_robots_noindex: '1' -> noindex (true),
+	 * '2' -> index (false), anything else -> the post-type/site default (null). Yoast is not loaded
+	 * under PHPUnit, so this encodes the vendor's verified semantics as the ground-truth oracle.
+	 *
+	 * @param string $stored The stored meta-robots-noindex value.
+	 * @return bool|null True = noindex, false = index, null = default.
+	 */
+	private function yoast_noindex_meaning( string $stored ): ?bool {
+		switch ( (int) $stored ) {
+			case 1:
+				return true;  // No-index.
+			case 2:
+				return false; // Index.
+			default:
+				return null;  // Post-type / site default.
+		}
+	}
+
+	public function test_yoast_robots_noindex_enum_means_what_yoast_means(): void {
+		// MEANING, not round-trip. The value the contract labels "index" must make Yoast actually
+		// index the page, and Yoast's stored noindex value must read back as "noindex" under the
+		// contract. A pure write-1/read-1 round-trip passes even while the contract's labels are
+		// inverted (the executor is a raw passthrough), so it cannot catch this bug.
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$meaning = aafm_yoast_robots_noindex_meaning();
+
+		// Write direction: an agent told to INDEX the page uses whatever value the contract says means
+		// "index". Once the plugin stores it, Yoast must treat that value as index, not noindex.
+		$index_value = (string) array_search( 'index', $meaning, true );
+		$this->assertNotSame( '', $index_value, 'The contract must define a value that means index.' );
+		wp_get_ability( 'aafm/yoast-update-post' )->execute(
+			array(
+				'post_id'        => $post_id,
+				'robots_noindex' => $index_value,
+			)
+		);
+		$stored = (string) get_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', true );
+		$this->assertFalse(
+			$this->yoast_noindex_meaning( $stored ),
+			'The contract\'s "index" value must make Yoast index the page, not de-index it.'
+		);
+
+		// Read direction: seed the value Yoast stores for noindex; the contract must report noindex.
+		$yoast_noindex_value = '1'; // wordpress-seo stores 1 = No-index.
+		$this->assertTrue( $this->yoast_noindex_meaning( $yoast_noindex_value ), 'Guard: Yoast 1 = noindex.' );
+		update_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', $yoast_noindex_value );
+		$read = wp_get_ability( 'aafm/yoast-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertSame(
+			'noindex',
+			$meaning[ $read['robots_noindex'] ] ?? 'MISSING',
+			'Yoast\'s stored noindex value must read back as noindex under the contract.'
+		);
+	}
+
 	public function test_yoast_update_post_robots_adv_drops_unknown_tokens(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );

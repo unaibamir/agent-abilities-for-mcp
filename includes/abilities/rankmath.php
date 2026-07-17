@@ -69,7 +69,7 @@ function aafm_rankmath_registry_definitions(): array {
 		),
 		'aafm/rankmath-update-post'   => array(
 			'label'        => __( 'Update post SEO (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Writes a post's Rank Math SEO fields to its rank_math_* post meta. URL fields are sanitized as URLs and robots is stored as Rank Math's serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'rankmath',
@@ -130,6 +130,40 @@ function aafm_rankmath_fields(): array {
  */
 function aafm_rankmath_url_fields(): array {
 	return array( 'canonical', 'og_image', 'twitter_image' );
+}
+
+/**
+ * The social-image fields whose write must ALSO persist an attachment-id companion meta, mapped to
+ * that companion key. Rank Math's frontend OpenGraph resolver renders the image from
+ * rank_math_{facebook,twitter}_image_id (an attachment id), never the URL meta - so writing only the
+ * URL persists a value the frontend ignores. Verified against Rank Math 1.0.274.1:
+ * includes/opengraph/class-image.php:405-410 reads Helper::get_post_meta("{$prefix}_image_id") and
+ * feeds it to add_image_by_id(), and includes/class-metadata.php:124-125 prepends the rank_math_
+ * prefix.
+ *
+ * @return array<string,string>
+ */
+function aafm_rankmath_image_id_fields(): array {
+	return array(
+		'og_image'      => 'rank_math_facebook_image_id',
+		'twitter_image' => 'rank_math_twitter_image_id',
+	);
+}
+
+/**
+ * Whether the write carries a non-empty Twitter-specific field, in which case the Twitter->Facebook
+ * fallback must be turned off so the Twitter values actually render.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_rankmath_twitter_fields_provided( array $input ): bool {
+	foreach ( array( 'twitter_title', 'twitter_description', 'twitter_image' ) as $field ) {
+		if ( array_key_exists( $field, $input ) && '' !== trim( (string) $input[ $field ] ) ) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -261,7 +295,7 @@ function aafm_args_rankmath_update_post(): array {
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/rankmath-update-post' ),
-		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+		'description'         => __( "Writes a post's Rank Math SEO fields. URL fields are sanitized as URLs and robots is stored as the serialized directive array. Social images (og_image, twitter_image) must be URLs of existing media-library attachments so Rank Math can render them; a URL with no matching attachment is refused. Setting a Twitter field turns off the Facebook fallback so the Twitter values render. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
@@ -300,6 +334,36 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Resolve every provided social-image URL to a media-library attachment id BEFORE any write. The
+	// frontend renders the image from the id meta, not the URL, so a URL that maps to no attachment can
+	// never render. Fail the whole write - resolving up front keeps a bad image from leaving a partial
+	// write behind - rather than silently persisting a confident-empty URL.
+	$image_id_fields = aafm_rankmath_image_id_fields();
+	$resolved_ids    = array();
+	foreach ( $image_id_fields as $field => $id_key ) {
+		if ( ! array_key_exists( $field, $input ) ) {
+			continue;
+		}
+		$url = esc_url_raw( trim( (string) $input[ $field ] ) );
+		if ( '' === $url ) {
+			$resolved_ids[ $field ] = 0; // Cleared: blank the URL and the id companion below.
+			continue;
+		}
+		$attachment_id = attachment_url_to_postid( $url );
+		if ( 0 === $attachment_id ) {
+			return new WP_Error(
+				'aafm_rankmath_image_not_in_library',
+				sprintf(
+					/* translators: %s: the social image field name, for example og_image. */
+					__( 'The %s URL does not resolve to a media-library attachment, so Rank Math cannot render it. Add the image to the media library and pass its attachment URL.', 'agent-abilities-for-mcp' ),
+					$field
+				),
+				array( 'status' => 400 )
+			);
+		}
+		$resolved_ids[ $field ] = $attachment_id;
+	}
+
 	$url_fields = aafm_rankmath_url_fields();
 	foreach ( aafm_rankmath_fields() as $field => $key ) {
 		if ( ! array_key_exists( $field, $input ) ) {
@@ -308,6 +372,21 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		$raw   = (string) $input[ $field ];
 		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
 		update_post_meta( $id, $key, $clean );
+	}
+
+	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
+	// blanks the id so the resolver falls through to the featured image, never a stale id.
+	foreach ( $resolved_ids as $field => $attachment_id ) {
+		update_post_meta( $id, $image_id_fields[ $field ], $attachment_id > 0 ? $attachment_id : '' );
+	}
+
+	// Turn off the Twitter->Facebook fallback when Twitter-specific fields are provided; otherwise the
+	// frontend reads the Facebook prefix and the Twitter title/description/image never render (verified:
+	// includes/opengraph/class-twitter.php:93-106 and includes/frontend/paper/class-singular.php:160).
+	// Rank Math's normalize_data() (includes/helpers/class-options.php:51-62) reads only the exact
+	// string 'off' as false; an empty string, '0', or boolean false falls back to the truthy default.
+	if ( aafm_rankmath_twitter_fields_provided( $input ) ) {
+		update_post_meta( $id, 'rank_math_twitter_use_facebook', 'off' );
 	}
 
 	if ( array_key_exists( 'robots', $input ) ) {

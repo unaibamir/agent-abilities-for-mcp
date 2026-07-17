@@ -73,6 +73,13 @@ final class RankMathTest extends TestCase {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
 
+		// Social image fields must point at real media-library attachments: the frontend renders the
+		// image from the attachment id, so the write refuses a URL that maps to no attachment.
+		$fb_att = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+		$tw_att = (int) self::factory()->attachment->create_object( 'rm-tw.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+		$fb_url = (string) wp_get_attachment_url( $fb_att );
+		$tw_url = (string) wp_get_attachment_url( $tw_att );
+
 		$payload = array(
 			'post_id'             => $post_id,
 			'title'               => 'RM Title',
@@ -81,10 +88,10 @@ final class RankMathTest extends TestCase {
 			'canonical'           => 'https://example.com/rm-canonical',
 			'og_title'            => 'RM OG Title',
 			'og_description'      => 'RM OG description.',
-			'og_image'            => 'https://example.com/rm-og.jpg',
+			'og_image'            => $fb_url,
 			'twitter_title'       => 'RM TW Title',
 			'twitter_description' => 'RM TW description.',
-			'twitter_image'       => 'https://example.com/rm-tw.jpg',
+			'twitter_image'       => $tw_url,
 			'robots'              => 'noindex,nofollow',
 		);
 		$res     = wp_get_ability( 'aafm/rankmath-update-post' )->execute( $payload );
@@ -97,6 +104,78 @@ final class RankMathTest extends TestCase {
 			}
 			$this->assertSame( $value, $read[ $field ], $field . ' did not round-trip.' );
 		}
+	}
+
+	public function test_rankmath_social_images_render_via_id_meta_and_disable_twitter_fallback(): void {
+		/*
+		 * The frontend OpenGraph resolver renders the image from rank_math_{facebook,twitter}_image_id
+		 * (an ATTACHMENT ID), never the URL meta, and Twitter silently falls back to Facebook whenever
+		 * rank_math_twitter_use_facebook is truthy or absent. A write that only persists URL meta and
+		 * leaves the fallback on renders nothing. Verified against Rank Math 1.0.274.1:
+		 *   includes/opengraph/class-image.php:405-410  reads {prefix}_image_id, add_image_by_id().
+		 *   includes/class-metadata.php:124-125         get_metadata() prepends rank_math_.
+		 *   includes/opengraph/class-twitter.php:93-106 use_facebook switches the prefix.
+		 *   includes/helpers/class-options.php:51-62    normalize_data(): only 'off' reads as false.
+		 */
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$fb_att = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+		$tw_att = (int) self::factory()->attachment->create_object( 'rm-tw.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'og_image'      => (string) wp_get_attachment_url( $fb_att ),
+				'twitter_image' => (string) wp_get_attachment_url( $tw_att ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'Attachment-backed social image URLs must write.' );
+
+		// The attachment-id meta the frontend actually resolves is present and distinct per network.
+		$this->assertSame( $fb_att, (int) get_post_meta( $post_id, 'rank_math_facebook_image_id', true ), 'The Facebook OG image id the frontend renders must be written.' );
+		$this->assertSame( $tw_att, (int) get_post_meta( $post_id, 'rank_math_twitter_image_id', true ), 'The Twitter image id the frontend renders must be written.' );
+
+		// The Twitter->Facebook fallback is disabled with the exact 'off' string normalize_data() reads
+		// as false; an empty string, '0', or false would fall back to the truthy default.
+		$this->assertSame( 'off', get_post_meta( $post_id, 'rank_math_twitter_use_facebook', true ), 'Providing a Twitter image must disable the Facebook fallback.' );
+	}
+
+	public function test_rankmath_update_post_rejects_a_social_image_url_with_no_attachment(): void {
+		// A social image URL that maps to no media-library attachment cannot render (the frontend reads
+		// the *_image_id, not the URL), so the write is refused rather than persisting a confident-empty
+		// URL that renders nothing.
+		$this->acting_as( 'administrator' );
+		$post_id = (int) self::factory()->post->create();
+
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => 'https://example.com/not-in-the-library.jpg',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'A non-attachment social image URL must be refused.' );
+
+		// Nothing was written: no partial URL meta and no id meta left behind.
+		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_facebook_image', true ), 'The refused write must not persist the URL meta.' );
+		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_facebook_image_id', true ), 'The refused write must not persist an id meta.' );
+	}
+
+	public function test_rankmath_update_post_leaves_twitter_fallback_untouched_without_twitter_fields(): void {
+		// Disabling the fallback is opt-in: a write that touches only Facebook/OG fields must not force
+		// rank_math_twitter_use_facebook off, so a post relying on the Facebook image for Twitter keeps
+		// doing so.
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+		$fb_att   = (int) self::factory()->attachment->create_object( 'rm-og.jpg', $post_id, array( 'post_mime_type' => 'image/jpeg' ) );
+
+		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'og_image' => (string) wp_get_attachment_url( $fb_att ),
+			)
+		);
+		$this->assertSame( '', get_post_meta( $post_id, 'rank_math_twitter_use_facebook', true ), 'A Facebook-only write must not touch the Twitter fallback flag.' );
 	}
 
 	public function test_rankmath_robots_is_stored_as_a_serialized_array(): void {

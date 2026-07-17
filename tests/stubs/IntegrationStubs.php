@@ -315,6 +315,13 @@ PHP;
 		if ( ! class_exists( 'WooCommerce' ) ) {
 			eval( 'class WooCommerce {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'WC_Product_Attribute' ) ) {
+			// A minimal WC_Product_Attribute mirroring the real data shape (id/name/options/position/
+			// visible/variation). The product abilities build these to write attributes, and the stub
+			// WC_Product::set_attributes() keeps only instances of this class - exactly as real
+			// WooCommerce does. Defined before WC_Product so set_attributes() can reference it.
+			eval( $this->aafm_wc_product_attribute_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+		}
 		if ( ! class_exists( 'WC_Product' ) ) {
 			// A minimal WC_Product backed by WcStubStore: getters read the stored data, setters stage
 			// changes on the instance, save() persists, delete() removes. Only the methods the product
@@ -632,6 +639,26 @@ PHP;
 	 *
 	 * @return string
 	 */
+	private function aafm_wc_product_attribute_class_source(): string {
+		return <<<'PHP'
+class WC_Product_Attribute {
+	private $data = array( 'id' => 0, 'name' => '', 'options' => array(), 'position' => 0, 'visible' => false, 'variation' => false );
+	public function get_id() { return (int) $this->data['id']; }
+	public function get_name() { return (string) $this->data['name']; }
+	public function get_options() { return (array) $this->data['options']; }
+	public function get_position() { return (int) $this->data['position']; }
+	public function get_visible() { return (bool) $this->data['visible']; }
+	public function get_variation() { return (bool) $this->data['variation']; }
+	public function set_id( $v ) { $this->data['id'] = (int) $v; }
+	public function set_name( $v ) { $this->data['name'] = (string) $v; }
+	public function set_options( $v ) { $this->data['options'] = (array) $v; }
+	public function set_position( $v ) { $this->data['position'] = (int) $v; }
+	public function set_visible( $v ) { $this->data['visible'] = (bool) $v; }
+	public function set_variation( $v ) { $this->data['variation'] = (bool) $v; }
+}
+PHP;
+	}
+
 	private function aafm_wc_product_class_source(): string {
 		return <<<'PHP'
 class WC_Product {
@@ -661,6 +688,20 @@ class WC_Product {
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
 	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
 	public function get_children() { return (array) ( $this->data['children'] ?? array() ); }
+	private function aafm_stub_merge_attributes( $existing, $v ) {
+		// Mirror WC_Product::set_attributes(): pre-null every existing key, then keep ONLY
+		// WC_Product_Attribute instances (re-keyed by sanitize_title of the name). Plain arrays are
+		// discarded, and any existing key not resupplied stays null. The persisted state drops those
+		// null holes, so a naive plain-array write both discards the sent attributes and wipes the
+		// existing ones - the exact bug under test.
+		$attributes = array_fill_keys( array_keys( (array) $existing ), null );
+		foreach ( (array) $v as $attribute ) {
+			if ( $attribute instanceof \WC_Product_Attribute ) {
+				$attributes[ sanitize_title( $attribute->get_name() ) ] = $attribute;
+			}
+		}
+		return array_filter( $attributes, static function ( $a ) { return $a instanceof \WC_Product_Attribute; } );
+	}
 	public function set_name( $v ) { $this->data['name'] = (string) $v; }
 	public function set_status( $v ) { $this->data['status'] = (string) $v; }
 	public function set_sku( $v ) { $this->data['sku'] = (string) $v; }
@@ -677,7 +718,7 @@ class WC_Product {
 	public function set_tag_ids( $v ) { $this->data['tag_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_gallery_image_ids( $v ) { $this->data['gallery_image_ids'] = array_map( 'intval', (array) $v ); }
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
-	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
+	public function set_attributes( $v ) { $this->data['attributes'] = $this->aafm_stub_merge_attributes( $this->data['attributes'] ?? array(), $v ); }
 	public function save() { $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
 }

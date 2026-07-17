@@ -214,6 +214,45 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Product_Attribute' ) ) {
+	/**
+	 * Minimal WooCommerce product-attribute signature for static analysis only.
+	 */
+	class WC_Product_Attribute {
+		public function get_id(): int {
+			return 0;
+		}
+		public function get_name(): string {
+			return '';
+		}
+		/** @return array<int,mixed> */
+		public function get_options(): array {
+			return array();
+		}
+		public function get_position(): int {
+			return 0;
+		}
+		public function get_visible(): bool {
+			return false;
+		}
+		public function get_variation(): bool {
+			return false;
+		}
+		/** @param mixed $value @return void */
+		public function set_id( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_name( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_options( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_position( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_visible( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_variation( $value ) {}
+	}
+}
+
 if ( ! function_exists( 'wc_get_product' ) ) {
 	/**
 	 * @param int|false $the_product

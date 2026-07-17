@@ -564,8 +564,109 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void
 		$product->set_gallery_image_ids( array_map( 'absint', (array) $input['images'] ) );
 	}
 	if ( array_key_exists( 'attributes', $input ) ) {
-		$product->set_attributes( aafm_wc_sanitize_attributes( (array) $input['attributes'] ) );
+		$sanitized = aafm_wc_sanitize_attributes( (array) $input['attributes'] );
+		$product->set_attributes(
+			aafm_wc_build_product_attributes( $sanitized, (array) $product->get_attributes() )
+		);
 	}
+}
+
+/**
+ * Build the WC_Product_Attribute set to write, merging the caller's attributes onto the product's
+ * existing ones by slug.
+ *
+ * WC_Product::set_attributes() keeps ONLY WC_Product_Attribute instances and pre-nulls every
+ * existing attribute key (abstract-wc-product.php set_attributes()). Passing plain {name, options}
+ * arrays therefore silently drops the requested attributes on create, and on update the pre-null
+ * wipes whatever the caller did not resend (orphaning any variations built on those attributes).
+ * This rebuilds each requested attribute as a real object and seeds the set with the existing
+ * attributes so unmentioned ones survive: sent attributes are upserted by slug, unsent ones are
+ * preserved.
+ *
+ * Caller-sent attributes are treated as custom (product-level) attributes: id 0, plain-string
+ * options, visible by default. The input schema only models custom attributes, so a global/taxonomy
+ * attribute the caller does not name is preserved untouched but is never fabricated from strings.
+ *
+ * @param array<int,array<string,mixed>> $sanitized Sanitized {name, options[]} items from the input.
+ * @param array<int|string,mixed>        $existing  The product's current attributes (objects or arrays).
+ * @return array<int,\WC_Product_Attribute>
+ */
+function aafm_wc_build_product_attributes( array $sanitized, array $existing ): array {
+	if ( ! class_exists( 'WC_Product_Attribute' ) ) {
+		return array();
+	}
+
+	// Seed the merged set with the product's existing attributes, keyed by slug, so any the caller
+	// does not resend outlives set_attributes()'s pre-null.
+	$by_slug  = array();
+	$next_pos = 0;
+	foreach ( $existing as $attribute ) {
+		$object = aafm_wc_coerce_product_attribute( $attribute );
+		if ( null === $object || '' === (string) $object->get_name() ) {
+			continue;
+		}
+		$by_slug[ sanitize_title( (string) $object->get_name() ) ] = $object;
+		$next_pos = max( $next_pos, (int) $object->get_position() + 1 );
+	}
+
+	foreach ( $sanitized as $item ) {
+		$name = (string) ( $item['name'] ?? '' );
+		if ( '' === $name ) {
+			continue;
+		}
+		$slug     = sanitize_title( $name );
+		$previous = $by_slug[ $slug ] ?? null;
+
+		$object = new \WC_Product_Attribute();
+		$object->set_id( 0 );
+		$object->set_name( $name );
+		$object->set_options( array_values( (array) ( $item['options'] ?? array() ) ) );
+		if ( $previous instanceof \WC_Product_Attribute ) {
+			// Replacing an existing attribute: keep its visibility, variation flag, and slot so a
+			// value edit does not silently unhide it or drop it from the product's variations.
+			$object->set_visible( (bool) $previous->get_visible() );
+			$object->set_variation( (bool) $previous->get_variation() );
+			$object->set_position( (int) $previous->get_position() );
+		} else {
+			$object->set_visible( true );
+			$object->set_variation( false );
+			$object->set_position( $next_pos );
+			++$next_pos;
+		}
+
+		$by_slug[ $slug ] = $object;
+	}
+
+	return array_values( $by_slug );
+}
+
+/**
+ * Coerce a stored attribute (a WC_Product_Attribute object or a WC-shaped array) into a
+ * WC_Product_Attribute, so existing attributes can be carried through a merge write. Returns null
+ * for anything that cannot become an attribute.
+ *
+ * @param mixed $attribute Stored attribute.
+ * @return \WC_Product_Attribute|null
+ */
+function aafm_wc_coerce_product_attribute( $attribute ): ?\WC_Product_Attribute {
+	if ( ! class_exists( 'WC_Product_Attribute' ) ) {
+		return null;
+	}
+	if ( $attribute instanceof \WC_Product_Attribute ) {
+		return $attribute;
+	}
+	if ( ! is_array( $attribute ) ) {
+		return null;
+	}
+
+	$object = new \WC_Product_Attribute();
+	$object->set_id( (int) ( $attribute['id'] ?? 0 ) );
+	$object->set_name( (string) ( $attribute['name'] ?? '' ) );
+	$object->set_options( array_values( (array) ( $attribute['options'] ?? array() ) ) );
+	$object->set_position( (int) ( $attribute['position'] ?? 0 ) );
+	$object->set_visible( (bool) ( $attribute['visible'] ?? true ) );
+	$object->set_variation( (bool) ( $attribute['variation'] ?? false ) );
+	return $object;
 }
 
 /**

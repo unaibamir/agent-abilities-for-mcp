@@ -420,6 +420,46 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( array( 'S', 'M', 'L' ), $first['options'], 'The attribute options round-trip in order.' );
 	}
 
+	public function test_update_product_preserves_attributes_the_caller_did_not_resend(): void {
+		// WC_Product::set_attributes() pre-nulls every existing attribute key and keeps only real
+		// WC_Product_Attribute instances, so a naive write of plain {name, options} arrays both
+		// discards the sent attribute AND wipes the ones the caller did not resend (orphaning any
+		// variations that used them). Create through the ability so Color is stored as a real
+		// attribute object, then update sending only Size, and assert BOTH survive.
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'       => 'Merge Product',
+				'attributes' => array(
+					array(
+						'name'    => 'Color',
+						'options' => array( 'Red', 'Blue' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+		$id = (int) $created['id'];
+
+		$updated = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => $id,
+				'attributes' => array(
+					array(
+						'name'    => 'Size',
+						'options' => array( 'S', 'M' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $updated );
+
+		$read  = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => $id ) );
+		$names = array_column( (array) $read['attributes'], 'name' );
+		$this->assertContains( 'Color', $names, 'An attribute the update did not resend must not be wiped.' );
+		$this->assertContains( 'Size', $names, 'The attribute the update sent must be added.' );
+	}
+
 	public function test_create_then_get_round_trips_the_regular_price(): void {
 		// regular_price runs through aafm_wc_sanitize_price; assert the clean decimal reads back, and
 		// that the stub mirrors it into price (regular only - sale price is left alone).

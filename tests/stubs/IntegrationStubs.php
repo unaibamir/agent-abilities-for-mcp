@@ -286,6 +286,15 @@ PHP;
 			$admin->add_cap( 'manage_woocommerce' );
 		}
 
+		// WooCommerce creates the 'customer' role on activation (WC_Install::create_roles():
+		// add_role( 'customer', 'Customer', array( 'read' => true ) )). Stock WP has no such role.
+		// aafm_exec_wc_list_customers() queries that role through WP_User_Query, so the role has to
+		// exist here for the list ability to be exercised against real WP user queries rather than
+		// against a fabricated WooCommerce API. Rolled back by the transaction-isolated fixture.
+		if ( null === get_role( 'customer' ) ) {
+			add_role( 'customer', 'Customer', array( 'read' => true ) );
+		}
+
 		if ( array() === $products ) {
 			$products = array(
 				array(
@@ -437,18 +446,13 @@ PHP;
 			eval( $this->aafm_wc_customer_class_source() );
 		}
 		if ( ! function_exists( 'wc_create_new_customer' ) ) {
-			// Mirrors the real WooCommerce wc_create_new_customer() signature.
+			// Mirrors the real WooCommerce wc_create_new_customer(): it wp_insert_user()s a real WP
+			// user with role 'customer' and returns that user's id (or a WP_Error). Creating the real
+			// user matters - aafm_exec_wc_list_customers() finds customers with WP_User_Query on the
+			// customer role, so a stub that only wrote to the store would make create and list
+			// disagree and hide exactly the class of bug this stub set once hid.
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_create_new_customer( $email, $username = "", $password = "", $args = array() ) { $c = new \WC_Customer(); $c->set_email( $email ); $c->set_username( $username ); $id = $c->save( true ); if ( ! $id ) { return new \WP_Error( "registration-error", "Create failed." ); } return (int) $id; }' );
-		}
-		if ( ! function_exists( 'wc_update_customer' ) ) {
-			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_update_customer( $id, $args = array() ) { $id = (int) $id; if ( ! \AAFM\Tests\WcCustomerStubStore::exists( $id ) ) { return new \WP_Error( "wc_update_customer_failed", "Customer not found." ); } $c = new \WC_Customer( $id ); if ( isset( $args["email"] ) ) { $c->set_email( $args["email"] ); } if ( isset( $args["first_name"] ) ) { $c->set_first_name( $args["first_name"] ); } if ( isset( $args["last_name"] ) ) { $c->set_last_name( $args["last_name"] ); } $c->save( false ); return new \WC_Customer( $id ); }' );
-		}
-		if ( ! function_exists( 'wc_get_customers' ) ) {
-			// Returns WC_Customer objects from the stub store, honoring limit/paged args.
-			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_customers( $args = array() ) { return \AAFM\Tests\WcCustomerStubStore::query( $args ); }' );
+			eval( 'function wc_create_new_customer( $email, $username = "", $password = "", $args = array() ) { if ( \AAFM\Tests\WcCustomerStubStore::$create_should_fail ) { return new \WP_Error( "registration-error", "Create failed." ); } $username = "" !== $username ? $username : "user" . wp_rand( 1000, 999999 ); $id = wp_insert_user( array( "user_login" => $username, "user_email" => $email, "user_pass" => "" !== $password ? $password : wp_generate_password(), "role" => "customer" ) ); if ( is_wp_error( $id ) ) { return $id; } \AAFM\Tests\WcCustomerStubStore::seed( (int) $id, array( "email" => $email, "username" => $username ) ); return (int) $id; }' );
 		}
 	}
 
@@ -759,18 +763,70 @@ PHP;
 	}
 
 	/**
-	 * Seed the WcCustomerStubStore with default customer fixtures for WC3 tests.
-	 *
-	 * Seeds customer id 7001 with email + billing phone so PII-exposure tests can assert presence.
-	 * Call after stub_woocommerce() (which does not reset the customer store), and before
-	 * registering customer abilities.
+	 * Remove every WP user carrying the 'customer' role, so a test can assert the genuinely-empty
+	 * list case. Only touches users the fixture itself created, and the transaction-isolated
+	 * fixture rolls the deletes back regardless.
 	 *
 	 * @return void
 	 */
-	protected function seed_wc_customers(): void {
+	protected function delete_all_customer_users(): void {
+		if ( ! function_exists( 'wp_delete_user' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/user.php';
+		}
+		$ids = get_users(
+			array(
+				'role'   => 'customer',
+				'fields' => 'ID',
+			)
+		);
+		foreach ( $ids as $id ) {
+			wp_delete_user( (int) $id );
+		}
+	}
+
+	/**
+	 * Create one customer fixture: a real WP user with the 'customer' role, backed by stub
+	 * WC_Customer data in the WcCustomerStubStore under that user's id.
+	 *
+	 * Call after stub_woocommerce() (which registers the customer role and does not reset the
+	 * customer store), and before registering customer abilities.
+	 *
+	 * @param array<string,mixed> $data Customer data for the WC_Customer stub getters.
+	 * @return int The created user id.
+	 * @throws \RuntimeException When the fixture user cannot be created.
+	 */
+	protected function seed_wc_customer_user( array $data ): int {
+		// Real WooCommerce customers ARE WP users carrying the 'customer' role - wc_create_new_customer()
+		// wp_insert_user()s them that way. aafm_exec_wc_list_customers() finds them with WP_User_Query on
+		// that role, so the fixture has to create a real user, not just a store row. Only WC_Customer (a
+		// real WooCommerce class) stays stubbed; the query under test runs against real WP.
+		$user_id = wp_insert_user(
+			array(
+				'user_login' => (string) ( $data['username'] ?? 'customer' . wp_rand( 1000, 999999 ) ),
+				'user_email' => (string) ( $data['email'] ?? 'customer' . wp_rand( 1000, 999999 ) . '@example.com' ),
+				'user_pass'  => wp_generate_password(),
+				'role'       => 'customer',
+			)
+		);
+		if ( is_wp_error( $user_id ) ) {
+			throw new \RuntimeException( 'Failed to seed a customer user: ' . esc_html( $user_id->get_error_message() ) );
+		}
+		WcCustomerStubStore::seed( (int) $user_id, $data );
+		return (int) $user_id;
+	}
+
+	/**
+	 * Seed the WcCustomerStubStore with the default customer fixture for WC3 tests.
+	 *
+	 * Seeds one customer (a real WP user with the customer role) carrying an email + billing phone so
+	 * PII-exposure tests can assert presence. The created id is returned so tests can address it; it is
+	 * assigned by WP, not hardcoded.
+	 *
+	 * @return int The seeded customer's user id.
+	 */
+	protected function seed_wc_customers(): int {
 		WcCustomerStubStore::reset();
-		WcCustomerStubStore::seed(
-			7001,
+		return $this->seed_wc_customer_user(
 			array(
 				'email'        => 'jane@example.com',
 				'first_name'   => 'Jane',

@@ -16,11 +16,17 @@ namespace AAFM\Tests;
 /**
  * Process-wide backing store for the WooCommerce customer stubs.
  *
- * The WC_Customer class stub and free functions wc_create_customer() / wc_update_customer() are
- * defined once per process; this static store holds the seeded data each stub reads and writes,
- * so tests can assert the shape of the customer abilities without WooCommerce installed.
- * seed_wc_customers() resets + seeds it per test, and reset_integration_stubs() clears it via
- * reset().
+ * The WC_Customer class stub and the wc_create_new_customer() free function are defined once per
+ * process; this static store holds the seeded data each stub reads and writes, so tests can assert
+ * the shape of the customer abilities without WooCommerce installed. seed_wc_customers() resets +
+ * seeds it per test, and reset_integration_stubs() clears it via reset().
+ *
+ * Only real WooCommerce API is stubbed here. This store is keyed by the id of a real WP user
+ * carrying the 'customer' role, because that is what a WooCommerce customer actually is; listing
+ * runs through WP_User_Query against real WP rather than through this store. An earlier version
+ * of these stubs invented a wc_get_customers() function that WooCommerce has never had, which let
+ * a broken ability pass its tests for three releases - do not stub a vendor API without first
+ * reading it in the vendor's source.
  */
 class WcCustomerStubStore {
 
@@ -133,39 +139,6 @@ class WcCustomerStubStore {
 			$out,
 			static fn( array $a, array $b ): int => ( (int) $a['id'] ) <=> ( (int) $b['id'] )
 		);
-		return $out;
-	}
-
-	/**
-	 * Query customers with limit/paged filtering.
-	 *
-	 * When args includes 'paginate' => true, returns an object with ->results (the page slice of
-	 * WC_Customer objects) and ->total (the grand count), mirroring the real WooCommerce paginate
-	 * shape used by the orders and products slices. Without paginate, returns a plain array.
-	 *
-	 * @param array<string,mixed> $args Query args (limit, paged, paginate).
-	 * @return array<int,\WC_Customer>|object
-	 */
-	public static function query( array $args = array() ) {
-		$all_rows = self::all();
-		$grand    = count( $all_rows );
-		$limit    = isset( $args['limit'] ) ? (int) $args['limit'] : -1;
-		$rows     = $all_rows;
-		if ( $limit > 0 ) {
-			$paged  = isset( $args['paged'] ) ? max( 1, (int) $args['paged'] ) : 1;
-			$offset = ( $paged - 1 ) * $limit;
-			$rows   = array_slice( $all_rows, $offset, $limit );
-		}
-		$out = array();
-		foreach ( $rows as $row ) {
-			$out[] = new \WC_Customer( (int) $row['id'] );
-		}
-		if ( ! empty( $args['paginate'] ) ) {
-			return (object) array(
-				'results' => $out,
-				'total'   => $grand,
-			);
-		}
 		return $out;
 	}
 

@@ -7,6 +7,10 @@
  * provided by the IntegrationStubs trait backed by WcCustomerStubStore. The seed_wc_customers()
  * helper resets and seeds the store per test so each test starts with a clean, known state.
  *
+ * Customers are seeded as real WP users with the 'customer' role (which is what a WooCommerce
+ * customer is), so the list ability is exercised against a real WP_User_Query. Ids are assigned by
+ * WP and read from $this->customer_id rather than hardcoded.
+ *
  * @package AgentAbilitiesForMCP
  */
 
@@ -23,13 +27,45 @@ final class WooCustomersTest extends TestCase {
 
 	use IntegrationStubs;
 
+	/**
+	 * The seeded customer's user id, assigned by WP in set_up().
+	 *
+	 * @var int
+	 */
+	private int $customer_id = 0;
+
+	/**
+	 * Placeholder for the seeded customer's id inside a data provider.
+	 *
+	 * PHPUnit builds provider data before set_up() runs, so $this->customer_id is still 0 there and a
+	 * provider cannot reference it. Providers emit this sentinel and resolve_args() swaps in the real
+	 * id once the fixture exists. Passing the unresolved 0 would make the audit cases fail and, worse,
+	 * would let the rejection cases keep passing for the wrong reason.
+	 *
+	 * @var int
+	 */
+	private const SEEDED_CUSTOMER = -1;
+
+	/**
+	 * Swap the SEEDED_CUSTOMER sentinel for the real seeded customer id.
+	 *
+	 * @param array<string,mixed> $args Provider args.
+	 * @return array<string,mixed>
+	 */
+	private function resolve_args( array $args ): array {
+		if ( isset( $args['customer_id'] ) && self::SEEDED_CUSTOMER === $args['customer_id'] ) {
+			$args['customer_id'] = $this->customer_id;
+		}
+		return $args;
+	}
+
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
 		$this->stub_woocommerce();
-		$this->seed_wc_customers();
+		$this->customer_id = $this->seed_wc_customers();
 		aafm_registry_cache_should_flush( true );
 		$this->register_wc_customers();
 	}
@@ -135,11 +171,11 @@ final class WooCustomersTest extends TestCase {
 	public function test_get_customer_requires_manage_woocommerce(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
-			wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => 7001 ) )
+			wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => $this->customer_id ) )
 		);
 
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 	}
 
@@ -157,7 +193,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_exposes_pii_email_and_billing_phone(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
 		// Top-level PII.
@@ -179,10 +215,10 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_get_customer_returns_full_shape(): void {
 		$this->acting_as( 'administrator' );
-		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => 7001 ) );
+		$res = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$this->assertSame( 7001, $res['id'] );
+		$this->assertSame( $this->customer_id, $res['id'] );
 		$this->assertSame( 'Jane', $res['first_name'] );
 		$this->assertSame( 'Doe', $res['last_name'] );
 		$this->assertSame( 'janedoe', $res['username'] );
@@ -253,12 +289,13 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
-	 * Real WooCommerce wc_create_customer() returns an int user id (or WP_Error), not a
+	 * Real WooCommerce wc_create_new_customer() returns an int user id (or WP_Error), not a
 	 * WC_Customer object. A successful create must return the rich shape exactly once and
 	 * leave a single customer behind - no false error on the success path, no duplicate.
 	 */
 	public function test_create_customer_int_return_is_success_no_duplicate(): void {
 		WcCustomerStubStore::reset();
+		$this->delete_all_customer_users();
 		$this->acting_as( 'administrator' );
 
 		$first = wp_get_ability( 'aafm/wc-create-customer' )->execute(
@@ -363,7 +400,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
 			wp_get_ability( 'aafm/wc-update-customer' )->check_permissions(
-				array( 'customer_id' => 7001 )
+				array( 'customer_id' => $this->customer_id )
 			)
 		);
 	}
@@ -374,10 +411,10 @@ final class WooCustomersTest extends TestCase {
 	public function test_update_customer_empty_patch_is_noop(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
-			array( 'customer_id' => 7001 )
+			array( 'customer_id' => $this->customer_id )
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 7001, $res['id'] );
+		$this->assertSame( $this->customer_id, $res['id'] );
 		// Existing data must be unchanged.
 		$this->assertSame( 'jane@example.com', $res['email'] );
 	}
@@ -389,7 +426,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
-				'customer_id' => 7001,
+				'customer_id' => $this->customer_id,
 				'first_name'  => 'Janet',
 			)
 		);
@@ -406,7 +443,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
-				'customer_id' => 7001,
+				'customer_id' => $this->customer_id,
 				'billing'     => array(
 					'city'  => 'Shelbyville',
 					'phone' => '+1-555-1234',
@@ -425,7 +462,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
-				'customer_id' => 7001,
+				'customer_id' => $this->customer_id,
 				'billing'     => array(
 					'role' => 'administrator',
 				),
@@ -459,7 +496,7 @@ final class WooCustomersTest extends TestCase {
 	public function test_closed_schema_rejects_unknown_field( string $ability, array $valid_min_args ): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( $ability )->execute(
-			array_merge( $valid_min_args, array( 'evil_field' => 'x' ) )
+			array_merge( $this->resolve_args( $valid_min_args ), array( 'evil_field' => 'x' ) )
 		);
 		$this->assertInstanceOf( WP_Error::class, $res, 'Closed schema must reject an unknown field.' );
 	}
@@ -472,9 +509,9 @@ final class WooCustomersTest extends TestCase {
 	public function provide_closed_schema_cases(): array {
 		return array(
 			'list-customers'  => array( 'aafm/wc-list-customers', array() ),
-			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ) ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ) ),
 			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'x@example.com' ) ),
-			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => 7001 ) ),
+			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ) ),
 		);
 	}
 
@@ -513,7 +550,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
-				'customer_id' => 7001,
+				'customer_id' => $this->customer_id,
 				'first_name'  => 'ShouldFail',
 			)
 		);
@@ -530,6 +567,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_list_customers_empty_store_returns_empty(): void {
 		WcCustomerStubStore::reset();
+		$this->delete_all_customer_users();
 
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
@@ -551,8 +589,19 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_list_customers_returns_both_ids_and_grand_total(): void {
 		WcCustomerStubStore::reset();
-		WcCustomerStubStore::seed( 7001, array( 'email' => 'a@example.com' ) );
-		WcCustomerStubStore::seed( 7002, array( 'email' => 'b@example.com' ) );
+		$this->delete_all_customer_users();
+		$first  = $this->seed_wc_customer_user(
+			array(
+				'email'    => 'a@example.com',
+				'username' => 'customer_a',
+			)
+		);
+		$second = $this->seed_wc_customer_user(
+			array(
+				'email'    => 'b@example.com',
+				'username' => 'customer_b',
+			)
+		);
 
 		$this->acting_as( 'administrator' );
 
@@ -560,8 +609,8 @@ final class WooCustomersTest extends TestCase {
 		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$ids = wp_list_pluck( $res['customers'], 'id' );
-		$this->assertContains( 7001, $ids );
-		$this->assertContains( 7002, $ids );
+		$this->assertContains( $first, $ids );
+		$this->assertContains( $second, $ids );
 		$this->assertSame( 2, $res['total'] );
 
 		// Page 2 of per_page=1: only 1 row in page, but total is still the grand count (2).
@@ -616,7 +665,7 @@ final class WooCustomersTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
 			array(
-				'customer_id' => 7001,
+				'customer_id' => $this->customer_id,
 				'shipping'    => array(
 					'role' => 'administrator',
 				),
@@ -734,7 +783,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_success_is_audited( string $ability, array $args ): void {
 		$this->acting_as( 'administrator' );
-		wp_get_ability( $ability )->execute( $args );
+		wp_get_ability( $ability )->execute( $this->resolve_args( $args ) );
 
 		$success   = aafm_query_activity( array( 'status' => 'success' ) );
 		$abilities = wp_list_pluck( $success, 'ability' );
@@ -749,12 +798,12 @@ final class WooCustomersTest extends TestCase {
 	public function provide_success_audit_cases(): array {
 		return array(
 			'list-customers'  => array( 'aafm/wc-list-customers', array() ),
-			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ) ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ) ),
 			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'audit@example.com' ) ),
 			'update-customer' => array(
 				'aafm/wc-update-customer',
 				array(
-					'customer_id' => 7001,
+					'customer_id' => self::SEEDED_CUSTOMER,
 					'first_name'  => 'Audited',
 				),
 			),
@@ -772,7 +821,7 @@ final class WooCustomersTest extends TestCase {
 	 */
 	public function test_denied_is_audited( string $ability, array $args, string $low_role ): void {
 		$this->acting_as( $low_role );
-		wp_get_ability( $ability )->check_permissions( $args );
+		wp_get_ability( $ability )->check_permissions( $this->resolve_args( $args ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );
@@ -787,9 +836,9 @@ final class WooCustomersTest extends TestCase {
 	public function provide_denied_audit_cases(): array {
 		return array(
 			'list-customers'  => array( 'aafm/wc-list-customers', array(), 'editor' ),
-			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => 7001 ), 'editor' ),
+			'get-customer'    => array( 'aafm/wc-get-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ), 'editor' ),
 			'create-customer' => array( 'aafm/wc-create-customer', array( 'email' => 'denied@example.com' ), 'editor' ),
-			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => 7001 ), 'editor' ),
+			'update-customer' => array( 'aafm/wc-update-customer', array( 'customer_id' => self::SEEDED_CUSTOMER ), 'editor' ),
 		);
 	}
 }

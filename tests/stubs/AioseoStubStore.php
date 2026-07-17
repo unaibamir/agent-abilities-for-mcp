@@ -84,9 +84,15 @@ class AioseoStubStore {
 			'og_title'                 => '',
 			'og_description'           => '',
 			'og_image_custom_url'      => '',
+			// Mirrors the real wp_aioseo_posts columns: the *_image_type default is 'default', which makes
+			// AIOSEO ignore the *_image_custom_url and use the site default image source. The custom URL
+			// only renders once the update ability flips these to 'custom_image', so the stub must carry
+			// them to catch a regression where that flip is dropped.
+			'og_image_type'            => 'default',
 			'twitter_title'            => '',
 			'twitter_description'      => '',
 			'twitter_image_custom_url' => '',
+			'twitter_image_type'       => 'default',
 			'robots_noindex'           => false,
 			'robots_nofollow'          => false,
 			// Mirrors the real wp_aioseo_posts column: a fresh row defaults to true ("use site default"),

@@ -181,9 +181,11 @@ function aafm_aioseo_registry_definitions(): array {
 
 /**
  * The AIOSEO text-and-URL field map: unified field => model property. The *_custom_url props hold the
- * social image URLs (sanitized with esc_url_raw on write); canonical_url is the canonical.
+ * social image URLs (sanitized with esc_url_raw on write); canonical_url is the canonical. An image
+ * field also carries type_prop: the *_image_type column that must read 'custom_image' before AIOSEO
+ * renders the custom URL at all (see aafm_exec_aioseo_update_post).
  *
- * @return array<string,array{prop:string,url:bool}>
+ * @return array<string,array{prop:string,url:bool,type_prop?:string}>
  */
 function aafm_aioseo_fields(): array {
 	return array(
@@ -208,8 +210,9 @@ function aafm_aioseo_fields(): array {
 			'url'  => false,
 		),
 		'og_image'            => array(
-			'prop' => 'og_image_custom_url',
-			'url'  => true,
+			'prop'      => 'og_image_custom_url',
+			'url'       => true,
+			'type_prop' => 'og_image_type',
 		),
 		'twitter_title'       => array(
 			'prop' => 'twitter_title',
@@ -220,8 +223,9 @@ function aafm_aioseo_fields(): array {
 			'url'  => false,
 		),
 		'twitter_image'       => array(
-			'prop' => 'twitter_image_custom_url',
-			'url'  => true,
+			'prop'      => 'twitter_image_custom_url',
+			'url'       => true,
+			'type_prop' => 'twitter_image_type',
 		),
 	);
 }
@@ -423,6 +427,17 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		}
 		$raw          = (string) $input[ $field ];
 		$model->$prop = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+
+		// A custom social image renders ONLY when its *_image_type column reads 'custom_image'.
+		// That column defaults to 'default' (AIOSEO\Plugin\Common\Models\Post::getDefaults), which
+		// makes AIOSEO\Plugin\Common\Social\Facebook/Twitter::getImage ignore the custom URL and fall
+		// back to the site default image source. So writing og_image_custom_url/twitter_image_custom_url
+		// alone persists a URL that never appears in og:image/twitter:image. Flip the type to
+		// 'custom_image' whenever a non-empty image URL is written (mirroring the AIOSEO editor), and
+		// back to 'default' when the caller clears it, so the read-back and the live tag agree.
+		if ( isset( $spec['type_prop'] ) && property_exists( $model, $spec['type_prop'] ) ) {
+			$model->{$spec['type_prop']} = '' !== $model->$prop ? 'custom_image' : 'default';
+		}
 	}
 	$robots_touched = false;
 	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {

@@ -128,9 +128,11 @@ class Post {
 	public $og_title = '';
 	public $og_description = '';
 	public $og_image_custom_url = '';
+	public $og_image_type = 'default';
 	public $twitter_title = '';
 	public $twitter_description = '';
 	public $twitter_image_custom_url = '';
+	public $twitter_image_type = 'default';
 	public $robots_noindex = false;
 	public $robots_nofollow = false;
 	public $robots_default = true;

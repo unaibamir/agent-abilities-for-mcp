@@ -688,36 +688,6 @@ if ( ! class_exists( 'WC_Customer' ) ) {
 		public function save() { return 0; }
 	}
 }
-if ( ! function_exists( 'wc_get_customers' ) ) {
-	/**
-	 * @param array<string,mixed> $args
-	 * @return array<int,\WC_Customer>|object
-	 */
-	function wc_get_customers( $args = array() ) {
-		return array();
-	}
-}
-if ( ! function_exists( 'wc_create_customer' ) ) {
-	/**
-	 * @param string $email
-	 * @param string $username
-	 * @param string $password
-	 * @return int|\WP_Error
-	 */
-	function wc_create_customer( $email, $username, $password ) {
-		return new \WP_Error();
-	}
-}
-if ( ! function_exists( 'wc_update_customer' ) ) {
-	/**
-	 * @param int                 $id
-	 * @param array<string,mixed> $args
-	 * @return \WC_Customer|\WP_Error
-	 */
-	function wc_update_customer( $id, $args = array() ) {
-		return new \WP_Error();
-	}
-}
 if ( ! class_exists( 'WC_Coupon' ) ) {
 	class WC_Coupon {
 		/** @param int|string $code_or_id */

@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.2.1 |
+| **Stable tag** | 1.3.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -181,6 +181,27 @@ This plugin does not contact any external service. It registers abilities on you
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.3.0
+
+* **Fix:** New installs now ship with OAuth off by default instead of on. Sites that already had OAuth on keep it on after updating, so existing connections keep working.
+* **Fix:** The OAuth consent grant could be phished into getting an administrator to approve a malicious client.
+* **Feature:** The OAuth consent screen now warns when the account approving a connection is an administrator.
+* **Feature:** The settings screen now warns you before a REST API lockdown would cut off your OAuth connections.
+* **Fix:** The MCP capability gate could quietly stop enforcing when another adapter copy loaded first. The plugin now checks that the running adapter still applies the filter, and matches it as a real call rather than a text match.
+* **Fix:** The update-user ability did not require edit_users, so an agent could change its own account beyond its own capabilities.
+* **Fix:** A bridged ability from another plugin with no destructive annotation is now treated as destructive rather than assumed safe.
+* **Feature:** The Abilities Bridge directory now shows each bridged ability's effective permission, not just its name.
+* **Fix:** WooCommerce customer listing returned zero customers on every real store, because it called a function WooCommerce does not have.
+* **Fix:** WooCommerce shipping zones came back empty on every real store.
+* **Fix:** WooCommerce order paging was ignored on stores using legacy (non-HPOS) order storage.
+* **Fix:** WooCommerce product attributes were dropped when creating a product and wiped when updating one.
+* **Fix:** Yoast's robots_noindex setting was inverted in the tool contract, so an agent wrote the opposite of what it asked for.
+* **Fix:** Rank Math social and Twitter images set by an agent now render, because the plugin writes the attachment ID instead of a URL.
+* **Fix:** AIOSEO social and Twitter images set by an agent now render. This corrects the image type, the Open Graph fallback, and a reset that was clearing a valid image.
+* **Fix:** ACF field writes reported failure on numeric and boolean values even when the value saved.
+* **Fix:** Partially updating a menu item wiped any field you did not pass instead of leaving it alone.
+* **Fix:** The page-publish permission check did not recognize custom public statuses from other plugins, blocking valid publishes.
 
 ### 1.2.1
 

@@ -984,6 +984,8 @@ if ( ! class_exists( 'WC_Payment_Gateway' ) ) {
 		 * @return mixed
 		 */
 		public function get_option( $key, $empty_value = null ) { return $empty_value; }
+		/** @return string */
+		public function get_option_key() { return ''; }
 		/** @return bool */
 		public function save() { return false; }
 	}

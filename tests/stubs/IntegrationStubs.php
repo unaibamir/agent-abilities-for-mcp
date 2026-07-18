@@ -1624,14 +1624,24 @@ class WC_Payment_Gateway {
 	 */
 	public function update_option( $key, $value ) {
 		$key = (string) $key;
-		$changed = \AAFM\Tests\WcGatewayStubStore::update_option( $this->id, $key, $value );
-		// Keep the in-memory settings in sync with what the store accepted so get_option() reflects
-		// the persisted state (matching how real WC_Settings_API caches $this->settings).
-		$stored = \AAFM\Tests\WcGatewayStubStore::get( $this->id );
-		if ( is_array( $stored ) ) {
-			$this->settings = $stored['settings'] ?? array();
-		}
-		return $changed;
+		// Mirror WC_Settings_API::update_option() exactly: set the in-memory copy BEFORE attempting to
+		// persist, and keep it set regardless of whether the DB write succeeds. This is the
+		// in-memory-before-persist behaviour that makes a same-instance get_option() read hide a failed
+		// persist - the false-success vector pinned by
+		// WooCommerceContractTest::test_gateway_update_option_mutates_in_memory_before_persist().
+		$this->settings[ $key ] = $value;
+		return \AAFM\Tests\WcGatewayStubStore::update_option( $this->id, $key, $value );
+	}
+
+	/**
+	 * Mirrors WC_Settings_API::get_option_key(): the wp_options row WooCommerce persists this
+	 * gateway's settings into. Production verifies a write against this DB-persisted row rather than
+	 * the in-memory $this->settings copy, which update_option() mutates before the write lands.
+	 *
+	 * @return string
+	 */
+	public function get_option_key() {
+		return 'woocommerce_' . $this->id . '_settings';
 	}
 
 	/**

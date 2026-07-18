@@ -836,6 +836,39 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * Update gateway must not report a false success when the in-memory copy holds the requested value
+	 * but the write never reached the database.
+	 *
+	 * WC_Settings_API::update_option() sets $this->settings[$key] BEFORE the DB write, so a
+	 * same-instance $gateway->get_option($key) read returns the requested value even when persistence
+	 * failed. The executor therefore verifies against the DB-persisted settings row (get_option_key()),
+	 * not the gateway object. Here the store rejects the write while the gateway's in-memory copy still
+	 * reports the requested title - the exact false-success vector - and the executor must still error.
+	 */
+	public function test_update_payment_gateway_in_memory_copy_does_not_mask_failed_persist(): void {
+		$this->acting_as( 'administrator' );
+		WcGatewayStubStore::$force_save_failure = true;
+
+		$gateways = \WC_Payment_Gateways::instance()->payment_gateways();
+		$gateways['paypal']->update_option( 'title', 'Ghost Title' );
+		// The in-memory copy reflects the requested value even though nothing persisted...
+		$this->assertSame( 'Ghost Title', $gateways['paypal']->get_option( 'title' ), 'Guard: in-memory copy holds the un-persisted value.' );
+		// ...but the DB-persisted settings row does not.
+		$persisted = get_option( $gateways['paypal']->get_option_key(), array() );
+		$this->assertNotSame( 'Ghost Title', $persisted['title'] ?? null, 'Guard: the value never reached the persisted option row.' );
+
+		$res                                    = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'title'      => 'Ghost Title',
+			)
+		);
+		WcGatewayStubStore::$force_save_failure = false;
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A write that never persisted must report failure, not a false success.' );
+	}
+
+	/**
 	 * Update gateway succeeds when the requested value already equals the stored value.
 	 *
 	 * Regression: WC_Settings_API::update_option() returns false when the value is unchanged (no write

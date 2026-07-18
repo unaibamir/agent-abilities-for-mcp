@@ -33,7 +33,7 @@ defined( 'ABSPATH' ) || exit;
  * not one of the known lifecycle events, so a logging failure can never break an
  * OAuth response.
  *
- * @param string              $event  One of register|authorize|token|refresh|revoke.
+ * @param string              $event  One of register|authorize|token|refresh|revoke|bearer.
  * @param string              $status One of success|error|denied.
  * @param array<string,mixed> $ctx    {
  *     Optional non-secret context.
@@ -50,7 +50,11 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 		return;
 	}
 
-	if ( ! in_array( $event, array( 'register', 'authorize', 'token', 'refresh', 'revoke' ), true ) ) {
+	// 'bearer' covers a presented-but-invalid aafm_oat_ credential (unknown/expired token,
+	// wrong audience, or a deactivated owning client) at the determine_current_user resolver -
+	// distinct from the five grant-lifecycle events, which all concern a code or token WordPress
+	// itself just minted or accepted.
+	if ( ! in_array( $event, array( 'register', 'authorize', 'token', 'refresh', 'revoke', 'bearer' ), true ) ) {
 		return;
 	}
 

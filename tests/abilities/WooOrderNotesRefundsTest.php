@@ -131,6 +131,47 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertArrayHasKey( 'customer_note', $note );
 	}
 
+	/**
+	 * M12: real WooCommerce never emits the literal string 'user' for added_by - a programmatic
+	 * note is attributed 'system', a user-added note is attributed the acting user's display name.
+	 * added_by_user must be derived from "not 'system'", not from a check for the literal 'user'.
+	 */
+	public function test_list_order_notes_added_by_user_matches_the_system_versus_user_contract(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed_notes(
+			5001,
+			array(
+				array(
+					'id'            => 1,
+					'note'          => 'Programmatic note.',
+					'added_by_user' => false,
+					'date_created'  => '2024-06-01T10:01:00',
+					'customer_note' => false,
+				),
+				array(
+					'id'            => 2,
+					'note'          => 'Human note.',
+					'added_by_user' => true,
+					'date_created'  => '2024-06-02T09:00:00',
+					'customer_note' => false,
+				),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-list-order-notes' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$by_id = array();
+		foreach ( $res['notes'] as $note ) {
+			$by_id[ $note['id'] ] = $note;
+		}
+
+		$this->assertFalse( $by_id[1]['added_by_user'], 'A system-attributed note must report added_by_user false.' );
+		$this->assertTrue( $by_id[2]['added_by_user'], 'A user-attributed note must report added_by_user true.' );
+	}
+
 	public function test_list_order_notes_unknown_order_returns_error(): void {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );

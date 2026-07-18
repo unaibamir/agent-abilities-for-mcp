@@ -627,7 +627,7 @@ class WC_Order {
 		$this->data['total']    = number_format( $subtotal + (float) ( $this->data['shipping_total'] ?? 0 ) + (float) ( $this->data['total_tax'] ?? 0 ), 2, '.', '' );
 		return $this->data['total'];
 	}
-	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note ); }
+	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $added_by_user = (bool) $added_by_user; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note, $added_by_user ); }
 	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
 	public function get_item( $item_id, $load_from_db = true ) { foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) { $item = (array) $item; if ( (int) ( $item['id'] ?? 0 ) === (int) $item_id ) { return new \WC_Order_Item( $item ); } } return false; }
 	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }

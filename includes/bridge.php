@@ -154,6 +154,13 @@ function aafm_bridge_tool_name( string $foreign_slug ): string {
 /**
  * Classify a foreign ability's risk from its annotations.
  *
+ * A foreign ability's annotations are OPTIONAL and self-declared, so an omission is not evidence
+ * of safety. We fail safe: an ability that neither declares itself read-only nor explicitly
+ * declares a destructive flag is treated as destructive, so the operator's "can delete data"
+ * confirm still shows and MCP clients are told destructive=true. Only an explicit, trusted
+ * annotation - readonly:true, or destructive:false on a write - downgrades it to non-destructive.
+ * Every case where the ability DOES declare its annotations keeps its previous classification.
+ *
  * @param \WP_Ability $ability The foreign ability.
  * @return array{risk:string,readonly:bool,destructive:bool,idempotent:bool}
  */
@@ -162,10 +169,21 @@ function aafm_bridge_risk( $ability ): array {
 	if ( method_exists( $ability, 'get_meta_item' ) ) {
 		$ann = (array) ( $ability->get_meta_item( 'annotations' ) ?? array() );
 	}
-	$readonly    = ! empty( $ann['readonly'] );
-	$destructive = ! empty( $ann['destructive'] );
-	$idempotent  = ! empty( $ann['idempotent'] );
-	$risk        = $destructive ? 'destructive' : ( $readonly ? 'read' : 'write' );
+	$readonly = ! empty( $ann['readonly'] );
+
+	// The Abilities API always populates the 'destructive' annotation, defaulting it to null when the
+	// ability declares nothing. So array_key_exists() can never see "absent" - null IS the unstated
+	// case. Treat only an explicit boolean as trusted: an unstated (null) destructive on a non-readonly
+	// ability fails safe to destructive, so the operator's "can delete data" confirm still shows and
+	// MCP clients are told destructive=true. Only readonly:true or an explicit destructive:false
+	// downgrades it.
+	$declared    = $ann['destructive'] ?? null;
+	$destructive = ( null === $declared )
+		? ! $readonly
+		: ! empty( $declared );
+
+	$idempotent = ! empty( $ann['idempotent'] );
+	$risk       = $destructive ? 'destructive' : ( $readonly ? 'read' : 'write' );
 	return array(
 		'risk'        => $risk,
 		'readonly'    => $readonly,

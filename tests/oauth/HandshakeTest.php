@@ -68,6 +68,11 @@ class HandshakeTest extends TestCase {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
 
+		// OAuth and DCR are OFF by default now; the full handshake exercises the enabled
+		// surface, so turn both on explicitly. The disabled-route test overrides.
+		update_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+
 		// Register the OAuth (and MCP) routes against the REST server for this run.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook fired to populate the REST server in the test.
 		do_action( 'rest_api_init' );

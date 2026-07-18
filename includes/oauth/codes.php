@@ -36,6 +36,7 @@ if ( ! defined( 'AAFM_OAUTH_CODE_TTL' ) ) {
  *     @type string $redirect_uri   The redirect URI this code is bound to.
  *     @type string $code_challenge The PKCE S256 challenge.
  *     @type string $resource       The resource indicator the code is scoped to.
+ *     @type string $scope          The requested OAuth scope, persisted for audit/narrowing (may be '').
  * }
  * @return string|\WP_Error The raw authorization code (64 hex characters), or a WP_Error when the
  *                          row could not be persisted (so callers never hand out a phantom code).
@@ -58,9 +59,10 @@ function aafm_oauth_mint_code( array $ctx ) {
 			'redirect_uri'   => isset( $ctx['redirect_uri'] ) ? (string) $ctx['redirect_uri'] : '',
 			'code_challenge' => isset( $ctx['code_challenge'] ) ? (string) $ctx['code_challenge'] : '',
 			'resource'       => isset( $ctx['resource'] ) ? (string) $ctx['resource'] : '',
+			'scope'          => isset( $ctx['scope'] ) ? (string) $ctx['scope'] : '',
 			'expires_at'     => $expires_at,
 		),
-		array( '%s', '%s', '%d', '%s', '%s', '%s', '%s' )
+		array( '%s', '%s', '%d', '%s', '%s', '%s', '%s', '%s' )
 	);
 
 	// A failed insert means there is no persisted grant - never return a code for it, or the

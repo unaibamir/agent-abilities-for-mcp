@@ -74,6 +74,7 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	$client_name   = isset( $view['client_name'] ) ? (string) $view['client_name'] : '';
 	$user_login    = isset( $view['user_login'] ) ? (string) $view['user_login'] : '';
 	$site_name     = isset( $view['site_name'] ) ? (string) $view['site_name'] : '';
+	$redirect_host = isset( $view['redirect_host'] ) ? (string) $view['redirect_host'] : '';
 	$action_url    = isset( $view['action_url'] ) ? (string) $view['action_url'] : '';
 	$nonce_field   = isset( $view['nonce_field'] ) ? (string) $view['nonce_field'] : '';
 	$hidden_inputs = isset( $view['hidden_inputs'] ) && is_array( $view['hidden_inputs'] )
@@ -128,6 +129,8 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	$client_glyph = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l1.9 5.4L19 9l-4.3 3.5L16 18l-4-3-4 3 1.3-5.5L5 9l5.1-.6z" fill="#6AA9FF"/></svg>';
 	$flow_svg     = '<svg width="28" height="14" viewBox="0 0 28 14" fill="none" aria-hidden="true"><path d="M1 7h22m0 0l-5-5m5 5l-5 5" stroke="#787c82" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 	$acting_icon  = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="#996800" stroke-width="1.7"/><path d="M12 7.5v5.5M12 16.2v.1" stroke="#996800" stroke-width="1.9" stroke-linecap="round"/></svg>';
+	$dest_icon    = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8-8-2z" stroke="#8a2011" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+	$warn_icon    = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3l9.5 17H2.5z" stroke="#8a2011" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9.5v4.2M12 16.6v.1" stroke="#8a2011" stroke-width="1.9" stroke-linecap="round"/></svg>';
 	$tick_svg     = '<span class="tick"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke="#00a32a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 	$shield_svg   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 8.6-8 11-4.6-2.4-8-6-8-11V5l8-3z" stroke="#787c82" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
@@ -171,6 +174,25 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	echo '<span class="avatar client">' . wp_kses( $client_glyph, aafm_svg_allowed_html() ) . '</span>';
 	echo '<span class="flow">' . wp_kses( $flow_svg, aafm_svg_allowed_html() ) . '<span>' . esc_html__( 'connect', 'agent-abilities-for-mcp' ) . '</span></span>';
 	echo '<span class="avatar site">' . esc_html( aafm_oauth_site_initials( $site_name ) ) . '</span>';
+	echo '</div>';
+
+	// Destination + unverified-app caution. The redirect host is the single most decision-relevant
+	// fact for the human - it says WHERE approving this sends account access - and the app was
+	// self-registered through public dynamic client registration, so it is flagged as unverified
+	// rather than presented as a vetted integration. Both are plain text (esc_html); the SVGs go
+	// through the SVG kses allowlist. This block is styled by assets/consent.css under the consent
+	// CSP, but the words alone convey the warning even if the stylesheet is blocked.
+	echo '<div class="destination">';
+	if ( '' !== $redirect_host ) {
+		echo '<div class="dest-line">';
+		echo wp_kses( $dest_icon, aafm_svg_allowed_html() );
+		echo '<p><span class="dest-label">' . esc_html__( 'Will send access to', 'agent-abilities-for-mcp' ) . '</span> <span class="dest-host">' . esc_html( $redirect_host ) . '</span></p>';
+		echo '</div>';
+	}
+	echo '<p class="unverified">';
+	echo '<span class="badge">' . wp_kses( $warn_icon, aafm_svg_allowed_html() ) . esc_html__( 'Unverified app', 'agent-abilities-for-mcp' ) . '</span> ';
+	echo esc_html__( 'This app registered itself and has not been reviewed by anyone. Approve it only if you started this connection and recognise where it is sending access.', 'agent-abilities-for-mcp' );
+	echo '</p>';
 	echo '</div>';
 
 	// "Acting as" note.

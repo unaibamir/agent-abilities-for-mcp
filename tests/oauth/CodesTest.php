@@ -110,6 +110,23 @@ class CodesTest extends TestCase {
 	}
 
 	/**
+	 * The requested scope is persisted on the code and returned on redemption, so it can flow
+	 * through to the token (H1c: scope is recorded/auditable, no longer silently discarded).
+	 */
+	public function test_scope_round_trips_through_mint_and_redeem(): void {
+		aafm_install_oauth_tables();
+
+		$ctx          = $this->ctx();
+		$ctx['scope'] = 'mcp:read mcp:write';
+		$raw          = aafm_oauth_mint_code( $ctx );
+
+		$row = aafm_oauth_redeem_code( $raw, $ctx['client_id'], $ctx['redirect_uri'] );
+
+		$this->assertIsArray( $row );
+		$this->assertSame( 'mcp:read mcp:write', (string) $row['scope'] );
+	}
+
+	/**
 	 * The same code cannot be redeemed twice (atomic one-time use).
 	 */
 	public function test_redeem_is_one_time_use(): void {

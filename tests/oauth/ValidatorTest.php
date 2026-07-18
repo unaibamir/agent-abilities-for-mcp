@@ -66,6 +66,10 @@ class ValidatorTest extends TestCase {
 		$_SERVER['HTTPS'] = 'on';
 
 		aafm_install_oauth_tables();
+
+		// OAuth is OFF by default now; the resolver's happy path requires it on. The
+		// disabled-bearer test sets it back to '0' explicitly.
+		update_option( 'aafm_oauth_enabled', '1' );
 	}
 
 	/**

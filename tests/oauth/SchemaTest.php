@@ -167,14 +167,27 @@ class SchemaTest extends TestCase {
 
 	/**
 	 * Install records the current schema version. Asserted against the constant so a deliberate
-	 * bump (v5 adds the GC / revoke-scan and reaper index coverage) does not require editing a
-	 * literal here, only confirming the stored option tracks the constant.
+	 * bump (v6 adds the persisted `scope` column on codes + access-tokens) does not require editing
+	 * a literal here, only confirming the stored option tracks the constant.
 	 */
 	public function test_install_records_schema_version(): void {
 		aafm_install_oauth_tables();
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '5', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '6', AAFM_OAUTH_SCHEMA_VERSION );
+	}
+
+	/**
+	 * The codes and access-tokens tables carry the persisted `scope` column (v6). The requested
+	 * OAuth scope is recorded through code -> token so it is auditable and available to the
+	 * aafm_oauth_token_capabilities narrowing seam; the column defaults to '' so existing rows
+	 * and behaviour are unchanged.
+	 */
+	public function test_scope_column_present_on_codes_and_tokens(): void {
+		aafm_install_oauth_tables();
+
+		$this->assertGreaterThanOrEqual( 1, $this->varchar_length( 'aafm_oauth_codes', 'scope' ), 'codes.scope column must exist.' );
+		$this->assertGreaterThanOrEqual( 1, $this->varchar_length( 'aafm_oauth_access_tokens', 'scope' ), 'access_tokens.scope column must exist.' );
 	}
 
 	/**

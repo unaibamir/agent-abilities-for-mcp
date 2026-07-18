@@ -15,24 +15,29 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Whether a stored toggle option counts as "off".
+ * Whether a stored toggle option counts as "on".
  *
- * `get_option( $key, $default )` returns $default whenever the stored value is
- * strictly === false, so a truthy default would read a literal boolean-false
- * "off" switch as on - fail-open on a public token surface. Defaulting to '1'
- * and treating every falsy stored form as off closes that gap: the option is on
- * only when it was never set or holds a genuinely truthy value.
+ * The OAuth surface is OFF by default: a public authorization server and open
+ * dynamic client registration must be an explicit operator opt-in, never a
+ * fresh-install default. So an ABSENT option reads OFF (default '0'), and the
+ * toggle is on only when a genuinely truthy value was stored. Every falsy stored
+ * form ('0', '', 'false', 'no', 'off', false, 0) also reads off, which keeps the
+ * reader fail-closed even against a literal boolean-false row.
  *
- * This is the ONE fail-closed reader for every OAuth on/off toggle. Both
- * aafm_oauth_enabled() and aafm_oauth_dcr_enabled() route through it; there is no raw
- * get_option() boolean read of those toggles anywhere (verified), so a toggle stored in any
- * falsy form ('0', '', 'false', 'no', 'off', false, 0) reads as off rather than failing open.
+ * Non-breaking migration: an install that already ran a prior activation has a
+ * stored row (the seed wrote '1' before this change), so get_option() returns
+ * that stored '1' and the surface keeps working untouched - the default only
+ * governs installs with no row, i.e. new installs, which now seed '0'.
+ *
+ * This is the ONE reader for every OAuth on/off toggle. Both aafm_oauth_enabled()
+ * and aafm_oauth_dcr_enabled() route through it; there is no raw get_option()
+ * boolean read of those toggles anywhere (verified).
  *
  * @param string $key The toggle option name.
- * @return bool True when the toggle is enabled, false when explicitly disabled.
+ * @return bool True when the toggle is explicitly enabled, false otherwise.
  */
 function aafm_oauth_option_is_on( string $key ): bool {
-	$value = get_option( $key, '1' );
+	$value = get_option( $key, '0' );
 
 	$off = array( false, 0, '0', '', 'false', 'no', 'off' );
 
@@ -42,7 +47,7 @@ function aafm_oauth_option_is_on( string $key ): bool {
 /**
  * Whether the OAuth surface is enabled.
  *
- * @return bool True unless the operator has explicitly disabled OAuth.
+ * @return bool True only when the operator has explicitly enabled OAuth.
  */
 function aafm_oauth_enabled(): bool {
 	return aafm_oauth_option_is_on( 'aafm_oauth_enabled' );
@@ -51,21 +56,24 @@ function aafm_oauth_enabled(): bool {
 /**
  * Whether Dynamic Client Registration is enabled.
  *
- * @return bool True unless the operator has explicitly disabled DCR.
+ * @return bool True only when the operator has explicitly enabled DCR.
  */
 function aafm_oauth_dcr_enabled(): bool {
 	return aafm_oauth_option_is_on( 'aafm_oauth_dcr_enabled' );
 }
 
 /**
- * Seed the OAuth toggle options to "on" at activation, only when they are absent.
+ * Seed the OAuth toggle options to "off" at activation, only when they are absent.
  *
- * The readers default on already, so a fresh install behaves correctly without any
- * stored row. Seeding writes the explicit '1' so the Settings toggles render in their
- * true state from the first load, and a later save that sets '0' is a real persisted
- * value rather than a phantom default. add_option() (not update_option) is deliberate:
- * it writes only when the option does not yet exist, so re-activation never clobbers an
- * operator who has already turned a toggle off.
+ * OAuth and open dynamic client registration are OFF by default: a public
+ * authorization server and self-registration endpoint are a deliberate opt-in, so a
+ * fresh install ships them closed and the operator turns them on in Settings. Seeding
+ * writes the explicit '0' so the Settings toggles render in their true (off) state
+ * from the first load. add_option() (not update_option) is deliberate: it writes only
+ * when the option does not yet exist, so this never clobbers an operator's saved
+ * value - and, crucially, an install that was activated under an earlier version
+ * already holds a stored '1' row, which this leaves untouched. Only genuinely new
+ * installs (no row) get the off default.
  *
  * @return void
  */
@@ -76,8 +84,8 @@ function aafm_oauth_seed_default_options(): void {
 	// determine_current_user. They must stay autoloaded ('yes', the add_option default) so those
 	// hot-path reads never trigger a separate query - switching them to autoload 'no' would be a
 	// per-request regression, not an improvement.
-	add_option( 'aafm_oauth_enabled', '1', '', true );
-	add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
+	add_option( 'aafm_oauth_enabled', '0', '', true );
+	add_option( 'aafm_oauth_dcr_enabled', '0', '', true );
 }
 
 /**
@@ -205,6 +213,12 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
  * @return array<int, string> The exposed set plus the OAuth + MCP session headers.
  */
 function aafm_oauth_filter_exposed_cors_headers( array $headers ): array {
+	// Registered unconditionally so a runtime toggle-on takes effect on the same request; no-op when
+	// OAuth is off, leaving the core CORS headers exactly as they were.
+	if ( ! aafm_oauth_enabled() ) {
+		return $headers;
+	}
+
 	foreach ( array( 'WWW-Authenticate', 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
 		$headers[] = $header;
 	}
@@ -225,6 +239,11 @@ function aafm_oauth_filter_exposed_cors_headers( array $headers ): array {
  * @return array<int, string> The allowed set plus the MCP session + protocol headers.
  */
 function aafm_oauth_filter_allowed_cors_headers( array $headers ): array {
+	// Registered unconditionally; no-op when OAuth is off (see the exposed-headers filter above).
+	if ( ! aafm_oauth_enabled() ) {
+		return $headers;
+	}
+
 	foreach ( array( 'Mcp-Session-Id', 'MCP-Protocol-Version' ) as $header ) {
 		$headers[] = $header;
 	}

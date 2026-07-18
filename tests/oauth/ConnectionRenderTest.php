@@ -23,6 +23,15 @@ use AAFM\Tests\TestCase;
 class ConnectionRenderTest extends TestCase {
 
 	/**
+	 * Enable OAuth for the card-render tests. OAuth is OFF by default now, but this suite
+	 * asserts the enabled-state card and management tables; the off-state test sets '0'.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		update_option( 'aafm_oauth_enabled', '1' );
+	}
+
+	/**
 	 * Restore the OAuth toggle after any test that changed it.
 	 */
 	public function tear_down(): void {

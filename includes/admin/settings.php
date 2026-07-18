@@ -221,6 +221,10 @@ function aafm_uninstall_site_data(): void {
  * trail, and OAuth state only. The activity-log and OAuth tables themselves are kept (rows cleared)
  * so the plugin keeps working immediately afterwards. This cannot be undone.
  *
+ * Wiping the activity log is itself security-relevant, so a tamper-evident marker is written
+ * after the clear (L4, shared with the direct "Clear log" action in
+ * aafm_ajax_clear_log()) - the emptied log always shows who reset the plugin and when.
+ *
  * @return void
  */
 function aafm_reset_plugin(): void {
@@ -228,6 +232,7 @@ function aafm_reset_plugin(): void {
 		delete_option( $option );
 	}
 	aafm_clear_activity_log();
+	aafm_log_activity_cleared_marker();
 	aafm_truncate_oauth_tables();
 }
 

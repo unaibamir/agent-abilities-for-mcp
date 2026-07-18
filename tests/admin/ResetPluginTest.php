@@ -107,8 +107,10 @@ final class ResetPluginTest extends TestCase {
 			$this->assertFalse( get_option( $option, false ), "Option {$option} should be deleted by reset." );
 		}
 
-		// Activity log emptied.
-		$this->assertSame( 0, aafm_activity_count(), 'Activity log should be empty after reset.' );
+		// Activity log emptied except for the L4 tamper marker recording the reset itself.
+		$this->assertSame( 1, aafm_activity_count(), 'Activity log should hold only the reset tamper marker.' );
+		$rows = aafm_query_activity( array() );
+		$this->assertNotSame( 'aafm/get-posts', $rows[0]['ability'], 'The seeded call must not survive the reset.' );
 
 		// Every OAuth data table emptied.
 		foreach ( aafm_oauth_table_suffixes() as $suffix ) {
@@ -159,6 +161,25 @@ final class ResetPluginTest extends TestCase {
 		$table = $wpdb->prefix . $suffix;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	}
+
+	/**
+	 * L4: aafm_reset_plugin() also empties the activity log, so it must leave the same
+	 * tamper-evident marker aafm_ajax_clear_log() does - proving who reset the plugin and when,
+	 * rather than leaving a completely silent, empty log.
+	 */
+	public function test_reset_leaves_a_tamper_marker_row(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		aafm_reset_plugin();
+
+		$rows = aafm_query_activity( array() );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'success', $rows[0]['status'] );
+		$this->assertSame( $admin, (int) $rows[0]['principal_user_id'] );
 	}
 
 	/**

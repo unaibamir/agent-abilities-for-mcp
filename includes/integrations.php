@@ -220,22 +220,70 @@ function aafm_acf_active(): bool {
 }
 
 /**
- * Whether WooCommerce is active, behind a filterable seam.
+ * The minimum WooCommerce version the store abilities require.
  *
- * Real detection is class_exists('WooCommerce'). This is wrapped in its own filter for the same
- * reason the ACF sub-detection is: the PHPUnit suite stubs the WooCommerce host API by defining a
- * WooCommerce marker class process-wide, and a defined class can never be undefined. So a test that
- * needs WooCommerce reported INACTIVE (the host-absent default, the tab "Not installed" state)
- * cannot flip detection back off by removing the aafm_integration_active_woocommerce force filter
- * alone - real detection would still see the stubbed class and report WooCommerce active. Driving
- * this seam to false through aafm_woocommerce_active lets those tests force detection OFF
- * deterministically, mirroring how aafm_acf_active and aafm_seo_active_plugin are pinned.
- * Production passes the real detection through unchanged.
+ * 9.1.0 is a real behavioural cliff, not an arbitrary line: from that release
+ * wc_update_attribute() backfills any field a caller omits from its own current value, so a
+ * name-only update no longer wipes has_archives/order_by/type back to their defaults (M3). Below
+ * 9.1 the same call is destructive. Kept at the actual cliff (never raised past it) so a site
+ * running a working older-but-still-safe version is never disabled by a floor that outran the
+ * real requirement.
+ */
+if ( ! defined( 'AAFM_WOOCOMMERCE_MIN_VERSION' ) ) {
+	define( 'AAFM_WOOCOMMERCE_MIN_VERSION', '9.1' );
+}
+
+/**
+ * The WooCommerce version this site reports, or null when undetectable.
+ *
+ * Wrapped in its own filter, mirroring every detection seam in this file, so the PHPUnit suite can
+ * pin an arbitrary version for the floor check without ever defining the real WC_VERSION constant
+ * - a PHP constant can never be undefined once defined, so a bare constant read here would let one
+ * test's pinned version leak into every later test in the same process. Production passes the real
+ * WC_VERSION through unchanged.
+ *
+ * @return string|null
+ */
+function aafm_woocommerce_version(): ?string {
+	$version = defined( 'WC_VERSION' ) ? (string) WC_VERSION : null;
+
+	/**
+	 * Filters the WooCommerce version reported for the ability floor check.
+	 *
+	 * @param string|null $version Detected version, or null when WC_VERSION is undefined.
+	 */
+	return apply_filters( 'aafm_woocommerce_version', $version );
+}
+
+/**
+ * Whether WooCommerce is active AND at or above the abilities' required version floor, behind a
+ * filterable seam.
+ *
+ * Real detection is class_exists('WooCommerce') plus the AAFM_WOOCOMMERCE_MIN_VERSION floor
+ * (see aafm_woocommerce_version()). This is wrapped in its own filter for the same reason the ACF
+ * sub-detection is: the PHPUnit suite stubs the WooCommerce host API by defining a WooCommerce
+ * marker class process-wide, and a defined class can never be undefined. So a test that needs
+ * WooCommerce reported INACTIVE (the host-absent default, the tab "Not installed" state) cannot
+ * flip detection back off by removing the aafm_integration_active_woocommerce force filter alone -
+ * real detection would still see the stubbed class and report WooCommerce active. Driving this seam
+ * to false through aafm_woocommerce_active lets those tests force detection OFF deterministically,
+ * mirroring how aafm_acf_active and aafm_seo_active_plugin are pinned. Production passes the real
+ * detection through unchanged.
+ *
+ * Fail-safe: when WC_VERSION cannot be determined (aafm_woocommerce_version() returns null), the
+ * floor is treated as met rather than failing the site closed - a detection quirk must never
+ * disable a working store's WC abilities. Below the floor, the WC abilities simply do not
+ * register (see aafm_integration_status() for the Integrations-tab reason line); this never fatals
+ * and never touches another integration.
  *
  * @return bool
  */
 function aafm_woocommerce_active(): bool {
 	$active = class_exists( 'WooCommerce' );
+	if ( $active ) {
+		$version = aafm_woocommerce_version();
+		$active  = null === $version || version_compare( $version, AAFM_WOOCOMMERCE_MIN_VERSION, '>=' );
+	}
 
 	/**
 	 * Filters whether WooCommerce is reported active. Production passes real detection through; the

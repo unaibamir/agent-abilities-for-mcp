@@ -317,6 +317,45 @@ final class IntegrationsTabTest extends TestCase {
 		$this->assertStringContainsString( 'data-risk=', $html );
 	}
 
+	/**
+	 * WS-B: a WooCommerce site running below the abilities' required version floor is genuinely
+	 * active as a WP plugin - it must NOT get the generic "Not installed"/"Inactive" copy, but a
+	 * specific "requires WooCommerce X.Y+" reason naming the version actually detected.
+	 */
+	public function test_woocommerce_card_shows_below_floor_reason(): void {
+		$this->acting_as( 'administrator' );
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			eval( 'class WooCommerce {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- class-only marker stub for the floor test, never shipped.
+		}
+		add_filter(
+			'aafm_woocommerce_version',
+			static function () {
+				return '9.0.1';
+			}
+		);
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+
+		try {
+			$this->assertSame( 'below_floor', aafm_integration_status( 'woocommerce' ) );
+
+			ob_start();
+			aafm_render_integrations_tab();
+			$html = (string) ob_get_clean();
+
+			$this->assertStringContainsString( 'Update required', $html );
+			$this->assertStringContainsString( 'WooCommerce', $html );
+			$this->assertStringContainsString( AAFM_WOOCOMMERCE_MIN_VERSION, $html );
+			$this->assertStringContainsString( '9.0.1', $html );
+		} finally {
+			remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+			remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+			remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+			remove_all_filters( 'aafm_woocommerce_version' );
+		}
+	}
+
 	public function test_tab_has_exactly_one_form_and_no_nested_form(): void {
 		// The Wave-0 lesson: never nest a <form>. The tab renders one outer form for the
 		// per-ability toggles; any secondary control is a <div> + type="button".

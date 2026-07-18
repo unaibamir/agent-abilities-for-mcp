@@ -62,15 +62,24 @@ function aafm_integration_cards(): array {
  * The detected status of an integration on this site.
  *
  * 'active'             - host plugin active (aafm_integration_active() true).
+ * 'below_floor'        - WooCommerce only: the plugin is active but below the abilities'
+ *                         required version floor (AAFM_WOOCOMMERCE_MIN_VERSION), so the WC
+ *                         abilities do not register. Checked before the file-presence probe so a
+ *                         genuinely-active-but-outdated store gets the accurate reason, not the
+ *                         generic "Not installed"/"Inactive" copy.
  * 'installed_inactive' - a candidate host plugin file is present but not active.
  * 'not_installed'      - no candidate host plugin file is present.
  *
  * @param string $slug Integration slug.
- * @return string One of 'active' | 'installed_inactive' | 'not_installed'.
+ * @return string One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
  */
 function aafm_integration_status( string $slug ): string {
 	if ( aafm_integration_active( $slug ) ) {
 		return 'active';
+	}
+
+	if ( 'woocommerce' === $slug && aafm_woocommerce_below_version_floor() ) {
+		return 'below_floor';
 	}
 
 	$cards = aafm_integration_cards();
@@ -81,6 +90,27 @@ function aafm_integration_status( string $slug ): string {
 		}
 	}
 	return 'not_installed';
+}
+
+/**
+ * Whether WooCommerce is installed and active as a host plugin, but below the abilities'
+ * required version floor.
+ *
+ * A separate, real (unfiltered by aafm_integration_active_woocommerce) probe purely for the
+ * Integrations tab's reason line - aafm_woocommerce_active() already reports "not active" for a
+ * below-floor site, which is correct for ability registration but would otherwise show the
+ * misleading generic "Not installed"/"Inactive" copy for a store that is genuinely running,
+ * just on an old WooCommerce. Reads the same aafm_woocommerce_version() seam as the floor check
+ * so a test can pin both consistently.
+ *
+ * @return bool
+ */
+function aafm_woocommerce_below_version_floor(): bool {
+	if ( ! class_exists( 'WooCommerce' ) ) {
+		return false;
+	}
+	$version = aafm_woocommerce_version();
+	return null !== $version && ! version_compare( $version, AAFM_WOOCOMMERCE_MIN_VERSION, '>=' );
 }
 
 /**
@@ -241,12 +271,13 @@ function aafm_render_integrations_tab(): void {
 /**
  * The status pill markup for an integration card head.
  *
- * @param string $status One of 'active' | 'installed_inactive' | 'not_installed'.
+ * @param string $status One of 'active' | 'below_floor' | 'installed_inactive' | 'not_installed'.
  * @return string Escaped HTML.
  */
 function aafm_integration_status_pill( string $status ): string {
 	$map                   = array(
 		'active'             => array( 'aafm-pill-success', __( 'Active', 'agent-abilities-for-mcp' ) ),
+		'below_floor'        => array( 'aafm-pill-warn', __( 'Update required', 'agent-abilities-for-mcp' ) ),
 		'installed_inactive' => array( 'aafm-pill-warn', __( 'Inactive', 'agent-abilities-for-mcp' ) ),
 		'not_installed'      => array( 'aafm-pill-neutral', __( 'Not installed', 'agent-abilities-for-mcp' ) ),
 	);
@@ -272,6 +303,14 @@ function aafm_integration_status_note( string $slug, string $status ): string {
 	switch ( $status ) {
 		case 'active':
 			return __( 'Active. Turn on the abilities you want this agent to use.', 'agent-abilities-for-mcp' );
+		case 'below_floor':
+			return sprintf(
+				/* translators: 1: the integration plugin name, e.g. WooCommerce. 2: the minimum required version. 3: the version installed on this site. */
+				__( '%1$s %2$s or newer is required for these abilities; this site is running %3$s.', 'agent-abilities-for-mcp' ),
+				$label,
+				AAFM_WOOCOMMERCE_MIN_VERSION,
+				(string) aafm_woocommerce_version()
+			);
 		case 'installed_inactive':
 			return sprintf(
 				/* translators: %s: the integration plugin name, e.g. WooCommerce. */

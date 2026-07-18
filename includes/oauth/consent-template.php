@@ -71,13 +71,14 @@ function aafm_oauth_site_initials( string $site_name ): string {
  * @return void
  */
 function aafm_oauth_render_consent_page( array $view ): void {
-	$client_name   = isset( $view['client_name'] ) ? (string) $view['client_name'] : '';
-	$user_login    = isset( $view['user_login'] ) ? (string) $view['user_login'] : '';
-	$site_name     = isset( $view['site_name'] ) ? (string) $view['site_name'] : '';
-	$redirect_host = isset( $view['redirect_host'] ) ? (string) $view['redirect_host'] : '';
-	$action_url    = isset( $view['action_url'] ) ? (string) $view['action_url'] : '';
-	$nonce_field   = isset( $view['nonce_field'] ) ? (string) $view['nonce_field'] : '';
-	$hidden_inputs = isset( $view['hidden_inputs'] ) && is_array( $view['hidden_inputs'] )
+	$client_name    = isset( $view['client_name'] ) ? (string) $view['client_name'] : '';
+	$user_login     = isset( $view['user_login'] ) ? (string) $view['user_login'] : '';
+	$site_name      = isset( $view['site_name'] ) ? (string) $view['site_name'] : '';
+	$redirect_host  = isset( $view['redirect_host'] ) ? (string) $view['redirect_host'] : '';
+	$high_privilege = ! empty( $view['high_privilege'] );
+	$action_url     = isset( $view['action_url'] ) ? (string) $view['action_url'] : '';
+	$nonce_field    = isset( $view['nonce_field'] ) ? (string) $view['nonce_field'] : '';
+	$hidden_inputs  = isset( $view['hidden_inputs'] ) && is_array( $view['hidden_inputs'] )
 		? $view['hidden_inputs']
 		: array();
 
@@ -197,6 +198,19 @@ function aafm_oauth_render_consent_page( array $view ): void {
 
 	// "Acting as" note.
 	echo wp_kses( '<div class="acting">' . $acting_icon . '<p>' . $acting . '</p></div>', aafm_admin_allowed_html() );
+
+	// High-privilege warning. A token is minted with the approving user's own capabilities, so
+	// approving as an administrator (or any user who can escalate) hands the app full administrative
+	// reach. Make that unmissable and steer the operator toward connecting as a limited agent user.
+	// Plain text so the warning survives even if the stylesheet is blocked.
+	if ( $high_privilege ) {
+		echo '<div class="hi-priv">';
+		echo wp_kses( $warn_icon, aafm_svg_allowed_html() );
+		echo '<p><strong>' . esc_html__( 'This is an administrator account.', 'agent-abilities-for-mcp' ) . '</strong> '
+			. esc_html__( 'Approving lets the app act with full administrator access, including changing settings, users, and content. If you do not need that, deny this and connect as a dedicated agent user on a limited role instead.', 'agent-abilities-for-mcp' )
+			. '</p>';
+		echo '</div>';
+	}
 
 	// Governance guarantees.
 	echo '<div class="guarantees">';

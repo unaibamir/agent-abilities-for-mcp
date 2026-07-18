@@ -546,6 +546,43 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * The high-privilege warning shows only when the approving account can administer the site.
+	 */
+	public function test_consent_render_shows_high_privilege_warning_only_for_admins(): void {
+		$base = array(
+			'client_name'   => 'App',
+			'user_login'    => 'admin',
+			'site_name'     => 'Example Site',
+			'redirect_host' => 'app.example',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( array( 'high_privilege' => true ) + $base );
+		$admin_html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'This is an administrator account.', $admin_html );
+		$this->assertStringContainsString( 'full administrator access', $admin_html );
+
+		ob_start();
+		aafm_oauth_render_consent_page( array( 'high_privilege' => false ) + $base );
+		$limited_html = (string) ob_get_clean();
+		$this->assertStringNotContainsString( 'This is an administrator account.', $limited_html );
+	}
+
+	/**
+	 * The privilege check flags site administrators and users who can escalate, not a subscriber.
+	 */
+	public function test_high_privilege_helper_flags_admins_not_subscribers(): void {
+		$admin      = get_userdata( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$subscriber = get_userdata( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
+
+		$this->assertTrue( aafm_oauth_user_is_high_privilege( $admin ) );
+		$this->assertFalse( aafm_oauth_user_is_high_privilege( $subscriber ) );
+	}
+
+	/**
 	 * The redirect-origin helper reduces a redirect_uri to scheme://host[:port] and
 	 * strips the path and query, so only a bare origin can ever reach the CSP.
 	 */

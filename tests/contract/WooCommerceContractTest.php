@@ -74,6 +74,56 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * Item-1 contract: `WC_Settings_API::update_option()` mutates the in-memory settings copy BEFORE
+	 * the DB write, so a same-instance `get_option()` read reflects the REQUESTED value even when a
+	 * sanitize filter diverts what actually persists. Verifying a gateway write against
+	 * `$gateway->get_option()` therefore reports a false success; the executor must read the
+	 * DB-persisted option row (`get_option_key()`) instead. This pins that divergence against real WC.
+	 */
+	public function test_gateway_update_option_mutates_in_memory_before_persist(): void {
+		// Force WooCommerce to load its bundled gateway classes.
+		if ( ! class_exists( '\WC_Gateway_BACS' ) && function_exists( 'WC' ) && WC()->payment_gateways() ) {
+			WC()->payment_gateways()->payment_gateways();
+		}
+		if ( ! class_exists( '\WC_Gateway_BACS' ) ) {
+			$this->markTestSkipped( 'BACS gateway class unavailable.' );
+		}
+
+		$gateway    = new \WC_Gateway_BACS();
+		$option_key = $gateway->get_option_key();
+		$filter     = 'woocommerce_settings_api_sanitized_fields_' . $gateway->id;
+
+		// A sanitize filter that diverts what lands in the DB, modelling a normalization or rejection
+		// that changes the persisted value away from the copy update_option() cached in memory.
+		$diverter = static function ( $settings ) {
+			$settings['title'] = 'AAFM_PERSISTED_DIFFERENT';
+			return $settings;
+		};
+		add_filter( $filter, $diverter );
+		$gateway->update_option( 'title', 'AAFM_IN_MEMORY' );
+		remove_filter( $filter, $diverter );
+
+		// The gateway's in-memory copy holds the value we passed - set BEFORE the DB write.
+		$this->assertSame(
+			'AAFM_IN_MEMORY',
+			$gateway->get_option( 'title' ),
+			'get_option() reads $this->settings, set before persist - it does not reflect the diverted DB value.'
+		);
+
+		// The DB-persisted row holds the diverted value, not the in-memory copy. Verifying against
+		// get_option() would falsely pass; only reading the persisted row catches the divergence.
+		$persisted = get_option( $option_key );
+		$this->assertIsArray( $persisted, 'The gateway settings option must have been written.' );
+		$this->assertSame(
+			'AAFM_PERSISTED_DIFFERENT',
+			$persisted['title'],
+			'The persisted row diverges from the in-memory copy - the in-memory-before-persist false-success vector.'
+		);
+
+		delete_option( $option_key );
+	}
+
+	/**
 	 * Refund crash risk (audit F3): `get_taxes()` lives on the product/fee/shipping order-item
 	 * subclasses, NOT on the base WC_Order_Item. The stub fabricated it on the base class, hiding a
 	 * fatal when a coupon/tax line id is passed to the refund ability.

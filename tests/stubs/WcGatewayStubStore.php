@@ -125,26 +125,33 @@ class WcGatewayStubStore {
 			return false;
 		}
 		if ( self::$force_save_failure ) {
-			// Reject the write: nothing persists, so a subsequent read-back sees the old value.
+			// Reject the write: nothing persists to the store OR the WP option, so a read-back of the
+			// DB-persisted option row sees the old value and the executor's mismatch path is exercised.
 			return false;
 		}
 		$existing = self::$gateways[ $gateway_id ]['settings'][ $key ] ?? null;
-		if ( $existing === $value ) {
-			// Unchanged - WordPress update_option() returns false but the stored value already holds it.
-			return false;
+		$changed  = ( $existing !== $value );
+		if ( $changed ) {
+			self::$gateways[ $gateway_id ]['settings'][ $key ] = $value;
+			// Mirror top-level fields that are aliased from settings.
+			if ( 'title' === $key ) {
+				self::$gateways[ $gateway_id ]['title'] = (string) $value;
+			}
+			if ( 'description' === $key ) {
+				self::$gateways[ $gateway_id ]['description'] = (string) $value;
+			}
+			if ( 'enabled' === $key ) {
+				self::$gateways[ $gateway_id ]['enabled'] = (string) $value;
+			}
 		}
-		self::$gateways[ $gateway_id ]['settings'][ $key ] = $value;
-		// Mirror top-level fields that are aliased from settings.
-		if ( 'title' === $key ) {
-			self::$gateways[ $gateway_id ]['title'] = (string) $value;
-		}
-		if ( 'description' === $key ) {
-			self::$gateways[ $gateway_id ]['description'] = (string) $value;
-		}
-		if ( 'enabled' === $key ) {
-			self::$gateways[ $gateway_id ]['enabled'] = (string) $value;
-		}
-		return true;
+		// Mirror the full settings array into the wp_options row WC_Settings_API::get_option_key()
+		// exposes, so production can verify the write against the DB-persisted value rather than the
+		// gateway's in-memory copy. Idempotent, so the unchanged-value case (nothing changed, but the
+		// option must still reflect the current settings) reads back as a match rather than a false miss.
+		update_option( 'woocommerce_' . $gateway_id . '_settings', self::$gateways[ $gateway_id ]['settings'] );
+		// WordPress update_option() returns false when the value was unchanged (no write needed) - NOT
+		// only on failure. Mirror that: the return signals whether THIS setting changed.
+		return $changed;
 	}
 
 	/**

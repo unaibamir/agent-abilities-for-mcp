@@ -420,12 +420,20 @@ function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
 			return aafm_generic_error();
 		}
 	}
-	// Verify the persisted state matches what we asked for. get_option() reflects the gateway's
-	// in-memory settings, which update_option() already updated, so a mismatch here means the write
-	// genuinely did not stick.
-	foreach ( $desired as $key => $value ) {
-		if ( (string) $gateway->get_option( $key ) !== (string) $value ) {
-			return aafm_generic_error();
+	// Verify the persisted state matches what we asked for, reading the value WooCommerce actually
+	// wrote to the database - NOT the gateway's in-memory copy. WC_Settings_API::update_option() sets
+	// $this->settings[$key] in memory BEFORE the DB write, and get_option() reads that in-memory copy,
+	// so a failed write (or a sanitize filter that altered the value on the way to disk) would still
+	// read back as a match through $gateway->get_option() and report a false success. Re-read the
+	// persisted settings row (get_option_key()) so only a genuinely persisted value counts as success.
+	if ( ! empty( $desired ) ) {
+		$persisted = get_option( $gateway->get_option_key(), array() );
+		$persisted = is_array( $persisted ) ? $persisted : array();
+		foreach ( $desired as $key => $value ) {
+			$stored = array_key_exists( $key, $persisted ) ? (string) $persisted[ $key ] : '';
+			if ( $stored !== (string) $value ) {
+				return aafm_generic_error();
+			}
 		}
 	}
 	// The response order reflects what was just requested when the request set one (the

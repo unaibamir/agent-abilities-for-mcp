@@ -21,6 +21,122 @@ defined( 'ABSPATH' ) || exit;
 add_filter( 'aafm_abilities_registry', 'aafm_register_rankmath_definitions' );
 add_filter( 'aafm_abilities_registry_integrations', 'aafm_register_rankmath_full_definitions' );
 
+// Production rendered-head seam. Registered unconditionally because host plugins may load after us
+// on plugins_loaded (so a load-time activity check could miss Rank Math); the callback's own
+// function_exists('rank_math') + rank_math()->head guards make it inert until Rank Math is genuinely
+// present. Under the PHPUnit stubs rank_math() is undefined, so this passes through and the test
+// stub's own filter supplies the canned head - production and test wiring never collide (M1: until
+// this was added, no production callback ever ran, so rankmath-get-head returned head:'' on every
+// real store; the unit test only ever exercised the test stub's canned filter, never this path).
+add_filter( 'aafm_seo_rendered_head', 'aafm_rankmath_rendered_head', 10, 3 );
+
+/**
+ * Produce Rank Math's rendered SEO head markup for a post.
+ *
+ * Rank Math exposes no string-returning per-post head API: its head is emitted on wp_head via
+ * rank_math()->head->head(), which echoes against the queried object (title, description, canonical,
+ * robots, OG/Twitter, JSON-LD schema). As a side effect it permanently removes a handful of core
+ * wp_head actions it replaces (rel_canonical, index_rel_link, ...) - the same removal that already
+ * happens on any real front-end request once Rank Math is active, not a new side effect introduced
+ * here. So this renders inside a controlled, fully restored singular query for the post: snapshot
+ * the main-query globals, build a throwaway singular WP_Query, buffer head(), then restore the
+ * originals exactly (the same shape as aafm_aioseo_rendered_head()). Honors $source (passthrough
+ * unless 'rankmath') and guards the real API defensively: a missing head object, a thrown error, or
+ * empty output all fall back to the passed head rather than fataling.
+ *
+ * Rank Math only builds rank_math()->head (and the OG/Twitter/schema generators that feed it) inside
+ * Frontend::integrations(), which Rank Math itself hooks to the 'wp' action - an action that never
+ * fires while WordPress is dispatching a REST request (core's REST bootstrap short-circuits
+ * parse_request() and exits before 'wp' runs), which is how every ability call reaches this code. So
+ * ->head would otherwise never exist here even on a fully-registered site. When rank_math()->frontend
+ * exists (set by Rank Math's own plugins_loaded handler once registration is valid or skipped) but
+ * ->head does not yet, this triggers frontend->integrations() once - the exact real-vendor call a
+ * normal front-end pageview would have made - before checking for ->head again.
+ *
+ * @param string $head    Head markup accumulated so far (passthrough default).
+ * @param int    $post_id Post id.
+ * @param string $source  Integration slug the caller is asking for.
+ * @return string
+ */
+function aafm_rankmath_rendered_head( string $head, int $post_id, string $source ): string {
+	if ( 'rankmath' !== $source || ! function_exists( 'rank_math' ) ) {
+		return $head;
+	}
+
+	$plugin = rank_math();
+	if ( ! is_object( $plugin ) ) {
+		return $head;
+	}
+
+	if ( ! isset( $plugin->head ) && isset( $plugin->frontend ) && is_object( $plugin->frontend ) && method_exists( $plugin->frontend, 'integrations' ) ) {
+		try {
+			$plugin->frontend->integrations();
+		} catch ( \Throwable $e ) {
+			return $head; // The real API shape changed or threw: stay best-effort, never fatal.
+		}
+	}
+
+	if ( ! isset( $plugin->head ) || ! is_object( $plugin->head ) || ! method_exists( $plugin->head, 'head' ) ) {
+		return $head; // Rank Math present but no head renderer (e.g. unregistered, or a differently-shaped build): best-effort.
+	}
+
+	$post = get_post( $post_id );
+	if ( ! $post instanceof WP_Post ) {
+		return $head;
+	}
+
+	// Snapshot the query globals Rank Math reads, so the throwaway query never leaks out of this call.
+	$saved_wp_query     = $GLOBALS['wp_query'] ?? null;
+	$saved_wp_the_query = $GLOBALS['wp_the_query'] ?? null;
+	$saved_post         = $GLOBALS['post'] ?? null;
+
+	$rendered = '';
+	try {
+		$temp_query = new WP_Query(
+			array(
+				'p'                      => $post_id,
+				'post_type'              => $post->post_type,
+				'posts_per_page'         => 1,
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => true,
+				'update_post_term_cache' => false,
+			)
+		);
+		// Point the main-query globals at our singular query so is_singular()/get_queried_object()
+		// resolve to this post while Rank Math builds the head. Both originals are snapshotted above
+		// and restored in the finally block, so this swap never leaks past this call.
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_query'] = $temp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- temporary, restored in finally.
+		$GLOBALS['wp_the_query'] = $temp_query;
+		if ( $temp_query->have_posts() ) {
+			$temp_query->the_post();
+		}
+
+		ob_start();
+		$plugin->head->head();
+		$rendered = (string) ob_get_clean();
+	} catch ( \Throwable $e ) {
+		// Make sure a half-open buffer from a throw inside head() is closed before we bail.
+		if ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+		$rendered = '';
+	} finally {
+		// Restore the originals exactly (order matters: globals first, then reset postdata).
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['wp_query'] = $saved_wp_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['wp_the_query'] = $saved_wp_the_query;
+		// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- restoring the snapshotted original.
+		$GLOBALS['post'] = $saved_post;
+		wp_reset_postdata();
+	}
+
+	$rendered = trim( $rendered );
+	return '' !== $rendered ? $rendered : $head;
+}
+
 /**
  * Contribute the Rank Math definitions to the registry, but only when Rank Math is active. Host
  * inactive: the registry is returned unchanged.

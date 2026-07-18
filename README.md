@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.3.0 |
+| **Stable tag** | 1.3.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -181,6 +181,32 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.3.1
+
+* **Fix:** wc-list-customers can now filter by role, so a customer using a role other than "customer" (for example a subscriber on an LMS or membership store) is no longer invisible to the list.
+* **Fix:** wc-list-order-notes now correctly detects which notes were written by a person versus WooCommerce itself.
+* **Fix:** A payment gateway's display order now reflects its real position in WooCommerce's own list instead of always reporting zero.
+* **Fix:** Saving a payment gateway is now verified against the value WooCommerce actually stored, instead of assuming the write took effect.
+* **Fix:** The refund executor no longer crashes on a gateway that has no tax method.
+* **Fix:** Updating a WooCommerce product attribute now works the same way across WooCommerce versions instead of assuming a single schema.
+* **Feature:** WooCommerce abilities now require WooCommerce 9.1 or newer. Below that, the WooCommerce tools simply do not register, with a clear reason shown on the Integrations screen, never a fatal error.
+* **Fix:** rankmath-get-head now returns a clear error instead of an empty success when Rank Math's own head renderer is not available.
+* **Fix:** AIOSEO write verification no longer reports failure when AIOSEO makes its own benign normalization to a saved value.
+* **Fix:** A term's parent must now belong to the same hierarchical taxonomy as the term itself.
+* **Fix:** Force-deleting a page no longer reports success when another plugin vetoed the delete.
+* **Fix:** count-media no longer counts items sitting in the trash.
+* **Fix:** upload-media now fails with a clear error instead of a fatal one when the server is missing the fileinfo PHP extension.
+* **Fix:** update-site-settings now reports failure when WordPress silently reverts a value it considers invalid, instead of reporting success on a change that never took effect.
+* **Fix:** Abilities from an inactive integration are no longer wiped out when the abilities form is saved.
+* **Fix:** The agent-user picker now finds every user with an application password, not just the first page of users.
+* **Fix:** A filtered-out ability row is now actually hidden instead of staying on screen.
+* **Fix:** Corrected the reset dialog, the rate-limit help, and the privacy disclosures to match what the plugin actually does.
+* **Feature:** The activity log now attributes each call to its OAuth client, shows a result count for list and read calls, and leaves a marker behind when the log is cleared.
+* **Fix:** Denied OAuth bearer authentication attempts are now logged, and only when they match a real, if invalid, token.
+* **Fix:** The OAuth consent screen and the authorization code redirect are never cached.
+* **Chore:** The release zip no longer ships the mcp-adapter's Node package metadata, making it smaller.
+* **Chore:** Added a real-vendor contract test suite that runs against pinned WooCommerce, Rank Math, AIOSEO, and ACF plugin code, to catch API-shape regressions like several of the fixes above before release instead of after.
 
 ### 1.3.0
 

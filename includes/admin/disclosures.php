@@ -23,9 +23,9 @@ function aafm_ability_disclosures(): array {
 	return array(
 		// Reads.
 		'aafm/get-posts'                   => __( 'Lists posts by type, status, or search. Returns the title, status, excerpt, link, dates, and author id, never the full body or private fields.', 'agent-abilities-for-mcp' ),
-		'aafm/get-post'                    => __( 'Reads one post by id: title, status, excerpt, link, dates, and author id. Not the full body, not protected fields.', 'agent-abilities-for-mcp' ),
+		'aafm/get-post'                    => __( 'Reads one post by id: title, status, excerpt, link, dates, author id, and the full body (rendered by default, raw on request). A password-protected post never exposes its body.', 'agent-abilities-for-mcp' ),
 		'aafm/get-pages'                   => __( 'Lists pages by status or search, with the same fields as posts.', 'agent-abilities-for-mcp' ),
-		'aafm/get-page'                    => __( 'Reads one page by id, with the same curated fields as a post.', 'agent-abilities-for-mcp' ),
+		'aafm/get-page'                    => __( 'Reads one page by id, with the same fields as a post, including the full body.', 'agent-abilities-for-mcp' ),
 		'aafm/get-post-meta'               => __( 'Reads one allowlisted scalar meta value from a post the agent can already edit. Protected and underscore keys are off limits.', 'agent-abilities-for-mcp' ),
 		'aafm/get-all-post-meta'           => __( 'Reads every allowlisted scalar meta value from a post the agent can already edit, as a key/value map. Protected, underscore, and non-scalar values are left out.', 'agent-abilities-for-mcp' ),
 		'aafm/get-comments'                => __( 'Lists approved comments on a post. Author email and IP are never returned.', 'agent-abilities-for-mcp' ),

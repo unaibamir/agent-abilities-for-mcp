@@ -739,6 +739,22 @@ function aafm_exec_rankmath_get_head( array $input ) {
 	/** This filter is documented in includes/abilities/yoast.php (the rendered-head seam). */
 	$head = (string) apply_filters( 'aafm_seo_rendered_head', '', $id, 'rankmath' );
 
+	if ( '' === trim( $head ) ) {
+		// Unlike Yoast/AIOSEO, Rank Math emits a head (title, robots, canonical, OG) for every public
+		// post, so an empty result never means "this post has no SEO head" - it means the renderer
+		// could not build one. In practice that is a Rank Math install whose setup wizard was never
+		// completed or skipped: rank_math()->frontend (and therefore ->head) is never initialised, so
+		// the renderer returns '' on every request. Report that honestly instead of handing back an
+		// empty head with success, which reads as a successfully-rendered-but-empty head. We do not
+		// force the frontend to initialise here: that would mutate Rank Math's registration state as a
+		// side effect of a read.
+		return new WP_Error(
+			'aafm_rankmath_head_unavailable',
+			__( 'Rank Math could not render the SEO head for this post. This usually means the Rank Math setup wizard has not been completed or skipped, so its front-end head renderer is not initialised.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 409 )
+		);
+	}
+
 	return array(
 		'post_id' => $id,
 		'plugin'  => 'rankmath',

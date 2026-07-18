@@ -485,6 +485,17 @@ function aafm_upload_allowlist(): array {
 }
 
 /**
+ * Whether the PHP fileinfo extension is available to byte-sniff an upload.
+ * Filterable so the missing-extension path can be exercised in tests without
+ * actually removing the extension from the runtime.
+ *
+ * @return bool
+ */
+function aafm_fileinfo_available(): bool {
+	return (bool) apply_filters( 'aafm_fileinfo_available', extension_loaded( 'fileinfo' ) );
+}
+
+/**
  * Execute aafm/upload-media - base64 only, byte-sniffed, allow-listed, SVG
  * rejected, size-capped, filename sanitized, WordPress owns the path.
  *
@@ -494,6 +505,9 @@ function aafm_upload_allowlist(): array {
  * - The real MIME is derived from the DECODED BYTES (finfo), never the supplied
  *   filename, extension, or any client mime - and must be on the raster-image
  *   allow-list. SVG and executable payloads fail this gate and no file is written.
+ * - fileinfo availability is guarded (aafm_fileinfo_available) before finfo is
+ *   ever instantiated, so a host without the extension errors instead of
+ *   fataling on a missing class.
  * - The filename is sanitized (sanitize_file_name) and rebuilt with the canonical
  *   extension for the real type; traversal segments cannot survive.
  * - wp_upload_bits() writes the bytes inside the uploads dir under WordPress's
@@ -518,6 +532,10 @@ function aafm_exec_upload_media( array $input ) {
 	// Size cap from WordPress, enforced before anything is written.
 	if ( strlen( $decoded ) > (int) wp_max_upload_size() ) {
 		return new WP_Error( 'aafm_too_large', __( 'File exceeds the maximum upload size.', 'agent-abilities-for-mcp' ) );
+	}
+
+	if ( ! aafm_fileinfo_available() ) {
+		return new WP_Error( 'aafm_fileinfo_missing', __( 'The server is missing the PHP fileinfo extension, required to verify upload contents.', 'agent-abilities-for-mcp' ) );
 	}
 
 	// Derive the true MIME from the decoded BYTES, never the supplied name/extension.

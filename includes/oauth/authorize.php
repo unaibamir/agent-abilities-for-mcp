@@ -316,12 +316,37 @@ function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
 }
 
 /**
+ * The fixed (non-CSP) security headers sent on every consent-flow render: the consent
+ * screen itself and its local error pages. Content-Security-Policy is built separately
+ * by aafm_oauth_consent_csp(), which needs its own $redirect_origin argument; this is
+ * the rest of the set.
+ *
+ * Cache-Control: no-store keeps the page out of any shared cache and a browser's
+ * back/forward cache - both the consent screen and its error variants carry OAuth flow
+ * state (client name, redirect host, the PKCE-bound nonce field) that must never be
+ * replayed from a stale cached copy.
+ *
+ * Kept as a pure array-returning function (rather than folded into the header()-calling
+ * wrapper below) so the header set is directly assertable in tests without needing to
+ * inspect real header() output.
+ *
+ * @return array<string,string> Header name => value.
+ */
+function aafm_oauth_consent_security_headers(): array {
+	return array(
+		'X-Frame-Options' => 'DENY',
+		'Referrer-Policy' => 'no-referrer',
+		'Cache-Control'   => 'no-store',
+	);
+}
+
+/**
  * Send the strict security headers used on the consent render.
  *
- * No external scripts or styles, framing denied, and no referrer leakage of the
- * authorize URL (which carries the PKCE challenge and state). The form-action source
- * list is built by aafm_oauth_consent_csp(); see it for why the validated client origin
- * is allowed there on the consent page but not on local error pages.
+ * No external scripts or styles, framing denied, no referrer leakage of the authorize
+ * URL (which carries the PKCE challenge and state), and never cached. The form-action
+ * source list is built by aafm_oauth_consent_csp(); see it for why the validated client
+ * origin is allowed there on the consent page but not on local error pages.
  *
  * @param string $redirect_origin Validated client origin to allow in form-action, or
  *                                 '' for 'self' only.
@@ -329,8 +354,9 @@ function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
  */
 function aafm_oauth_send_consent_headers( string $redirect_origin = '' ): void {
 	header( 'Content-Security-Policy: ' . aafm_oauth_consent_csp( $redirect_origin ) );
-	header( 'X-Frame-Options: DENY' );
-	header( 'Referrer-Policy: no-referrer' );
+	foreach ( aafm_oauth_consent_security_headers() as $name => $value ) {
+		header( "{$name}: {$value}" );
+	}
 }
 
 /**
@@ -428,6 +454,10 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 		$args['state'] = $valid['state'];
 	}
 	$url = add_query_arg( array_map( 'rawurlencode', $args ), $valid['redirect_uri'] );
+	// The 302 carries a freshly-minted, single-use authorization code in its Location
+	// URL; a cached copy of this response would hand that code to whoever reads the
+	// cache, so it must never be stored (same guarantee as the consent render).
+	header( 'Cache-Control: ' . aafm_oauth_consent_security_headers()['Cache-Control'] );
 	// phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- redirect_uri is allowlist-validated against the client registration above.
 	wp_redirect( $url );
 	exit;

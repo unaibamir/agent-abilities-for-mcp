@@ -654,4 +654,20 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringNotContainsString( 'app.example', $csp );
 		$this->assertStringNotContainsString( 'https://', $csp );
 	}
+
+	/**
+	 * L2: the fixed security headers sent on every consent-flow render (the consent screen
+	 * itself and its local error pages) include Cache-Control: no-store, so a shared cache or
+	 * a browser's back/forward cache never stores a page carrying OAuth flow state (client
+	 * name, redirect host, PKCE-bound nonce).
+	 */
+	public function test_consent_security_headers_include_no_store(): void {
+		$headers = aafm_oauth_consent_security_headers();
+
+		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		// Locked in alongside Cache-Control so this helper stays the single source of truth
+		// for the fixed (non-CSP) consent-flow headers.
+		$this->assertSame( 'DENY', $headers['X-Frame-Options'] );
+		$this->assertSame( 'no-referrer', $headers['Referrer-Policy'] );
+	}
 }

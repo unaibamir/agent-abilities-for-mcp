@@ -146,6 +146,106 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertContains( 'aafm/null-perm', $abilities, 'A null permission return must be audited as denied.' );
 	}
 
+	/**
+	 * L5: the activity log recorded argument KEYS but never how much data a list/read call
+	 * actually returned. A read ability whose result carries a 'total' key (the shape every
+	 * list ability in this plugin already returns - see aafm_exec_get_posts()) logs that count.
+	 */
+	public function test_read_call_with_total_logs_result_count(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/list-things',
+			array(
+				'label'               => 'List things',
+				'description'         => 'Returns a list with a total.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(
+					'things' => array( 'a', 'b', 'c' ),
+					'total'  => 3,
+				),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/list-things' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 3, (int) $rows[0]['result_count'] );
+	}
+
+	/**
+	 * Without an explicit 'total', the magnitude falls back to the length of the first
+	 * sequential-list value in the result (the shape a simpler read ability might return).
+	 */
+	public function test_read_call_without_total_falls_back_to_list_length(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/list-no-total',
+			array(
+				'label'               => 'List, no total',
+				'description'         => 'Returns a bare list.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'things' => array( 'a', 'b' ) ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/list-no-total' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 2, (int) $rows[0]['result_count'] );
+	}
+
+	/**
+	 * A write ability's result is never given a magnitude - only list/read calls are scoped in,
+	 * so a write's return shape is never guessed at.
+	 */
+	public function test_write_call_never_logs_a_result_count(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/write-thing',
+			array(
+				'label'               => 'Write thing',
+				'description'         => 'A write ability.',
+				'category'            => 'aafm-writes',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'items' => array( 1, 2, 3 ) ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/write-thing' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertNull( $rows[0]['result_count'] );
+	}
+
+	/**
+	 * An errored call never logs a magnitude either - there is no result to measure.
+	 */
+	public function test_errored_read_call_never_logs_a_result_count(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/read-error',
+			array(
+				'label'               => 'Read error',
+				'description'         => 'A read ability that errors.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => new \WP_Error( 'boom', 'boom' ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/read-error' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 'error', $rows[0]['status'] );
+		$this->assertNull( $rows[0]['result_count'] );
+	}
+
 	public function test_categories_are_registered(): void {
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-reads' ) );
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-writes' ) );

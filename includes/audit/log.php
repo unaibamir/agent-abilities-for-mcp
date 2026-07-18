@@ -14,10 +14,13 @@ if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// admin query (WHERE status/ability = ? ORDER BY created_at DESC) is index-backed instead of
 	// filesorting. v3 adds the client_id column (M16) so an OAuth-attributed call can be traced
 	// back to the client that made it; NOT NULL DEFAULT '' so every existing row (and every
-	// caller that never supplies one) is unaffected. Bumping this makes
-	// aafm_maybe_upgrade_activity_log() re-run dbDelta so existing installs pick the change up
-	// without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '3' );
+	// caller that never supplies one) is unaffected. v4 adds the nullable result_count column
+	// (L5) so a list/read call's magnitude is observable; NULL by default so an unmeasured or
+	// write call is distinguishable from a genuine zero-item result, and every existing row is
+	// unaffected. Bumping this makes aafm_maybe_upgrade_activity_log() re-run dbDelta so existing
+	// installs pick the change up without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in
+	// includes/oauth/schema.php.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '4' );
 }
 
 /**
@@ -68,6 +71,7 @@ function aafm_install_activity_log(): void {
 		arg_keys TEXT NULL,
 		source_ip VARCHAR(45) NOT NULL DEFAULT '',
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
+		result_count BIGINT UNSIGNED NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
@@ -193,18 +197,32 @@ function aafm_prune_activity_log(): void {
 /**
  * Update an existing activity row's status in place (used to resolve a 'started' row).
  *
- * @param int    $row_id Row id returned by aafm_log_activity().
- * @param string $status one of success|error|denied.
+ * $result_count (L5) is written only when the caller supplies one - omitting it leaves the
+ * column at its NULL default rather than overwriting it, so a write call or an unmeasured
+ * result never gets a fabricated magnitude.
+ *
+ * @param int      $row_id       Row id returned by aafm_log_activity().
+ * @param string   $status       One of success|error|denied.
+ * @param int|null $result_count Optional magnitude of a list/read call's result. Null (default)
+ *                               leaves the column untouched.
  * @return void
  */
-function aafm_update_activity_status( int $row_id, string $status ): void {
+function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null ): void {
 	global $wpdb;
 	if ( $row_id <= 0 ) {
 		return;
 	}
 	$status = in_array( $status, aafm_activity_statuses( false ), true ) ? $status : 'error';
+
+	$data   = array( 'status' => $status );
+	$format = array( '%s' );
+	if ( null !== $result_count ) {
+		$data['result_count'] = $result_count;
+		$format[]             = '%d';
+	}
+
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->update( aafm_activity_log_table(), array( 'status' => $status ), array( 'id' => $row_id ), array( '%s' ), array( '%d' ) );
+	$wpdb->update( aafm_activity_log_table(), $data, array( 'id' => $row_id ), $format, array( '%d' ) );
 }
 
 /**

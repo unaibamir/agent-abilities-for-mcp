@@ -110,4 +110,22 @@ final class WpmlLanguageTest extends TestCase {
 		}
 		$this->fail( 'exception should have propagated' );
 	}
+
+	public function test_redact_post_surfaces_language_when_wpml_on(): void {
+		$this->fake_wpml();
+		// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- signature must match the fake WPML filter's arity.
+		add_filter( 'wpml_post_language_details', fn( $x, $id ) => array( 'language_code' => 'en' ), 10, 2 );
+
+		$post_id = self::factory()->post->create( array( 'post_title' => 'Hello' ) );
+		$shape   = aafm_redact_post( get_post( $post_id ) );
+
+		$this->assertSame( 'en', $shape['lang'] );
+		remove_all_filters( 'wpml_post_language_details' );
+	}
+
+	public function test_redact_post_omits_language_when_wpml_off(): void {
+		$post_id = self::factory()->post->create();
+		$shape   = aafm_redact_post( get_post( $post_id ) );
+		$this->assertArrayNotHasKey( 'lang', $shape );
+	}
 }

@@ -1018,7 +1018,7 @@ function aafm_status_requires_publish_cap( string $status ): bool {
  * @return array<string,mixed>
  */
 function aafm_redact_post( WP_Post $post ): array {
-	return array(
+	$shape = array(
 		'id'           => (int) $post->ID,
 		'title'        => get_the_title( $post ),
 		'status'       => $post->post_status,
@@ -1030,6 +1030,13 @@ function aafm_redact_post( WP_Post $post ): array {
 		'date_gmt'     => $post->post_date_gmt,
 		'modified_gmt' => $post->post_modified_gmt,
 	);
+
+	$lang = aafm_wpml_post_language( (int) $post->ID );
+	if ( null !== $lang ) {
+		$shape['lang'] = $lang;
+	}
+
+	return $shape;
 }
 
 /**
@@ -1081,6 +1088,10 @@ function aafm_rich_post_output_properties(): array {
 		'status'         => array( 'type' => 'string' ),
 		'type'           => array( 'type' => 'string' ),
 		'slug'           => array( 'type' => 'string' ),
+		'lang'           => array(
+			'type'        => 'string',
+			'description' => __( 'WPML language code of this item. Present only when WPML is active.', 'agent-abilities-for-mcp' ),
+		),
 		'link'           => array( 'type' => 'string' ),
 		'author_id'      => array( 'type' => 'integer' ),
 		'author'         => array(

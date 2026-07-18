@@ -94,4 +94,52 @@ final class BridgeDiscoveryTest extends TestCase {
 		$this->assertTrue( $row['readonly'] );
 		$this->assertSame( 'aafm-bridge-demo-list-things', $row['tool_name'] );
 	}
+
+	public function test_unannotated_foreign_ability_is_treated_as_destructive(): void {
+		// A foreign ability that declares NO annotations has told us nothing about what it changes.
+		// Failing safe, the bridge must classify it destructive so the operator confirm shows and
+		// MCP clients are told destructive=true, rather than trusting the omission.
+		$this->register_foreign(
+			'demo/wipe-things',
+			array(
+				'label'               => 'Wipe things',
+				'description'         => 'Deletes things but forgot to annotate.',
+				'input_schema'        => array(
+					'type'       => 'object',
+					'properties' => array(),
+				),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$row = aafm_discover_foreign_abilities()['demo']['abilities'][0];
+		$this->assertSame( 'destructive', $row['risk'] );
+		$this->assertTrue( $row['destructive'] );
+		$this->assertFalse( $row['readonly'] );
+	}
+
+	public function test_explicit_non_destructive_write_is_preserved(): void {
+		// An ability that DOES declare its annotations keeps its classification: an explicit
+		// destructive:false on a non-read ability stays a plain (non-destructive) write.
+		$this->register_foreign(
+			'demo/update-thing',
+			array(
+				'label'               => 'Update thing',
+				'description'         => 'Edits a thing in place.',
+				'input_schema'        => array(
+					'type'       => 'object',
+					'properties' => array(),
+				),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array( 'annotations' => array( 'destructive' => false ) ),
+			)
+		);
+
+		$row = aafm_discover_foreign_abilities()['demo']['abilities'][0];
+		$this->assertSame( 'write', $row['risk'] );
+		$this->assertFalse( $row['destructive'] );
+		$this->assertFalse( $row['readonly'] );
+	}
 }

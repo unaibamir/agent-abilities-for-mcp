@@ -1,0 +1,226 @@
+<?php
+/**
+ * WooCommerce vendor-contract tests.
+ *
+ * THE STANDING RULE FOR THIS SUITE: a stub may only model behaviour that a contract test here has
+ * confirmed against the REAL vendor. When a stub and a contract test disagree, the stub is wrong.
+ * Each test below pins one contract an ability depends on; a test that FAILS against reality is a
+ * finding (the source fix lands in the matching correctness workstream), not a flaky test.
+ *
+ * Run: vendor/bin/phpunit -c phpunit-contract.xml.dist (after tests/bin/install-vendors.sh).
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Contract;
+
+use AAFM\Tests\TestCase;
+
+/**
+ * Asserts the real WooCommerce contracts the store abilities rely on.
+ *
+ * @group contract
+ */
+final class WooCommerceContractTest extends TestCase {
+
+	/**
+	 * Skip the whole class if WooCommerce is not provisioned in the test core.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		if ( ! class_exists( '\WooCommerce' ) ) {
+			$this->markTestSkipped( 'WooCommerce not provisioned — run tests/bin/install-vendors.sh.' );
+		}
+	}
+
+	/**
+	 * The original exemplar: `wc_get_customers()` never existed. 1.2.1 called it and every store
+	 * reported zero customers. The stub eval()'d it into being; reality has no such function.
+	 */
+	public function test_wc_get_customers_does_not_exist(): void {
+		$this->assertFalse(
+			function_exists( 'wc_get_customers' ),
+			'wc_get_customers() must NOT exist in real WooCommerce — the 1.2.1 silent-zero bug proved it never did.'
+		);
+	}
+
+	/**
+	 * The customer-listing helpers the rewritten ability actually uses DO exist.
+	 */
+	public function test_customer_query_symbols_exist(): void {
+		$this->assertTrue( class_exists( '\WC_Customer' ), 'WC_Customer must exist.' );
+		$this->assertTrue( function_exists( 'wc_create_new_customer' ), 'wc_create_new_customer() must exist.' );
+	}
+
+	/**
+	 * M13: a payment gateway's sort position is NOT a `$gateway->order` property. Production reads
+	 * `->order` and gets nothing (every gateway reports order:0). The abstract gateway declares no
+	 * such property, and gateways expose no `save()` (the phpstan stub invented one).
+	 */
+	public function test_payment_gateway_has_no_order_property_or_save_method(): void {
+		$this->assertTrue( class_exists( '\WC_Payment_Gateway' ), 'WC_Payment_Gateway must exist.' );
+		$ref = new \ReflectionClass( '\WC_Payment_Gateway' );
+
+		$this->assertFalse(
+			$ref->hasProperty( 'order' ),
+			'WC_Payment_Gateway declares no `order` property — reading $gateway->order (gateways.php:142) is the M13 fabrication.'
+		);
+		$this->assertFalse(
+			method_exists( '\WC_Payment_Gateway', 'save' ),
+			'WC_Payment_Gateway has no save() — the phpstan stub invented one.'
+		);
+	}
+
+	/**
+	 * Refund crash risk (audit F3): `get_taxes()` lives on the product/fee/shipping order-item
+	 * subclasses, NOT on the base WC_Order_Item. The stub fabricated it on the base class, hiding a
+	 * fatal when a coupon/tax line id is passed to the refund ability.
+	 */
+	public function test_get_taxes_is_not_on_base_order_item(): void {
+		$this->assertTrue( class_exists( '\WC_Order_Item' ), 'WC_Order_Item must exist.' );
+		$this->assertFalse(
+			method_exists( '\WC_Order_Item', 'get_taxes' ),
+			'Base WC_Order_Item has no get_taxes() — refund executor must guard with method_exists (F3).'
+		);
+		$this->assertTrue(
+			method_exists( '\WC_Order_Item_Product', 'get_taxes' ),
+			'WC_Order_Item_Product does define get_taxes().'
+		);
+		$this->assertFalse(
+			method_exists( '\WC_Order_Item_Coupon', 'get_taxes' ),
+			'WC_Order_Item_Coupon has no get_taxes() — passing a coupon line id would fatal.'
+		);
+	}
+
+	/**
+	 * C1: `WC_Shipping_Zones::get_zones()` rows carry NO `zone_object` key. 1.2.1 read
+	 * `$row['zone_object']` (never set) and returned an empty zone list on every store.
+	 */
+	public function test_shipping_zone_rows_have_no_zone_object_key(): void {
+		if ( ! class_exists( '\WC_Shipping_Zone' ) || ! class_exists( '\WC_Shipping_Zones' ) ) {
+			$this->markTestSkipped( 'WC shipping classes unavailable.' );
+		}
+
+		$zone = new \WC_Shipping_Zone();
+		$zone->set_zone_name( 'AAFM Contract Zone' );
+		$zone->set_zone_order( 1 );
+		$zone_id = $zone->save();
+		$this->assertGreaterThan( 0, $zone_id, 'Zone must persist so get_zones() has a row to return.' );
+
+		$rows = \WC_Shipping_Zones::get_zones();
+		$this->assertNotEmpty( $rows, 'get_zones() must return the created zone.' );
+
+		$row = reset( $rows );
+		$this->assertIsArray( $row );
+		$this->assertArrayNotHasKey(
+			'zone_object',
+			$row,
+			'get_zones() rows have NO zone_object key — reading it (shipping.php:300) was the C1 silent-empty bug.'
+		);
+		$this->assertArrayHasKey( 'zone_id', $row, 'Rows expose the zone id under zone_id.' );
+
+		// Cleanup: remove the throwaway zone so the contract DB is not left dirty.
+		( new \WC_Shipping_Zone( (int) $row['zone_id'] ) )->delete();
+	}
+
+	/**
+	 * M4: WooCommerce registers a dedicated `customer` role on install. A buyer who holds a
+	 * different role (subscriber on a membership/LMS store) is invisible to a role=customer query,
+	 * which is why hardcoding role=customer reports zero customers on those stores.
+	 */
+	public function test_customer_role_is_distinct_from_other_roles(): void {
+		$this->assertNotNull( get_role( 'customer' ), 'WC install must register the customer role.' );
+
+		$buyer = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$as_customer = get_users(
+			array(
+				'role'   => 'customer',
+				'fields' => 'ID',
+			)
+		);
+		$this->assertNotContains(
+			(string) $buyer,
+			array_map( 'strval', $as_customer ),
+			'A subscriber-role buyer is NOT returned by role=customer — the M4 blind spot.'
+		);
+
+		$all = get_users(
+			array(
+				'include' => array( $buyer ),
+				'fields'  => 'ID',
+			)
+		);
+		$this->assertContains(
+			(string) $buyer,
+			array_map( 'strval', $all ),
+			'The same buyer IS reachable without the role filter, so listing must not hardcode role=customer.'
+		);
+	}
+
+	/**
+	 * M12: a programmatic order note is attributed by WooCommerce as `added_by = 'system'`, never
+	 * the literal `'user'` the stub emitted and the production `added_by_user` check tested for.
+	 */
+	public function test_order_note_added_by_is_system_not_user(): void {
+		if ( ! function_exists( 'wc_get_order_notes' ) ) {
+			$this->markTestSkipped( 'wc_get_order_notes() unavailable.' );
+		}
+
+		$order = new \WC_Order();
+		$order->save();
+		$order->add_order_note( 'AAFM contract note', false, false );
+
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$this->assertNotEmpty( $notes, 'The added note must be returned.' );
+		$note = reset( $notes );
+
+		$this->assertObjectHasProperty( 'added_by', $note, 'Notes expose added_by.' );
+		$this->assertSame(
+			'system',
+			$note->added_by,
+			"A programmatic note is added_by 'system', not 'user' — the M12 fabrication tested for 'user'."
+		);
+
+		$order->delete( true );
+	}
+
+	/**
+	 * M3 / WC 9.1 floor: at 9.1.0 `wc_update_attribute()` backfills the fields a partial update
+	 * omits, so a name-only update no longer wipes has_archives/order_by/type. This is the
+	 * behavioural cliff the version floor is pinned to; below 9.1 the same call is destructive.
+	 */
+	public function test_update_attribute_backfills_unsent_fields_at_floor(): void {
+		if ( ! function_exists( 'wc_create_attribute' ) || ! function_exists( 'wc_update_attribute' ) ) {
+			$this->markTestSkipped( 'WC attribute functions unavailable.' );
+		}
+		$this->assertTrue(
+			version_compare( \WC_VERSION, '9.1', '>=' ),
+			'Contract pins WooCommerce at the 9.1 floor; the backfill contract only holds from 9.1.0.'
+		);
+
+		$attribute_id = wc_create_attribute(
+			array(
+				'name'         => 'AAFM Contract Color',
+				'slug'         => 'aafm_contract_color',
+				'type'         => 'select',
+				'order_by'     => 'name',
+				'has_archives' => true,
+			)
+		);
+		$this->assertIsInt( $attribute_id );
+		$this->assertGreaterThan( 0, $attribute_id );
+
+		// Name-only update: everything else is intentionally omitted.
+		wc_update_attribute( $attribute_id, array( 'name' => 'AAFM Contract Colour' ) );
+
+		$updated = wc_get_attribute( $attribute_id );
+		$this->assertSame( 'AAFM Contract Colour', $updated->name, 'The sent field updates.' );
+		$this->assertSame( 'name', $updated->order_by, 'order_by is backfilled, not reset (9.1 contract).' );
+		$this->assertEquals( 1, (int) $updated->has_archives, 'has_archives is backfilled, not reset (9.1 contract).' );
+
+		wc_delete_attribute( $attribute_id );
+	}
+}

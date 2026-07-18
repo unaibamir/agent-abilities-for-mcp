@@ -164,6 +164,9 @@ function aafm_args_update_site_settings(): array {
  * refused outright before any write, so a structure can never be stored. Values are sanitized
  * per type; the two integers are clamped into their legal ranges server-side (posts_per_page
  * floored to >=1 and capped at 100 so a 0 cannot break WP_Query; start_of_week clamped to 0..6).
+ * A value core's own sanitize_option() would silently revert (e.g. an invalid timezone_string)
+ * is caught with a dry run before any write, so the call errors instead of reporting a
+ * success that never actually changed the setting.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -207,6 +210,32 @@ function aafm_exec_update_site_settings( array $input ) {
 					/* translators: %s: the setting key that received a boolean value. */
 					__( 'The setting "%s" expects a text value, not true/false.', 'agent-abilities-for-mcp' ),
 					(string) $key
+				)
+			);
+		}
+	}
+
+	// Fourth pass: some allowlisted keys (timezone_string) are additionally validated by
+	// WordPress's own sanitize_option() at write time. On an invalid value core does not
+	// error out visibly to us - it silently REVERTS to whatever the option already held.
+	// Left unchecked this ability would report success on a write that never happened.
+	// Dry-run sanitize_option() against our own sanitized value before writing anything,
+	// so a value core would reject fails the whole call instead - keeping the same
+	// no-partial-apply guarantee as the allowlist and type checks above.
+	foreach ( $settings as $key => $value ) {
+		$key      = (string) $key;
+		$intended = aafm_sanitize_site_setting( $key, $value );
+		$current  = get_option( $key );
+		if ( $intended === $current ) {
+			continue; // No-op write; nothing for core to silently revert.
+		}
+		if ( sanitize_option( $key, $intended ) === $current ) {
+			return new WP_Error(
+				'aafm_setting_rejected',
+				sprintf(
+					/* translators: %s: the setting key WordPress rejected as invalid. */
+					__( 'The value for "%s" is not valid and was not applied.', 'agent-abilities-for-mcp' ),
+					$key
 				)
 			);
 		}

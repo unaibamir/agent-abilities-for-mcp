@@ -219,18 +219,43 @@ final class SiteSettingsTest extends TestCase {
 	}
 
 	/**
-	 * A malformed timezone_string is normalized by WordPress's own sanitize_option (which
-	 * update_option fires) - it must not be stored as the bogus value. Documents that
-	 * containment leans on core sanitize_option for the keys core validates.
+	 * A malformed timezone_string is rejected by WordPress's own sanitize_option (which
+	 * update_option fires): core silently REVERTS to the previously stored value rather
+	 * than storing the bogus one. Left unchecked, the ability would report success on a
+	 * write that never actually happened. It must instead compare the read-back to what
+	 * was intended and error on the mismatch, leaving the prior value untouched.
 	 */
-	public function test_update_site_settings_normalizes_a_malformed_timezone(): void {
+	public function test_update_site_settings_errors_on_a_malformed_timezone_core_silently_reverts(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );
-		wp_get_ability( 'aafm/update-site-settings' )->execute(
+		$before = get_option( 'timezone_string' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
 			array(
 				'settings' => array( 'timezone_string' => 'Not/AZone' ),
 			)
 		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a bogus timezone that core silently reverts must be reported as an error.' );
 		$this->assertNotSame( 'Not/AZone', get_option( 'timezone_string' ), 'a bogus timezone must not persist verbatim.' );
+		$this->assertSame( $before, get_option( 'timezone_string' ), 'the prior timezone must be untouched.' );
+	}
+
+	/**
+	 * A valid timezone_string is accepted and reported as changed - the new revert-detection
+	 * must not false-positive on a legitimate write.
+	 */
+	public function test_update_site_settings_accepts_a_valid_timezone(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'timezone_string' => 'Europe/Berlin' ),
+			)
+		);
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'Europe/Berlin', get_option( 'timezone_string' ) );
 	}
 }

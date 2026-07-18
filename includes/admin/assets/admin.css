@@ -804,6 +804,12 @@
 		border-block-end: 1px solid var(--aafm-border);
 		transition: background 0.15s ease;
 
+		/* The search/risk filters (admin.js) hide a non-matching row via the `hidden`
+		   attribute only. An author-stylesheet `display: flex` above beats the user-agent's
+		   `[hidden] { display: none }` regardless of specificity, so without this the row
+		   stayed visible - restate `display: none` here to let `hidden` actually hide it. */
+		&[hidden] { display: none; }
+
 		&:last-child { border-block-end: 0; }
 
 		&:hover { background: var(--aafm-surface-2); }

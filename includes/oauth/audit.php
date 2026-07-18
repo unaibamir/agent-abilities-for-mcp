@@ -50,10 +50,11 @@ function aafm_oauth_log_event( string $event, string $status, array $ctx = array
 		return;
 	}
 
-	// 'bearer' covers a presented-but-invalid aafm_oat_ credential (unknown/expired token,
-	// wrong audience, or a deactivated owning client) at the determine_current_user resolver -
-	// distinct from the five grant-lifecycle events, which all concern a code or token WordPress
-	// itself just minted or accepted.
+	// 'bearer' covers a presented-but-invalid aafm_oat_ credential at the determine_current_user
+	// resolver: a real but expired token, a wrong audience, or a deactivated owning client. A bearer
+	// that matches no stored token at all is NOT logged (see aafm_oauth_access_token_row_exists) so an
+	// unauthenticated caller cannot grow the log by fabricating the prefix. Distinct from the five
+	// grant-lifecycle events, which all concern a code or token WordPress itself just minted or accepted.
 	if ( ! in_array( $event, array( 'register', 'authorize', 'token', 'refresh', 'revoke', 'bearer' ), true ) ) {
 		return;
 	}

@@ -139,13 +139,16 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// resolver already gates on (active + unexpired), so a null row covers
 		// every present-but-invalid case - unknown, inactive, expired - and a
 		// present-but-invalid OAuth token simply fails to resolve a user rather
-		// than hard-failing the request. Audited as a denied `bearer` event: the
-		// token carries our prefix, so this is a genuine failed authentication
-		// attempt, not ordinary non-OAuth traffic. No client_id is known yet -
-		// the lookup that would resolve one is exactly what just failed.
+		// than hard-failing the request. Audit a denial ONLY when the bearer
+		// matches a REAL stored token row that is now invalid (expired or
+		// deactivated) - genuine credential misuse. A bearer that matches NO
+		// stored token at all is unauthenticated, since anyone can fabricate the
+		// aafm_oat_ prefix, so logging it would let an attacker grow the activity
+		// log unbounded; skip the audit for that case. No client_id is known here
+		// - the lookup that would resolve one is exactly what just failed.
 		$row = aafm_oauth_get_access_token_row( $credential );
 		if ( null === $row ) {
-			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) && aafm_oauth_access_token_row_exists( $credential ) ) {
 				aafm_oauth_log_event( 'bearer', 'denied' );
 			}
 			return $user_id;
@@ -391,6 +394,36 @@ function aafm_oauth_get_access_token_row( string $raw ): ?array {
 	);
 
 	return is_array( $row ) ? $row : null;
+}
+
+/**
+ * Whether an access-token row exists for this raw token at all, ignoring the active/unexpired
+ * predicate {@see aafm_oauth_get_access_token_row()} applies.
+ *
+ * Used at the determine_current_user resolver to tell a genuine-but-invalid credential (a token that
+ * was once issued and is now expired or belongs to a deactivated client - worth auditing as credential
+ * misuse) apart from a bearer that matches NO stored token, which anyone can fabricate simply by using
+ * the aafm_oat_ prefix. Auditing the latter would let an unauthenticated caller grow the activity log
+ * at will, so the denial audit is gated on this existence check. token_hash is a UNIQUE key, so this
+ * is a single indexed lookup.
+ *
+ * @param string $raw The raw access token presented by the client.
+ * @return bool True when a row with this token hash exists, regardless of its active/expiry state.
+ */
+function aafm_oauth_access_token_row_exists( string $raw ): bool {
+	global $wpdb;
+	$table = $wpdb->prefix . 'aafm_oauth_access_tokens';
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$id = $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT id FROM %i WHERE token_hash = %s LIMIT 1',
+			$table,
+			hash( 'sha256', $raw )
+		)
+	);
+
+	return null !== $id;
 }
 
 /**

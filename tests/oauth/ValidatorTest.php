@@ -441,9 +441,10 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
-	 * L3: an unknown/inactive/expired bearer (the token row lookup itself fails) writes a
-	 * denied `oauth:bearer` audit row, so a stolen or guessed credential leaves a trace even
-	 * though it never resolves an owning client.
+	 * L3: an inactive or expired bearer - a real token row that was once issued but no longer
+	 * validates - writes a denied `oauth:bearer` audit row, so a stolen or replayed credential leaves
+	 * a trace even though it never resolves an owning client. A bearer that matches no stored token at
+	 * all is NOT logged (see test_unknown_bearer_writes_no_audit_row); only a real credential does.
 	 */
 	public function test_expired_token_writes_a_denied_bearer_audit_row(): void {
 		$uid    = self::factory()->user->create();
@@ -496,6 +497,63 @@ class ValidatorTest extends TestCase {
 		$this->assertSame( 'oauth:bearer', $row['ability'] );
 		$this->assertSame( 'denied', $row['status'] );
 		$this->assertStringContainsString( 'client_wrong-audience-client', (string) $row['arg_keys'] );
+	}
+
+	/**
+	 * A bearer that carries our aafm_oat_ prefix but matches NO stored token writes no audit row.
+	 * Anyone can fabricate the prefix without any credential, so logging that denial would let an
+	 * unauthenticated caller grow aafm_activity_log at will. The resolver still refuses the request
+	 * (returns the incoming value); it just does not record the unauthenticated miss. Genuine credential
+	 * misuse - an expired or wrong-audience real token - still writes a row (the tests above).
+	 */
+	public function test_unknown_bearer_writes_no_audit_row(): void {
+		$this->set_bearer( 'Bearer ' . AAFM_OAUTH_ACCESS_TOKEN_PREFIX . 'this-token-was-never-issued' );
+
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'An unknown bearer must not resolve a user.' );
+		$this->assertNull(
+			$this->latest_activity_row(),
+			'An unknown bearer that matches no stored token must not write an audit row.'
+		);
+	}
+
+	/**
+	 * The existence probe underpinning the audit gate: it reports true for a real token row regardless
+	 * of active/expiry state, and false for a token that was never stored. This is what separates
+	 * genuine credential misuse (worth auditing) from an unauthenticated fabricated prefix.
+	 */
+	public function test_access_token_row_exists_tracks_real_rows_only(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+
+		$this->assertTrue(
+			aafm_oauth_access_token_row_exists( $tokens['access_token'] ),
+			'A real, active token row must exist.'
+		);
+
+		// Expire it: the row still exists even though it no longer validates.
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 3600 ) ),
+			array( 'token_hash' => hash( 'sha256', $tokens['access_token'] ) ),
+			array( '%s' ),
+			array( '%s' )
+		);
+		$this->assertTrue(
+			aafm_oauth_access_token_row_exists( $tokens['access_token'] ),
+			'An expired token row still exists - existence ignores the active/unexpired predicate.'
+		);
+		$this->assertFalse(
+			aafm_oauth_access_token_row_exists( AAFM_OAUTH_ACCESS_TOKEN_PREFIX . 'never-issued' ),
+			'A token that was never stored must not exist.'
+		);
 	}
 
 	/**

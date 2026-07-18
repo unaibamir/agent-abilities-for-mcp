@@ -2021,13 +2021,14 @@ function aafm_render_help_tab(): void {
 		)
 	);
 
-	// Term meta is filter-only (no admin field).
+	// Term meta has an admin field, plus an optional filter for setting it in code.
 	aafm_render_help_entry(
 		__( 'Exposing term (category and tag) meta', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Term meta has no field on the Abilities tab. It is off by default and you open it up with a small filter in your own code (a site-specific plugin or your theme\'s functions.php). Add the key names you want an agent to read or write on terms:', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Term meta is off by default. Turn it on under the Taxonomies & Terms panel on the Abilities tab: list the key names you want an agent to read or write in the "Exposed term meta keys" field. A "Denied term meta keys" field is also there if you need to carve out an exception.', 'agent-abilities-for-mcp' ) . '</p>'
+			. '<p>' . esc_html__( 'If you would rather set this in code, the same list runs through a filter you can add to (a site-specific plugin or your theme\'s functions.php):', 'agent-abilities-for-mcp' ) . '</p>'
 			. aafm_help_copy_line( 'add_filter( \'aafm_allowed_term_meta_keys\', fn( $keys ) => array_merge( $keys, [ \'my_term_color\', \'my_term_icon\' ] ) );' )
-			. '<p>' . esc_html__( 'The same protections apply as for post meta: underscore-prefixed and authentication keys are stripped out even if your filter tries to add them.', 'agent-abilities-for-mcp' ) . '</p>',
+			. '<p>' . esc_html__( 'The same protections apply either way: underscore-prefixed and authentication keys are stripped out even if the field or the filter tries to add them.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)
 	);

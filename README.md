@@ -18,7 +18,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes zero outbound calls and has no telemetry.
+Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes no requests to any external or third-party service and has no telemetry.
 
 Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
@@ -160,7 +160,7 @@ Yes. Set a per-minute cap on the Settings tab under "Rate limit (per minute)". E
 
 ### Does it send my content to OpenAI, Anthropic, or Google?
 
-No. The plugin connects to no AI provider and makes no outbound requests of its own. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client.
+No. The plugin connects to no AI provider and makes no requests to any external or third-party service. Your own AI client connects in to your site and calls the abilities you have enabled. Whatever your AI client does with the results afterward is between you and whoever makes that client.
 
 ### Does it send data anywhere?
 
@@ -176,7 +176,7 @@ Please report security issues privately rather than in the support forum, so a f
 
 ## External Services
 
-This plugin does not contact any external service. It registers abilities on your own site and answers the requests your AI client sends to it. It makes no outbound requests of its own and includes no analytics or telemetry.
+This plugin does not contact any external or third-party service. It registers abilities on your own site and answers the requests your AI client sends to it. The one HTTP request it can make on its own is the Connection tab's reachability check, a same-origin call to your own site's MCP endpoint used to confirm it answers, never a request to anywhere else. It includes no analytics or telemetry.
 
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 

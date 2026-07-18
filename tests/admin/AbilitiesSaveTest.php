@@ -369,6 +369,71 @@ final class AbilitiesSaveTest extends TestCase {
 		$this->assertArrayHasKey( 'aafm/search-content', $mapped );
 	}
 
+	/**
+	 * M9: an ability whose host integration is currently inactive never renders a checkbox, so
+	 * it can never appear in $posted. Saving the Abilities tab (the full-replace, no-scope path)
+	 * must not silently wipe it - it survives until the operator explicitly turns it off (which
+	 * requires the host to be active again, exactly as aafm_ajax_save_bridged_abilities() already
+	 * guarantees for bridged abilities).
+	 */
+	public function test_full_save_preserves_an_inactive_host_ability(): void {
+		// Simulate an integration ability whose host is currently inactive: it is only ever
+		// registered on the unconditional 'aafm_abilities_registry_integrations' filter (the full
+		// catalog view), never on the host-gated 'aafm_abilities_registry' filter.
+		add_filter(
+			'aafm_abilities_registry_integrations',
+			static function ( array $registry ): array {
+				$registry['aafm/fake-inactive-host'] = array( 'subject' => 'woocommerce' );
+				return $registry;
+			}
+		);
+		aafm_registry_cache_should_flush( true );
+
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
+
+		// The Abilities tab posts only what it can see - the inactive-host ability was never
+		// rendered, so it is absent from the post entirely.
+		$enabled = aafm_sanitize_enabled_input( array( 'aafm_abilities' => array( 'aafm/get-posts' ) ) );
+
+		$this->assertContains( 'aafm/fake-inactive-host', $enabled, 'An inactive-host ability must survive a full-tab save.' );
+		$this->assertContains( 'aafm/get-posts', $enabled );
+
+		remove_all_filters( 'aafm_abilities_registry_integrations' );
+		aafm_registry_cache_should_flush( true );
+	}
+
+	/**
+	 * M9, scoped variant: the Integrations tab save must also preserve an inactive-host
+	 * ability, not just the Abilities tab. page.php:258's preserved-abilities loop used to drop
+	 * anything absent from the host-gated registry, which included the very abilities the
+	 * Integrations tab exists to manage once their host comes back online.
+	 */
+	public function test_scoped_save_preserves_an_inactive_host_ability(): void {
+		add_filter(
+			'aafm_abilities_registry_integrations',
+			static function ( array $registry ): array {
+				$registry['aafm/fake-inactive-host'] = array( 'subject' => 'woocommerce' );
+				return $registry;
+			}
+		);
+		aafm_registry_cache_should_flush( true );
+
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/fake-inactive-host' ) );
+
+		$resolved = aafm_resolve_scoped_enabled_input(
+			array(
+				'aafm_scope'     => array( 'woocommerce' ),
+				'aafm_abilities' => array(),
+			)
+		);
+
+		$this->assertContains( 'aafm/fake-inactive-host', $resolved, 'An inactive-host ability must survive a scoped save too.' );
+		$this->assertContains( 'aafm/get-posts', $resolved );
+
+		remove_all_filters( 'aafm_abilities_registry_integrations' );
+		aafm_registry_cache_should_flush( true );
+	}
+
 	public function test_saving_ability_from_a_non_default_subject_persists(): void {
 		// 'aafm/get-media' lives under the Media sub-tab, which is never the default (Content is).
 		// The save path is the same flat list regardless of which sub-tab was visible.

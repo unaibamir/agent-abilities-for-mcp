@@ -58,6 +58,23 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'per agent user', $html );
 	}
 
+	/**
+	 * L13: the term-meta help entry used to claim "Term meta has no field on the Abilities
+	 * tab" and code-filter only, but aafm_render_term_meta_keys_selector() renders an
+	 * "Exposed term meta keys" / "Denied term meta keys" field under the Taxonomies & Terms
+	 * panel. The entry must point at that field, not deny it exists.
+	 */
+	public function test_help_tab_term_meta_entry_points_at_the_real_field(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'Term meta has no field on the Abilities tab', $html );
+		$this->assertStringContainsString( 'Exposed term meta keys', $html );
+	}
+
 	public function test_help_tab_documents_the_waf_cdn_unreachable_cluster(): void {
 		$this->acting_as( 'administrator' );
 

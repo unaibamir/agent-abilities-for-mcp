@@ -667,6 +667,11 @@ function aafm_register_privacy_policy_content(): void {
 /**
  * AJAX: clear the activity log.
  *
+ * Clearing is itself a security-relevant action - a manage_options user (or an attacker who
+ * has reached that capability) can otherwise wipe the audit trail without leaving any trace
+ * that it happened. Write one final row into the freshly emptied log recording who cleared it
+ * and when, so the log is never completely silent about its own history (L4).
+ *
  * @return void
  */
 function aafm_ajax_clear_log(): void {
@@ -675,7 +680,31 @@ function aafm_ajax_clear_log(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	aafm_clear_activity_log();
+	aafm_log_activity_cleared_marker();
 	wp_send_json_success();
+}
+
+/**
+ * Write a tamper-evident marker row recording that the activity log was cleared.
+ *
+ * Shared by the direct "Clear log" action and aafm_reset_plugin() (which also empties the
+ * log), so either path leaves the same trace: who cleared it and when. Uses a synthetic
+ * ability name that can never collide with a real ability (the ability column is free text,
+ * not registry-validated) so it renders in the Activity tab like any other row but is never
+ * mistaken for an actual agent call.
+ *
+ * @return void
+ */
+function aafm_log_activity_cleared_marker(): void {
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => 'aafm/activity-log-cleared',
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'success',
+		)
+	);
 }
 
 /**

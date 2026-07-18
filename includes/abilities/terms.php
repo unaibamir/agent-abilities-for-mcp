@@ -744,13 +744,39 @@ function aafm_args_create_term(): array {
 }
 
 /**
+ * Validate a candidate parent term ID against the target taxonomy.
+ *
+ * A parent only makes sense within a hierarchical taxonomy, and it must belong
+ * to that same taxonomy - wp_insert_term()/wp_update_term() do not confine
+ * parent to the target taxonomy themselves, so left unchecked a caller could
+ * reparent a term under an ID borrowed from a different taxonomy entirely.
+ *
+ * @param int    $parent_id Candidate parent term ID (0 means "no parent").
+ * @param string $taxonomy  Target taxonomy, already allow-list validated.
+ * @return int|WP_Error Sanitized parent ID (possibly 0), or error.
+ */
+function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
+	if ( 0 === $parent_id ) {
+		return 0;
+	}
+	if ( ! is_taxonomy_hierarchical( $taxonomy ) ) {
+		return new WP_Error( 'aafm_invalid_term_parent', __( 'This taxonomy does not support a parent term.', 'agent-abilities-for-mcp' ) );
+	}
+	if ( ! get_term( $parent_id, $taxonomy ) instanceof WP_Term ) {
+		return new WP_Error( 'aafm_invalid_term_parent', __( 'The parent term does not belong to this taxonomy.', 'agent-abilities-for-mcp' ) );
+	}
+	return $parent_id;
+}
+
+/**
  * Execute aafm/create-term.
  *
  * Default-deny: the taxonomy is validated against the public allow-list, so an
  * unknown or internal taxonomy (nav_menu, link_category, etc.) is rejected before
  * any write. The name is sanitized with sanitize_text_field and the description
  * with wp_kses_post, so script can never be stored. The closed input schema rejects
- * any undeclared field before this runs.
+ * any undeclared field before this runs. A parent, if given, must belong to this
+ * same hierarchical taxonomy (aafm_validate_term_parent).
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -761,12 +787,17 @@ function aafm_exec_create_term( array $input ) {
 		return $taxonomy;
 	}
 
+	$parent = aafm_validate_term_parent( isset( $input['parent'] ) ? absint( $input['parent'] ) : 0, $taxonomy );
+	if ( is_wp_error( $parent ) ) {
+		return $parent;
+	}
+
 	$result = wp_insert_term(
 		sanitize_text_field( (string) $input['name'] ),
 		$taxonomy,
 		array(
 			'description' => isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '',
-			'parent'      => isset( $input['parent'] ) ? absint( $input['parent'] ) : 0,
+			'parent'      => $parent,
 		)
 	);
 	if ( is_wp_error( $result ) ) {
@@ -835,8 +866,9 @@ function aafm_args_update_term(): array {
  * Confines the write to the allow-listed taxonomy AND to a term that actually
  * belongs to it: get_term( $id, $taxonomy ) returns null when the term is in a
  * different taxonomy, so a tag ID claimed as a category is rejected (the term/
- * taxonomy-confusion guard). Reparenting is guarded against cycles with
- * term_is_ancestor_of before the update runs.
+ * taxonomy-confusion guard). A reparent target is confined to the same
+ * hierarchical taxonomy the same way (aafm_validate_term_parent), then guarded
+ * against cycles with term_is_ancestor_of before the update runs.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -861,7 +893,10 @@ function aafm_exec_update_term( array $input ) {
 		$args['description'] = wp_kses_post( (string) $input['description'] );
 	}
 	if ( isset( $input['parent'] ) ) {
-		$parent = absint( $input['parent'] );
+		$parent = aafm_validate_term_parent( absint( $input['parent'] ), $taxonomy );
+		if ( is_wp_error( $parent ) ) {
+			return $parent;
+		}
 		// Circular-hierarchy guard: the requested parent must not be a descendant
 		// of the term being edited (which would make the term its own ancestor).
 		if ( $parent && term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) {

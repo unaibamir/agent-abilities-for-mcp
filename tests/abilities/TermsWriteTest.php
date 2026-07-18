@@ -169,6 +169,58 @@ final class TermsWriteTest extends TestCase {
 		$this->assertSame( 'Untouchable', $still->name );
 	}
 
+	public function test_create_term_rejects_parent_from_other_taxonomy(): void {
+		// A tag exists in post_tag. Claiming it as the parent of a new category
+		// must be rejected - wp_insert_term does not itself confine parent to the
+		// target taxonomy, so the ability has to.
+		$this->acting_as( 'editor' );
+		$tag = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
+
+		$out = wp_get_ability( 'aafm/create-term' )->execute(
+			array(
+				'taxonomy' => 'category',
+				'name'     => 'Orphan',
+				'parent'   => $tag,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_create_term_rejects_parent_on_non_hierarchical_taxonomy(): void {
+		// post_tag is not hierarchical, so a parent never makes sense there,
+		// even one that exists and belongs to post_tag itself.
+		$this->acting_as( 'editor' );
+		$existing = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
+
+		$out = wp_get_ability( 'aafm/create-term' )->execute(
+			array(
+				'taxonomy' => 'post_tag',
+				'name'     => 'Flat',
+				'parent'   => $existing,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	public function test_update_term_rejects_parent_from_other_taxonomy(): void {
+		$this->acting_as( 'editor' );
+		$tag      = self::factory()->term->create( array( 'taxonomy' => 'post_tag' ) );
+		$category = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+
+		$out = wp_get_ability( 'aafm/update-term' )->execute(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $category,
+				'parent'   => $tag,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+
+		// The category's hierarchy is unchanged.
+		$reloaded = get_term( $category, 'category' );
+		$this->assertSame( 0, (int) $reloaded->parent );
+	}
+
 	public function test_update_term_blocks_circular_parent(): void {
 		$this->acting_as( 'editor' );
 		$parent = self::factory()->term->create( array( 'taxonomy' => 'category' ) );

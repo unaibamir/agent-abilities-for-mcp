@@ -254,6 +254,31 @@ final class MediaWriteTest extends TestCase {
 
 
 	/**
+	 * A host without the PHP fileinfo extension must get a clean error, not a
+	 * fatal "Class finfo not found". aafm_fileinfo_available() is filterable so
+	 * this can be exercised without actually removing the extension.
+	 */
+	public function test_upload_media_errors_cleanly_when_fileinfo_is_unavailable(): void {
+		$this->acting_as( 'author' );
+		$before = $this->count_uploaded_files();
+
+		$unavailable = static function () {
+			return false;
+		};
+		add_filter( 'aafm_fileinfo_available', $unavailable );
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'pixel.png',
+				'data_base64' => self::PNG_B64,
+			)
+		);
+		remove_filter( 'aafm_fileinfo_available', $unavailable );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $before, $this->count_uploaded_files(), 'no file must be written when the type cannot be verified.' );
+	}
+
+	/**
 	 * (b) SVG is rejected (XSS/script-capable) and NO file is written.
 	 */
 	public function test_upload_media_rejects_svg_and_writes_nothing(): void {

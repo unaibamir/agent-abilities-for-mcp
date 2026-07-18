@@ -1281,7 +1281,10 @@ function aafm_force_delete_post( int $id, string $expected_type = '' ) {
 		return aafm_generic_error();
 	}
 	$result = wp_delete_post( $id, true );
-	if ( ! ( $result instanceof WP_Post ) && false === $result ) {
+	// wp_delete_post() documents false|null on failure, but a pre_delete_post veto can
+	// short-circuit it to any falsy value a plugin returns. Guard on "not a WP_Post"
+	// rather than "exactly false", so an unrecognized veto is never mistaken for success.
+	if ( ! ( $result instanceof WP_Post ) ) {
 		return aafm_generic_error();
 	}
 	return array( 'deleted' => true );

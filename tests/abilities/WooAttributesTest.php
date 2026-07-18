@@ -197,6 +197,24 @@ final class WooAttributesTest extends TestCase {
 		$this->assertSame( 'Size', $res['name'], 'name is untouched.' );
 	}
 
+	public function test_update_attribute_field_isolation_preserves_archives_and_order(): void {
+		// M3: below WC 9.1, wc_update_attribute() resets any field the caller omits back to its
+		// default, so a name-only PATCH silently wiped has_archives and order_by. The version-safe
+		// fix always resends the CURRENT value for every untouched field, so this must hold
+		// regardless of the WooCommerce version installed.
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(
+			array(
+				'attribute_id' => 1,
+				'name'         => 'Colour', // British spelling.
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'Colour', $res['name'] );
+		$this->assertFalse( $res['has_archives'], 'has_archives is untouched (the M3 destructive field).' );
+		$this->assertSame( 'menu_order', $res['order_by'], 'order_by is untouched (the M3 destructive field).' );
+	}
+
 	public function test_update_attribute_unknown_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(

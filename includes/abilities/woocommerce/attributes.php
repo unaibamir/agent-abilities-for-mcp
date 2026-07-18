@@ -364,9 +364,16 @@ function aafm_args_wc_update_product_attribute(): array {
 /**
  * Execute aafm/wc-update-product-attribute.
  *
- * Resolve-before-mutate: unknown id returns a generic error. Only fields present
- * in $input are included in the update args (PATCH semantics). Re-reads the row
- * after update and returns the rich shape.
+ * Resolve-before-mutate: unknown id returns a generic error.
+ *
+ * Version-safe (M3 / the WC 9.1 floor's belt-and-braces guard): rather than sending a partial
+ * PATCH and relying on wc_update_attribute()'s own field backfill (only present from WC 9.1.0 -
+ * below that, an omitted field is reset to its default, wiping has_archives/order_by/type), the
+ * full field set is built here FIRST from the resolved attribute's current values, then
+ * overwritten with whatever the caller actually sent. wc_update_attribute() always receives every
+ * field, so this ability's correctness never depends on which WooCommerce version is installed.
+ * $changed tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op
+ * (no write) exactly as before.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
@@ -378,24 +385,37 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$args = array();
+	$args = array(
+		'name'         => (string) ( $attr->attribute_label ?? '' ),
+		'slug'         => (string) ( $attr->attribute_name ?? '' ),
+		'type'         => (string) ( $attr->attribute_type ?? 'select' ),
+		'order_by'     => (string) ( $attr->attribute_orderby ?? 'menu_order' ),
+		'has_archives' => (bool) ( $attr->attribute_public ?? false ),
+	);
+
+	$changed = false;
 	if ( array_key_exists( 'name', $input ) ) {
 		$args['name'] = sanitize_text_field( (string) $input['name'] );
+		$changed      = true;
 	}
 	if ( array_key_exists( 'slug', $input ) ) {
 		$args['slug'] = wc_sanitize_taxonomy_name( sanitize_title( (string) $input['slug'] ) );
+		$changed      = true;
 	}
 	if ( array_key_exists( 'type', $input ) ) {
 		$args['type'] = sanitize_key( (string) $input['type'] );
+		$changed      = true;
 	}
 	if ( array_key_exists( 'order_by', $input ) ) {
 		$args['order_by'] = sanitize_key( (string) $input['order_by'] );
+		$changed          = true;
 	}
 	if ( array_key_exists( 'has_archives', $input ) ) {
 		$args['has_archives'] = (bool) $input['has_archives'];
+		$changed              = true;
 	}
 
-	if ( ! empty( $args ) ) {
+	if ( $changed ) {
 		$result = wc_update_attribute( $id, $args );
 		if ( is_wp_error( $result ) || ! $result ) {
 			return aafm_generic_error();

@@ -829,13 +829,15 @@ PHP;
 	}
 
 	/**
-	 * Create one customer fixture: a real WP user with the 'customer' role, backed by stub
-	 * WC_Customer data in the WcCustomerStubStore under that user's id.
+	 * Create one customer fixture: a real WP user carrying the 'customer' role by default, backed by
+	 * stub WC_Customer data in the WcCustomerStubStore under that user's id.
 	 *
 	 * Call after stub_woocommerce() (which registers the customer role and does not reset the
 	 * customer store), and before registering customer abilities.
 	 *
-	 * @param array<string,mixed> $data Customer data for the WC_Customer stub getters.
+	 * @param array<string,mixed> $data Customer data for the WC_Customer stub getters. An optional
+	 *                                   'role' key seeds a different WP role (e.g. 'subscriber' for
+	 *                                   an M4 fixture) instead of 'customer'.
 	 * @return int The created user id.
 	 * @throws \RuntimeException When the fixture user cannot be created.
 	 */
@@ -849,7 +851,7 @@ PHP;
 				'user_login' => (string) ( $data['username'] ?? 'customer' . wp_rand( 1000, 999999 ) ),
 				'user_email' => (string) ( $data['email'] ?? 'customer' . wp_rand( 1000, 999999 ) . '@example.com' ),
 				'user_pass'  => wp_generate_password(),
-				'role'       => 'customer',
+				'role'       => (string) ( $data['role'] ?? 'customer' ),
 			)
 		);
 		if ( is_wp_error( $user_id ) ) {

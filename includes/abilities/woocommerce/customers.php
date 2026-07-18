@@ -383,6 +383,9 @@ function aafm_args_wc_list_customers(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
+				'role'     => array(
+					'type' => 'string',
+				),
 				'page'     => array(
 					'type'    => 'integer',
 					'minimum' => 1,
@@ -432,10 +435,12 @@ function aafm_args_wc_list_customers(): array {
 /**
  * Execute aafm/wc-list-customers.
  *
- * WooCommerce ships no list-customers helper, so query the customer role directly with
- * WP_User_Query - the same way WooCommerce's own REST customers controller does (it feeds
- * WP_User_Query and defaults its role param to 'customer'). Each customer is mapped through the
- * lean aafm_redact_wc_customer() shape - no addresses.
+ * WooCommerce ships no list-customers helper, so query the role directly with WP_User_Query - the
+ * same way WooCommerce's own REST customers controller does (it defaults its role param to
+ * 'customer' and treats 'all' as "no role filter"). Hardcoding role=customer went blind on an
+ * LMS/membership store where buyers hold a different role (e.g. subscriber), so the role is now an
+ * input, still defaulting to 'customer' to preserve today's behaviour. Each customer is mapped
+ * through the lean aafm_redact_wc_customer() shape - no addresses.
  *
  * total is the grand count of matching customers (WP_User_Query::get_total()), not the length of
  * the returned page.
@@ -453,18 +458,23 @@ function aafm_exec_wc_list_customers( array $input ): array {
 
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 10;
+	$role     = isset( $input['role'] ) ? sanitize_key( (string) $input['role'] ) : 'customer';
 
-	$query = new \WP_User_Query(
-		array(
-			'role'        => 'customer',
-			'fields'      => 'ID',
-			'orderby'     => 'ID',
-			'order'       => 'ASC',
-			'number'      => $per_page,
-			'offset'      => ( $page - 1 ) * $per_page,
-			'count_total' => true,
-		)
+	$query_args = array(
+		'fields'      => 'ID',
+		'orderby'     => 'ID',
+		'order'       => 'ASC',
+		'number'      => $per_page,
+		'offset'      => ( $page - 1 ) * $per_page,
+		'count_total' => true,
 	);
+	// 'all' mirrors the REST controller's convention: every role, so omit the filter entirely
+	// rather than pass the literal string through to WP_User_Query.
+	if ( 'all' !== $role ) {
+		$query_args['role'] = $role;
+	}
+
+	$query = new \WP_User_Query( $query_args );
 
 	$customers = array();
 	foreach ( (array) $query->get_results() as $user_id ) {

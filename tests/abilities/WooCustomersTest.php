@@ -626,6 +626,67 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	// =========================================================================
+	// M4: role input, so a buyer on a non-customer role is not silently invisible.
+	// =========================================================================
+
+	/**
+	 * A buyer who holds the 'subscriber' role (typical on an LMS/membership store) is invisible to
+	 * the default role=customer query - the M4 blind spot. Passing role=all must surface them.
+	 */
+	public function test_list_customers_role_all_includes_non_customer_roles(): void {
+		WcCustomerStubStore::reset();
+		$this->delete_all_customer_users();
+		$buyer = $this->seed_wc_customer_user(
+			array(
+				'email'    => 'subscriber@example.com',
+				'username' => 'subscriber_buyer',
+				'role'     => 'subscriber',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+
+		$default = wp_get_ability( 'aafm/wc-list-customers' )->execute( array() );
+		$this->assertNotInstanceOf( WP_Error::class, $default );
+		$this->assertSame( array(), $default['customers'], 'Default role=customer must not see a subscriber-role buyer.' );
+
+		$all = wp_get_ability( 'aafm/wc-list-customers' )->execute( array( 'role' => 'all' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $all );
+		$ids = wp_list_pluck( $all['customers'], 'id' );
+		$this->assertContains( $buyer, $ids, 'role=all must surface a buyer on any role.' );
+	}
+
+	/**
+	 * Passing a specific non-default role filters to exactly that role, mirroring WooCommerce's own
+	 * REST customers controller (role defaults to customer, any other role name filters to it).
+	 */
+	public function test_list_customers_role_targets_a_specific_role(): void {
+		WcCustomerStubStore::reset();
+		$this->delete_all_customer_users();
+		$subscriber = $this->seed_wc_customer_user(
+			array(
+				'email'    => 'subscriber2@example.com',
+				'username' => 'subscriber_buyer_2',
+				'role'     => 'subscriber',
+			)
+		);
+		$customer   = $this->seed_wc_customer_user(
+			array(
+				'email'    => 'customer2@example.com',
+				'username' => 'plain_customer',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array( 'role' => 'subscriber' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$ids = wp_list_pluck( $res['customers'], 'id' );
+		$this->assertContains( $subscriber, $ids, 'role=subscriber must return the subscriber-role buyer.' );
+		$this->assertNotContains( $customer, $ids, 'role=subscriber must not return the customer-role buyer.' );
+	}
+
+	// =========================================================================
 	// FIX-8: pin error codes on unknown-id tests.
 	// =========================================================================
 

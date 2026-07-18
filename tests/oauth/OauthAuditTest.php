@@ -111,6 +111,33 @@ class OauthAuditTest extends TestCase {
 	}
 
 	/**
+	 * A denied bearer event (a presented-but-invalid aafm_oat_ credential) is auditable,
+	 * same as a denied refresh - this is the resolver's failed-authentication signal.
+	 */
+	public function test_bearer_denied_event_records_denied_status(): void {
+		aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => 'c0ffee' ) );
+
+		$row = $this->latest_row();
+		$this->assertIsArray( $row );
+		$this->assertSame( 'oauth:bearer', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertStringContainsString( 'client_c0ffee', (string) $row['arg_keys'] );
+	}
+
+	/**
+	 * A bearer event with no resolvable client_id (an unknown token never reaches a client
+	 * row) still writes a row - the context is simply empty, never a reason to drop the event.
+	 */
+	public function test_bearer_denied_event_without_client_id_still_writes_a_row(): void {
+		aafm_oauth_log_event( 'bearer', 'denied' );
+
+		$row = $this->latest_row();
+		$this->assertIsArray( $row );
+		$this->assertSame( 'oauth:bearer', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+	}
+
+	/**
 	 * The host helper derives host[:port] from a redirect URI and returns '' when unparseable.
 	 */
 	public function test_audit_host_from_uri(): void {

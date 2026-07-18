@@ -116,15 +116,24 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// resolver already gates on (active + unexpired), so a null row covers
 		// every present-but-invalid case - unknown, inactive, expired - and a
 		// present-but-invalid OAuth token simply fails to resolve a user rather
-		// than hard-failing the request.
+		// than hard-failing the request. Audited as a denied `bearer` event: the
+		// token carries our prefix, so this is a genuine failed authentication
+		// attempt, not ordinary non-OAuth traffic. No client_id is known yet -
+		// the lookup that would resolve one is exactly what just failed.
 		$row = aafm_oauth_get_access_token_row( $credential );
 		if ( null === $row ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'bearer', 'denied' );
+			}
 			return $user_id;
 		}
 
 		// 9. Audience binding (RFC 8707): the token must have been minted for THIS
 		// endpoint. A token scoped to a different audience resolves no user here.
 		if ( ! hash_equals( aafm_endpoint_url(), (string) $row['resource'] ) ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
+			}
 			return $user_id;
 		}
 
@@ -132,6 +141,9 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 		// already in a client's hands keeps working unless its owning client is re-checked here -
 		// so disabling a compromised client invalidates its live access tokens immediately.
 		if ( aafm_oauth_client_is_deactivated( (string) $row['client_id'] ) ) {
+			if ( function_exists( 'aafm_oauth_log_event' ) ) {
+				aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => (string) $row['client_id'] ) );
+			}
 			return $user_id;
 		}
 

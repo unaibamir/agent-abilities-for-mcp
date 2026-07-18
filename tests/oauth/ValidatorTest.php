@@ -70,6 +70,10 @@ class ValidatorTest extends TestCase {
 		// OAuth is OFF by default now; the resolver's happy path requires it on. The
 		// disabled-bearer test sets it back to '0' explicitly.
 		update_option( 'aafm_oauth_enabled', '1' );
+
+		// The failed-bearer audit tests below read the activity log.
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
 	}
 
 	/**
@@ -323,6 +327,12 @@ class ValidatorTest extends TestCase {
 			array( '%s' )
 		);
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ), 'a deactivated client must invalidate its live access token' );
+
+		$row = $this->latest_activity_row();
+		$this->assertIsArray( $row, 'A bearer for a deactivated client must write a denied audit row.' );
+		$this->assertSame( 'oauth:bearer', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertStringContainsString( 'client_' . $client_id, (string) $row['arg_keys'] );
 	}
 
 	/**
@@ -418,6 +428,74 @@ class ValidatorTest extends TestCase {
 		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
 
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+	}
+
+	/**
+	 * Fetch the single most recent activity row, or null when the log is empty.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	private function latest_activity_row(): ?array {
+		$rows = aafm_query_activity( array( 'per_page' => 5 ) );
+		return isset( $rows[0] ) && is_array( $rows[0] ) ? $rows[0] : null;
+	}
+
+	/**
+	 * L3: an unknown/inactive/expired bearer (the token row lookup itself fails) writes a
+	 * denied `oauth:bearer` audit row, so a stolen or guessed credential leaves a trace even
+	 * though it never resolves an owning client.
+	 */
+	public function test_expired_token_writes_a_denied_bearer_audit_row(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'c',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->update(
+			$wpdb->prefix . 'aafm_oauth_access_tokens',
+			array( 'expires_at' => gmdate( 'Y-m-d H:i:s', time() - 3600 ) ),
+			array( 'token_hash' => hash( 'sha256', $tokens['access_token'] ) ),
+			array( '%s' ),
+			array( '%s' )
+		);
+
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+
+		$row = $this->latest_activity_row();
+		$this->assertIsArray( $row, 'An expired bearer must write an audit row.' );
+		$this->assertSame( 'oauth:bearer', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+	}
+
+	/**
+	 * L3: a wrong-audience bearer writes a denied `oauth:bearer` row carrying the client_id
+	 * the token actually belongs to, so an operator can trace which client presented it.
+	 */
+	public function test_wrong_audience_token_writes_a_denied_bearer_audit_row(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'wrong-audience-client',
+				'resource'   => 'https://evil.example/mcp',
+			)
+		);
+
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+
+		$row = $this->latest_activity_row();
+		$this->assertIsArray( $row, 'A wrong-audience bearer must write an audit row.' );
+		$this->assertSame( 'oauth:bearer', $row['ability'] );
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertStringContainsString( 'client_wrong-audience-client', (string) $row['arg_keys'] );
 	}
 
 	/**

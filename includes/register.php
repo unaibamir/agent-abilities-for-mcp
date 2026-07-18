@@ -62,6 +62,38 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
 }
 
 /**
+ * Best-effort magnitude of a list/read ability's result, for activity-log observability only.
+ *
+ * Every list ability in this plugin returns an integer 'total' key alongside its items (see
+ * aafm_exec_get_posts() and its siblings) - that is authoritative and preferred, since it is the
+ * full matched count, not just the page slice returned. Failing that, the length of the first
+ * sequential-list value in the result is used as a fallback for a simpler shape. A single-object
+ * "get" result (no list value at all) yields no magnitude - always logging 1 for those would add
+ * noise, not information.
+ *
+ * @param mixed $result The ability's execute_callback return value (never a WP_Error - the
+ *                       caller only invokes this on a successful result).
+ * @return int|null The magnitude, or null when the result shape does not offer one.
+ */
+function aafm_result_magnitude( $result ): ?int {
+	if ( ! is_array( $result ) ) {
+		return null;
+	}
+
+	if ( isset( $result['total'] ) && is_int( $result['total'] ) ) {
+		return $result['total'];
+	}
+
+	foreach ( $result as $value ) {
+		if ( is_array( $value ) && array_values( $value ) === $value ) {
+			return count( $value );
+		}
+	}
+
+	return null;
+}
+
+/**
  * Register an ability with a guaranteed permission callback and full audit logging.
  *
  * Refuses to register without a callable permission_callback. Decorates the permission
@@ -89,6 +121,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 	$original_permission = $args['permission_callback'];
 	$original_execute    = $args['execute_callback'];
+	// L5: only a list/read ability's result gets a logged magnitude - a write ability's return
+	// shape is never guessed at. Read before the closures below capture it, so a plain scalar
+	// is what gets captured rather than the whole (still-mutating) $args array.
+	$is_read_ability = 'aafm-reads' === (string) ( $args['category'] ?? '' );
 
 	// Stash the undecorated permission callback so list-time capability checks
 	// (e.g. the MCP tools/list filter) can test visibility WITHOUT writing a
@@ -142,7 +178,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		return $allowed;
 	};
 
-	$args['execute_callback'] = static function ( $input = null ) use ( $original_execute, $name, $principal ) {
+	$args['execute_callback'] = static function ( $input = null ) use ( $original_execute, $name, $principal, $is_read_ability ) {
 		$arg_keys = is_array( $input ) ? array_keys( $input ) : array();
 
 		// One row at 'started' (intent), then updated in place with the real outcome -
@@ -160,7 +196,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		$result = $original_execute( $input );
 
-		aafm_update_activity_status( $row_id, is_wp_error( $result ) ? 'error' : 'success' );
+		// L5: a list/read call's magnitude is observability only - it is never used to alter
+		// $result or the logged status, so a mis-shaped result simply logs no count.
+		$result_count = ( $is_read_ability && ! is_wp_error( $result ) ) ? aafm_result_magnitude( $result ) : null;
+
+		aafm_update_activity_status( $row_id, is_wp_error( $result ) ? 'error' : 'success', $result_count );
 
 		return $result;
 	};

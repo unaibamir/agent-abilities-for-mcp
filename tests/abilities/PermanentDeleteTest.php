@@ -43,6 +43,26 @@ final class PermanentDeleteTest extends TestCase {
 		$this->assertTrue( $ann['destructive'] );
 	}
 
+	public function test_delete_post_reports_error_when_a_plugin_vetoes_with_a_falsy_non_bool(): void {
+		// wp_delete_post() can be short-circuited by the pre_delete_post filter, and a
+		// misbehaving plugin might veto with something falsy-but-not-strictly-false (0,
+		// null, ''), not the documented false-on-failure. The executor must treat "not a
+		// WP_Post" as failure, not "exactly false" as failure, or a veto is silently
+		// reported as a successful delete while the post survives.
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$veto = static function () {
+			return 0;
+		};
+		add_filter( 'pre_delete_post', $veto, 10, 0 );
+		$res = wp_get_ability( 'aafm/delete-post' )->execute( array( 'post_id' => $id ) );
+		remove_filter( 'pre_delete_post', $veto, 10 );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a non-WP_Post veto must be reported as an error.' );
+		$this->assertNotNull( get_post( $id ), 'the post must survive an unsuccessful delete.' );
+	}
+
 	public function test_delete_post_denies_a_contributor_on_anothers_post(): void {
 		$author_id = self::factory()->user->create( array( 'role' => 'author' ) );
 		$id        = self::factory()->post->create(

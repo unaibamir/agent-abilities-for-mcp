@@ -305,6 +305,107 @@ function aafm_render_bridge_orphan_group( array $orphans ): void {
 }
 
 /**
+ * Best-effort read of a foreign ability's raw permission callback, for display only.
+ *
+ * The bridge adds no capability floor of its own: a bridged tool's effective gate is the
+ * transport's signed-in check plus THIS ability's own permission_callback, which lives in the
+ * source plugin. The Abilities API keeps that callback protected with no public getter, so this
+ * reflects the property purely to SHOW the operator what gates the ability (a wide-open
+ * __return_true or a bare is_user_logged_in is exactly the weak check worth seeing). It is never
+ * invoked. Any reflection failure returns null so the caller falls back to an honest note.
+ *
+ * @param object $ability The foreign WP_Ability.
+ * @return mixed The raw callback, or null when it cannot be read.
+ */
+function aafm_bridge_reflect_permission_callback( $ability ) {
+	if ( ! is_object( $ability ) ) {
+		return null;
+	}
+	try {
+		$prop = new \ReflectionProperty( $ability, 'permission_callback' );
+		$prop->setAccessible( true );
+		return $prop->getValue( $ability );
+	} catch ( \Throwable $e ) {
+		unset( $e );
+		return null;
+	}
+}
+
+/**
+ * A readable label for a foreign ability's permission callback, or '' when it is not readable.
+ *
+ * Resolves the LIVE foreign ability by slug and reflects its callback (see
+ * aafm_bridge_reflect_permission_callback()). A string callback (function name) or an
+ * array [class, method] callback yields a readable label; a closure or anything unreadable
+ * yields '' so the renderer shows the honest "determined by the plugin" note instead.
+ *
+ * @param string $slug The foreign ability slug.
+ * @return string A human-readable callback reference, or '' when none can be shown.
+ */
+function aafm_bridge_permission_label( string $slug ): string {
+	if ( ! function_exists( 'wp_get_ability' ) ) {
+		return '';
+	}
+	$ability = wp_get_ability( $slug );
+	if ( ! $ability instanceof \WP_Ability ) {
+		return '';
+	}
+
+	$callback = aafm_bridge_reflect_permission_callback( $ability );
+
+	if ( is_string( $callback ) && '' !== $callback ) {
+		return $callback;
+	}
+	if ( is_array( $callback ) && isset( $callback[0], $callback[1] ) ) {
+		$class  = is_object( $callback[0] ) ? get_class( $callback[0] ) : (string) $callback[0];
+		$method = (string) $callback[1];
+		if ( '' !== $class && '' !== $method ) {
+			return $class . '::' . $method;
+		}
+	}
+
+	return ''; // Closure or otherwise not readable.
+}
+
+/**
+ * Render the effective-permission line for a bridge ability row (display only).
+ *
+ * The bridge never overrides the source plugin's own permission_callback, so the operator can't
+ * otherwise see what really gates a bridged tool. Surface it: the readable callback when we can
+ * reflect one, or an honest "permission determined by <plugin>" note when we can't (a closure, or
+ * an orphan whose host plugin is inactive). Read-only; changes no dispatch behavior.
+ *
+ * @param string $slug     The foreign ability slug.
+ * @param bool   $disabled True for orphan/unavailable rows (host plugin inactive).
+ * @return void
+ */
+function aafm_render_bridge_permission_line( string $slug, bool $disabled ): void {
+	$label = $disabled ? '' : aafm_bridge_permission_label( $slug );
+
+	if ( '' !== $label ) {
+		printf(
+			'<p class="aafm-ability-hint aafm-muted">%1$s <code>%2$s</code></p>',
+			esc_html__( 'Permission check:', 'agent-abilities-for-mcp' ),
+			esc_html( $label )
+		);
+		return;
+	}
+
+	$pos          = strpos( $slug, '/' );
+	$plugin_label = aafm_bridge_display_label( false !== $pos ? substr( $slug, 0, $pos ) : $slug );
+	printf(
+		'<p class="aafm-ability-hint aafm-muted">%s</p>',
+		esc_html(
+			sprintf(
+				/* translators: %s: source plugin display name. */
+				__( 'Permission determined by %s', 'agent-abilities-for-mcp' ),
+				$plugin_label
+			)
+		)
+	);
+}
+
+/**
  * Render a single bridge ability toggle row.
  *
  * Bridge-specific by design (see MF-1): it emits name="bridged_abilities[]", derives its checked
@@ -358,6 +459,9 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 		'<p class="aafm-ability-hint aafm-muted"><code>%s</code></p>',
 		esc_html( $tool_name )
 	);
+
+	// The effective permission gate, so the operator can judge exposure before enabling.
+	aafm_render_bridge_permission_line( $slug, $disabled );
 
 	// Destructive confirm: an inline reveal, never a JS modal. admin.js shows it when the switch
 	// is flipped on; "Enable anyway" keeps it on, "Cancel" flips it back off.

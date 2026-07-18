@@ -435,6 +435,10 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Desired values keyed by unified field name (not model prop), so they can be diffed straight
+	// against aafm_aioseo_read_fields()'s output after save() - see the read-back comment below (L11).
+	$desired = array();
+
 	foreach ( aafm_aioseo_fields() as $field => $spec ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
@@ -443,8 +447,9 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		if ( ! property_exists( $model, $prop ) ) {
 			continue; // The installed model version does not expose this prop; do not invent it.
 		}
-		$raw          = (string) $input[ $field ];
-		$model->$prop = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		$raw               = (string) $input[ $field ];
+		$model->$prop      = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		$desired[ $field ] = (string) $model->$prop;
 
 		// A custom social image renders ONLY when its *_image_type column reads 'custom_image'.
 		// That column defaults to 'default' (AIOSEO\Plugin\Common\Models\Post::getDefaults), which
@@ -486,8 +491,9 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		if ( ! array_key_exists( $field, $input ) || ! property_exists( $model, $prop ) ) {
 			continue;
 		}
-		$model->$prop   = (bool) $input[ $field ];
-		$robots_touched = true;
+		$model->$prop      = (bool) $input[ $field ];
+		$desired[ $field ] = $model->$prop;
+		$robots_touched    = true;
 	}
 
 	// AIOSEO honors the per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy
@@ -499,13 +505,21 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		$model->robots_default = false;
 	}
 
-	// AIOSEO's model save() returns false on a custom-table write failure. Surface it rather
-	// than reporting a stale read as a success.
-	if ( false === $model->save() ) {
-		return aafm_generic_error();
+	// AIOSEO's model save() returns void, not bool (L11: the old `false === $model->save()` guard
+	// was dead code that could never trip, letting a genuinely failed custom-table write report
+	// success - pinned by SeoContractTest::test_aioseo_model_save_returns_void_not_bool()). Verify
+	// persistence a different way: force a fresh read of the model and diff it against what we just
+	// asked to be written, field by field. A real write failure now surfaces as a read-back mismatch.
+	$model->save();
+
+	$after = aafm_aioseo_read_fields( $id );
+	foreach ( $desired as $field => $value ) {
+		if ( $after[ $field ] !== $value ) {
+			return aafm_generic_error();
+		}
 	}
 
-	return aafm_aioseo_read_fields( $id );
+	return $after;
 }
 
 /**

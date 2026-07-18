@@ -36,6 +36,19 @@ final class AbilitiesDisclosureTest extends TestCase {
 		}
 	}
 
+	/**
+	 * L6: aafm/get-post and aafm/get-page (aafm_exec_get_post()/aafm_exec_get_page() in
+	 * includes/abilities/) both call aafm_rich_post() with include_content left at its
+	 * default of true, so a single-object read DOES return the full body - the disclosure
+	 * previously claimed the opposite.
+	 */
+	public function test_get_post_and_get_page_disclosures_do_not_deny_the_body(): void {
+		$disclosures = aafm_ability_disclosures();
+		$this->assertStringNotContainsString( 'Not the full body', $disclosures['aafm/get-post'] );
+		$this->assertStringContainsString( 'body', $disclosures['aafm/get-post'] );
+		$this->assertStringContainsString( 'body', $disclosures['aafm/get-page'] );
+	}
+
 	public function test_no_orphan_disclosure_keys(): void {
 		$disclosures = array_keys( aafm_ability_disclosures() );
 		$registry    = array_keys( aafm_get_abilities_registry() );

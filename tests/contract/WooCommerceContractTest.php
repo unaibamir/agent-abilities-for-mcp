@@ -238,6 +238,53 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * M12 companion: a note a logged-in user with edit_shop_orders adds ($added_by_user = true) is
+	 * attributed to that user's DISPLAY NAME, not 'system'. This is the case the production
+	 * added_by_user check ('system' !== added_by) must read as true - the inverse of the programmatic
+	 * case above, and the half the original stub's hardcoded 'user' never modelled either.
+	 */
+	public function test_order_note_added_by_is_display_name_for_a_human(): void {
+		if ( ! function_exists( 'wc_get_order_notes' ) ) {
+			$this->markTestSkipped( 'wc_get_order_notes() unavailable.' );
+		}
+
+		$user_id = self::factory()->user->create(
+			array(
+				'role'         => 'administrator',
+				'display_name' => 'Aafm Store Manager',
+			)
+		);
+		// WC_Order::add_order_note() attributes the note to the acting user only when that user is
+		// logged in AND can edit_shop_orders; administrators get that WooCommerce capability on install.
+		$user = new \WP_User( $user_id );
+		$user->add_cap( 'edit_shop_orders' );
+		wp_set_current_user( $user_id );
+
+		$order = new \WC_Order();
+		$order->save();
+		$order->add_order_note( 'AAFM human note', false, true );
+
+		$notes = wc_get_order_notes( array( 'order_id' => $order->get_id() ) );
+		$this->assertNotEmpty( $notes, 'The added note must be returned.' );
+		$note = reset( $notes );
+
+		$this->assertObjectHasProperty( 'added_by', $note, 'Notes expose added_by.' );
+		$this->assertSame(
+			'Aafm Store Manager',
+			$note->added_by,
+			"A human-authored note is attributed to the user's display name, not 'system'."
+		);
+		$this->assertNotSame(
+			'system',
+			$note->added_by,
+			"The production added_by_user check ('system' !== added_by) must read true for a human note."
+		);
+
+		$order->delete( true );
+		wp_set_current_user( 0 );
+	}
+
+	/**
 	 * M3 / WC 9.1 floor: at 9.1.0 `wc_update_attribute()` backfills the fields a partial update
 	 * omits, so a name-only update no longer wipes has_archives/order_by/type. This is the
 	 * behavioural cliff the version floor is pinned to; below 9.1 the same call is destructive.

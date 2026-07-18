@@ -326,10 +326,13 @@ function aafm_perm_update_page( array $input ): bool {
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type || ! aafm_can_edit_post_object( $post ) ) {
 		return false;
 	}
-	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
-		// Derive the publish cap from the page type object for consistency; resolves to publish_pages.
-		$obj = get_post_type_object( 'page' );
-		return $obj instanceof WP_Post_Type && current_user_can( (string) $obj->cap->publish_posts );
+	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
+		// Mirror aafm_perm_update_post: any public status (not just literal 'publish', so
+		// custom public statuses are covered too) requires the type's publish cap, which
+		// resolves to publish_pages for pages.
+		$caps = aafm_type_caps( $post->post_type );
+		return $caps['object'] instanceof WP_Post_Type
+			&& current_user_can( (string) $caps['object']->cap->publish_posts );
 	}
 	return true;
 }

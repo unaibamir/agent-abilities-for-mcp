@@ -998,8 +998,17 @@
 					'input[name="aafm_log_retention_days"]'
 				);
 				const draft = form.querySelector( 'input[name="aafm_force_draft"]' );
+				const blockGuardStrict = form.querySelector(
+					'input[name="aafm_block_guard_strict"]'
+				);
 				const deleteOnUninstall = form.querySelector(
 					'input[name="aafm_delete_data_on_uninstall"]'
+				);
+				const oauthEnabled = form.querySelector(
+					'input[name="aafm_oauth_enabled"]'
+				);
+				const oauthDcrEnabled = form.querySelector(
+					'input[name="aafm_oauth_dcr_enabled"]'
 				);
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 
@@ -1009,11 +1018,25 @@
 				body.append( 'aafm_rate_limit_per_min', rate?.value ?? '0' );
 				body.append( 'aafm_max_title_len', title?.value ?? '0' );
 				body.append( 'aafm_log_retention_days', retention?.value ?? '30' );
+				// Every checkbox in this form is forwarded the same way: append '1' when checked,
+				// omit it when unchecked. The server sanitizer reads an absent field as off, so a
+				// checkbox that is left out of the payload is never persisted as on. Leaving any of
+				// these out (the pre-fix bug for the OAuth, DCR, and strict-block toggles) made the
+				// server coerce them off on every save, so toggling one on never stuck.
 				if ( draft?.checked ) {
 					body.append( 'aafm_force_draft', '1' );
 				}
+				if ( blockGuardStrict?.checked ) {
+					body.append( 'aafm_block_guard_strict', '1' );
+				}
 				if ( deleteOnUninstall?.checked ) {
 					body.append( 'aafm_delete_data_on_uninstall', '1' );
+				}
+				if ( oauthEnabled?.checked ) {
+					body.append( 'aafm_oauth_enabled', '1' );
+				}
+				if ( oauthDcrEnabled?.checked ) {
+					body.append( 'aafm_oauth_dcr_enabled', '1' );
 				}
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
 

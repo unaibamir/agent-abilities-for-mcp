@@ -1,10 +1,10 @@
 === Agent Abilities for MCP - MCP Server for AI Agents ===
 Contributors: unaibamir
-Tags: mcp, chatgpt, ai-assistant, woocommerce, abilities
+Tags: ai, chatgpt, claude, mcp, seo
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.1.1
+Stable tag: 1.2.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,17 +77,19 @@ So you are not limited to the integrations shipped here. Any plugin that speaks 
 
 Your AI client connects in to your site over MCP. The plugin never calls out to any AI provider, so there is no model API key to add and nothing extra to pay for.
 
-* **Anthropic Claude:** works today through Claude Desktop, Claude Code, and other MCP-capable Claude clients.
+* **Anthropic Claude:** works today. The claude.ai web app and Claude Desktop share one custom-connector flow, so you paste your endpoint URL and approve the sign-in once. Claude Code connects from the command line.
+* **OpenAI ChatGPT:** works once you turn on developer mode in ChatGPT and add your site as a custom connector.
+* **Manus:** works by adding your endpoint as a custom MCP connector and approving the sign-in. Manus runs in the cloud, so it connects by URL with no local bridge.
 * **Google Gemini:** works today through the Gemini CLI.
 * **Any Model Context Protocol client:** anything that speaks MCP can connect, directly or through the open-source `mcp-remote` bridge that runs on your own machine.
 
-The hosted ChatGPT and Gemini apps are not supported yet. They expect a streamable HTTP/SSE remote connector that the underlying MCP Adapter does not serve natively yet. The clients listed below all work today.
+The hosted Gemini app is not supported yet. The clients listed below all work today.
 
 = 🧩 Compatible clients and frameworks =
 
 Connect any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL and approve once in the browser; with an Application Password you point a dedicated low-privilege user at the endpoint.
 
-* **Desktop AI apps:** Claude Desktop.
+* **Hosted cloud apps:** ChatGPT (developer mode turned on, your site added as a custom connector), Claude (the claude.ai web app and Claude Desktop, which share one connector flow), and Manus. These connect by URL over OAuth, so there is no config file to edit and no bridge to install.
 * **AI code editors and IDEs:** Claude Code, Cursor, VS Code, and Windsurf.
 * **Command line:** Gemini CLI.
 * **AI agent frameworks:** any MCP-compatible framework can call your enabled abilities as tools.
@@ -166,11 +168,11 @@ WordPress 6.9 or newer, which is where the Abilities API and the official MCP Ad
 
 = Which AI clients work? =
 
-Any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL into the client and approve the connection once in the browser; clients like Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect this way, some directly and some through the mcp-remote bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth. The hosted ChatGPT and Gemini apps want a streamable HTTP/SSE remote connector, which the underlying adapter does not serve natively yet.
+Any MCP client that can reach your site's endpoint. With OAuth you paste the endpoint URL into the client and approve the connection once in the browser; clients like Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect this way, some directly and some through the mcp-remote bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth, though the hosted cloud apps use OAuth only. ChatGPT connects too, once you turn on developer mode and add your site as a custom connector, and so does Manus. The hosted Gemini app is not supported yet.
 
 = Does it work with ChatGPT? =
 
-Not the hosted ChatGPT app yet. It needs a streamable HTTP/SSE remote connector that the underlying MCP Adapter does not serve natively yet. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI all work today, some directly and some through the mcp-remote bridge that runs on your own machine.
+Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
 
 = I'm on Windows and the config won't start. =
 
@@ -236,6 +238,24 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.2.1 =
+
+* **Chore:** The plugin's website link now points to agentabilitieswp.com instead of the GitHub repository.
+* **Chore:** Refreshed the documentation so the supported-client list matches what actually works: ChatGPT, Claude (the claude.ai web app and Claude Desktop), and Manus all connect by URL over OAuth, while Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect from your own machine.
+
+= 1.2.0 =
+
+* **Fix:** Logged-out visitors could see "There has been a critical error" on every page. It happened when another active plugin checked the current user very early in the WordPress load (The Events Calendar is one example). The plugin now waits until it has finished loading before doing that work.
+* **Feature:** Added ChatGPT as a connection option, plus a single Claude entry that covers both the Claude web app and Claude Desktop. Hosted apps like these connect by URL over OAuth, so they no longer show the application-password steps.
+* **Fix:** Manus now connects the same way, by URL over OAuth, instead of the local-bridge config it could never run as a cloud agent.
+* **Fix:** The Settings screen now saves the Enable OAuth, Dynamic Client Registration, and strict block-validation switches correctly. They were being switched off on save.
+* **Fix:** No more white screen when the standalone MCP Adapter plugin is active alongside this one.
+* **Fix:** The operating-system tabs in the connection guide now show the right instructions when you switch between them.
+* **Chore:** Tightened up the connection snippet helpers.
+* **Fix:** Tightened OAuth token scoping so an MCP access token can only authenticate the MCP endpoint and never another REST route, and closed a rare condition that could exhaust memory during connection setup.
+* **Fix:** Publishing through the write abilities now always requires publish permission, including for custom public post statuses added by other plugins.
+* **Fix:** Valid Cover and Media & Text blocks are no longer flagged as invalid by the block-safety check.
+
 = 1.1.1 =
 
 * AI agents that write pages, posts, or templates are now steered to keep block styling in the block attributes instead of inline CSS, the mistake that made blocks show "unexpected or invalid content" in the editor.
@@ -263,6 +283,14 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.2.1 =
+
+Documentation and links only. The plugin's website link now points to agentabilitieswp.com, and the supported-client list is up to date for ChatGPT, Claude, and Manus. No code changes.
+
+= 1.2.0 =
+
+Fixes a critical crash that could white-screen logged-out visitors when another plugin resolves the current user early in the load, and tightens OAuth token scoping. Also adds ChatGPT support and fixes the Settings save.
 
 = 1.1.1 =
 Agent-written pages, posts, and templates no longer risk showing invalid content in the block editor. An optional strict mode under Safety controls can reject bad block markup outright.

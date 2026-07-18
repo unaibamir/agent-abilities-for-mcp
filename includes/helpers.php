@@ -992,6 +992,26 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 }
 
 /**
+ * Whether a requested status is publicly viewable, so publishing authority is required.
+ *
+ * Keys on core's own public-status registry rather than the literal 'publish' string, so a
+ * custom public status another plugin registers (register_post_status( 'featured',
+ * array( 'public' => true ) )) is treated as a publish-equivalent and gated on the type's
+ * publish_posts cap - not reachable with only edit capability. On stock WordPress the public
+ * set is just 'publish', so behaviour there is unchanged.
+ *
+ * @param string $status Requested status (raw; sanitized here).
+ * @return bool True when the status is publicly viewable.
+ */
+function aafm_status_requires_publish_cap( string $status ): bool {
+	return in_array(
+		sanitize_key( $status ),
+		array_values( get_post_stati( array( 'public' => true ) ) ),
+		true
+	);
+}
+
+/**
  * Reduce a post to a safe, public-facing shape.
  *
  * @param WP_Post $post Post object.

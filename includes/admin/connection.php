@@ -210,6 +210,13 @@ function aafm_create_agent_user( string $login ) {
  * @return string
  */
 function aafm_client_snippet( string $client, string $username, string $os = 'unix' ): string {
+	// Hosted web apps connect over OAuth by URL and cannot run an mcp-remote stdio server, so the
+	// builder self-guards: it never hands back a config a hosted client could not use. The UI
+	// already skips these clients before calling here; this closes the direct-call footgun.
+	if ( aafm_client_is_hosted_web_app( $client ) ) {
+		return '';
+	}
+
 	$env = array(
 		'WP_API_URL'      => aafm_endpoint_url(),
 		'WP_API_USERNAME' => $username,
@@ -244,24 +251,69 @@ function aafm_client_snippet( string $client, string $username, string $os = 'un
 }
 
 /**
- * The MCP clients we ship copy-paste quickstarts for: slug => display label.
+ * Every MCP client the Connection tab guides, slug => display label, in display order.
  *
- * Only clients that connect over the mcp-wordpress-remote proxy are listed. Hosted
- * assistants that cannot run a local stdio server (ChatGPT, the hosted Gemini app) are
- * deliberately left out so the grid never hands out a config that can't work.
+ * The list leads with the hosted web apps most people reach for (ChatGPT, Claude AI), then the
+ * editors and CLIs. Web apps connect over OAuth by URL only; the rest can also run the
+ * mcp-remote stdio bridge. Which clients get an mcp-remote config snippet is decided by
+ * {@see aafm_config_snippet_clients()}, not this list.
  *
  * @return array<string,string> Slug-keyed labels, in the order shown in the UI.
  */
 function aafm_quickstart_clients(): array {
 	return array(
-		'claude-desktop' => __( 'Claude Desktop', 'agent-abilities-for-mcp' ),
-		'claude-code'    => __( 'Claude Code', 'agent-abilities-for-mcp' ),
-		'cursor'         => __( 'Cursor', 'agent-abilities-for-mcp' ),
-		'vscode'         => __( 'VS Code', 'agent-abilities-for-mcp' ),
-		'windsurf'       => __( 'Windsurf', 'agent-abilities-for-mcp' ),
-		'gemini-cli'     => __( 'Gemini CLI', 'agent-abilities-for-mcp' ),
-		'manus'          => __( 'Manus', 'agent-abilities-for-mcp' ),
-		'generic'        => __( 'Generic', 'agent-abilities-for-mcp' ),
+		'chatgpt'     => __( 'ChatGPT', 'agent-abilities-for-mcp' ),
+		'claude'      => __( 'Claude', 'agent-abilities-for-mcp' ),
+		'claude-code' => __( 'Claude Code', 'agent-abilities-for-mcp' ),
+		'cursor'      => __( 'Cursor', 'agent-abilities-for-mcp' ),
+		'vscode'      => __( 'VS Code', 'agent-abilities-for-mcp' ),
+		'windsurf'    => __( 'Windsurf', 'agent-abilities-for-mcp' ),
+		'gemini-cli'  => __( 'Gemini CLI', 'agent-abilities-for-mcp' ),
+		'manus'       => __( 'Manus', 'agent-abilities-for-mcp' ),
+		'generic'     => __( 'Generic', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
+ * The hosted web-app clients: OAuth-by-URL only, and never an mcp-remote stdio config.
+ *
+ * ChatGPT, Claude (the claude.ai web app and Claude Desktop, which share one custom-connector flow),
+ * and Manus all run as hosted cloud services. They cannot launch a local stdio server on the
+ * operator's machine, so they must never be shown an mcp-remote snippet or appear in the
+ * App-Password config grid. Manus connects the same way: its MCP connectors are added by remote URL
+ * and approved over OAuth 2.0 (per manus.im/docs/integrations/mcp-connectors), so it belongs with
+ * the URL-only web apps rather than the stdio-bridge clients.
+ *
+ * @return list<string> Slugs of the hosted web-app clients.
+ */
+function aafm_hosted_web_app_clients(): array {
+	return array( 'chatgpt', 'claude', 'manus' );
+}
+
+/**
+ * Whether a client is a hosted web app that connects over OAuth by URL only.
+ *
+ * @param string $client Client slug.
+ * @return bool
+ */
+function aafm_client_is_hosted_web_app( string $client ): bool {
+	return in_array( $client, aafm_hosted_web_app_clients(), true );
+}
+
+/**
+ * The clients that get an mcp-remote config snippet, slug => label, in display order.
+ *
+ * This is {@see aafm_quickstart_clients()} minus the hosted web apps, so the App-Password config
+ * grid and the per-client snippet cards never hand out a stdio config to a client that cannot run
+ * one.
+ *
+ * @return array<string,string> Slug-keyed labels.
+ */
+function aafm_config_snippet_clients(): array {
+	return array_filter(
+		aafm_quickstart_clients(),
+		static fn( string $slug ): bool => ! aafm_client_is_hosted_web_app( $slug ),
+		ARRAY_FILTER_USE_KEY
 	);
 }
 
@@ -275,8 +327,6 @@ function aafm_quickstart_clients(): array {
  */
 function aafm_quickstart_note( string $client ): string {
 	switch ( $client ) {
-		case 'claude-desktop':
-			return __( 'Paste into claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude.', 'agent-abilities-for-mcp' );
 		case 'claude-code':
 			return __( "Add it to your project's .mcp.json, or run claude mcp add.", 'agent-abilities-for-mcp' );
 		case 'cursor':
@@ -317,6 +367,13 @@ function aafm_quickstart_note( string $client ): string {
  * @return string JSON snippet, credential-free.
  */
 function aafm_oauth_client_snippet( string $client, string $os = 'unix' ): string {
+	// Hosted web apps connect over OAuth by URL only and cannot run the mcp-remote bridge, so the
+	// builder returns no snippet for them. The OAuth panel already renders the endpoint URL for
+	// these clients instead of calling here; this self-guard closes the direct-call footgun.
+	if ( aafm_client_is_hosted_web_app( $client ) ) {
+		return '';
+	}
+
 	$package = 'mcp-remote';
 	$url     = aafm_endpoint_url();
 
@@ -356,7 +413,7 @@ function aafm_oauth_client_snippet( string $client, string $os = 'unix' ): strin
  * @return string 'native' or 'bridge'.
  */
 function aafm_oauth_client_mode( string $client ): string {
-	$native_clients = array( 'claude-desktop', 'claude-code', 'cursor', 'vscode', 'windsurf', 'gemini-cli' );
+	$native_clients = array( 'chatgpt', 'claude', 'manus', 'claude-code', 'cursor', 'vscode', 'windsurf', 'gemini-cli' );
 	return in_array( $client, $native_clients, true ) ? 'native' : 'bridge';
 }
 
@@ -371,8 +428,10 @@ function aafm_oauth_client_mode( string $client ): string {
  */
 function aafm_oauth_client_note( string $client ): string {
 	switch ( $client ) {
-		case 'claude-desktop':
-			return __( 'Settings → Connectors → Add custom connector, then paste the endpoint URL.', 'agent-abilities-for-mcp' );
+		case 'chatgpt':
+			return __( 'Turn on Developer mode in ChatGPT settings, then add a custom connector: give it a name, paste the endpoint URL as the MCP server URL, create it, and approve the sign-in. Developer mode needs a paid ChatGPT plan.', 'agent-abilities-for-mcp' );
+		case 'claude':
+			return __( 'Open Settings, then Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow.', 'agent-abilities-for-mcp' );
 		case 'claude-code':
 			return __( 'Run: claude mcp add --transport http agent-abilities <endpoint-url>', 'agent-abilities-for-mcp' );
 		case 'cursor':
@@ -384,7 +443,7 @@ function aafm_oauth_client_note( string $client ): string {
 		case 'gemini-cli':
 			return __( 'Add the endpoint under httpUrl in your Gemini CLI settings.json mcpServers block.', 'agent-abilities-for-mcp' );
 		case 'manus':
-			return __( "Add the endpoint URL in Manus's MCP server config.", 'agent-abilities-for-mcp' );
+			return __( 'In Manus, add a custom MCP connector, paste the endpoint URL as the server URL, and approve the OAuth sign-in. Manus runs in the cloud, so it connects by URL - there is no local bridge to install.', 'agent-abilities-for-mcp' );
 		case 'generic':
 			return __( 'Use the bridge snippet below with any MCP client that runs a local stdio server.', 'agent-abilities-for-mcp' );
 		default:
@@ -795,7 +854,7 @@ function aafm_render_connection_tab(): void {
 		// the tablist is given an accessible name via aria-labelledby instead.
 		echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-oauth">';
 		printf(
-			'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
+			'<button type="button" class="aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
 			esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
 		);
 		printf(
@@ -831,17 +890,41 @@ function aafm_render_connection_tab(): void {
 		// Native-mode clients lead with the URL paste note; bridge-mode clients lead with the snippet.
 		echo '<div class="aafm-oauth-panels">';
 		foreach ( aafm_quickstart_clients() as $slug => $label ) {
-			$mode = aafm_oauth_client_mode( $slug );
-			$note = aafm_oauth_client_note( $slug );
-
-			$unix_oauth    = aafm_oauth_client_snippet( $slug, 'unix' );
-			$windows_oauth = aafm_oauth_client_snippet( $slug, 'windows' );
+			$mode       = aafm_oauth_client_mode( $slug );
+			$note       = aafm_oauth_client_note( $slug );
+			$is_web_app = aafm_client_is_hosted_web_app( $slug );
 
 			printf(
 				'<div class="aafm-oauth-panel" data-client="%s"%s>',
 				esc_attr( $slug ),
-				'claude-desktop' === $slug ? '' : ' hidden'
+				'chatgpt' === $slug ? '' : ' hidden'
 			);
+
+			if ( $is_web_app ) {
+				// Hosted web app: it connects over OAuth by URL only and cannot run a local
+				// stdio server, so show the endpoint URL to paste and never an mcp-remote config.
+				if ( '' !== $note ) {
+					echo '<p class="aafm-oauth-note">' . esc_html( $note ) . '</p>';
+				}
+				echo '<div class="aafm-field-mono aafm-oauth-endpoint">';
+				printf( '<span class="aafm-endpoint">%s</span>', esc_html( $url ) );
+				echo wp_kses(
+					sprintf(
+						'<button type="button" class="aafm-btn aafm-btn-secondary aafm-btn-sm copy-fab aafm-copy" data-copy="%1$s" aria-label="%4$s">%2$s<span class="aafm-copy-label">%3$s</span></button>',
+						esc_attr( $url ),
+						aafm_icon( 'copy' ),
+						esc_html__( 'Copy', 'agent-abilities-for-mcp' ),
+						esc_attr__( 'Copy the MCP endpoint URL', 'agent-abilities-for-mcp' )
+					),
+					aafm_admin_allowed_html()
+				);
+				echo '</div>';
+				echo '</div>'; // .aafm-oauth-panel
+				continue;
+			}
+
+			$unix_oauth    = aafm_oauth_client_snippet( $slug, 'unix' );
+			$windows_oauth = aafm_oauth_client_snippet( $slug, 'windows' );
 
 			if ( 'native' === $mode ) {
 				// Native: lead with URL-paste instructions, offer bridge as secondary.
@@ -909,6 +992,27 @@ function aafm_render_connection_tab(): void {
 			'OAuth is turned off. Enable it under Settings to use the browser-approval flow, or connect with an Application Password below.',
 			'agent-abilities-for-mcp'
 		) . '</p>';
+
+		// Hosted web apps (ChatGPT, Claude, Manus) can ONLY connect over OAuth - they cannot run the
+		// Application Password bridge below - so with OAuth off they have no path at all. Name them
+		// rather than let the operator discover the dead end. The label list is derived from
+		// aafm_hosted_web_app_clients() so it stays in sync if that set changes.
+		$client_labels = aafm_quickstart_clients();
+		$hosted_labels = array();
+		foreach ( aafm_hosted_web_app_clients() as $hosted_slug ) {
+			if ( isset( $client_labels[ $hosted_slug ] ) ) {
+				$hosted_labels[] = $client_labels[ $hosted_slug ];
+			}
+		}
+		if ( ! empty( $hosted_labels ) ) {
+			echo '<p class="sub aafm-oauth-off-hosted">' . esc_html(
+				sprintf(
+					/* translators: %s: comma-separated list of hosted client names, e.g. "ChatGPT, Claude, and Manus". */
+					__( '%s connect over OAuth only, so they need OAuth turned on - the Application Password path below will not work for them.', 'agent-abilities-for-mcp' ),
+					wp_sprintf_l( '%l', $hosted_labels )
+				)
+			) . '</p>';
+		}
 	}
 
 	echo '</section>';
@@ -985,7 +1089,7 @@ function aafm_render_connection_tab(): void {
 	// One tablist filters many snippet panels, so no aria-controls; named via aria-labelledby.
 	echo '<div class="aafm-seg aafm-os-tabs" role="tablist" aria-labelledby="aafm-os-label-bridge">';
 	printf(
-		'<button type="button" class="aafm-os-tab is-active on" data-os="unix" role="tab" aria-selected="true">%s</button>',
+		'<button type="button" class="aafm-os-tab is-active" data-os="unix" role="tab" aria-selected="true">%s</button>',
 		esc_html__( 'macOS / Linux', 'agent-abilities-for-mcp' )
 	);
 	printf(
@@ -999,7 +1103,7 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-stat-label">' . esc_html__( 'Your client', 'agent-abilities-for-mcp' ) . '</div>';
 	echo '<div class="aafm-client-grid" id="aafm-clients">';
 	$first = true;
-	foreach ( aafm_quickstart_clients() as $slug => $label ) {
+	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
 		echo wp_kses(
 			sprintf(
 				'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
@@ -1020,10 +1124,9 @@ function aafm_render_connection_tab(): void {
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
 	echo '<div class="aafm-card-pad">';
 
-	// Use the first real client slug from the grid (claude-desktop), not a non-existent 'claude'
-	// that only happened to fall through to the default root key.
-	$unix_snippet    = aafm_client_snippet( 'claude-desktop', 'mcp-agent', 'unix' );
-	$windows_snippet = aafm_client_snippet( 'claude-desktop', 'mcp-agent', 'windows' );
+	// Use the first client in the config-snippet grid (claude-code) for the default block.
+	$unix_snippet    = aafm_client_snippet( 'claude-code', 'mcp-agent', 'unix' );
+	$windows_snippet = aafm_client_snippet( 'claude-code', 'mcp-agent', 'windows' );
 
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
 	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
@@ -1071,7 +1174,7 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-quickstarts">';
 	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
 	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
-	foreach ( aafm_quickstart_clients() as $slug => $label ) {
+	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
 		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
 		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';

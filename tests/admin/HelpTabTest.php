@@ -75,6 +75,23 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'Exposed term meta keys', $html );
 	}
 
+	/**
+	 * L14: aafm_rate_limit_consume() (includes/safety.php) keys its transient bucket by
+	 * user_id alone, so two connections authenticated as the same agent user share one
+	 * budget. The old copy claimed the opposite ("do not eat into each other's budget").
+	 */
+	public function test_help_tab_rate_limit_entry_says_connections_share_one_budget(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'do not eat into each other', $html );
+		$this->assertStringContainsString( 'per agent user, not per connection', $html );
+		$this->assertStringContainsString( 'share one budget', $html );
+	}
+
 	public function test_help_tab_documents_the_waf_cdn_unreachable_cluster(): void {
 		$this->acting_as( 'administrator' );
 

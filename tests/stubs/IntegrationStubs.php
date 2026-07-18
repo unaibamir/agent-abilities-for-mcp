@@ -428,11 +428,20 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_create_refund( $args = array() ) { \AAFM\Tests\WcOrderStubStore::$last_refund_args = $args; $order_id = isset( $args["order_id"] ) ? (int) $args["order_id"] : 0; $amount = isset( $args["amount"] ) ? (string) $args["amount"] : "0.00"; $reason = isset( $args["reason"] ) ? (string) $args["reason"] : ""; if ( ! \AAFM\Tests\WcOrderStubStore::exists( $order_id ) ) { return new \WP_Error( "wc_create_refund_failed", "Order not found." ); } return \AAFM\Tests\WcOrderStubStore::add_refund( $order_id, $amount, $reason ); }' );
 		}
-		// A WC_Order_Item carrying the tax map the refund executor reads via $order->get_item()->get_taxes().
-		// get_taxes() returns the real WooCommerce shape: array( 'total' => array( rate_id => amount ) ).
+		// The base WC_Order_Item carries no get_taxes() - real WooCommerce only defines it on
+		// WC_Order_Item_Product (and the other taxed subtypes), never the base class (pinned by
+		// WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()). A coupon/fee-shaped
+		// line id resolves to this base class so the executor's method_exists() guard is exercisable.
 		if ( ! class_exists( 'WC_Order_Item' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Order_Item { private $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } public function get_taxes() { return (array) ( $this->data["taxes"] ?? array() ); } }' );
+			eval( 'class WC_Order_Item { protected $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } }' );
+		}
+		// A product line item carries the tax map the refund executor reads via
+		// $order->get_item()->get_taxes(). get_taxes() returns the real WooCommerce shape:
+		// array( 'total' => array( rate_id => amount ) ).
+		if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+			eval( 'class WC_Order_Item_Product extends WC_Order_Item { public function get_taxes() { return (array) ( $this->data["taxes"] ?? array() ); } }' );
 		}
 		// Minimal stand-ins for the two WooCommerce price helpers the refund executor calls. wc_format_decimal
 		// normalises a money string (rounding to $dp when given); wc_get_price_decimals is the store precision.
@@ -629,7 +638,7 @@ class WC_Order {
 	}
 	public function add_order_note( $note, $customer_note = false, $added_by_user = false ) { $note = (string) $note; $customer_note = (bool) $customer_note; $added_by_user = (bool) $added_by_user; $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::add_note( $id, $note, $customer_note, $added_by_user ); }
 	public function get_refunds() { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::get_refunds_for_order( $id ); }
-	public function get_item( $item_id, $load_from_db = true ) { foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) { $item = (array) $item; if ( (int) ( $item['id'] ?? 0 ) === (int) $item_id ) { return new \WC_Order_Item( $item ); } } return false; }
+	public function get_item( $item_id, $load_from_db = true ) { foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) { $item = (array) $item; if ( (int) ( $item['id'] ?? 0 ) === (int) $item_id ) { return array_key_exists( 'product_id', $item ) ? new \WC_Order_Item_Product( $item ) : new \WC_Order_Item( $item ); } } return false; }
 	public function delete( $force = false ) { $id = (int) ( $this->data['id'] ?? 0 ); return \AAFM\Tests\WcOrderStubStore::delete_order( $id ); }
 	public function save() { $id = (int) ( $this->data['id'] ?? 0 ); $id = \AAFM\Tests\WcOrderStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
 }

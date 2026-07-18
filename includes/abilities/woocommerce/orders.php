@@ -1607,8 +1607,12 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 			// multi-jurisdiction); get_taxes()['total'] is a rate_id => tax_amount map. Spread
 			// the requested refund_tax across every rate id in proportion to that rate's share
 			// of the line's total tax, rather than dumping the whole amount on the first rate.
+			// get_taxes() lives on WC_Order_Item_Product (and the other line-item subtypes with tax),
+			// NOT on the base WC_Order_Item - a coupon or base-shaped line id would fatal without this
+			// guard (Info: refund crash risk, pinned by
+			// WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()).
 			$order_item = $order->get_item( $line_item_id );
-			if ( $order_item instanceof \WC_Order_Item ) {
+			if ( $order_item instanceof \WC_Order_Item && method_exists( $order_item, 'get_taxes' ) ) {
 				$item_taxes = $order_item->get_taxes();
 				if ( isset( $item_taxes['total'] ) && is_array( $item_taxes['total'] ) && array() !== $item_taxes['total'] ) {
 					$line_taxes       = array_map( 'floatval', $item_taxes['total'] );

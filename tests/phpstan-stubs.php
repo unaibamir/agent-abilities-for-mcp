@@ -505,10 +505,22 @@ if ( ! class_exists( 'WC_Order' ) ) {
 if ( ! class_exists( 'WC_Order_Item' ) ) {
 	/**
 	 * Stub WC_Order_Item for PHPStan - mirrors the getters the order abilities call.
+	 *
+	 * The base class declares no get_taxes() - real WooCommerce only defines it on
+	 * WC_Order_Item_Product (and the other taxed subtypes), never the base class (M13/refund
+	 * crash-risk fix; pinned by WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()).
 	 */
 	class WC_Order_Item {
 		/** @return int */
 		public function get_id() { return 0; }
+	}
+}
+
+if ( ! class_exists( 'WC_Order_Item_Product' ) ) {
+	/**
+	 * Stub WC_Order_Item_Product for PHPStan - the taxed line-item subtype get_item() can return.
+	 */
+	class WC_Order_Item_Product extends WC_Order_Item {
 		/**
 		 * Return the item's tax data, keyed by 'total' (and 'subtotal') => [ rate_id => amount ].
 		 *

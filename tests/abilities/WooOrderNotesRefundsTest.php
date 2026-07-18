@@ -995,6 +995,52 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
+	 * Refund crash risk (Info, audit F3): get_taxes() lives on WC_Order_Item_Product, NOT the base
+	 * WC_Order_Item. A refund targeting a coupon/base-shaped line id (no product_id) must not fatal -
+	 * the executor's method_exists() guard must simply omit refund_tax for that line.
+	 */
+	public function test_create_order_refund_on_base_shaped_line_does_not_fatal(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+
+		// A coupon-shaped line: no product_id, so get_item() resolves to the base WC_Order_Item,
+		// which has no get_taxes().
+		WcOrderStubStore::seed(
+			6004,
+			array(
+				'status' => 'processing',
+				'items'  => array(
+					array(
+						'id'    => 50,
+						'name'  => '10off',
+						'total' => '-10.00',
+					),
+				),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 6004,
+				'amount'     => '10.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 50,
+						'refund_total' => '10.00',
+						'refund_tax'   => '1.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A coupon/base-shaped line must not fatal or error.' );
+
+		$line = WcOrderStubStore::$last_refund_args['line_items'][50] ?? array();
+		$this->assertArrayHasKey( 'refund_total', $line );
+		$this->assertArrayNotHasKey( 'refund_tax', $line, 'A line with no get_taxes() must not emit a refund_tax map.' );
+	}
+
+	/**
 	 * Regression: many equal rates with a small refund_tax must never produce a negative part.
 	 *
 	 * With six EQUAL rates and a 0.04 refund_tax, naive per-rate rounding rounds five shares up to

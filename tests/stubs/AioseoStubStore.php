@@ -38,6 +38,16 @@ class AioseoStubStore {
 	public static bool $save_should_fail = false;
 
 	/**
+	 * When true, save() strips a trailing slash from any URL column (canonical_url and the custom image
+	 * URLs) before storing, modelling the benign URL reformatting a vendor can apply on save. A write
+	 * still persists; it just reads back in a normalized form, which is exactly the case the executor's
+	 * tolerant read-back must treat as success rather than a false failure.
+	 *
+	 * @var bool
+	 */
+	public static bool $normalize_urls = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -45,6 +55,7 @@ class AioseoStubStore {
 	public static function reset(): void {
 		self::$rows             = array();
 		self::$save_should_fail = false;
+		self::$normalize_urls   = false;
 	}
 
 	/**
@@ -66,7 +77,14 @@ class AioseoStubStore {
 	 * @return void
 	 */
 	public static function save( int $id, array $row ): void {
-		$row['post_id']    = $id;
+		$row['post_id'] = $id;
+		if ( self::$normalize_urls ) {
+			foreach ( array( 'canonical_url', 'og_image_custom_url', 'twitter_image_custom_url' ) as $url_col ) {
+				if ( isset( $row[ $url_col ] ) && is_string( $row[ $url_col ] ) && '' !== $row[ $url_col ] ) {
+					$row[ $url_col ] = untrailingslashit( $row[ $url_col ] );
+				}
+			}
+		}
 		self::$rows[ $id ] = array_merge( self::defaults( $id ), $row );
 	}
 

@@ -299,6 +299,35 @@ function aafm_aioseo_read_fields( int $id ): array {
 }
 
 /**
+ * Whether an AIOSEO string write actually persisted, tolerating the benign normalization AIOSEO may
+ * apply on save. An exact match passes immediately; otherwise both the persisted and the expected
+ * value are canonicalized the same way (trimmed, and for URL fields re-encoded with a trailing slash
+ * dropped) before comparison, so a write that landed but was reformatted is not read back as a
+ * failure. A genuine non-persist still fails: the old or default value left in the row is not a
+ * normalized form of what we asked to write.
+ *
+ * @param string $persisted Value read back from AIOSEO after save().
+ * @param string $expected  Sanitized value we asked AIOSEO to store.
+ * @param bool   $is_url    Whether the field is a URL (adds URL canonicalization on top of trim).
+ * @return bool
+ */
+function aafm_aioseo_value_persisted( string $persisted, string $expected, bool $is_url ): bool {
+	if ( $persisted === $expected ) {
+		return true;
+	}
+
+	$persisted_trimmed = trim( $persisted );
+	$expected_trimmed  = trim( $expected );
+	if ( $persisted_trimmed === $expected_trimmed ) {
+		return true;
+	}
+	if ( $is_url ) {
+		return untrailingslashit( esc_url_raw( $persisted_trimmed ) ) === untrailingslashit( esc_url_raw( $expected_trimmed ) );
+	}
+	return false;
+}
+
+/**
  * The shared output schema for aioseo-get-post / aioseo-update-post.
  *
  * @return array<string,array<string,mixed>>
@@ -512,9 +541,26 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	// asked to be written, field by field. A real write failure now surfaces as a read-back mismatch.
 	$model->save();
 
-	$after = aafm_aioseo_read_fields( $id );
+	$after     = aafm_aioseo_read_fields( $id );
+	$url_field = array();
+	foreach ( aafm_aioseo_fields() as $field => $spec ) {
+		$url_field[ $field ] = (bool) $spec['url'];
+	}
 	foreach ( $desired as $field => $value ) {
-		if ( $after[ $field ] !== $value ) {
+		if ( is_bool( $value ) ) {
+			// Robots flags are stored verbatim; an exact bool check is right, and a genuine failure
+			// (the old flag still in the row) still trips it.
+			if ( (bool) $after[ $field ] !== $value ) {
+				return aafm_generic_error();
+			}
+			continue;
+		}
+		// String fields: tolerate the benign normalization AIOSEO may apply on save (trimming, or a
+		// URL re-encode / trailing-slash change) so a write that genuinely persisted is not reported as
+		// a failure just because the stored form differs cosmetically. A real non-persist - the old or
+		// default value still sitting in the row - is not a normalized form of what we wrote, so it
+		// still fails.
+		if ( ! aafm_aioseo_value_persisted( (string) $after[ $field ], (string) $value, $url_field[ $field ] ?? false ) ) {
 			return aafm_generic_error();
 		}
 	}

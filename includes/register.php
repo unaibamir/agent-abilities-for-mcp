@@ -150,9 +150,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				array_merge(
 					$p,
 					array(
-						'ability'  => $name,
-						'status'   => 'denied',
-						'arg_keys' => is_array( $input ) ? array_keys( $input ) : array(),
+						'ability'   => $name,
+						'status'    => 'denied',
+						'arg_keys'  => is_array( $input ) ? array_keys( $input ) : array(),
+						'client_id' => aafm_oauth_current_client_id(),
 					)
 				)
 			);
@@ -168,9 +169,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				array_merge(
 					$p,
 					array(
-						'ability'  => $name,
-						'status'   => 'denied',
-						'arg_keys' => is_array( $input ) ? array_keys( $input ) : array(),
+						'ability'   => $name,
+						'status'    => 'denied',
+						'arg_keys'  => is_array( $input ) ? array_keys( $input ) : array(),
+						'client_id' => aafm_oauth_current_client_id(),
 					)
 				)
 			);
@@ -187,9 +189,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			array_merge(
 				$principal(),
 				array(
-					'ability'  => $name,
-					'status'   => 'started',
-					'arg_keys' => $arg_keys,
+					'ability'   => $name,
+					'status'    => 'started',
+					'arg_keys'  => $arg_keys,
+					'client_id' => aafm_oauth_current_client_id(),
 				)
 			)
 		);

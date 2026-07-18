@@ -759,4 +759,34 @@ class ValidatorTest extends TestCase {
 			remove_filter( 'home_url', $reentrant );
 		}
 	}
+
+	/**
+	 * M16: a successful bearer resolve records the client_id via aafm_oauth_current_client_id(),
+	 * purely for activity-log attribution - register.php reads it back when logging the ability
+	 * call that follows on this same request.
+	 */
+	public function test_successful_resolve_records_client_id_for_audit_attribution(): void {
+		$uid    = self::factory()->user->create();
+		$tokens = aafm_oauth_mint_tokens(
+			array(
+				'wp_user_id' => $uid,
+				'client_id'  => 'attribution_client',
+				'resource'   => aafm_endpoint_url(),
+			)
+		);
+		$this->set_bearer( 'Bearer ' . $tokens['access_token'] );
+
+		$this->assertSame( $uid, aafm_oauth_resolve_current_user( false ) );
+		$this->assertSame( 'attribution_client', aafm_oauth_current_client_id() );
+	}
+
+	/**
+	 * M16: a bearer that never resolves a user (no header, wrong audience, expired, deactivated
+	 * client) must never populate the client_id store - a failed or absent OAuth attempt is not
+	 * an attributed call.
+	 */
+	public function test_failed_resolve_does_not_record_a_client_id(): void {
+		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
+		$this->assertSame( '', aafm_oauth_current_client_id() );
+	}
 }

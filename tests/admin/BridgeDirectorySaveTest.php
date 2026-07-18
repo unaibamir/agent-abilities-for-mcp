@@ -174,4 +174,42 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertStringContainsString( 'data-bridge-bulk="enable"', $html );
 		$this->assertStringContainsString( 'data-bridge-bulk="disable"', $html );
 	}
+
+	public function test_directory_surfaces_effective_permission(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		// A second foreign ability gated by a closure. We cannot read a closure, so its row must
+		// fall back to the honest "determined by the plugin" note rather than a callback label.
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/closed',
+					array(
+						'label'               => 'Closed',
+						'description'         => 'c',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'execute_callback'    => static fn() => array(),
+						'permission_callback' => static fn() => true,
+					)
+				);
+			}
+		);
+
+		ob_start();
+		aafm_render_bridge_directory();
+		$html = (string) ob_get_clean();
+
+		// demo/echo gates on a named __return_true - a readable, and notably wide-open, callback
+		// the operator should be able to see before enabling.
+		$this->assertStringContainsString( 'Permission check:', $html );
+		$this->assertStringContainsString( '__return_true', $html );
+
+		// demo/closed gates on an unreadable closure, so its row shows the honest fallback.
+		$this->assertStringContainsString( 'Permission determined by Demo', $html );
+	}
 }

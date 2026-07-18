@@ -401,6 +401,53 @@ final class UsersWriteTest extends TestCase {
 	}
 
 	/**
+	 * A low-privileged user must not reach update-user on its OWN account. Core's edit_user
+	 * meta cap is true for self (every user may edit their own profile), so gating on that
+	 * alone let a subscriber change its own email through wp_update_user() and bypass the
+	 * pending-email confirmation flow. The gate now also requires the object-independent
+	 * edit_users cap, matching create-user and delete-user.
+	 */
+	public function test_update_user_denied_for_low_priv_self_target(): void {
+		$self = $this->acting_as( 'subscriber' );
+
+		// The exact hole: a subscriber CAN edit its own profile but holds no edit_users cap.
+		$this->assertTrue( current_user_can( 'edit_user', $self ), 'self edit_user is true - the pre-fix bypass.' );
+		$this->assertFalse( current_user_can( 'edit_users' ) );
+
+		$this->assertFalse(
+			aafm_perm_update_user( array( 'user_id' => $self ) ),
+			'a subscriber must not reach update-user on its own account.'
+		);
+		$this->assertFalse(
+			wp_get_ability( 'aafm/update-user' )->check_permissions(
+				array(
+					'user_id' => $self,
+					'email'   => 'agent_self@example.com',
+				)
+			),
+			'the update-user ability must deny a low-priv self target.'
+		);
+	}
+
+	/**
+	 * A legitimate edit_users holder is unaffected: an administrator may update both another
+	 * account and its own through the ability.
+	 */
+	public function test_update_user_allowed_for_edit_users_holder(): void {
+		$self   = $this->acting_as( 'administrator' );
+		$target = self::factory()->user->create( array( 'role' => 'author' ) );
+
+		$this->assertTrue(
+			aafm_perm_update_user( array( 'user_id' => $target ) ),
+			'an edit_users holder may update another account.'
+		);
+		$this->assertTrue(
+			aafm_perm_update_user( array( 'user_id' => $self ) ),
+			'an edit_users holder may update its own account.'
+		);
+	}
+
+	/**
 	 * The headline guarantee: create-user can never mint a privileged account. Even when a
 	 * full administrator smuggles a role => 'administrator' field, the closed schema strips
 	 * the unknown key (or rejects it) and the new user is forced to the site default role.

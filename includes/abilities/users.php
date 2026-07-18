@@ -460,7 +460,13 @@ function aafm_args_update_user(): array {
 }
 
 /**
- * Permission for aafm/update-user: per-object edit_user on the target id.
+ * Permission for aafm/update-user: edit_users AND per-object edit_user on the id.
+ *
+ * The object-independent edit_users floor is required first, matching create-user and
+ * delete-user. Without it, edit_user(self) is true for every user, so a low-privileged
+ * agent could reach this ability on its OWN account and change its email through
+ * wp_update_user(), bypassing WordPress's pending-email confirmation flow. A legitimate
+ * edit_users holder is unaffected. The per-object edit_user check still gates the target.
  *
  * Returns false with empty input (no id), so discovery uses the object-independent
  * edit_users floor in server.php; this per-object check still runs at execute time.
@@ -470,7 +476,7 @@ function aafm_args_update_user(): array {
  */
 function aafm_perm_update_user( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	return $id > 0 && current_user_can( 'edit_user', $id );
+	return $id > 0 && current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
 }
 
 /**

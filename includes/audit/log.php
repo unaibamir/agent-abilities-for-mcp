@@ -12,9 +12,12 @@ defined( 'ABSPATH' ) || exit;
 if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// v2 adds composite (status, created_at) and (ability, created_at) indexes so the filtered
 	// admin query (WHERE status/ability = ? ORDER BY created_at DESC) is index-backed instead of
-	// filesorting. Bumping this makes aafm_maybe_upgrade_activity_log() re-run dbDelta so existing
-	// installs pick the change up. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '2' );
+	// filesorting. v3 adds the client_id column (M16) so an OAuth-attributed call can be traced
+	// back to the client that made it; NOT NULL DEFAULT '' so every existing row (and every
+	// caller that never supplies one) is unaffected. Bumping this makes
+	// aafm_maybe_upgrade_activity_log() re-run dbDelta so existing installs pick the change up
+	// without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '3' );
 }
 
 /**
@@ -64,6 +67,7 @@ function aafm_install_activity_log(): void {
 		status VARCHAR(20) NOT NULL DEFAULT '',
 		arg_keys TEXT NULL,
 		source_ip VARCHAR(45) NOT NULL DEFAULT '',
+		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
@@ -120,6 +124,8 @@ function aafm_source_ip(): string {
  *     @type string   $principal_login    Acting user login.
  *     @type string   $status             One of started|success|error|denied.
  *     @type string[] $arg_keys           Input argument keys (values are never logged).
+ *     @type string   $client_id          OAuth client id the call is attributed to, or '' for a
+ *                                        non-OAuth (Application Password) call. Optional.
  * }
  * @return int The inserted row id (0 on failure).
  */
@@ -141,9 +147,10 @@ function aafm_log_activity( array $record ): int {
 			'status'            => $status,
 			'arg_keys'          => $arg_keys,
 			'source_ip'         => aafm_source_ip(),
+			'client_id'         => isset( $record['client_id'] ) ? (string) $record['client_id'] : '',
 			'created_at'        => current_time( 'mysql', true ),
 		),
-		array( '%s', '%d', '%s', '%s', '%s', '%s', '%s' )
+		array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
 	);
 
 	$row_id = (int) $wpdb->insert_id;

@@ -223,4 +223,49 @@ final class WooCommerceContractTest extends TestCase {
 
 		wc_delete_attribute( $attribute_id );
 	}
+
+	/**
+	 * M3 version-safety: the ability's update executor no longer trusts wc_update_attribute()'s
+	 * own backfill (that only exists from 9.1.0); instead it resolves the CURRENT row from
+	 * wc_get_attribute_taxonomies() and backfills every field itself before writing. This pins the
+	 * exact stdClass property names that resolve step reads (attributes.php:aafm_wc_get_attribute /
+	 * aafm_redact_wc_attribute), so a WooCommerce refactor that renames one is caught here instead
+	 * of silently producing an empty or default field on write.
+	 */
+	public function test_attribute_taxonomy_row_shape(): void {
+		if ( ! function_exists( 'wc_create_attribute' ) || ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
+			$this->markTestSkipped( 'WC attribute functions unavailable.' );
+		}
+
+		$attribute_id = wc_create_attribute(
+			array(
+				'name'         => 'AAFM Contract Shape',
+				'slug'         => 'aafm_contract_shape',
+				'type'         => 'select',
+				'order_by'     => 'name',
+				'has_archives' => true,
+			)
+		);
+		$this->assertIsInt( $attribute_id );
+		$this->assertGreaterThan( 0, $attribute_id );
+
+		$row = null;
+		foreach ( wc_get_attribute_taxonomies() as $candidate ) {
+			if ( (int) ( $candidate->attribute_id ?? 0 ) === $attribute_id ) {
+				$row = $candidate;
+				break;
+			}
+		}
+		$this->assertNotNull( $row, 'The created attribute must appear in wc_get_attribute_taxonomies().' );
+
+		// The exact property names aafm_wc_get_attribute()/aafm_redact_wc_attribute() read, and
+		// which the version-safe update executor now backfills from.
+		foreach ( array( 'attribute_id', 'attribute_name', 'attribute_label', 'attribute_type', 'attribute_orderby', 'attribute_public' ) as $property ) {
+			$this->assertObjectHasProperty( $property, $row, "Attribute row must expose {$property}." );
+		}
+		$this->assertSame( 'aafm_contract_shape', $row->attribute_name, 'attribute_name is the raw, unprefixed slug.' );
+		$this->assertSame( 'AAFM Contract Shape', $row->attribute_label, 'attribute_label is the human name.' );
+
+		wc_delete_attribute( $attribute_id );
+	}
 }

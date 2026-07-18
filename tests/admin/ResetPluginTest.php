@@ -162,6 +162,20 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
+	 * L15: aafm_reset_plugin() truncates all four OAuth data tables (clients, codes, access
+	 * tokens, consents) - see its own docblock - but the confirm dialog the operator actually
+	 * reads before clicking never said so. State it, alongside the other real consequences.
+	 */
+	public function test_reset_confirm_dialog_discloses_the_oauth_wipe(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		aafm_enqueue_admin_assets( 'toplevel_page_agent-abilities-for-mcp' );
+		$data = wp_scripts()->get_data( 'aafm-admin', 'data' );
+		$this->assertIsString( $data );
+		$this->assertStringContainsString( 'resetConfirm', $data );
+		$this->assertStringContainsString( 'OAuth', $data );
+	}
+
+	/**
 	 * The Settings tab must expose the destructive control with the JS hook id and a Danger zone.
 	 */
 	public function test_settings_render_exposes_reset_control(): void {

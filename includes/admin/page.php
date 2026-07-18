@@ -187,7 +187,7 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'errorUnknown'             => __( 'unknown', 'agent-abilities-for-mcp' ),
 				'copyCopied'               => __( 'Copied', 'agent-abilities-for-mcp' ),
 				'copyFallback'             => __( 'Press Ctrl+C', 'agent-abilities-for-mcp' ),
-				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, and the whole activity log. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
+				'resetConfirm'             => __( 'Reset the plugin to defaults? This clears every setting, your enabled abilities, the whole activity log, and every OAuth client, token, and consent. Your agent user and any content it created are kept. This cannot be undone.', 'agent-abilities-for-mcp' ),
 				'resetWorking'             => __( 'Resetting…', 'agent-abilities-for-mcp' ),
 				'resetDone'                => __( 'Reset. Reloading…', 'agent-abilities-for-mcp' ),
 				'resetFailed'              => __( 'Reset failed.', 'agent-abilities-for-mcp' ),

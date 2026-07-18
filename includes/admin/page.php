@@ -2102,7 +2102,7 @@ function aafm_render_help_tab(): void {
 	aafm_render_help_entry(
 		__( 'Is there rate limiting?', 'agent-abilities-for-mcp' ),
 		wp_kses(
-			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each connection can make at most that many agent calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, so two connections do not eat into each other\'s budget.', 'agent-abilities-for-mcp' ) . '</p>'
+			'<p>' . esc_html__( 'Yes. The Settings tab has a "Rate limit (per minute)" field. Set it to a number and each agent user can make at most that many calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, not per connection, so two connections signed in as the same agent user share one budget between them.', 'agent-abilities-for-mcp' ) . '</p>'
 			. '<p>' . esc_html__( 'Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling.', 'agent-abilities-for-mcp' ) . '</p>',
 			$inline
 		)

@@ -68,10 +68,22 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
-	 * Both feature toggles default to enabled when their options are unset.
+	 * Both feature toggles default to DISABLED when their options are unset: the
+	 * public OAuth surface and open client registration are opt-in, never a
+	 * fresh-install default. A stored truthy row (an existing install, or an
+	 * operator opt-in) still reads on.
 	 */
-	public function test_toggles_default_to_enabled(): void {
-		$this->assertTrue( aafm_oauth_enabled() );
-		$this->assertTrue( aafm_oauth_dcr_enabled() );
+	public function test_toggles_default_to_disabled(): void {
+		delete_option( 'aafm_oauth_enabled' );
+		delete_option( 'aafm_oauth_dcr_enabled' );
+
+		$this->assertFalse( aafm_oauth_enabled(), 'OAuth must be off by default on a fresh install.' );
+		$this->assertFalse( aafm_oauth_dcr_enabled(), 'DCR must be off by default on a fresh install.' );
+
+		// An existing/opted-in install with a stored truthy row keeps working (non-breaking).
+		update_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		$this->assertTrue( aafm_oauth_enabled(), 'A stored 1 must read on (existing installs preserved).' );
+		$this->assertTrue( aafm_oauth_dcr_enabled(), 'A stored 1 must read on (existing installs preserved).' );
 	}
 }

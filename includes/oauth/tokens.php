@@ -59,6 +59,7 @@ if ( ! defined( 'AAFM_OAUTH_CHAIN_MAX_HOPS' ) ) {
  *     @type string $client_id         The public client identifier.
  *     @type int    $wp_user_id        The authenticated WordPress user.
  *     @type string $resource          The resource indicator the token is scoped to.
+ *     @type string $scope             The requested OAuth scope, persisted for audit/narrowing (may be '').
  *     @type int    $refresh_parent_id The id of the refresh row this pair rotated from (0 for a fresh mint).
  * }
  * @return array{access_token:string,refresh_token:string,expires_in:int}|\WP_Error The token pair,
@@ -85,11 +86,12 @@ function aafm_oauth_mint_tokens( array $ctx ) {
 			'client_id'          => isset( $ctx['client_id'] ) ? (string) $ctx['client_id'] : '',
 			'wp_user_id'         => isset( $ctx['wp_user_id'] ) ? (int) $ctx['wp_user_id'] : 0,
 			'resource'           => isset( $ctx['resource'] ) ? (string) $ctx['resource'] : '',
+			'scope'              => isset( $ctx['scope'] ) ? (string) $ctx['scope'] : '',
 			'expires_at'         => gmdate( 'Y-m-d H:i:s', $now + $access_ttl ),
 			'refresh_expires_at' => gmdate( 'Y-m-d H:i:s', $now + $refresh_ttl ),
 			'is_active'          => 1,
 		),
-		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%d' )
+		array( '%s', '%s', '%d', '%s', '%d', '%s', '%s', '%s', '%s', '%d' )
 	);
 
 	// A failed insert means there is no persisted token row - never return a token pair for it,
@@ -261,6 +263,8 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 			'client_id'         => (string) $row['client_id'],
 			'wp_user_id'        => (int) $row['wp_user_id'],
 			'resource'          => (string) $row['resource'],
+			// Carry the original grant's scope forward so a rotated token never silently widens.
+			'scope'             => isset( $row['scope'] ) ? (string) $row['scope'] : '',
 			'refresh_parent_id' => (int) $row['id'],
 		)
 	);

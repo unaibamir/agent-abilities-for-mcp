@@ -29,6 +29,12 @@ class AuthorizeTest extends TestCase {
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_oauth_tables();
+		// OAuth (and DCR) are now OFF by default; these authorize-flow tests exercise the
+		// enabled surface, so turn them on explicitly. The disabled-path tests override.
+		update_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		// The authorize choke point writes an OAuth lifecycle audit row on success.
+		aafm_install_activity_log();
 	}
 
 	/**
@@ -384,6 +390,54 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * A bare Subscriber cannot mint an MCP token: the authorize capability floor defaults to
+	 * `edit_posts` (contributor and up), not `read`, so a subscriber-level account is denied at
+	 * the capability gate (a local 403) and never reaches consent.
+	 */
+	public function test_subscriber_is_denied_by_the_capability_floor(): void {
+		$this->acting_as( 'subscriber' );
+		$client = $this->register_client();
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		$this->assertNull( $result['redirect'], 'A capability denial is local; it must never redirect to the client.' );
+		$this->assertSame( 403, $result['status'], 'A subscriber must be refused by the default edit_posts floor.' );
+	}
+
+	/**
+	 * An Author (who has edit_posts) clears the default capability floor and reaches consent.
+	 */
+	public function test_author_clears_the_capability_floor(): void {
+		$this->acting_as( 'author' );
+		$client = $this->register_client();
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		$this->assertNull( $result['redirect'] );
+		$this->assertSame( 200, $result['status'], 'An edit_posts-capable user must reach the consent screen.' );
+	}
+
+	/**
+	 * The capability floor is filterable: lowering it to `read` via aafm_oauth_min_capability
+	 * lets a subscriber through again, proving the default is a policy choice, not a hard gate.
+	 */
+	public function test_capability_floor_is_filterable(): void {
+		$this->acting_as( 'subscriber' );
+		$client = $this->register_client();
+
+		$lower = static function (): string {
+			return 'read';
+		};
+		add_filter( 'aafm_oauth_min_capability', $lower );
+
+		$result = $this->run_authorize_get( $this->valid_params( $client ) );
+
+		remove_filter( 'aafm_oauth_min_capability', $lower );
+
+		$this->assertSame( 200, $result['status'], 'Lowering the floor to read must let a subscriber reach consent.' );
+	}
+
+	/**
 	 * The consent page renders a self-contained, escaped, script-free document.
 	 */
 	public function test_consent_render_is_escaped_and_self_contained(): void {
@@ -437,6 +491,57 @@ class AuthorizeTest extends TestCase {
 		$this->assertStringNotContainsString( '<script', $html );
 
 		// The malicious client_name comes back HTML-escaped, never as a raw tag.
+		$this->assertStringContainsString( '&lt;script&gt;alert(1)&lt;/script&gt;', $html );
+	}
+
+	/**
+	 * The consent page reveals WHERE the grant is sent (the redirect host) and flags the app as
+	 * unverified, so a phishing client cannot hide its destination behind a benign name. The host
+	 * is escaped on output.
+	 */
+	public function test_consent_render_shows_redirect_host_and_unverified_badge(): void {
+		$view = array(
+			'client_name'   => 'Totally Legit App',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'redirect_host' => 'evil.attacker.example',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '<input type="hidden" name="_wpnonce" value="abc123" />',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		// The destination host is stated plainly on the card.
+		$this->assertStringContainsString( 'Will send access to', $html );
+		$this->assertStringContainsString( 'evil.attacker.example', $html );
+
+		// The self-registered app is flagged as unverified.
+		$this->assertStringContainsString( 'Unverified app', $html );
+		$this->assertStringContainsString( 'registered itself', $html );
+	}
+
+	/**
+	 * A hostile redirect host is escaped, never emitted as live markup.
+	 */
+	public function test_consent_render_escapes_the_redirect_host(): void {
+		$view = array(
+			'client_name'   => 'App',
+			'user_login'    => 'mcp-agent',
+			'site_name'     => 'Example Site',
+			'redirect_host' => '"><script>alert(1)</script>',
+			'action_url'    => 'https://site.example/?aafm_oauth=authorize',
+			'nonce_field'   => '',
+			'hidden_inputs' => array(),
+		);
+
+		ob_start();
+		aafm_oauth_render_consent_page( $view );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( '<script>alert(1)</script>', $html );
 		$this->assertStringContainsString( '&lt;script&gt;alert(1)&lt;/script&gt;', $html );
 	}
 

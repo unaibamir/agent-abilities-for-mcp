@@ -394,6 +394,7 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 			'redirect_uri'   => $valid['redirect_uri'],
 			'code_challenge' => $valid['code_challenge'],
 			'resource'       => aafm_endpoint_url(),
+			'scope'          => isset( $valid['scope'] ) ? $valid['scope'] : '',
 		)
 	);
 
@@ -403,6 +404,22 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 		aafm_oauth_render_local_error(
 			500,
 			__( 'Could not issue an authorization code. Please try again.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	// Audit the grant: an authorization code was issued to this client for this user. The raw code
+	// is never logged - only who approved, which client, and where the grant is sent.
+	if ( function_exists( 'aafm_oauth_log_event' ) ) {
+		$approver = wp_get_current_user();
+		aafm_oauth_log_event(
+			'authorize',
+			'success',
+			array(
+				'client_id'     => $valid['client_id'],
+				'redirect_host' => aafm_oauth_audit_host_from_uri( $valid['redirect_uri'] ),
+				'user_id'       => $user_id,
+				'user_login'    => $approver instanceof WP_User ? (string) $approver->user_login : '',
+			)
 		);
 	}
 
@@ -438,10 +455,25 @@ function aafm_oauth_show_consent( array $valid ): void {
 		);
 	}
 
+	// The destination the grant is actually sent to is the single most decision-relevant
+	// fact for the human, so surface the redirect host (with any explicit port) on the
+	// consent card. Derived from the allowlist-validated redirect_uri in $valid, never raw
+	// request input, so it is a trusted value; the template still escapes it on output.
+	$redirect_host = '';
+	$parsed_host   = wp_parse_url( $valid['redirect_uri'], PHP_URL_HOST );
+	if ( is_string( $parsed_host ) && '' !== $parsed_host ) {
+		$redirect_host = $parsed_host;
+		$parsed_port   = wp_parse_url( $valid['redirect_uri'], PHP_URL_PORT );
+		if ( is_int( $parsed_port ) ) {
+			$redirect_host .= ':' . $parsed_port;
+		}
+	}
+
 	$view = array(
 		'client_name'   => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
 		'user_login'    => $user->user_login,
 		'site_name'     => get_bloginfo( 'name' ),
+		'redirect_host' => $redirect_host,
 		'action_url'    => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
 		'nonce_field'   => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
 		'hidden_inputs' => $hidden_inputs,
@@ -525,8 +557,13 @@ function aafm_oauth_handle_authorize(): void {
 	}
 
 	// Capability gate. A failure here is a LOCAL authorization failure, not an OAuth
-	// error to hand back to the client, so render a local 403 (never redirect).
-	$min_cap = apply_filters( 'aafm_oauth_min_capability', 'read' );
+	// error to hand back to the client, so render a local 403 (never redirect). The floor
+	// defaults to `edit_posts` (contributor and up) rather than `read`, so a bare subscriber
+	// cannot mint an MCP token by default - the token acts with the approver's full account,
+	// so a subscriber-level floor is an over-broad self-service foothold on any site with open
+	// registration. Filterable via aafm_oauth_min_capability for operators who want it lower or
+	// higher (e.g. 'manage_options' to restrict authorization to admins).
+	$min_cap = apply_filters( 'aafm_oauth_min_capability', 'edit_posts' );
 	if ( ! current_user_can( $min_cap ) ) {
 		aafm_oauth_render_local_error(
 			403,

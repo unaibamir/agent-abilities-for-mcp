@@ -119,6 +119,10 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/pkce.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/http.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/clients.php';
 
+// OAuth lifecycle audit logging: one activity-log row per register/authorize/token/refresh/revoke
+// event (non-secret context only). Writes through the audit log module, required earlier.
+require_once AAFM_PLUGIN_DIR . 'includes/oauth/audit.php';
+
 // Authorization codes: hashed storage, 60-second TTL, atomic one-time redemption.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/codes.php';
 
@@ -138,11 +142,10 @@ add_filter( 'rest_post_dispatch', 'aafm_oauth_filter_rest_challenge', 10, 3 );
 
 // Let browser-context (CORS) MCP clients read the OAuth challenge + MCP session
 // header off the response, and send the session/protocol headers back on follow-up
-// requests. Gated on the toggle to match the rest of the OAuth surface.
-if ( aafm_oauth_enabled() ) {
-	add_filter( 'rest_exposed_cors_headers', 'aafm_oauth_filter_exposed_cors_headers' );
-	add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers' );
-}
+// requests. Registered unconditionally and gated INSIDE each callback on the toggle,
+// so enabling OAuth at runtime takes effect on the same request; both no-op when off.
+add_filter( 'rest_exposed_cors_headers', 'aafm_oauth_filter_exposed_cors_headers' );
+add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers' );
 
 // OAuth REST endpoints: dynamic client registration, token, and revocation.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';

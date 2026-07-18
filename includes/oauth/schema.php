@@ -20,9 +20,15 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// client_id) on access-tokens for the revoke-by-grant scan; an expires_at index plus
 	// a client_id and (wp_user_id, client_id) index on codes for the code GC and the
 	// revoke-by-client/grant code deletes; and a created_at index on clients for the
-	// abandoned-client reaper. Bumping the version makes aafm_maybe_upgrade_oauth_tables()
-	// re-run dbDelta so existing installs pick the change up (additive - indexes only).
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '5' );
+	// abandoned-client reaper. v6 adds a `scope` column to the codes and access-tokens
+	// tables so the requested OAuth scope is persisted through code -> token and is
+	// recorded/auditable (it previously reached the code context but was discarded at mint).
+	// The column defaults to '' so existing rows and the current "acts as the approver's
+	// full account" behaviour are unchanged; narrowing is opt-in via the
+	// aafm_oauth_token_capabilities filter. Bumping the version makes
+	// aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing installs pick the change
+	// up (additive - one nullable-defaulted column per table, no data migration).
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '6' );
 }
 
 /**
@@ -77,6 +83,7 @@ function aafm_install_oauth_tables(): void {
 		redirect_uri TEXT NULL,
 		code_challenge VARCHAR(191) NOT NULL DEFAULT '',
 		resource VARCHAR(2048) NOT NULL DEFAULT '',
+		scope VARCHAR(191) NOT NULL DEFAULT '',
 		expires_at DATETIME NULL,
 		used_at DATETIME NULL,
 		PRIMARY KEY  (id),
@@ -94,6 +101,7 @@ function aafm_install_oauth_tables(): void {
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		wp_user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 		resource VARCHAR(2048) NOT NULL DEFAULT '',
+		scope VARCHAR(191) NOT NULL DEFAULT '',
 		expires_at DATETIME NULL,
 		refresh_expires_at DATETIME NULL,
 		is_active TINYINT(1) NOT NULL DEFAULT 1,

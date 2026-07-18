@@ -16,6 +16,7 @@
 	--border:#dcdcde; --border-strong:#c3c4c7; --accent:#2271b1; --accent-hover:#135e96;
 	--accent-soft:#e7f1f9; --green:#00a32a; --amber-text:#815f00; --amber-soft:#fcf9e8;
 	--amber-border:#f0dcb4; --radius:8px;
+	--red-text:#8a2011; --red-soft:#fdf0ec; --red-border:#f2c4b6;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -50,6 +51,20 @@ h1 strong{font-weight:700;}
 .acting strong{color:#3d2f00;}
 .acting .who{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#fff;
 	border:1px solid #e7d3a8; border-radius:5px; padding:1px 6px; font-size:12.5px; color:var(--amber-text);}
+.destination{margin:0 28px 14px; padding:14px 16px; background:var(--red-soft); border:1px solid var(--red-border);
+	border-radius:var(--radius);}
+.dest-line{display:flex; gap:10px; align-items:center; margin-bottom:8px;}
+.dest-line svg{flex:0 0 auto;}
+.dest-line p{margin:0; font-size:13.5px; color:var(--text); display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
+.dest-line .dest-label{color:var(--text-muted);}
+.dest-line .dest-host{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#fff;
+	border:1px solid var(--red-border); border-radius:5px; padding:2px 7px; font-size:12.5px; font-weight:600;
+	color:var(--red-text); word-break:break-all;}
+.destination .unverified{margin:0; font-size:12.5px; line-height:1.45; color:var(--red-text);}
+.destination .badge{display:inline-flex; align-items:center; gap:4px; font-weight:700; font-size:11px;
+	letter-spacing:.02em; text-transform:uppercase; color:var(--red-text); background:#fff;
+	border:1px solid var(--red-border); border-radius:5px; padding:1px 7px; margin-right:4px; white-space:nowrap;}
+.destination .badge svg{flex:0 0 auto;}
 .guarantees{padding:18px 28px 4px;}
 .guarantees h2{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); margin:0 0 12px;}
 ul.trust{list-style:none; margin:0; padding:0; display:grid; gap:11px;}
@@ -72,7 +87,7 @@ form{padding:20px 28px 26px; display:flex; flex-direction:column; gap:10px;}
 .foot svg{opacity:.7;}
 @media (max-width:400px){
 	.card-head,.connect-row,.guarantees,form{padding-left:20px; padding-right:20px;}
-	.acting{margin-left:20px; margin-right:20px;}
+	.acting,.destination{margin-left:20px; margin-right:20px;}
 	h1{font-size:19px;}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;}}

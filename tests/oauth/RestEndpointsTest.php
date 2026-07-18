@@ -36,6 +36,14 @@ class RestEndpointsTest extends TestCase {
 		// The endpoints read and write the OAuth storage tables.
 		aafm_install_oauth_tables();
 
+		// OAuth and DCR are OFF by default now; these endpoint tests exercise the enabled
+		// surface, so turn both on explicitly. The disabled-path tests override per case.
+		update_option( 'aafm_oauth_enabled', '1' );
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+
+		// register/token success now writes an OAuth lifecycle audit row to the activity log.
+		aafm_install_activity_log();
+
 		// Register the routes against the REST server for this test run.
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core hook fired to populate the REST server in the test.
 		do_action( 'rest_api_init' );

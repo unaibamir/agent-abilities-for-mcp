@@ -21,15 +21,17 @@ use AAFM\Tests\TestCase;
 class SettingsTest extends TestCase {
 
 	/**
-	 * Each OAuth toggle reader defaults to true when its option was never stored,
-	 * matching the fail-on default of aafm_oauth_option_is_on().
+	 * Each OAuth toggle reader defaults to FALSE when its option was never stored: the
+	 * public OAuth surface and open client registration are an explicit opt-in, so a
+	 * fresh install (no stored row) reads off. Matches the fail-closed default of
+	 * aafm_oauth_option_is_on().
 	 */
-	public function test_oauth_toggles_default_on_when_option_absent(): void {
+	public function test_oauth_toggles_default_off_when_option_absent(): void {
 		delete_option( 'aafm_oauth_enabled' );
 		delete_option( 'aafm_oauth_dcr_enabled' );
 
-		$this->assertTrue( aafm_oauth_enabled() );
-		$this->assertTrue( aafm_oauth_dcr_enabled() );
+		$this->assertFalse( aafm_oauth_enabled() );
+		$this->assertFalse( aafm_oauth_dcr_enabled() );
 	}
 
 	/**

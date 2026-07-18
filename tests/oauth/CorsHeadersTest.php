@@ -26,6 +26,15 @@ use AAFM\Tests\TestCase;
 final class CorsHeadersTest extends TestCase {
 
 	/**
+	 * OAuth is off by default now, and the CORS callbacks no-op when it is off, so
+	 * enable it for the cases that assert the additive behavior.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		update_option( 'aafm_oauth_enabled', '1' );
+	}
+
+	/**
 	 * A representative starting header set matching WordPress core's defaults.
 	 *
 	 * @return array<int, string>
@@ -111,5 +120,19 @@ final class CorsHeadersTest extends TestCase {
 		$this->assertNotFalse(
 			has_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers' )
 		);
+	}
+
+	/**
+	 * With OAuth off the callbacks are still attached but must pass the header sets
+	 * through untouched, so a plain-App-Password install carries no OAuth CORS additions.
+	 */
+	public function test_callbacks_are_noop_when_oauth_disabled(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		$exposed = aafm_oauth_filter_exposed_cors_headers( $this->core_exposed_defaults() );
+		$this->assertSame( $this->core_exposed_defaults(), $exposed );
+
+		$allowed = aafm_oauth_filter_allowed_cors_headers( array( 'Authorization' ) );
+		$this->assertSame( array( 'Authorization' ), $allowed );
 	}
 }

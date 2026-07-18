@@ -135,10 +135,86 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			return $user_id;
 		}
 
+		// 11. Capability-narrowing seam. The token resolves to the approver's FULL account by
+		// default (unchanged behaviour); this offers operators/future code a hook to cap what a
+		// token may do based on the requested scope, without altering the resolved identity.
+		aafm_oauth_apply_token_capability_scope(
+			(int) $row['wp_user_id'],
+			isset( $row['scope'] ) ? (string) $row['scope'] : '',
+			(string) $row['client_id']
+		);
+
 		return (int) $row['wp_user_id'];
 	} finally {
 		$resolving = false;
 	}
+}
+
+/**
+ * Optionally narrow the capabilities an OAuth token may exercise for this request.
+ *
+ * The identity a token resolves to is never changed here: the token always acts AS the
+ * approving WordPress user. What this offers is a seam to cap what that identity may DO on
+ * the current MCP request, keyed on the scope the grant was minted with.
+ *
+ * By default it does nothing - the `aafm_oauth_token_capabilities` filter returns null, so no
+ * restriction is applied and existing "acts with the approver's full caps" behaviour is
+ * preserved (non-breaking; live tokens are never silently reduced). A hook that returns a
+ * capability => bool allow-map instead installs a request-scoped `user_has_cap` filter that
+ * grants only the listed capabilities and denies the rest, so an operator (or future
+ * scope-mapping code) can bind a token to least privilege. The map is applied only for the
+ * remainder of THIS request, which only reaches here on the MCP route with a valid OAuth
+ * bearer, so it can never leak into an unrelated context.
+ *
+ * @param int    $user_id   The resolved approver (unchanged; passed for hook context).
+ * @param string $scope     The scope the token was minted with (may be '').
+ * @param string $client_id The client the token belongs to.
+ * @return void
+ */
+function aafm_oauth_apply_token_capability_scope( int $user_id, string $scope, string $client_id ): void {
+	/**
+	 * Filter the capabilities an OAuth-authenticated request may exercise.
+	 *
+	 * Return null (the default) to apply NO restriction - the token acts with the approving
+	 * user's full capabilities, exactly as before. Return an array of capability => bool to cap the
+	 * token to that allow-list for the current request; any capability not present in the map is
+	 * denied.
+	 *
+	 * @param array<string,bool>|null $caps      Capability allow-map, or null for no restriction.
+	 * @param string                  $scope     The scope the token was minted with (may be '').
+	 * @param string                  $client_id The client the token belongs to.
+	 * @param int                     $user_id   The approving WordPress user id.
+	 */
+	$caps = apply_filters( 'aafm_oauth_token_capabilities', null, $scope, $client_id, $user_id );
+
+	if ( ! is_array( $caps ) ) {
+		return; // Default (and any non-array return): acts as the approver, unchanged.
+	}
+
+	// Normalise to a capability => bool allow-map once, outside the per-check closure.
+	$allow = array();
+	foreach ( $caps as $cap => $granted ) {
+		$allow[ (string) $cap ] = (bool) $granted;
+	}
+
+	add_filter(
+		'user_has_cap',
+		static function ( $allcaps ) use ( $allow ) {
+			if ( ! is_array( $allcaps ) ) {
+				return $allcaps;
+			}
+			// Deny everything the token was not explicitly granted, then apply the allow-map.
+			foreach ( array_keys( $allcaps ) as $cap ) {
+				$allcaps[ $cap ] = isset( $allow[ $cap ] ) ? $allow[ $cap ] : false;
+			}
+			foreach ( $allow as $cap => $granted ) {
+				$allcaps[ $cap ] = $granted;
+			}
+			return $allcaps;
+		},
+		10,
+		1
+	);
 }
 
 /**

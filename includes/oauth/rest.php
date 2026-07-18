@@ -313,6 +313,20 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 		);
 	}
 
+	// Audit the registration: a new client now exists on the public DCR endpoint. Records the
+	// client_id and its first redirect host so an operator can spot attacker self-registration.
+	if ( function_exists( 'aafm_oauth_log_event' ) ) {
+		$first_uri = isset( $result['redirect_uris'][0] ) ? (string) $result['redirect_uris'][0] : '';
+		aafm_oauth_log_event(
+			'register',
+			'success',
+			array(
+				'client_id'     => $result['client_id'],
+				'redirect_host' => aafm_oauth_audit_host_from_uri( $first_uri ),
+			)
+		);
+	}
+
 	$response = new WP_REST_Response(
 		array(
 			'client_id'                  => $result['client_id'],
@@ -439,6 +453,9 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 			'client_id'  => (string) $row['client_id'],
 			'wp_user_id' => (int) $row['wp_user_id'],
 			'resource'   => (string) $row['resource'],
+			// Persist the scope the code was minted with so the token records it too (auditable;
+			// applied by the aafm_oauth_token_capabilities seam, which defaults to no restriction).
+			'scope'      => isset( $row['scope'] ) ? (string) $row['scope'] : '',
 		)
 	);
 
@@ -448,6 +465,21 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
 			500
+		);
+	}
+
+	// Audit the mint: an access token now exists for this user + client. The raw token is never
+	// logged - only the actor and client, so the token's life is traceable from here.
+	if ( function_exists( 'aafm_oauth_log_event' ) ) {
+		$actor = get_userdata( (int) $row['wp_user_id'] );
+		aafm_oauth_log_event(
+			'token',
+			'success',
+			array(
+				'client_id'  => (string) $row['client_id'],
+				'user_id'    => (int) $row['wp_user_id'],
+				'user_login' => $actor ? (string) $actor->user_login : '',
+			)
 		);
 	}
 
@@ -479,11 +511,22 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 	// aafm_oauth_rotate_refresh() manages its own transaction - never wrap it.
 	$tokens = aafm_oauth_rotate_refresh( $refresh_token, $client_id );
 	if ( is_wp_error( $tokens ) ) {
+		// Audit the failed rotation. A rejected refresh includes the reuse-detection path (a
+		// replayed, already-consumed token), which is a compromise signal worth a trace row.
+		if ( function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'refresh', 'denied', array( 'client_id' => $client_id ) );
+		}
+
 		return aafm_oauth_rest_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),
 			400
 		);
+	}
+
+	// Audit the successful rotation: a fresh token pair replaced the presented refresh token.
+	if ( function_exists( 'aafm_oauth_log_event' ) ) {
+		aafm_oauth_log_event( 'refresh', 'success', array( 'client_id' => $client_id ) );
 	}
 
 	return aafm_oauth_rest_token_response( $tokens );
@@ -543,7 +586,13 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 
 	$token = aafm_oauth_rest_param( $request, 'token' );
 	if ( '' !== $token ) {
-		aafm_oauth_revoke_token( $token );
+		$revoked = aafm_oauth_revoke_token( $token );
+
+		// Audit only an actual revocation (a matched, still-active token), so a probe with a
+		// bogus token does not create noise. The raw token is never logged.
+		if ( $revoked && function_exists( 'aafm_oauth_log_event' ) ) {
+			aafm_oauth_log_event( 'revoke', 'success' );
+		}
 	}
 
 	// RFC 7009: a successful revocation (or a no-op for an unknown token) is 200

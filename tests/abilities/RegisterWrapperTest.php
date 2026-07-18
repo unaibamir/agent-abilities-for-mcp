@@ -246,6 +246,82 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertNull( $rows[0]['result_count'] );
 	}
 
+	/**
+	 * M16: a plain (non-OAuth) call - no bearer ever resolved this request - logs client_id as ''.
+	 */
+	public function test_activity_log_has_no_client_id_for_a_non_oauth_call(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/echo-plain',
+			array(
+				'label'               => 'Echo plain',
+				'description'         => 'Returns ok.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/echo-plain' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( '', $rows[0]['client_id'] );
+	}
+
+	/**
+	 * M16: once an OAuth bearer has resolved a client_id for the request (see
+	 * aafm_oauth_current_client_id() in includes/oauth/validator.php, populated at the end of
+	 * aafm_oauth_resolve_current_user()), a successful ability call's activity row is attributed
+	 * to that client. Calling the read-only recorder directly here stands in for a full bearer
+	 * resolve - the wiring under test is register.php reading it back, not the OAuth resolve
+	 * itself (that is covered end to end in ValidatorTest).
+	 */
+	public function test_activity_log_attributes_successful_call_to_resolved_oauth_client(): void {
+		$this->acting_as( 'administrator' );
+		aafm_oauth_current_client_id( 'agent_client_42' );
+		$this->register(
+			'aafm/echo-oauth',
+			array(
+				'label'               => 'Echo oauth',
+				'description'         => 'Returns ok.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		wp_get_ability( 'aafm/echo-oauth' )->execute( null );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 'agent_client_42', $rows[0]['client_id'] );
+	}
+
+	/**
+	 * M16: a denied call under a resolved OAuth client is attributed too, not only a success.
+	 */
+	public function test_activity_log_attributes_denied_call_to_resolved_oauth_client(): void {
+		$this->acting_as( 'subscriber' );
+		aafm_oauth_current_client_id( 'agent_client_42' );
+		$this->register(
+			'aafm/needs-admin-oauth',
+			array(
+				'label'               => 'Needs admin, oauth',
+				'description'         => 'Admin only.',
+				'category'            => 'aafm-writes',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'done' => true ),
+				'permission_callback' => static fn() => current_user_can( 'manage_options' ),
+			)
+		);
+
+		wp_get_ability( 'aafm/needs-admin-oauth' )->check_permissions( array() );
+
+		$rows = aafm_query_activity( array( 'status' => 'denied' ) );
+		$this->assertSame( 'agent_client_42', $rows[0]['client_id'] );
+	}
+
 	public function test_categories_are_registered(): void {
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-reads' ) );
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-writes' ) );

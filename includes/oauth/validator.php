@@ -29,6 +29,29 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
 }
 
 /**
+ * Remember (or read) the OAuth client_id a bearer token resolved for the current request.
+ *
+ * Read-only observability for M16: this store has no bearing on authentication or capability
+ * decisions - aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
+ * resolved a user, purely so the activity-log wrapper in register.php can attribute the resulting
+ * ability call to the OAuth client that made it. Mirrors the aafm_remember_raw_permission() static
+ * store in register.php. Never populated for a non-OAuth (Application Password/cookie) request, so
+ * it correctly stays '' for those.
+ *
+ * @param string|null $client_id Client id to record, or null to read the currently stored value.
+ * @return string The stored client id, or '' when no OAuth bearer has resolved this request.
+ */
+function aafm_oauth_current_client_id( ?string $client_id = null ): string {
+	static $stored = '';
+
+	if ( null !== $client_id ) {
+		$stored = $client_id;
+	}
+
+	return $stored;
+}
+
+/**
  * Resolve an OAuth bearer token to the WordPress user that approved it.
  *
  * Hooked on `determine_current_user`. Returns the incoming `$user_id` unchanged
@@ -155,6 +178,11 @@ function aafm_oauth_resolve_current_user( $user_id ) {
 			isset( $row['scope'] ) ? (string) $row['scope'] : '',
 			(string) $row['client_id']
 		);
+
+		// 12. M16: record the resolved client_id purely for activity-log attribution. Read-only -
+		// this happens only after the token has fully resolved a user through every guard above, so
+		// it can never influence the auth decision itself, only observability of its outcome.
+		aafm_oauth_current_client_id( (string) $row['client_id'] );
 
 		return (int) $row['wp_user_id'];
 	} finally {

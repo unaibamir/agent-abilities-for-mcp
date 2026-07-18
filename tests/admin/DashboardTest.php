@@ -33,6 +33,23 @@ final class DashboardTest extends TestCase {
 		$this->assertTrue( $admin_row['is_admin'] );
 	}
 
+	/**
+	 * M11: the candidate scan used to fetch only the first 50 users ordered by ID, so an
+	 * app-password holder created after the 50th user was invisible to the dashboard. Querying
+	 * by the application-passwords meta key directly removes the arbitrary page bound.
+	 */
+	public function test_agent_user_candidates_finds_a_holder_past_the_old_fifty_user_cap(): void {
+		for ( $i = 0; $i < 55; $i++ ) {
+			self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		}
+		$late_holder = self::factory()->user->create( array( 'role' => 'editor' ) );
+		WP_Application_Passwords::create_new_application_password( $late_holder, array( 'name' => 'mcp-late' ) );
+
+		$ids = wp_list_pluck( aafm_agent_user_candidates(), 'id' );
+
+		$this->assertContains( $late_holder, $ids );
+	}
+
 	public function test_candidates_expose_no_pii(): void {
 		$user = self::factory()->user->create( array( 'role' => 'editor' ) );
 		WP_Application_Passwords::create_new_application_password( $user, array( 'name' => 'mcp-c' ) );

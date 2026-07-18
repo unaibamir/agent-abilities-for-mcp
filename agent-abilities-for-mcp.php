@@ -35,12 +35,14 @@ define( 'AAFM_MIN_ADAPTER_VERSION', '0.5.0' );
 // killing our /mcp route. We MUST run our own 0.5.0 (0.4.1 lacks the per-connection capability
 // gate). A prepended autoloader alone is not enough - later plugins' Composer autoloaders also
 // prepend and leapfrog ours - so we EAGER-LOAD our copy: declare every WP\MCP\ class from our
-// bundle now, during the plugin-include phase. Because plugin folders load alphabetically and we
-// sort first as "agent-abilities-for-mcp", this runs before any conflicting sibling's file, so PHP
-// commits to our copy and later siblings transparently use it. The prepended autoloader (still
-// registered first) resolves interface/trait dependencies during the eager load and covers
-// no-conflict installs. The floor/notice logic in includes/bootstrap.php stays as the fallback for
-// a sibling that sorts before us and declares an incompatible copy first.
+// bundle now, during the plugin-include phase. Declaring every class up front beats a sibling's
+// lazy Composer autoloader, which only resolves a class on first use: by the time anything asks for
+// a WP\MCP\ class ours is already declared, so PHP commits to our copy and later siblings
+// transparently use it. (Active plugins load in activation order, not alphabetically, so we do not
+// rely on winning a name sort.) The prepended autoloader (still registered first) resolves
+// interface/trait dependencies during the eager load and covers no-conflict installs. The
+// floor/notice logic in includes/bootstrap.php stays as the fallback for a sibling that eager-loads
+// before us and declares an incompatible copy first.
 require_once AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
 aafm_register_adapter_autoloader();
 aafm_eager_load_adapter();

@@ -37,3 +37,5 @@ composer.lock   export-ignore
 /vendor/theseer          export-ignore
 /vendor/wp-coding-standards export-ignore
 /vendor/yoast            export-ignore
+/vendor/wordpress/mcp-adapter/package.json      export-ignore
+/vendor/wordpress/mcp-adapter/package-lock.json export-ignore

@@ -52,3 +52,10 @@
 /vendor/theseer
 /vendor/wp-coding-standards
 /vendor/yoast
+
+# Node dev metadata bundled inside the mcp-adapter runtime dependency. Nothing in the
+# plugin's PHP runtime touches these; they exist because mcp-adapter's own repo ships a
+# package.json/package-lock.json alongside its PHP, and Composer has no mechanism to
+# prune non-PHP files from an installed package.
+/vendor/wordpress/mcp-adapter/package.json
+/vendor/wordpress/mcp-adapter/package-lock.json

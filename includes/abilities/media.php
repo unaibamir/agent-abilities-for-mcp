@@ -286,6 +286,12 @@ function aafm_exec_count_media( array $input ): array {
 	$by_mime = array();
 	$total   = 0;
 	foreach ( $counts as $mime => $n ) {
+		// wp_count_attachments() adds a 'trash' key alongside the mime-type rows -
+		// it is a status bucket (how many attachments are trashed), not a mime
+		// type, so it must not be reported as one or summed into the total.
+		if ( 'trash' === $mime ) {
+			continue;
+		}
 		$n = (int) $n;
 		if ( '' !== $filter && $filter !== $mime ) {
 			continue;

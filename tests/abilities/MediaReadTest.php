@@ -295,6 +295,40 @@ final class MediaReadTest extends TestCase {
 		$this->assertSame( array( 'image/png' ), array_keys( (array) $out['by_mime'] ) );
 	}
 
+	public function test_count_media_excludes_the_trash_bucket(): void {
+		// wp_count_attachments() adds a 'trash' key alongside the mime-type rows -
+		// it is a status bucket (how many trashed attachments exist), not a mime
+		// type, and must not be summed into the total or listed in by_mime.
+		$this->acting_as( 'author' );
+		self::factory()->attachment->create_object(
+			'active.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		$trashed = self::factory()->attachment->create_object(
+			'trashed.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'          => $trashed,
+				'post_status' => 'trash',
+			)
+		);
+
+		$out     = wp_get_ability( 'aafm/count-media' )->execute( array() );
+		$by_mime = (array) $out['by_mime'];
+		$this->assertArrayNotHasKey( 'trash', $by_mime, 'trash is a status bucket, not a mime type.' );
+		$this->assertSame( 1, $out['total'], 'the trashed attachment must not inflate the total.' );
+	}
+
 	public function test_count_media_by_mime_is_object_when_empty(): void {
 		$this->acting_as( 'author' );
 

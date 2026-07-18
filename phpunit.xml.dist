@@ -21,6 +21,16 @@
 			<directory>tests/coexistence</directory>
 		</testsuite>
 	</testsuites>
+	<!--
+	  The contract suite (tests/contract, @group contract) runs against real vendor plugins under
+	  its own config (phpunit-contract.xml.dist) and CI job. Exclude it here so the fast stub-based
+	  suite never tries to run it, even if pointed at tests/contract directly.
+	-->
+	<groups>
+		<exclude>
+			<group>contract</group>
+		</exclude>
+	</groups>
 	<coverage>
 		<include>
 			<directory suffix=".php">includes</directory>

@@ -1,0 +1,104 @@
+name: Contract
+
+# Vendor-contract suite: runs the abilities' vendor assumptions against REAL, version-pinned plugins
+# (WooCommerce, ACF, Yoast, AIOSEO, Rank Math). Separate from Test.yml so it never slows the fast
+# stub-based suite — this job downloads and boots real plugins, so it is heavier. A green run proves
+# the vendor symbols genuinely exist and behave as the abilities assume.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Vendor contracts (PHP ${{ matrix.php }} · WP ${{ matrix.wp }})
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3']
+        wp: ['latest']
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      WP_TESTS_DIR: /tmp/wordpress-tests-lib
+      WP_CORE_DIR: /tmp/wordpress
+      WP_CONTRACT_DB: wordpress_contract
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mysqli, zip, gd
+          coverage: none
+          tools: composer:v2
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+
+      - name: Provision WordPress core + PHPUnit test suite
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y subversion
+          WP_VERSION='${{ matrix.wp }}'
+          if [ "$WP_VERSION" = "latest" ]; then
+            WP_VERSION="$(curl -fsSL https://api.wordpress.org/core/version-check/1.7/ \
+              | grep -o '"version":"[0-9.]*"' | head -1 | grep -o '[0-9.]*')"
+          fi
+          TAG="tags/${WP_VERSION}"
+
+          mkdir -p "$WP_CORE_DIR"
+          curl -fsSL "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" -o /tmp/wp.tgz
+          tar --strip-components=1 -zxmf /tmp/wp.tgz -C "$WP_CORE_DIR"
+
+          mkdir -p "$WP_TESTS_DIR"
+          svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/includes/" "${WP_TESTS_DIR}/includes"
+          svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/data/" "${WP_TESTS_DIR}/data"
+          curl -fsSL "https://develop.svn.wordpress.org/${TAG}/wp-tests-config-sample.php" -o "${WP_TESTS_DIR}/wp-tests-config.php"
+          # The contract bootstrap clones this config and swaps DB_NAME to $WP_CONTRACT_DB; the base
+          # name here just has to be a valid placeholder.
+          sed -i "s/youremptytestdbnamehere/wordpress_test/" "${WP_TESTS_DIR}/wp-tests-config.php"
+          sed -i "s/yourusernamehere/root/" "${WP_TESTS_DIR}/wp-tests-config.php"
+          sed -i "s/yourpasswordhere/root/" "${WP_TESTS_DIR}/wp-tests-config.php"
+          sed -i "s|localhost|127.0.0.1|" "${WP_TESTS_DIR}/wp-tests-config.php"
+          sed -i "s:dirname( __FILE__ ) . '/src/':'${WP_CORE_DIR}/':" "${WP_TESTS_DIR}/wp-tests-config.php"
+
+      - name: Create contract database
+        run: mysqladmin create "$WP_CONTRACT_DB" -uroot -proot -h127.0.0.1 -P3306 || true
+
+      - name: Install real vendor plugins
+        run: tests/bin/install-vendors.sh
+
+      - name: Run contract suite
+        run: vendor/bin/phpunit -c phpunit-contract.xml.dist

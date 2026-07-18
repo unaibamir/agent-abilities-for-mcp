@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  Contract test suite: runs against REAL, version-pinned vendor plugins (WooCommerce, ACF/SCF,
+  Yoast, AIOSEO, Rank Math) installed into the throwaway WP test core by tests/bin/install-vendors.sh.
+  Separate from the fast stub-based suite (phpunit.xml.dist) because it loads real plugins and is
+  slower. A green run here proves the vendor symbol truly exists and behaves as the abilities assume.
+-->
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+	bootstrap="tests/contract/bootstrap.php"
+	colors="true"
+	beStrictAboutOutputDuringTests="false"
+	failOnRisky="true"
+	cacheResultFile=".phpunit.cache/contract-results"
+	convertErrorsToExceptions="true"
+	convertWarningsToExceptions="false"
+	convertNoticesToExceptions="false"
+	convertDeprecationsToExceptions="false">
+	<!--
+	  This suite boots five real third-party plugins (WooCommerce, ACF, Yoast, AIOSEO, Rank Math).
+	  On a cold CI database some vendors emit boot-time notices before their async schema migrations
+	  finish (e.g. AIOSEO's sitemap ping reading a not-yet-migrated column) and print them to output.
+	  Those are the VENDOR's internals, not the contracts under test, so notices/warnings/deprecations
+	  neither convert to exceptions nor trip output strictness — the contracts are pinned by explicit
+	  assertions. Genuine PHP errors still convert to exceptions and fail, and risky tests still fail.
+	-->
+	<testsuites>
+		<testsuite name="contract">
+			<directory>tests/contract</directory>
+		</testsuite>
+	</testsuites>
+</phpunit>

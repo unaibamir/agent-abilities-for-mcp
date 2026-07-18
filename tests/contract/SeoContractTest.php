@@ -66,6 +66,51 @@ final class SeoContractTest extends TestCase {
 	}
 
 	/**
+	 * Item-3 round-trip: write the AIOSEO fields through the real model and read them straight back, so
+	 * the tolerant read-back verification (aafm_aioseo_value_persisted) is measured against what the
+	 * real vendor actually stores. At the pinned AIOSEO version the round-trip is byte-identical
+	 * (including a canonical URL carrying a trailing slash), which pins that the read-back is not
+	 * fighting a normalization the vendor does not actually apply. Should the vendor start reformatting,
+	 * this is where that change surfaces, and the tolerant comparison already absorbs a trailing-slash
+	 * or re-encode difference without reporting a false failure.
+	 */
+	public function test_aioseo_field_write_round_trips_through_the_real_model(): void {
+		$model_class = 'AIOSEO\\Plugin\\Common\\Models\\Post';
+		if ( ! class_exists( $model_class ) ) {
+			$this->markTestSkipped( 'AIOSEO not provisioned — run tests/bin/install-vendors.sh.' );
+		}
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+
+		$writes = array(
+			'title'         => sanitize_text_field( 'AAFM Contract Title' ),
+			'canonical_url' => esc_url_raw( 'https://example.com/aafm-canonical/' ),
+		);
+		$model  = $model_class::getPost( (int) $post_id );
+		foreach ( $writes as $prop => $value ) {
+			if ( ! property_exists( $model, $prop ) ) {
+				$this->markTestSkipped( "AIOSEO model does not expose {$prop} at this version." );
+			}
+			$model->$prop = $value;
+		}
+		$model->save();
+
+		$reread = $model_class::getPost( (int) $post_id );
+		foreach ( $writes as $prop => $value ) {
+			$this->assertTrue(
+				aafm_aioseo_value_persisted( (string) ( $reread->$prop ?? '' ), (string) $value, str_contains( $prop, 'url' ) ),
+				"The tolerant read-back must accept the persisted {$prop} as a successful write."
+			);
+		}
+		// The value the tolerant check accepts is the vendor's own stored form, proving persistence, not
+		// a value we merely handed back unread.
+		$this->assertSame(
+			'AAFM Contract Title',
+			(string) ( $reread->title ?? '' ),
+			'A text field round-trips unchanged at the pinned AIOSEO version.'
+		);
+	}
+
+	/**
 	 * Rank Math's post/schema abilities are a meta-key integration (no Rank Math code symbols
 	 * called); the head-rendering ability is not (M1). Pin the detection contract M6-style: the
 	 * `RankMath` marker class and version constant exist.

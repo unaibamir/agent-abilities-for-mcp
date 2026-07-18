@@ -149,6 +149,29 @@ final class AioseoTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res, 'A custom-table save failure must surface as an error, not a stale read.' );
 	}
 
+	/**
+	 * L11 read-back tolerance: AIOSEO can reformat a URL on save (a trailing-slash change, re-encoding).
+	 * A write that genuinely persisted must not be reported as a failure just because it reads back in
+	 * that normalized form. Here the store strips the trailing slash the caller sent; the tolerant
+	 * read-back still counts the write as a success and returns the stored (normalized) value.
+	 */
+	public function test_aioseo_update_tolerates_url_normalization_on_save(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		\AAFM\Tests\AioseoStubStore::$normalize_urls = true;
+		$res = wp_get_ability( 'aafm/aioseo-update-post' )->execute(
+			array(
+				'post_id'   => $post_id,
+				'canonical' => 'https://example.com/aio-canonical/',
+			)
+		);
+		\AAFM\Tests\AioseoStubStore::$normalize_urls = false;
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A write reformatted on save (trailing slash dropped) still persisted and must report success.' );
+		$this->assertSame( 'https://example.com/aio-canonical', $res['canonical'], 'The response reflects the normalized stored value.' );
+	}
+
 	public function test_aioseo_write_does_not_touch_the_shadow_meta(): void {
 		// The _aioseo_* post meta keys are WPML-compat shadow copies, not AIOSEO's source of truth.
 		// The write must go through the model store, NOT update the shadow meta.

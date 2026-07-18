@@ -365,6 +365,25 @@ final class RankMathTest extends TestCase {
 		$this->assertStringContainsString( 'Rank Math head', $res['head'] );
 	}
 
+	/**
+	 * When the renderer produces nothing - the real state on a Rank Math install whose setup wizard was
+	 * never completed or skipped, so rank_math()->frontend/head never initialise - the ability must
+	 * report that honestly rather than returning an empty head with success. Dropping every
+	 * aafm_seo_rendered_head callback models the renderer contributing no markup.
+	 */
+	public function test_rankmath_get_head_errors_when_renderer_produces_nothing(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		// No callback contributes markup: the seam returns the empty passthrough, the exact
+		// wizard-incomplete state where the head renderer is unavailable.
+		remove_all_filters( 'aafm_seo_rendered_head' );
+
+		$res = wp_get_ability( 'aafm/rankmath-get-head' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertInstanceOf( WP_Error::class, $res, 'An unavailable head renderer must not report an empty-but-successful head.' );
+		$this->assertSame( 'aafm_rankmath_head_unavailable', $res->get_error_code() );
+	}
+
 	public function test_rankmath_get_post_reads_a_legacy_string_robots_value(): void {
 		// Defensive: a legacy/imported row may hold rank_math_robots as a raw CSV string rather than
 		// the current serialized array. The read must pass that string through, not floor it to ''.

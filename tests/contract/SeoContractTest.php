@@ -158,4 +158,47 @@ final class SeoContractTest extends TestCase {
 			'rank_math()->head must expose a public head() method - the call aafm_rankmath_rendered_head() makes.'
 		);
 	}
+
+	/**
+	 * Item-2 end-to-end: run the FULL production renderer for a real published post and prove it
+	 * returns non-empty markup, not empty-but-successful. The shape tests above only pin the plumbing
+	 * (frontend->integrations() builds ->head); this drives aafm_rankmath_rendered_head() itself
+	 * through its temp-query swap on a registered site (setup wizard completed or skipped, so
+	 * ->registration is resolved) and asserts the head actually rendered.
+	 */
+	public function test_rankmath_rendered_head_is_non_empty_for_published_post(): void {
+		if ( ! function_exists( 'rank_math' ) || ! function_exists( 'aafm_rankmath_rendered_head' ) ) {
+			$this->markTestSkipped( 'Rank Math or the renderer not provisioned — run tests/bin/install-vendors.sh.' );
+		}
+		$plugin = rank_math();
+		$this->assertIsObject( $plugin, 'rank_math() must return an object.' );
+
+		// Model a site whose Rank Math setup wizard has been completed or skipped: registration
+		// resolved and the frontend initialised (Rank Math does this on plugins_loaded for a registered
+		// site). The renderer then self-heals ->head via frontend->integrations() the way a front-end
+		// pageview would. Without this, ->frontend never exists and the renderer would return '' forever.
+		if ( isset( $plugin->registration ) ) {
+			$plugin->registration->invalid = false;
+		}
+		if ( method_exists( $plugin, 'init_frontend' ) ) {
+			$plugin->init_frontend();
+		}
+
+		$post_id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'AAFM Rank Math Head Contract',
+				'post_content' => 'Body copy for the rendered-head contract test.',
+			)
+		);
+
+		$rendered = aafm_rankmath_rendered_head( '', (int) $post_id, 'rankmath' );
+
+		$this->assertNotSame(
+			'',
+			trim( $rendered ),
+			'The renderer must produce a real head for a published post, never empty-but-successful.'
+		);
+		$this->assertStringContainsString( '<', $rendered, 'The rendered head must contain markup.' );
+	}
 }

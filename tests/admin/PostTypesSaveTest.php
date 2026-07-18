@@ -147,4 +147,30 @@ final class PostTypesSaveTest extends TestCase {
 			'Suggested text must mention meta exposure.'
 		);
 	}
+
+	/**
+	 * L19: the privacy-policy text only described the content-type/meta-key surface, but an
+	 * agent can also read user PII (aafm/get-users, aafm/get-user), WooCommerce customer/order
+	 * PII (billing/shipping address, phone, order history - see includes/abilities/woocommerce/
+	 * customers.php), and ACF field values (which bypass the post-meta allowlist entirely - see
+	 * includes/abilities/acf-integration.php). Extend the disclosure to name all three when
+	 * those integrations are opted into.
+	 */
+	public function test_privacy_policy_content_discloses_user_woocommerce_and_acf_surfaces(): void {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		set_current_screen( 'admin_init' );
+		global $wp_actions;
+		$wp_actions['admin_init'] = ( $wp_actions['admin_init'] ?? 0 ) + 1;
+
+		aafm_register_privacy_policy_content();
+
+		$entries = WP_Privacy_Policy_Content::get_suggested_policy_text();
+		$ours    = wp_list_filter( $entries, array( 'plugin_name' => 'Agent Abilities for MCP' ) );
+		$entry   = reset( $ours );
+		$text    = (string) $entry['policy_text'];
+
+		$this->assertStringContainsString( 'user', strtolower( $text ), 'Must disclose the user-data surface (name, email, roles).' );
+		$this->assertStringContainsString( 'WooCommerce', $text, 'Must disclose WooCommerce customer/order PII when that integration is enabled.' );
+		$this->assertStringContainsString( 'ACF', $text, 'Must disclose that ACF field values bypass the meta-key allowlist.' );
+	}
 }

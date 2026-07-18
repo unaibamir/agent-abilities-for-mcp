@@ -644,6 +644,13 @@ function aafm_ajax_save_term_meta_keys(): void {
 /**
  * Contribute suggested privacy-policy text describing what an exposed content type leaks.
  *
+ * Covers every PII surface the plugin can expose once an operator opts into it: content-type
+ * fields and their meta keys (the original scope), user data if user abilities are enabled,
+ * WooCommerce customer/order data if that integration is enabled (billing/shipping address,
+ * phone, and order history - see includes/abilities/woocommerce/customers.php), and ACF field
+ * values if that integration is enabled (which read/write directly and bypass the post-meta
+ * allowlist entirely - see includes/abilities/acf-integration.php).
+ *
  * @return void
  */
 function aafm_register_privacy_policy_content(): void {
@@ -652,6 +659,7 @@ function aafm_register_privacy_policy_content(): void {
 	}
 	$content = wp_kses_post(
 		'<p>' . __( 'When an administrator exposes a content type to AI agents through Agent Abilities for MCP, an authenticated agent can read that type\'s title, slug, excerpt, status, permalink, publish/modified dates, and author id. If an administrator also exposes specific meta keys, an agent can read and change those keys\' values on any post it is allowed to edit. Protected keys (those prefixed with an underscore) and authentication-related keys can never be exposed. Only expose content types and meta keys whose values do not hold personal data.', 'agent-abilities-for-mcp' ) . '</p>'
+		. '<p>' . __( 'If user abilities are enabled, an agent can read a user\'s display name, email, roles, and post count, plus any exposed user meta. If the WooCommerce integration is enabled, an agent can read and, depending on which abilities are turned on, write customer and order data - including full billing and shipping addresses, phone number, and order/purchase history. If the ACF (or SCF) integration is enabled, an agent can read and write ACF field values directly; ACF fields are a separate surface from the meta-key allowlist above and are not filtered by it.', 'agent-abilities-for-mcp' ) . '</p>'
 	);
 	wp_add_privacy_policy_content( __( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ), $content );
 }

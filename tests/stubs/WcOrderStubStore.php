@@ -326,10 +326,13 @@ class WcOrderStubStore {
 			array_map(
 				static function ( array $row ): object {
 					// Mirror the normalized objects real wc_get_order_notes() returns: ->id and ->content.
+					// Real WooCommerce never emits the literal 'user' (M12) - a programmatic note is
+					// attributed 'system' (comment_author 'WooCommerce'), a user-added note is attributed
+					// the acting user's display name, which the fixture stands in for here.
 					$obj                = new \stdClass();
 					$obj->id            = (int) $row['id'];
 					$obj->content       = (string) $row['note'];
-					$obj->added_by      = $row['added_by_user'] ? 'user' : '';
+					$obj->added_by      = $row['added_by_user'] ? 'AAFM Test User' : 'system';
 					$obj->date_created  = (string) $row['date_created'];
 					$obj->customer_note = (bool) $row['customer_note'];
 					return $obj;
@@ -360,9 +363,11 @@ class WcOrderStubStore {
 	 * @param int    $order_id      Order id.
 	 * @param string $note          Note text.
 	 * @param bool   $customer_note Whether this is a customer-facing note.
+	 * @param bool   $added_by_user Whether the note is attributed to the acting user rather than
+	 *                               'system' - mirrors WC_Order::add_order_note()'s third argument.
 	 * @return int The new note id.
 	 */
-	public static function add_note( int $order_id, string $note, bool $customer_note = false ): int {
+	public static function add_note( int $order_id, string $note, bool $customer_note = false, bool $added_by_user = true ): int {
 		if ( self::$add_note_should_fail ) {
 			return 0;
 		}
@@ -374,7 +379,7 @@ class WcOrderStubStore {
 			array(
 				'id'            => $id,
 				'note'          => $note,
-				'added_by_user' => true,
+				'added_by_user' => $added_by_user,
 				'date_created'  => gmdate( 'Y-m-d\TH:i:s' ),
 				'customer_note' => $customer_note,
 			)

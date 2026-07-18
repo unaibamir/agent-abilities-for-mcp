@@ -14,6 +14,16 @@ use WP_Error;
 
 final class ConnectionTest extends TestCase {
 
+	/**
+	 * These render-tab tests were written against the old OAuth-on default. OAuth is now OFF
+	 * by default, so enable it here to preserve that baseline; the off-state tests set the
+	 * toggle to '0'/'' explicitly and override this.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		update_option( 'aafm_oauth_enabled', '1' );
+	}
+
 	public function test_diagnostics_report_adapter_and_endpoint(): void {
 		// Note: we do NOT fire rest_api_init here. The adapter creates its server (a
 		// process-global, once-per-ID resource) on that action, so re-firing it across the

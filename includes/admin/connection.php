@@ -844,6 +844,17 @@ function aafm_render_connection_tab(): void {
 	if ( $oauth_on ) {
 		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
 
+		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
+		// client has any credential, so a security or membership plugin that restricts the whole
+		// REST API to logged-in users blocks them and the connect flow dies with no obvious cause.
+		// Surface it here so an operator who sees connections fail knows where to look. A dynamic
+		// loopback self-check that only warns when a lockdown is actually detected would be the
+		// fuller fix; this is the minimal always-visible note.
+		aafm_render_notice(
+			'info',
+			__( 'If a security or membership plugin on this site restricts the WordPress REST API to logged-in users, OAuth connections will fail: an agent has to reach the sign-in and token steps before it is logged in. Application Passwords are not affected. If a connection never completes, check your REST API restrictions first.', 'agent-abilities-for-mcp' )
+		);
+
 		// OAuth client picker: OS tabs + client grid + per-client instructions and bridge snippet.
 		echo '<div class="aafm-connect-controls aafm-oauth-picker">';
 

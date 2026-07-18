@@ -135,8 +135,15 @@ require_once AAFM_PLUGIN_DIR . 'includes/oauth/tokens.php';
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/discovery.php';
 add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 
-// Seed the OAuth toggles to "on" at activation (add_option only - never clobbers a saved value).
+// Seed the OAuth toggles to "off" at activation (add_option only - never clobbers a saved value).
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
+
+// One-time upgrade safety: an install updated in place from a pre-off-by-default version
+// holds no stored toggle row and ran on the old on-by-default reader, so the new
+// fail-closed default would disable its OAuth surface (and any live connection) on update.
+// Preserve the prior state once, early, before any request-time toggle read; fresh installs
+// (seeded '0' at activation) stay off. See aafm_oauth_preserve_toggle_on_upgrade().
+add_action( 'plugins_loaded', 'aafm_oauth_preserve_toggle_on_upgrade', 1 );
 
 // Surface the transport's 401 challenge (resource_metadata) as a real
 // WWW-Authenticate header on the dispatched REST error response.

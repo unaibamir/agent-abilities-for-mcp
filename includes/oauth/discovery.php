@@ -89,6 +89,49 @@ function aafm_oauth_seed_default_options(): void {
 }
 
 /**
+ * Preserve an upgrading install's effective OAuth state across the off-by-default change.
+ *
+ * Before this release the toggle readers defaulted ON, so an install that updated in
+ * place from a pre-seed version - one with no stored toggle row - was serving OAuth on
+ * that on-by-default default. This release flips the default OFF so a genuinely new
+ * install ships fail-closed. For a fresh install that is correct: aafm_oauth_seed_default_options()
+ * writes an explicit '0' row at activation, which runs before this ever fires, so the
+ * row is present and this leaves it off. But an in-place upgrade never re-runs activation,
+ * so such a site holds NO row and relied on the old default; without this, the new '0'
+ * default would silently disable its OAuth surface - and any live Claude/ChatGPT
+ * connection - on update.
+ *
+ * So, exactly once per install: when a toggle row is ABSENT, write '1' to preserve the
+ * prior behaviour. add_option() only writes a missing row, so it never clobbers an
+ * operator's explicit '0' opt-out or a seeded fresh install. A guard option makes it
+ * idempotent and keeps the steady-state cost to one autoloaded read; a later legitimate
+ * absence (e.g. a reset returning to off-by-default) is therefore not forced back on.
+ *
+ * Hooked on plugins_loaded (priority 1) so it completes before any request-time toggle
+ * read - determine_current_user, the .well-known handler on parse_request, and the REST
+ * route gates all read later in the request - leaving no window on the first post-update
+ * request.
+ *
+ * @return void
+ */
+function aafm_oauth_preserve_toggle_on_upgrade(): void {
+	if ( '1' === get_option( 'aafm_oauth_toggle_migrated', '' ) ) {
+		return;
+	}
+
+	// A stored toggle is always the string '0' or '1', so get_option() returns false
+	// only when the row is genuinely absent - the signal for a pre-seed in-place upgrade.
+	if ( false === get_option( 'aafm_oauth_enabled', false ) ) {
+		add_option( 'aafm_oauth_enabled', '1', '', true );
+	}
+	if ( false === get_option( 'aafm_oauth_dcr_enabled', false ) ) {
+		add_option( 'aafm_oauth_dcr_enabled', '1', '', true );
+	}
+
+	update_option( 'aafm_oauth_toggle_migrated', '1', true );
+}
+
+/**
  * Protected-resource metadata (RFC 9728).
  *
  * Advertises the MCP endpoint as the protected resource, this site as its

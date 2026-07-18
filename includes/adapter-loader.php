@@ -14,10 +14,14 @@
  * regression. The public McpAdapter API is identical between 0.4.1 and 0.5.0 and 0.5.0 is an
  * additive superset, so forcing our 0.5.0 to be the loaded copy is API-safe for other plugins.
  *
- * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace, resolving from our bundled
- * copy, at the plugin file's top level. Because plugin folders load alphabetically and we sort
- * first as "agent-abilities-for-mcp", this runs before any sibling's autoloader is even loaded;
- * McpAdapter is a final class with no declaration-time dependencies, so eager resolution is clean.
+ * The fix: register a PREPENDED autoloader for the WP\MCP\ namespace resolving from our bundled
+ * copy, then EAGER-DECLARE every adapter class from that copy (aafm_eager_load_adapter()), both at
+ * the plugin file's top level. The win does NOT come from folder-name ordering: plugins load in
+ * activation order (the active_plugins option), not alphabetically. It comes from eager-declare
+ * beating lazy-autoload - we declare the WP\MCP\ classes outright at our include time, while a
+ * sibling shipping the adapter as a plain Composer library only declares them on first reference,
+ * so PHP commits to our copy first. McpAdapter is a final class with no declaration-time
+ * dependencies, so eager resolution is clean.
  *
  * MAINTENANCE: when the bundled wordpress/mcp-adapter is updated, re-verify
  * aafm_adapter_namespace_map() against each bundled package's composer.json PSR-4 map (the adapter
@@ -141,8 +145,10 @@ function aafm_adapter_path_to_class( string $path, string $base, string $prefix 
  * class_exists guard (mcp-adapter.php -> includes/Autoloader.php:19 `final class Autoloader`). If our
  * eager load has already declared WP\MCP\Autoloader from our bundle, that unguarded require throws a
  * non-catchable "Cannot declare class WP\MCP\Autoloader, because the name is already in use" fatal
- * and white-screens the whole site - in EITHER activation order, because our folder sorts first
- * ("agent-abilities-for-mcp" < "mcp-adapter") so our eager load always runs before their require.
+ * and white-screens the whole site. This is a risk in EITHER load order (plugins load in activation
+ * order, not by folder name): if our eager declare runs first, their unguarded require then collides;
+ * if their plugin runs first, they declare it and our require would collide. Skipping these shell
+ * classes is therefore correct regardless of which plugin loads first.
  *
  * These two classes are pure plugin scaffolding: the adapter RUNTIME that actually serves /mcp
  * (WP\MCP\Core\*, Handlers\*, Domain\*, Transport\*, Infrastructure\*, Servers\*, Abilities\*) never
@@ -242,10 +248,11 @@ function aafm_register_adapter_autoloader(): void {
  * later-loading plugin's Composer autoloader also prepends itself and leapfrogs ours, so the
  * first reference to WP\MCP\Core\McpAdapter can resolve to a sibling's older copy (confirmed:
  * Rank Math SEO bundles 0.4.1). PHP, however, allows only ONE declaration of a class per
- * request. Because plugin folders load alphabetically and we sort first as
- * "agent-abilities-for-mcp", our main file runs before any conflicting sibling's file. Declaring
- * all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase, makes PHP commit to our
- * copy; a later sibling that references the same class then transparently uses ours. The public
+ * request. The win is eager-declare vs lazy-autoload, not folder ordering: plugins load in
+ * activation order (the active_plugins option), not alphabetically, but a sibling that ships the
+ * adapter as a plain Composer library only declares its classes on first reference, whereas we
+ * declare all of our 0.5.0 WP\MCP\ classes here, during our plugin-include phase. That makes PHP
+ * commit to our copy; a later sibling that references the same class then transparently uses ours. The public
  * McpAdapter API is identical across 0.4.1 and 0.5.0 (0.5.0 is an additive superset), so a
  * 0.4.1-expecting consumer keeps working - and we keep the per-connection capability gate that
  * 0.4.1 lacks.
@@ -287,6 +294,14 @@ function aafm_eager_load_adapter(): void {
 	$loaded = true;
 
 	aafm_eager_require_adapter_dir( AAFM_PLUGIN_DIR . 'vendor/wordpress/mcp-adapter/includes/' );
+
+	// Now that a copy is committed, guard the request-time per-connection capability gate. The
+	// version floor (bootstrap.php) only proves the copy REPORTS an in-range version; it cannot
+	// prove that copy still APPLIES the mcp_adapter_tools_list filter our gate rides on. Priority 5
+	// runs before server.php registers aafm_register_mcp_server (priority 10) on mcp_adapter_init,
+	// so a stripped copy is caught before create_server ever registers the /mcp route. See
+	// aafm_guard_adapter_capability_gate().
+	add_action( 'mcp_adapter_init', 'aafm_guard_adapter_capability_gate', 5 );
 }
 
 /**
@@ -295,7 +310,8 @@ function aafm_eager_load_adapter(): void {
  * Split out of aafm_eager_load_adapter() (no static guard of its own) so the redeclaration-safety
  * behaviour can be exercised against a fixture directory. The eager-load pass only ever wins the
  * WP\MCP\ race when OUR file runs first; if a sibling that loads before us already declared one of
- * these classes (e.g. an alphabetically-earlier plugin bundling its own mcp-adapter copy), an
+ * these classes (e.g. a plugin earlier in activation order that eager-declares its own mcp-adapter
+ * copy), an
  * unconditional require_once would throw a non-catchable "Cannot declare class … already in use"
  * fatal and white-screen the whole site before bootstrap.php's floor notice can render. So before
  * requiring a file we derive the class it declares and skip it when that class/interface/trait
@@ -350,4 +366,151 @@ function aafm_eager_require_adapter_dir( string $base ): void {
 
 		require_once $path;
 	}
+}
+
+/**
+ * Whether a PHP source file applies the per-connection capability filter our request-time gate rides on.
+ *
+ * The adapter's tools/list handler is expected to run
+ * `apply_filters( 'mcp_adapter_tools_list', $tools, $server )` while dispatching tools/list - the
+ * hook where aafm_filter_mcp_tools_list() (server.php) drops any tool the connection may not call.
+ * A sibling that pre-declares an in-range adapter COPY with that apply_filters() call stripped would
+ * clear the version floor yet silently disable the gate: our callback stays registered but the
+ * loaded copy never invokes it. Scanning the loaded handler's own source for the call detects a
+ * stripped copy regardless of the version string it reports, which the version floor alone cannot.
+ *
+ * Pure (path in, bool out) with no side effects beyond a read, so it can be exercised against
+ * fixtures. Returns false when the file is unreadable or the call is absent - the caller fails safe.
+ *
+ * @param string $file Absolute path to the PHP file that should apply the filter.
+ * @return bool True when the file contains an apply_filters() call on 'mcp_adapter_tools_list'.
+ */
+function aafm_adapter_file_applies_tools_list_filter( string $file ): bool {
+	if ( '' === $file || ! is_readable( $file ) ) {
+		return false;
+	}
+
+	// Reading a local, already-loaded PHP source file for integrity verification; WP_Filesystem is
+	// unnecessary and not initialised this early in the request.
+	$source = file_get_contents( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+
+	if ( false === $source ) {
+		return false;
+	}
+
+	// Strip comments before matching so a bare mention of the hook in a docblock or comment (e.g. a
+	// phpdoc example, or a note describing that the call was removed) can never be mistaken for the
+	// gate being present. Only an actual apply_filters() invocation in executable code counts.
+	$code = '';
+	foreach ( token_get_all( $source ) as $token ) {
+		if ( is_array( $token ) ) {
+			if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] ) {
+				continue;
+			}
+			$code .= $token[1];
+		} else {
+			$code .= $token;
+		}
+	}
+
+	// Require an actual apply_filters() call on the exact hook.
+	return 1 === preg_match(
+		'/apply_filters(?:_ref_array)?\s*\(\s*([\'"])mcp_adapter_tools_list\1/',
+		$code
+	);
+}
+
+/**
+ * Whether the LOADED adapter copy still carries the request-time per-connection capability gate.
+ *
+ * Reflects the loaded WP\MCP\Handlers\Tools\ToolsHandler (the class that dispatches tools/list) to
+ * its source file and asserts that file applies the mcp_adapter_tools_list filter. Fails safe
+ * (returns false) when the handler class is not loaded, its file cannot be resolved or read, or the
+ * filter call is absent. Uses class_exists(..., false) so a missing handler is treated as "gate
+ * absent" rather than triggering an autoload that could mask the very substitution we are checking.
+ *
+ * @return bool True when the loaded tools/list handler applies the capability filter.
+ */
+function aafm_adapter_capability_gate_present(): bool {
+	$handler = 'WP\\MCP\\Handlers\\Tools\\ToolsHandler';
+
+	if ( ! class_exists( $handler, false ) ) {
+		return false;
+	}
+
+	try {
+		$file = ( new ReflectionClass( $handler ) )->getFileName();
+	} catch ( ReflectionException $e ) {
+		return false;
+	}
+
+	if ( ! is_string( $file ) ) {
+		return false;
+	}
+
+	return aafm_adapter_file_applies_tools_list_filter( $file );
+}
+
+/**
+ * Apply the capability-gate fail-safe: refuse to register our /mcp server when the gate is absent.
+ *
+ * Split from aafm_guard_adapter_capability_gate() (which supplies the live gate-presence result) so
+ * the decision can be exercised deterministically in tests without substituting the real adapter.
+ * Mirrors the version-floor handling in bootstrap.php: unhook server registration so create_server
+ * never runs (no ungated route) and surface an admin notice, rather than serving tools whose
+ * per-connection visibility filter would never fire.
+ *
+ * @param bool $gate_present Whether the loaded adapter copy applies the capability filter.
+ * @return void
+ */
+function aafm_apply_adapter_capability_gate_guard( bool $gate_present ): void {
+	if ( $gate_present ) {
+		return;
+	}
+
+	remove_action( 'mcp_adapter_init', 'aafm_register_mcp_server' );
+	add_action( 'admin_notices', 'aafm_notice_adapter_capability_gate_missing' );
+}
+
+/**
+ * Guard hook (mcp_adapter_init, priority 5): fail safe if the loaded adapter has no capability gate.
+ *
+ * Runs before server.php registers aafm_register_mcp_server (priority 10), so a stripped-but-in-range
+ * adapter copy is caught before create_server registers the /mcp route.
+ *
+ * @return void
+ */
+function aafm_guard_adapter_capability_gate(): void {
+	aafm_apply_adapter_capability_gate_guard( aafm_adapter_capability_gate_present() );
+}
+
+/**
+ * Admin notice: the loaded MCP adapter copy is missing the request-time per-connection capability gate.
+ *
+ * A sibling plugin declared an in-range adapter copy whose mcp_adapter_tools_list filter has been
+ * stripped, so the gate that decides which tools a connection may see would never run. We refuse to
+ * register the /mcp server rather than expose an ungated route, and name the offending plugin when
+ * it can be resolved (reusing bootstrap.php's resolver) so the operator knows what to update or
+ * deactivate. All output escaped.
+ *
+ * @return void
+ */
+function aafm_notice_adapter_capability_gate_missing(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+
+	$plugin = function_exists( 'aafm_resolve_adapter_owner_plugin' ) ? aafm_resolve_adapter_owner_plugin() : '';
+
+	echo '<div class="notice notice-error"><p>';
+	if ( '' !== $plugin ) {
+		printf(
+			/* translators: %s: name of the plugin loading the stripped adapter copy. */
+			esc_html__( 'Agent Abilities for MCP is disabled: the plugin %s is loading an MCP Adapter copy that is missing the per-connection capability gate, so agent tools cannot be served safely. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' ),
+			esc_html( $plugin )
+		);
+	} else {
+		esc_html_e( 'Agent Abilities for MCP is disabled: another active plugin is loading an MCP Adapter copy that is missing the per-connection capability gate, so agent tools cannot be served safely. Update or deactivate that plugin to enable agent tools.', 'agent-abilities-for-mcp' );
+	}
+	echo '</p></div>';
 }

@@ -1580,6 +1580,8 @@ PHP;
 	private function aafm_wc_payment_gateway_class_source(): string {
 		return <<<'PHP'
 class WC_Payment_Gateway {
+	// Deliberately no $order property or save() method - real WooCommerce declares neither
+	// (M13; pinned by WooCommerceContractTest::test_payment_gateway_has_no_order_property_or_save_method()).
 	/** @var string */
 	public $id = '';
 	/** @var string */
@@ -1588,8 +1590,6 @@ class WC_Payment_Gateway {
 	public $description = '';
 	/** @var string */
 	public $enabled = 'yes';
-	/** @var int */
-	public $order = 0;
 	/** @var array<string,mixed> */
 	public $settings = array();
 

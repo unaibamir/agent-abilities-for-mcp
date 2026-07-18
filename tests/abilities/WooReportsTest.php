@@ -586,6 +586,23 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * M13: WC_Payment_Gateway declares no `order` property, so order must be derived from the
+	 * gateway's position in WooCommerce's own sorted payment_gateways() list, not a fabricated
+	 * property read. The fixture seeds paypal then stripe, so paypal is position 0, stripe is 1.
+	 */
+	public function test_get_payment_gateway_order_reflects_list_position(): void {
+		$this->acting_as( 'administrator' );
+
+		$paypal = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $paypal );
+		$this->assertSame( 0, $paypal['order'], 'paypal is seeded first, so its position is 0.' );
+
+		$stripe = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'stripe' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $stripe );
+		$this->assertSame( 1, $stripe['order'], 'stripe is seeded second, so its position is 1.' );
+	}
+
+	/**
 	 * Get gateway strips secret keys from settings.
 	 */
 	public function test_get_payment_gateway_redacts_secrets(): void {
@@ -765,6 +782,7 @@ final class WooReportsTest extends TestCase {
 		$ordering = get_option( 'woocommerce_gateway_order' );
 		$this->assertIsArray( $ordering );
 		$this->assertSame( 4, (int) $ordering['paypal'] );
+		$this->assertSame( 4, $res['order'], 'The response order must reflect what was just requested (M13).' );
 	}
 
 	/**

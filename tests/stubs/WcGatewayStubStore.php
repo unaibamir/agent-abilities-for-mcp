@@ -59,7 +59,6 @@ class WcGatewayStubStore {
 				'title'       => 'PayPal',
 				'description' => 'Pay via PayPal.',
 				'enabled'     => 'yes',
-				'order'       => 1,
 				'settings'    => array(
 					'title'      => 'PayPal',
 					'api_secret' => 'super-secret-value',
@@ -70,7 +69,6 @@ class WcGatewayStubStore {
 				'title'       => 'Stripe',
 				'description' => 'Pay via Stripe.',
 				'enabled'     => 'no',
-				'order'       => 2,
 				'settings'    => array(
 					'title'         => 'Stripe',
 					'stripe_secret' => 'stripe_secret_value',

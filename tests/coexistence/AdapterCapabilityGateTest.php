@@ -37,6 +37,15 @@ final class AdapterCapabilityGateTest extends TestCase {
 		);
 	}
 
+	public function test_scanner_is_not_fooled_by_a_string_or_heredoc_decoy(): void {
+		// A hostile copy that only names the hook inside a string literal or heredoc, never calling
+		// it, must read as gate-absent - the scan matches an executable call, not a source substring.
+		$this->assertFalse(
+			aafm_adapter_file_applies_tools_list_filter( $this->fixture( 'decoy-string' ) ),
+			'A handler that mentions the hook only in a string/heredoc must be reported as gate-absent.'
+		);
+	}
+
 	public function test_scanner_fails_safe_on_unreadable_file(): void {
 		$this->assertFalse(
 			aafm_adapter_file_applies_tools_list_filter( AAFM_PLUGIN_DIR . 'tests/Fixtures/AdapterCapabilityGate/does-not-exist.php' )

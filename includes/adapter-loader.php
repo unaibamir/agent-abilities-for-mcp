@@ -398,26 +398,56 @@ function aafm_adapter_file_applies_tools_list_filter( string $file ): bool {
 		return false;
 	}
 
-	// Strip comments before matching so a bare mention of the hook in a docblock or comment (e.g. a
-	// phpdoc example, or a note describing that the call was removed) can never be mistaken for the
-	// gate being present. Only an actual apply_filters() invocation in executable code counts.
-	$code = '';
+	// Match an actual apply_filters() CALL on the exact hook, not a substring of the source. Walk the
+	// token stream for the function-name token 'apply_filters' (or apply_filters_ref_array) directly
+	// followed by '(' and the literal 'mcp_adapter_tools_list'. A mention of the hook inside a
+	// comment, a string, or a heredoc collapses to a single non-T_STRING token, so a decoy copy that
+	// only names the hook in a docblock or a string literal never counts as the gate being present.
+	$significant = array();
 	foreach ( token_get_all( $source ) as $token ) {
-		if ( is_array( $token ) ) {
-			if ( T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0] ) {
+		if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+			continue;
+		}
+		$significant[] = $token;
+	}
+
+	$method_operators = array( T_OBJECT_OPERATOR, T_DOUBLE_COLON );
+	if ( defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) ) {
+		$method_operators[] = T_NULLSAFE_OBJECT_OPERATOR;
+	}
+
+	$total = count( $significant );
+	for ( $i = 0; $i + 2 < $total; $i++ ) {
+		$name = $significant[ $i ];
+		if ( ! is_array( $name ) || T_STRING !== $name[0] ) {
+			continue;
+		}
+		$lower = strtolower( $name[1] );
+		if ( 'apply_filters' !== $lower && 'apply_filters_ref_array' !== $lower ) {
+			continue;
+		}
+
+		// A method or static call ($x->apply_filters(...) / Cls::apply_filters(...)) is not the
+		// global adapter hook, so skip it.
+		if ( $i > 0 ) {
+			$prev = $significant[ $i - 1 ];
+			if ( is_array( $prev ) && in_array( $prev[0], $method_operators, true ) ) {
 				continue;
 			}
-			$code .= $token[1];
-		} else {
-			$code .= $token;
+		}
+
+		$open = $significant[ $i + 1 ];
+		$hook = $significant[ $i + 2 ];
+		if ( '(' === $open
+			&& is_array( $hook )
+			&& T_CONSTANT_ENCAPSED_STRING === $hook[0]
+			&& 'mcp_adapter_tools_list' === trim( $hook[1], '\'"' )
+		) {
+			return true;
 		}
 	}
 
-	// Require an actual apply_filters() call on the exact hook.
-	return 1 === preg_match(
-		'/apply_filters(?:_ref_array)?\s*\(\s*([\'"])mcp_adapter_tools_list\1/',
-		$code
-	);
+	return false;
 }
 
 /**

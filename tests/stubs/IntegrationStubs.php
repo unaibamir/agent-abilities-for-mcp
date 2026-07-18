@@ -149,11 +149,13 @@ class Post {
 		return $model;
 	}
 	public function save() {
+		// Real AIOSEO's Model::save() returns void, never a bool (L11) - a "failure" here means the
+		// write silently does not persist, exercisable only through the read-back verification the
+		// executor now does, not through a fabricated return value.
 		if ( \AAFM\Tests\AioseoStubStore::$save_should_fail ) {
-			return false;
+			return;
 		}
 		\AAFM\Tests\AioseoStubStore::save( (int) $this->post_id, get_object_vars( $this ) );
-		return true;
 	}
 }
 PHP;

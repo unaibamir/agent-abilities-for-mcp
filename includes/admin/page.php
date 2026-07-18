@@ -203,10 +203,33 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 }
 
 /**
+ * Read the raw persisted enabled-abilities option, sanitized but NOT filtered by registry.
+ *
+ * The aafm_get_enabled_abilities() accessor intersects the stored option against the live,
+ * host-gated registry, so an ability whose host integration is currently inactive is invisible
+ * there even though it is still sitting in the option untouched. The save-preservation logic
+ * below needs to see those inactive-host entries in order to carry them forward (M9), so it
+ * reads the option directly here instead of going through that filtered accessor.
+ *
+ * @return array<int,string>
+ */
+function aafm_get_stored_enabled_abilities_raw(): array {
+	$stored = get_option( 'aafm_enabled_abilities', array() );
+	return is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
+}
+
+/**
  * Sanitize posted ability toggles down to known registry keys.
  *
  * The result is intersected with the live registry, so a stale, unknown, or smuggled
  * key can never enable anything - only abilities that actually exist are honored.
+ *
+ * An ability whose host integration is currently inactive is host-gated out of the live
+ * registry, so its checkbox never rendered and it can never appear in $posted - a plain
+ * intersect would silently wipe it on ANY save, not just an Integrations-tab one (M9). It is
+ * unioned back in when it is still a real ability (present in the full, host-independent
+ * registry) that was previously enabled, mirroring the orphan handling in
+ * aafm_ajax_save_bridged_abilities().
  *
  * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
  * @return array<int,string>
@@ -219,7 +242,17 @@ function aafm_sanitize_enabled_input( array $posted ): array {
 			$enabled[] = sanitize_text_field( (string) $name );
 		}
 	}
-	return array_values( array_intersect( $enabled, $known ) );
+	$enabled = array_values( array_intersect( $enabled, $known ) );
+
+	$registry_full = aafm_get_abilities_registry_full();
+	$orphans       = array();
+	foreach ( aafm_get_stored_enabled_abilities_raw() as $name ) {
+		if ( ! in_array( $name, $known, true ) && isset( $registry_full[ $name ] ) ) {
+			$orphans[] = $name;
+		}
+	}
+
+	return array_values( array_unique( array_merge( $enabled, $orphans ) ) );
 }
 
 /**
@@ -250,14 +283,24 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 		$posted['aafm_scope']
 	);
 
-	$registry = aafm_get_abilities_registry();
-	$known    = array_keys( $registry );
+	$registry      = aafm_get_abilities_registry();
+	$registry_full = aafm_get_abilities_registry_full();
+	$known         = array_keys( $registry );
 
-	// Persisted abilities OUTSIDE the posted scope are kept from the server, not the POST.
+	// Persisted abilities OUTSIDE the posted scope are kept from the server, not the POST. Look
+	// up "is this real" and "which subject" against the FULL, host-independent registry rather
+	// than the live one: an ability whose host integration is currently inactive is host-gated
+	// out of the live registry too, so a plain live-registry check would drop it exactly like
+	// M9's Abilities-tab bug - it can never have been intentionally toggled off since its
+	// checkbox never rendered, so it is always preserved rather than scope-checked.
 	$preserved = array();
-	foreach ( aafm_get_enabled_abilities() as $name ) {
+	foreach ( aafm_get_stored_enabled_abilities_raw() as $name ) {
+		if ( ! isset( $registry_full[ $name ] ) ) {
+			continue; // Drop truly stale/removed abilities.
+		}
 		if ( ! in_array( $name, $known, true ) ) {
-			continue; // Drop stale/removed abilities.
+			$preserved[] = $name; // Inactive-host ability: always preserved.
+			continue;
 		}
 		$subject = (string) ( $registry[ $name ]['subject'] ?? '' );
 		if ( ! in_array( $subject, $scope, true ) ) {

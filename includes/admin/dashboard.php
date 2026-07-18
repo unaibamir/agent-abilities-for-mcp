@@ -12,18 +12,27 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Users that hold at least one application password - the accounts an MCP agent
- * could authenticate as. Bounded to a sane page; exposes only id/login/roles and
- * an admin flag, never email, display name, or any password material.
+ * could authenticate as. Exposes only id/login/roles and an admin flag, never
+ * email, display name, or any password material.
+ *
+ * Queries by the application-passwords meta key directly rather than paging through every
+ * user on the site: a fixed page (M11) meant an agent user created after the cap was
+ * invisible to the dashboard on any site with more users than the page held. A user still
+ * carries the meta key after deleting all their passwords (WP_Application_Passwords stores
+ * an empty array rather than removing the key), so the per-user emptiness check below still
+ * does the real filtering; this query only narrows the candidate set.
  *
  * @return array<int,array{id:int,login:string,roles:array<int,string>,is_admin:bool}>
  */
 function aafm_agent_user_candidates(): array {
 	$users = get_users(
 		array(
-			'number'  => 50,
-			'orderby' => 'ID',
-			'order'   => 'ASC',
-			'fields'  => array( 'ID', 'user_login' ),
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- narrows to app-password holders instead of paging through every user.
+			'meta_key'     => WP_Application_Passwords::USERMETA_KEY_APPLICATION_PASSWORDS,
+			'meta_compare' => 'EXISTS',
+			'orderby'      => 'ID',
+			'order'        => 'ASC',
+			'fields'       => array( 'ID', 'user_login' ),
 		)
 	);
 

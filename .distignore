@@ -30,6 +30,7 @@
 /phpstan.neon.dist
 /phpstan-baseline.neon
 /phpunit.xml.dist
+/phpunit-contract.xml.dist
 
 # Dev-only Composer dependencies. The release build runs `composer install --no-dev`,
 # so these are normally absent when the tree is deployed; listed here as a backstop in

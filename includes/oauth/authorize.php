@@ -434,10 +434,35 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 }
 
 /**
+ * Whether the approving user holds site-administration or privilege-escalation capabilities.
+ *
+ * A token is minted with the approving user's own capabilities, so approving a self-registered app
+ * while signed in as an administrator hands that app full administrative reach. This drives a louder
+ * warning on the consent screen and reinforces the "connect as a limited agent user" guidance.
+ *
+ * @param WP_User $user The user who would approve the grant.
+ * @return bool True when the user can administer the site or escalate privileges.
+ */
+function aafm_oauth_user_is_high_privilege( WP_User $user ): bool {
+	if ( is_super_admin( $user->ID ) ) {
+		return true;
+	}
+
+	foreach ( array( 'manage_options', 'edit_users', 'promote_users', 'install_plugins', 'unfiltered_html' ) as $cap ) {
+		if ( user_can( $user, $cap ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
  * Render the consent screen for a validated authorize request, then exit.
  *
  * Carries every OAuth param as a hidden field (attribute-escaped) so the POST back
- * re-presents them, plus the consent nonce.
+ * re-presents them, plus the consent nonce. Flags the destination host and, when the
+ * approving user can administer the site, a high-privilege warning.
  *
  * @param array<string,string> $valid The normalized, validated authorize params.
  * @return void
@@ -470,13 +495,14 @@ function aafm_oauth_show_consent( array $valid ): void {
 	}
 
 	$view = array(
-		'client_name'   => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
-		'user_login'    => $user->user_login,
-		'site_name'     => get_bloginfo( 'name' ),
-		'redirect_host' => $redirect_host,
-		'action_url'    => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'nonce_field'   => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
-		'hidden_inputs' => $hidden_inputs,
+		'client_name'    => '' !== $valid['client_name'] ? $valid['client_name'] : $valid['client_id'],
+		'user_login'     => $user->user_login,
+		'site_name'      => get_bloginfo( 'name' ),
+		'redirect_host'  => $redirect_host,
+		'high_privilege' => aafm_oauth_user_is_high_privilege( $user ),
+		'action_url'     => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
+		'nonce_field'    => wp_nonce_field( 'aafm_oauth_consent', '_wpnonce', true, false ),
+		'hidden_inputs'  => $hidden_inputs,
 	);
 
 	// The consent form's POST is answered with a 302 to this validated client origin,

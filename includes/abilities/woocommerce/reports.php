@@ -545,8 +545,11 @@ function aafm_exec_wc_count_products( array $input ): array|\WP_Error {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
-	$lang    = aafm_resolve_lang( $input );
-	$counts  = aafm_wpml_count_posts_by_status( 'product', $lang );
+	$lang = aafm_resolve_lang( $input );
+	// Pass an empty perm so the WPML-off branch delegates to wp_count_posts('product') with NO
+	// perm argument, matching this ability's original (pre-WPML) behavior byte-for-byte - unlike
+	// aafm/count-posts, wc-count-products never applied the 'readable' capability gate to its counts.
+	$counts  = aafm_wpml_count_posts_by_status( 'product', $lang, '' );
 	$publish = (int) ( $counts['publish'] ?? 0 );
 	$draft   = (int) ( $counts['draft'] ?? 0 );
 	$private = (int) ( $counts['private'] ?? 0 );

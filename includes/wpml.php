@@ -142,13 +142,23 @@ function aafm_wpml_post_language( int $post_id ): ?string {
  * language-correct because wp_count_posts() is language-blind. When WPML is off
  * this delegates to wp_count_posts() so non-multilingual sites are unaffected.
  *
+ * $perm is forwarded to the WPML-off wp_count_posts() delegation only - the WPML-on branch
+ * below always runs a per-status WP_Query with no perm restriction of its own, leaving
+ * capability filtering to each ability's own downstream logic. The parameter exists because
+ * two callers need different WPML-off behavior from the SAME helper: aafm/count-posts always
+ * used wp_count_posts($type, 'readable') and keeps that default, while aafm/wc-count-products
+ * originally called wp_count_posts('product') with no perm argument at all - passing '' here
+ * preserves that exact byte-for-byte non-WPML behavior instead of silently tightening it.
+ *
  * @param string      $type Post type (already validated by the caller).
  * @param string|null $lang Resolved language, 'all', or null.
+ * @param string      $perm Permission argument forwarded to wp_count_posts() on the WPML-off
+ *                          path only ('readable' or ''). Defaults to 'readable'.
  * @return array<string,int> Status => count.
  */
-function aafm_wpml_count_posts_by_status( string $type, ?string $lang ): array {
+function aafm_wpml_count_posts_by_status( string $type, ?string $lang, string $perm = 'readable' ): array {
 	if ( ! aafm_wpml_active() ) {
-		$counts = (array) wp_count_posts( $type, 'readable' );
+		$counts = (array) wp_count_posts( $type, $perm );
 		return array_map( 'intval', $counts );
 	}
 	$statuses = get_post_stati();

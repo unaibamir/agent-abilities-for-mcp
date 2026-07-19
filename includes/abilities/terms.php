@@ -97,33 +97,40 @@ function aafm_args_get_terms(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+			'properties'           => array_merge(
+				array(
+					'taxonomy' => array(
+						'type'    => 'string',
+						'default' => 'category',
+					),
+					'search'   => array( 'type' => 'string' ),
+					'page'     => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PAGE_MAX,
+					),
+					'per_page' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_TERMS_PER_PAGE_MAX,
+					),
 				),
-				'search'   => array( 'type' => 'string' ),
-				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
-				),
-				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_TERMS_PER_PAGE_MAX,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'terms' => array(
+				'terms'    => array(
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
-				'total' => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_terms',
@@ -154,16 +161,41 @@ function aafm_exec_get_terms( array $input ) {
 	}
 
 	$paging = aafm_paginate_args( $input, AAFM_TERMS_PER_PAGE_MAX );
+	$search = isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '';
 
-	$terms = get_terms(
-		array(
-			'taxonomy'   => $taxonomy,
-			'hide_empty' => false,
-			'search'     => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-			'number'     => $paging['per_page'],
-			'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
-		)
+	// WPML filters get_terms() (and wp_count_terms()) by the ambient language, so the list
+	// and its total must run inside the SAME language scope or they'd disagree - one call
+	// switched, the other not. A single aafm_with_language() wrap keeps them consistent.
+	$lang   = aafm_resolve_lang( $input );
+	$result = aafm_with_language(
+		$lang,
+		static function () use ( $taxonomy, $search, $paging ): array {
+			$terms = get_terms(
+				array(
+					'taxonomy'   => $taxonomy,
+					'hide_empty' => false,
+					'search'     => $search,
+					'number'     => $paging['per_page'],
+					'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
+				)
+			);
+
+			// total is the full match count for the same taxonomy + search filter (not paged), so
+			// an agent can page through the whole set. wp_count_terms() honors hide_empty/search the
+			// same way the listing query does.
+			$total = wp_count_terms(
+				array(
+					'taxonomy'   => $taxonomy,
+					'hide_empty' => false,
+					'search'     => $search,
+				)
+			);
+
+			return array( $terms, $total );
+		}
 	);
+
+	list( $terms, $total ) = $result;
 	if ( is_wp_error( $terms ) ) {
 		return aafm_generic_error();
 	}
@@ -173,20 +205,10 @@ function aafm_exec_get_terms( array $input ) {
 		static fn( $term ): bool => $term instanceof WP_Term
 	);
 
-	// total is the full match count for the same taxonomy + search filter (not paged), so an
-	// agent can page through the whole set. wp_count_terms() honors hide_empty/search the same
-	// way the listing query does.
-	$total = wp_count_terms(
-		array(
-			'taxonomy'   => $taxonomy,
-			'hide_empty' => false,
-			'search'     => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-		)
-	);
-
 	return array(
-		'terms' => array_values( array_map( 'aafm_redact_term', $objects ) ),
-		'total' => is_wp_error( $total ) ? count( $objects ) : (int) $total,
+		'terms'    => array_values( array_map( 'aafm_redact_term', $objects ) ),
+		'total'    => is_wp_error( $total ) ? count( $objects ) : (int) $total,
+		'language' => $lang,
 	);
 }
 

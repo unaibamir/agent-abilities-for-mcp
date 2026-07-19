@@ -506,17 +506,21 @@ function aafm_args_wc_count_products(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => array(),
+			'properties'           => aafm_lang_schema_fragment(),
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'publish' => array( 'type' => 'integer' ),
-				'draft'   => array( 'type' => 'integer' ),
-				'private' => array( 'type' => 'integer' ),
-				'pending' => array( 'type' => 'integer' ),
-				'trash'   => array( 'type' => 'integer' ),
-				'total'   => array( 'type' => 'integer' ),
+				'publish'  => array( 'type' => 'integer' ),
+				'draft'    => array( 'type' => 'integer' ),
+				'private'  => array( 'type' => 'integer' ),
+				'pending'  => array( 'type' => 'integer' ),
+				'trash'    => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_count_products',
@@ -537,24 +541,26 @@ function aafm_args_wc_count_products(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_count_products( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_count_products( array $input ): array|\WP_Error {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
-	$counts  = wp_count_posts( 'product' );
-	$publish = (int) ( $counts->publish ?? 0 );
-	$draft   = (int) ( $counts->draft ?? 0 );
-	$private = (int) ( $counts->private ?? 0 );
-	$pending = (int) ( $counts->pending ?? 0 );
-	$trash   = (int) ( $counts->trash ?? 0 );
+	$lang    = aafm_resolve_lang( $input );
+	$counts  = aafm_wpml_count_posts_by_status( 'product', $lang );
+	$publish = (int) ( $counts['publish'] ?? 0 );
+	$draft   = (int) ( $counts['draft'] ?? 0 );
+	$private = (int) ( $counts['private'] ?? 0 );
+	$pending = (int) ( $counts['pending'] ?? 0 );
+	$trash   = (int) ( $counts['trash'] ?? 0 );
 	// total counts ACTIVE (non-trashed) products only - trash is reported as its own line but is
 	// deliberately excluded from total, the shared count convention across the count siblings (B4).
 	return array(
-		'publish' => $publish,
-		'draft'   => $draft,
-		'private' => $private,
-		'pending' => $pending,
-		'trash'   => $trash,
-		'total'   => $publish + $draft + $private + $pending,
+		'publish'  => $publish,
+		'draft'    => $draft,
+		'private'  => $private,
+		'pending'  => $pending,
+		'trash'    => $trash,
+		'total'    => $publish + $draft + $private + $pending,
+		'language' => $lang,
 	);
 }

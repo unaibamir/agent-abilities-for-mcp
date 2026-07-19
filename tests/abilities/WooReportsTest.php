@@ -502,6 +502,28 @@ final class WooReportsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
+	/**
+	 * Count products reports the resolved language, null when WPML is off - matching the
+	 * language reported by wc-list-products so the two abilities agree on scope.
+	 */
+	public function test_count_products_reports_language_null_without_wpml(): void {
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			$this->markTestSkipped( 'WooCommerce not active' );
+		}
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-count-products' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $res );
+		$this->assertNull( $res['language'] ); // WPML off in the unit suite.
+	}
+
+	/**
+	 * The count-products input schema accepts the shared lang property.
+	 */
+	public function test_count_products_accepts_lang_in_its_input_schema(): void {
+		$schema = wp_get_ability( 'aafm/wc-count-products' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
+
 	// =========================================================================
 	// aafm/wc-list-payment-gateways
 	// =========================================================================

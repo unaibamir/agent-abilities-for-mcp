@@ -268,21 +268,24 @@ function aafm_args_wc_list_products(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+			'properties'           => array_merge(
+				array(
+					'page'     => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
+					'per_page' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => 100,
+					),
+					'status'   => array(
+						'type'        => 'string',
+						'description' => "Status filter; 'any' returns all states.",
+						'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
+					),
 				),
-				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
-				),
-				'status'   => array(
-					'type'        => 'string',
-					'description' => "Status filter; 'any' returns all states.",
-					'enum'        => array( 'any', 'publish', 'draft', 'pending', 'private' ),
-				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
@@ -310,6 +313,10 @@ function aafm_args_wc_list_products(): array {
 					),
 				),
 				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_list_products',
@@ -331,9 +338,11 @@ function aafm_args_wc_list_products(): array {
  * @return array<string,mixed>
  */
 function aafm_exec_wc_list_products( array $input ): array {
-	$out = array(
+	$lang = aafm_resolve_lang( $input );
+	$out  = array(
 		'products' => array(),
 		'total'    => 0,
+		'language' => $lang,
 	);
 
 	if ( ! function_exists( 'wc_get_products' ) ) {
@@ -344,13 +353,26 @@ function aafm_exec_wc_list_products( array $input ): array {
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
-	$query = wc_get_products(
-		array(
-			'limit'    => $per_page,
-			'page'     => $page,
-			'status'   => $status,
-			'paginate' => true,
-		)
+	// aafm_with_language() returns mixed, so restore the concrete type wc_get_products() promises
+	// (an array of WC_Product, or a stdClass carrying ->products/->total when paginate is true) -
+	// otherwise the is_object() narrowing below loses stdClass's dynamic-property allowance.
+	/**
+	 * The raw WooCommerce product query result.
+	 *
+	 * @var WC_Product[]|\stdClass $query
+	 */
+	$query = aafm_with_language(
+		$lang,
+		static function () use ( $per_page, $page, $status ) {
+			return wc_get_products(
+				array(
+					'limit'    => $per_page,
+					'page'     => $page,
+					'status'   => $status,
+					'paginate' => true,
+				)
+			);
+		}
 	);
 
 	// With paginate => true WooCommerce returns an object carrying ->products (the page) and ->total

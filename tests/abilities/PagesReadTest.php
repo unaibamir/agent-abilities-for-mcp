@@ -124,4 +124,9 @@ final class PagesReadTest extends TestCase {
 		$this->assertSame( $id, $out['post']['id'] );
 		$this->assertArrayNotHasKey( 'post_password', $out['post'] );
 	}
+
+	public function test_get_page_accepts_lang_arg(): void {
+		$schema = wp_get_ability( 'aafm/get-page' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
 }

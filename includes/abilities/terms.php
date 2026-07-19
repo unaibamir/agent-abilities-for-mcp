@@ -224,15 +224,18 @@ function aafm_args_get_term(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+			'properties'           => array_merge(
+				array(
+					'taxonomy' => array(
+						'type'    => 'string',
+						'default' => 'category',
+					),
+					'term_id'  => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
 				),
-				'term_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'required'             => array( 'term_id' ),
 			'additionalProperties' => false,
@@ -270,7 +273,13 @@ function aafm_exec_get_term( array $input ) {
 		return $taxonomy;
 	}
 
-	$term = get_term( absint( $input['term_id'] ), $taxonomy );
+	$term_id = absint( $input['term_id'] );
+	$lang    = aafm_resolve_lang( $input );
+	$term_id = ( null !== $lang && 'all' !== $lang )
+		? aafm_wpml_translated_id( $term_id, $taxonomy, $lang )
+		: $term_id;
+
+	$term = get_term( $term_id, $taxonomy );
 	if ( ! $term instanceof WP_Term ) {
 		return aafm_generic_error();
 	}

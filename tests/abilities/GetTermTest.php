@@ -83,4 +83,10 @@ final class GetTermTest extends TestCase {
 			)
 		);
 	}
+
+	public function test_get_term_accepts_lang_arg(): void {
+		$this->register_enabled( array( 'aafm/get-term' ) );
+		$schema = wp_get_ability( 'aafm/get-term' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
 }

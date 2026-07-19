@@ -524,6 +524,39 @@ final class WooReportsTest extends TestCase {
 		$this->assertArrayHasKey( 'lang', $schema['properties'] );
 	}
 
+	/**
+	 * Aafm/wc-count-products calls the shared WPML count helper with an empty perm argument so
+	 * its WPML-off delegation preserves the ORIGINAL wp_count_posts('product') behavior (no perm
+	 * at all) instead of the 'readable' gate aafm/count-posts uses. wp_count_posts() short-circuits
+	 * to an empty stdClass for an unregistered post type, so 'product' is registered for the
+	 * duration of this test to get real counts out of it.
+	 */
+	public function test_helper_forwards_empty_perm_so_private_counts_are_ungated(): void {
+		register_post_type( 'aafm_test_product', array( 'capability_type' => 'post' ) );
+
+		try {
+			$other_author_id = self::factory()->user->create( array( 'role' => 'author' ) );
+			self::factory()->post->create(
+				array(
+					'post_type'   => 'aafm_test_product',
+					'post_status' => 'private',
+					'post_author' => $other_author_id,
+				)
+			);
+
+			// Current user cannot read_private_posts and did not author the private item.
+			$this->acting_as( 'subscriber' );
+
+			$no_perm  = aafm_wpml_count_posts_by_status( 'aafm_test_product', null, '' );
+			$readable = aafm_wpml_count_posts_by_status( 'aafm_test_product', null );
+
+			$this->assertSame( 1, $no_perm['private'] ?? 0, 'An empty perm must not apply the private-post capability gate, matching wc-count-products\' original behavior.' );
+			$this->assertSame( 0, $readable['private'] ?? 0, 'The default perm ("readable"), used by count-posts, must still gate private counts by capability.' );
+		} finally {
+			unregister_post_type( 'aafm_test_product' );
+		}
+	}
+
 	// =========================================================================
 	// aafm/wc-list-payment-gateways
 	// =========================================================================

@@ -15,6 +15,27 @@ use WP_Error;
 
 final class SearchTest extends TestCase {
 
+	public function test_search_reports_language(): void {
+		$this->acting_as( 'subscriber' );
+		self::factory()->post->create(
+			array(
+				'post_status' => 'publish',
+				'post_title'  => 'findme',
+			)
+		);
+
+		// The audited registration wrapper logs every execute to the custom table, so it
+		// must exist before an ability invoked via wp_get_ability() runs.
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		$this->register_enabled( array( 'aafm/search-content' ) );
+
+		$out = wp_get_ability( 'aafm/search-content' )->execute( array( 'search' => 'findme' ) );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] ); // WPML off in the unit suite.
+	}
+
 	public function test_search_spans_allowlisted_types_redacted(): void {
 		register_post_type(
 			'aafm_book',

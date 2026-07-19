@@ -41,39 +41,42 @@ function aafm_args_search_content(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'search'          => array(
-					'type'      => 'string',
-					'minLength' => 1,
+			'properties'           => array_merge(
+				array(
+					'search'          => array(
+						'type'      => 'string',
+						'minLength' => 1,
+					),
+					'post_types'      => array(
+						'type'  => 'array',
+						'items' => array( 'type' => 'string' ),
+					),
+					'status'          => array(
+						'type'        => 'string',
+						'default'     => 'publish',
+						'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
+					),
+					'page'            => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PAGE_MAX,
+					),
+					'per_page'        => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					),
+					'content_format'  => array(
+						'type'    => 'string',
+						'enum'    => array( 'rendered', 'raw' ),
+						'default' => 'rendered',
+					),
+					'include_content' => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
 				),
-				'post_types'      => array(
-					'type'  => 'array',
-					'items' => array( 'type' => 'string' ),
-				),
-				'status'          => array(
-					'type'        => 'string',
-					'default'     => 'publish',
-					'description' => __( 'A single post status to search within. Public statuses (publish and any custom public status) are always allowed; the non-public statuses draft, pending, future, and private are accepted only when the caller can read private content. Aggregate values (any, trash, auto-draft, inherit) are rejected.', 'agent-abilities-for-mcp' ),
-				),
-				'page'            => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
-				),
-				'per_page'        => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
-				),
-				'content_format'  => array(
-					'type'    => 'string',
-					'enum'    => array( 'rendered', 'raw' ),
-					'default' => 'rendered',
-				),
-				'include_content' => array(
-					'type'    => 'boolean',
-					'default' => false,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'required'             => array( 'search' ),
 			'additionalProperties' => false,
@@ -81,14 +84,18 @@ function aafm_args_search_content(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'results' => array(
+				'results'  => array(
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
 						'properties' => aafm_rich_post_output_properties(),
 					),
 				),
-				'total'   => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_search_content',
@@ -113,6 +120,7 @@ function aafm_args_search_content(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_search_content( array $input ) {
+	$lang   = aafm_resolve_lang( $input );
 	$search = sanitize_text_field( (string) ( $input['search'] ?? '' ) );
 	if ( '' === $search ) {
 		return aafm_generic_error();
@@ -121,8 +129,9 @@ function aafm_exec_search_content( array $input ) {
 	$types     = aafm_resolve_search_post_types( $requested );
 	if ( empty( $types ) ) {
 		return array(
-			'results' => array(),
-			'total'   => 0,
+			'results'  => array(),
+			'total'    => 0,
+			'language' => $lang,
 		);
 	}
 
@@ -148,23 +157,29 @@ function aafm_exec_search_content( array $input ) {
 		);
 		if ( empty( $types ) ) {
 			return array(
-				'results' => array(),
-				'total'   => 0,
+				'results'  => array(),
+				'total'    => 0,
+				'language' => $lang,
 			);
 		}
 	}
 
 	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$query   = new WP_Query(
-		array(
-			'post_type'        => $types,
-			'post_status'      => $status,
-			's'                => $search,
-			'posts_per_page'   => $paging['per_page'],
-			'paged'            => $paging['page'],
-			'no_found_rows'    => false,
-			'suppress_filters' => false,
-		)
+	$query   = aafm_with_language(
+		$lang,
+		static function () use ( $types, $status, $search, $paging ): WP_Query {
+			return new WP_Query(
+				array(
+					'post_type'        => $types,
+					'post_status'      => $status,
+					's'                => $search,
+					'posts_per_page'   => $paging['per_page'],
+					'paged'            => $paging['page'],
+					'no_found_rows'    => false,
+					'suppress_filters' => false,
+				)
+			);
+		}
 	);
 	$objects = array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post );
 
@@ -176,10 +191,11 @@ function aafm_exec_search_content( array $input ) {
 	);
 
 	return array(
-		'results' => array_map(
+		'results'  => array_map(
 			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
 			array_values( $objects )
 		),
-		'total'   => (int) $query->found_posts,
+		'total'    => (int) $query->found_posts,
+		'language' => $lang,
 	);
 }

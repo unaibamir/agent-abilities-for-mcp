@@ -81,44 +81,51 @@ function aafm_args_get_pages(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'status'          => array(
-					'type'    => 'string',
-					'default' => 'publish',
+			'properties'           => array_merge(
+				array(
+					'status'          => array(
+						'type'    => 'string',
+						'default' => 'publish',
+					),
+					'search'          => array( 'type' => 'string' ),
+					'page'            => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
+					'per_page'        => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => 50,
+					),
+					'content_format'  => array(
+						'type'    => 'string',
+						'enum'    => array( 'rendered', 'raw' ),
+						'default' => 'rendered',
+					),
+					'include_content' => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
 				),
-				'search'          => array( 'type' => 'string' ),
-				'page'            => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-				),
-				'per_page'        => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 50,
-				),
-				'content_format'  => array(
-					'type'    => 'string',
-					'enum'    => array( 'rendered', 'raw' ),
-					'default' => 'rendered',
-				),
-				'include_content' => array(
-					'type'    => 'boolean',
-					'default' => false,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'posts' => array(
+				'posts'    => array(
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
 						'properties' => aafm_rich_post_output_properties(),
 					),
 				),
-				'total' => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_pages',

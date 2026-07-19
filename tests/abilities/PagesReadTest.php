@@ -129,4 +129,22 @@ final class PagesReadTest extends TestCase {
 		$schema = wp_get_ability( 'aafm/get-page' )->get_input_schema();
 		$this->assertArrayHasKey( 'lang', $schema['properties'] );
 	}
+
+	public function test_get_pages_accepts_lang_arg(): void {
+		$schema = wp_get_ability( 'aafm/get-pages' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
+
+	public function test_get_pages_reports_resolved_language_null_without_wpml(): void {
+		$this->acting_as( 'subscriber' );
+		self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$out = wp_get_ability( 'aafm/get-pages' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] ); // WPML off in the unit suite.
+	}
 }

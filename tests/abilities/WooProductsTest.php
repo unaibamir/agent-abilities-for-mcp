@@ -70,6 +70,21 @@ final class WooProductsTest extends TestCase {
 		$this->assertArrayNotHasKey( 'description', $res['products'][0], 'list rows are lean.' );
 	}
 
+	public function test_list_products_reports_language_null_without_wpml(): void {
+		if ( ! class_exists( 'WooCommerce' ) ) {
+			$this->markTestSkipped( 'WooCommerce not active' );
+		}
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-products' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $res );
+		$this->assertNull( $res['language'] ); // WPML off in the unit suite.
+	}
+
+	public function test_list_products_accepts_lang_in_its_input_schema(): void {
+		$schema = wp_get_ability( 'aafm/wc-list-products' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
+
 	public function test_list_products_denies_a_subscriber(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertNotTrue( wp_get_ability( 'aafm/wc-list-products' )->check_permissions( array() ) );

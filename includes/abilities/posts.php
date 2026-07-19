@@ -293,8 +293,11 @@ function aafm_args_count_posts(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'post_type' => array( 'type' => 'string' ),
+			'properties'           => array_merge(
+				array(
+					'post_type' => array( 'type' => 'string' ),
+				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
@@ -303,6 +306,10 @@ function aafm_args_count_posts(): array {
 			'properties' => array(
 				'total'     => array( 'type' => 'integer' ),
 				'by_status' => array( 'type' => 'object' ),
+				'language'  => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_count_posts',
@@ -341,11 +348,14 @@ function aafm_exec_count_posts( array $input ) {
 	// Statuses excluded from the active total (still surfaced in by_status).
 	$non_active = array( 'trash', 'auto-draft' );
 
-	// Pass the 'readable' perm so counts respect the caller's read capability. On its own,
-	// though, 'readable' only restricts the `private` status - wp_count_posts() still hands
-	// back draft/pending/future/trash counts to any reader, leaking how many unpublished
-	// items exist under this read-only gate. So layer a capability check on top of it.
-	$counts = (array) wp_count_posts( $type, 'readable' );
+	// Pass the 'readable' perm (via the helper's wp_count_posts() delegation) so counts
+	// respect the caller's read capability. On its own, though, 'readable' only restricts
+	// the `private` status - the raw counts still hand back draft/pending/future/trash counts
+	// to any reader, leaking how many unpublished items exist under this read-only gate. So
+	// layer a capability check on top of it. Under WPML the counts are language-scoped so they
+	// agree with aafm/get-posts instead of the language-blind wp_count_posts() total.
+	$lang   = aafm_resolve_lang( $input );
+	$counts = aafm_wpml_count_posts_by_status( $type, $lang );
 
 	// Editors of this post type get the full breakdown; everyone else is limited to counts
 	// for publicly-viewable statuses (normally just 'publish'). Non-public status counts are
@@ -375,6 +385,7 @@ function aafm_exec_count_posts( array $input ) {
 		'total'     => $total,
 		// Cast so an empty breakdown JSON-encodes to "{}" (object) per the schema.
 		'by_status' => (object) $by_status,
+		'language'  => $lang,
 	);
 }
 

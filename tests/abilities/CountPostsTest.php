@@ -14,6 +14,21 @@ use WP_Error;
 
 final class CountPostsTest extends TestCase {
 
+	public function set_up(): void {
+		parent::set_up();
+		// The audited registration wrapper logs every permission check and execute to the
+		// custom table, so it must exist before any ability is invoked.
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+
+		// Register categories + enabled abilities inside their gated init actions, simulated
+		// by pushing the action name onto $wp_current_filter - the idiom WP core's own
+		// ability test trait uses. wp_register_ability() refuses to run otherwise.
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/count-posts' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
 	public function test_in_registry_as_a_read(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/count-posts', $registry );
@@ -135,5 +150,13 @@ final class CountPostsTest extends TestCase {
 		$this->acting_as( 'subscriber' );
 		// Subscriber has 'read'; the read floor admits them (same as get-posts).
 		$this->assertTrue( aafm_perm_read() );
+	}
+
+	public function test_count_posts_reports_language_null_without_wpml(): void {
+		$this->acting_as( 'subscriber' );
+		self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$out = wp_get_ability( 'aafm/count-posts' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] );
 	}
 }

@@ -218,6 +218,11 @@ final class MediaReadTest extends TestCase {
 		$this->assertArrayNotHasKey( 'file', $out['media'] );
 	}
 
+	public function test_get_media_item_accepts_lang_arg(): void {
+		$schema = wp_get_ability( 'aafm/get-media-item' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
+
 	public function test_get_media_list_stays_lean(): void {
 		// Adding the rich single-item read must NOT bloat the LIST shape.
 		$this->acting_as( 'author' );

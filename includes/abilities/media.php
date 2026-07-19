@@ -206,11 +206,14 @@ function aafm_args_get_media_item(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'attachment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+			'properties'           => array_merge(
+				array(
+					'attachment_id' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
 				),
+				aafm_lang_schema_fragment()
 			),
 			'required'             => array( 'attachment_id' ),
 			'additionalProperties' => false,
@@ -243,7 +246,13 @@ function aafm_args_get_media_item(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_media_item( array $input ) {
-	$att_id     = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
+	if ( $att_id ) {
+		$lang   = aafm_resolve_lang( $input );
+		$att_id = ( null !== $lang && 'all' !== $lang )
+			? aafm_wpml_translated_id( $att_id, 'attachment', $lang )
+			: $att_id;
+	}
 	$attachment = $att_id ? get_post( $att_id ) : null;
 	if ( ! $attachment instanceof WP_Post || 'attachment' !== $attachment->post_type ) {
 		return aafm_generic_error();

@@ -156,16 +156,19 @@ function aafm_args_get_page(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'page_id'        => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+			'properties'           => array_merge(
+				array(
+					'page_id'        => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+					),
+					'content_format' => array(
+						'type'    => 'string',
+						'enum'    => array( 'rendered', 'raw' ),
+						'default' => 'rendered',
+					),
 				),
-				'content_format' => array(
-					'type'    => 'string',
-					'enum'    => array( 'rendered', 'raw' ),
-					'default' => 'rendered',
-				),
+				aafm_lang_schema_fragment()
 			),
 			'required'             => array( 'page_id' ),
 			'additionalProperties' => false,
@@ -194,6 +197,11 @@ function aafm_args_get_page(): array {
 /**
  * Permission for aafm/get-page: read, plus per-object edit for non-public pages.
  *
+ * When a `lang` is requested, the id is resolved to that language's translation
+ * FIRST, so the capability check below runs against the id that will actually be
+ * loaded - a caller cannot pass a readable id but have a different, unreadable
+ * translation served.
+ *
  * @param array<string,mixed> $input Input.
  * @return bool
  */
@@ -201,7 +209,10 @@ function aafm_perm_get_page( array $input ): bool {
 	if ( ! current_user_can( 'read' ) ) {
 		return false;
 	}
-	$id   = isset( $input['page_id'] ) ? absint( $input['page_id'] ) : 0;
+	$id = isset( $input['page_id'] ) ? absint( $input['page_id'] ) : 0;
+	if ( $id ) {
+		$id = aafm_get_page_lang_resolved_id( $id, $input );
+	}
 	$post = $id ? get_post( $id ) : null;
 	// Keep the type pin so a non-page id is still rejected, then delegate to the shared gate.
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
@@ -211,13 +222,29 @@ function aafm_perm_get_page( array $input ): bool {
 }
 
 /**
+ * Resolve a requested page id to its WPML translation per the caller's `lang`
+ * input. Feature-detected no-op: returns $id unchanged when WPML is off, no
+ * `lang` was requested, or `lang` is 'all' (no single translation to resolve to).
+ *
+ * @param int                 $id    Original page id.
+ * @param array<string,mixed> $input Ability input (read for `lang`).
+ * @return int
+ */
+function aafm_get_page_lang_resolved_id( int $id, array $input ): int {
+	$lang = aafm_resolve_lang( $input );
+	return ( null !== $lang && 'all' !== $lang )
+		? aafm_wpml_translated_id( $id, 'page', $lang )
+		: $id;
+}
+
+/**
  * Execute aafm/get-page.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_page( array $input ) {
-	$id   = absint( $input['page_id'] );
+	$id   = aafm_get_page_lang_resolved_id( absint( $input['page_id'] ), $input );
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {
 		return aafm_generic_error();

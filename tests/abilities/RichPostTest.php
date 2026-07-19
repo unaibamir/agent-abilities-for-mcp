@@ -386,4 +386,10 @@ final class RichPostTest extends TestCase {
 			array_keys( $shape['terms']['category'][0] )
 		);
 	}
+
+	public function test_get_post_accepts_lang_arg(): void {
+		$this->register_enabled( array( 'aafm/get-post' ) );
+		$schema = wp_get_ability( 'aafm/get-post' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
 }

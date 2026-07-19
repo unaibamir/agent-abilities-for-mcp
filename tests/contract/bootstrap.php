@@ -108,6 +108,10 @@ tests_add_filter(
 			'wordpress-seo/wp-seo.php',
 			'all-in-one-seo-pack/all_in_one_seo_pack.php',
 			'seo-by-rank-math/rank-math.php',
+			// WPML is licensed (no free wp.org zip) -- install-vendors.sh cannot provision
+			// it, so this is normally absent and WpmlContractTest skips. Dropping a real,
+			// licensed copy into this test core's plugins dir makes that leg assert for real.
+			'sitepress-multilingual-cms/sitepress.php',
 		);
 		foreach ( $vendor_mains as $main ) {
 			$path = $plugins . '/' . $main;

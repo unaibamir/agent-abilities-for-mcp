@@ -100,5 +100,10 @@ jobs:
       - name: Install real vendor plugins
         run: tests/bin/install-vendors.sh
 
+      # WPML (WpmlContractTest) is not provisioned here: it is a licensed plugin with no free
+      # wp.org zip, so install-vendors.sh cannot fetch it the way it does WooCommerce/ACF/Yoast/
+      # AIOSEO/Rank Math. That leg cleanly skips in CI until a licensed WPML zip is wired in via a
+      # secret — a pending operator decision. It already asserts for real wherever WPML actually
+      # is present (tests/contract/bootstrap.php loads it when found).
       - name: Run contract suite
         run: vendor/bin/phpunit -c phpunit-contract.xml.dist

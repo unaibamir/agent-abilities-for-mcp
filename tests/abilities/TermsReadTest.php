@@ -118,4 +118,11 @@ final class TermsReadTest extends TestCase {
 		$this->assertContains( 'Findable', $titles );
 		$this->assertNotContains( 'Unrelated', $titles );
 	}
+
+	public function test_get_terms_reports_language(): void {
+		$this->acting_as( 'subscriber' );
+		$out = wp_get_ability( 'aafm/get-terms' )->execute( array( 'taxonomy' => 'category' ) );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] );
+	}
 }

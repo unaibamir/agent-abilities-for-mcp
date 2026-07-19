@@ -141,49 +141,56 @@ function aafm_args_get_posts(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'post_type'       => array(
-					'type'    => 'string',
-					'default' => 'post',
+			'properties'           => array_merge(
+				array(
+					'post_type'       => array(
+						'type'    => 'string',
+						'default' => 'post',
+					),
+					'status'          => array(
+						'type'    => 'string',
+						'default' => 'publish',
+					),
+					'search'          => array( 'type' => 'string' ),
+					'page'            => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PAGE_MAX,
+					),
+					'per_page'        => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					),
+					'content_format'  => array(
+						'type'    => 'string',
+						'enum'    => array( 'rendered', 'raw' ),
+						'default' => 'rendered',
+					),
+					'include_content' => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
 				),
-				'status'          => array(
-					'type'    => 'string',
-					'default' => 'publish',
-				),
-				'search'          => array( 'type' => 'string' ),
-				'page'            => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
-				),
-				'per_page'        => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
-				),
-				'content_format'  => array(
-					'type'    => 'string',
-					'enum'    => array( 'rendered', 'raw' ),
-					'default' => 'rendered',
-				),
-				'include_content' => array(
-					'type'    => 'boolean',
-					'default' => false,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'posts' => array(
+				'posts'    => array(
 					'type'  => 'array',
 					'items' => array(
 						'type'       => 'object',
 						'properties' => aafm_rich_post_output_properties(),
 					),
 				),
-				'total' => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_posts',
@@ -232,16 +239,22 @@ function aafm_exec_get_posts( array $input ) {
 
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 
-	$query = new WP_Query(
-		array(
-			'post_type'        => $type,
-			'post_status'      => $status,
-			's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-			'posts_per_page'   => $paging['per_page'],
-			'paged'            => $paging['page'],
-			'no_found_rows'    => false,
-			'suppress_filters' => false,
-		)
+	$lang  = aafm_resolve_lang( $input );
+	$query = aafm_with_language(
+		$lang,
+		static function () use ( $type, $status, $input, $paging ): WP_Query {
+			return new WP_Query(
+				array(
+					'post_type'        => $type,
+					'post_status'      => $status,
+					's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+					'posts_per_page'   => $paging['per_page'],
+					'paged'            => $paging['page'],
+					'no_found_rows'    => false,
+					'suppress_filters' => false,
+				)
+			);
+		}
 	);
 
 	$objects = array_filter(
@@ -262,8 +275,9 @@ function aafm_exec_get_posts( array $input ) {
 	);
 
 	return array(
-		'posts' => $posts,
-		'total' => (int) $query->found_posts,
+		'posts'    => $posts,
+		'total'    => (int) $query->found_posts,
+		'language' => $lang,
 	);
 }
 

@@ -90,31 +90,38 @@ function aafm_args_get_media(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'search'   => array(
-					'type' => 'string',
+			'properties'           => array_merge(
+				array(
+					'search'   => array(
+						'type' => 'string',
+					),
+					'per_page' => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					),
+					'page'     => array(
+						'type'    => 'integer',
+						'minimum' => 1,
+						'maximum' => AAFM_LIST_PAGE_MAX,
+					),
 				),
-				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
-				),
-				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
-				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'media' => array(
+				'media'    => array(
 					'type'  => 'array',
 					'items' => array( 'type' => 'object' ),
 				),
-				'total' => array( 'type' => 'integer' ),
+				'total'    => array( 'type' => 'integer' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_get_media',
@@ -154,15 +161,23 @@ function aafm_perm_get_media(): bool {
  */
 function aafm_exec_get_media( array $input ): array {
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$query  = new WP_Query(
-		array(
-			'post_type'      => 'attachment',
-			'post_status'    => 'inherit',
-			's'              => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-			'posts_per_page' => $paging['per_page'],
-			'paged'          => $paging['page'],
-			'no_found_rows'  => false,
-		)
+
+	$lang  = aafm_resolve_lang( $input );
+	$query = aafm_with_language(
+		$lang,
+		static function () use ( $input, $paging ): WP_Query {
+			return new WP_Query(
+				array(
+					'post_type'        => 'attachment',
+					'post_status'      => 'inherit',
+					's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+					'posts_per_page'   => $paging['per_page'],
+					'paged'            => $paging['page'],
+					'no_found_rows'    => false,
+					'suppress_filters' => false,
+				)
+			);
+		}
 	);
 
 	// WP_Query->posts is typed array<int,int|WP_Post>; keep only WP_Post before redacting.
@@ -172,9 +187,10 @@ function aafm_exec_get_media( array $input ): array {
 	);
 
 	return array(
-		'media' => array_values( array_map( 'aafm_redact_media', $attachments ) ),
+		'media'    => array_values( array_map( 'aafm_redact_media', $attachments ) ),
 		// Full match count for the search filter so an agent can page through the library.
-		'total' => (int) $query->found_posts,
+		'total'    => (int) $query->found_posts,
+		'language' => $lang,
 	);
 }
 
@@ -248,16 +264,23 @@ function aafm_args_count_media(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array(
-				'mime_type' => array( 'type' => 'string' ),
+			'properties'           => array_merge(
+				array(
+					'mime_type' => array( 'type' => 'string' ),
+				),
+				aafm_lang_schema_fragment()
 			),
 			'additionalProperties' => false,
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'total'   => array( 'type' => 'integer' ),
-				'by_mime' => array( 'type' => 'object' ),
+				'total'    => array( 'type' => 'integer' ),
+				'by_mime'  => array( 'type' => 'object' ),
+				'language' => array(
+					'type'        => array( 'string', 'null' ),
+					'description' => __( 'The WPML language the list was scoped to ("all" for every language), or null when WPML is inactive.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_count_media',
@@ -276,19 +299,35 @@ function aafm_args_count_media(): array {
  * Execute aafm/count-media - wp_count_attachments() returns counts keyed by mime
  * type; sum for the total. An optional mime_type narrows the breakdown to one type.
  *
+ * That single language-blind SQL GROUP BY disagreed with the language-scoped
+ * aafm/get-media list whenever WPML Media Translation is active. When WPML is on,
+ * the same mime-keyed counts are instead built from an attachment WP_Query run
+ * inside the resolved language scope; when WPML is off this delegates to
+ * wp_count_attachments() exactly as before, so non-multilingual sites are
+ * byte-for-byte unchanged.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
 function aafm_exec_count_media( array $input ): array {
-	$counts = (array) wp_count_attachments();
 	$filter = isset( $input['mime_type'] ) ? sanitize_text_field( (string) $input['mime_type'] ) : '';
+	$lang   = aafm_resolve_lang( $input );
+
+	if ( aafm_wpml_active() ) {
+		$counts = aafm_with_language( $lang, 'aafm_query_attachment_counts_by_mime' );
+	} else {
+		$counts = (array) wp_count_attachments();
+	}
 
 	$by_mime = array();
 	$total   = 0;
 	foreach ( $counts as $mime => $n ) {
 		// wp_count_attachments() adds a 'trash' key alongside the mime-type rows -
 		// it is a status bucket (how many attachments are trashed), not a mime
-		// type, so it must not be reported as one or summed into the total.
+		// type, so it must not be reported as one or summed into the total. The
+		// WPML-scoped query never includes trashed attachments in the first place
+		// (post_status => 'inherit'), so this guard only matters for the
+		// wp_count_attachments() branch.
 		if ( 'trash' === $mime ) {
 			continue;
 		}
@@ -301,11 +340,41 @@ function aafm_exec_count_media( array $input ): array {
 	}
 
 	return array(
-		'total'   => $total,
+		'total'    => $total,
 		// Cast so an empty breakdown JSON-encodes to "{}" (object) per the schema,
 		// instead of "[]" (a JSON array). A populated assoc array is unaffected.
-		'by_mime' => (object) $by_mime,
+		'by_mime'  => (object) $by_mime,
+		'language' => $lang,
 	);
+}
+
+/**
+ * Count non-trashed attachments grouped by their exact post_mime_type, mirroring
+ * wp_count_attachments()'s key shape but via WP_Query so WPML's language filters
+ * apply. Called only from inside aafm_with_language() - see aafm_exec_count_media().
+ *
+ * @return array<string,int> Mime type => count.
+ */
+function aafm_query_attachment_counts_by_mime(): array {
+	$query = new WP_Query(
+		array(
+			'post_type'        => 'attachment',
+			'post_status'      => 'inherit',
+			'posts_per_page'   => -1,
+			'no_found_rows'    => true,
+			'suppress_filters' => false,
+		)
+	);
+
+	$counts = array();
+	foreach ( $query->posts as $post ) {
+		if ( ! $post instanceof WP_Post ) {
+			continue;
+		}
+		$mime            = (string) $post->post_mime_type;
+		$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + 1;
+	}
+	return $counts;
 }
 
 /**

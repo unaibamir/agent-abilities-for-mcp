@@ -342,6 +342,20 @@ final class MediaReadTest extends TestCase {
 		$this->assertStringContainsString( '"by_mime":{}', (string) wp_json_encode( $out ) );
 	}
 
+	public function test_get_media_reports_language(): void {
+		$this->acting_as( 'author' );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] );
+	}
+
+	public function test_count_media_reports_language(): void {
+		$this->acting_as( 'author' );
+		$out = wp_get_ability( 'aafm/count-media' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] );
+	}
+
 	public function test_media_discovery_floors(): void {
 		// Reads: same floor as get-media (upload_files OR edit_posts). The reads have NO
 		// discovery override - like get-media itself, they fall through to their real,

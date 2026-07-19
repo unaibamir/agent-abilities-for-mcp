@@ -137,6 +137,44 @@ function aafm_wpml_post_language( int $post_id ): ?string {
 }
 
 /**
+ * Per-status counts for a post type, scoped to a WPML language when active.
+ * Mirrors the shape of wp_count_posts() (status => int) but, under WPML, is
+ * language-correct because wp_count_posts() is language-blind. When WPML is off
+ * this delegates to wp_count_posts() so non-multilingual sites are unaffected.
+ *
+ * @param string      $type Post type (already validated by the caller).
+ * @param string|null $lang Resolved language, 'all', or null.
+ * @return array<string,int> Status => count.
+ */
+function aafm_wpml_count_posts_by_status( string $type, ?string $lang ): array {
+	if ( ! aafm_wpml_active() ) {
+		$counts = (array) wp_count_posts( $type, 'readable' );
+		return array_map( 'intval', $counts );
+	}
+	$statuses = get_post_stati();
+	return aafm_with_language(
+		'all' === $lang ? 'all' : $lang,
+		static function () use ( $type, $statuses ): array {
+			$out = array();
+			foreach ( $statuses as $status ) {
+				$q              = new WP_Query(
+					array(
+						'post_type'        => $type,
+						'post_status'      => $status,
+						'posts_per_page'   => 1,
+						'fields'           => 'ids',
+						'no_found_rows'    => false,
+						'suppress_filters' => false,
+					)
+				);
+				$out[ $status ] = (int) $q->found_posts;
+			}
+			return $out;
+		}
+	);
+}
+
+/**
  * Translate an element id into a target language via wpml_object_id (plain
  * element types only). Returns the original id when WPML is off or when there
  * is no translation (return_original_if_missing = true).

@@ -100,4 +100,17 @@ final class PostsReadTest extends TestCase {
 		$this->assertSame( $id, $out['post']['id'] );
 		$this->assertArrayNotHasKey( 'post_password', $out['post'] );
 	}
+
+	public function test_get_posts_reports_resolved_language_null_without_wpml(): void {
+		$this->acting_as( 'subscriber' );
+		self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$out = wp_get_ability( 'aafm/get-posts' )->execute( array() );
+		$this->assertArrayHasKey( 'language', $out );
+		$this->assertNull( $out['language'] ); // WPML off in the unit suite.
+	}
+
+	public function test_get_posts_rejects_undeclared_arg_but_accepts_lang(): void {
+		$schema = wp_get_ability( 'aafm/get-posts' )->get_input_schema();
+		$this->assertArrayHasKey( 'lang', $schema['properties'] );
+	}
 }

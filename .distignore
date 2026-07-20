@@ -20,6 +20,12 @@
 .DS_Store
 /.phpunit.cache
 /.playwright-cli
+/.playwright
+/.superpowers
+/.firecrawl
+/.impeccable
+/.scratch
+/project-state
 /.distignore
 /.gitattributes
 /.gitignore

@@ -286,6 +286,11 @@ function aafm_args_list_menu_items(): array {
  * directly, so the list is language-agnostic and works the same with or without WPML. An unknown
  * or empty menu yields an empty items list.
  *
+ * get_objects_in_term() applies no post_status filter, whereas wp_get_nav_menu_items() defaulted to
+ * post_status => 'publish'. We restore that filter here so the returned SET matches the pre-fix
+ * behaviour exactly on a non-WPML site (published items only, drafts excluded) while keeping the
+ * language-agnostic resolution that is the actual WPML fix.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
@@ -301,6 +306,11 @@ function aafm_exec_list_menu_items( array $input ): array {
 		if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 			continue;
 		}
+		// Publish-only parity with the old wp_get_nav_menu_items() default: skip any item that is not
+		// published so the returned list is byte-identical to the pre-fix behaviour.
+		if ( 'publish' !== $post->post_status ) {
+			continue;
+		}
 		$decorated[] = wp_setup_nav_menu_item( $post );
 	}
 
@@ -314,8 +324,16 @@ function aafm_exec_list_menu_items( array $input ): array {
 	);
 
 	$items = array();
+	$order = 0;
 	foreach ( $decorated as $item ) {
-		$items[] = aafm_redact_menu_item( $item );
+		++$order;
+		// The old wp_get_nav_menu_items() path emitted a contiguous 1..N display index as the item
+		// order; the raw stored menu_order carried here can have gaps. Relative order is already
+		// correct from the usort above, so renumber the emitted value to a contiguous 1-based index
+		// to match the pre-fix output contract.
+		$redacted          = aafm_redact_menu_item( $item );
+		$redacted['order'] = $order;
+		$items[]           = $redacted;
 	}
 	return array( 'items' => $items );
 }
@@ -668,9 +686,9 @@ function aafm_exec_update_menu_item( array $input ) {
 	// current stored values and layer the requested edit on top, leaving every unspecified field
 	// exactly as it was. Values are read from the same decorated item shape the read path uses; the
 	// slashed text fields (title/description/attr-title, per the core contract) are re-slashed.
-	// Position is read from the raw post row, not $existing->menu_order: wp_get_nav_menu_items()
-	// rewrites menu_order to a contiguous 1..N display index, so the decorated value is not the
-	// stored order and re-sending it would shuffle items in a menu with non-contiguous orders.
+	// Position is read straight from the stored post row so the item keeps its exact saved
+	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
+	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
 	$stored_post = get_post( $item_id );
 	$args        = array(
 		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
@@ -792,6 +810,9 @@ function aafm_exec_delete_menu_item( array $input ) {
  * @return object|null The decorated nav menu item object, or null.
  */
 function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
+	// Deliberately NOT status-filtered: create/update/delete re-read the item they just wrote, which
+	// can be a draft (e.g. it points at an unpublished object), so a just-saved draft item must stay
+	// resolvable. This is intentionally more capable than the old publish-only reader.
 	$post = get_post( $item_id );
 	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return null;

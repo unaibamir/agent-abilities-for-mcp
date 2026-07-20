@@ -212,16 +212,6 @@ final class MenusTest extends TestCase {
 		$before_classes   = (array) get_post_meta( $item_id, '_menu_item_classes', true );
 		$before_order     = (int) get_post( $item_id )->menu_order;
 
-		// The ability's read representation reindexes menu_order to a contiguous display index, so
-		// capture that separately to assert the redacted return preserves it.
-		$before_items    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
-		$before_redacted = 0;
-		foreach ( $before_items['items'] as $listed ) {
-			if ( (int) $listed['id'] === (int) $item_id ) {
-				$before_redacted = (int) $listed['order'];
-			}
-		}
-
 		$this->assertSame( 'post_type', $before_type );
 		$this->assertSame( 'page', $before_object );
 		$this->assertSame( $page_id, $before_object_id );
@@ -255,7 +245,9 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 'page', $up['object'], 'returned object survives.' );
 		$this->assertSame( $page_id, (int) $up['object_id'], 'returned object_id survives.' );
 		$this->assertSame( (int) $parent_id, (int) $up['parent'], 'returned parent survives.' );
-		$this->assertSame( $before_redacted, (int) $up['order'], 'returned order (display index) survives.' );
+		// update-menu-item re-reads via aafm_menu_item_by_id(), which carries the raw stored
+		// menu_order, so the returned order is the preserved stored position (5), not a reindex.
+		$this->assertSame( $before_order, (int) $up['order'], 'returned order (stored menu_order) survives.' );
 		// A post_type item derives its url from the object, so it must resolve to the page permalink,
 		// never the empty url a custom-link flip would leave behind.
 		$this->assertSame( get_permalink( $page_id ), $up['url'], 'url resolves to the page permalink.' );
@@ -434,6 +426,75 @@ final class MenusTest extends TestCase {
 		$res    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
 		$titles = array_column( $res['items'], 'title' );
 		$this->assertSame( array( 'First', 'Second' ), $titles, 'items come back sorted by menu_order.' );
+	}
+
+	public function test_list_menu_items_emits_contiguous_order_values(): void {
+		// The stored menu_order can have gaps (here 5 and 10); the old wp_get_nav_menu_items() path
+		// emitted a contiguous 1..N display index. Pin that the emitted order is renumbered 1..N in
+		// menu_order sequence rather than carrying the raw stored values.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Gapped' );
+
+		wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'    => 'Ten',
+				'menu-item-url'      => home_url( '/ten' ),
+				'menu-item-position' => 10,
+				'menu-item-status'   => 'publish',
+			)
+		);
+		wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'    => 'Five',
+				'menu-item-url'      => home_url( '/five' ),
+				'menu-item-position' => 5,
+				'menu-item-status'   => 'publish',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$this->assertSame( array( 'Five', 'Ten' ), array_column( $res['items'], 'title' ), 'items come back sorted by stored menu_order.' );
+		$this->assertSame( array( 1, 2 ), array_column( $res['items'], 'order' ), 'emitted order is a contiguous 1..N index, not the raw 5/10.' );
+	}
+
+	public function test_list_menu_items_excludes_draft_items(): void {
+		// Publish-only parity pin: get_objects_in_term() applies no post_status filter, so the exec
+		// must skip non-published items to match the old wp_get_nav_menu_items() default. A draft item
+		// is a real member of the menu term, so only the status filter can exclude it.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Mixed' );
+
+		wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'  => 'Published',
+				'menu-item-url'    => home_url( '/pub' ),
+				'menu-item-status' => 'publish',
+			)
+		);
+		$draft_id = wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'  => 'Draft',
+				'menu-item-url'    => home_url( '/draft' ),
+				'menu-item-status' => 'draft',
+			)
+		);
+		$this->assertIsInt( $draft_id );
+		$this->assertSame( 'draft', get_post( $draft_id )->post_status, 'the fixture item is stored as a draft.' );
+		$this->assertTrue( (bool) is_object_in_term( $draft_id, 'nav_menu', $menu_id ), 'the draft is a member of the menu term.' );
+
+		$res    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$titles = array_column( $res['items'], 'title' );
+		$this->assertSame( array( 'Published' ), $titles, 'only the published item is listed; the draft is excluded.' );
 	}
 
 	public function test_list_menu_items_empty_menu_returns_empty_list(): void {

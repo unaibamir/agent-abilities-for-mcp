@@ -318,6 +318,133 @@ final class MenusTest extends TestCase {
 		$this->assertSame( '', $stored2, 'esc_url_raw neutralizes the data: scheme to an empty url.' );
 	}
 
+	public function test_create_menu_item_returns_the_created_item(): void {
+		// The re-read after the write must resolve the just-created item by id. On a WPML site
+		// wp_get_nav_menu_items() is language-filtered and would hide the fresh item, so the helper
+		// resolves it language-agnostically (by post + nav_menu term). Without WPML present this pins
+		// the plain contract: create hands back the item it just made, not a generic error.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Create' );
+
+		$item = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'Contact',
+				'url'     => home_url( '/contact' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $item, 'the created item is re-read, not lost.' );
+		$this->assertArrayHasKey( 'id', $item );
+		$this->assertSame( 'Contact', $item['title'], 're-read by id returns the created item.' );
+	}
+
+	public function test_update_menu_item_rejects_item_from_another_menu(): void {
+		// The cross-menu contract update relies on: an item that lives in menu A cannot be steered
+		// through menu B. The re-read helper scopes by the nav_menu term relationship, so an item of
+		// another menu resolves to null and the update returns a generic error rather than editing it.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_a = $this->make_menu( 'Menu A' );
+		$menu_b = $this->make_menu( 'Menu B' );
+
+		$item    = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_a,
+				'title'   => 'A item',
+				'url'     => home_url( '/a' ),
+			)
+		);
+		$item_id = (int) $item['id'];
+
+		$res = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_b,
+				'item_id' => $item_id,
+				'title'   => 'hijack',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'an item from another menu is rejected.' );
+
+		// The item's title in menu A is untouched by the rejected cross-menu update.
+		$this->assertSame( 'A item', get_post( $item_id )->post_title, 'the item in its own menu is unchanged.' );
+	}
+
+	public function test_menu_item_by_id_resolves_and_scopes(): void {
+		// Direct contract for the re-read helper: it resolves an item for its owning menu, returns
+		// null for a different menu (term-scoped), and null for a post that is not a nav_menu_item
+		// (so it can never be steered onto an arbitrary post).
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_a = $this->make_menu( 'Alpha' );
+		$menu_b = $this->make_menu( 'Beta' );
+
+		$item    = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_a,
+				'title'   => 'Docs',
+				'url'     => home_url( '/docs' ),
+			)
+		);
+		$item_id = (int) $item['id'];
+
+		$found = aafm_menu_item_by_id( $menu_a, $item_id );
+		$this->assertIsObject( $found, 'the item resolves for its owning menu.' );
+		$this->assertSame( $item_id, (int) $found->ID );
+
+		$this->assertNull( aafm_menu_item_by_id( $menu_b, $item_id ), 'an item of another menu does not resolve.' );
+
+		$page_id = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$this->assertNull( aafm_menu_item_by_id( $menu_a, $page_id ), 'a non nav_menu_item id does not resolve.' );
+	}
+
+	public function test_list_menu_items_returns_items_ordered_by_menu_order(): void {
+		// list-menu-items must return the menu's items sorted by menu_order, resolved from the
+		// nav_menu term membership (language-agnostic) rather than the WPML-filtered core reader.
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Ordered' );
+
+		wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'    => 'Second',
+				'menu-item-url'      => home_url( '/second' ),
+				'menu-item-position' => 2,
+				'menu-item-status'   => 'publish',
+			)
+		);
+		wp_update_nav_menu_item(
+			$menu_id,
+			0,
+			array(
+				'menu-item-title'    => 'First',
+				'menu-item-url'      => home_url( '/first' ),
+				'menu-item-position' => 1,
+				'menu-item-status'   => 'publish',
+			)
+		);
+
+		$res    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$titles = array_column( $res['items'], 'title' );
+		$this->assertSame( array( 'First', 'Second' ), $titles, 'items come back sorted by menu_order.' );
+	}
+
+	public function test_list_menu_items_empty_menu_returns_empty_list(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Empty' );
+
+		$res = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$this->assertSame( array(), $res['items'], 'an empty menu yields an empty item list.' );
+	}
+
 	public function test_menu_write_is_discoverable_by_an_admin_and_hidden_from_an_editor(): void {
 		// Exercises the server.php fall-through for a menu WRITE (not just by comment): an admin
 		// holds edit_theme_options so create-menu is discoverable; an editor lacks it, so it is

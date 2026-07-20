@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, seo
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.3.1
+Stable tag: 1.3.2
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -237,6 +237,13 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 6. Abilities from other plugins are grouped by the plugin that registers them, each off until you turn it on, with an enable-all or disable-all per plugin.
 
 == Changelog ==
+
+= 1.3.2 =
+
+* **Feature:** Content reads (posts, pages, search, terms, media, and products) now take an optional language argument and report which language they returned, and a single-item read can fetch a specific translation. Sites without WPML are unaffected.
+* **Fix:** On a WPML site the content lists returned only the default language while the counters reported every language, so an agent was told more items existed than it could actually read. The counts now match the language the list returns.
+* **Fix:** The menu-item tools reported failure on a multilingual site even when the item was created, because WPML's language filter hid it from the re-read. They now resolve the item by id and work correctly.
+* **Chore:** Added a real-WPML contract test and a guard that fails the build if a read-only ability ever starts writing, and kept tooling directories out of the deployed package.
 
 = 1.3.1 =
 

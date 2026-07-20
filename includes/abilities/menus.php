@@ -279,20 +279,42 @@ function aafm_args_list_menu_items(): array {
 /**
  * Execute aafm/list-menu-items.
  *
- * Returns the items in the menu, each redacted to the menu-relevant fields. An unknown or
- * empty menu yields an empty items list - wp_get_nav_menu_items() returns false for a bad id,
- * which is treated as no items.
+ * Returns the items in the menu, each redacted to the menu-relevant fields, sorted by menu_order.
+ * The items are resolved from the nav_menu TERM membership rather than wp_get_nav_menu_items(),
+ * which WPML language-filters mid-request - a language filter would otherwise drop items that
+ * genuinely belong to the requested menu. get_objects_in_term() reads the term relationship
+ * directly, so the list is language-agnostic and works the same with or without WPML. An unknown
+ * or empty menu yields an empty items list.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
 function aafm_exec_list_menu_items( array $input ): array {
-	$raw = wp_get_nav_menu_items( (int) $input['menu_id'] );
-	if ( ! is_array( $raw ) ) {
-		$raw = array();
+	$object_ids = get_objects_in_term( (int) $input['menu_id'], 'nav_menu' );
+	if ( is_wp_error( $object_ids ) || ! is_array( $object_ids ) ) {
+		$object_ids = array();
 	}
+
+	$decorated = array();
+	foreach ( $object_ids as $object_id ) {
+		$post = get_post( (int) $object_id );
+		if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
+			continue;
+		}
+		$decorated[] = wp_setup_nav_menu_item( $post );
+	}
+
+	usort(
+		$decorated,
+		static function ( $a, $b ): int {
+			$a_order = isset( $a->menu_order ) ? (int) $a->menu_order : 0;
+			$b_order = isset( $b->menu_order ) ? (int) $b->menu_order : 0;
+			return $a_order <=> $b_order;
+		}
+	);
+
 	$items = array();
-	foreach ( $raw as $item ) {
+	foreach ( $decorated as $item ) {
 		$items[] = aafm_redact_menu_item( $item );
 	}
 	return array( 'items' => $items );
@@ -756,23 +778,27 @@ function aafm_exec_delete_menu_item( array $input ) {
  * Resolve one nav menu item inside a given menu by its id.
  *
  * The core writer wp_update_nav_menu_item() returns only the new item id, so to hand back the
- * redacted item shape we re-read the menu's items and match the id. Scoping the lookup to the menu confirms the
- * item really belongs to it (used by update to reject an item from another menu). Returns null
- * when the id is not an item of that menu.
+ * redacted item shape we re-read the saved item. This resolves it WITHOUT wp_get_nav_menu_items():
+ * that reader is language-filtered by WPML (it remaps/filters the menu to the current language
+ * mid-request), so a just-created item can be absent from its list and the write would look like a
+ * failure. Instead we load the post directly and confirm it belongs to the menu via the nav_menu
+ * TERM relationship, which is language-agnostic. This keeps the "reject an item from another menu"
+ * contract that update relies on and works identically with or without WPML. The post is decorated
+ * with wp_setup_nav_menu_item() so it carries the same fields aafm_redact_menu_item() reads.
+ * Returns null when the id is not a nav_menu_item, or is not an item of that menu.
  *
  * @param int $menu_id Menu (nav_menu term) id.
  * @param int $item_id Menu item (nav_menu_item post) id.
  * @return object|null The decorated nav menu item object, or null.
  */
 function aafm_menu_item_by_id( int $menu_id, int $item_id ) {
-	$items = wp_get_nav_menu_items( $menu_id );
-	if ( ! is_array( $items ) ) {
+	$post = get_post( $item_id );
+	if ( ! $post instanceof WP_Post || 'nav_menu_item' !== $post->post_type ) {
 		return null;
 	}
-	foreach ( $items as $item ) {
-		if ( isset( $item->ID ) && (int) $item->ID === $item_id ) {
-			return $item;
-		}
+	$belongs = is_object_in_term( $item_id, 'nav_menu', $menu_id );
+	if ( is_wp_error( $belongs ) || ! $belongs ) {
+		return null;
 	}
-	return null;
+	return wp_setup_nav_menu_item( $post );
 }

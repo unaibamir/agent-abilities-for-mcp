@@ -207,6 +207,61 @@ final class ConnectionTest extends TestCase {
 		$this->assertSame( $before, $after, 'No agent user may be created for a non-manage_options user.' );
 	}
 
+	/**
+	 * Self-healing marker: re-running create for a login that already exists as a safe,
+	 * low-privilege (subscriber-shape) account stamps the plugin marker on it, so the onboarding
+	 * "Connect your agent" step - which keys off the marker - flips to done. The friendly
+	 * "already exists" error is still returned. Covers the pre-marker and custom-login regressions.
+	 */
+	public function test_create_agent_user_heals_marker_on_existing_subscriber(): void {
+		$this->acting_as( 'administrator' );
+
+		// An unmarked agent account created outside the marker flow (e.g. a pre-marker install or a
+		// custom login), holding no manage_options.
+		$existing = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'legacy-agent',
+			)
+		);
+		$this->assertSame( '', (string) get_user_meta( $existing, aafm_agent_user_marker_meta_key(), true ), 'Fixture: starts unmarked.' );
+
+		$result = aafm_create_agent_user( 'legacy-agent' );
+
+		// Still the friendly "already exists" payload, with the edit link.
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$data = $result->get_error_data();
+		$this->assertSame( $existing, (int) $data['user_id'] );
+		$this->assertArrayHasKey( 'edit_url', $data );
+
+		// ...but the marker is now healed onto the existing account.
+		$this->assertSame( '1', (string) get_user_meta( $existing, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertContains( $existing, aafm_created_agent_users() );
+		$this->assertTrue( aafm_has_created_agent_user() );
+	}
+
+	/**
+	 * Guard rail: a privileged account (holds manage_options) that happens to share the login is
+	 * NEVER stamped. Marking an admin as the low-privilege agent user would misreport a full-caps
+	 * login as the dedicated agent, so the marker must stay off it.
+	 */
+	public function test_create_agent_user_never_heals_marker_on_a_privileged_account(): void {
+		$this->acting_as( 'administrator' );
+
+		$admin = self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_login' => 'privileged-agent',
+			)
+		);
+
+		$result = aafm_create_agent_user( 'privileged-agent' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( '', (string) get_user_meta( $admin, aafm_agent_user_marker_meta_key(), true ), 'A manage_options account must never be marked as the agent user.' );
+		$this->assertNotContains( $admin, aafm_created_agent_users() );
+	}
+
 	public function test_client_snippet_points_at_endpoint_and_username(): void {
 		$snippet = aafm_client_snippet( 'claude-code', 'mcp-agent' );
 		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );

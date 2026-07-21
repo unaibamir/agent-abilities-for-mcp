@@ -157,14 +157,28 @@ function aafm_create_agent_user( string $login ) {
 	}
 	$existing_id = username_exists( $login );
 	if ( $existing_id ) {
+		$existing_id = (int) $existing_id;
+
+		// Self-heal the marker: an agent user created before the marker existed (or under a custom
+		// login) has no plugin marker, so the onboarding "Connect your agent" step stays stuck at
+		// "To do" even though the account is right there. When the existing account has the safe
+		// dedicated-agent shape - it exists and does NOT hold manage_options, i.e. a subscriber-type
+		// account, not an admin - stamp the same marker the create path stamps so re-clicking
+		// "Create agent user" flips the step to done. We NEVER stamp a privileged account: marking an
+		// admin as the agent user would misreport a full-caps login as the low-privilege agent.
+		if ( ! user_can( $existing_id, 'manage_options' ) && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
+			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );
+			update_user_meta( $existing_id, 'aafm_agent_user_created', time() );
+		}
+
 		// The user is already there - hand back a friendly message plus the existing user's
 		// id and edit link so the caller can offer "Edit user" instead of a dead-end error.
 		return new WP_Error(
 			'aafm_user_exists',
 			__( 'That user already exists, so there is nothing to create. You can edit it instead.', 'agent-abilities-for-mcp' ),
 			array(
-				'user_id'  => (int) $existing_id,
-				'edit_url' => (string) get_edit_user_link( (int) $existing_id ),
+				'user_id'  => $existing_id,
+				'edit_url' => (string) get_edit_user_link( $existing_id ),
 			)
 		);
 	}

@@ -64,6 +64,28 @@ final class UninstallTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_delete_data_on_uninstall', false ), 'aafm_delete_data_on_uninstall must be deleted after the wipe.' );
 	}
 
+	/**
+	 * The one-time OAuth upgrade-preserve guard is a real stored option, so a delete-data uninstall
+	 * must remove it rather than orphan it. It must NOT be swept by reset: clearing it on reset would
+	 * let the preserve migration re-run and could flip OAuth back on after a reset.
+	 */
+	public function test_uninstall_removes_oauth_toggle_migrated_but_reset_keeps_it(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+
+		// Reset leaves the guard in place (it is not part of the reset set).
+		update_option( 'aafm_oauth_toggle_migrated', '1', true );
+		aafm_reset_plugin();
+		$this->assertSame( '1', get_option( 'aafm_oauth_toggle_migrated' ), 'Reset must not clear the OAuth preserve guard.' );
+		$this->assertNotContains( 'aafm_oauth_toggle_migrated', aafm_config_option_names(), 'The guard must stay out of the reset set.' );
+
+		// Delete-data uninstall removes it.
+		update_option( 'aafm_oauth_toggle_migrated', '1', true );
+		update_option( 'aafm_delete_data_on_uninstall', true );
+		aafm_uninstall_site_data();
+		$this->assertFalse( get_option( 'aafm_oauth_toggle_migrated', false ), 'Uninstall-with-delete-data must remove the OAuth preserve guard.' );
+	}
+
 	public function test_cleanup_drops_table_and_option(): void {
 		aafm_install_activity_log();
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );

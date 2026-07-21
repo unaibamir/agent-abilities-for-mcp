@@ -98,6 +98,27 @@ final class UsersWriteTest extends TestCase {
 		$this->assertContains( 'subscriber', (array) $new->roles, 'an elevated default_role must floor to subscriber.' );
 	}
 
+	/**
+	 * The aafm/create-user ability is an agent minting an arbitrary WordPress user (content),
+	 * NOT the operator's dedicated-agent-user onboarding flow. It must never stamp the
+	 * plugin-created marker, or an agent could forge the "an agent user exists" onboarding
+	 * signal. Only aafm_create_agent_user() stamps.
+	 */
+	public function test_create_user_ability_does_not_stamp_the_agent_marker(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/create-user' )->execute(
+			array(
+				'username' => 'content_user',
+				'email'    => 'content_user@example.com',
+			)
+		);
+		$this->assertIsArray( $res );
+		$new = get_user_by( 'login', 'content_user' );
+		$this->assertInstanceOf( \WP_User::class, $new );
+		$this->assertSame( '', (string) get_user_meta( (int) $new->ID, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertFalse( aafm_has_created_agent_user() );
+	}
+
 	public function test_create_user_is_destructive_and_closed_schema(): void {
 		$ability = wp_get_ability( 'aafm/create-user' );
 		$ann     = $ability->get_meta_item( 'annotations' );

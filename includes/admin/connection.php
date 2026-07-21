@@ -180,7 +180,49 @@ function aafm_create_agent_user( string $login ) {
 	if ( is_wp_error( $user_id ) ) {
 		return $user_id;
 	}
-	return array( 'user_id' => (int) $user_id );
+
+	$user_id = (int) $user_id;
+
+	// Stamp the plugin-created marker so the onboarding "Connect your agent" signal can tell this
+	// dedicated agent user apart from any unrelated application-password holder. Whatever login the
+	// admin typed, the marker travels with the account - the signal keys off the marker, not a name.
+	update_user_meta( $user_id, aafm_agent_user_marker_meta_key(), 1 );
+	update_user_meta( $user_id, 'aafm_agent_user_created', time() );
+
+	return array( 'user_id' => $user_id );
+}
+
+/**
+ * One-time backfill: stamp the agent-user marker on an install that created its agent user
+ * through the pre-marker flow, so its onboarding "Connect your agent" step is not stuck "To do".
+ *
+ * The old flow always produced the same shape: login 'mcp-agent', the subscriber role, and
+ * (once the operator connected a client) at least one application password. We stamp ONLY a user
+ * that matches that exact shape, so a same-named account created for some unrelated reason is
+ * never mis-marked. This is deliberately conservative: the marker only drives an onboarding hint,
+ * so a missed backfill (operator re-runs the create step, which is idempotent) is far cheaper than
+ * a false one. Guarded by a stored flag so it runs at most once per install.
+ *
+ * @return void
+ */
+function aafm_backfill_agent_user_marker(): void {
+	if ( '1' === get_option( 'aafm_agent_user_marker_backfilled', '' ) ) {
+		return;
+	}
+
+	$existing_id = (int) username_exists( 'mcp-agent' );
+	if ( $existing_id > 0 && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
+		$user = get_userdata( $existing_id );
+		if ( $user instanceof WP_User
+			&& in_array( 'subscriber', array_map( 'strval', $user->roles ), true )
+			&& ! empty( WP_Application_Passwords::get_user_application_passwords( $existing_id ) )
+		) {
+			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );
+			update_user_meta( $existing_id, 'aafm_agent_user_created', time() );
+		}
+	}
+
+	update_option( 'aafm_agent_user_marker_backfilled', '1', true );
 }
 
 /**
@@ -1036,9 +1078,22 @@ function aafm_render_connection_tab(): void {
 	echo '<summary>' . esc_html__( 'OAuth not working? Connect with an Application Password', 'agent-abilities-for-mcp' ) . '</summary>';
 
 	// ---- Step 1: create a dedicated agent user ----
-	$default_agent_login = 'mcp-agent';
-	$existing_agent_id   = (int) username_exists( $default_agent_login );
-	$agent_exists        = $existing_agent_id > 0;
+	// Done-ness keys off the plugin-created marker (any dedicated agent user this plugin made),
+	// NOT a hardcoded login: the create form below lets the admin type any username, so matching
+	// on 'mcp-agent' would disagree with the Dashboard checklist whenever they picked another name.
+	// When a marked user exists, show its actual login so the "already exists" copy names the right
+	// account. The create form still seeds the 'mcp-agent' default for a fresh install.
+	$default_agent_login  = 'mcp-agent';
+	$created_agent_ids    = aafm_created_agent_users();
+	$agent_exists         = array() !== $created_agent_ids;
+	$existing_agent_id    = $agent_exists ? $created_agent_ids[0] : 0;
+	$existing_agent_login = $default_agent_login;
+	if ( $agent_exists ) {
+		$existing_agent_user = get_userdata( $existing_agent_id );
+		if ( $existing_agent_user instanceof WP_User ) {
+			$existing_agent_login = (string) $existing_agent_user->user_login;
+		}
+	}
 
 	printf(
 		'<div class="aafm-step aafm-conn-step%s">',
@@ -1064,7 +1119,7 @@ function aafm_render_connection_tab(): void {
 			sprintf(
 				/* translators: %s: the agent user's login. */
 				esc_html__( 'The %s user already exists, so you can move straight to connecting your client.', 'agent-abilities-for-mcp' ),
-				'<strong>' . esc_html( $default_agent_login ) . '</strong>'
+				'<strong>' . esc_html( $existing_agent_login ) . '</strong>'
 			),
 			aafm_admin_allowed_html()
 		);

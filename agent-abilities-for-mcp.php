@@ -139,9 +139,14 @@ add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 
 // Flag a genuinely new install so the first-activation admin-menu pointer shows once. The callback
-// lives in includes/admin/quickconnect.php (loaded on plugins_loaded, before the activation hook
-// fires), and uses add_option so a later reactivation never re-arms it. Per-user dismissal is
-// tracked in the core dismissed-pointers meta.
+// lives in includes/admin/onboarding-pointer.php, required here at top level so it is defined when
+// the activation hook fires: activating a plugin includes its main file and runs the activation hook
+// in the SAME request without ever firing plugins_loaded, so a callback defined only inside
+// aafm_bootstrap() (hooked on plugins_loaded) would be an undefined function - fatal on activation.
+// The matching require_once inside aafm_bootstrap() then no-ops. The callback uses add_option so a
+// later reactivation never re-arms it; per-user dismissal is tracked in the core dismissed-pointers
+// meta.
+require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer' );
 
 // One-time upgrade safety: an install updated in place from a pre-off-by-default version

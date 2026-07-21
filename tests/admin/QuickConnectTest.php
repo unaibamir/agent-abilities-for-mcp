@@ -199,6 +199,83 @@ final class QuickConnectTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_quickconnect_dismissed', false ), 'A bad-nonce call must not set the dismissed flag.' );
 	}
 
+	/**
+	 * Invoke an AJAX handler and return the decoded wp_send_json_* payload. Same in-process routing
+	 * as {@see invoke_ajax()}, but the echoed JSON body is captured and decoded instead of discarded,
+	 * so a caller can assert on `success` and the returned state - not just on option side effects.
+	 *
+	 * @param callable $handler The AJAX handler to invoke.
+	 * @param array    $post    $_POST fields to set (the nonce is added automatically).
+	 * @return array The decoded JSON response.
+	 */
+	private function capture_ajax_json( callable $handler, array $post = array() ): array {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		foreach ( $post as $key => $value ) {
+			$_POST[ $key ] = $value;
+		}
+
+		ob_start();
+		try {
+			$handler();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$body = (string) ob_get_clean();
+
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'] );
+		foreach ( array_keys( $post ) as $key ) {
+			unset( $_POST[ $key ] );
+		}
+
+		$decoded = json_decode( $body, true );
+		return is_array( $decoded ) ? $decoded : array();
+	}
+
+	/**
+	 * On a valid privileged call the OAuth handler returns a success payload carrying the resulting
+	 * enabled state, so the wizard's Continue step can trust the write before it advances. Turning it
+	 * on returns success + '1'; turning it back off returns success + '0'. This is the contract the
+	 * JS relies on to stop advancing on a failed write.
+	 */
+	public function test_oauth_handler_returns_success_and_resulting_state(): void {
+		$this->acting_as( 'administrator' );
+
+		$on = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
+		$this->assertTrue( $on['success'] ?? false, 'A valid privileged enable call must report success.' );
+		$this->assertSame( '1', $on['data']['aafm_oauth_enabled'] ?? null, 'The payload must carry the resulting on state.' );
+		$this->assertTrue( aafm_oauth_enabled() );
+
+		$off = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '0' ) );
+		$this->assertTrue( $off['success'] ?? false, 'A valid privileged disable call must report success.' );
+		$this->assertSame( '0', $off['data']['aafm_oauth_enabled'] ?? null, 'The payload must carry the resulting off state.' );
+		$this->assertFalse( aafm_oauth_enabled() );
+	}
+
+	/**
+	 * A denied (subscriber) call returns a failure payload and changes no state, so the JS keeps the
+	 * operator on the connection step. Pairs with the enable-path success contract above.
+	 */
+	public function test_oauth_handler_denied_call_reports_failure_without_state_change(): void {
+		$this->acting_as( 'subscriber' );
+
+		$json = $this->capture_ajax_json( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ) );
+
+		$this->assertFalse( $json['success'] ?? true, 'A denied call must report failure.' );
+		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'A denied call must not write the OAuth option.' );
+	}
+
 	public function test_should_render_true_for_admin_on_first_run(): void {
 		$this->acting_as( 'administrator' );
 		$this->assertTrue( aafm_quickconnect_should_render() );

@@ -1701,8 +1701,17 @@
 			} );
 
 			// ---- Job 1: Continue writes OAuth (the one explicit enable point) ----
+			// Only advance when the write actually succeeded, so a denied, expired-nonce, or failed
+			// call surfaces an error here instead of letting Finish later report a connection that is
+			// not really on. Mirrors the finish handler's inline-error pattern.
 			root.querySelector( '[data-qc-next="2"]' ).addEventListener( 'click', async () => {
-				await this.#post( 'aafm_quickconnect_oauth', { enabled: oauth.checked ? 1 : 0 } );
+				const json = await this.#post( 'aafm_quickconnect_oauth', { enabled: oauth.checked ? 1 : 0 } );
+				if ( ! json?.success ) {
+					if ( hint ) {
+						hint.textContent = json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
 				goStep( 2 );
 			} );
 

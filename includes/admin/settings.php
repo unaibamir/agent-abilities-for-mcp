@@ -186,6 +186,11 @@ function aafm_config_option_names(): array {
 		'aafm_quickconnect_finished',
 		'aafm_quickconnect_dismissed',
 		'aafm_menu_pointer_active',
+		// The one-time agent-user marker backfill guard. Listed so a reset clears it (letting the
+		// backfill re-run against a legacy install) and uninstall-with-delete-data removes the row
+		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall
+		// keeps the agent user, so its marker travels with the account.
+		'aafm_agent_user_marker_backfilled',
 	);
 }
 

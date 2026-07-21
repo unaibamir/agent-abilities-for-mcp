@@ -42,6 +42,24 @@ final class ResetPluginTest extends TestCase {
 	}
 
 	/**
+	 * The one-time agent-user marker backfill guard is part of the reset set, so a reset clears it
+	 * (letting the backfill re-run) and uninstall-with-delete-data removes the row rather than
+	 * orphaning it. The marker USER META is intentionally out of scope - uninstall keeps the agent
+	 * user - so this only pins the OPTION.
+	 */
+	public function test_reset_clears_agent_user_marker_backfill_guard(): void {
+		aafm_install_activity_log();
+		aafm_install_oauth_tables();
+
+		$this->assertContains( 'aafm_agent_user_marker_backfilled', aafm_config_option_names() );
+
+		update_option( 'aafm_agent_user_marker_backfilled', '1' );
+		aafm_reset_plugin();
+
+		$this->assertFalse( get_option( 'aafm_agent_user_marker_backfilled', false ) );
+	}
+
+	/**
 	 * Reset clears the three Slice C meta-governance options. They are covered automatically
 	 * by the config-list loop in aafm_reset_plugin(); this pins each of the new ones explicitly
 	 * so a future edit that drops one from aafm_config_option_names() is caught.

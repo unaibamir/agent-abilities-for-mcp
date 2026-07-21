@@ -78,6 +78,48 @@ final class QuickConnectAbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * Defence in depth against the first-run write set: the wizard's write filter is
+	 * risk !== 'destructive', so a content write whose author forgot the destructive risk tag would
+	 * silently slip into the first-run bundle. Independently of that filter, cross-check the registry:
+	 * every content write whose ability name signals a delete/trash operation MUST be tagged
+	 * risk='destructive' (and is therefore excluded from the wizard's write row). A future
+	 * aafm/delete-* or aafm/trash-* content write that forgets its risk tag fails here rather than
+	 * quietly entering the first-run write set.
+	 */
+	public function test_destructive_content_writes_are_risk_tagged_and_excluded(): void {
+		$registry = aafm_get_abilities_registry();
+		$writes   = aafm_quickconnect_write_abilities();
+		$checked  = 0;
+
+		foreach ( $registry as $name => $def ) {
+			$subject = $def['subject'] ?? '';
+			$group   = $def['group'] ?? '';
+			if ( 'content' !== $subject || 'writes' !== $group ) {
+				continue;
+			}
+
+			// The local part after the aafm/ namespace, e.g. 'delete-post', 'trash-page'.
+			$local = str_contains( (string) $name, '/' ) ? substr( (string) $name, strpos( (string) $name, '/' ) + 1 ) : (string) $name;
+			if ( ! str_starts_with( $local, 'delete-' ) && ! str_starts_with( $local, 'trash-' ) ) {
+				continue;
+			}
+
+			++$checked;
+			$this->assertSame(
+				'destructive',
+				$def['risk'] ?? '',
+				"Content write {$name} deletes/trashes, so it must be tagged risk='destructive'."
+			);
+			// And, tag being correct, it stays out of the wizard's first-run write row.
+			$this->assertNotContains( $name, $writes, "Destructive content write {$name} must never enter the first-run write bundle." );
+		}
+
+		// The registry always ships delete-post and trash-post, so a zero here means the scan stopped
+		// seeing content writes - a broken guard, not a clean catalog.
+		$this->assertGreaterThan( 0, $checked, 'No delete/trash content writes were checked, so the guard is not scanning the registry.' );
+	}
+
+	/**
 	 * The Read and Write bundles are disjoint, so a name never gets double-classified.
 	 */
 	public function test_read_and_write_bundles_are_disjoint(): void {

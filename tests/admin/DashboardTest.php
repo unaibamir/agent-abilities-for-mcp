@@ -106,7 +106,7 @@ final class DashboardTest extends TestCase {
 		$this->assertStringContainsString( 'Turn some on to start', $html );
 	}
 
-	public function test_dashboard_warns_when_agent_user_can_manage_site(): void {
+	public function test_dashboard_warns_when_admin_holds_app_password(): void {
 		$admin = self::factory()->user->create(
 			array(
 				'role'       => 'administrator',
@@ -117,12 +117,58 @@ final class DashboardTest extends TestCase {
 
 		ob_start();
 		aafm_render_dashboard_tab();
-		$html = ob_get_clean();
+		$html = (string) ob_get_clean();
 
-		// The security signal is preserved as a warn pill plus the offending login in the sub text.
+		// The security signal is preserved as a warn pill plus the offending login, but reframed:
+		// it is about an admin who can reach the API, not "your agent users".
 		$this->assertStringContainsString( 'aafm-pill aafm-pill-warn', $html );
-		$this->assertStringContainsString( 'Review role', $html );
+		$this->assertStringContainsString( 'Review access', $html );
+		$this->assertStringContainsString( 'can reach the API and manage this site', $html );
 		$this->assertStringContainsString( 'aafm-admin-agent', $html );
+		// The old wording that called them agent users to replace is gone.
+		$this->assertStringNotContainsString( 'Review role', $html );
+
+		// This admin app-password holder is NOT a plugin-created agent, so the card value stays 0
+		// and reads the empty state - the number never implies the admin is an agent user.
+		$this->assertStringContainsString( 'No agent user yet', $html );
+		$this->assertStringNotContainsString( 'Created by this plugin', $html );
+	}
+
+	/**
+	 * The Agent Users card VALUE counts only agent users this plugin created (the marker). A bare
+	 * app-password holder does not inflate it, while the separate admin-access caution still fires.
+	 */
+	public function test_agent_users_card_value_counts_only_marked_agents(): void {
+		// One plugin-created agent (marked) + one unrelated admin holding an app password.
+		aafm_create_agent_user( 'mcp-agent' );
+		$admin = self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_login' => 'stray-admin',
+			)
+		);
+		WP_Application_Passwords::create_new_application_password( $admin, array( 'name' => 'stray' ) );
+
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		// Card value reflects the single MARKED agent, not the two app-password holders.
+		$this->assertStringContainsString( 'Created by this plugin', $html );
+		$this->assertStringNotContainsString( 'No agent user yet', $html );
+		// The admin-access caution still fires for the stray admin, separately from the value.
+		$this->assertStringContainsString( 'Review access', $html );
+		$this->assertStringContainsString( 'stray-admin', $html );
+	}
+
+	public function test_agent_users_card_empty_state_with_no_app_passwords_at_all(): void {
+		// No app-password holders and no created agent: value 0, empty state, no caution pill.
+		ob_start();
+		aafm_render_dashboard_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'No agent user yet', $html );
+		$this->assertStringNotContainsString( 'Review access', $html );
 	}
 
 	public function test_dashboard_renders_setup_checklist_and_stat_grid(): void {
@@ -138,11 +184,10 @@ final class DashboardTest extends TestCase {
 
 	public function test_dashboard_setup_checklist_emits_styling_classes_when_incomplete(): void {
 		// Force a partial setup so the checklist (not the "all set" notice) renders
-		// with BOTH row states reachable: an agent user with an app password makes
-		// step 1 "done", while no enabled abilities keeps step 2 "to do". The
-		// transaction fixture rolls every change back, so live state is untouched.
-		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
-		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-setup' ) );
+		// with BOTH row states reachable: a plugin-created (marked) agent user makes
+		// the connect step "done", while no enabled abilities keeps the abilities step
+		// "to do". The transaction fixture rolls every change back, so live state is untouched.
+		aafm_create_agent_user( 'mcp-agent' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		update_option( 'aafm_enabled_abilities', array() );
 
@@ -163,10 +208,9 @@ final class DashboardTest extends TestCase {
 	}
 
 	public function test_dashboard_setup_collapses_when_every_step_is_complete(): void {
-		// Drive all three steps done: an agent user with an app password, at least one
+		// Drive all three steps done: a plugin-created (marked) agent user, at least one
 		// enabled ability, and one logged call. The transaction fixture rolls it all back.
-		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
-		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-complete' ) );
+		aafm_create_agent_user( 'mcp-agent' );
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		update_option( 'aafm_enabled_abilities', array( 'aafm/get-post' ) );
 		aafm_log_activity(
@@ -194,8 +238,7 @@ final class DashboardTest extends TestCase {
 	}
 
 	public function test_dashboard_setup_stays_open_when_incomplete(): void {
-		$agent = self::factory()->user->create( array( 'role' => 'editor' ) );
-		WP_Application_Passwords::create_new_application_password( $agent, array( 'name' => 'mcp-open' ) );
+		// Nothing enabled and no agent connected, so at least one step is still pending.
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		update_option( 'aafm_enabled_abilities', array() );
 
@@ -219,11 +262,42 @@ final class DashboardTest extends TestCase {
 		$this->assertFalse( $steps[2]['done'] ); // First call - no activity.
 	}
 
-	public function test_connect_step_done_via_agent_user(): void {
-		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
-		WP_Application_Passwords::create_new_application_password( $uid, array( 'name' => 'test' ) );
+	public function test_connect_step_done_via_created_agent_user(): void {
+		// A user THIS plugin created (carrying the marker) satisfies the connect step.
+		aafm_create_agent_user( 'mcp-agent' );
 		$steps = aafm_setup_steps();
 		$this->assertTrue( $steps[1]['done'] );
+	}
+
+	/**
+	 * The whole point of the fix: a bare application-password holder (Jetpack, a mobile app,
+	 * some other REST integration) is NOT a connected agent, so it must not flip the connect
+	 * step to done. Only the plugin's own marker or a live OAuth grant may.
+	 */
+	public function test_connect_step_not_done_from_bare_app_password_holder(): void {
+		update_option( 'aafm_enabled_abilities', array() );
+		$holder = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		WP_Application_Passwords::create_new_application_password( $holder, array( 'name' => 'jetpack' ) );
+
+		// It is a security-warning candidate...
+		$candidate_ids = wp_list_pluck( aafm_agent_user_candidates(), 'id' );
+		$this->assertContains( $holder, $candidate_ids );
+		// ...but it carries no marker, so it is not a created agent user...
+		$this->assertFalse( aafm_has_created_agent_user() );
+		// ...and the connect step stays "To do".
+		$steps = aafm_setup_steps();
+		$this->assertFalse( $steps[1]['done'] );
+	}
+
+	public function test_created_agent_user_helpers_track_the_marker(): void {
+		$this->assertFalse( aafm_has_created_agent_user() );
+		$this->assertSame( array(), aafm_created_agent_users() );
+
+		$result = aafm_create_agent_user( 'mcp-agent' );
+		$this->assertIsArray( $result );
+
+		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertContains( (int) $result['user_id'], aafm_created_agent_users() );
 	}
 
 	public function test_has_oauth_grant_false_without_grants(): void {

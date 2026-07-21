@@ -59,6 +59,52 @@ function aafm_agent_user_candidates(): array {
 }
 
 /**
+ * Meta key stamped on a user this plugin created through the dedicated-agent-user flow
+ * ({@see aafm_create_agent_user()}). It is the durable, plugin-owned record that tells a real
+ * agent connection apart from any unrelated application-password holder (Jetpack, a mobile app,
+ * some other REST integration), so the onboarding "Connect your agent" signal never reads a
+ * false positive. Single source of truth: both the stamp and the reader below reference it.
+ *
+ * @return string
+ */
+function aafm_agent_user_marker_meta_key(): string {
+	return 'aafm_agent_user';
+}
+
+/**
+ * IDs of users this plugin created as dedicated agent users - the ones carrying the marker
+ * meta {@see aafm_agent_user_marker_meta_key()}. Unlike {@see aafm_agent_user_candidates()},
+ * which counts every application-password holder for the security warning, this counts only
+ * accounts the plugin itself made for the agent, so it is the honest "an agent user exists"
+ * signal for the setup checklist.
+ *
+ * @return int[] User IDs, ascending.
+ */
+function aafm_created_agent_users(): array {
+	$ids = get_users(
+		array(
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- narrows to plugin-created agent users by our own marker meta.
+			'meta_key'     => aafm_agent_user_marker_meta_key(),
+			'meta_compare' => 'EXISTS',
+			'orderby'      => 'ID',
+			'order'        => 'ASC',
+			'fields'       => 'ids',
+		)
+	);
+
+	return array_map( 'intval', $ids );
+}
+
+/**
+ * Whether the plugin has created at least one dedicated agent user.
+ *
+ * @return bool
+ */
+function aafm_has_created_agent_user(): bool {
+	return array() !== aafm_created_agent_users();
+}
+
+/**
  * Count of abilities the operator has enabled.
  *
  * @return int
@@ -140,8 +186,12 @@ function aafm_has_oauth_grant(): bool {
  * faked "connected" signal. Step done-ness comes straight from the data helpers:
  *
  *   [0] abilities are enabled - aafm_enabled_ability_count() > 0
- *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_agent_user_candidates() non-empty
+ *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_has_created_agent_user()
  *   [2] a call has been made  - aafm_activity_count() > 0 (logged for real)
+ *
+ * Step [1] keys off a live OAuth grant or a user THIS plugin created as a dedicated agent
+ * (the marker meta), never a bare application-password holder - app passwords are minted for
+ * many unrelated reasons, so counting them here flagged "connected" before any agent had.
  *
  * The zero-based index is the contract callers rely on: $steps[0] is always the
  * abilities step, $steps[1] is always the connect step.
@@ -169,7 +219,7 @@ function aafm_setup_steps(): array {
 		array(
 			'title' => __( 'Connect your agent', 'agent-abilities-for-mcp' ),
 			'desc'  => __( 'Approve it in the browser over OAuth, or set up an Application Password for a dedicated agent user. Either way its reach stays capped by what you turn on.', 'agent-abilities-for-mcp' ),
-			'done'  => aafm_has_oauth_grant() || ! empty( aafm_agent_user_candidates() ),
+			'done'  => aafm_has_oauth_grant() || aafm_has_created_agent_user(),
 			'href'  => $tab_url( 'connection' ),
 		),
 		array(
@@ -200,12 +250,17 @@ function aafm_render_dashboard_tab(): void {
 	// Single source of truth for "available / total" - counts the full catalog (core + every
 	// integration's manifest total) so an inactive integration still contributes its count and
 	// the Dashboard never disagrees with the Abilities tab.
-	$total         = aafm_available_ability_count();
-	$adapter       = aafm_loaded_adapter_version();
-	$candidates    = aafm_agent_user_candidates();
-	$recent        = aafm_recent_agent_count();
-	$log_rows      = aafm_activity_count();
-	$retention     = aafm_log_retention_days();
+	$total          = aafm_available_ability_count();
+	$adapter        = aafm_loaded_adapter_version();
+	$candidates     = aafm_agent_user_candidates();
+	$created_agents = aafm_created_agent_users();
+	$recent         = aafm_recent_agent_count();
+	$log_rows       = aafm_activity_count();
+	$retention      = aafm_log_retention_days();
+	// Two different questions, kept apart on purpose. $created_agents is the honest "agent
+	// users this plugin made" count (the card value). $admin_agents is the security signal:
+	// admins who hold an application password, so they can reach the API and manage the site -
+	// the correct broad scope for that caution, whether or not this plugin created them.
 	$admin_agents  = array_values( array_filter( $candidates, static fn( array $c ): bool => ! empty( $c['is_admin'] ) ) );
 	$adapter_label = ( null === $adapter ) ? __( 'not loaded', 'agent-abilities-for-mcp' ) : $adapter;
 
@@ -393,8 +448,12 @@ function aafm_render_dashboard_tab(): void {
 	printf( '<div class="stat-sub">%s</div>', esc_html( $log_sub ) );
 	echo '</div>';
 
-	// Agent users. The security signal is preserved: when an admin-capable agent exists,
-	// a warn pill flags it AND the sub text names the login(s).
+	// Agent users. The VALUE counts only agent users this plugin created (the marker), never a
+	// bare application-password holder - counting those flagged admins with app passwords as
+	// "agent users" they never were. The admin-app-password caution below is a separate, honest
+	// security heads-up computed from the broad candidate set, worded so it does not imply those
+	// admins are agent users.
+	$created_count = count( $created_agents );
 	echo '<div class="aafm-stat aafm-stat-agent-users">';
 	echo '<div class="stat-top">';
 	echo '<span class="stat-label">' . esc_html__( 'Agent users', 'agent-abilities-for-mcp' ) . '</span>';
@@ -402,24 +461,33 @@ function aafm_render_dashboard_tab(): void {
 	echo wp_kses( aafm_icon( 'groups' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
-	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( count( $candidates ) ) ) );
-	if ( empty( $candidates ) ) {
+	printf( '<div class="stat-value">%s</div>', esc_html( number_format_i18n( $created_count ) ) );
+	if ( 0 === $created_count ) {
 		echo '<div class="stat-sub">' . esc_html__( 'No agent user yet', 'agent-abilities-for-mcp' ) . '</div>';
-	} elseif ( empty( $admin_agents ) ) {
-		echo '<div class="stat-sub">' . esc_html__( 'All low-privilege', 'agent-abilities-for-mcp' ) . '</div>';
 	} else {
-		$logins = implode( ', ', array_map( static fn( array $c ): string => (string) $c['login'], $admin_agents ) );
-		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review role', 'agent-abilities-for-mcp' ) . '</span></div>';
-		printf(
-			'<div class="stat-sub">%s</div>',
-			esc_html(
-				sprintf(
-					/* translators: %s: comma-separated list of user logins that can manage the site. */
-					__( 'Can manage the site: %s. Give the agent its own low-privilege user instead.', 'agent-abilities-for-mcp' ),
-					$logins
-				)
-			)
+		echo '<div class="stat-sub">' . esc_html__( 'Created by this plugin', 'agent-abilities-for-mcp' ) . '</div>';
+	}
+
+	// Separate security caution: admins who hold an application password can reach the API and
+	// manage the site, whether or not they are the plugin's agent user. Kept out of the value so
+	// the card's number and this warning never contradict each other.
+	if ( ! empty( $admin_agents ) ) {
+		$admin_count = count( $admin_agents );
+		$logins      = implode( ', ', array_map( static fn( array $c ): string => (string) $c['login'], $admin_agents ) );
+		echo '<div class="stat-sub"><span class="aafm-pill aafm-pill-warn">' . esc_html__( 'Review access', 'agent-abilities-for-mcp' ) . '</span></div>';
+		$caution = sprintf(
+			/* translators: 1: number of admin accounts, 2: comma-separated list of their logins. */
+			_n(
+				'%1$s account can reach the API and manage this site: %2$s.',
+				'%1$s accounts can reach the API and manage this site: %2$s.',
+				$admin_count,
+				'agent-abilities-for-mcp'
+			),
+			number_format_i18n( $admin_count ),
+			$logins
 		);
+		$caution .= ' ' . __( 'If you connect an agent, give it its own low-privilege user instead.', 'agent-abilities-for-mcp' );
+		printf( '<div class="stat-sub">%s</div>', esc_html( $caution ) );
 	}
 	echo '</div>';
 

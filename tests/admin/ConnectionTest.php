@@ -10,6 +10,7 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\TestCase;
+use WP_Application_Passwords;
 use WP_Error;
 
 final class ConnectionTest extends TestCase {
@@ -59,6 +60,96 @@ final class ConnectionTest extends TestCase {
 		aafm_create_agent_user( 'dupe-agent' );
 		$again = aafm_create_agent_user( 'dupe-agent' );
 		$this->assertInstanceOf( WP_Error::class, $again );
+	}
+
+	public function test_create_agent_user_stamps_the_plugin_marker(): void {
+		$this->acting_as( 'administrator' );
+		$result = aafm_create_agent_user( 'mcp-agent' );
+		$this->assertIsArray( $result );
+		$uid = (int) $result['user_id'];
+
+		$this->assertSame( '1', (string) get_user_meta( $uid, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertNotEmpty( get_user_meta( $uid, 'aafm_agent_user_created', true ) );
+		$this->assertTrue( aafm_has_created_agent_user() );
+		$this->assertContains( $uid, aafm_created_agent_users() );
+	}
+
+	/**
+	 * Regression: the Connection-tab step 1 done-state keys off the plugin marker, not a
+	 * hardcoded 'mcp-agent' login. Even a name-matching bare app-password holder (created
+	 * outside this plugin) must NOT flip step 1 to done - the create form must still show,
+	 * matching the Dashboard checklist.
+	 */
+	public function test_connection_step_one_ignores_a_bare_app_password_holder(): void {
+		$holder = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'mcp-agent',
+			)
+		);
+		WP_Application_Passwords::create_new_application_password( $holder, array( 'name' => 'jetpack' ) );
+
+		$html = $this->render_connection_tab();
+		$this->assertStringContainsString( 'id="aafm-create-user"', $html );
+		$this->assertStringNotContainsString( 'aafm-agent-done', $html );
+	}
+
+	public function test_connection_step_one_done_for_a_marked_agent_user(): void {
+		aafm_create_agent_user( 'mcp-agent' );
+		$html = $this->render_connection_tab();
+		$this->assertStringContainsString( 'aafm-agent-done', $html );
+		$this->assertStringNotContainsString( 'id="aafm-create-user"', $html );
+	}
+
+	/**
+	 * The done-state copy names the actual agent login, not the hardcoded default, so an
+	 * operator who picked a custom username still sees the right account referenced.
+	 */
+	public function test_connection_step_one_names_the_actual_agent_login(): void {
+		aafm_create_agent_user( 'robo-agent' );
+		$html = $this->render_connection_tab();
+		$this->assertStringContainsString( 'aafm-agent-done', $html );
+		$this->assertStringContainsString( 'robo-agent', $html );
+	}
+
+	/**
+	 * The one-time backfill stamps a pre-marker install's agent user ONLY when it matches the
+	 * old flow's exact shape (login 'mcp-agent', subscriber, has an application password), and a
+	 * same-named account that does not match is left alone.
+	 */
+	public function test_backfill_marks_only_the_old_flow_shape(): void {
+		// Matches the old flow: login mcp-agent, subscriber, with an application password.
+		$legacy = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'mcp-agent',
+			)
+		);
+		WP_Application_Passwords::create_new_application_password( $legacy, array( 'name' => 'legacy' ) );
+
+		delete_option( 'aafm_agent_user_marker_backfilled' );
+		aafm_backfill_agent_user_marker();
+
+		$this->assertSame( '1', (string) get_user_meta( $legacy, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertContains( $legacy, aafm_created_agent_users() );
+		// The guard flag is set so a second pass is a no-op.
+		$this->assertSame( '1', get_option( 'aafm_agent_user_marker_backfilled' ) );
+	}
+
+	public function test_backfill_leaves_a_non_matching_same_named_user_alone(): void {
+		// Same name, but an admin with no application password - NOT the old agent-user shape.
+		$impostor = self::factory()->user->create(
+			array(
+				'role'       => 'administrator',
+				'user_login' => 'mcp-agent',
+			)
+		);
+
+		delete_option( 'aafm_agent_user_marker_backfilled' );
+		aafm_backfill_agent_user_marker();
+
+		$this->assertSame( '', (string) get_user_meta( $impostor, aafm_agent_user_marker_meta_key(), true ) );
+		$this->assertFalse( aafm_has_created_agent_user() );
 	}
 
 	/**

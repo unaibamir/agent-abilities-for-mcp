@@ -252,6 +252,10 @@ function aafm_bootstrap() {
 	// (the installer runs only when the recorded version is behind).
 	add_action( 'admin_init', 'aafm_maybe_upgrade_oauth_tables' );
 
+	// One-time backfill so a pre-marker install's agent user is recognised by the onboarding
+	// checklist. Self-guarded by a stored flag; runs at most once. Defined in admin/connection.php.
+	add_action( 'admin_init', 'aafm_backfill_agent_user_marker' );
+
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/icons.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/notices.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';

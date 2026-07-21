@@ -67,6 +67,138 @@ final class QuickConnectTest extends TestCase {
 		}
 	}
 
+	/**
+	 * Invoke an AJAX handler and report whether it called wp_die (denied or completed). Unlike
+	 * {@see invoke_ajax()}, the nonce is caller-controlled so the check_ajax_referer gate can be
+	 * exercised too. Any option side effects the handler applies before it dies are already in
+	 * place when this returns, so the caller asserts on state, not just on the die.
+	 *
+	 * @param callable $handler    The AJAX handler to invoke.
+	 * @param array    $post       $_POST fields to set.
+	 * @param bool     $with_nonce Whether to supply a valid aafm_admin nonce.
+	 * @return bool True if the handler called wp_die.
+	 */
+	private function run_ajax( callable $handler, array $post, bool $with_nonce ): bool {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$nonce             = $with_nonce ? wp_create_nonce( 'aafm_admin' ) : 'not-a-valid-nonce';
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		foreach ( $post as $key => $value ) {
+			$_POST[ $key ] = $value;
+		}
+
+		$died = false;
+		ob_start();
+		try {
+			$handler();
+		} catch ( \WPDieException $e ) {
+			$died = true;
+			unset( $e );
+		} finally {
+			ob_end_clean();
+		}
+
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'] );
+		foreach ( array_keys( $post ) as $key ) {
+			unset( $_POST[ $key ] );
+		}
+		return $died;
+	}
+
+	/**
+	 * The OAuth handler is nonce + manage_options gated: a subscriber (with a valid nonce) is denied
+	 * and, critically, aafm_oauth_enabled is never written. Fails if the cap gate is removed - a
+	 * subscriber would then flip the security-relevant OAuth option.
+	 */
+	public function test_oauth_handler_denies_subscriber_and_never_writes_oauth(): void {
+		$this->acting_as( 'subscriber' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ), true );
+
+		$this->assertTrue( $died, 'The handler must deny a subscriber (wp_die at 403).' );
+		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'A subscriber must not write aafm_oauth_enabled.' );
+		$this->assertFalse( aafm_oauth_enabled(), 'OAuth must stay off after a denied wizard call.' );
+	}
+
+	/**
+	 * A bad nonce is rejected before the OAuth option is ever written, even for an admin. Fails if
+	 * the check_ajax_referer gate is removed.
+	 */
+	public function test_oauth_handler_rejects_bad_nonce_and_never_writes_oauth(): void {
+		$this->acting_as( 'administrator' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_oauth', array( 'enabled' => '1' ), false );
+
+		$this->assertTrue( $died, 'A bad nonce must be rejected (wp_die).' );
+		$this->assertFalse( get_option( 'aafm_oauth_enabled', false ), 'A bad-nonce call must not write aafm_oauth_enabled.' );
+	}
+
+	/**
+	 * The finish handler is nonce + manage_options gated: a subscriber is denied, the completion
+	 * flag is never set, and no ability bundle is applied. Fails if the cap gate is removed.
+	 */
+	public function test_finish_handler_denies_subscriber_and_makes_no_state_change(): void {
+		$this->acting_as( 'subscriber' );
+		delete_option( 'aafm_enabled_abilities' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_finish', array( 'write' => '1' ), true );
+
+		$this->assertTrue( $died, 'The handler must deny a subscriber (wp_die at 403).' );
+		$this->assertFalse( get_option( 'aafm_quickconnect_finished', false ), 'A subscriber must not set the completion flag.' );
+		$this->assertNotContains( 'aafm/create-post', aafm_get_enabled_abilities(), 'A denied finish must not apply the write bundle.' );
+		$this->assertNotContains( 'aafm/get-posts', aafm_get_enabled_abilities(), 'A denied finish must not apply the read bundle.' );
+	}
+
+	/**
+	 * A bad nonce is rejected before the finish handler applies anything, even for an admin. Fails
+	 * if the check_ajax_referer gate is removed.
+	 */
+	public function test_finish_handler_rejects_bad_nonce_and_makes_no_state_change(): void {
+		$this->acting_as( 'administrator' );
+		delete_option( 'aafm_enabled_abilities' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_finish', array( 'write' => '1' ), false );
+
+		$this->assertTrue( $died, 'A bad nonce must be rejected (wp_die).' );
+		$this->assertFalse( get_option( 'aafm_quickconnect_finished', false ), 'A bad-nonce call must not set the completion flag.' );
+		$this->assertNotContains( 'aafm/create-post', aafm_get_enabled_abilities(), 'A bad-nonce finish must not apply the write bundle.' );
+	}
+
+	/**
+	 * The dismiss handler is nonce + manage_options gated: a subscriber is denied and the permanent
+	 * opt-out flag is never set. Fails if the cap gate is removed.
+	 */
+	public function test_dismiss_handler_denies_subscriber_and_never_sets_flag(): void {
+		$this->acting_as( 'subscriber' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_dismiss', array(), true );
+
+		$this->assertTrue( $died, 'The handler must deny a subscriber (wp_die at 403).' );
+		$this->assertFalse( get_option( 'aafm_quickconnect_dismissed', false ), 'A subscriber must not set the dismissed flag.' );
+	}
+
+	/**
+	 * A bad nonce is rejected before the dismiss flag is set, even for an admin. Fails if the
+	 * check_ajax_referer gate is removed.
+	 */
+	public function test_dismiss_handler_rejects_bad_nonce_and_never_sets_flag(): void {
+		$this->acting_as( 'administrator' );
+
+		$died = $this->run_ajax( 'aafm_ajax_quickconnect_dismiss', array(), false );
+
+		$this->assertTrue( $died, 'A bad nonce must be rejected (wp_die).' );
+		$this->assertFalse( get_option( 'aafm_quickconnect_dismissed', false ), 'A bad-nonce call must not set the dismissed flag.' );
+	}
+
 	public function test_should_render_true_for_admin_on_first_run(): void {
 		$this->acting_as( 'administrator' );
 		$this->assertTrue( aafm_quickconnect_should_render() );

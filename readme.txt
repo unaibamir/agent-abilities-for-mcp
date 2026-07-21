@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, seo
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.3.2
+Stable tag: 1.4.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -237,6 +237,12 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 6. Abilities from other plugins are grouped by the plugin that registers them, each off until you turn it on, with an enable-all or disable-all per plugin.
 
 == Changelog ==
+
+= 1.4.0 =
+
+* **Feature:** A first-run Quick Connect wizard gets a new admin connected on one screen. Turn on OAuth and copy the endpoint, or create a dedicated agent user and generate an application password, then switch on content reads and, if you want, content writes.
+* **Feature:** A pointer on the admin menu greets a brand-new install and points to the plugin page so setup is easy to find.
+* **Fix:** The onboarding "Connect your agent" step and the "Agent users" count no longer read any application password as a connected agent. They now track the agent users this plugin created, or an approved OAuth connection, so an unrelated application password stops showing a false "done" or padding the count.
 
 = 1.3.2 =
 

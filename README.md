@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.3.2 |
+| **Stable tag** | 1.4.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -181,6 +181,12 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.4.0
+
+* **Feature:** A first-run Quick Connect wizard gets a new admin connected on one screen. Turn on OAuth and copy the endpoint, or create a dedicated agent user and generate an application password, then switch on content reads and, if you want, content writes.
+* **Feature:** A pointer on the admin menu greets a brand-new install and points to the plugin page so setup is easy to find.
+* **Fix:** The onboarding "Connect your agent" step and the "Agent users" count no longer read any application password as a connected agent. They now track the agent users this plugin created, or an approved OAuth connection, so an unrelated application password stops showing a false "done" or padding the count.
 
 ### 1.3.2
 

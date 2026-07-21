@@ -161,12 +161,19 @@ function aafm_create_agent_user( string $login ) {
 
 		// Self-heal the marker: an agent user created before the marker existed (or under a custom
 		// login) has no plugin marker, so the onboarding "Connect your agent" step stays stuck at
-		// "To do" even though the account is right there. When the existing account has the safe
-		// dedicated-agent shape - it exists and does NOT hold manage_options, i.e. a subscriber-type
-		// account, not an admin - stamp the same marker the create path stamps so re-clicking
-		// "Create agent user" flips the step to done. We NEVER stamp a privileged account: marking an
-		// admin as the agent user would misreport a full-caps login as the low-privilege agent.
-		if ( ! user_can( $existing_id, 'manage_options' ) && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
+		// "To do" even though the account is right there. Stamp the marker ONLY when the existing
+		// account matches the exact shape the create path produces - a single 'subscriber' role and
+		// nothing else - and does not hold manage_options. An Editor, Author, or Contributor whose
+		// login merely collides is not the dedicated agent, so it must not self-heal; and we NEVER
+		// stamp a privileged account, which would misreport a full-caps login as the low-privilege
+		// agent. When the shape matches, re-clicking "Create agent user" flips the step to done.
+		$existing_user   = get_userdata( $existing_id );
+		$is_agent_shaped = $existing_user instanceof WP_User
+			&& array( 'subscriber' ) === array_values( array_map( 'strval', $existing_user->roles ) );
+		if ( $is_agent_shaped
+			&& ! user_can( $existing_id, 'manage_options' )
+			&& ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true )
+		) {
 			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );
 			update_user_meta( $existing_id, 'aafm_agent_user_created', time() );
 		}

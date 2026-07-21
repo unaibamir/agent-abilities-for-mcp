@@ -217,6 +217,10 @@ function aafm_uninstall_site_data(): void {
 	aafm_drop_oauth_tables();
 	delete_option( 'aafm_oauth_schema_version' );
 	delete_option( 'aafm_activity_log_schema_version' );
+	// The one-time OAuth upgrade-preserve guard (written by the plugins_loaded migration). Cleared
+	// here so a delete-data uninstall leaves nothing behind. It is deliberately NOT in the reset set:
+	// clearing it on reset would let the preserve migration re-run and could flip OAuth back on.
+	delete_option( 'aafm_oauth_toggle_migrated' );
 	wp_clear_scheduled_hook( 'aafm_oauth_cleanup' );
 	delete_option( 'aafm_delete_data_on_uninstall' );
 }

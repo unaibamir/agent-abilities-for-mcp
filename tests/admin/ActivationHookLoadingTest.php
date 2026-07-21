@@ -28,7 +28,8 @@ final class ActivationHookLoadingTest extends TestCase {
 	 * callback lived only in a bootstrap-required file, so a fresh activation could not call it.
 	 */
 	public function test_every_activation_callback_is_loaded_before_bootstrap(): void {
-		$main   = AAFM_PLUGIN_FILE;
+		$main = AAFM_PLUGIN_FILE;
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own source from disk in a test, not a remote URL.
 		$source = (string) file_get_contents( $main );
 
 		// The top-level region: everything before the aafm_bootstrap() definition. Includes required
@@ -84,8 +85,9 @@ final class ActivationHookLoadingTest extends TestCase {
 	public function test_menu_pointer_flag_callback_file_is_loaded_at_top_level(): void {
 		$this->assertTrue( function_exists( 'aafm_quickconnect_flag_menu_pointer' ) );
 
-		$file       = ( new \ReflectionFunction( 'aafm_quickconnect_flag_menu_pointer' ) )->getFileName();
-		$relative   = str_replace( AAFM_PLUGIN_DIR, '', (string) $file );
+		$file     = ( new \ReflectionFunction( 'aafm_quickconnect_flag_menu_pointer' ) )->getFileName();
+		$relative = str_replace( AAFM_PLUGIN_DIR, '', (string) $file );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading the plugin's own source from disk in a test, not a remote URL.
 		$source     = (string) file_get_contents( AAFM_PLUGIN_FILE );
 		$top_region = substr( $source, 0, (int) strpos( $source, 'function aafm_bootstrap(' ) );
 

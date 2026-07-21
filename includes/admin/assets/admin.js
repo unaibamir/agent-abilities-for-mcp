@@ -70,6 +70,7 @@
 			this.#bindResetPlugin();
 			this.#bindQuickstarts();
 			this.#bindOauthRevoke();
+			this.#bindQuickConnect();
 		}
 
 		#bindQuickstarts() {
@@ -1545,6 +1546,339 @@
 				}
 				btn.disabled = false;
 			} );
+		}
+
+		/**
+		 * Drive the first-run Quick Connect wizard: step progression, the OAuth toggle and its
+		 * live/inert endpoint field, the app-password path, the write toggle, and finish/dismiss.
+		 *
+		 * The wizard markup is rendered server-side only when setup is due, so this returns early
+		 * when the modal is absent. OAuth is written to the option solely on the explicit
+		 * "Continue" click past the connection step (aafm_quickconnect_oauth), never on load.
+		 */
+		#bindQuickConnect() {
+			const root = document.querySelector( '#aafm-qc' );
+			if ( ! root ) {
+				return;
+			}
+
+			const reduce = window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
+			const state = { step: 1, oauth: true, write: false, method: 'oauth' };
+
+			const jobs = {
+				1: root.querySelector( '[data-qc-job="1"]' ),
+				2: root.querySelector( '[data-qc-job="2"]' ),
+				3: root.querySelector( '[data-qc-job="3"]' ),
+			};
+			const segs = Array.from( root.querySelectorAll( '[data-qc-seg]' ) );
+			const stepNow = root.querySelector( '[data-qc-stepnow]' );
+			const pct = root.querySelector( '[data-qc-pct]' );
+
+			const setTag = ( job, kind, text ) => {
+				const tag = job.querySelector( '[data-qc-tag]' );
+				if ( tag ) {
+					tag.className = 'aafm-qc-tag ' + kind;
+					tag.textContent = text;
+				}
+			};
+
+			const render = () => {
+				[ 1, 2, 3 ].forEach( ( i ) => {
+					const job = jobs[ i ];
+					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
+					if ( i < state.step ) {
+						job.classList.add( 'is-done' );
+						setTag( job, 'done', this.#t( 'saved', 'Saved' ) );
+					} else if ( i === state.step ) {
+						job.classList.add( 'is-current' );
+						setTag( job, 'now', this.#t( 'qcInProgress', 'In progress' ) );
+					} else {
+						job.classList.add( 'is-todo' );
+						setTag( job, 'todo', this.#t( 'qcNotStarted', 'Not started' ) );
+					}
+				} );
+				segs.forEach( ( seg, idx ) => {
+					seg.classList.remove( 'is-fill', 'is-current' );
+					const n = idx + 1;
+					if ( n < state.step ) {
+						seg.classList.add( 'is-fill' );
+					} else if ( n === state.step ) {
+						seg.classList.add( 'is-current' );
+					}
+				} );
+				if ( stepNow ) {
+					stepNow.textContent = String( state.step );
+				}
+				if ( pct ) {
+					pct.textContent = Math.round( ( ( state.step - 1 ) / 3 ) * 100 ) + '%';
+				}
+				const active = jobs[ state.step ];
+				if ( active ) {
+					active.scrollIntoView( { behavior: reduce ? 'auto' : 'smooth', block: 'nearest' } );
+				}
+			};
+
+			const goStep = ( n ) => {
+				state.step = Math.max( 1, Math.min( 3, n ) );
+				render();
+			};
+
+			// Re-open a completed step by clicking its header.
+			[ 1, 2, 3 ].forEach( ( i ) => {
+				jobs[ i ].querySelector( '.aafm-qc-job-head' ).addEventListener( 'click', () => {
+					if ( jobs[ i ].classList.contains( 'is-done' ) ) {
+						goStep( i );
+					}
+				} );
+			} );
+
+			// ---- Job 1: OAuth toggle + endpoint field ----
+			const oauth = root.querySelector( '[data-qc-oauth]' );
+			const urlField = root.querySelector( '[data-qc-urlfield]' );
+			const urlCopy = urlField.querySelector( '.aafm-qc-ucopy' );
+			const nextline = root.querySelector( '[data-qc-nextline]' );
+			const hint = root.querySelector( '[data-qc-hint]' );
+
+			const applyOauth = () => {
+				state.oauth = oauth.checked;
+				if ( oauth.checked ) {
+					urlField.classList.add( 'is-live' );
+					urlField.classList.remove( 'is-inert' );
+					urlCopy.disabled = false;
+					nextline.classList.remove( 'is-hidden' );
+					state.method = 'oauth';
+					if ( hint ) {
+						hint.textContent = this.#t( 'qcOauthOn', 'OAuth is on. Copy the URL, then continue.' );
+					}
+				} else {
+					urlField.classList.remove( 'is-live' );
+					urlField.classList.add( 'is-inert' );
+					urlCopy.disabled = true;
+					nextline.classList.add( 'is-hidden' );
+					state.method = 'apppw';
+					if ( hint ) {
+						hint.textContent = this.#t( 'qcOauthOff', 'OAuth is off. Use the application-password path below, or turn OAuth on.' );
+					}
+				}
+			};
+			oauth.addEventListener( 'change', applyOauth );
+
+			// ---- Job 1: app-password disclosure ----
+			const alt = root.querySelector( '[data-qc-altauth]' );
+			const altTrigger = root.querySelector( '[data-qc-alttrigger]' );
+			altTrigger.addEventListener( 'click', () => {
+				const open = alt.classList.toggle( 'is-open' );
+				altTrigger.setAttribute( 'aria-expanded', String( open ) );
+			} );
+
+			// Create the dedicated agent user (reuses the real aafm_create_agent_user action,
+			// which stamps the plugin marker). Mirrors #bindCreateUser's DOM-only status output.
+			const createUser = root.querySelector( '#aafm-qc-create-user' );
+			const userStatus = root.querySelector( '[data-qc-userstatus]' );
+			const substepA = root.querySelector( '[data-qc-substep="a"]' );
+			createUser.addEventListener( 'click', async () => {
+				userStatus.textContent = this.#t( 'creating', 'Creating…' );
+				userStatus.classList.remove( 'is-ok' );
+				const json = await this.#post( 'aafm_create_agent_user', { login: 'mcp-agent' } );
+				userStatus.textContent = '';
+				if ( json?.success ) {
+					userStatus.classList.add( 'is-ok' );
+					userStatus.textContent = this.#t( 'qcUserCreated', 'mcp-agent created (subscriber)' );
+					substepA.classList.add( 'is-ok' );
+					createUser.disabled = true;
+					state.method = state.oauth ? 'oauth' : 'apppw';
+				} else {
+					userStatus.textContent = json?.data?.message ?? this.#t( 'errorUnknown', 'unknown' );
+					const editUrl = json?.data?.edit_url;
+					if ( editUrl ) {
+						const link = document.createElement( 'a' );
+						link.href = editUrl;
+						link.textContent = this.#t( 'editUser', 'Edit user' );
+						userStatus.append( ' ', link );
+						substepA.classList.add( 'is-ok' );
+					}
+				}
+			} );
+
+			// ---- Job 1: Continue writes OAuth (the one explicit enable point) ----
+			root.querySelector( '[data-qc-next="2"]' ).addEventListener( 'click', async () => {
+				await this.#post( 'aafm_quickconnect_oauth', { enabled: oauth.checked ? 1 : 0 } );
+				goStep( 2 );
+			} );
+
+			// ---- Job 2: write toggle ----
+			const write = root.querySelector( '[data-qc-write]' );
+			const writeWarn = root.querySelector( '[data-qc-writewarn]' );
+			write.addEventListener( 'change', () => {
+				state.write = write.checked;
+				writeWarn.classList.toggle( 'is-open', write.checked );
+			} );
+			root.querySelector( '[data-qc-next="3"]' ).addEventListener( 'click', () => goStep( 3 ) );
+
+			// ---- Back buttons ----
+			root.querySelectorAll( '[data-qc-back]' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => goStep( Number( btn.dataset.qcBack ) ) );
+			} );
+
+			// ---- Job 3: finish ----
+			const finishBtn = root.querySelector( '#aafm-qc-finish' );
+			finishBtn.addEventListener( 'click', async () => {
+				finishBtn.disabled = true;
+				const json = await this.#post( 'aafm_quickconnect_finish', { write: state.write ? 1 : 0 } );
+				if ( ! json?.success ) {
+					finishBtn.disabled = false;
+					if ( hint ) {
+						hint.textContent = json?.data?.message ?? this.#t( 'requestFailed', 'Request failed.' );
+					}
+					return;
+				}
+				this.#quickConnectSucceed( root, state, reduce );
+			} );
+
+			// ---- Permanent opt-out ----
+			root.querySelector( '#aafm-qc-dismiss' ).addEventListener( 'click', async () => {
+				await this.#post( 'aafm_quickconnect_dismiss' );
+				root.classList.add( 'is-closed' );
+			} );
+
+			// ---- Go to dashboard from the success screen ----
+			const goDash = root.querySelector( '#aafm-qc-godash' );
+			if ( goDash ) {
+				goDash.addEventListener( 'click', () => {
+					window.location.href = 'admin.php?page=agent-abilities-for-mcp';
+				} );
+			}
+
+			// ---- Temporary close: X, scrim, Esc. Sets no flag, so it reopens next visit. ----
+			const closeTemp = () => root.classList.add( 'is-closed' );
+			root.querySelectorAll( '[data-qc-close]' ).forEach( ( el ) => {
+				el.addEventListener( 'click', closeTemp );
+			} );
+			document.addEventListener( 'keydown', ( e ) => {
+				if ( 'Escape' === e.key && ! root.classList.contains( 'is-closed' ) ) {
+					closeTemp();
+				}
+			} );
+
+			render();
+			applyOauth();
+		}
+
+		/**
+		 * Show the wizard's success receipt and (unless reduced motion) fire the confetti.
+		 *
+		 * @param {HTMLElement} root   The wizard root.
+		 * @param {Object}      state  The wizard state (method + write).
+		 * @param {boolean}     reduce Whether reduced motion is preferred.
+		 */
+		#quickConnectSucceed( root, state, reduce ) {
+			const method = 'apppw' === state.method
+				? this.#t( 'qcMethodAppPassword', 'Application password' )
+				: this.#t( 'qcMethodOauth', 'OAuth' );
+			root.querySelector( '[data-qc-rmethod]' ).textContent = method;
+			const writeVal = root.querySelector( '[data-qc-rwrite]' );
+			const writeIcon = root.querySelector( '[data-qc-rwriteicon]' );
+			if ( state.write ) {
+				writeVal.textContent = this.#t( 'qcOn', 'On' );
+				writeIcon.classList.add( 'is-amber' );
+			} else {
+				writeVal.textContent = this.#t( 'qcOff', 'Off' );
+				writeIcon.classList.remove( 'is-amber' );
+			}
+			root.querySelector( '[data-qc-body]' ).style.display = 'none';
+			root.querySelector( '.aafm-qc-foot' ).style.display = 'none';
+			const meter = root.querySelector( '.aafm-qc-meter' );
+			if ( meter ) {
+				meter.style.display = 'none';
+			}
+			root.querySelector( '[data-qc-success]' ).classList.add( 'is-shown' );
+			if ( ! reduce ) {
+				this.#quickConnectConfetti( root );
+			}
+		}
+
+		/**
+		 * A self-contained canvas confetti burst for the success moment. No external library or
+		 * asset; a static inline SVG stands in under prefers-reduced-motion (handled in CSS).
+		 *
+		 * @param {HTMLElement} root The wizard root.
+		 */
+		#quickConnectConfetti( root ) {
+			const cv = root.querySelector( '[data-qc-confetti]' );
+			const modal = root.querySelector( '.aafm-qc-modal' );
+			const success = root.querySelector( '[data-qc-success]' );
+			if ( ! cv || ! modal ) {
+				return;
+			}
+			const dpr = Math.min( window.devicePixelRatio || 1, 2 );
+			const w = modal.clientWidth;
+			const h = success.clientHeight || 340;
+			cv.width = w * dpr;
+			cv.height = h * dpr;
+			cv.style.width = w + 'px';
+			cv.style.height = h + 'px';
+			const ctx = cv.getContext( '2d' );
+			ctx.scale( dpr, dpr );
+
+			const colors = [ '#2271b1', '#135e96', '#dba617', '#00a32a', '#8ec5e8' ];
+			const parts = Array.from( { length: 130 }, () => {
+				const fromLeft = Math.random() < 0.5;
+				return {
+					x: fromLeft ? w * 0.16 : w * 0.84,
+					y: h * 0.3,
+					vx: ( fromLeft ? 1 : -1 ) * ( 2 + Math.random() * 5 ),
+					vy: -( 6 + Math.random() * 7 ),
+					g: 0.24 + Math.random() * 0.12,
+					s: 5 + Math.random() * 6,
+					rot: Math.random() * Math.PI,
+					vr: ( Math.random() - 0.5 ) * 0.32,
+					c: colors[ ( Math.random() * colors.length ) | 0 ],
+					shape: Math.random() < 0.35 ? 'c' : 'r',
+					life: 1,
+				};
+			} );
+
+			let raf;
+			let t0 = performance.now();
+			const tick = ( now ) => {
+				const dt = Math.min( 2, ( now - t0 ) / 16.67 );
+				t0 = now;
+				ctx.clearRect( 0, 0, w, h );
+				let alive = 0;
+				parts.forEach( ( p ) => {
+					p.vy += p.g * dt;
+					p.x += p.vx * dt;
+					p.y += p.vy * dt;
+					p.rot += p.vr * dt;
+					if ( p.y > h * 0.42 ) {
+						p.life -= 0.012 * dt;
+					}
+					if ( p.life <= 0 ) {
+						return;
+					}
+					alive++;
+					ctx.save();
+					ctx.globalAlpha = Math.max( 0, p.life );
+					ctx.translate( p.x, p.y );
+					ctx.rotate( p.rot );
+					ctx.fillStyle = p.c;
+					if ( 'c' === p.shape ) {
+						ctx.beginPath();
+						ctx.arc( 0, 0, p.s * 0.5, 0, 7 );
+						ctx.fill();
+					} else {
+						ctx.fillRect( -p.s / 2, -p.s / 2, p.s, p.s * 0.62 );
+					}
+					ctx.restore();
+				} );
+				if ( alive > 0 ) {
+					raf = requestAnimationFrame( tick );
+				} else {
+					ctx.clearRect( 0, 0, w, h );
+				}
+			};
+			raf = requestAnimationFrame( tick );
+			window.setTimeout( () => window.cancelAnimationFrame( raf ), 5000 );
 		}
 	}
 

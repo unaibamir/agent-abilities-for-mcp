@@ -262,6 +262,30 @@ final class ConnectionTest extends TestCase {
 		$this->assertNotContains( $admin, aafm_created_agent_users() );
 	}
 
+	/**
+	 * Guard rail: an account whose login collides but whose role is NOT the dedicated-agent shape
+	 * (here an Editor - no manage_options, but not a subscriber either) is never stamped. Only a
+	 * single-'subscriber' account matches the shape the create path produces, so a colliding
+	 * Editor/Author/Contributor must not self-heal into the agent-user marker.
+	 */
+	public function test_create_agent_user_never_heals_marker_on_a_non_subscriber_role(): void {
+		$this->acting_as( 'administrator' );
+
+		$editor = self::factory()->user->create(
+			array(
+				'role'       => 'editor',
+				'user_login' => 'editor-agent',
+			)
+		);
+		$this->assertFalse( user_can( $editor, 'manage_options' ), 'Fixture: an editor must not hold manage_options.' );
+
+		$result = aafm_create_agent_user( 'editor-agent' );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( '', (string) get_user_meta( $editor, aafm_agent_user_marker_meta_key(), true ), 'A non-subscriber role must never self-heal the agent-user marker.' );
+		$this->assertNotContains( $editor, aafm_created_agent_users() );
+	}
+
 	public function test_client_snippet_points_at_endpoint_and_username(): void {
 		$snippet = aafm_client_snippet( 'claude-code', 'mcp-agent' );
 		$this->assertStringContainsString( rest_url( 'agent-abilities-for-mcp/mcp' ), $snippet );

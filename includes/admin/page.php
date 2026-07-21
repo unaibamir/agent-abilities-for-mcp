@@ -197,6 +197,16 @@ function aafm_enqueue_admin_assets( string $hook ): void {
 				'revokeGrantConfirm'       => __( 'Revoke this grant? The user will have to approve again to reconnect.', 'agent-abilities-for-mcp' ),
 				'revokeFailed'             => __( 'Could not revoke. Please try again.', 'agent-abilities-for-mcp' ),
 				'statusRevoked'            => __( 'Revoked', 'agent-abilities-for-mcp' ),
+				// Quick Connect wizard.
+				'qcInProgress'             => __( 'In progress', 'agent-abilities-for-mcp' ),
+				'qcNotStarted'             => __( 'Not started', 'agent-abilities-for-mcp' ),
+				'qcOauthOn'                => __( 'OAuth is on. Copy the URL, then continue.', 'agent-abilities-for-mcp' ),
+				'qcOauthOff'               => __( 'OAuth is off. Use the application-password path below, or turn OAuth on.', 'agent-abilities-for-mcp' ),
+				'qcUserCreated'            => __( 'mcp-agent created (subscriber)', 'agent-abilities-for-mcp' ),
+				'qcMethodOauth'            => __( 'OAuth', 'agent-abilities-for-mcp' ),
+				'qcMethodAppPassword'      => __( 'Application password', 'agent-abilities-for-mcp' ),
+				'qcOn'                     => __( 'On', 'agent-abilities-for-mcp' ),
+				'qcOff'                    => __( 'Off', 'agent-abilities-for-mcp' ),
 			),
 		)
 	);
@@ -930,6 +940,11 @@ function aafm_render_admin_page(): void {
 		default:
 			aafm_render_dashboard_tab();
 	}
+
+	// First-run onboarding: a self-gated modal that only renders when setup is neither finished
+	// nor permanently dismissed (aafm_quickconnect_should_render()). It never changes state on load.
+	aafm_quickconnect_render();
+
 	echo '</div>';
 }
 

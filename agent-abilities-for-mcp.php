@@ -138,6 +138,12 @@ add_action( 'parse_request', 'aafm_oauth_maybe_serve_well_known', 0 );
 // Seed the OAuth toggles to "off" at activation (add_option only - never clobbers a saved value).
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_seed_default_options' );
 
+// Flag a genuinely new install so the first-activation admin-menu pointer shows once. The callback
+// lives in includes/admin/quickconnect.php (loaded on plugins_loaded, before the activation hook
+// fires), and uses add_option so a later reactivation never re-arms it. Per-user dismissal is
+// tracked in the core dismissed-pointers meta.
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_quickconnect_flag_menu_pointer' );
+
 // One-time upgrade safety: an install updated in place from a pre-off-by-default version
 // holds no stored toggle row and ran on the old on-by-default reader, so the new
 // fail-closed default would disable its OAuth surface (and any live connection) on update.
@@ -261,6 +267,8 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/components.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/dashboard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
@@ -286,6 +294,10 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_client', 'aafm_ajax_oauth_revoke_client' );
 		add_action( 'wp_ajax_aafm_oauth_revoke_grant', 'aafm_ajax_oauth_revoke_grant' );
+		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );
+		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
+		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
+		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 
 	if ( defined( 'WP_CLI' ) && WP_CLI ) {

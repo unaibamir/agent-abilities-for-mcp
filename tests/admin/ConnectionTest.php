@@ -153,6 +153,30 @@ final class ConnectionTest extends TestCase {
 	}
 
 	/**
+	 * Regression: the backfill must require the EXACT subscriber-only shape, matching the
+	 * create-path self-heal. An 'mcp-agent' account carrying a second role (here subscriber +
+	 * editor) plus an application password is not the low-privilege agent, so a loose "is
+	 * subscriber among the roles" test would wrongly stamp it. Guards against a full-caps login
+	 * being mis-marked as the scoped agent via the backfill twin of the create path.
+	 */
+	public function test_backfill_leaves_a_subscriber_plus_extra_role_user_alone(): void {
+		$multi = self::factory()->user->create(
+			array(
+				'role'       => 'subscriber',
+				'user_login' => 'mcp-agent',
+			)
+		);
+		get_userdata( $multi )->add_role( 'editor' );
+		WP_Application_Passwords::create_new_application_password( $multi, array( 'name' => 'legacy' ) );
+
+		delete_option( 'aafm_agent_user_marker_backfilled' );
+		aafm_backfill_agent_user_marker();
+
+		$this->assertSame( '', (string) get_user_meta( $multi, aafm_agent_user_marker_meta_key(), true ), 'A subscriber+editor account must not be backfilled as the agent user.' );
+		$this->assertFalse( aafm_has_created_agent_user() );
+	}
+
+	/**
 	 * T3-1: the agent-user AJAX handler must gate on manage_options, not create_users. A
 	 * non-admin custom role holding only create_users (plus the nonce) must be denied.
 	 */

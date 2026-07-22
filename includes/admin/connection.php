@@ -235,7 +235,7 @@ function aafm_backfill_agent_user_marker(): void {
 	if ( $existing_id > 0 && ! get_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), true ) ) {
 		$user = get_userdata( $existing_id );
 		if ( $user instanceof WP_User
-			&& in_array( 'subscriber', array_map( 'strval', $user->roles ), true )
+			&& array( 'subscriber' ) === array_values( array_map( 'strval', $user->roles ) )
 			&& ! empty( WP_Application_Passwords::get_user_application_passwords( $existing_id ) )
 		) {
 			update_user_meta( $existing_id, aafm_agent_user_marker_meta_key(), 1 );

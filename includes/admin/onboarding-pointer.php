@@ -188,7 +188,7 @@ function aafm_quickconnect_pointer_inline_js(): string {
 					e.preventDefault();
 					t.element.pointer( 'close' );
 				} ).appendTo( $box );
-				$( '<a class="button button-primary" style="margin-left:8px"/>' )
+				$( '<a class="button button-primary" style="margin-left:8px;margin-right:8px"/>' )
 					.text( cfg.start ).attr( 'href', cfg.pageUrl ).appendTo( $box );
 				return $box;
 			},

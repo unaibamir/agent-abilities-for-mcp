@@ -132,13 +132,18 @@ function aafm_oauth_register_rest_routes(): void {
 }
 
 /**
- * Attach `Cache-Control: no-store` to a REST response and return it.
+ * Attach the RFC 6749 §5.1 no-cache headers to a REST response and return it.
+ *
+ * §5.1 requires both `Cache-Control: no-store` and `Pragma: no-cache` on any response
+ * carrying tokens, credentials, or other sensitive information. This one helper covers
+ * the token response, the DCR 201, the revocation 200, and every protocol error.
  *
  * @param \WP_REST_Response $response The response to decorate.
- * @return \WP_REST_Response The same response, with the no-store header set.
+ * @return \WP_REST_Response The same response, with both no-cache headers set.
  */
 function aafm_oauth_rest_no_store( WP_REST_Response $response ): WP_REST_Response {
 	$response->header( 'Cache-Control', 'no-store' );
+	$response->header( 'Pragma', 'no-cache' );
 	return $response;
 }
 

@@ -133,7 +133,8 @@ class RestEndpointsTest extends TestCase {
 	}
 
 	/**
-	 * Registration returns 201 with a 32-hex client_id.
+	 * Registration returns 201 with a 32-hex client_id and both RFC 6749 section 5.1
+	 * no-cache headers, since the response carries a live client_id.
 	 */
 	public function test_register_returns_client_id(): void {
 		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
@@ -150,6 +151,10 @@ class RestEndpointsTest extends TestCase {
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 201, $response->get_status() );
+
+		$headers = $response->get_headers();
+		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		$data = $response->get_data();
 		$this->assertMatchesRegularExpression( '/^[0-9a-f]{32}$/', (string) $data['client_id'] );
@@ -174,6 +179,7 @@ class RestEndpointsTest extends TestCase {
 		// bearer credential, so a shared cache holding it would leak the token.
 		$headers = $response->get_headers();
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		$data = $response->get_data();
 		$this->assertStringStartsWith( 'aafm_oat_', (string) $data['access_token'] );
@@ -271,6 +277,12 @@ class RestEndpointsTest extends TestCase {
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 200, $response->get_status() );
+
+		// The revocation response is never cached either (RFC 6749 §5.1): it acknowledges
+		// a credential operation even though its own body carries no secret.
+		$headers = $response->get_headers();
+		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		// Revocation must genuinely kill the token, not just return 200: validating
 		// the same token afterwards now reports it as dead.
@@ -537,5 +549,62 @@ class RestEndpointsTest extends TestCase {
 		);
 
 		$this->assertSame( 404, rest_do_request( $request )->get_status() );
+	}
+
+	/**
+	 * With OAuth disabled, /register still returns WordPress's own error shape rather than
+	 * the RFC 6749 shape used for real protocol errors.
+	 *
+	 * D1: a disabled endpoint answers as "this route does not exist" (WordPress's own
+	 * rest_no_route body), not as an OAuth error, because there is no grant to describe -
+	 * the RFC 6749 §5.2 shape would not apply to a switched-off surface. This is a
+	 * deliberate exception carved out during the issue #68 fix, not a gap in it, and this
+	 * test locks the exception so a future change cannot quietly merge the two shapes.
+	 */
+	public function test_register_disabled_returns_wordpress_error_shape(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		$request  = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 404, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'rest_no_route', $data['code'] );
+		$this->assertArrayNotHasKey( 'error', $data );
+	}
+
+	/**
+	 * With OAuth disabled, /token still returns WordPress's own error shape. See D1 on the
+	 * register test above for why this is deliberate.
+	 */
+	public function test_token_disabled_returns_wordpress_error_shape(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		$request  = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/token' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 404, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'rest_no_route', $data['code'] );
+		$this->assertArrayNotHasKey( 'error', $data );
+	}
+
+	/**
+	 * With OAuth disabled, /revoke still returns WordPress's own error shape. See D1 on the
+	 * register test above for why this is deliberate.
+	 */
+	public function test_revoke_disabled_returns_wordpress_error_shape(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		$request  = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/revoke' );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 404, $response->get_status() );
+
+		$data = $response->get_data();
+		$this->assertSame( 'rest_no_route', $data['code'] );
+		$this->assertArrayNotHasKey( 'error', $data );
 	}
 }

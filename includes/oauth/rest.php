@@ -7,10 +7,12 @@
  * `__return_true` - the OAuth grant itself is the authentication, not a WordPress
  * capability. The handlers gate on the feature toggles, enforce the HTTPS policy,
  * and rate-limit before doing any work, then delegate the cryptographic and
- * storage logic to the clients/codes/tokens modules. Every response except the
- * disabled-route 404 carries `Cache-Control: no-store` and `Pragma: no-cache`
- * (RFC 6749 §5.1), covering both successes and protocol errors, so a token or
- * credential is never cached.
+ * storage logic to the clients/codes/tokens modules. Every response these
+ * handlers return, except the disabled-route 404, carries `Cache-Control:
+ * no-store` and `Pragma: no-cache` (RFC 6749 §5.1), covering both successes
+ * and protocol errors, so a token or credential is never cached. A request
+ * with the wrong HTTP method never reaches this code at all - WordPress
+ * answers with its own 405 first, without these headers.
  *
  * @package AgentAbilitiesForMCP
  */

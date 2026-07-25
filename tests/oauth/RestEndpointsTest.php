@@ -154,6 +154,11 @@ class RestEndpointsTest extends TestCase {
 
 		$headers = $response->get_headers();
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertArrayHasKey(
+			'Pragma',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		$data = $response->get_data();
@@ -179,6 +184,11 @@ class RestEndpointsTest extends TestCase {
 		// bearer credential, so a shared cache holding it would leak the token.
 		$headers = $response->get_headers();
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertArrayHasKey(
+			'Pragma',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		$data = $response->get_data();
@@ -282,6 +292,11 @@ class RestEndpointsTest extends TestCase {
 		// a credential operation even though its own body carries no secret.
 		$headers = $response->get_headers();
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertArrayHasKey(
+			'Pragma',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-cache', $headers['Pragma'] );
 
 		// Revocation must genuinely kill the token, not just return 200: validating
@@ -570,6 +585,11 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 404, $response->get_status() );
 
 		$data = $response->get_data();
+		$this->assertArrayHasKey(
+			'code',
+			$data,
+			'Response body keys were: ' . wp_json_encode( array_keys( $data ) )
+		);
 		$this->assertSame( 'rest_no_route', $data['code'] );
 		$this->assertArrayNotHasKey( 'error', $data );
 	}
@@ -587,6 +607,11 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 404, $response->get_status() );
 
 		$data = $response->get_data();
+		$this->assertArrayHasKey(
+			'code',
+			$data,
+			'Response body keys were: ' . wp_json_encode( array_keys( $data ) )
+		);
 		$this->assertSame( 'rest_no_route', $data['code'] );
 		$this->assertArrayNotHasKey( 'error', $data );
 	}
@@ -604,6 +629,11 @@ class RestEndpointsTest extends TestCase {
 		$this->assertSame( 404, $response->get_status() );
 
 		$data = $response->get_data();
+		$this->assertArrayHasKey(
+			'code',
+			$data,
+			'Response body keys were: ' . wp_json_encode( array_keys( $data ) )
+		);
 		$this->assertSame( 'rest_no_route', $data['code'] );
 		$this->assertArrayNotHasKey( 'error', $data );
 	}

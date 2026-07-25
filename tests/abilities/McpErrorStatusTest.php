@@ -263,4 +263,37 @@ final class McpErrorStatusTest extends TestCase {
 		$this->assertInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
 		$this->assertSame( -32003, $result->getError()->getCode() );
 	}
+
+	/**
+	 * The allowlist in aafm_mcp_filter_governed_error_status() (includes/server.php) is
+	 * written as bare integer literals on purpose (see that function's docblock: a hard
+	 * dependency on a vendor class being loaded is a load-order risk on a filter that runs
+	 * for every REST request the site serves). That means nothing at runtime ties our
+	 * literals back to the adapter's own constants, so this test is the one place that
+	 * does: it proves -32601/-32002/-32003/-32004/-32005 still mean what the allowlist
+	 * assumes they mean.
+	 *
+	 * SESSION_NOT_FOUND matters most here. The real-adapter test above only exercises the
+	 * tool-not-found path and test_session_not_found_keeps_404() only hand-builds -32005
+	 * from our own literal, so neither would notice if the adapter ever renumbered
+	 * SESSION_NOT_FOUND onto one of the four allowlisted values - that would make this
+	 * filter start rewriting real session terminations to 200, and every other test in
+	 * this file would stay green while it happened.
+	 */
+	public function test_adapter_error_code_constants_match_the_allowlist(): void {
+		if ( ! class_exists( \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::class ) ) {
+			$this->markTestSkipped( 'The mcp-adapter McpErrorFactory class is not loaded in this environment.' );
+		}
+
+		$mismatch = 'The adapter renumbered its JSON-RPC error codes, and '
+			. 'aafm_mcp_filter_governed_error_status()\'s allowlist in includes/server.php must be '
+			. 'reviewed before this ships, with particular attention to whether SESSION_NOT_FOUND '
+			. 'now collides with an allowlisted value.';
+
+		$this->assertSame( -32601, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::METHOD_NOT_FOUND, $mismatch );
+		$this->assertSame( -32002, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::RESOURCE_NOT_FOUND, $mismatch );
+		$this->assertSame( -32003, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::TOOL_NOT_FOUND, $mismatch );
+		$this->assertSame( -32004, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::PROMPT_NOT_FOUND, $mismatch );
+		$this->assertSame( -32005, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::SESSION_NOT_FOUND, $mismatch );
+	}
 }

@@ -171,6 +171,10 @@ add_filter( 'rest_allowed_cors_headers', 'aafm_oauth_filter_allowed_cors_headers
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/rest.php';
 add_action( 'rest_api_init', 'aafm_oauth_register_rest_routes' );
 
+// Re-shape core's malformed-JSON rejection into RFC 6749 on the three OAuth routes only;
+// every other route's rest_invalid_json response passes through untouched.
+add_filter( 'rest_post_dispatch', 'aafm_oauth_filter_malformed_json', 10, 3 );
+
 // Bearer-token validator: resolve an OAuth access token to its approving user on
 // the same auth layer Application Passwords use, before the transport gate runs.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/validator.php';

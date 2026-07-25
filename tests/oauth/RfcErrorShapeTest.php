@@ -224,4 +224,104 @@ class RfcErrorShapeTest extends TestCase {
 
 		$this->assertSame( 418, $response->get_status() );
 	}
+
+	/**
+	 * Dispatch a POST carrying a syntactically broken JSON body and return the request
+	 * alongside the response core's own has_valid_params() produces, before any route
+	 * callback runs - this is the failure mode a route callback's own validation can
+	 * never intercept.
+	 *
+	 * Dispatch() (which rest_do_request() calls) never applies the rest_post_dispatch
+	 * filter itself - that only happens in WP_REST_Server::serve_request(), the real
+	 * HTTP entry point, confirmed by the fact that this genuinely reproduces core's
+	 * unfiltered rest_invalid_json shape here even with aafm_oauth_filter_malformed_json()
+	 * registered. So every test below feeds this real, unfiltered response through the
+	 * filter directly, the same convention ChallengeTest.php already uses for
+	 * aafm_oauth_filter_rest_challenge(), rather than expecting rest_do_request() to have
+	 * applied it.
+	 *
+	 * @param string $route The REST route to dispatch to.
+	 * @return array{0: WP_REST_Request, 1: WP_REST_Response} The request and core's raw response.
+	 */
+	private function dispatch_malformed_json( string $route ): array {
+		$request = new WP_REST_Request( 'POST', $route );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body( '{"not": "valid json"' ); // Missing closing brace.
+
+		return array( $request, rest_do_request( $request ) );
+	}
+
+	/**
+	 * Malformed JSON to /token is caught by aafm_oauth_filter_malformed_json() and
+	 * reshaped into the same RFC 6749 error contract as every other protocol error on
+	 * this route, rather than leaking core's {code, message, data} shape.
+	 */
+	public function test_malformed_json_to_token_returns_rfc6749_error_shape(): void {
+		list( $request, $raw ) = $this->dispatch_malformed_json( '/agent-abilities-for-mcp/oauth/token' );
+		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
+
+		$this->assertSame( 400, $filtered->get_status() );
+		$this->assert_rfc6749_error_shape( $filtered, $filtered->get_data(), 'invalid_request' );
+	}
+
+	/**
+	 * Malformed JSON to /register gets the same treatment. This route matters most:
+	 * RFC 7591 registration is JSON-only, so a syntax error here has no other path back
+	 * to a body a DCR client can parse.
+	 */
+	public function test_malformed_json_to_register_returns_rfc6749_error_shape(): void {
+		list( $request, $raw ) = $this->dispatch_malformed_json( '/agent-abilities-for-mcp/oauth/register' );
+		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
+
+		$this->assertSame( 400, $filtered->get_status() );
+		$this->assert_rfc6749_error_shape( $filtered, $filtered->get_data(), 'invalid_request' );
+	}
+
+	/**
+	 * The critical negative case: the same malformed body sent to an unrelated core
+	 * route must come back completely untouched, still carrying core's own
+	 * rest_invalid_json WP_Error shape with no RFC 6749 fields and no cache headers.
+	 * rest_post_dispatch fires for every REST request on the site, not only ours, so
+	 * this is the test that proves the filter has not started rewriting core's or
+	 * another plugin's JSON errors.
+	 */
+	public function test_malformed_json_to_unrelated_core_route_is_untouched(): void {
+		list( $request, $raw ) = $this->dispatch_malformed_json( '/wp/v2/posts' );
+		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
+
+		$this->assertSame( 400, $filtered->get_status() );
+
+		$data = $filtered->get_data();
+		$this->assertSame( 'rest_invalid_json', $data['code'] );
+		$this->assertArrayNotHasKey( 'error', $data );
+		$this->assertArrayNotHasKey( 'error_description', $data );
+
+		$headers = $filtered->get_headers();
+		$this->assertArrayNotHasKey( 'Cache-Control', $headers );
+		$this->assertArrayNotHasKey( 'Pragma', $headers );
+	}
+
+	/**
+	 * A well-formed registration request's 201 success is unaffected by the filter: it
+	 * never matches the 400-status, rest_invalid_json-code gate the filter checks, so
+	 * feeding it through returns the exact same response.
+	 */
+	public function test_valid_register_response_is_unaffected_by_malformed_json_filter(): void {
+		$request = new WP_REST_Request( 'POST', '/agent-abilities-for-mcp/oauth/register' );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			wp_json_encode(
+				array(
+					'redirect_uris' => array( 'https://app.example/cb' ),
+					'client_name'   => 'Valid Client',
+				)
+			)
+		);
+
+		$response = rest_do_request( $request );
+		$this->assertSame( 201, $response->get_status(), 'client registration should succeed' );
+
+		$filtered = aafm_oauth_filter_malformed_json( $response, rest_get_server(), $request );
+		$this->assertSame( $response, $filtered );
+	}
 }

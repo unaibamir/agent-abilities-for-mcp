@@ -141,9 +141,10 @@ function aafm_oauth_register_rest_routes(): void {
  * §5.1 requires both `Cache-Control: no-store` and `Pragma: no-cache` on any response
  * carrying tokens, credentials, or other sensitive information. This one helper covers
  * the token response, the DCR 201, the revocation 200, and every protocol error these
- * handlers return. A request core rejects before the callback runs (malformed JSON in
- * the body is the reachable case, via `has_valid_params()`) never reaches this helper
- * and gets core's own `rest_invalid_json` shape with no cache headers instead.
+ * handlers return, including a malformed-JSON body: core rejects that before the route
+ * callback runs (via `has_valid_params()`), but aafm_oauth_filter_malformed_json()
+ * catches that case on `rest_post_dispatch` and routes it back through
+ * aafm_oauth_rest_protocol_error(), which calls this helper too.
  *
  * @param \WP_REST_Response $response The response to decorate.
  * @return \WP_REST_Response The same response, with both no-cache headers set.
@@ -177,6 +178,69 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
 	);
 
 	return aafm_oauth_rest_no_store( $response );
+}
+
+/**
+ * Convert core's malformed-JSON rejection into the RFC 6749 §5.2 shape, on the three
+ * OAuth routes only.
+ *
+ * `WP_REST_Server::dispatch()` validates the request body via `has_valid_params()` before
+ * any route callback runs. A JSON syntax error there never reaches
+ * aafm_oauth_rest_register() / aafm_oauth_rest_token() / aafm_oauth_rest_revoke(): it
+ * becomes core's own `{code: 'rest_invalid_json', message, data}` WP_Error, already
+ * converted to a `WP_REST_Response` by the time `rest_post_dispatch` fires, carrying no
+ * cache headers. This matters most on `/register`, which RFC 7591 defines as JSON-only,
+ * so a malformed body there has no other path back to our own response shape.
+ *
+ * Scoped narrowly on purpose: `rest_post_dispatch` fires on every REST request the site
+ * serves, not only ours, so this returns the response completely untouched unless every
+ * one of route, status, and error code match. Route is read from the `WP_REST_Request`
+ * argument the filter receives, never a global, matching the same discipline
+ * aafm_oauth_filter_rest_challenge() already uses for its own narrow rest_post_dispatch
+ * gate.
+ *
+ * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
+ * @param \WP_REST_Server $server   The REST server (unused).
+ * @param mixed           $request  The originating request (WP_REST_Request on the REST path).
+ * @return mixed The RFC 6749 shaped response when every condition matches, the original
+ *               response untouched otherwise.
+ */
+function aafm_oauth_filter_malformed_json( $response, $server, $request ) {
+	unset( $server );
+
+	if ( ! $response instanceof WP_REST_Response ) {
+		return $response;
+	}
+
+	if ( 400 !== (int) $response->get_status() ) {
+		return $response;
+	}
+
+	$data = $response->get_data();
+	if ( ! is_array( $data ) || ! isset( $data['code'] ) || 'rest_invalid_json' !== $data['code'] ) {
+		return $response;
+	}
+
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+
+	// The three routes aafm_oauth_register_rest_routes() registers under the
+	// 'agent-abilities-for-mcp/oauth' namespace. Kept in sync by hand: there is no
+	// shared constant today, and adding one is out of scope for this fix.
+	$oauth_routes = array(
+		'/agent-abilities-for-mcp/oauth/register',
+		'/agent-abilities-for-mcp/oauth/token',
+		'/agent-abilities-for-mcp/oauth/revoke',
+	);
+
+	if ( ! in_array( $route, $oauth_routes, true ) ) {
+		return $response;
+	}
+
+	return aafm_oauth_rest_protocol_error(
+		'invalid_request',
+		__( 'The request body could not be parsed as valid JSON.', 'agent-abilities-for-mcp' ),
+		400
+	);
 }
 
 /**

@@ -537,9 +537,11 @@ function aafm_register_mcp_server( $adapter ): void {
  *
  * Scoped narrowly, the same way aafm_oauth_filter_rest_challenge() scopes its own
  * rest_post_dispatch gate: the MCP route only (read from the request, never a global), a
- * 404 status, and a single (non-batch) JSON-RPC error response - a batch request's response
- * body is always a plain list of per-message results and never reaches this shape, but the
- * check guards against relying on that indirectly. Any miss returns the response untouched.
+ * 404 status, and a single (non-batch) JSON-RPC error response. A batch response is always
+ * a plain list of per-message results, so it has no top-level 'error' key and the code
+ * check further down already excludes it on its own; the batch check states that intent
+ * explicitly rather than providing protection the next check does not already give. Any
+ * miss returns the response untouched.
  *
  * rest_post_dispatch fires on every REST request the whole site serves, not only ours, so
  * the guards are ordered cheapest-and-most-discriminating first: the route check runs
@@ -574,7 +576,10 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	}
 
 	// A batch response is always a sequential list of per-message results (integer keys
-	// starting at 0), never a single {jsonrpc, error, id} object - never rewrite one.
+	// starting at 0), so it has no top-level 'error' key and the isset() check just below
+	// already excludes it on its own - this guard adds no protection beyond that. It exists
+	// purely to state the intent explicitly, so a batch staying unrewritten does not depend
+	// on the accident of which check happens to run first.
 	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 8.0, so build the check
 	// by hand.
 	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {

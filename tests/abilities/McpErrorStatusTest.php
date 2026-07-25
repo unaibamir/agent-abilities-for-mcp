@@ -185,9 +185,11 @@ final class McpErrorStatusTest extends TestCase {
 
 	/**
 	 * A batch response is always a plain list of per-message results, never a single
-	 * {jsonrpc, error, id} object, and must never be rewritten even if one somehow carried
-	 * a 404 status (the adapter itself never produces this combination - batches always
-	 * return 200 - but the filter guards against relying on that indirectly).
+	 * {jsonrpc, error, id} object. Its keys are integers, so it has no top-level 'error'
+	 * key and the filter's code check already excludes it on its own; the batch check adds
+	 * no protection beyond that (deleting it leaves this test green), it exists to state
+	 * the intent explicitly. This test asserts the resulting behaviour - a batch shape is
+	 * never rewritten - not that the dedicated guard is what produces it.
 	 */
 	public function test_batch_shaped_response_is_untouched(): void {
 		$batch    = array(
@@ -236,8 +238,10 @@ final class McpErrorStatusTest extends TestCase {
 	 * exactly one branch for a missing tool: `$mcp_tool = $this->mcp->get_mcp_tool( $tool_name );
 	 * if ( ! $mcp_tool ) { ... return McpErrorFactory::tool_not_found(...); }`. A
 	 * governance-disabled ability is never added to the server's $tools list in the first
-	 * place (aafm_build_server_tools() only includes aafm_get_enabled_abilities()), so to
-	 * this method it is indistinguishable from a name that was never registered at all -
+	 * place (aafm_build_server_tools() is called with aafm_all_server_ability_names(), which
+	 * is enabled natives plus enabled bridge wrappers - a disabled ability is absent from
+	 * both), so to this method it is indistinguishable from a name that was never registered
+	 * at all -
 	 * there is no separate "disabled" branch to exercise. I did not build a second, isolated
 	 * MCP server fixture to prove that case independently: the adapter keeps one server per
 	 * ID for the life of the PHPUnit process with no reset method, so an earlier test's real
@@ -270,8 +274,14 @@ final class McpErrorStatusTest extends TestCase {
 	 * dependency on a vendor class being loaded is a load-order risk on a filter that runs
 	 * for every REST request the site serves). That means nothing at runtime ties our
 	 * literals back to the adapter's own constants, so this test is the one place that
-	 * does: it proves -32601/-32002/-32003/-32004/-32005 still mean what the allowlist
-	 * assumes they mean.
+	 * does. The fix rests on a four-link chain - an unknown tool emits -32003 (link 1,
+	 * proved by the real-adapter test above), the adapter maps -32003 (and the other three
+	 * allowlisted codes, and -32005) to HTTP 404 (link 2), our filter rewrites 404 to 200
+	 * for the allowlisted codes only (link 3, proved by the tests above), and WordPress
+	 * reads the rewritten status back after rest_post_dispatch (link 4, verified
+	 * separately against the live site, not practical to assert here) - and this test
+	 * closes link 2: it proves McpErrorFactory::mcp_error_to_http_status() still maps
+	 * every one of the five codes the way the allowlist assumes.
 	 *
 	 * SESSION_NOT_FOUND matters most here. The real-adapter test above only exercises the
 	 * tool-not-found path and test_session_not_found_keeps_404() only hand-builds -32005
@@ -279,6 +289,13 @@ final class McpErrorStatusTest extends TestCase {
 	 * SESSION_NOT_FOUND onto one of the four allowlisted values - that would make this
 	 * filter start rewriting real session terminations to 200, and every other test in
 	 * this file would stay green while it happened.
+	 *
+	 * Coverage limit, stated plainly rather than left for a later reader to assume away:
+	 * this test only checks the five codes the fix already knows about. If a future
+	 * adapter release adds a sixth code to the 404 bucket, nothing here notices, and that
+	 * code simply keeps its 404 until someone deliberately reviews the allowlist - the
+	 * safe direction (a bug staying unfixed) rather than the dangerous one (a safety
+	 * property breaking), but a real gap all the same.
 	 */
 	public function test_adapter_error_code_constants_match_the_allowlist(): void {
 		if ( ! class_exists( \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::class ) ) {
@@ -295,5 +312,20 @@ final class McpErrorStatusTest extends TestCase {
 		$this->assertSame( -32003, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::TOOL_NOT_FOUND, $mismatch );
 		$this->assertSame( -32004, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::PROMPT_NOT_FOUND, $mismatch );
 		$this->assertSame( -32005, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::SESSION_NOT_FOUND, $mismatch );
+
+		$status_mismatch = 'The adapter changed which HTTP status it maps a JSON-RPC error code to, and '
+			. 'aafm_mcp_filter_governed_error_status()\'s allowlist in includes/server.php only rewrites '
+			. 'a response that already arrived at 404 - if one of these codes no longer maps to 404, the '
+			. 'filter never sees it and the fix silently stops working.';
+
+		$this->assertSame( 404, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::mcp_error_to_http_status( -32601 ), $status_mismatch );
+		$this->assertSame( 404, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::mcp_error_to_http_status( -32002 ), $status_mismatch );
+		$this->assertSame( 404, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::mcp_error_to_http_status( -32003 ), $status_mismatch );
+		$this->assertSame( 404, \WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::mcp_error_to_http_status( -32004 ), $status_mismatch );
+		$this->assertSame(
+			404,
+			\WP\MCP\Infrastructure\ErrorHandling\McpErrorFactory::mcp_error_to_http_status( -32005 ),
+			'SESSION_NOT_FOUND must still map to 404 - if the adapter changed this, ' . $status_mismatch
+		);
 	}
 }

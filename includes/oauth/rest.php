@@ -12,7 +12,7 @@
  * no-store` and `Pragma: no-cache` (RFC 6749 §5.1), covering both successes
  * and protocol errors, so a token or credential is never cached. A request
  * with the wrong HTTP method never reaches this code at all - WordPress
- * answers with its own 405 first, without these headers.
+ * answers with its own 404 rest_no_route first, without these headers.
  *
  * @package AgentAbilitiesForMCP
  */

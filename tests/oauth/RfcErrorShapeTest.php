@@ -182,8 +182,8 @@ class RfcErrorShapeTest extends TestCase {
 	 * dispatching 30 real requests through the REST server to get there.
 	 */
 	public function test_revoke_rate_limited_returns_rfc6749_error_shape(): void {
-		// 30 matches the per-IP cap aafm_oauth_rest_revoke() passes to aafm_oauth_rate_ok()
-		// at includes/oauth/rest.php:628. If that cap ever changes, this loop must move with it.
+		// 30 matches the per-IP cap aafm_oauth_rest_revoke() passes to aafm_oauth_rate_ok().
+		// If that cap ever changes, this loop must move with it.
 		for ( $i = 0; $i < 30; $i++ ) {
 			aafm_oauth_rate_ok( 'revoke', 30, 300 );
 		}

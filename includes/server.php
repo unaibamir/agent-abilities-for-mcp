@@ -507,3 +507,89 @@ function aafm_register_mcp_server( $adapter ): void {
 		'aafm_transport_permission_callback'
 	);
 }
+
+/**
+ * Stop four specific JSON-RPC "not found" errors on the MCP route from claiming the
+ * session died.
+ *
+ * The MCP 2025-06-18 spec reserves the transport-level HTTP 404 to mean the session is
+ * terminated and the client MUST re-initialize. The bundled adapter's
+ * McpErrorFactory::mcp_error_to_http_status() maps five different JSON-RPC error codes to
+ * that same 404 in one bucket: -32601 (method not found), -32002 (resource not found),
+ * -32003 (tool not found), -32004 (prompt not found), and -32005 (session not found). The
+ * first four are ordinary application-level errors an agent can read and correct from
+ * within the same session - calling an unknown tool, or a real tool the operator has not
+ * enabled (never registered, so the lookup fails the same way as a genuinely unknown one) -
+ * but the adapter's map tells the client its session is dead regardless. There is no filter,
+ * hook, or injectable strategy anywhere in the adapter that can change this mapping at the
+ * source (confirmed by direct source review; `McpErrorFactory` is a static utility with no
+ * DI entry), and editing vendor/ is not an option, so this reshapes the response after
+ * dispatch instead.
+ *
+ * Rewrites ONLY the exact four codes above, from 404 to 200 (the same status the adapter
+ * already uses for every other application-level error, e.g. INVALID_PARAMS), leaving the
+ * JSON-RPC error body untouched so the client still sees which error occurred. -32005 is
+ * deliberately excluded and MUST keep its 404: that is the one code for which the
+ * session-terminated signal is correct, and rewriting it would make a client cling to a
+ * dead session. This is an explicit allowlist, not "every code except -32005" - a future
+ * JSON-RPC error code the adapter maps to 404 stays 404 here until this list is deliberately
+ * updated to include it.
+ *
+ * Scoped narrowly, the same way aafm_oauth_filter_rest_challenge() scopes its own
+ * rest_post_dispatch gate: the MCP route only (read from the request, never a global), a
+ * 404 status, and a single (non-batch) JSON-RPC error response - a batch request's response
+ * body is always a plain list of per-message results and never reaches this shape, but the
+ * check guards against relying on that indirectly. Any miss returns the response untouched.
+ *
+ * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
+ * @param \WP_REST_Server $server   The REST server (unused).
+ * @param mixed           $request  The originating request (WP_REST_Request on the REST path).
+ * @return mixed The response with its status rewritten to 200 when every condition matches,
+ *               the original response untouched otherwise.
+ */
+function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
+	unset( $server );
+
+	if ( ! $response instanceof WP_REST_Response ) {
+		return $response;
+	}
+
+	if ( 404 !== (int) $response->get_status() ) {
+		return $response;
+	}
+
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( aafm_mcp_rest_route() !== $route ) {
+		return $response;
+	}
+
+	$data = $response->get_data();
+	if ( ! is_array( $data ) ) {
+		return $response;
+	}
+
+	// A batch response is always a sequential list of per-message results (integer keys
+	// starting at 0), never a single {jsonrpc, error, id} object - never rewrite one.
+	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 8.0, so build the check
+	// by hand.
+	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
+		return $response;
+	}
+
+	if ( ! isset( $data['error']['code'] ) || ! is_numeric( $data['error']['code'] ) ) {
+		return $response;
+	}
+
+	$code = (int) $data['error']['code'];
+
+	// Allowlist only: method not found, resource not found, tool not found, prompt not
+	// found. -32005 (session not found) is deliberately absent from this list.
+	$reportable_in_band = array( -32601, -32002, -32003, -32004 );
+	if ( ! in_array( $code, $reportable_in_band, true ) ) {
+		return $response;
+	}
+
+	$response->set_status( 200 );
+
+	return $response;
+}

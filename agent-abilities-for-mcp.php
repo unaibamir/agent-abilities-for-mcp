@@ -210,6 +210,13 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/block-guard.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/register.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/server.php';
+
+	// Rewrite four specific "not found" 404s on the MCP route to 200, so an unknown or
+	// governance-disabled tool reads as an in-band error an agent can correct from, not as
+	// the MCP session-terminated signal. -32005 (session not found) is deliberately left
+	// out and keeps its 404.
+	add_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status', 10, 3 );
+
 	require_once AAFM_PLUGIN_DIR . 'includes/bridge.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/catalog.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/integrations.php';

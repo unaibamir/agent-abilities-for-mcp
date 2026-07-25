@@ -143,18 +143,47 @@ function aafm_oauth_rest_no_store( WP_REST_Response $response ): WP_REST_Respons
 }
 
 /**
- * Build an OAuth-style error.
+ * Build an RFC 6749 §5.2 error response.
  *
- * The error code becomes the OAuth `error` value and the HTTP status is carried
- * in the data array so WordPress renders the matching status code.
+ * WordPress serialises a WP_Error as {code, message, data}, which is not the OAuth error
+ * representation any conforming client can read, so protocol errors are built as an explicit
+ * WP_REST_Response instead. RFC 7591 §3.2.2 (registration) and RFC 7009 §2.2.1 (revocation)
+ * use the same two members, so this one helper serves all three endpoints.
  *
- * @param string $code    The OAuth error code (e.g. 'invalid_grant').
- * @param string $message A non-leaky human-readable description.
- * @param int    $status  The HTTP status code to return.
+ * @param string $code        The OAuth error code (e.g. 'invalid_grant').
+ * @param string $description A non-leaky human-readable description.
+ * @param int    $status      The HTTP status code to return.
+ * @return \WP_REST_Response
+ */
+function aafm_oauth_rest_protocol_error( string $code, string $description, int $status ): WP_REST_Response {
+	$response = new WP_REST_Response(
+		array(
+			'error'             => $code,
+			'error_description' => $description,
+		),
+		$status
+	);
+
+	return aafm_oauth_rest_no_store( $response );
+}
+
+/**
+ * Build the 404 served when an OAuth endpoint is switched off.
+ *
+ * Deliberately NOT the RFC 6749 §5.2 shape. This is not a protocol error: it is the plugin
+ * claiming the route does not exist, so it reproduces WordPress's own rest_no_route body
+ * verbatim and a disabled endpoint stays indistinguishable from one that was never
+ * registered. No OAuth RFC covers a disabled endpoint, so nothing here is being violated.
+ * Use aafm_oauth_rest_protocol_error() for every actual OAuth error.
+ *
  * @return \WP_Error
  */
-function aafm_oauth_rest_error( string $code, string $message, int $status ): WP_Error {
-	return new WP_Error( $code, $message, array( 'status' => $status ) );
+function aafm_oauth_rest_disabled_route(): WP_Error {
+	return new WP_Error(
+		'rest_no_route',
+		__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
+		array( 'status' => 404 )
+	);
 }
 
 /**
@@ -219,11 +248,11 @@ function aafm_oauth_rest_param( WP_REST_Request $request, string $key ): string 
 /**
  * Enforce the shared transport-security policy for an OAuth endpoint.
  *
- * @return \WP_Error|null A 400 error when HTTPS is required but the request is plain HTTP, otherwise null.
+ * @return \WP_REST_Response|null A 400 error when HTTPS is required but the request is plain HTTP, otherwise null.
  */
 function aafm_oauth_rest_require_https() {
 	if ( aafm_oauth_https_required() && ! is_ssl() ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'invalid_request',
 			__( 'This endpoint requires HTTPS.', 'agent-abilities-for-mcp' ),
 			400
@@ -245,11 +274,7 @@ function aafm_oauth_rest_require_https() {
  */
 function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() || ! aafm_oauth_dcr_enabled() ) {
-		return aafm_oauth_rest_error(
-			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
-			404
-		);
+		return aafm_oauth_rest_disabled_route();
 	}
 
 	$https = aafm_oauth_rest_require_https();
@@ -258,7 +283,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'register', 10, 100 ) ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'rate_limited',
 			__( 'Too many registration requests. Try again shortly.', 'agent-abilities-for-mcp' ),
 			429
@@ -272,7 +297,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	 */
 	$max_clients = (int) apply_filters( 'aafm_oauth_max_clients', AAFM_OAUTH_MAX_ACTIVE_CLIENTS );
 	if ( $max_clients > 0 && aafm_oauth_count_active_clients() >= $max_clients ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'temporarily_unavailable',
 			__( 'Client registration is temporarily unavailable. Please try again later.', 'agent-abilities-for-mcp' ),
 			503
@@ -286,7 +311,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 
 	// Refuse an abusive client_name outright rather than silently truncating it.
 	if ( strlen( $client_name ) > AAFM_OAUTH_MAX_CLIENT_NAME_LEN ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'invalid_client_metadata',
 			__( 'The client name is too long.', 'agent-abilities-for-mcp' ),
 			400
@@ -306,7 +331,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	);
 
 	if ( is_wp_error( $result ) ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'invalid_redirect_uri' === $result->get_error_code() ? 'invalid_redirect_uri' : 'invalid_client_metadata',
 			$result->get_error_message(),
 			400
@@ -357,11 +382,7 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
  */
 function aafm_oauth_rest_token( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() ) {
-		return aafm_oauth_rest_error(
-			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
-			404
-		);
+		return aafm_oauth_rest_disabled_route();
 	}
 
 	$https = aafm_oauth_rest_require_https();
@@ -370,7 +391,7 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'token', 30, 300 ) ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'rate_limited',
 			__( 'Too many token requests. Try again shortly.', 'agent-abilities-for-mcp' ),
 			429
@@ -387,7 +408,7 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 		return aafm_oauth_rest_token_refresh( $request );
 	}
 
-	return aafm_oauth_rest_error(
+	return aafm_oauth_rest_protocol_error(
 		'unsupported_grant_type',
 		__( 'The grant type is missing or not supported.', 'agent-abilities-for-mcp' ),
 		400
@@ -398,15 +419,15 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
  * Handle the authorization_code grant on the token endpoint.
  *
  * @param \WP_REST_Request $request The incoming request.
- * @return \WP_REST_Response|\WP_Error
+ * @return \WP_REST_Response
  */
-function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
+function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): WP_REST_Response {
 	$code          = aafm_oauth_rest_param( $request, 'code' );
 	$redirect_uri  = aafm_oauth_rest_param( $request, 'redirect_uri' );
 	$client_id     = aafm_oauth_rest_param( $request, 'client_id' );
 	$code_verifier = aafm_oauth_rest_param( $request, 'code_verifier' );
 
-	$invalid_grant = aafm_oauth_rest_error(
+	$invalid_grant = aafm_oauth_rest_protocol_error(
 		'invalid_grant',
 		__( 'The authorization grant is invalid.', 'agent-abilities-for-mcp' ),
 		400
@@ -461,7 +482,7 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
 
 	// A mint failure (the row never persisted) is a server_error, not a fake token response.
 	if ( is_wp_error( $tokens ) ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
 			500
@@ -490,9 +511,9 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ) {
  * Handle the refresh_token grant on the token endpoint.
  *
  * @param \WP_REST_Request $request The incoming request.
- * @return \WP_REST_Response|\WP_Error
+ * @return \WP_REST_Response
  */
-function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
+function aafm_oauth_rest_token_refresh( WP_REST_Request $request ): WP_REST_Response {
 	$refresh_token = aafm_oauth_rest_param( $request, 'refresh_token' );
 	$client_id     = aafm_oauth_rest_param( $request, 'client_id' );
 
@@ -501,7 +522,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 		|| aafm_oauth_field_too_long( $refresh_token )
 		|| aafm_oauth_field_too_long( $client_id )
 	) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),
 			400
@@ -517,7 +538,7 @@ function aafm_oauth_rest_token_refresh( WP_REST_Request $request ) {
 			aafm_oauth_log_event( 'refresh', 'denied', array( 'client_id' => $client_id ) );
 		}
 
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'invalid_grant',
 			__( 'The refresh token grant is invalid.', 'agent-abilities-for-mcp' ),
 			400
@@ -564,11 +585,7 @@ function aafm_oauth_rest_token_response( array $tokens ): WP_REST_Response {
  */
 function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	if ( ! aafm_oauth_enabled() ) {
-		return aafm_oauth_rest_error(
-			'rest_no_route',
-			__( 'No route was found matching the URL and request method.', 'agent-abilities-for-mcp' ),
-			404
-		);
+		return aafm_oauth_rest_disabled_route();
 	}
 
 	$https = aafm_oauth_rest_require_https();
@@ -577,7 +594,7 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'revoke', 30, 300 ) ) {
-		return aafm_oauth_rest_error(
+		return aafm_oauth_rest_protocol_error(
 			'rate_limited',
 			__( 'Too many revocation requests. Try again shortly.', 'agent-abilities-for-mcp' ),
 			429

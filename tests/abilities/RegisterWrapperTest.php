@@ -326,4 +326,90 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-reads' ) );
 		$this->assertInstanceOf( \WP_Ability_Category::class, wp_get_ability_category( 'aafm-writes' ) );
 	}
+
+	/**
+	 * A native aafm/* ability that declares no openWorldHint gets one defaulted to false:
+	 * nothing native reaches an external system, so that is a true statement.
+	 */
+	public function test_native_ability_defaults_open_world_hint_to_false(): void {
+		$this->register(
+			'aafm/no-hint-declared',
+			array(
+				'label'               => 'No hint declared',
+				'description'         => 'A native ability with no openWorldHint of its own.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array(
+					'annotations' => array(
+						'readonly'    => true,
+						'destructive' => false,
+						'idempotent'  => true,
+					),
+				),
+			)
+		);
+
+		$annotations = wp_get_ability( 'aafm/no-hint-declared' )->get_meta_item( 'annotations' );
+		$this->assertFalse( $annotations['openWorldHint'] );
+	}
+
+	/**
+	 * A native ability that already declares its own openWorldHint keeps that value: the
+	 * default only fills a gap, it never overwrites an explicit declaration.
+	 */
+	public function test_native_ability_with_explicit_open_world_hint_is_not_overwritten(): void {
+		$this->register(
+			'aafm/hint-declared',
+			array(
+				'label'               => 'Hint declared',
+				'description'         => 'A native ability that already declares openWorldHint.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array(
+					'annotations' => array(
+						'readonly'      => true,
+						'destructive'   => false,
+						'idempotent'    => true,
+						'openWorldHint' => true,
+					),
+				),
+			)
+		);
+
+		$annotations = wp_get_ability( 'aafm/hint-declared' )->get_meta_item( 'annotations' );
+		$this->assertTrue( $annotations['openWorldHint'] );
+	}
+
+	/**
+	 * A bridged aafm-bridge/* wrapper never gets openWorldHint injected, declared or not: a
+	 * third-party ability may genuinely reach outward and this plugin cannot vouch for it, so
+	 * the key must stay absent rather than defaulted either way.
+	 */
+	public function test_bridged_wrapper_never_gets_open_world_hint_injected(): void {
+		$this->register(
+			'aafm-bridge/some-foreign-tool',
+			array(
+				'label'               => 'Some foreign tool',
+				'description'         => 'A bridged wrapper around a third-party ability.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array(
+					'annotations' => array(
+						'readonly'    => true,
+						'destructive' => false,
+						'idempotent'  => true,
+					),
+				),
+			)
+		);
+
+		$annotations = wp_get_ability( 'aafm-bridge/some-foreign-tool' )->get_meta_item( 'annotations' );
+		$this->assertArrayNotHasKey( 'openWorldHint', $annotations );
+	}
 }

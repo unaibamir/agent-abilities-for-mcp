@@ -535,13 +535,17 @@ function aafm_register_mcp_server( $adapter ): void {
  * JSON-RPC error code the adapter maps to 404 stays 404 here until this list is deliberately
  * updated to include it.
  *
- * Scoped narrowly, the same way aafm_oauth_filter_rest_challenge() scopes its own
- * rest_post_dispatch gate: the MCP route only (read from the request, never a global), a
- * 404 status, and a single (non-batch) JSON-RPC error response. A batch response is always
- * a plain list of per-message results, so it has no top-level 'error' key and the code
- * check further down already excludes it on its own; the batch check states that intent
- * explicitly rather than providing protection the next check does not already give. Any
- * miss returns the response untouched.
+ * Scoped narrowly: the MCP route only, read from the request rather than a global, a 404
+ * status, and a single (non-batch) JSON-RPC error response. The route comparison is
+ * case-insensitive (`strcasecmp()`), matching how core itself matches REST routes
+ * (`class-wp-rest-server.php`'s route regex is built with the `i` modifier) and the same
+ * fix aafm_oauth_filter_malformed_json() already needed for the same reason - without it,
+ * a request to e.g. `/agent-abilities-for-mcp/MCP` would still reach the adapter and
+ * produce the same governed 404, but a case-sensitive comparison here would miss it. A
+ * batch response is always a plain list of per-message results, so it has no top-level
+ * 'error' key and the code check further down already excludes it on its own; the batch
+ * check states that intent explicitly rather than providing protection the next check
+ * does not already give. Any miss returns the response untouched.
  *
  * rest_post_dispatch fires on every REST request the whole site serves, not only ours, so
  * the guards are ordered cheapest-and-most-discriminating first: the route check runs
@@ -558,7 +562,7 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	unset( $server );
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( aafm_mcp_rest_route() !== $route ) {
+	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
 		return $response;
 	}
 

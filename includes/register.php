@@ -99,6 +99,14 @@ function aafm_result_magnitude( $result ): ?int {
  * Refuses to register without a callable permission_callback. Decorates the permission
  * callback to log denials and the execute callback to log before + after with real status.
  *
+ * Also defaults the MCP `openWorldHint` annotation to false for our own `aafm/*` abilities,
+ * unless the ability already declared a value. Nothing native makes an outbound network call
+ * (verified: the plugin's one remote HTTP request is an admin-side loopback in
+ * includes/admin/connection.php, not an ability), so false is a true statement about the whole
+ * native set. A bridged `aafm-bridge/*` wrapper fronts a third-party ability we cannot vouch
+ * for, so this never touches those; an absent key there still reads as "unknown, assume open"
+ * per the MCP schema default, which is the honest state for a foreign ability.
+ *
  * @param string              $name Ability name.
  * @param array<string,mixed> $args Ability args (per the Abilities API).
  * @return WP_Ability|null
@@ -117,6 +125,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			'1.0.0'
 		);
 		return null;
+	}
+
+	if ( str_starts_with( $name, 'aafm/' ) && ! isset( $args['meta']['annotations']['openWorldHint'] ) ) {
+		$args['meta']['annotations']['openWorldHint'] = false;
 	}
 
 	$original_permission = $args['permission_callback'];

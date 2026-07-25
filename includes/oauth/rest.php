@@ -176,10 +176,17 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
  * Build the 404 served when an OAuth endpoint is switched off.
  *
  * Deliberately NOT the RFC 6749 §5.2 shape. This is not a protocol error: it is the plugin
- * claiming the route does not exist, so it reproduces WordPress's own rest_no_route body
- * verbatim and a disabled endpoint stays indistinguishable from one that was never
- * registered. No OAuth RFC covers a disabled endpoint, so nothing here is being violated.
- * Use aafm_oauth_rest_protocol_error() for every actual OAuth error.
+ * claiming the route does not exist, so it reproduces WordPress's own rest_no_route body,
+ * message, and status code. No OAuth RFC covers a disabled endpoint, so nothing here is
+ * being violated. Use aafm_oauth_rest_protocol_error() for every actual OAuth error.
+ *
+ * Two things still tell this apart from a genuinely unregistered route, though neither
+ * undermines the purpose above. WordPress calls set_matched_route() on this WP_Error branch
+ * (the route WAS matched, it just answers with a 404), so rest_send_allow_header() fires and
+ * the response carries an Allow: POST header that a truly unregistered path never sends.
+ * The message string also lives in our agent-abilities-for-mcp text domain rather than
+ * core's default domain, so a localized site translates core's own rest_no_route text but
+ * not this copy of it.
  *
  * @return \WP_Error
  */

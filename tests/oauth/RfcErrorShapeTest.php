@@ -60,7 +60,18 @@ class RfcErrorShapeTest extends TestCase {
 	 * @return void
 	 */
 	private function assert_rfc6749_error_shape( WP_REST_Response $response, array $data, string $expected_code ): void {
+		$this->assertArrayHasKey(
+			'error',
+			$data,
+			'Response body keys were: ' . wp_json_encode( array_keys( $data ) ) . ' (has the RFC 6749 shape reverted to a WP_Error?)'
+		);
 		$this->assertSame( $expected_code, $data['error'] );
+
+		$this->assertArrayHasKey(
+			'error_description',
+			$data,
+			'Response body keys were: ' . wp_json_encode( array_keys( $data ) )
+		);
 		$this->assertIsString( $data['error_description'] );
 		$this->assertNotSame( '', $data['error_description'] );
 
@@ -71,7 +82,18 @@ class RfcErrorShapeTest extends TestCase {
 		$this->assertArrayNotHasKey( 'data', $data );
 
 		$headers = $response->get_headers();
+		$this->assertArrayHasKey(
+			'Cache-Control',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+
+		$this->assertArrayHasKey(
+			'Pragma',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-cache', $headers['Pragma'] );
 	}
 
@@ -160,6 +182,8 @@ class RfcErrorShapeTest extends TestCase {
 	 * dispatching 30 real requests through the REST server to get there.
 	 */
 	public function test_revoke_rate_limited_returns_rfc6749_error_shape(): void {
+		// 30 matches the per-IP cap aafm_oauth_rest_revoke() passes to aafm_oauth_rate_ok()
+		// at includes/oauth/rest.php:610. If that cap ever changes, this loop must move with it.
 		for ( $i = 0; $i < 30; $i++ ) {
 			aafm_oauth_rate_ok( 'revoke', 30, 300 );
 		}

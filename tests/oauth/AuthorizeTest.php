@@ -661,10 +661,15 @@ class AuthorizeTest extends TestCase {
 	 * (RFC 6749 section 5.1), so a shared cache or a browser's back/forward cache never
 	 * stores a page carrying OAuth flow state (client name, redirect host, PKCE-bound nonce).
 	 */
-	public function test_consent_security_headers_include_no_store(): void {
+	public function test_consent_security_headers_are_locked(): void {
 		$headers = aafm_oauth_consent_security_headers();
 
 		$this->assertSame( 'no-store', $headers['Cache-Control'] );
+		$this->assertArrayHasKey(
+			'Pragma',
+			$headers,
+			'Header keys were: ' . wp_json_encode( array_keys( $headers ) )
+		);
 		$this->assertSame( 'no-cache', $headers['Pragma'] );
 		// Locked in alongside Cache-Control so this helper stays the single source of truth
 		// for the fixed (non-CSP) consent-flow headers.

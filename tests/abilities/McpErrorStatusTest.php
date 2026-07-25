@@ -23,10 +23,11 @@ use WP_REST_Response;
  * leaves -32005 (and everything else) alone.
  *
  * Every test here calls the filter function directly rather than dispatching through
- * rest_do_request(): rest_post_dispatch is never applied on that code path (only
- * WP_REST_Server::serve_request(), the real HTTP entry point, applies it), the same fact
- * RfcErrorShapeTest.php and ChallengeTest.php already work around for their own
- * rest_post_dispatch filters.
+ * rest_do_request(): dispatch() (which rest_do_request() calls) never applies the
+ * rest_post_dispatch filter itself - that filter only fires along paths rest_do_request()
+ * does not take (WP_REST_Server::serve_request(), the real HTTP entry point, plus its
+ * embed_links() and serve_batch_request_v1() helpers), the same fact RfcErrorShapeTest.php
+ * and ChallengeTest.php already work around for their own rest_post_dispatch filters.
  */
 final class McpErrorStatusTest extends TestCase {
 

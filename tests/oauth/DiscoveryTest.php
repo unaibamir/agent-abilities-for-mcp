@@ -31,7 +31,8 @@ class DiscoveryTest extends TestCase {
 
 	/**
 	 * Authorization-server metadata advertises PKCE S256, the supported grant and
-	 * response types, public-client auth, and the three OAuth REST endpoints.
+	 * response types, public-client auth, and the token/revocation OAuth REST
+	 * endpoints, regardless of the DCR toggle.
 	 */
 	public function test_authorization_server_metadata_shape(): void {
 		$meta = aafm_oauth_authorization_server_metadata();
@@ -42,8 +43,22 @@ class DiscoveryTest extends TestCase {
 		$this->assertSame( array( 'none' ), $meta['token_endpoint_auth_methods_supported'] );
 
 		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/token', $meta['token_endpoint'] );
-		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', $meta['registration_endpoint'] );
 		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/revoke', $meta['revocation_endpoint'] );
+	}
+
+	/**
+	 * The registration_endpoint key appears only when DCR is enabled: the route
+	 * 404s when it is off, so advertising the key then would point clients at a
+	 * dead endpoint.
+	 */
+	public function test_registration_endpoint_present_only_when_dcr_enabled(): void {
+		update_option( 'aafm_oauth_dcr_enabled', '1' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		$this->assertStringContainsString( 'agent-abilities-for-mcp/oauth/register', $meta['registration_endpoint'] );
+
+		update_option( 'aafm_oauth_dcr_enabled', '0' );
+		$meta = aafm_oauth_authorization_server_metadata();
+		$this->assertArrayNotHasKey( 'registration_endpoint', $meta );
 	}
 
 	/**

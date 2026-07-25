@@ -153,12 +153,17 @@ function aafm_oauth_protected_resource_metadata(): array {
  *
  * Describes the endpoints and capabilities of this site as an OAuth 2.1
  * authorization server: authorization code with PKCE S256, refresh tokens, and
- * public clients (no client secret) registered via DCR.
+ * public clients (no client secret).
+ *
+ * `registration_endpoint` is included only when aafm_oauth_dcr_enabled() is true.
+ * The route disables to a 404 when DCR is off, so advertising the key
+ * unconditionally would point every client at a dead endpoint; RFC 8414 section 2
+ * lists every field as optional, so omitting it is spec-correct.
  *
  * @return array<string, mixed>
  */
 function aafm_oauth_authorization_server_metadata(): array {
-	return array(
+	$metadata = array(
 		'issuer'                                => home_url(),
 		'authorization_endpoint'                => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
 		'token_endpoint'                        => rest_url( 'agent-abilities-for-mcp/oauth/token' ),
@@ -169,6 +174,12 @@ function aafm_oauth_authorization_server_metadata(): array {
 		'code_challenge_methods_supported'      => array( 'S256' ),
 		'token_endpoint_auth_methods_supported' => array( 'none' ),
 	);
+
+	if ( ! aafm_oauth_dcr_enabled() ) {
+		unset( $metadata['registration_endpoint'] );
+	}
+
+	return $metadata;
 }
 
 /**

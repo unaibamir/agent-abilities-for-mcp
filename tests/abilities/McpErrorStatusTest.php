@@ -220,4 +220,47 @@ final class McpErrorStatusTest extends TestCase {
 		$this->assertNotFalse( $priority, 'aafm_mcp_filter_governed_error_status must be hooked on rest_post_dispatch.' );
 		$this->assertSame( 10, $priority );
 	}
+
+	/**
+	 * Every test above hand-builds a JSON-RPC error body and feeds it to the filter, which
+	 * proves the filter's own logic but assumes the adapter actually returns -32003 for an
+	 * unknown tool name. This test drives the real vendored code instead: it registers the
+	 * plugin's real MCP server (the same aafm_register_mcp_server() the live site calls,
+	 * simulating mcp_adapter_init the way ServerToolsTest.php already does) and calls the
+	 * adapter's own ToolsHandler::call_tool() - the exact method a live tools/call request
+	 * reaches - with a name that cannot be registered.
+	 *
+	 * This single real-path call also covers the governance case ("a tool that exists but
+	 * is not enabled by the operator"), because ToolsHandler::call_tool()
+	 * (vendor/wordpress/mcp-adapter/includes/Handlers/Tools/ToolsHandler.php:139-146) has
+	 * exactly one branch for a missing tool: `$mcp_tool = $this->mcp->get_mcp_tool( $tool_name );
+	 * if ( ! $mcp_tool ) { ... return McpErrorFactory::tool_not_found(...); }`. A
+	 * governance-disabled ability is never added to the server's $tools list in the first
+	 * place (aafm_build_server_tools() only includes aafm_get_enabled_abilities()), so to
+	 * this method it is indistinguishable from a name that was never registered at all -
+	 * there is no separate "disabled" branch to exercise. I did not build a second, isolated
+	 * MCP server fixture to prove that case independently: the adapter keeps one server per
+	 * ID for the life of the PHPUnit process with no reset method, so an earlier test's real
+	 * abilities may already occupy 'aafm-server' by the time this one runs, making a
+	 * from-scratch "this specific ability is absent" fixture unreliable to control here
+	 * without a lot of scaffolding the team lead asked me not to spend on this.
+	 */
+	public function test_unknown_tool_call_produces_tool_not_found_via_real_adapter(): void {
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$this->in_action(
+			'mcp_adapter_init',
+			static function () use ( $adapter ): void {
+				aafm_register_mcp_server( $adapter );
+			}
+		);
+
+		$server = $adapter->get_server( 'aafm-server' );
+		$this->assertNotNull( $server, 'The plugin must have a registered MCP server to call tools/call against.' );
+
+		$handler = new \WP\MCP\Handlers\Tools\ToolsHandler( $server );
+		$result  = $handler->call_tool( array( 'name' => 'definitely-not-a-real-tool-9f3c1a' ), 'req-premise-1' );
+
+		$this->assertInstanceOf( \WP\McpSchema\Common\JsonRpc\DTO\JSONRPCErrorResponse::class, $result );
+		$this->assertSame( -32003, $result->getError()->getCode() );
+	}
 }

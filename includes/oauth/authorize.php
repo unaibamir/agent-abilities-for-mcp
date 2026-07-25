@@ -321,10 +321,11 @@ function aafm_oauth_consent_csp( string $redirect_origin = '' ): string {
  * by aafm_oauth_consent_csp(), which needs its own $redirect_origin argument; this is
  * the rest of the set.
  *
- * Cache-Control: no-store keeps the page out of any shared cache and a browser's
- * back/forward cache - both the consent screen and its error variants carry OAuth flow
- * state (client name, redirect host, the PKCE-bound nonce field) that must never be
- * replayed from a stale cached copy.
+ * Cache-Control: no-store and Pragma: no-cache keep the page out of any shared cache
+ * and a browser's back/forward cache - both the consent screen and its error variants
+ * carry OAuth flow state (client name, redirect host, the PKCE-bound nonce field) that
+ * must never be replayed from a stale cached copy. RFC 6749 §5.1 requires both headers
+ * on any response carrying tokens, credentials, or other sensitive information.
  *
  * Kept as a pure array-returning function (rather than folded into the header()-calling
  * wrapper below) so the header set is directly assertable in tests without needing to
@@ -337,6 +338,7 @@ function aafm_oauth_consent_security_headers(): array {
 		'X-Frame-Options' => 'DENY',
 		'Referrer-Policy' => 'no-referrer',
 		'Cache-Control'   => 'no-store',
+		'Pragma'          => 'no-cache',
 	);
 }
 
@@ -456,8 +458,10 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 	$url = add_query_arg( array_map( 'rawurlencode', $args ), $valid['redirect_uri'] );
 	// The 302 carries a freshly-minted, single-use authorization code in its Location
 	// URL; a cached copy of this response would hand that code to whoever reads the
-	// cache, so it must never be stored (same guarantee as the consent render).
+	// cache, so it must never be stored (same guarantee as the consent render). RFC
+	// 6749 §5.1 requires both Cache-Control: no-store and Pragma: no-cache here.
 	header( 'Cache-Control: ' . aafm_oauth_consent_security_headers()['Cache-Control'] );
+	header( 'Pragma: ' . aafm_oauth_consent_security_headers()['Pragma'] );
 	// phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- redirect_uri is allowlist-validated against the client registration above.
 	wp_redirect( $url );
 	exit;

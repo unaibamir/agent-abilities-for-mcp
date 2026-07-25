@@ -140,7 +140,10 @@ function aafm_oauth_register_rest_routes(): void {
  *
  * §5.1 requires both `Cache-Control: no-store` and `Pragma: no-cache` on any response
  * carrying tokens, credentials, or other sensitive information. This one helper covers
- * the token response, the DCR 201, the revocation 200, and every protocol error.
+ * the token response, the DCR 201, the revocation 200, and every protocol error these
+ * handlers return. A request core rejects before the callback runs (malformed JSON in
+ * the body is the reachable case, via `has_valid_params()`) never reaches this helper
+ * and gets core's own `rest_invalid_json` shape with no cache headers instead.
  *
  * @param \WP_REST_Response $response The response to decorate.
  * @return \WP_REST_Response The same response, with both no-cache headers set.

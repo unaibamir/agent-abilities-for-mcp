@@ -156,11 +156,14 @@ function aafm_oauth_protected_resource_metadata(): array {
  * public clients (no client secret).
  *
  * `registration_endpoint` is included only when aafm_oauth_dcr_enabled() is true.
- * The route disables to a 404 when DCR is off, so advertising the key
- * unconditionally would point every client at a dead endpoint. RFC 8414 section 2
- * marks `registration_endpoint` specifically as OPTIONAL (unlike `issuer` and
+ * The route returns a 404 when DCR is off, so advertising the key unconditionally
+ * would point every client at a dead endpoint. RFC 8414 section 2 marks
+ * `registration_endpoint` specifically as OPTIONAL (unlike `issuer` and
  * `response_types_supported`, which are REQUIRED), so omitting only this key is
- * spec-correct.
+ * spec-correct. In production this builder is only reached via
+ * aafm_oauth_maybe_serve_well_known(), which already returns early unless OAuth
+ * itself is enabled, so checking the DCR toggle here is sufficient without
+ * repeating that outer gate.
  *
  * @return array<string, mixed>
  */

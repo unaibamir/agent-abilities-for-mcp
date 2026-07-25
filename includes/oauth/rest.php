@@ -177,6 +177,26 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
 }
 
 /**
+ * Build the 429 served when a rate limit is exceeded.
+ *
+ * Adds `Retry-After` (RFC 9110 §10.2.3) alongside the usual RFC 6749 §5.2 error body, so a
+ * client that hits a limit knows how long to wait rather than hammering the endpoint or giving
+ * up. No OAuth RFC prescribes `Retry-After` for a 429 (the only mention in the family is RFC
+ * 7009 §2.2.1, tied to a 503), but RFC 9110 defines the header generally and it costs nothing
+ * to include here. The value is `AAFM_OAUTH_RATE_WINDOW`, the one fixed window
+ * aafm_oauth_rate_ok() enforces on both its per-IP and global counters.
+ *
+ * @param string $description A non-leaky human-readable description.
+ * @return \WP_REST_Response
+ */
+function aafm_oauth_rest_rate_limited_error( string $description ): WP_REST_Response {
+	$response = aafm_oauth_rest_protocol_error( 'rate_limited', $description, 429 );
+	$response->header( 'Retry-After', (string) AAFM_OAUTH_RATE_WINDOW );
+
+	return $response;
+}
+
+/**
  * Build the 404 served when an OAuth endpoint is switched off.
  *
  * Deliberately NOT the RFC 6749 §5.2 shape. This is not a protocol error: it is the plugin
@@ -299,10 +319,8 @@ function aafm_oauth_rest_register( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'register', 10, 100 ) ) {
-		return aafm_oauth_rest_protocol_error(
-			'rate_limited',
-			__( 'Too many registration requests. Try again shortly.', 'agent-abilities-for-mcp' ),
-			429
+		return aafm_oauth_rest_rate_limited_error(
+			__( 'Too many registration requests. Try again shortly.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -407,10 +425,8 @@ function aafm_oauth_rest_token( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'token', 30, 300 ) ) {
-		return aafm_oauth_rest_protocol_error(
-			'rate_limited',
-			__( 'Too many token requests. Try again shortly.', 'agent-abilities-for-mcp' ),
-			429
+		return aafm_oauth_rest_rate_limited_error(
+			__( 'Too many token requests. Try again shortly.', 'agent-abilities-for-mcp' )
 		);
 	}
 
@@ -610,10 +626,8 @@ function aafm_oauth_rest_revoke( WP_REST_Request $request ) {
 	}
 
 	if ( ! aafm_oauth_rate_ok( 'revoke', 30, 300 ) ) {
-		return aafm_oauth_rest_protocol_error(
-			'rate_limited',
-			__( 'Too many revocation requests. Try again shortly.', 'agent-abilities-for-mcp' ),
-			429
+		return aafm_oauth_rest_rate_limited_error(
+			__( 'Too many revocation requests. Try again shortly.', 'agent-abilities-for-mcp' )
 		);
 	}
 

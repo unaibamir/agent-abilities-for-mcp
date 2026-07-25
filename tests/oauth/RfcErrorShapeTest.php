@@ -183,7 +183,7 @@ class RfcErrorShapeTest extends TestCase {
 	 */
 	public function test_revoke_rate_limited_returns_rfc6749_error_shape(): void {
 		// 30 matches the per-IP cap aafm_oauth_rest_revoke() passes to aafm_oauth_rate_ok()
-		// at includes/oauth/rest.php:610. If that cap ever changes, this loop must move with it.
+		// at includes/oauth/rest.php:628. If that cap ever changes, this loop must move with it.
 		for ( $i = 0; $i < 30; $i++ ) {
 			aafm_oauth_rate_ok( 'revoke', 30, 300 );
 		}
@@ -195,6 +195,16 @@ class RfcErrorShapeTest extends TestCase {
 
 		$this->assertSame( 429, $response->get_status() );
 		$this->assert_rfc6749_error_shape( $response, $response->get_data(), 'rate_limited' );
+
+		// RFC 9110 §10.2.3: a 429 should tell the client how long to wait.
+		$headers = $response->get_headers();
+		$this->assertArrayHasKey(
+			'Retry-After',
+			$headers,
+			'Response headers were: ' . wp_json_encode( array_keys( $headers ) )
+		);
+		$this->assertIsNumeric( $headers['Retry-After'] );
+		$this->assertGreaterThan( 0, (int) $headers['Retry-After'] );
 	}
 
 	/**

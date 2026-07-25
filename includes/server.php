@@ -541,6 +541,11 @@ function aafm_register_mcp_server( $adapter ): void {
  * body is always a plain list of per-message results and never reaches this shape, but the
  * check guards against relying on that indirectly. Any miss returns the response untouched.
  *
+ * rest_post_dispatch fires on every REST request the whole site serves, not only ours, so
+ * the guards are ordered cheapest-and-most-discriminating first: the route check runs
+ * before anything is even read off $response, since it alone already rules out every
+ * request except the one MCP route this filter cares about.
+ *
  * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
  * @param \WP_REST_Server $server   The REST server (unused).
  * @param mixed           $request  The originating request (WP_REST_Request on the REST path).
@@ -550,16 +555,16 @@ function aafm_register_mcp_server( $adapter ): void {
 function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	unset( $server );
 
+	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	if ( aafm_mcp_rest_route() !== $route ) {
+		return $response;
+	}
+
 	if ( ! $response instanceof WP_REST_Response ) {
 		return $response;
 	}
 
 	if ( 404 !== (int) $response->get_status() ) {
-		return $response;
-	}
-
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
-	if ( aafm_mcp_rest_route() !== $route ) {
 		return $response;
 	}
 

@@ -205,4 +205,19 @@ final class McpErrorStatusTest extends TestCase {
 		$this->assertSame( $response, $out );
 		$this->assertSame( 404, $out->get_status() );
 	}
+
+	/**
+	 * Every test above calls the filter function directly, which proves its logic but not
+	 * that it is actually wired up. This filter is the only thing standing between a
+	 * disabled-tool call and a client being told its session died, so a direct check that
+	 * it is genuinely hooked on rest_post_dispatch closes that gap: an accidental
+	 * deregistration would leave every test above passing while the real fix silently
+	 * stopped running.
+	 */
+	public function test_filter_is_registered_on_rest_post_dispatch(): void {
+		$priority = has_filter( 'rest_post_dispatch', 'aafm_mcp_filter_governed_error_status' );
+
+		$this->assertNotFalse( $priority, 'aafm_mcp_filter_governed_error_status must be hooked on rest_post_dispatch.' );
+		$this->assertSame( 10, $priority );
+	}
 }

@@ -585,6 +585,10 @@ function aafm_oauth_handle_authorize(): void {
 	if ( ! aafm_oauth_rate_ok( 'authorize', 30, 300 ) ) {
 		status_header( 429 );
 		header( 'Content-Type: text/plain; charset=utf-8' );
+		// RFC 9110 §10.2.3: tells the client how long to wait rather than leaving it to
+		// guess. AAFM_OAUTH_RATE_WINDOW is the one fixed window aafm_oauth_rate_ok()
+		// enforces on both its per-IP and global counters.
+		header( 'Retry-After: ' . AAFM_OAUTH_RATE_WINDOW );
 		echo 'Too many requests';
 		exit;
 	}

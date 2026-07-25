@@ -79,6 +79,20 @@ function aafm_oauth_field_too_long( string $value ): bool {
 }
 
 /**
+ * The OAuth REST namespace every OAuth route lives under.
+ *
+ * Single-sourced so aafm_oauth_register_rest_routes() and any code that needs to recognise
+ * "an OAuth route" (without hardcoding a namespace string, or a list of the three current
+ * route names, in more than one place) read the same value. Mirrors the pattern
+ * aafm_mcp_rest_route() already uses for the MCP route in includes/bootstrap.php.
+ *
+ * @return non-falsy-string
+ */
+function aafm_oauth_rest_namespace(): string {
+	return 'agent-abilities-for-mcp/oauth';
+}
+
+/**
  * Register the three public OAuth 2.0 REST routes.
  *
  * Hooked on `rest_api_init`. These endpoints are publicly reachable by design - the
@@ -99,7 +113,7 @@ function aafm_oauth_field_too_long( string $value ): bool {
  * @return void
  */
 function aafm_oauth_register_rest_routes(): void {
-	$namespace = 'agent-abilities-for-mcp/oauth';
+	$namespace = aafm_oauth_rest_namespace();
 
 	register_rest_route(
 		$namespace,
@@ -181,8 +195,8 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
 }
 
 /**
- * Convert core's malformed-JSON rejection into the RFC 6749 §5.2 shape, on the three
- * OAuth routes only.
+ * Convert core's malformed-JSON rejection into the RFC 6749 §5.2 shape, on the OAuth
+ * routes only.
  *
  * `WP_REST_Server::dispatch()` validates the request body via `has_valid_params()` before
  * any route callback runs. A JSON syntax error there never reaches
@@ -192,12 +206,25 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
  * cache headers. This matters most on `/register`, which RFC 7591 defines as JSON-only,
  * so a malformed body there has no other path back to our own response shape.
  *
- * Scoped narrowly on purpose: `rest_post_dispatch` fires on every REST request the site
- * serves, not only ours, so this returns the response completely untouched unless every
- * one of route, status, and error code match. Route is read from the `WP_REST_Request`
- * argument the filter receives, never a global, matching the same discipline
- * aafm_oauth_filter_rest_challenge() already uses for its own narrow rest_post_dispatch
- * gate.
+ * Gated on aafm_oauth_enabled() first, matching aafm_oauth_filter_rest_challenge()'s own
+ * first check: with OAuth off, `/token` and friends already answer with the disabled-route
+ * 404 on every other path, and this filter staying silent keeps that "OAuth off means
+ * nothing OAuth-shaped comes back" property intact rather than producing an RFC 6749 body
+ * for a switched-off endpoint.
+ *
+ * Scoped narrowly beyond that: `rest_post_dispatch` fires on every REST request the site
+ * serves, not only ours, so this returns the response completely untouched unless status,
+ * error code, and route all match. The route check matches any route under the
+ * aafm_oauth_rest_namespace() namespace (case-insensitively, since core itself matches
+ * REST routes case-insensitively - see `class-wp-rest-server.php`'s route regex, built with
+ * the `i` modifier), rather than a hand-maintained list of the three current route names:
+ * every endpoint that can live in this namespace and accept a JSON body is an OAuth
+ * protocol endpoint (RFC 7591 §3.2.2 and RFC 7009 §2.2.1 both reuse the same §5.2 error
+ * object RFC 6749 §5.2 defines), so a route added here later is covered automatically
+ * instead of silently falling outside a stale list. Route is read from the
+ * `WP_REST_Request` argument the filter receives, never a global, matching the same
+ * discipline aafm_oauth_filter_rest_challenge() already uses for its own narrow
+ * rest_post_dispatch gate.
  *
  * @param mixed           $response The dispatch result (WP_REST_Response on the REST path).
  * @param \WP_REST_Server $server   The REST server (unused).
@@ -207,6 +234,10 @@ function aafm_oauth_rest_protocol_error( string $code, string $description, int 
  */
 function aafm_oauth_filter_malformed_json( $response, $server, $request ) {
 	unset( $server );
+
+	if ( ! aafm_oauth_enabled() ) {
+		return $response;
+	}
 
 	if ( ! $response instanceof WP_REST_Response ) {
 		return $response;
@@ -221,18 +252,10 @@ function aafm_oauth_filter_malformed_json( $response, $server, $request ) {
 		return $response;
 	}
 
-	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	$route        = $request instanceof WP_REST_Request ? $request->get_route() : '';
+	$route_prefix = '/' . aafm_oauth_rest_namespace() . '/';
 
-	// The three routes aafm_oauth_register_rest_routes() registers under the
-	// 'agent-abilities-for-mcp/oauth' namespace. Kept in sync by hand: there is no
-	// shared constant today, and adding one is out of scope for this fix.
-	$oauth_routes = array(
-		'/agent-abilities-for-mcp/oauth/register',
-		'/agent-abilities-for-mcp/oauth/token',
-		'/agent-abilities-for-mcp/oauth/revoke',
-	);
-
-	if ( ! in_array( $route, $oauth_routes, true ) ) {
+	if ( 0 !== stripos( $route, $route_prefix ) ) {
 		return $response;
 	}
 

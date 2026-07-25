@@ -232,13 +232,14 @@ class RfcErrorShapeTest extends TestCase {
 	 * never intercept.
 	 *
 	 * Dispatch() (which rest_do_request() calls) never applies the rest_post_dispatch
-	 * filter itself - that only happens in WP_REST_Server::serve_request(), the real
-	 * HTTP entry point, confirmed by the fact that this genuinely reproduces core's
-	 * unfiltered rest_invalid_json shape here even with aafm_oauth_filter_malformed_json()
-	 * registered. So every test below feeds this real, unfiltered response through the
-	 * filter directly, the same convention ChallengeTest.php already uses for
-	 * aafm_oauth_filter_rest_challenge(), rather than expecting rest_do_request() to have
-	 * applied it.
+	 * filter itself - that filter only fires along paths rest_do_request() does not take
+	 * (WP_REST_Server::serve_request(), the real HTTP entry point, plus its embed_links()
+	 * and serve_batch_request_v1() helpers), confirmed by the fact that this genuinely
+	 * reproduces core's unfiltered rest_invalid_json shape here even with
+	 * aafm_oauth_filter_malformed_json() registered. So every test below feeds this real,
+	 * unfiltered response through the filter directly, the same convention
+	 * ChallengeTest.php already uses for aafm_oauth_filter_rest_challenge(), rather than
+	 * expecting rest_do_request() to have applied it.
 	 *
 	 * @param string $route The REST route to dispatch to.
 	 * @return array{0: WP_REST_Request, 1: WP_REST_Response} The request and core's raw response.
@@ -278,6 +279,19 @@ class RfcErrorShapeTest extends TestCase {
 	}
 
 	/**
+	 * Malformed JSON to /revoke gets the same treatment. The filter covers three routes;
+	 * without this test only two were ever exercised, so a typo in the third route string
+	 * could have shipped undetected.
+	 */
+	public function test_malformed_json_to_revoke_returns_rfc6749_error_shape(): void {
+		list( $request, $raw ) = $this->dispatch_malformed_json( '/agent-abilities-for-mcp/oauth/revoke' );
+		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
+
+		$this->assertSame( 400, $filtered->get_status() );
+		$this->assert_rfc6749_error_shape( $filtered, $filtered->get_data(), 'invalid_request' );
+	}
+
+	/**
 	 * The critical negative case: the same malformed body sent to an unrelated core
 	 * route must come back completely untouched, still carrying core's own
 	 * rest_invalid_json WP_Error shape with no RFC 6749 fields and no cache headers.
@@ -289,6 +303,7 @@ class RfcErrorShapeTest extends TestCase {
 		list( $request, $raw ) = $this->dispatch_malformed_json( '/wp/v2/posts' );
 		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
 
+		$this->assertSame( $raw, $filtered );
 		$this->assertSame( 400, $filtered->get_status() );
 
 		$data = $filtered->get_data();
@@ -323,5 +338,33 @@ class RfcErrorShapeTest extends TestCase {
 
 		$filtered = aafm_oauth_filter_malformed_json( $response, rest_get_server(), $request );
 		$this->assertSame( $response, $filtered );
+	}
+
+	/**
+	 * With OAuth switched off, malformed JSON to /token must come back exactly as core
+	 * produced it: the disabled-route 404 already tells a caller nothing OAuth-shaped
+	 * exists there on every other path, and this filter must not be the one exception
+	 * that produces an RFC 6749 body for a switched-off endpoint.
+	 */
+	public function test_malformed_json_is_untouched_when_oauth_disabled(): void {
+		update_option( 'aafm_oauth_enabled', '0' );
+
+		list( $request, $raw ) = $this->dispatch_malformed_json( '/agent-abilities-for-mcp/oauth/token' );
+		$filtered              = aafm_oauth_filter_malformed_json( $raw, rest_get_server(), $request );
+
+		$this->assertSame( $raw, $filtered );
+		$this->assertSame( 'rest_invalid_json', $filtered->get_data()['code'] );
+	}
+
+	/**
+	 * The filter is registered on rest_post_dispatch. Every test above calls it directly,
+	 * which proves the logic but not that the add_filter() call in
+	 * agent-abilities-for-mcp.php is still present - an accidental deregistration would
+	 * leave all of them green while the real fix silently stopped running.
+	 */
+	public function test_filter_is_registered_on_rest_post_dispatch(): void {
+		$this->assertNotFalse(
+			has_filter( 'rest_post_dispatch', 'aafm_oauth_filter_malformed_json' )
+		);
 	}
 }

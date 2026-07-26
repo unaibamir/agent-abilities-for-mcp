@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.4.0 |
+| **Stable tag** | 1.4.1 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -181,6 +181,16 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.4.1
+
+* **Fix:** OAuth errors came back in WordPress's own `{code, message, data}` shape instead of the `{error, error_description}` shape RFC 6749 requires, so no standard OAuth client could read what went wrong. Reported by an external user as issue #68, and wrong since the first release.
+* **Fix:** A malformed JSON body sent to an OAuth route was rejected by WordPress before the plugin ever saw it, so it escaped with the same wrong shape and no cache headers at all.
+* **Fix:** Responses that carry a credential were missing `Pragma: no-cache` next to `Cache-Control: no-store`, including the response that hands out the token.
+* **Fix:** Calling a tool that does not exist, or one you have switched off, returned HTTP 404. The MCP spec reserves that status for "this session is dead, start over", so clients were being told to reconnect after an ordinary mistake. A session that really has expired still returns 404.
+* **Fix:** The OAuth discovery document advertised a client-registration endpoint even when dynamic client registration was off, which is the default. A fresh install was pointing connectors at a URL that does not answer.
+* **Fix:** No tool declared `openWorldHint`, and the MCP schema reads an absent value as "this tool may reach the open internet". Every ability this plugin provides now declares it false, which is what the plugin has always actually done.
+* **Chore:** Rate-limited OAuth responses now send `Retry-After`.
 
 ### 1.4.0
 

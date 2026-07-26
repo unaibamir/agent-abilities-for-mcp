@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, seo
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.4.0
+Stable tag: 1.4.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -238,6 +238,16 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.4.1 =
+
+* **Fix:** OAuth errors came back in WordPress's own `{code, message, data}` shape instead of the `{error, error_description}` shape RFC 6749 requires, so no standard OAuth client could read what went wrong. Reported by an external user as issue #68, and wrong since the first release.
+* **Fix:** A malformed JSON body sent to an OAuth route was rejected by WordPress before the plugin ever saw it, so it escaped with the same wrong shape and no cache headers at all.
+* **Fix:** Responses that carry a credential were missing `Pragma: no-cache` next to `Cache-Control: no-store`, including the response that hands out the token.
+* **Fix:** Calling a tool that does not exist, or one you have switched off, returned HTTP 404. The MCP spec reserves that status for "this session is dead, start over", so clients were being told to reconnect after an ordinary mistake. A session that really has expired still returns 404.
+* **Fix:** The OAuth discovery document advertised a client-registration endpoint even when dynamic client registration was off, which is the default. A fresh install was pointing connectors at a URL that does not answer.
+* **Fix:** No tool declared `openWorldHint`, and the MCP schema reads an absent value as "this tool may reach the open internet". Every ability this plugin provides now declares it false, which is what the plugin has always actually done.
+* **Chore:** Rate-limited OAuth responses now send `Retry-After`.
+
 = 1.4.0 =
 
 * **Feature:** A first-run Quick Connect wizard gets a new admin connected on one screen. Turn on OAuth and copy the endpoint, or create a dedicated agent user and generate an application password, then switch on content reads and, if you want, content writes.
@@ -343,6 +353,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.4.1 =
+
+Standards fixes for OAuth and strict MCP clients. OAuth errors now use the RFC 6749 shape instead of WordPress's, an unknown or disabled tool no longer tells your client its session died, and discovery stops advertising an endpoint that is off. No settings or abilities changed.
 
 = 1.2.1 =
 

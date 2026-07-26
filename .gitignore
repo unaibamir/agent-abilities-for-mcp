@@ -45,6 +45,10 @@ Thumbs.db
 # QA evidence screenshots - scratch, never part of the plugin
 /public/
 
+# Local working files: harness scripts, probe output, throwaway drafts. Never shipped, and
+# Plugin Check reports loose scripts here as application_detected when a scan picks them up.
+/scratchpad/
+
 # Python bytecode cache
 __pycache__/
 *.pyc

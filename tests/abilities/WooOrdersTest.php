@@ -739,6 +739,170 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	// =========================================================================
+	// aafm/wc-update-order -- add_line_items / line_items (additive, MCP defect fix)
+	//
+	// wc-update-order used to call the SAME line_items handler as create, which always ADDS via
+	// add_product() -- an agent asked to "change this order to 2 units" instead got 2 MORE units.
+	// The fix does not change that additive behaviour (removing it would be a breaking change for
+	// existing callers already sending line_items); it adds an honestly-named add_line_items field
+	// and keeps line_items as a deprecated additive alias. Order 5001 (seeded in set_up() via
+	// seed_wc_orders()) carries exactly one line item -- product 101, quantity 2 -- so every test
+	// below can assert the original item survives untouched alongside whatever is added.
+	// =========================================================================
+
+	/**
+	 * Add_line_items is the honestly-named field: sending it must ADD a new line item to the
+	 * existing order, on top of whatever is already there -- never replace it.
+	 */
+	public function test_update_order_add_line_items_adds_a_new_item(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $before );
+		$this->assertCount( 1, $before['line_items'], 'Order 5001 seeds exactly one line item.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount( 2, $res['line_items'], 'add_line_items must ADD a second line item, not replace the first.' );
+		$this->assertSame( 101, $res['line_items'][0]['product_id'] );
+		$this->assertSame( 2, $res['line_items'][0]['quantity'], 'The original qty-2 item must survive untouched.' );
+		$this->assertSame( 101, $res['line_items'][1]['product_id'] );
+		$this->assertSame( 1, $res['line_items'][1]['quantity'], 'The newly added item carries the requested quantity.' );
+	}
+
+	/**
+	 * Line_items is kept as a deprecated alias with IDENTICAL additive behaviour to
+	 * add_line_items -- an existing caller that already sends line_items on update must keep
+	 * getting the same (additive) result after this fix, never a silent switch to replace.
+	 */
+	public function test_update_order_line_items_deprecated_alias_still_adds(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'   => 5001,
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 3,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount( 2, $res['line_items'], 'The deprecated line_items alias must still ADD, not replace.' );
+		$this->assertSame( 2, $res['line_items'][0]['quantity'], 'The original item survives untouched.' );
+		$this->assertSame( 3, $res['line_items'][1]['quantity'], 'The item sent via the deprecated alias is added.' );
+	}
+
+	/**
+	 * Documented both-sent rule: line_items and add_line_items sent together on the same call are
+	 * COMBINED into one list -- every item in both is added, none is dropped in favour of the
+	 * other. (See the add_line_items/line_items descriptions in aafm_args_wc_update_order().)
+	 */
+	public function test_update_order_add_line_items_and_line_items_combine_when_both_sent(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'line_items'     => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 5,
+					),
+				),
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 7,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount(
+			3,
+			$res['line_items'],
+			'Sending both fields combines them: the original item plus one from each field.'
+		);
+		$quantities = wp_list_pluck( $res['line_items'], 'quantity' );
+		$this->assertSame(
+			array( 2, 5, 7 ),
+			$quantities,
+			'The original item, then the line_items item, then the add_line_items item, in that order.'
+		);
+	}
+
+	/**
+	 * Wc-create-order keeps accepting line_items, unchanged: on create there is no existing item
+	 * to add to, so line_items is not deprecated there and carries none of the update-only
+	 * alias/combine wording -- it is simply how a new order's items are provided.
+	 */
+	public function test_create_order_accepts_line_items(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 4,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount( 1, $res['line_items'] );
+		$this->assertSame( 101, $res['line_items'][0]['product_id'] );
+		$this->assertSame( 4, $res['line_items'][0]['quantity'] );
+	}
+
+	/**
+	 * Wc-create-order has no add_line_items field -- there is no existing order to add to on
+	 * create, so the closed schema must reject it rather than silently accepting and ignoring it.
+	 */
+	public function test_create_order_rejects_add_line_items(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$res,
+			'add_line_items has no place on create -- the closed schema must reject it.'
+		);
+	}
+
+	// =========================================================================
 	// aafm/wc-update-order-status
 	// =========================================================================
 

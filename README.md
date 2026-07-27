@@ -9,7 +9,7 @@ Connect AI agents to your WordPress site as a scoped, least-privilege user over 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 8.0 |
-| **Stable tag** | 1.4.1 |
+| **Stable tag** | 1.4.2 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -181,6 +181,17 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+
+### 1.4.2
+
+* **Fix:** Asking for a post status when creating content did nothing. "Create a post as a draft" published it live instead, and reported success. Create post, page and draft now honour the status you ask for, and refuse it when your user lacks the capability to publish.
+* **Fix:** Scheduling was not treated as publishing, so a contributor who asked for a future status could put a post live without the capability to publish one. Scheduled and private now require the same permission as publishing.
+* **Fix:** Editing a post's status was checked against the wrong permission, which both let some users set a status they should not have and stopped a contributor changing their own draft. It now checks the capability that actually governs publishing, using the post type's own capability names.
+* **Fix:** Custom post types ignored every status except publish, so a request for pending or private silently became a draft.
+* **Fix:** Updating a WooCommerce order with `line_items` added new items rather than changing the existing ones, which quietly raised the order total. There is now an `add_line_items` field that says what it does. The old field keeps working exactly as before so nothing breaks.
+* **Fix:** The product type sent when updating a WooCommerce product was discarded without a word. Sending one that does not match the product now returns an error instead of pretending it worked.
+* **Feature:** Every input on every tool now explains itself. All 505 of them, where only three abilities were fully documented before. Agents were guessing at things like which fields replace rather than merge, that prices are plain decimal strings, that country and state want two-letter codes, and that a meta key outside your allowlist is refused rather than returned empty.
+* **Chore:** Added a build check that fails when any tool input goes undocumented, so this cannot drift back.
 
 ### 1.4.1
 

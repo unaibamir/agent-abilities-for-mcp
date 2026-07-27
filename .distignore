@@ -32,6 +32,7 @@
 /.gitignore
 /.editorconfig
 /README.md
+/glama.json
 /composer.lock
 /phpcs.xml.dist
 /phpstan.neon.dist

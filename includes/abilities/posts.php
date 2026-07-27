@@ -928,8 +928,8 @@ function aafm_perm_create_cpt_item( array $input ): bool {
 	if ( ! current_user_can( (string) $caps['object']->cap->edit_posts ) ) {
 		return false;
 	}
-	// Public status requested → require the type's publish cap too. Keys on core's public-status
-	// registry, not the literal 'publish', so a custom public status is gated the same way.
+	// A publish-equivalent status requested (publish, future, private, or a custom public
+	// status - see aafm_status_requires_publish_cap()) → require the type's publish cap too.
 	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
 		return current_user_can( (string) $caps['object']->cap->publish_posts );
 	}
@@ -941,9 +941,15 @@ function aafm_perm_create_cpt_item( array $input ): bool {
  *
  * Re-validates post_type against the allowlist+floor at execute time (defense in depth: the
  * type could have been de-allowlisted between the permission check and execute), then resolves
- * the forced status from the publish request + the type's publish cap and delegates to the
- * shared aafm_insert_post(), so the CPT item inherits force-draft, author-forcing, content
- * sanitization, the status floor, and the C2 enrichment exactly as post/page creates do.
+ * the requested status through the shared aafm_resolve_create_status() chokepoint - gated on
+ * THIS type's own publish cap (e.g. publish_products), never a hardcoded 'publish' string
+ * compare - and delegates to aafm_insert_post(), so the CPT item inherits force-draft,
+ * author-forcing, content sanitization, the status floor, and the C2 enrichment exactly as
+ * post/page creates do.
+ *
+ * Previously this compared the raw input directly against the literal string 'publish' and
+ * fell back to 'draft' for anything else, with no error - so a request for pending, private,
+ * or future was silently downgraded to draft instead of being honoured or refused.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
@@ -955,15 +961,14 @@ function aafm_exec_create_cpt_item( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// Default to draft; only escalate to publish when the request asked for it AND the agent
-	// holds the type's publish cap. Force-draft inside aafm_insert_post may still coerce back.
-	$status = 'draft';
-	if ( isset( $input['status'] ) && 'publish' === sanitize_key( (string) $input['status'] ) ) {
-		$caps = aafm_type_caps( $validated );
-		if ( $caps['object'] instanceof WP_Post_Type
-			&& current_user_can( (string) $caps['object']->cap->publish_posts ) ) {
-			$status = 'publish';
-		}
+	$caps = aafm_type_caps( $validated );
+	if ( ! $caps['object'] instanceof WP_Post_Type ) {
+		return aafm_generic_error();
+	}
+
+	$status = aafm_resolve_create_status( $input, 'draft', (string) $caps['object']->cap->publish_posts );
+	if ( is_wp_error( $status ) ) {
+		return $status;
 	}
 
 	return aafm_insert_post( $input, $status, $validated );
@@ -1077,22 +1082,27 @@ function aafm_exec_update_post( array $input ) {
 		}
 	}
 	if ( isset( $input['status'] ) ) {
-		// Gate non-public target statuses on the POST TYPE's own edit_others cap, not the
-		// hardcoded 'edit_others_posts'. A custom type maps this to its own cap (e.g.
-		// edit_others_products), so a CPT update is judged by that type's capability model,
-		// never the generic post primitive (B5).
+		// Gate a publish-equivalent target status (publish/future/private/a custom public
+		// status) on the POST TYPE's OWN publish cap, not a hardcoded 'publish_posts' literal -
+		// a custom type is judged by its own capability model (e.g. publish_products), mirroring
+		// aafm_perm_update_post()'s permission_callback gate and core's own
+		// WP_REST_Posts_Controller::handle_status_param(), which requires publish_posts for
+		// publish/future/private alike (WordPress has no separate "set post private" cap).
+		// Previously this used the type's edit_others cap, which is the wrong question (can this
+		// caller edit someone else's post) and wrongly refused an Author - holds publish_posts
+		// but not edit_others_posts - trying to schedule or privatize their OWN post.
 		$type_object = get_post_type_object( $post->post_type );
-		$others_cap  = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->edit_others_posts : 'edit_others_posts';
-		$status      = aafm_validate_post_status( (string) $input['status'], current_user_can( $others_cap ) );
+		$publish_cap = $type_object instanceof WP_Post_Type ? (string) $type_object->cap->publish_posts : 'publish_posts';
+		$status      = aafm_authorize_post_status( (string) $input['status'], $publish_cap );
 		if ( is_wp_error( $status ) ) {
 			return $status;
 		}
-		// Mirror the create-path force-draft guard: when the operator has force-draft on,
-		// an explicit request for a public status is coerced to 'draft'. This only fires on
-		// an explicit public-status request - an edit-only update with no 'status' field never
-		// reaches here, so force-draft can never retro-unpublish an already-published post.
-		$public_statuses = array_values( get_post_stati( array( 'public' => true ) ) );
-		if ( aafm_force_draft() && in_array( $status, $public_statuses, true ) ) {
+		// Mirror the create-path force-draft guard: when the operator has force-draft on, an
+		// explicit request for a status that would make the post publicly visible now or later
+		// is coerced to 'draft'. This only fires on such an explicit request - an edit-only
+		// update with no 'status' field never reaches here, so force-draft can never
+		// retro-unpublish an already-published post.
+		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
 			$status = 'draft';
 		}
 		$postarr['post_status'] = $status;

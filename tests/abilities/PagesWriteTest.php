@@ -58,6 +58,54 @@ final class PagesWriteTest extends TestCase {
 		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
 	}
 
+	public function test_create_page_honors_requested_draft_pending_private_status(): void {
+		// An editor holds publish_pages, so create-page's cap gate is already satisfied;
+		// this proves a non-default requested status is still honoured, not overwritten.
+		$this->acting_as( 'editor' );
+
+		$draft = wp_get_ability( 'aafm/create-page' )->execute(
+			array(
+				'title'   => 'Draft page',
+				'content' => 'Body',
+				'status'  => 'draft',
+			)
+		);
+		$this->assertSame( 'draft', get_post_status( $draft['post']['id'] ) );
+
+		$pending = wp_get_ability( 'aafm/create-page' )->execute(
+			array(
+				'title'   => 'Pending page',
+				'content' => 'Body',
+				'status'  => 'pending',
+			)
+		);
+		$this->assertSame( 'pending', get_post_status( $pending['post']['id'] ) );
+
+		$private = wp_get_ability( 'aafm/create-page' )->execute(
+			array(
+				'title'   => 'Private page',
+				'content' => 'Body',
+				'status'  => 'private',
+			)
+		);
+		$this->assertSame( 'private', get_post_status( $private['post']['id'] ) );
+	}
+
+	public function test_create_page_rejects_disallowed_statuses(): void {
+		$this->acting_as( 'editor' );
+
+		foreach ( array( 'any', 'trash', 'auto-draft', 'inherit', 'bogus_status' ) as $bad_status ) {
+			$out = wp_get_ability( 'aafm/create-page' )->execute(
+				array(
+					'title'   => 'Bad status page ' . $bad_status,
+					'content' => 'Body',
+					'status'  => $bad_status,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $out, "create-page must reject status={$bad_status}" );
+		}
+	}
+
 	public function test_create_page_publish_is_split_from_edit(): void {
 		// A contributor can edit_posts/pages but not publish - create-page is gated
 		// by publish_pages, so the contributor is denied.

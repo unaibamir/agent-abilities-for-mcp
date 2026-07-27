@@ -597,7 +597,7 @@ function aafm_args_create_draft(): array {
 			'properties' => array( 'post' => array( 'type' => 'object' ) ),
 		),
 		'execute_callback'    => 'aafm_exec_create_draft',
-		'permission_callback' => 'aafm_perm_edit_posts',
+		'permission_callback' => 'aafm_perm_create_draft',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -626,21 +626,92 @@ function aafm_perm_publish_posts(): bool {
 }
 
 /**
- * Insert a post with a forced status and type, returning the redacted post.
+ * Permission for aafm/create-draft: edit_posts to create at all, plus publish_posts when the
+ * request asks for a publicly-viewable status.
+ *
+ * Create-draft's floor is edit_posts alone, so any Contributor can call it. Without this
+ * input-aware check, a Contributor could pass status:"publish" straight through to a live
+ * post - the escalation this gate exists to refuse. Keys on aafm_status_requires_publish_cap()
+ * (core's public-status registry), not the literal 'publish', so a custom public status is
+ * gated the same way.
+ *
+ * @param array<string,mixed> $input Input.
+ * @return bool
+ */
+function aafm_perm_create_draft( array $input ): bool {
+	if ( ! aafm_perm_edit_posts() ) {
+		return false;
+	}
+	if ( isset( $input['status'] ) && aafm_status_requires_publish_cap( (string) $input['status'] ) ) {
+		return aafm_perm_publish_posts();
+	}
+	return true;
+}
+
+/**
+ * Resolve the effective post status for a create ability from `$input['status']`, falling
+ * back to $fallback_status when the caller omitted it.
+ *
+ * A request for a status core marks public (aafm_status_requires_publish_cap()) is refused
+ * with a WP_Error unless the caller holds $publish_cap - this is the same escalation gate as
+ * aafm_perm_create_draft, re-checked here so the guard lives at the one shared write
+ * chokepoint rather than trusting the permission_callback alone. A non-public status
+ * (draft/pending/future/private) is always accepted: every caller that reaches this function
+ * already cleared at least edit_posts in its permission_callback, and 'any'/'trash'/
+ * 'auto-draft'/'inherit'/unknown values are still rejected by aafm_validate_post_status().
+ *
+ * @param array<string,mixed> $input          Validated ability input.
+ * @param string              $fallback_status Status to use when `status` is omitted.
+ * @param string              $publish_cap    Capability required to request a public status.
+ * @return string|WP_Error
+ */
+function aafm_resolve_create_status( array $input, string $fallback_status, string $publish_cap ) {
+	if ( ! isset( $input['status'] ) ) {
+		return $fallback_status;
+	}
+	$requested = (string) $input['status'];
+	if ( aafm_status_requires_publish_cap( $requested ) && ! current_user_can( $publish_cap ) ) {
+		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
+	}
+	return aafm_validate_post_status( $requested, true );
+}
+
+/**
+ * Insert a post with a forced/default status and type, returning the redacted post.
  *
  * Anti-escalation: post_author is never threaded from input - wp_insert_post
  * defaults it to the current (agent) user, so a caller cannot spoof authorship.
- * post_type and post_status are forced by the caller of this function, never by
- * the agent's input. Title is sanitized with sanitize_text_field and content with
- * wp_kses_post so even an unfiltered_html-capable agent cannot store script.
+ * post_type is forced by the caller of this function, never by the agent's input. Title is
+ * sanitized with sanitize_text_field and content with wp_kses_post so even an
+ * unfiltered_html-capable agent cannot store script.
  *
- * @param array<string,mixed> $input  Validated input.
- * @param string              $status Forced status (draft|publish).
- * @param string              $type   Forced post type.
+ * When $publish_cap is given, the effective status is resolved from $input['status'] (falling
+ * back to $default_status when omitted) via aafm_resolve_create_status() - this is the shared
+ * chokepoint create-draft/create-post/create-page route through so all three honour a
+ * requested status under the same cap gate. When $publish_cap is null (the CPT-item create
+ * path, which resolves its own status before calling in), $default_status is used exactly as
+ * given, unchanged from prior behaviour.
+ *
+ * @param array<string,mixed> $input          Validated input.
+ * @param string              $default_status Forced status, or the default when $publish_cap
+ *                                             is set and the caller omitted `status`.
+ * @param string              $type           Forced post type.
+ * @param string|null         $publish_cap    Capability required to request a public status,
+ *                                             or null to skip status resolution entirely.
  * @return array<string,mixed>|WP_Error
  */
-function aafm_insert_post( array $input, string $status, string $type ) {
-	// Force-draft override applies to every create that routes here (post + page).
+function aafm_insert_post( array $input, string $default_status, string $type, ?string $publish_cap = null ) {
+	if ( null !== $publish_cap ) {
+		$status = aafm_resolve_create_status( $input, $default_status, $publish_cap );
+		if ( is_wp_error( $status ) ) {
+			return $status;
+		}
+	} else {
+		$status = $default_status;
+	}
+
+	// Force-draft override applies to every create that routes here (post + page), even
+	// when the request explicitly asked for a public status.
 	if ( aafm_force_draft() ) {
 		$status = 'draft';
 	}
@@ -700,13 +771,14 @@ function aafm_insert_post( array $input, string $status, string $type ) {
 }
 
 /**
- * Execute aafm/create-draft - status is ALWAYS draft regardless of input.
+ * Execute aafm/create-draft - defaults to draft, honours a requested status when the caller
+ * holds publish_posts (the permission_callback already refused the request otherwise).
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_draft( array $input ) {
-	return aafm_insert_post( $input, 'draft', 'post' );
+	return aafm_insert_post( $input, 'draft', 'post', 'publish_posts' );
 }
 
 /**
@@ -736,13 +808,14 @@ function aafm_args_create_post(): array {
 }
 
 /**
- * Execute aafm/create-post.
+ * Execute aafm/create-post - defaults to publish (the permission_callback already requires
+ * publish_posts to call this ability at all), honours a requested draft/pending/private status.
  *
  * @param array<string,mixed> $input Input.
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_post( array $input ) {
-	return aafm_insert_post( $input, 'publish', 'post' );
+	return aafm_insert_post( $input, 'publish', 'post', 'publish_posts' );
 }
 
 /**

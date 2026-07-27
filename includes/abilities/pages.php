@@ -301,7 +301,9 @@ function aafm_perm_publish_pages(): bool {
 }
 
 /**
- * Execute aafm/create-page - type pinned to 'page', status forced to 'publish'.
+ * Execute aafm/create-page - type pinned to 'page', defaults to 'publish' (the
+ * permission_callback already requires publish_pages to call this ability at all), honours a
+ * requested draft/pending/private status.
  *
  * Delegates to the shared aafm_insert_post(), which never threads post_author
  * (so authorship is forced to the agent user) and sanitizes title/content.
@@ -310,7 +312,7 @@ function aafm_perm_publish_pages(): bool {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_page( array $input ) {
-	return aafm_insert_post( $input, 'publish', 'page' );
+	return aafm_insert_post( $input, 'publish', 'page', 'publish_pages' );
 }
 
 /**

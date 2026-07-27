@@ -218,6 +218,51 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertSame( 'draft', $out['post']['status'] );
 	}
 
+	/**
+	 * Force-draft must still coerce to draft even when the request explicitly asks for a
+	 * public status (not just when status is omitted) - now that create-post/create-draft/
+	 * create-page honour a requested status, this is the guard against force-draft being
+	 * silently bypassed by an explicit status field.
+	 */
+	public function test_force_draft_overrides_explicit_publish_status_on_create_post(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_force_draft', '1' );
+		$out = aafm_exec_create_post(
+			array(
+				'title'  => 'Hello',
+				'status' => 'publish',
+			)
+		);
+		$this->assertSame( 'draft', $out['post']['status'] );
+	}
+
+	public function test_force_draft_overrides_explicit_publish_status_on_create_draft(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_force_draft', '1' );
+		$out = aafm_exec_create_draft(
+			array(
+				'title'  => 'Hello',
+				'status' => 'publish',
+			)
+		);
+		$this->assertSame( 'draft', $out['post']['status'] );
+	}
+
+	public function test_force_draft_overrides_explicit_publish_status_on_create_page(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_force_draft', '1' );
+		$out = aafm_exec_create_page(
+			array(
+				'title'  => 'Hello Page',
+				'status' => 'publish',
+			)
+		);
+		$this->assertSame( 'draft', $out['post']['status'] );
+	}
+
 	public function test_force_draft_off_create_post_still_publishes(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		wp_set_current_user( $uid );

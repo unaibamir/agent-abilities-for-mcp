@@ -650,25 +650,37 @@ function aafm_wc_order_write_properties(): array {
 		'line_items'    => array(
 			'type'        => 'array',
 			'description' => __( 'Products to add as line items, each given as a product_id and quantity pair. Items are always ADDED as new line items rather than replacing or editing what is already on the order; this ability has no way to modify or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write.', 'agent-abilities-for-mcp' ),
-			'items'       => array(
-				'type'                 => 'object',
-				// MEDIUM-4: close the line_items item object -- meta_data and any other key are rejected.
-				'additionalProperties' => false,
-				'properties'           => array(
-					'product_id' => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'description' => __( 'ID of an existing WooCommerce product to add as a line item. Must resolve to a real product or the entire request fails with no partial write.', 'agent-abilities-for-mcp' ),
-					),
-					'quantity'   => array(
-						'type'        => 'integer',
-						'minimum'     => 1,
-						'description' => __( 'Quantity of the product to add. Minimum 1.', 'agent-abilities-for-mcp' ),
-					),
-				),
-				'required'             => array( 'product_id', 'quantity' ),
+			'items'       => aafm_wc_order_line_item_schema(),
+		),
+	);
+}
+
+/**
+ * The shared item schema for a single requested order line item: {product_id, quantity}, closed.
+ *
+ * Used by `line_items` (on both create and, as a deprecated alias, update) and by `add_line_items`
+ * (update only), so every field that accepts a line-item list validates an identical shape.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_wc_order_line_item_schema(): array {
+	return array(
+		'type'                 => 'object',
+		// MEDIUM-4: close the line_items item object -- meta_data and any other key are rejected.
+		'additionalProperties' => false,
+		'properties'           => array(
+			'product_id' => array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'description' => __( 'ID of an existing WooCommerce product to add as a line item. Must resolve to a real product or the entire request fails with no partial write.', 'agent-abilities-for-mcp' ),
+			),
+			'quantity'   => array(
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'description' => __( 'Quantity of the product to add. Minimum 1.', 'agent-abilities-for-mcp' ),
 			),
 		),
+		'required'             => array( 'product_id', 'quantity' ),
 	);
 }
 
@@ -701,6 +713,11 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * sanitize_text_field; customer_note -> sanitize_textarea_field; customer_id -> absint.
  * The nested billing/shipping arrays are sanitized leaf-by-leaf so structured data
  * is never flattened or corrupted.
+ *
+ * Line items are additive on BOTH create and update -- `add_line_items` (update only) and the
+ * deprecated `line_items` alias (create, and update for backward compatibility) are collected into
+ * one combined list and every item in it is added via add_product(). Neither field can edit,
+ * replace, or remove an existing line item.
  *
  * @param \WC_Order           $order The order to mutate.
  * @param array<string,mixed> $input Validated input (already schema-checked).
@@ -792,23 +809,35 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 		}
 	}
 
-	// Line items -- add each item via add_product (create path only; update does not re-add items).
+	// Line items -- add each item via add_product(). This ALWAYS adds a new line item, on both
+	// create and update; there is no way to edit or remove an existing one through this ability.
+	// `add_line_items` is the honestly-named field for adding items to an existing order on
+	// wc-update-order; `line_items` is kept as a deprecated alias with identical additive
+	// behaviour so an existing caller that already sends it keeps working unchanged. When both
+	// are sent (update only -- create has no add_line_items field), the two lists are combined
+	// and every item in either is added; see the add_line_items/line_items descriptions in
+	// aafm_args_wc_update_order() for the documented rule.
 	// Any product_id that can't be resolved is collected and returned so the caller can surface a
 	// hard error instead of silently saving an incomplete order.
-	$unresolved = array();
+	$unresolved   = array();
+	$items_to_add = array();
 	if ( array_key_exists( 'line_items', $input ) && is_array( $input['line_items'] ) ) {
-		foreach ( $input['line_items'] as $item ) {
-			if ( ! is_array( $item ) ) {
-				continue;
-			}
-			$pid     = absint( $item['product_id'] ?? 0 );
-			$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
-			$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
-			if ( $product instanceof \WC_Product ) {
-				$order->add_product( $product, $qty );
-			} else {
-				$unresolved[] = $pid;
-			}
+		$items_to_add = array_merge( $items_to_add, $input['line_items'] );
+	}
+	if ( array_key_exists( 'add_line_items', $input ) && is_array( $input['add_line_items'] ) ) {
+		$items_to_add = array_merge( $items_to_add, $input['add_line_items'] );
+	}
+	foreach ( $items_to_add as $item ) {
+		if ( ! is_array( $item ) ) {
+			continue;
+		}
+		$pid     = absint( $item['product_id'] ?? 0 );
+		$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
+		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
+		if ( $product instanceof \WC_Product ) {
+			$order->add_product( $product, $qty );
+		} else {
+			$unresolved[] = $pid;
 		}
 	}
 
@@ -991,6 +1020,21 @@ function aafm_args_wc_update_order(): array {
 		'minimum'     => 1,
 		'description' => __( "The order's post ID to update. Must reference an existing order or the request fails.", 'agent-abilities-for-mcp' ),
 	);
+
+	// `add_line_items` is the honestly-named field for adding items to an existing order --
+	// unlike `line_items` (below), its name does not imply it edits or replaces what is already
+	// there. Both fields behave identically (additive only); this one is update-only because a
+	// wc-create-order request has no existing order to add to.
+	$properties['add_line_items'] = array(
+		'type'        => 'array',
+		'description' => __( 'Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists -- every item in either is added.', 'agent-abilities-for-mcp' ),
+		'items'       => aafm_wc_order_line_item_schema(),
+	);
+	// line_items predates add_line_items and its original name reads as if it replaces an order's
+	// items rather than adding to them. It is kept, unchanged in behaviour, as a deprecated alias
+	// so an existing caller already sending it is never rejected -- override the create-facing
+	// description (which does not need the alias/combine wording) with the truthful update-only one.
+	$properties['line_items']['description'] = __( 'Deprecated alias for add_line_items: items sent here are ADDED as new line items on the existing order, exactly like add_line_items, never replacing or editing what is already there. Kept for backward compatibility with existing callers; prefer add_line_items in new integrations. If both line_items and add_line_items are sent, every item in both lists is added.', 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-update-order' ),

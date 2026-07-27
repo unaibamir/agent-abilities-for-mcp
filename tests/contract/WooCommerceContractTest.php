@@ -365,4 +365,50 @@ final class WooCommerceContractTest extends TestCase {
 
 		wc_delete_attribute( $attribute_id );
 	}
+
+	/**
+	 * MCP defect-fix premise: `WC_Order::add_product()` always creates a NEW order item -- it never
+	 * merges into an existing line item that already carries the same product id. This is the
+	 * vendor fact the wc-update-order additive fix (add_line_items / the deprecated line_items
+	 * alias) depends on: adding the same product twice results in two line items, never one line
+	 * with a combined quantity, so "additive" genuinely means "adds a new line", not "increments
+	 * an existing one".
+	 */
+	public function test_add_product_always_creates_a_new_line_item(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Widget' );
+		$product->set_regular_price( '9.99' );
+		$product_id = $product->save();
+		$this->assertGreaterThan( 0, $product_id );
+
+		$order = new \WC_Order();
+		$order->add_product( wc_get_product( $product_id ), 2 );
+		$order->add_product( wc_get_product( $product_id ), 3 );
+		$order->save();
+
+		$items = $order->get_items();
+		$this->assertCount(
+			2,
+			$items,
+			'add_product() called twice for the SAME product must produce two line items, not merge into one.'
+		);
+
+		$quantities = array();
+		foreach ( $items as $item ) {
+			$quantities[] = (int) $item->get_quantity();
+		}
+		sort( $quantities );
+		$this->assertSame(
+			array( 2, 3 ),
+			$quantities,
+			'Each add_product() call keeps its own requested quantity -- none are summed into an existing line.'
+		);
+
+		$order->delete( true );
+		$product->delete( true );
+	}
 }

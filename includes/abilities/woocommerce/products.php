@@ -271,13 +271,15 @@ function aafm_args_wc_list_products(): array {
 			'properties'           => array_merge(
 				array(
 					'page'     => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'Page number of products to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page' => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => 100,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => 100,
+						'description' => __( 'Number of products per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
 					),
 					'status'   => array(
 						'type'        => 'string',
@@ -404,8 +406,9 @@ function aafm_args_wc_get_product(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'product_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The WooCommerce product id to read.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'product_id' ),
@@ -462,9 +465,18 @@ function aafm_wc_product_write_properties(): array {
 			'description' => "The product's publish state.",
 			'enum'        => array( 'publish', 'draft', 'pending', 'private' ),
 		),
-		'description'       => array( 'type' => 'string' ),
-		'short_description' => array( 'type' => 'string' ),
-		'sku'               => array( 'type' => 'string' ),
+		'description'       => array(
+			'type'        => 'string',
+			'description' => __( "The product's full description, shown on the single product page. Accepts the same HTML as post content.", 'agent-abilities-for-mcp' ),
+		),
+		'short_description' => array(
+			'type'        => 'string',
+			'description' => __( 'A short summary shown near the price on the single product page. Accepts limited HTML.', 'agent-abilities-for-mcp' ),
+		),
+		'sku'               => array(
+			'type'        => 'string',
+			'description' => __( "The product's SKU (stock keeping unit). WooCommerce requires SKUs to be unique across products.", 'agent-abilities-for-mcp' ),
+		),
 		'regular_price'     => array(
 			'type'        => 'string',
 			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
@@ -476,56 +488,72 @@ function aafm_wc_product_write_properties(): array {
 			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
 		),
 		'stock_status'      => array(
-			'type' => 'string',
-			'enum' => array( 'instock', 'outofstock', 'onbackorder' ),
+			'type'        => 'string',
+			'enum'        => array( 'instock', 'outofstock', 'onbackorder' ),
+			'description' => __( 'Whether the product is in stock, out of stock, or on backorder.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_quantity'    => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
 			'description' => 'On-hand quantity (only applied when manage_stock is true).',
 		),
-		'manage_stock'      => array( 'type' => 'boolean' ),
-		'featured'          => array( 'type' => 'boolean' ),
+		'manage_stock'      => array(
+			'type'        => 'boolean',
+			'description' => __( 'Whether WooCommerce tracks a numeric stock_quantity for this product.', 'agent-abilities-for-mcp' ),
+		),
+		'featured'          => array(
+			'type'        => 'boolean',
+			'description' => __( "Whether the product is marked as featured (used by 'featured products' widgets and shortcodes).", 'agent-abilities-for-mcp' ),
+		),
 		'categories'        => array(
-			'type'  => 'array',
-			'items' => array(
+			'type'        => 'array',
+			'items'       => array(
 				'type'    => 'integer',
 				'minimum' => 1,
 			),
+			'description' => __( "Product category term ids. Replaces the product's current categories.", 'agent-abilities-for-mcp' ),
 		),
 		'tags'              => array(
-			'type'  => 'array',
-			'items' => array(
+			'type'        => 'array',
+			'items'       => array(
 				'type'    => 'integer',
 				'minimum' => 1,
 			),
+			'description' => __( "Product tag term ids. Replaces the product's current tags.", 'agent-abilities-for-mcp' ),
 		),
 		'image_id'          => array(
-			'type'    => 'integer',
-			'minimum' => 0,
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => __( "Attachment id to use as the product's main image.", 'agent-abilities-for-mcp' ),
 		),
 		'images'            => array(
-			'type'  => 'array',
-			'items' => array(
+			'type'        => 'array',
+			'items'       => array(
 				'type'    => 'integer',
 				'minimum' => 1,
 			),
+			'description' => __( "Attachment ids for the product's image gallery, in display order. Replaces the current gallery.", 'agent-abilities-for-mcp' ),
 		),
 		'attributes'        => array(
-			'type'  => 'array',
-			'items' => array(
+			'type'        => 'array',
+			'items'       => array(
 				'type'                 => 'object',
 				'properties'           => array(
-					'name'    => array( 'type' => 'string' ),
+					'name'    => array(
+						'type'        => 'string',
+						'description' => __( 'Display name of the custom attribute, for example "Material". This is also the key it is upserted by, so reusing an existing name updates that attribute rather than adding a second one.', 'agent-abilities-for-mcp' ),
+					),
 					'options' => array(
-						'type'  => 'array',
-						'items' => array( 'type' => 'string' ),
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => __( 'The attribute\'s possible values, for example ["Cotton", "Wool"]. Sending this replaces that attribute\'s full option list rather than appending to it.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				'required'             => array( 'name' ),
 				// MEDIUM-4: close the nested attribute object so a smuggled key is rejected.
 				'additionalProperties' => false,
 			),
+			'description' => __( 'Custom (product-level) attributes as {name, options[]} objects. Each is upserted by name; existing custom attributes not included here are left unchanged, not removed. Global/taxonomy attributes already on the product are not affected by this field.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -723,9 +751,15 @@ function aafm_wc_sanitize_attributes( array $attributes ): array {
 function aafm_args_wc_create_product(): array {
 	$properties         = aafm_wc_product_write_properties();
 	$properties['name'] = array(
-		'type'      => 'string',
-		'minLength' => 1,
+		'type'        => 'string',
+		'minLength'   => 1,
+		'description' => __( "The product's title. Required; the product is not created without one.", 'agent-abilities-for-mcp' ),
 	);
+	// This ability only builds simple products (see aafm_exec_wc_create_product): a non-simple
+	// request is rejected rather than silently downgraded, so the create-only restriction is
+	// documented here rather than on the shared write-properties description, which also serves
+	// the update ability where `type` is silently dropped and stays undescribed (MCP audit finding).
+	$properties['type']['description'] = __( "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails.", 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-create-product' ),
@@ -796,13 +830,19 @@ function aafm_exec_wc_create_product( array $input ) {
 function aafm_args_wc_update_product(): array {
 	$properties               = aafm_wc_product_write_properties();
 	$properties['product_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'The WooCommerce product id to update.', 'agent-abilities-for-mcp' ),
 	);
 	$properties['name']       = array(
-		'type'      => 'string',
-		'minLength' => 1,
+		'type'        => 'string',
+		'minLength'   => 1,
+		'description' => __( "The product's title. Omit to leave the existing title unchanged.", 'agent-abilities-for-mcp' ),
 	);
+	// `type` is deliberately left without a description: aafm_exec_wc_update_product() unsets
+	// $input['type'] before applying, so a caller-sent value here is silently ignored (a product's
+	// type cannot be changed once created). Documented as a bug in the description audit rather
+	// than papered over with a description that would make the ignore look intentional.
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-update-product' ),
@@ -865,8 +905,9 @@ function aafm_args_wc_delete_product(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'product_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The WooCommerce product id to permanently delete.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'product_id' ),

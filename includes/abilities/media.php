@@ -93,17 +93,20 @@ function aafm_args_get_media(): array {
 			'properties'           => array_merge(
 				array(
 					'search'   => array(
-						'type' => 'string',
+						'type'        => 'string',
+						'description' => __( 'Free-text search term matched against the media item\'s title, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page' => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_LIST_PER_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PER_PAGE_MAX,
+						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 					),
 					'page'     => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_LIST_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PAGE_MAX,
+						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -275,7 +278,10 @@ function aafm_args_count_media(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'mime_type' => array( 'type' => 'string' ),
+					'mime_type' => array(
+						'type'        => 'string',
+						'description' => __( 'Exact MIME type to filter the breakdown to, for example image/jpeg. Omit to return the total and breakdown across every MIME type.', 'agent-abilities-for-mcp' ),
+					),
 				),
 				aafm_lang_schema_fragment()
 			),
@@ -404,12 +410,14 @@ function aafm_args_set_featured_image(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'       => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose featured image will be set. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
 				),
 				'attachment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of an existing image attachment to use as the featured image. Must already exist and genuinely be an image; a non-image or missing attachment is rejected.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'attachment_id' ),
@@ -501,15 +509,18 @@ function aafm_args_upload_media(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'filename'    => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Filename to base the stored file\'s name on. Only the basename is kept and sanitized, and the extension is replaced with the one matching the file\'s actual detected type, not the extension supplied here.', 'agent-abilities-for-mcp' ),
 				),
 				'data_base64' => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Base64-encoded file bytes. The decoded content must be a real jpg, png, gif, or webp image, verified from its bytes rather than the filename or a claimed MIME type; SVG and any other type is rejected, and the decoded size must fit within the site\'s maximum upload size.', 'agent-abilities-for-mcp' ),
 				),
 				'alt'         => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Alt text to set on the uploaded image.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'filename', 'data_base64' ),
@@ -696,13 +707,26 @@ function aafm_args_update_media(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'attachment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the attachment to update.', 'agent-abilities-for-mcp' ),
 				),
-				'title'         => array( 'type' => 'string' ),
-				'alt'           => array( 'type' => 'string' ),
-				'caption'       => array( 'type' => 'string' ),
-				'description'   => array( 'type' => 'string' ),
+				'title'         => array(
+					'type'        => 'string',
+					'description' => __( 'New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given.', 'agent-abilities-for-mcp' ),
+				),
+				'alt'           => array(
+					'type'        => 'string',
+					'description' => __( 'New alt text for the image, sanitized as plain text.', 'agent-abilities-for-mcp' ),
+				),
+				'caption'       => array(
+					'type'        => 'string',
+					'description' => __( 'New caption, sanitized as plain text with no HTML.', 'agent-abilities-for-mcp' ),
+				),
+				'description'   => array(
+					'type'        => 'string',
+					'description' => __( 'New description. Basic HTML is allowed and sanitized.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'attachment_id' ),
 			'additionalProperties' => false,
@@ -821,8 +845,9 @@ function aafm_args_delete_media(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'attachment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'attachment_id' ),

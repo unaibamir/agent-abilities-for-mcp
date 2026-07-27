@@ -144,32 +144,41 @@ function aafm_args_get_posts(): array {
 			'properties'           => array_merge(
 				array(
 					'post_type'       => array(
-						'type'    => 'string',
-						'default' => 'post',
+						'type'        => 'string',
+						'default'     => 'post',
+						'description' => __( 'Slug of an allowlisted content type to list. Defaults to post. Types outside the operator\'s exposed allowlist are rejected.', 'agent-abilities-for-mcp' ),
 					),
 					'status'          => array(
-						'type'    => 'string',
-						'default' => 'publish',
+						'type'        => 'string',
+						'default'     => 'publish',
+						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private content for this type; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array( 'type' => 'string' ),
+					'search'          => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search term matched against the post title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
+					),
 					'page'            => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_LIST_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PAGE_MAX,
+						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page'        => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_LIST_PER_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PER_PAGE_MAX,
+						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 					),
 					'content_format'  => array(
-						'type'    => 'string',
-						'enum'    => array( 'rendered', 'raw' ),
-						'default' => 'rendered',
+						'type'        => 'string',
+						'enum'        => array( 'rendered', 'raw' ),
+						'default'     => 'rendered',
+						'description' => __( 'Format for each item\'s content when include_content is true: rendered HTML or raw block markup. Has no effect when include_content is false.', 'agent-abilities-for-mcp' ),
 					),
 					'include_content' => array(
-						'type'    => 'boolean',
-						'default' => false,
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => __( 'When true, also returns each item\'s full content (in content_format). Defaults to false, returning metadata only, to keep responses small.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -295,7 +304,10 @@ function aafm_args_count_posts(): array {
 			'type'                 => 'object',
 			'properties'           => array_merge(
 				array(
-					'post_type' => array( 'type' => 'string' ),
+					'post_type' => array(
+						'type'        => 'string',
+						'description' => __( 'Slug of an allowlisted content type to count. Defaults to post. Types outside the operator\'s exposed allowlist are rejected.', 'agent-abilities-for-mcp' ),
+					),
 				),
 				aafm_lang_schema_fragment()
 			),
@@ -404,13 +416,15 @@ function aafm_args_get_post(): array {
 			'properties'           => array_merge(
 				array(
 					'post_id'        => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the post to retrieve.', 'agent-abilities-for-mcp' ),
 					),
 					'content_format' => array(
-						'type'    => 'string',
-						'enum'    => array( 'rendered', 'raw' ),
-						'default' => 'rendered',
+						'type'        => 'string',
+						'enum'        => array( 'rendered', 'raw' ),
+						'default'     => 'rendered',
+						'description' => __( 'Format for the returned content: rendered HTML (default) or raw block markup.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -516,22 +530,34 @@ function aafm_write_content_schema( bool $require_title ): array {
 		'type'                 => 'object',
 		'properties'           => array(
 			'title'          => array(
-				'type'      => 'string',
-				'minLength' => 1,
+				'type'        => 'string',
+				'minLength'   => 1,
+				'description' => __( 'Post title. Required to create; omitting it on update leaves the existing title unchanged. Sanitized as plain text and subject to the operator\'s optional maximum-length setting, if one is configured.', 'agent-abilities-for-mcp' ),
 			),
 			'content'        => array(
 				'type'        => 'string',
 				'description' => aafm_write_content_description(),
 			),
-			'excerpt'        => array( 'type' => 'string' ),
-			'status'         => array( 'type' => 'string' ),
-			'slug'           => array( 'type' => 'string' ),
+			'excerpt'        => array(
+				'type'        => 'string',
+				'description' => __( 'Short manual excerpt for the post. Sanitized as plain text with no HTML; omitting it on update leaves the existing excerpt unchanged.', 'agent-abilities-for-mcp' ),
+			),
+			'status'         => array(
+				'type'        => 'string',
+				'description' => __( 'Status for the post. A public status (for example publish) always requires this content type\'s publish capability; draft, pending, future, or private is otherwise accepted on create-draft, create-post, and create-page once the ability\'s base permission is met, but on update-post and update-page requires the type\'s edit-others capability instead. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator\'s force-draft setting can still coerce a public-status request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish.', 'agent-abilities-for-mcp' ),
+			),
+			'slug'           => array(
+				'type'        => 'string',
+				'description' => __( 'URL slug for the post. Run through WordPress\'s slug sanitizer; if that produces an empty string the slug is left as-is (auto-generated on create, unchanged on update) rather than cleared.', 'agent-abilities-for-mcp' ),
+			),
 			'featured_media' => array(
-				'type'    => 'integer',
-				'minimum' => 1,
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'description' => __( 'Attachment ID to set as the post\'s featured image. Must be an existing image attachment; a non-image or nonexistent attachment ID is rejected.', 'agent-abilities-for-mcp' ),
 			),
 			'terms'          => array(
 				'type'                 => 'object',
+				'description'          => __( 'Taxonomy slug to term ID list mapping, for example {"category": [3, 7]}. REPLACES the post\'s existing terms for each taxonomy named; taxonomies left out are untouched. Every term ID must already exist in that taxonomy, the taxonomy itself must be public, and the caller needs that taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
 				'additionalProperties' => array(
 					'type'  => 'array',
 					'items' => array(
@@ -542,6 +568,7 @@ function aafm_write_content_schema( bool $require_title ): array {
 			),
 			'meta'           => array(
 				'type'                 => 'object',
+				'description'          => __( 'Post meta to write as key/value pairs. Only keys on the operator\'s meta allowlist are accepted (protected and internal keys are always blocked regardless of the allowlist); values must be scalar (string, number, boolean, or integer).', 'agent-abilities-for-mcp' ),
 				'additionalProperties' => array(
 					'type' => array( 'string', 'number', 'boolean', 'integer' ),
 				),
@@ -919,8 +946,9 @@ function aafm_exec_create_cpt_item( array $input ) {
 function aafm_args_update_post(): array {
 	$schema                          = aafm_write_content_schema( false );
 	$schema['properties']['post_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'ID of the post to update.', 'agent-abilities-for-mcp' ),
 	);
 	$schema['required']              = array( 'post_id' );
 
@@ -1282,8 +1310,9 @@ function aafm_args_trash_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to move to trash.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -1348,8 +1377,9 @@ function aafm_args_delete_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to permanently delete. This bypasses the Trash; there is no undo.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),

@@ -84,27 +84,35 @@ function aafm_args_get_pages(): array {
 			'properties'           => array_merge(
 				array(
 					'status'          => array(
-						'type'    => 'string',
-						'default' => 'publish',
+						'type'        => 'string',
+						'default'     => 'publish',
+						'description' => __( 'Post status to filter by. Defaults to publish. A non-public status (draft, pending, future, private) is only returned when the caller can read private pages; any, trash, auto-draft, inherit, and unrecognized values are rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'          => array( 'type' => 'string' ),
+					'search'          => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search term matched against the page title and content, using WordPress\'s normal search matching.', 'agent-abilities-for-mcp' ),
+					),
 					'page'            => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page'        => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => 50,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => 50,
+						'description' => __( 'Number of items per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 					),
 					'content_format'  => array(
-						'type'    => 'string',
-						'enum'    => array( 'rendered', 'raw' ),
-						'default' => 'rendered',
+						'type'        => 'string',
+						'enum'        => array( 'rendered', 'raw' ),
+						'default'     => 'rendered',
+						'description' => __( 'Format for each item\'s content when include_content is true: rendered HTML or raw block markup. Has no effect when include_content is false.', 'agent-abilities-for-mcp' ),
 					),
 					'include_content' => array(
-						'type'    => 'boolean',
-						'default' => false,
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => __( 'When true, also returns each item\'s full content (in content_format). Defaults to false, returning metadata only, to keep responses small.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -166,13 +174,15 @@ function aafm_args_get_page(): array {
 			'properties'           => array_merge(
 				array(
 					'page_id'        => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the page to retrieve.', 'agent-abilities-for-mcp' ),
 					),
 					'content_format' => array(
-						'type'    => 'string',
-						'enum'    => array( 'rendered', 'raw' ),
-						'default' => 'rendered',
+						'type'        => 'string',
+						'enum'        => array( 'rendered', 'raw' ),
+						'default'     => 'rendered',
+						'description' => __( 'Format for the returned content: rendered HTML (default) or raw block markup.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -323,8 +333,9 @@ function aafm_exec_create_page( array $input ) {
 function aafm_args_update_page(): array {
 	$schema                          = aafm_write_content_schema( false );
 	$schema['properties']['page_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'ID of the page to update.', 'agent-abilities-for-mcp' ),
 	);
 	$schema['required']              = array( 'page_id' );
 
@@ -406,8 +417,9 @@ function aafm_args_trash_page(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'page_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the page to move to trash.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'page_id' ),
@@ -482,8 +494,9 @@ function aafm_args_delete_page(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'page_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the page to permanently delete. This bypasses the Trash; there is no undo.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'page_id' ),

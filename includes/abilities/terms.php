@@ -100,19 +100,25 @@ function aafm_args_get_terms(): array {
 			'properties'           => array_merge(
 				array(
 					'taxonomy' => array(
-						'type'    => 'string',
-						'default' => 'category',
+						'type'        => 'string',
+						'default'     => 'category',
+						'description' => __( 'Slug of a public taxonomy to list terms from. Defaults to category. A non-public or unknown taxonomy is rejected.', 'agent-abilities-for-mcp' ),
 					),
-					'search'   => array( 'type' => 'string' ),
+					'search'   => array(
+						'type'        => 'string',
+						'description' => __( 'Free-text search term matched against the term name.', 'agent-abilities-for-mcp' ),
+					),
 					'page'     => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_LIST_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PAGE_MAX,
+						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page' => array(
-						'type'    => 'integer',
-						'minimum' => 1,
-						'maximum' => AAFM_TERMS_PER_PAGE_MAX,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'maximum'     => AAFM_TERMS_PER_PAGE_MAX,
+						'description' => __( 'Number of terms per page, clamped to the 1-100 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -227,12 +233,14 @@ function aafm_args_get_term(): array {
 			'properties'           => array_merge(
 				array(
 					'taxonomy' => array(
-						'type'    => 'string',
-						'default' => 'category',
+						'type'        => 'string',
+						'default'     => 'category',
+						'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. A term ID from a different taxonomy is rejected.', 'agent-abilities-for-mcp' ),
 					),
 					'term_id'  => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the term to retrieve.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()
@@ -301,20 +309,23 @@ function aafm_args_add_post_terms(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to add terms to. The caller must be able to edit this post.', 'agent-abilities-for-mcp' ),
 				),
 				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy the term_ids belong to. Defaults to category.', 'agent-abilities-for-mcp' ),
 				),
 				'term_ids' => array(
-					'type'     => 'array',
-					'items'    => array(
+					'type'        => 'array',
+					'description' => __( 'Term IDs to append to the post within the given taxonomy. Existing terms on the post are kept; these are added alongside them, not used to replace them. Every ID must already exist in that taxonomy, and the caller needs the taxonomy\'s assign_terms capability.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
 						'type'    => 'integer',
 						'minimum' => 1,
 					),
-					'minItems' => 1,
+					'minItems'    => 1,
 				),
 			),
 			'required'             => array( 'post_id', 'taxonomy', 'term_ids' ),
@@ -743,17 +754,23 @@ function aafm_args_create_term(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'taxonomy'    => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission.', 'agent-abilities-for-mcp' ),
 				),
 				'name'        => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Term name. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
 				),
-				'description' => array( 'type' => 'string' ),
+				'description' => array(
+					'type'        => 'string',
+					'description' => __( 'Term description. Basic HTML is allowed and sanitized; omit to leave it blank.', 'agent-abilities-for-mcp' ),
+				),
 				'parent'      => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'ID of the parent term, or 0 for no parent. Only accepted on a hierarchical taxonomy, and the parent must belong to the same taxonomy.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'name' ),
@@ -856,21 +873,28 @@ function aafm_args_update_term(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'taxonomy'    => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term to update.', 'agent-abilities-for-mcp' ),
 				),
 				'name'        => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'New term name. Sanitized as plain text; omit to leave the existing name unchanged.', 'agent-abilities-for-mcp' ),
 				),
-				'description' => array( 'type' => 'string' ),
+				'description' => array(
+					'type'        => 'string',
+					'description' => __( 'New term description; basic HTML is allowed and sanitized. Omit to leave the existing description unchanged.', 'agent-abilities-for-mcp' ),
+				),
 				'parent'      => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'New parent term ID, or 0 to clear the parent. Must belong to the same taxonomy, and reparenting under one of the term\'s own descendants is rejected to prevent a circular hierarchy. Omit to leave the current parent unchanged.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id' ),

@@ -86,12 +86,14 @@ function aafm_args_get_post_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose meta to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The post-meta key to read. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the read runs, not returned empty.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key' ),
@@ -171,8 +173,9 @@ function aafm_args_get_all_post_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "ID of the post whose allowlisted meta to read. The current user must have edit access to it. Only keys on the operator\'s post-meta allowlist (or every stored key under the allow-all wildcard) are returned; protected, denied, and hard-blocked keys are silently excluded from this bulk read rather than causing an error.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -278,15 +281,18 @@ function aafm_args_update_post_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose meta to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The post-meta key to write. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the write runs, never silently ignored.', 'agent-abilities-for-mcp' ),
 				),
 				'value'    => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
+					'description' => __( 'The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized (meta is not rendered as post content, so no markup is preserved) and then run through any registered sanitize_post_meta_{key} callback.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key', 'value' ),
@@ -372,12 +378,14 @@ function aafm_args_delete_post_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose meta to delete. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key' ),

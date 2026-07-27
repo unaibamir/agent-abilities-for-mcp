@@ -352,8 +352,9 @@ function aafm_args_rankmath_get_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose Rank Math SEO fields to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -395,14 +396,30 @@ function aafm_exec_rankmath_get_post( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_rankmath_update_post(): array {
-	$properties = array(
+	$properties                  = array(
 		'post_id' => array(
-			'type'    => 'integer',
-			'minimum' => 1,
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'description' => __( 'ID of the post whose Rank Math SEO fields to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 		),
 	);
+	$rankmath_field_descriptions = array(
+		'title'               => __( 'SEO title override for the post. Empty clears it and lets Rank Math fall back to its title template.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Meta description override for the post. Empty clears it and lets Rank Math fall back to its description template.', 'agent-abilities-for-mcp' ),
+		'focus_keyword'       => __( "Rank Math's target focus keyword, used to score this post's on-page SEO.", 'agent-abilities-for-mcp' ),
+		'canonical'           => __( 'Canonical URL override for the post, sanitized as a URL.', 'agent-abilities-for-mcp' ),
+		'og_title'            => __( 'Open Graph (Facebook) title override for the post.', 'agent-abilities-for-mcp' ),
+		'og_description'      => __( 'Open Graph (Facebook) description override for the post.', 'agent-abilities-for-mcp' ),
+		'og_image'            => __( 'Open Graph (Facebook) share image. Must be the URL of an existing media-library attachment; a URL that does not resolve to one is refused, because Rank Math renders the image from the attachment ID rather than the URL itself.', 'agent-abilities-for-mcp' ),
+		'twitter_title'       => __( "Twitter Card title override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
+		'twitter_description' => __( "Twitter Card description override. Setting any twitter_* field turns off Rank Math's Twitter-to-Facebook fallback so this value actually renders.", 'agent-abilities-for-mcp' ),
+		'twitter_image'       => __( 'Twitter Card share image. Must be the URL of an existing media-library attachment (same rule as og_image); setting any twitter_* field also turns off the Twitter-to-Facebook fallback.', 'agent-abilities-for-mcp' ),
+	);
 	foreach ( array_keys( aafm_rankmath_fields() ) as $field ) {
-		$properties[ $field ] = array( 'type' => 'string' );
+		$properties[ $field ] = array(
+			'type'        => 'string',
+			'description' => $rankmath_field_descriptions[ $field ] ?? '',
+		);
 	}
 	$properties['robots'] = array(
 		'type'        => 'string',
@@ -546,8 +563,9 @@ function aafm_args_rankmath_get_schema(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose Rank Math schema of this type to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'type'    => array(
 					'type'        => 'string',
@@ -617,15 +635,19 @@ function aafm_args_rankmath_update_schema(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose Rank Math schema of this type to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'type'    => array(
 					'type'        => 'string',
 					'pattern'     => '^[A-Za-z][A-Za-z0-9]*$',
 					'description' => __( 'The schema type suffix, for example Article, FAQPage, or HowTo. Must start with a letter and contain only letters and digits (PascalCase).', 'agent-abilities-for-mcp' ),
 				),
-				'schema'  => array( 'type' => 'object' ),
+				'schema'  => array(
+					'type'        => 'object',
+					'description' => __( 'The JSON-LD schema object to store for this type. Recursively sanitized: values under url-ish keys (url, image, logo, sameAs, @id) are treated as URLs and dropped if unsafe, other scalar leaves are stripped of markup, and the tree is depth-limited.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'post_id', 'type', 'schema' ),
 			'additionalProperties' => false,
@@ -697,8 +719,9 @@ function aafm_args_rankmath_get_head(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to render the Rank Math SEO head for.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),

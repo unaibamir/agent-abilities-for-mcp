@@ -579,8 +579,9 @@ function aafm_args_acf_get_post_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose ACF field values to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -649,12 +650,14 @@ function aafm_args_acf_update_post_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose ACF field values to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'fields'  => array(
 					'type'                 => 'object',
 					'additionalProperties' => true,
+					'description'          => __( 'Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field\'s ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else via sanitize_text_field.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'fields' ),
@@ -749,8 +752,9 @@ function aafm_args_acf_get_term_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'term_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term whose ACF field values to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id' ),
@@ -813,12 +817,14 @@ function aafm_args_acf_update_term_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'term_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term whose ACF field values to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 				'fields'  => array(
 					'type'                 => 'object',
 					'additionalProperties' => true,
+					'description'          => __( 'Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules).', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id', 'fields' ),
@@ -913,8 +919,9 @@ function aafm_args_acf_get_user_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user whose ACF field values to read. The current user must have edit access to this user. A field of the user_email type returns the real email address (PII), governed by the edit-user capability gate rather than being redacted.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id' ),
@@ -981,12 +988,14 @@ function aafm_args_acf_update_user_fields(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user whose ACF field values to write. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
 				'fields'  => array(
 					'type'                 => 'object',
 					'additionalProperties' => true,
+					'description'          => __( 'Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules). The user-scoped hard-block also blocks capability, session, application-password, and 2FA keys even if a field\'s storage name collides with one.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'fields' ),

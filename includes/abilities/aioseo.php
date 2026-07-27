@@ -360,8 +360,9 @@ function aafm_args_aioseo_get_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose All in One SEO fields to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -403,17 +404,39 @@ function aafm_exec_aioseo_get_post( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_aioseo_update_post(): array {
-	$properties = array(
+	$properties                = array(
 		'post_id' => array(
-			'type'    => 'integer',
-			'minimum' => 1,
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'description' => __( 'ID of the post whose All in One SEO fields to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 		),
 	);
+	$aioseo_field_descriptions = array(
+		'title'               => __( 'SEO title override for the post.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Meta description override for the post.', 'agent-abilities-for-mcp' ),
+		'canonical'           => __( 'Canonical URL override for the post, sanitized as a URL.', 'agent-abilities-for-mcp' ),
+		'og_title'            => __( 'Open Graph (Facebook) title override for the post.', 'agent-abilities-for-mcp' ),
+		'og_description'      => __( 'Open Graph (Facebook) description override for the post.', 'agent-abilities-for-mcp' ),
+		'og_image'            => __( "Open Graph (Facebook) share image URL. A non-empty value switches AIOSEO's image source to custom so this URL actually renders instead of its default source; clearing the value resets that source only when it was already set to custom.", 'agent-abilities-for-mcp' ),
+		'twitter_title'       => __( "Twitter Card title override. Setting any twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG title.", 'agent-abilities-for-mcp' ),
+		'twitter_description' => __( "Twitter Card description override. Setting any twitter_* field turns off AIOSEO's use-OpenGraph fallback so this value renders instead of the Facebook/OG description.", 'agent-abilities-for-mcp' ),
+		'twitter_image'       => __( 'Twitter Card share image URL (same custom-source switch as og_image). Setting any twitter_* field also turns off the use-OpenGraph fallback.', 'agent-abilities-for-mcp' ),
+	);
 	foreach ( array_keys( aafm_aioseo_fields() ) as $field ) {
-		$properties[ $field ] = array( 'type' => 'string' );
+		$properties[ $field ] = array(
+			'type'        => 'string',
+			'description' => $aioseo_field_descriptions[ $field ] ?? '',
+		);
 	}
+	$aioseo_robots_descriptions = array(
+		'robots_noindex'  => __( "Whether to noindex this post. Setting either robots flag turns off AIOSEO's 'use site default' robots setting so the explicit flags actually take effect.", 'agent-abilities-for-mcp' ),
+		'robots_nofollow' => __( 'Whether to nofollow links on this post (see robots_noindex for the site-default interaction this also turns off).', 'agent-abilities-for-mcp' ),
+	);
 	foreach ( array_keys( aafm_aioseo_robots_fields() ) as $field ) {
-		$properties[ $field ] = array( 'type' => 'boolean' );
+		$properties[ $field ] = array(
+			'type'        => 'boolean',
+			'description' => $aioseo_robots_descriptions[ $field ] ?? '',
+		);
 	}
 
 	return array(
@@ -582,8 +605,9 @@ function aafm_args_aioseo_get_head(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to render the All in One SEO head for.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),

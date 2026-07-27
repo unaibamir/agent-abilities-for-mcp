@@ -260,8 +260,9 @@ function aafm_args_yoast_get_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post whose Yoast SEO fields to read. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),
@@ -306,14 +307,30 @@ function aafm_exec_yoast_get_post( array $input ) {
  * @return array<string,mixed>
  */
 function aafm_args_yoast_update_post(): array {
-	$properties = array(
+	$properties               = array(
 		'post_id' => array(
-			'type'    => 'integer',
-			'minimum' => 1,
+			'type'        => 'integer',
+			'minimum'     => 1,
+			'description' => __( 'ID of the post whose Yoast SEO fields to write. The current user must have edit access to it.', 'agent-abilities-for-mcp' ),
 		),
 	);
+	$yoast_field_descriptions = array(
+		'title'               => __( 'SEO title override for the post.', 'agent-abilities-for-mcp' ),
+		'description'         => __( 'Meta description override for the post.', 'agent-abilities-for-mcp' ),
+		'focus_keyword'       => __( "Yoast's target focus keyword, used to score this post's on-page SEO.", 'agent-abilities-for-mcp' ),
+		'canonical'           => __( 'Canonical URL override for the post, sanitized as a URL.', 'agent-abilities-for-mcp' ),
+		'og_title'            => __( 'Open Graph (Facebook) title override for the post.', 'agent-abilities-for-mcp' ),
+		'og_description'      => __( 'Open Graph (Facebook) description override for the post.', 'agent-abilities-for-mcp' ),
+		'og_image'            => __( 'Open Graph (Facebook) share image URL, sanitized as a URL. Unlike Rank Math, no media-library attachment lookup is performed; any URL is stored as given.', 'agent-abilities-for-mcp' ),
+		'twitter_title'       => __( 'Twitter Card title override. Unlike Rank Math and AIOSEO, Yoast has no separate use-Facebook-data fallback to disable, so this value is used as-is once set.', 'agent-abilities-for-mcp' ),
+		'twitter_description' => __( 'Twitter Card description override. Unlike Rank Math and AIOSEO, Yoast has no separate use-Facebook-data fallback to disable, so this value is used as-is once set.', 'agent-abilities-for-mcp' ),
+		'twitter_image'       => __( 'Twitter Card share image URL, sanitized as a URL. No media-library attachment lookup is performed; any URL is stored as given.', 'agent-abilities-for-mcp' ),
+	);
 	foreach ( array_keys( aafm_yoast_fields() ) as $field ) {
-		$properties[ $field ] = array( 'type' => 'string' );
+		$properties[ $field ] = array(
+			'type'        => 'string',
+			'description' => $yoast_field_descriptions[ $field ] ?? '',
+		);
 	}
 	$noindex_meaning = aafm_yoast_robots_noindex_meaning();
 	$noindex_pairs   = array();
@@ -430,8 +447,9 @@ function aafm_args_yoast_get_head(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to render the Yoast SEO head for.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id' ),

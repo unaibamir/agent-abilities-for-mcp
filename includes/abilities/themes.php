@@ -257,8 +257,9 @@ function aafm_args_list_templates(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'type' => array(
-					'type' => 'string',
-					'enum' => array( 'wp_template', 'wp_template_part' ),
+					'type'        => 'string',
+					'enum'        => array( 'wp_template', 'wp_template_part' ),
+					'description' => __( 'Which kind of block template to list: wp_template for full page templates, or wp_template_part for reusable regions such as a header or footer. Defaults to wp_template when omitted.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -320,10 +321,14 @@ function aafm_args_get_template(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'template_id' => array( 'type' => 'string' ),
+				'template_id' => array(
+					'type'        => 'string',
+					'description' => __( 'The template\'s theme//slug identifier, as returned by list-templates, for example twentytwentyfour//single. An unknown ID returns a generic error rather than confirming which IDs exist.', 'agent-abilities-for-mcp' ),
+				),
 				'type'        => array(
-					'type' => 'string',
-					'enum' => array( 'wp_template', 'wp_template_part' ),
+					'type'        => 'string',
+					'enum'        => array( 'wp_template', 'wp_template_part' ),
+					'description' => __( 'Which kind of template template_id refers to: wp_template or wp_template_part. Defaults to wp_template, and must match the type of the template actually named.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'template_id' ),
@@ -382,14 +387,18 @@ function aafm_args_update_template(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'template_id' => array( 'type' => 'string' ),
+				'template_id' => array(
+					'type'        => 'string',
+					'description' => __( 'The theme//slug identifier of the database template to update, as returned by list-templates or get-template. A theme-file template with no database override has no backing post and is refused.', 'agent-abilities-for-mcp' ),
+				),
 				'content'     => array(
 					'type'        => 'string',
 					'description' => aafm_write_content_description(),
 				),
 				'type'        => array(
-					'type' => 'string',
-					'enum' => array( 'wp_template', 'wp_template_part' ),
+					'type'        => 'string',
+					'enum'        => array( 'wp_template', 'wp_template_part' ),
+					'description' => __( 'Which kind of template template_id refers to: wp_template or wp_template_part. Defaults to wp_template, and must match the type of the template actually named.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'template_id', 'content' ),

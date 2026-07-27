@@ -191,7 +191,10 @@ function aafm_args_get_menu(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array( 'type' => 'integer' ),
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu to read. An unknown ID, or a term that is not a nav menu, returns a generic error.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id' ),
 			'additionalProperties' => false,
@@ -247,7 +250,10 @@ function aafm_args_list_menu_items(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array( 'type' => 'integer' ),
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu whose items to list. An unknown or empty menu returns an empty items list rather than an error.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id' ),
 			'additionalProperties' => false,
@@ -354,7 +360,10 @@ function aafm_args_create_menu(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'name' => array( 'type' => 'string' ),
+				'name' => array(
+					'type'        => 'string',
+					'description' => __( 'Name for the new navigation menu. Sanitized as plain text; a duplicate name is refused.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'name' ),
 			'additionalProperties' => false,
@@ -412,8 +421,14 @@ function aafm_args_update_menu(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array( 'type' => 'integer' ),
-				'name'    => array( 'type' => 'string' ),
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu to rename. An unknown ID returns a generic error.', 'agent-abilities-for-mcp' ),
+				),
+				'name'    => array(
+					'type'        => 'string',
+					'description' => __( 'New name for the menu. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id', 'name' ),
 			'additionalProperties' => false,
@@ -477,7 +492,10 @@ function aafm_args_delete_menu(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array( 'type' => 'integer' ),
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu to permanently delete, along with every item inside it. Navigation menus have no Trash, so this cannot be undone.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id' ),
 			'additionalProperties' => false,
@@ -544,12 +562,30 @@ function aafm_args_create_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id'   => array( 'type' => 'integer' ),
-				'title'     => array( 'type' => 'string' ),
-				'url'       => array( 'type' => 'string' ),
-				'parent'    => array( 'type' => 'integer' ),
-				'object_id' => array( 'type' => 'integer' ),
-				'type'      => array( 'type' => 'string' ),
+				'menu_id'   => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu to add the item to. An unknown ID returns a generic error.', 'agent-abilities-for-mcp' ),
+				),
+				'title'     => array(
+					'type'        => 'string',
+					'description' => __( 'The item\'s visible link text. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
+				),
+				'url'       => array(
+					'type'        => 'string',
+					'description' => __( 'Destination URL for a custom link item. Sanitized with esc_url_raw. Omit when object_id and type point at an existing post, page, or term instead.', 'agent-abilities-for-mcp' ),
+				),
+				'parent'    => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of an existing menu item this one should nest under, or omit for a top-level item. Not verified to exist or to belong to this menu before being applied.', 'agent-abilities-for-mcp' ),
+				),
+				'object_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Not verified to exist before being applied.', 'agent-abilities-for-mcp' ),
+				),
+				'type'      => array(
+					'type'        => 'string',
+					'description' => __( 'Menu item type, for example post_type, post_type_archive, taxonomy, or custom. Not validated against a fixed list; an unrecognized value is passed straight through to WordPress.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id', 'title' ),
 			'additionalProperties' => false,
@@ -632,10 +668,22 @@ function aafm_args_update_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'menu_id' => array( 'type' => 'integer' ),
-				'item_id' => array( 'type' => 'integer' ),
-				'title'   => array( 'type' => 'string' ),
-				'url'     => array( 'type' => 'string' ),
+				'menu_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the navigation menu the item belongs to. The item must genuinely belong to this menu or the update is refused.', 'agent-abilities-for-mcp' ),
+				),
+				'item_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the menu item to update. Every field you do not send here (link target, order, CSS classes, and so on) is preserved from its current stored value; only title and url actually change.', 'agent-abilities-for-mcp' ),
+				),
+				'title'   => array(
+					'type'        => 'string',
+					'description' => __( 'New link text for the item. Sanitized as plain text. Omit to leave the current title unchanged.', 'agent-abilities-for-mcp' ),
+				),
+				'url'     => array(
+					'type'        => 'string',
+					'description' => __( 'New destination URL for the item. Sanitized with esc_url_raw. Omit to leave the current URL unchanged.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'menu_id', 'item_id' ),
 			'additionalProperties' => false,
@@ -741,7 +789,10 @@ function aafm_args_delete_menu_item(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'item_id' => array( 'type' => 'integer' ),
+				'item_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'item_id' ),
 			'additionalProperties' => false,

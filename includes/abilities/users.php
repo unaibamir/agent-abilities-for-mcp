@@ -98,20 +98,24 @@ function aafm_args_get_users(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'role'     => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Filter to users holding exactly this role slug (for example administrator or editor). An unrecognized slug simply matches no one; it is not validated against a list of real roles.', 'agent-abilities-for-mcp' ),
 				),
 				'search'   => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Free-text search wrapped in wildcards and matched against login, nicename, display name, email, and URL.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
+					'description' => __( 'Number of users per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 				),
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
+					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -152,8 +156,9 @@ function aafm_args_get_user(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user to read. An unknown ID returns a generic error rather than confirming which IDs exist.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id' ),
@@ -282,24 +287,30 @@ function aafm_args_create_user(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'username'     => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Login name for the new account. Sanitized to a valid WordPress username; the account is refused if the username is already taken.', 'agent-abilities-for-mcp' ),
 				),
 				'email'        => array(
-					'type'   => 'string',
-					'format' => 'email',
+					'type'        => 'string',
+					'format'      => 'email',
+					'description' => __( 'Email address for the new account. Must be a valid address that is not already registered to another user.', 'agent-abilities-for-mcp' ),
 				),
 				'display_name' => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Public display name for the new user. Sanitized as plain text; defaults to the username when omitted.', 'agent-abilities-for-mcp' ),
 				),
 				'first_name'   => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'First name. Sanitized as plain text; omit to leave it blank.', 'agent-abilities-for-mcp' ),
 				),
 				'last_name'    => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Last name. Sanitized as plain text; omit to leave it blank.', 'agent-abilities-for-mcp' ),
 				),
 				'password'     => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Password for the new account. Omit it, or send an empty string, to have WordPress generate a strong random password instead of setting one yourself.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'username', 'email' ),
@@ -419,24 +430,30 @@ function aafm_args_update_user(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id'      => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user to edit. The caller needs the edit-users capability plus edit access to this specific user.', 'agent-abilities-for-mcp' ),
 				),
 				'display_name' => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'New public display name. Sanitized as plain text; omit to leave the current value unchanged.', 'agent-abilities-for-mcp' ),
 				),
 				'first_name'   => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'New first name. Sanitized as plain text; omit to leave the current value unchanged.', 'agent-abilities-for-mcp' ),
 				),
 				'last_name'    => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'New last name. Sanitized as plain text; omit to leave the current value unchanged.', 'agent-abilities-for-mcp' ),
 				),
 				'email'        => array(
-					'type'   => 'string',
-					'format' => 'email',
+					'type'        => 'string',
+					'format'      => 'email',
+					'description' => __( 'New email address, applied immediately via wp_update_user rather than WordPress\'s usual pending-email confirmation step. Must be a valid address.', 'agent-abilities-for-mcp' ),
 				),
 				'role'         => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'New role slug to assign. Only honored when the caller holds the promote-users capability, can promote this specific user, and the role is one they are allowed to hand out; otherwise the whole update is rejected, not just the role change. A change that would demote the site\'s last remaining administrator is always refused.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id' ),
@@ -654,12 +671,14 @@ function aafm_args_delete_user(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user to permanently delete. Refused for the caller\'s own account and for the site\'s last remaining administrator.', 'agent-abilities-for-mcp' ),
 				),
 				'reassign_to' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of an existing user to reassign the deleted user\'s content to. Not marked required by the schema, but the delete is refused without it: it must be given, must exist, and must differ from the user being deleted.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id' ),

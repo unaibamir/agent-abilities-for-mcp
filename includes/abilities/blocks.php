@@ -132,16 +132,21 @@ function aafm_args_list_blocks(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
+					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of blocks per page, clamped to the 1-100 range regardless of the value requested. Defaults to 20 when omitted.', 'agent-abilities-for-mcp' ),
 				),
-				'search'   => array( 'type' => 'string' ),
+				'search'   => array(
+					'type'        => 'string',
+					'description' => __( 'Free-text search using WordPress\'s normal post search, matched against the block\'s title and content. Omit to list every block you can edit.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'additionalProperties' => false,
 		),
@@ -221,7 +226,12 @@ function aafm_args_get_block(): array {
 		'category'            => 'aafm-reads',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array( 'block_id' => array( 'type' => 'integer' ) ),
+			'properties'           => array(
+				'block_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the reusable block to read. The caller must have edit access to this specific block.', 'agent-abilities-for-mcp' ),
+				),
+			),
 			'required'             => array( 'block_id' ),
 			'additionalProperties' => false,
 		),
@@ -271,7 +281,10 @@ function aafm_args_create_block(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'title'   => array( 'type' => 'string' ),
+				'title'   => array(
+					'type'        => 'string',
+					'description' => __( 'Title for the new reusable block. Sanitized as plain text.', 'agent-abilities-for-mcp' ),
+				),
 				'content' => array(
 					'type'        => 'string',
 					'description' => aafm_write_content_description(),
@@ -366,8 +379,14 @@ function aafm_args_update_block(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'properties'           => array(
-				'block_id' => array( 'type' => 'integer' ),
-				'title'    => array( 'type' => 'string' ),
+				'block_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the reusable block to update. The caller must have edit access to this specific block.', 'agent-abilities-for-mcp' ),
+				),
+				'title'    => array(
+					'type'        => 'string',
+					'description' => __( 'New title for the block. Sanitized as plain text. Omit to leave the current title unchanged.', 'agent-abilities-for-mcp' ),
+				),
 				'content'  => array(
 					'type'        => 'string',
 					'description' => aafm_write_content_description(),
@@ -437,7 +456,12 @@ function aafm_args_delete_block(): array {
 		'category'            => 'aafm-writes',
 		'input_schema'        => array(
 			'type'                 => 'object',
-			'properties'           => array( 'block_id' => array( 'type' => 'integer' ) ),
+			'properties'           => array(
+				'block_id' => array(
+					'type'        => 'integer',
+					'description' => __( 'ID of the reusable block to move to the Trash. The caller must have delete access to this specific block. This is a Trash move, not a permanent delete, so it can be restored.', 'agent-abilities-for-mcp' ),
+				),
+			),
 			'required'             => array( 'block_id' ),
 			'additionalProperties' => false,
 		),

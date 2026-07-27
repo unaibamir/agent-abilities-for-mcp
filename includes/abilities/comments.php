@@ -92,18 +92,21 @@ function aafm_args_get_comments(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to list comments for. Omit to list approved comments across the whole site, filtered to posts you can read; if given, the post must exist and you must be able to read it.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
+					'description' => __( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 				),
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
+					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -295,8 +298,9 @@ function aafm_args_get_comment(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'comment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the comment to read. An approved comment on a public, non-password-protected post is visible to any logged-in caller; anything else (pending, spam, trashed, or on a hidden post) requires moderation rights on this comment. An unknown ID returns a generic error rather than confirming which IDs exist.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'comment_id' ),
@@ -403,21 +407,24 @@ function aafm_args_create_comment(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to comment on. Must be a real post; creating the comment requires the moderate-comments capability regardless of who owns the post.', 'agent-abilities-for-mcp' ),
 				),
 				'content' => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
 					// Character cap, not a byte cap: WordPress stores comment_content in a TEXT
 					// column (~65,535 BYTES). A comment of multi-byte (UTF-8) characters can still
 					// exceed the byte limit even under this length, so the DB write is the final
 					// guard; this bound just rejects the obviously-oversized payload up front.
-					'maxLength' => 65525,
+					'maxLength'   => 65525,
+					'description' => __( 'Comment body. Sanitized with wp_kses_post, so scripts are stripped but basic HTML survives. The comment is always created pending; it is never auto-published, even for a caller who could otherwise approve comments.', 'agent-abilities-for-mcp' ),
 				),
 				'parent'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of an existing comment to reply to. Must already be a comment on the same post; a comment from a different post is refused. Omit for a top-level comment.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'content' ),
@@ -552,14 +559,16 @@ function aafm_args_get_pending_comments(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PER_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PER_PAGE_MAX,
+					'description' => __( 'Number of comments per page, clamped to the 1-50 range regardless of the value requested. Defaults to 10 when omitted.', 'agent-abilities-for-mcp' ),
 				),
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => AAFM_LIST_PAGE_MAX,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
+					'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -647,8 +656,9 @@ function aafm_args_moderate_comment(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'comment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the comment to moderate. The caller must hold moderate-comments and be able to edit this specific comment.', 'agent-abilities-for-mcp' ),
 				),
 				'action'     => array(
 					'type'        => 'string',
@@ -765,17 +775,19 @@ function aafm_args_update_comment(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'comment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the comment to edit. Requires moderate-comments plus edit access to this specific comment.', 'agent-abilities-for-mcp' ),
 				),
 				'content'    => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
 					// Character cap, not a byte cap: WordPress stores comment_content in a TEXT
 					// column (~65,535 BYTES). A comment of multi-byte (UTF-8) characters can still
 					// exceed the byte limit even under this length, so the DB write is the final
 					// guard; this bound just rejects the obviously-oversized payload up front.
-					'maxLength' => 65525,
+					'maxLength'   => 65525,
+					'description' => __( 'New comment body. Sanitized with wp_kses_post. Only the body changes here; the parent post, author, email, and IP can never be altered through this ability.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'comment_id', 'content' ),
@@ -877,8 +889,9 @@ function aafm_args_delete_comment(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'comment_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the comment to permanently delete. This bypasses the Trash and cannot be undone; use moderate-comment\'s trash action instead for a recoverable delete.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'comment_id' ),

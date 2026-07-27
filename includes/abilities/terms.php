@@ -446,16 +446,19 @@ function aafm_args_get_term_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term to read meta from. Requires edit access to this specific term, since term meta can hold non-public data.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Meta key to read. Must clear this plugin\'s meta-key allow/deny gate; keys WordPress marks protected, or that are on the sensitive-key hard-block list, are never exposed even if explicitly allowed.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id', 'meta_key' ),
@@ -537,19 +540,23 @@ function aafm_args_update_term_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term to write meta to. Requires edit access to this specific term.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Meta key to write. Must clear this plugin\'s meta-key allow/deny gate; keys WordPress marks protected, or that are on the sensitive-key hard-block list, can never be written even if explicitly allowed.', 'agent-abilities-for-mcp' ),
 				),
 				'value'    => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
+					'description' => __( 'New value to store. Must be a string, number, or boolean; arrays and objects are rejected. Runs through WordPress\'s sanitize_meta filters for this key before saving.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id', 'meta_key', 'value' ),
@@ -635,16 +642,19 @@ function aafm_args_delete_term_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'taxonomy' => array(
-					'type'    => 'string',
-					'default' => 'category',
+					'type'        => 'string',
+					'default'     => 'category',
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the term to delete meta from. Requires edit access to this specific term.', 'agent-abilities-for-mcp' ),
 				),
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Meta key to delete. Removes every stored value under this key. Must clear this plugin\'s meta-key allow/deny gate.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'term_id', 'meta_key' ),

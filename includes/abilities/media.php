@@ -212,8 +212,9 @@ function aafm_args_get_media_item(): array {
 			'properties'           => array_merge(
 				array(
 					'attachment_id' => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of the attachment to read. An unknown ID, or one that is not an attachment, returns a generic error.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				aafm_lang_schema_fragment()

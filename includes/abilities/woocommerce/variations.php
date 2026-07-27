@@ -243,13 +243,15 @@ function aafm_args_wc_list_product_variations(): array {
 					'description' => 'The parent (variable) product id.',
 				),
 				'page'       => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'Page number of variations to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page'   => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of variations per page, 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'product_id' ),
@@ -341,8 +343,9 @@ function aafm_args_wc_get_product_variation(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'variation_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The variation's own product id (not the parent product's id).", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'variation_id' ),
@@ -396,8 +399,14 @@ function aafm_wc_variation_write_properties(): array {
 			'description' => "The variation's publish state.",
 			'enum'        => array( 'publish', 'private' ),
 		),
-		'description'    => array( 'type' => 'string' ),
-		'sku'            => array( 'type' => 'string' ),
+		'description'    => array(
+			'type'        => 'string',
+			'description' => __( "The variation's own description. Shown instead of the parent product's description when this variation is selected.", 'agent-abilities-for-mcp' ),
+		),
+		'sku'            => array(
+			'type'        => 'string',
+			'description' => __( "The variation's own SKU. WooCommerce requires SKUs to be unique across products and variations.", 'agent-abilities-for-mcp' ),
+		),
 		'regular_price'  => array(
 			'type'        => 'string',
 			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
@@ -409,18 +418,23 @@ function aafm_wc_variation_write_properties(): array {
 			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
 		),
 		'stock_status'   => array(
-			'type' => 'string',
-			'enum' => array( 'instock', 'outofstock', 'onbackorder' ),
+			'type'        => 'string',
+			'enum'        => array( 'instock', 'outofstock', 'onbackorder' ),
+			'description' => __( 'Whether this variation is in stock, out of stock, or on backorder.', 'agent-abilities-for-mcp' ),
 		),
 		'stock_quantity' => array(
 			'type'        => 'integer',
 			'minimum'     => 0,
 			'description' => 'On-hand quantity (only applied when manage_stock is true).',
 		),
-		'manage_stock'   => array( 'type' => 'boolean' ),
+		'manage_stock'   => array(
+			'type'        => 'boolean',
+			'description' => __( 'Whether WooCommerce tracks a numeric stock_quantity for this variation, independent of the parent product.', 'agent-abilities-for-mcp' ),
+		),
 		'image_id'       => array(
-			'type'    => 'integer',
-			'minimum' => 0,
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => __( "Attachment id for this variation's own image. Falls back to the parent product's image when unset.", 'agent-abilities-for-mcp' ),
 		),
 		'attributes'     => array(
 			'type'                 => 'object',
@@ -573,9 +587,16 @@ function aafm_exec_wc_create_product_variation( array $input ) {
 function aafm_args_wc_update_product_variation(): array {
 	$properties                 = aafm_wc_variation_write_properties();
 	$properties['variation_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'The variation id to update.', 'agent-abilities-for-mcp' ),
 	);
+	// Unlike every other field here, attributes is a full replace on update - set_attributes() is
+	// called with only the sanitized input map, never merged against the variation's existing
+	// attributes (contrast aafm_wc_build_product_attributes() for the parent product, which does
+	// merge). Override the shared description for this ability only, so the PATCH-style wording
+	// on every other field does not silently imply the same semantics here.
+	$properties['attributes']['description'] = __( 'A flat map of attribute name to the chosen value (strings only). Unlike every other field on this ability, this replaces the variation\'s entire attribute map: any attribute not included here is cleared, not preserved.', 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-update-product-variation' ),
@@ -638,8 +659,9 @@ function aafm_args_wc_delete_product_variation(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'variation_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'The variation id to permanently delete.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'variation_id' ),

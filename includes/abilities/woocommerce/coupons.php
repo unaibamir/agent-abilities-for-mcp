@@ -201,35 +201,65 @@ function aafm_wc_coupon_output_properties(): array {
  */
 function aafm_wc_coupon_write_properties(): array {
 	return array(
-		'code'                 => array( 'type' => 'string' ),
-		'amount'               => array( 'type' => 'string' ),
+		'code'                 => array(
+			'type'        => 'string',
+			'description' => __( 'The coupon code customers enter at checkout. WooCommerce requires codes to be unique.', 'agent-abilities-for-mcp' ),
+		),
+		'amount'               => array(
+			'type'        => 'string',
+			'description' => __( 'The discount amount as a decimal string, e.g. "10" for a 10% discount when discount_type is percent, or a currency amount for fixed_cart / fixed_product.', 'agent-abilities-for-mcp' ),
+		),
 		'discount_type'        => array(
 			'type'        => 'string',
 			'enum'        => array( 'percent', 'fixed_cart', 'fixed_product' ),
 			'description' => 'How the coupon discounts: percent (a percentage of the cart), fixed_cart (a fixed amount off the whole cart), or fixed_product (a fixed amount off each matching product).',
 		),
-		'description'          => array( 'type' => 'string' ),
+		'description'          => array(
+			'type'        => 'string',
+			'description' => __( 'A description of the coupon, for admin reference.', 'agent-abilities-for-mcp' ),
+		),
 		'date_expires'         => array(
 			'type'        => array( 'string', 'null' ),
 			'description' => 'Expiry date as a YYYY-MM-DD string (the coupon expires at the start of that day, site timezone). Pass null or an empty string for no expiry.',
 		),
-		'usage_limit'          => array( 'type' => array( 'integer', 'null' ) ),
-		'usage_limit_per_user' => array( 'type' => array( 'integer', 'null' ) ),
-		'minimum_amount'       => array( 'type' => 'string' ),
-		'maximum_amount'       => array( 'type' => 'string' ),
-		'individual_use'       => array( 'type' => 'boolean' ),
-		'exclude_sale_items'   => array( 'type' => 'boolean' ),
+		'usage_limit'          => array(
+			'type'        => array( 'integer', 'null' ),
+			'description' => __( 'Maximum number of times this coupon can be used in total, across all customers. Pass null for unlimited.', 'agent-abilities-for-mcp' ),
+		),
+		'usage_limit_per_user' => array(
+			'type'        => array( 'integer', 'null' ),
+			'description' => __( 'Maximum number of times a single customer can use this coupon. Pass null for unlimited.', 'agent-abilities-for-mcp' ),
+		),
+		'minimum_amount'       => array(
+			'type'        => 'string',
+			'description' => __( 'Minimum cart subtotal required for the coupon to apply, as a decimal string, e.g. "50.00".', 'agent-abilities-for-mcp' ),
+		),
+		'maximum_amount'       => array(
+			'type'        => 'string',
+			'description' => __( 'Maximum cart subtotal allowed for the coupon to apply, as a decimal string.', 'agent-abilities-for-mcp' ),
+		),
+		'individual_use'       => array(
+			'type'        => 'boolean',
+			'description' => __( 'When true, this coupon cannot be combined with other coupons in the same order.', 'agent-abilities-for-mcp' ),
+		),
+		'exclude_sale_items'   => array(
+			'type'        => 'boolean',
+			'description' => __( "When true, products already on sale are excluded from this coupon's discount.", 'agent-abilities-for-mcp' ),
+		),
 		'product_ids'          => array(
-			'type'  => 'array',
-			'items' => array( 'type' => 'integer' ),
+			'type'        => 'array',
+			'items'       => array( 'type' => 'integer' ),
+			'description' => __( 'Product ids this coupon is restricted to. Leave empty for no product restriction.', 'agent-abilities-for-mcp' ),
 		),
 		'excluded_product_ids' => array(
-			'type'  => 'array',
-			'items' => array( 'type' => 'integer' ),
+			'type'        => 'array',
+			'items'       => array( 'type' => 'integer' ),
+			'description' => __( "Product ids excluded from this coupon's discount.", 'agent-abilities-for-mcp' ),
 		),
 		'email_restrictions'   => array(
-			'type'  => 'array',
-			'items' => array( 'type' => 'string' ),
+			'type'        => 'array',
+			'items'       => array( 'type' => 'string' ),
+			'description' => __( 'Email addresses allowed to use this coupon. Leave empty for no restriction.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -316,13 +346,15 @@ function aafm_args_wc_list_coupons(): array {
 			'additionalProperties' => false,
 			'properties'           => array(
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of coupons per page, 1 to 100. Defaults to 10.', 'agent-abilities-for-mcp' ),
 				),
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'Page number of coupons to return, 1-indexed. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -423,8 +455,9 @@ function aafm_args_wc_get_coupon(): array {
 			'required'             => array( 'coupon_id' ),
 			'properties'           => array(
 				'coupon_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The WooCommerce coupon's post id.", 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -532,8 +565,9 @@ function aafm_exec_wc_create_coupon( array $input ) {
 function aafm_args_wc_update_coupon(): array {
 	$write_props              = aafm_wc_coupon_write_properties();
 	$write_props['coupon_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'The coupon to update. An empty request body besides this id is a no-op success.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(

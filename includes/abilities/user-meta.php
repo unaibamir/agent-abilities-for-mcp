@@ -82,13 +82,14 @@ function aafm_args_get_user_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user whose meta to read. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),
@@ -131,16 +132,18 @@ function aafm_args_update_user_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user whose meta to write. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 				'value'   => array(
-					'type' => array( 'string', 'number', 'boolean', 'integer' ),
+					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
+					'description' => __( 'The scalar value to store. Only text, number, or boolean values are accepted; the value is plain-text sanitized and then run through any registered sanitize_user_meta_{key} callback.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key', 'value' ),
@@ -181,13 +184,14 @@ function aafm_args_delete_user_meta(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'user_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the user whose meta to delete. The current user must have edit access to this user.', 'agent-abilities-for-mcp' ),
 				),
 				'key'     => array(
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The user-meta key to operate on. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The user-meta key to operate on. Must be on the operator\'s user-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; session tokens, application passwords, capability, user-level, and 2FA/passkey keys can never be exposed under any allowlist, and a key that fails any of those checks is rejected before the operation runs. (The post-meta abilities name the equivalent parameter meta_key; the two are kept distinct for back-compatibility and are not interchangeable.)', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'user_id', 'key' ),

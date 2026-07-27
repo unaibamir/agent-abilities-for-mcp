@@ -1144,14 +1144,19 @@ function aafm_args_replace_in_post(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'post_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'ID of the post to edit.', 'agent-abilities-for-mcp' ),
 				),
 				'search'  => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'Literal text to find in the post content. Matched as-is, not as a regular expression.', 'agent-abilities-for-mcp' ),
 				),
-				'replace' => array( 'type' => 'string' ),
+				'replace' => array(
+					'type'        => 'string',
+					'description' => __( 'Literal text to substitute for every match of search. Sanitized the same way as a full content update.', 'agent-abilities-for-mcp' ),
+				),
 			),
 			'required'             => array( 'post_id', 'search', 'replace' ),
 			'additionalProperties' => false,
@@ -1267,8 +1272,9 @@ function aafm_exec_replace_in_post( array $input ) {
 function aafm_args_update_cpt_item(): array {
 	$schema                          = aafm_write_content_schema( false );
 	$schema['properties']['post_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'ID of the content item to update.', 'agent-abilities-for-mcp' ),
 	);
 	$schema['required']              = array( 'post_id' );
 

@@ -46,9 +46,21 @@ final class PostsWriteTest extends TestCase {
 		$this->assertSame( 'destructive', $registry['aafm/trash-post']['risk'] );
 	}
 
-	public function test_create_draft_forces_draft_status(): void {
+	public function test_create_draft_defaults_to_draft_when_status_omitted(): void {
+		$this->acting_as( 'contributor' );
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Agent draft',
+				'content' => 'Body',
+			)
+		);
+		$this->assertSame( 'draft', get_post_status( $out['post']['id'] ) );
+	}
+
+	public function test_create_draft_honors_requested_publish_status_when_caller_may_publish(): void {
+		// An author holds both edit_posts and publish_posts, so an explicit publish
+		// request must be honoured rather than silently forced back to draft.
 		$this->acting_as( 'author' );
-		// Even if the agent asks to publish, create-draft must produce a draft.
 		$out = wp_get_ability( 'aafm/create-draft' )->execute(
 			array(
 				'title'   => 'Agent draft',
@@ -56,7 +68,51 @@ final class PostsWriteTest extends TestCase {
 				'status'  => 'publish',
 			)
 		);
-		$this->assertSame( 'draft', get_post_status( $out['post']['id'] ) );
+		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
+	}
+
+	public function test_create_draft_honors_requested_pending_and_private_status(): void {
+		$this->acting_as( 'editor' );
+
+		$pending = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Pending item',
+				'content' => 'Body',
+				'status'  => 'pending',
+			)
+		);
+		$this->assertSame( 'pending', get_post_status( $pending['post']['id'] ) );
+
+		$private = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Private item',
+				'content' => 'Body',
+				'status'  => 'private',
+			)
+		);
+		$this->assertSame( 'private', get_post_status( $private['post']['id'] ) );
+	}
+
+	/**
+	 * The escalation regression: create-draft's permission_callback only requires
+	 * edit_posts, so a Contributor (edit_posts, no publish_posts) must be refused when it
+	 * asks for a publicly-viewable status - not silently downgraded to draft, and not
+	 * allowed to publish. No post may exist afterwards.
+	 */
+	public function test_create_draft_denies_publish_status_without_publish_cap(): void {
+		$this->acting_as( 'contributor' );
+		$before = (int) wp_count_posts( 'post' )->publish;
+
+		$out = wp_get_ability( 'aafm/create-draft' )->execute(
+			array(
+				'title'   => 'Should never go live',
+				'content' => 'Body',
+				'status'  => 'publish',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( $before, (int) wp_count_posts( 'post' )->publish );
 	}
 
 	public function test_create_draft_needs_only_edit_posts_not_publish(): void {
@@ -75,6 +131,63 @@ final class PostsWriteTest extends TestCase {
 			)
 		);
 		$this->assertSame( 'publish', get_post_status( $out['post']['id'] ) );
+	}
+
+	public function test_create_post_honors_requested_draft_pending_private_status(): void {
+		// An editor holds publish_posts, so create-post's cap gate is already satisfied;
+		// this proves a non-default requested status is still honoured, not overwritten.
+		$this->acting_as( 'editor' );
+
+		$draft = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Draft via create-post',
+				'content' => 'Body',
+				'status'  => 'draft',
+			)
+		);
+		$this->assertSame( 'draft', get_post_status( $draft['post']['id'] ) );
+
+		$pending = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Pending via create-post',
+				'content' => 'Body',
+				'status'  => 'pending',
+			)
+		);
+		$this->assertSame( 'pending', get_post_status( $pending['post']['id'] ) );
+
+		$private = wp_get_ability( 'aafm/create-post' )->execute(
+			array(
+				'title'   => 'Private via create-post',
+				'content' => 'Body',
+				'status'  => 'private',
+			)
+		);
+		$this->assertSame( 'private', get_post_status( $private['post']['id'] ) );
+	}
+
+	public function test_create_post_and_create_draft_reject_disallowed_statuses(): void {
+		$this->acting_as( 'administrator' );
+
+		foreach ( array( 'any', 'trash', 'auto-draft', 'inherit', 'bogus_status' ) as $bad_status ) {
+			$post_out = wp_get_ability( 'aafm/create-post' )->execute(
+				array(
+					'title'   => 'Bad status post ' . $bad_status,
+					'content' => 'Body',
+					'status'  => $bad_status,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $post_out, "create-post must reject status={$bad_status}" );
+
+			$draft_out = wp_get_ability( 'aafm/create-draft' )->execute(
+				array(
+					'title'   => 'Bad status draft ' . $bad_status,
+					'content' => 'Body',
+					'status'  => $bad_status,
+				)
+			);
+			$this->assertInstanceOf( WP_Error::class, $draft_out, "create-draft must reject status={$bad_status}" );
+		}
 	}
 
 	public function test_subscriber_denied_create_draft_is_audited(): void {

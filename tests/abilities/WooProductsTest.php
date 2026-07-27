@@ -559,6 +559,80 @@ final class WooProductsTest extends TestCase {
 		);
 	}
 
+	// =========================================================================
+	// aafm/wc-update-product -- `type` (MCP defect fix)
+	//
+	// aafm_exec_wc_update_product() used to unset $input['type'] before applying, so a caller-sent
+	// type had zero effect and no error -- the schema advertised grouped/external/variable as if
+	// changeable when converting a product's type is out of scope. The fix does not implement
+	// conversion; it stops the silent discard: a matching type is a harmless no-op, a mismatched
+	// one now returns a WP_Error instead. Product 101 (seeded by stub_woocommerce()) carries no
+	// explicit type, so get_type() defaults to 'simple'.
+	// =========================================================================
+
+	/**
+	 * A `type` matching the product's current type is accepted as a no-op -- the update proceeds
+	 * normally and any other sent fields are still applied.
+	 */
+	public function test_update_product_matching_type_is_a_noop_success(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'type'       => 'simple',
+				'name'       => 'Still Simple Widget',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A type matching the current type must not be rejected.' );
+		$this->assertSame( 'simple', $res['type'] );
+		$this->assertSame( 'Still Simple Widget', $res['name'], 'Other sent fields are still applied when type matches.' );
+	}
+
+	/**
+	 * A `type` that does NOT match the product's actual type must now return a WP_Error instead of
+	 * being silently discarded, and the whole request must be rejected -- no partial write of the
+	 * other fields sent alongside the bad type either.
+	 */
+	public function test_update_product_mismatched_type_returns_error_and_product_is_unchanged(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'type'       => 'variable',
+				'name'       => 'Should Not Apply',
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			"A type that does not match the product's actual type must be rejected, not silently discarded."
+		);
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 101 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $read );
+		$this->assertSame( 'simple', $read['type'], "The product's actual type must be unchanged." );
+		$this->assertSame( 'Test Widget', $read['name'], 'No partial write: the name sent alongside the bad type must not apply either.' );
+	}
+
+	/**
+	 * Omitting `type` entirely behaves exactly as before this fix: the product's type is left
+	 * untouched and other sent fields still apply.
+	 */
+	public function test_update_product_omitted_type_leaves_type_unchanged(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => 101,
+				'name'       => 'Renamed Without Type',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'simple', $res['type'], 'Omitting type must leave it unchanged.' );
+		$this->assertSame( 'Renamed Without Type', $res['name'] );
+	}
+
 	public function test_create_product_write_is_audited(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Audited Create' ) );

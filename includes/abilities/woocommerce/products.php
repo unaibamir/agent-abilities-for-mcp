@@ -757,8 +757,8 @@ function aafm_args_wc_create_product(): array {
 	);
 	// This ability only builds simple products (see aafm_exec_wc_create_product): a non-simple
 	// request is rejected rather than silently downgraded, so the create-only restriction is
-	// documented here rather than on the shared write-properties description, which also serves
-	// the update ability where `type` is silently dropped and stays undescribed (MCP audit finding).
+	// documented here rather than on the shared write-properties description, which is also the
+	// base for the update ability's own type description (aafm_args_wc_update_product()).
 	$properties['type']['description'] = __( "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails.", 'agent-abilities-for-mcp' );
 
 	return array(
@@ -839,10 +839,14 @@ function aafm_args_wc_update_product(): array {
 		'minLength'   => 1,
 		'description' => __( "The product's title. Omit to leave the existing title unchanged.", 'agent-abilities-for-mcp' ),
 	);
-	// `type` is deliberately left without a description: aafm_exec_wc_update_product() unsets
-	// $input['type'] before applying, so a caller-sent value here is silently ignored (a product's
-	// type cannot be changed once created). Documented as a bug in the description audit rather
-	// than papered over with a description that would make the ignore look intentional.
+	// A product's type cannot be changed once created (converting between simple/grouped/
+	// external/variable is a non-trivial operation this ability does not implement -- see
+	// aafm_exec_wc_update_product()). Sending a value that matches the product's current type is
+	// accepted as a no-op; a mismatched value is refused with an error rather than silently
+	// discarded, so this override replaces the create-facing description (which does not apply
+	// here) with one that is true for update, mirroring the `attributes` override in
+	// aafm_args_wc_update_product_variation() (variations.php).
+	$properties['type']['description'] = __( "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged.", 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-update-product' ),
@@ -880,6 +884,19 @@ function aafm_exec_wc_update_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
+
+	// `type` cannot be changed on update -- converting a product between simple/grouped/external/
+	// variable is a non-trivial operation this ability does not implement. A caller-sent value
+	// matching the product's actual current type is a harmless no-op; a mismatched value used to
+	// be silently discarded (the caller saw success and an unconverted product). Refuse it instead
+	// so a caller trying to change the type learns immediately, rather than papering over the gap.
+	if ( array_key_exists( 'type', $input ) ) {
+		$current_type = $product->get_type();
+		if ( (string) $input['type'] !== $current_type ) {
+			return aafm_wc_product_type_mismatch_error( $current_type, (string) $input['type'] );
+		}
+	}
+
 	unset( $input['product_id'], $input['type'] );
 	aafm_wc_apply_product_input( $product, $input );
 	$id = (int) $product->save();
@@ -889,6 +906,28 @@ function aafm_exec_wc_update_product( array $input ) {
 		return aafm_generic_error();
 	}
 	return aafm_rich_wc_product( $saved );
+}
+
+/**
+ * Build the WP_Error returned when aafm/wc-update-product receives a `type` that does not match
+ * the product's actual current type. Converting a product between simple/grouped/external/
+ * variable is out of scope for this ability -- a matching value is treated as a no-op elsewhere in
+ * aafm_exec_wc_update_product(); this error is only for a genuine mismatch.
+ *
+ * @param string $current_type   The product's actual current type.
+ * @param string $requested_type The type the caller sent.
+ * @return \WP_Error
+ */
+function aafm_wc_product_type_mismatch_error( string $current_type, string $requested_type ): \WP_Error {
+	return new \WP_Error(
+		'aafm_wc_product_type_mismatch',
+		sprintf(
+			/* translators: 1: the product's actual current type. 2: the type the caller requested. */
+			__( 'This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged.', 'agent-abilities-for-mcp' ),
+			$current_type,
+			$requested_type
+		)
+	);
 }
 
 /**

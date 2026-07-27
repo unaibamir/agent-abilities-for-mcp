@@ -23,23 +23,18 @@ use AAFM\Tests\TestCase;
 final class DescriptionCoverageTest extends TestCase {
 
 	/**
-	 * Abilities the parameter-description sweep has not reached yet (tranches 2-4: comments,
-	 * media, users, post/user/term meta, revisions, activity log, blocks, menus, templates, and
-	 * every yoast-/rankmath-/aioseo-/acf-/wc- integration). Tranche 1 (posts, pages, terms,
-	 * media's list/get reads, search - commit 3b7ff24) is NOT here, so this test already
-	 * enforces coverage on it structurally.
+	 * Abilities the parameter-description sweep has not reached yet.
 	 *
-	 * Shrinks to empty as tranches 2-4 land - remove an ability the moment its properties all
-	 * carry a description; never add one back to paper over a regression.
+	 * Empty since the wc-update-product `type` fix (release/1.4.2): `type` used to be silently
+	 * discarded by aafm_exec_wc_update_product() (a mismatched value now returns a WP_Error
+	 * instead, and a matching value is a no-op), so it now has an honest, ability-specific
+	 * description and the last remaining entry was removed. Keep this const and comment as the
+	 * ratchet's home for the next ability found undescribed -- add an entry only for a genuinely
+	 * bare ability, never to paper over a regression in one already covered.
 	 *
 	 * @var string[]
 	 */
-	private const UNCOVERED_ABILITIES = array(
-		// Only entry left. `type` is advertised on the update schema but discarded by
-		// aafm_exec_wc_update_product() (products.php:879), so it cannot be described
-		// truthfully until that is resolved. See 137-tool-description-audit.md.
-		'aafm/wc-update-product',
-	);
+	private const UNCOVERED_ABILITIES = array();
 
 	public function set_up(): void {
 		parent::set_up();

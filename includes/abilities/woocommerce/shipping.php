@@ -228,10 +228,14 @@ function aafm_wc_shipping_zone_output_properties(): array {
  */
 function aafm_wc_shipping_zone_write_properties(): array {
 	return array(
-		'zone_name'  => array( 'type' => 'string' ),
+		'zone_name'  => array(
+			'type'        => 'string',
+			'description' => __( 'Display name for the shipping zone shown in the WooCommerce admin.', 'agent-abilities-for-mcp' ),
+		),
 		'zone_order' => array(
-			'type'    => 'integer',
-			'minimum' => 0,
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => __( "Sort position among shipping zones, lowest first. Zones are matched against a customer's address in this order, so an earlier zone whose locations also match a later zone's address wins. New zones default to 0 when omitted; on update, an omitted value leaves the zone's existing order unchanged.", 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -358,8 +362,9 @@ function aafm_args_wc_get_shipping_zone(): array {
 			'required'             => array( 'zone_id' ),
 			'properties'           => array(
 				'zone_id' => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The shipping zone\'s id. Use 0 for the "Rest of the World" zone, which always exists.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -468,8 +473,9 @@ function aafm_exec_wc_create_shipping_zone( array $input ) {
 function aafm_args_wc_update_shipping_zone(): array {
 	$write_props            = aafm_wc_shipping_zone_write_properties();
 	$write_props['zone_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 0,
+		'type'        => 'integer',
+		'minimum'     => 0,
+		'description' => __( "The shipping zone's id to update. Must reference an existing zone or the request fails.", 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
@@ -612,8 +618,9 @@ function aafm_args_wc_list_shipping_methods(): array {
 			'required'             => array( 'zone_id' ),
 			'properties'           => array(
 				'zone_id' => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The shipping zone\'s id whose methods to list. Use 0 for the "Rest of the World" zone.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -690,8 +697,9 @@ function aafm_args_wc_get_shipping_method(): array {
 			'required'             => array( 'zone_id', 'instance_id' ),
 			'properties'           => array(
 				'zone_id'     => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The shipping zone\'s id the method instance belongs to. Use 0 for the "Rest of the World" zone.', 'agent-abilities-for-mcp' ),
 				),
 				'instance_id' => array(
 					'type'        => 'integer',
@@ -752,8 +760,9 @@ function aafm_args_wc_create_shipping_method(): array {
 			'required'             => array( 'zone_id', 'method_type' ),
 			'properties'           => array(
 				'zone_id'     => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The shipping zone\'s id to add the method to. Use 0 for the "Rest of the World" zone.', 'agent-abilities-for-mcp' ),
 				),
 				'method_type' => array(
 					'type'        => 'string',
@@ -825,15 +834,19 @@ function aafm_args_wc_update_shipping_method(): array {
 			'required'             => array( 'zone_id', 'instance_id' ),
 			'properties'           => array(
 				'zone_id'      => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'The shipping zone\'s id the method instance belongs to. Use 0 for the "Rest of the World" zone.', 'agent-abilities-for-mcp' ),
 				),
 				'instance_id'  => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
 					'description' => 'The shipping method INSTANCE id within the zone (from wc-list-shipping-methods or the instance_id returned by wc-create-shipping-method).',
 				),
-				'method_title' => array( 'type' => 'string' ),
+				'method_title' => array(
+					'type'        => 'string',
+					'description' => __( 'Display name shown for this method instance at checkout, overriding the shipping method type\'s generic label (e.g. "Flat rate"). Falls back to the method type\'s own title when never set.', 'agent-abilities-for-mcp' ),
+				),
 				'enabled'      => array(
 					'type'        => 'string',
 					'enum'        => array( 'yes', 'no' ),

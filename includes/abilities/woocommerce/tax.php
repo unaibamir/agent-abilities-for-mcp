@@ -288,8 +288,9 @@ function aafm_args_wc_get_tax_rate(): array {
 			'required'             => array( 'rate_id' ),
 			'properties'           => array(
 				'rate_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The tax rate's numeric id (tax_rate_id), from wc-list-tax-rates or the id returned by wc-create-tax-rate.", 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -371,12 +372,30 @@ function aafm_args_wc_create_tax_rate(): array {
 					'type'        => 'string',
 					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
 				),
-				'name'     => array( 'type' => 'string' ),
-				'priority' => array( 'type' => 'integer' ),
-				'compound' => array( 'type' => 'boolean' ),
-				'shipping' => array( 'type' => 'boolean' ),
-				'order'    => array( 'type' => 'integer' ),
-				'class'    => array( 'type' => 'string' ),
+				'name'     => array(
+					'type'        => 'string',
+					'description' => __( 'Display name for the tax rate shown in the WooCommerce admin (e.g. "State Tax"). Does not affect calculation, only labeling.', 'agent-abilities-for-mcp' ),
+				),
+				'priority' => array(
+					'type'        => 'integer',
+					'description' => __( 'Priority group the rate is evaluated in. Rates that share a priority are summed; rates in different priorities are compounded in order. Defaults to 1.', 'agent-abilities-for-mcp' ),
+				),
+				'compound' => array(
+					'type'        => 'boolean',
+					'description' => __( 'When true, this rate is calculated on top of the order total after other (lower-priority) taxes have already been applied, rather than on the pre-tax subtotal. Defaults to false.', 'agent-abilities-for-mcp' ),
+				),
+				'shipping' => array(
+					'type'        => 'boolean',
+					'description' => __( "Whether this rate also applies to the order's shipping cost. Defaults to true.", 'agent-abilities-for-mcp' ),
+				),
+				'order'    => array(
+					'type'        => 'integer',
+					'description' => __( 'Sort position among rates that share the same country, state, and class, lowest first. Defaults to 0.', 'agent-abilities-for-mcp' ),
+				),
+				'class'    => array(
+					'type'        => 'string',
+					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string (the default) is the Standard class.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'output_schema'       => array(
@@ -491,8 +510,9 @@ function aafm_args_wc_update_tax_rate(): array {
 			'required'             => array( 'rate_id' ),
 			'properties'           => array(
 				'rate_id'  => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The tax rate's numeric id (tax_rate_id) to update. Must reference an existing rate or the request fails.", 'agent-abilities-for-mcp' ),
 				),
 				'rate'     => array(
 					'type'        => 'string',
@@ -507,12 +527,30 @@ function aafm_args_wc_update_tax_rate(): array {
 					'type'        => 'string',
 					'description' => 'WooCommerce state/region code (e.g. the 2-letter US state code "CA"). An empty string means the rate applies to all states within the country.',
 				),
-				'name'     => array( 'type' => 'string' ),
-				'priority' => array( 'type' => 'integer' ),
-				'compound' => array( 'type' => 'boolean' ),
-				'shipping' => array( 'type' => 'boolean' ),
-				'order'    => array( 'type' => 'integer' ),
-				'class'    => array( 'type' => 'string' ),
+				'name'     => array(
+					'type'        => 'string',
+					'description' => __( 'Display name for the tax rate shown in the WooCommerce admin (e.g. "State Tax"). Does not affect calculation, only labeling.', 'agent-abilities-for-mcp' ),
+				),
+				'priority' => array(
+					'type'        => 'integer',
+					'description' => __( 'Priority group the rate is evaluated in. Rates that share a priority are summed; rates in different priorities are compounded in order.', 'agent-abilities-for-mcp' ),
+				),
+				'compound' => array(
+					'type'        => 'boolean',
+					'description' => __( 'When true, this rate is calculated on top of the order total after other (lower-priority) taxes have already been applied, rather than on the pre-tax subtotal.', 'agent-abilities-for-mcp' ),
+				),
+				'shipping' => array(
+					'type'        => 'boolean',
+					'description' => __( "Whether this rate also applies to the order's shipping cost.", 'agent-abilities-for-mcp' ),
+				),
+				'order'    => array(
+					'type'        => 'integer',
+					'description' => __( 'Sort position among rates that share the same country, state, and class, lowest first.', 'agent-abilities-for-mcp' ),
+				),
+				'class'    => array(
+					'type'        => 'string',
+					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string is the Standard class.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'output_schema'       => array(
@@ -728,8 +766,14 @@ function aafm_args_wc_create_tax_class(): array {
 			'additionalProperties' => false,
 			'required'             => array( 'name' ),
 			'properties'           => array(
-				'name' => array( 'type' => 'string' ),
-				'slug' => array( 'type' => 'string' ),
+				'name' => array(
+					'type'        => 'string',
+					'description' => __( 'Display name for the new tax class (e.g. "Reduced rate").', 'agent-abilities-for-mcp' ),
+				),
+				'slug' => array(
+					'type'        => 'string',
+					'description' => __( 'Optional slug for the class. When omitted, WooCommerce derives one from name; when the derived or requested slug collides with an existing class, WooCommerce de-duplicates it (e.g. "reduced-rate-1") and the response reports the actual stored slug.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'output_schema'       => array(

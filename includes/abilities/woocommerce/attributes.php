@@ -231,8 +231,14 @@ function aafm_exec_wc_list_product_attributes(): array {
  */
 function aafm_wc_attribute_write_properties(): array {
 	return array(
-		'name'         => array( 'type' => 'string' ),
-		'slug'         => array( 'type' => 'string' ),
+		'name'         => array(
+			'type'        => 'string',
+			'description' => __( 'Human-readable label for the attribute shown in the WooCommerce admin and on the storefront (e.g. "Color").', 'agent-abilities-for-mcp' ),
+		),
+		'slug'         => array(
+			'type'        => 'string',
+			'description' => __( 'Attribute taxonomy slug. When omitted, WooCommerce derives one from name. Do not include the pa_ prefix; WooCommerce adds it automatically when building the taxonomy name.', 'agent-abilities-for-mcp' ),
+		),
 		'type'         => array(
 			'type'        => 'string',
 			'enum'        => array( 'select', 'text' ),
@@ -243,7 +249,10 @@ function aafm_wc_attribute_write_properties(): array {
 			'enum'        => array( 'menu_order', 'name', 'name_num', 'id' ),
 			'description' => 'Default term sort order for this attribute: menu_order (custom), name, name_num (name treated numerically), or id. Defaults to menu_order.',
 		),
-		'has_archives' => array( 'type' => 'boolean' ),
+		'has_archives' => array(
+			'type'        => 'boolean',
+			'description' => __( 'Whether values of this attribute get their own public archive page (like a taxonomy term archive). New attributes default to false when omitted; on update, an omitted value leaves the existing setting unchanged.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 
@@ -329,8 +338,9 @@ function aafm_args_wc_update_product_attribute(): array {
 	$all_props    = array_merge(
 		array(
 			'attribute_id' => array(
-				'type'    => 'integer',
-				'minimum' => 1,
+				'type'        => 'integer',
+				'minimum'     => 1,
+				'description' => __( "The global attribute's id, from wc-list-product-attributes or the id returned by wc-create-product-attribute. Must reference an existing attribute or the request fails.", 'agent-abilities-for-mcp' ),
 			),
 		),
 		$write_props

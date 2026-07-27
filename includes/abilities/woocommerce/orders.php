@@ -297,13 +297,15 @@ function aafm_args_wc_list_orders(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of orders to return per page, from 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
 				),
 				'status'   => array(
 					'type'        => 'string',
@@ -414,8 +416,9 @@ function aafm_args_wc_get_order(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID. Must reference an existing order or the request fails.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'order_id' ),
@@ -540,58 +543,127 @@ function aafm_wc_order_write_properties(): array {
 			'description' => 'Order status slug (e.g. processing, completed, on-hold). Must match a key returned by wc_get_order_statuses().',
 		),
 		'customer_id'   => array(
-			'type'    => 'integer',
-			'minimum' => 0,
+			'type'        => 'integer',
+			'minimum'     => 0,
+			'description' => __( 'WordPress/WooCommerce user ID to attach the order to. Use 0 for a guest order with no linked customer account.', 'agent-abilities-for-mcp' ),
 		),
-		'customer_note' => array( 'type' => 'string' ),
+		'customer_note' => array(
+			'type'        => 'string',
+			'description' => __( 'Free-text note attached to the order, visible to the customer on their My Account order view and order emails.', 'agent-abilities-for-mcp' ),
+		),
 		'billing'       => array(
 			'type'                 => 'object',
+			'description'          => __( 'Billing address to set on the order. Only the sub-fields included in the request are applied; other billing fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			// MEDIUM-4: close the nested billing object -- a smuggled key (e.g. billing.role) is rejected.
 			'additionalProperties' => false,
 			'properties'           => array(
-				'first_name' => array( 'type' => 'string' ),
-				'last_name'  => array( 'type' => 'string' ),
-				'company'    => array( 'type' => 'string' ),
-				'address_1'  => array( 'type' => 'string' ),
-				'address_2'  => array( 'type' => 'string' ),
-				'city'       => array( 'type' => 'string' ),
-				'state'      => array( 'type' => 'string' ),
-				'postcode'   => array( 'type' => 'string' ),
-				'country'    => array( 'type' => 'string' ),
-				'email'      => array( 'type' => 'string' ),
-				'phone'      => array( 'type' => 'string' ),
+				'first_name' => array(
+					'type'        => 'string',
+					'description' => __( 'First name for the billing address. Appears on invoices and order emails; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
+				),
+				'last_name'  => array(
+					'type'        => 'string',
+					'description' => __( 'Last name for the billing address. Appears on invoices and order emails.', 'agent-abilities-for-mcp' ),
+				),
+				'company'    => array(
+					'type'        => 'string',
+					'description' => __( 'Company name for the billing address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
+				),
+				'address_1'  => array(
+					'type'        => 'string',
+					'description' => __( 'Primary billing street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
+				),
+				'address_2'  => array(
+					'type'        => 'string',
+					'description' => __( 'Secondary billing address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
+				),
+				'city'       => array(
+					'type'        => 'string',
+					'description' => __( 'City or town for the billing address.', 'agent-abilities-for-mcp' ),
+				),
+				'state'      => array(
+					'type'        => 'string',
+					'description' => __( 'State, county, or province code for the billing address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
+				),
+				'postcode'   => array(
+					'type'        => 'string',
+					'description' => __( 'Postal or ZIP code for the billing address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
+				),
+				'country'    => array(
+					'type'        => 'string',
+					'description' => __( 'Two-letter ISO country code for the billing address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
+				),
+				'email'      => array(
+					'type'        => 'string',
+					'description' => __( 'Billing email address. Shipping has no email field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+				),
+				'phone'      => array(
+					'type'        => 'string',
+					'description' => __( 'Billing phone number. Shipping has no phone field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'shipping'      => array(
 			'type'                 => 'object',
+			'description'          => __( 'Shipping address to set on the order (no email or phone; those are billing-only fields). Only the sub-fields included in the request are applied; other shipping fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			// MEDIUM-4: close the nested shipping object.
 			'additionalProperties' => false,
 			'properties'           => array(
-				'first_name' => array( 'type' => 'string' ),
-				'last_name'  => array( 'type' => 'string' ),
-				'company'    => array( 'type' => 'string' ),
-				'address_1'  => array( 'type' => 'string' ),
-				'address_2'  => array( 'type' => 'string' ),
-				'city'       => array( 'type' => 'string' ),
-				'state'      => array( 'type' => 'string' ),
-				'postcode'   => array( 'type' => 'string' ),
-				'country'    => array( 'type' => 'string' ),
+				'first_name' => array(
+					'type'        => 'string',
+					'description' => __( 'First name for the shipping address. Appears on packing slips; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
+				),
+				'last_name'  => array(
+					'type'        => 'string',
+					'description' => __( 'Last name for the shipping address. Appears on packing slips.', 'agent-abilities-for-mcp' ),
+				),
+				'company'    => array(
+					'type'        => 'string',
+					'description' => __( 'Company name for the shipping address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
+				),
+				'address_1'  => array(
+					'type'        => 'string',
+					'description' => __( 'Primary shipping street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
+				),
+				'address_2'  => array(
+					'type'        => 'string',
+					'description' => __( 'Secondary shipping address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
+				),
+				'city'       => array(
+					'type'        => 'string',
+					'description' => __( 'City or town for the shipping address.', 'agent-abilities-for-mcp' ),
+				),
+				'state'      => array(
+					'type'        => 'string',
+					'description' => __( 'State, county, or province code for the shipping address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
+				),
+				'postcode'   => array(
+					'type'        => 'string',
+					'description' => __( 'Postal or ZIP code for the shipping address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
+				),
+				'country'    => array(
+					'type'        => 'string',
+					'description' => __( 'Two-letter ISO country code for the shipping address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'line_items'    => array(
-			'type'  => 'array',
-			'items' => array(
+			'type'        => 'array',
+			'description' => __( 'Products to add as line items, each given as a product_id and quantity pair. Items are always ADDED as new line items rather than replacing or editing what is already on the order; this ability has no way to modify or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write.', 'agent-abilities-for-mcp' ),
+			'items'       => array(
 				'type'                 => 'object',
 				// MEDIUM-4: close the line_items item object -- meta_data and any other key are rejected.
 				'additionalProperties' => false,
 				'properties'           => array(
 					'product_id' => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'ID of an existing WooCommerce product to add as a line item. Must resolve to a real product or the entire request fails with no partial write.', 'agent-abilities-for-mcp' ),
 					),
 					'quantity'   => array(
-						'type'    => 'integer',
-						'minimum' => 1,
+						'type'        => 'integer',
+						'minimum'     => 1,
+						'description' => __( 'Quantity of the product to add. Minimum 1.', 'agent-abilities-for-mcp' ),
 					),
 				),
 				'required'             => array( 'product_id', 'quantity' ),
@@ -915,8 +987,9 @@ function aafm_exec_wc_create_order( array $input ) {
 function aafm_args_wc_update_order(): array {
 	$properties             = aafm_wc_order_write_properties();
 	$properties['order_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( "The order's post ID to update. Must reference an existing order or the request fails.", 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
@@ -1006,11 +1079,13 @@ function aafm_args_wc_update_order_status(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID whose status to change.", 'agent-abilities-for-mcp' ),
 				),
 				'status'   => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'New order status. Accepts either the short slug (e.g. "completed") or the wc- prefixed form (e.g. "wc-completed"); must match a status registered with wc_get_order_statuses(). No transition is blocked based on the order\'s current status.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'order_id', 'status' ),
@@ -1185,8 +1260,9 @@ function aafm_args_wc_list_order_notes(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID whose notes to list.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'order_id' ),
@@ -1254,15 +1330,18 @@ function aafm_args_wc_create_order_note(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id'      => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID to attach the note to.", 'agent-abilities-for-mcp' ),
 				),
 				'note'          => array(
-					'type'      => 'string',
-					'minLength' => 1,
+					'type'        => 'string',
+					'minLength'   => 1,
+					'description' => __( 'The note text to add to the order.', 'agent-abilities-for-mcp' ),
 				),
 				'customer_note' => array(
-					'type' => 'boolean',
+					'type'        => 'boolean',
+					'description' => __( 'When true, the note is customer-facing and appears in the customer\'s My Account order view and order emails. When false (the default), it is a private, admin-only note.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'order_id', 'note' ),
@@ -1384,8 +1463,9 @@ function aafm_args_wc_list_order_refunds(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID whose refunds to list.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'order_id' ),
@@ -1455,8 +1535,9 @@ function aafm_args_wc_get_order_refund(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'refund_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The refund's own post ID (not the order id). Get it from wc-list-order-refunds or the id returned by wc-create-order-refund.", 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'refund_id' ),
@@ -1512,24 +1593,37 @@ function aafm_args_wc_create_order_refund(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'order_id'   => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( "The order's post ID to refund.", 'agent-abilities-for-mcp' ),
 				),
 				'amount'     => array(
-					'type'    => 'string',
-					'pattern' => '^\d+(\.\d{1,2})?$',
+					'type'        => 'string',
+					'pattern'     => '^\d+(\.\d{1,2})?$',
+					'description' => __( 'Total refund amount as a decimal string, e.g. "12.50" (no currency symbol or thousands separator). Required even when line_items is also sent.', 'agent-abilities-for-mcp' ),
 				),
 				'reason'     => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'Optional free-text reason recorded on the refund and returned verbatim under the Integrations security disclaimer.', 'agent-abilities-for-mcp' ),
 				),
 				'line_items' => array(
-					'type'  => 'array',
-					'items' => array(
+					'type'        => 'array',
+					'description' => __( 'Optional per-line-item refund breakdown, each with line_item_id (the order\'s own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line fails the entire request.', 'agent-abilities-for-mcp' ),
+					'items'       => array(
 						'type'                 => 'object',
 						'properties'           => array(
-							'line_item_id' => array( 'type' => 'integer' ),
-							'refund_total' => array( 'type' => 'string' ),
-							'refund_tax'   => array( 'type' => 'string' ),
+							'line_item_id' => array(
+								'type'        => 'integer',
+								'description' => __( "The order's own line item id, as returned by reading the order. This is not a product id.", 'agent-abilities-for-mcp' ),
+							),
+							'refund_total' => array(
+								'type'        => 'string',
+								'description' => __( 'Amount to refund against this line, as a decimal string, e.g. "12.50" (no currency symbol or thousands separator). Unlike the top-level amount this is not constrained by the schema, so it is checked when the refund runs: a non-numeric or negative value fails the whole request before any refund is created.', 'agent-abilities-for-mcp' ),
+							),
+							'refund_tax'   => array(
+								'type'        => 'string',
+								'description' => __( 'Tax portion to refund against this line, as a decimal string. Same validation as refund_total: non-numeric or negative fails the whole request before any refund is created.', 'agent-abilities-for-mcp' ),
+							),
 						),
 						'additionalProperties' => false,
 					),

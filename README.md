@@ -190,6 +190,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** Custom post types ignored every status except publish, so a request for pending or private silently became a draft.
 * **Fix:** Updating a WooCommerce order with `line_items` added new items rather than changing the existing ones, which quietly raised the order total. There is now an `add_line_items` field that says what it does. The old field keeps working exactly as before so nothing breaks.
 * **Fix:** The product type sent when updating a WooCommerce product was discarded without a word. Sending one that does not match the product now returns an error instead of pretending it worked.
+* **Fix:** A WooCommerce order request that mixed valid and invalid product ids reported failure after it had already written the valid items, leaving an order with items you were told had not been added. Every id is now checked before anything is written, so a bad one fails the whole request and changes nothing.
 * **Feature:** Every input on every tool now explains itself. All 505 of them, where only three abilities were fully documented before. Agents were guessing at things like which fields replace rather than merge, that prices are plain decimal strings, that country and state want two-letter codes, and that a meta key outside your allowlist is refused rather than returned empty.
 * **Chore:** Added a build check that fails when any tool input goes undocumented, so this cannot drift back.
 

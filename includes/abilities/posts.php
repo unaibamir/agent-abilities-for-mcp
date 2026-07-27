@@ -64,7 +64,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-draft']    = array(
 		'label'        => __( 'Create draft', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a new draft post. The agent drafts; a human publishes. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new post, draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires this content type\'s publish capability. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -72,7 +72,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-post']     = array(
 		'label'        => __( 'Create post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create and publish a post (requires publish capability). Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a new post, published by default (requires publish capability to call this ability at all). An explicit draft, pending, or private status is also accepted. Optional: slug, featured_media (attachment id), terms ({taxonomy: [termId]}, replaces existing terms per taxonomy), and meta ({key: value}, allowlisted keys only). Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -104,7 +104,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-cpt-item'] = array(
 		'label'        => __( 'Create content item', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create an item of an allowlisted custom content type (post_type). Drafts unless the type\'s publish capability is held. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create an item of an allowlisted custom content type (post_type), draft by default. An explicit status is honored, but publish, future, private, or any other publicly-visible status requires that type\'s publish capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',

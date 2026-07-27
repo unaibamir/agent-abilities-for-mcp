@@ -411,4 +411,249 @@ final class WooCommerceContractTest extends TestCase {
 		$order->delete( true );
 		$product->delete( true );
 	}
+
+	/**
+	 * THE regression test for the wc-update-order partial-write defect. `WC_Order::add_product()`
+	 * calls `$item->save()` immediately -- it does not wait for `$order->save()`. Before the fix,
+	 * `aafm_wc_apply_order_input()` looped over the combined line_items/add_line_items list and
+	 * called add_product() as each id resolved, only detecting an unresolvable id (and returning
+	 * WP_Error) after any earlier valid item had already been persisted. This is invisible to the
+	 * stub suite: the stub's add_product() only mutates the in-memory PHP object and is never
+	 * flushed to WcOrderStubStore until $order->save() runs, so a stub test cannot distinguish the
+	 * buggy single-pass loop from the fixed two-pass one. Only a real WC_Order, whose add_product()
+	 * genuinely persists ahead of save(), can prove the write never partially lands.
+	 */
+	public function test_update_order_unresolved_item_leaves_no_partial_write(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$existing_product = new \WC_Product();
+		$existing_product->set_name( 'AAFM Contract Existing Widget' );
+		$existing_product->set_regular_price( '9.00' );
+		$existing_product_id = $existing_product->save();
+		$this->assertGreaterThan( 0, $existing_product_id );
+
+		$new_product = new \WC_Product();
+		$new_product->set_name( 'AAFM Contract New Widget' );
+		$new_product->set_regular_price( '12.50' );
+		$new_product_id = $new_product->save();
+		$this->assertGreaterThan( 0, $new_product_id );
+
+		// Seed a baseline order that already carries one line item, mirroring the finding's exact
+		// scenario -- an order that exists and must come out of the failed update EXACTLY as it went
+		// in, not just "no items were added".
+		$order = new \WC_Order();
+		$order->add_product( wc_get_product( $existing_product_id ), 1 );
+		$order->calculate_totals();
+		$order->save();
+		$order_id = $order->get_id();
+		$this->assertGreaterThan( 0, $order_id );
+
+		// Snapshot from a fresh DB read (not the in-memory $order object) so the baseline and the
+		// post-failure read are captured identically.
+		$baseline     = new \WC_Order( $order_id );
+		$before_count = count( $baseline->get_items() );
+		$before_total = $baseline->get_total();
+		$this->assertSame( 1, $before_count, 'Baseline order must seed exactly one line item.' );
+
+		$bogus_product_id = 999999999;
+		$result           = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $new_product_id,
+						'quantity'   => 2,
+					),
+					array(
+						'product_id' => $bogus_product_id,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$result,
+			'An unresolvable product id in the combined list must fail the whole request.'
+		);
+
+		// Re-read the order fresh from the DB -- not the in-memory $order object -- so a premature
+		// add_product() write for the valid new item would show up even though this PHP request
+		// never called $order->save() again itself.
+		$reloaded = new \WC_Order( $order_id );
+		$this->assertCount(
+			$before_count,
+			$reloaded->get_items(),
+			'The valid item that precedes the unresolvable one in the list must NOT have been persisted.'
+		);
+		$this->assertSame(
+			$before_total,
+			$reloaded->get_total(),
+			'The order total must be exactly what it was before the failed update -- no partial write.'
+		);
+
+		foreach ( $reloaded->get_items() as $item ) {
+			$this->assertSame(
+				$existing_product_id,
+				(int) $item->get_product_id(),
+				'The only surviving line item must be the original one -- the rejected new item is absent.'
+			);
+		}
+
+		$order->delete( true );
+		$existing_product->delete( true );
+		$new_product->delete( true );
+	}
+
+	/**
+	 * The all-valid path: every item in the combined line_items/add_line_items list must still be
+	 * added, in the documented order (line_items first, then add_line_items), once every id
+	 * resolves. Pins that the two-pass fix does not drop, duplicate, or reorder items when there is
+	 * nothing to reject.
+	 */
+	public function test_update_order_all_valid_items_are_added_in_order(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product_a = new \WC_Product();
+		$product_a->set_name( 'AAFM Contract Order Item A' );
+		$product_a->set_regular_price( '5.00' );
+		$product_a_id = $product_a->save();
+
+		$product_b = new \WC_Product();
+		$product_b->set_name( 'AAFM Contract Order Item B' );
+		$product_b->set_regular_price( '7.00' );
+		$product_b_id = $product_b->save();
+
+		$order = new \WC_Order();
+		$order->save();
+		$order_id = $order->get_id();
+
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'line_items'     => array(
+					array(
+						'product_id' => $product_a_id,
+						'quantity'   => 1,
+					),
+				),
+				'add_line_items' => array(
+					array(
+						'product_id' => $product_b_id,
+						'quantity'   => 3,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+
+		$reloaded = new \WC_Order( $order_id );
+		$items    = array_values( $reloaded->get_items() );
+		$this->assertCount( 2, $items, 'Both the line_items and add_line_items entries must be added.' );
+		$this->assertSame( $product_a_id, (int) $items[0]->get_product_id(), 'line_items entries are added first.' );
+		$this->assertSame( 1, (int) $items[0]->get_quantity() );
+		$this->assertSame( $product_b_id, (int) $items[1]->get_product_id(), 'add_line_items entries follow.' );
+		$this->assertSame( 3, (int) $items[1]->get_quantity() );
+
+		$order->delete( true );
+		$product_a->delete( true );
+		$product_b->delete( true );
+	}
+
+	/**
+	 * Wc-create-order companion to the update regression above. On create, the order passed into
+	 * aafm_wc_apply_order_input() is UNSAVED (get_id() === 0): add_product() still calls
+	 * $item->save() immediately, which persists an order_item row against order_id 0 -- an orphaned
+	 * row, since wp_insert_post() for the order itself never runs when the executor returns before
+	 * calling $order->save(). The two-pass fix avoids this too, because it never calls add_product()
+	 * at all until every id in the list has resolved. Pins that no order_item row leaks into
+	 * wp_woocommerce_order_items when wc-create-order fails on an unresolvable product id.
+	 */
+	public function test_create_order_unresolved_item_leaves_no_orphaned_order_item_rows(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		global $wpdb;
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Orphan-Row Widget' );
+		$product->set_regular_price( '3.25' );
+		$product_id = $product->save();
+
+		$items_table  = $wpdb->prefix . 'woocommerce_order_items';
+		$before_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $items_table ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- fixed table name, test-only.
+
+		$result = aafm_exec_wc_create_order(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => 999999998,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'An unresolvable product id must fail the whole create.' );
+
+		$after_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i', $items_table ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- fixed table name, test-only.
+		$this->assertSame(
+			$before_count,
+			$after_count,
+			'The valid item preceding the unresolvable one must never have been persisted -- not even against an orphaned order_id 0 row.'
+		);
+
+		$product->delete( true );
+	}
+
+	/**
+	 * Wc-create-order's all-valid path is unchanged by the atomicity fix: every requested item is
+	 * still added and the order still saves with a calculated total.
+	 */
+	public function test_create_order_behavior_unchanged_for_valid_items(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Create-Order Widget' );
+		$product->set_regular_price( '10.00' );
+		$product_id = $product->save();
+
+		$result = aafm_exec_wc_create_order(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 2,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertArrayHasKey( 'id', $result );
+		$this->assertGreaterThan( 0, $result['id'] );
+
+		$order = new \WC_Order( (int) $result['id'] );
+		$items = array_values( $order->get_items() );
+		$this->assertCount( 1, $items );
+		$this->assertSame( $product_id, (int) $items[0]->get_product_id() );
+		$this->assertSame( 2, (int) $items[0]->get_quantity() );
+		$this->assertSame( '20.00', $order->get_total(), 'calculate_totals() must still run after all items resolve.' );
+
+		$order->delete( true );
+		$product->delete( true );
+	}
 }

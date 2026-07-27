@@ -817,8 +817,14 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 	// are sent (update only -- create has no add_line_items field), the two lists are combined
 	// and every item in either is added; see the add_line_items/line_items descriptions in
 	// aafm_args_wc_update_order() for the documented rule.
-	// Any product_id that can't be resolved is collected and returned so the caller can surface a
-	// hard error instead of silently saving an incomplete order.
+	//
+	// Atomicity: this MUST run as two passes, never interleaved. WC_Order::add_product() calls
+	// $item->save() immediately -- it persists the order item row right away, it does not wait for
+	// $order->save(). Resolving and adding in a single loop would write every item that comes before
+	// the first unresolvable id, then report failure as if nothing happened (the exact contract the
+	// line_items/add_line_items schema promises: "the entire request fails with no partial write").
+	// Pass 1 resolves every id to a WC_Product without touching the order at all. Pass 2 only runs,
+	// and only calls add_product(), once every id in the combined list has resolved.
 	$unresolved   = array();
 	$items_to_add = array();
 	if ( array_key_exists( 'line_items', $input ) && is_array( $input['line_items'] ) ) {
@@ -827,6 +833,8 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 	if ( array_key_exists( 'add_line_items', $input ) && is_array( $input['add_line_items'] ) ) {
 		$items_to_add = array_merge( $items_to_add, $input['add_line_items'] );
 	}
+
+	$resolved = array();
 	foreach ( $items_to_add as $item ) {
 		if ( ! is_array( $item ) ) {
 			continue;
@@ -835,10 +843,21 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 		$qty     = max( 1, absint( $item['quantity'] ?? 1 ) );
 		$product = ( $pid > 0 && function_exists( 'wc_get_product' ) ) ? wc_get_product( $pid ) : false;
 		if ( $product instanceof \WC_Product ) {
-			$order->add_product( $product, $qty );
+			$resolved[] = array(
+				'product' => $product,
+				'qty'     => $qty,
+			);
 		} else {
 			$unresolved[] = $pid;
 		}
+	}
+
+	if ( array() !== $unresolved ) {
+		return $unresolved;
+	}
+
+	foreach ( $resolved as $to_add ) {
+		$order->add_product( $to_add['product'], $to_add['qty'] );
 	}
 
 	return $unresolved;

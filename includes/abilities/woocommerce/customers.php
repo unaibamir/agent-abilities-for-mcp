@@ -141,17 +141,50 @@ function aafm_wc_get_customer_object( int $id ): ?\WC_Customer {
  */
 function aafm_wc_customer_billing_properties(): array {
 	return array(
-		'first_name' => array( 'type' => 'string' ),
-		'last_name'  => array( 'type' => 'string' ),
-		'company'    => array( 'type' => 'string' ),
-		'address_1'  => array( 'type' => 'string' ),
-		'address_2'  => array( 'type' => 'string' ),
-		'city'       => array( 'type' => 'string' ),
-		'state'      => array( 'type' => 'string' ),
-		'postcode'   => array( 'type' => 'string' ),
-		'country'    => array( 'type' => 'string' ),
-		'email'      => array( 'type' => 'string' ),
-		'phone'      => array( 'type' => 'string' ),
+		'first_name' => array(
+			'type'        => 'string',
+			'description' => __( 'First name for the billing address. Appears on invoices and order emails; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
+		),
+		'last_name'  => array(
+			'type'        => 'string',
+			'description' => __( 'Last name for the billing address. Appears on invoices and order emails.', 'agent-abilities-for-mcp' ),
+		),
+		'company'    => array(
+			'type'        => 'string',
+			'description' => __( 'Company name for the billing address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
+		),
+		'address_1'  => array(
+			'type'        => 'string',
+			'description' => __( 'Primary billing street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
+		),
+		'address_2'  => array(
+			'type'        => 'string',
+			'description' => __( 'Secondary billing address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
+		),
+		'city'       => array(
+			'type'        => 'string',
+			'description' => __( 'City or town for the billing address.', 'agent-abilities-for-mcp' ),
+		),
+		'state'      => array(
+			'type'        => 'string',
+			'description' => __( 'State, county, or province code for the billing address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
+		),
+		'postcode'   => array(
+			'type'        => 'string',
+			'description' => __( 'Postal or ZIP code for the billing address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
+		),
+		'country'    => array(
+			'type'        => 'string',
+			'description' => __( 'Two-letter ISO country code for the billing address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
+		),
+		'email'      => array(
+			'type'        => 'string',
+			'description' => __( 'Billing email address. Shipping has no email field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+		),
+		'phone'      => array(
+			'type'        => 'string',
+			'description' => __( 'Billing phone number. Shipping has no phone field; the closed shipping schema rejects one if sent there.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 
@@ -162,15 +195,42 @@ function aafm_wc_customer_billing_properties(): array {
  */
 function aafm_wc_customer_shipping_properties(): array {
 	return array(
-		'first_name' => array( 'type' => 'string' ),
-		'last_name'  => array( 'type' => 'string' ),
-		'company'    => array( 'type' => 'string' ),
-		'address_1'  => array( 'type' => 'string' ),
-		'address_2'  => array( 'type' => 'string' ),
-		'city'       => array( 'type' => 'string' ),
-		'state'      => array( 'type' => 'string' ),
-		'postcode'   => array( 'type' => 'string' ),
-		'country'    => array( 'type' => 'string' ),
+		'first_name' => array(
+			'type'        => 'string',
+			'description' => __( 'First name for the shipping address. Appears on packing slips; does not need to match the account first name.', 'agent-abilities-for-mcp' ),
+		),
+		'last_name'  => array(
+			'type'        => 'string',
+			'description' => __( 'Last name for the shipping address. Appears on packing slips.', 'agent-abilities-for-mcp' ),
+		),
+		'company'    => array(
+			'type'        => 'string',
+			'description' => __( 'Company name for the shipping address. Optional; leave blank for a personal, non-business address.', 'agent-abilities-for-mcp' ),
+		),
+		'address_1'  => array(
+			'type'        => 'string',
+			'description' => __( 'Primary shipping street address (house or building number and street name).', 'agent-abilities-for-mcp' ),
+		),
+		'address_2'  => array(
+			'type'        => 'string',
+			'description' => __( 'Secondary shipping address line for an apartment, suite, or unit number. Optional.', 'agent-abilities-for-mcp' ),
+		),
+		'city'       => array(
+			'type'        => 'string',
+			'description' => __( 'City or town for the shipping address.', 'agent-abilities-for-mcp' ),
+		),
+		'state'      => array(
+			'type'        => 'string',
+			'description' => __( 'State, county, or province code for the shipping address (e.g. "CA", not "California"). Only meaningful for countries WooCommerce tracks states for. Stored exactly as sent with no validation, so a full name will not match WooCommerce\'s state-based tax or shipping rules.', 'agent-abilities-for-mcp' ),
+		),
+		'postcode'   => array(
+			'type'        => 'string',
+			'description' => __( 'Postal or ZIP code for the shipping address, in the format the destination country expects.', 'agent-abilities-for-mcp' ),
+		),
+		'country'    => array(
+			'type'        => 'string',
+			'description' => __( 'Two-letter ISO country code for the shipping address (e.g. "US", not "United States"). Stored exactly as sent with no validation, so an unrecognized value will not match WooCommerce\'s country-based tax rates or shipping zones.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 
@@ -186,15 +246,23 @@ function aafm_wc_customer_shipping_properties(): array {
  */
 function aafm_wc_customer_write_properties(): array {
 	return array(
-		'first_name' => array( 'type' => 'string' ),
-		'last_name'  => array( 'type' => 'string' ),
+		'first_name' => array(
+			'type'        => 'string',
+			'description' => __( "Customer's first name.", 'agent-abilities-for-mcp' ),
+		),
+		'last_name'  => array(
+			'type'        => 'string',
+			'description' => __( "Customer's last name.", 'agent-abilities-for-mcp' ),
+		),
 		'billing'    => array(
 			'type'                 => 'object',
+			'description'          => __( 'Billing address fields to set on the customer account. Only the sub-fields included in the request are applied; other billing fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			'properties'           => aafm_wc_customer_billing_properties(),
 			'additionalProperties' => false,
 		),
 		'shipping'   => array(
 			'type'                 => 'object',
+			'description'          => __( 'Shipping address fields to set on the customer account (no email or phone; those are billing-only). Only the sub-fields included in the request are applied; other shipping fields are left unchanged (on update) or blank (on create).', 'agent-abilities-for-mcp' ),
 			'properties'           => aafm_wc_customer_shipping_properties(),
 			'additionalProperties' => false,
 		),
@@ -384,16 +452,19 @@ function aafm_args_wc_list_customers(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'role'     => array(
-					'type' => 'string',
+					'type'        => 'string',
+					'description' => __( 'WordPress role slug to filter by (e.g. "customer", "subscriber"). Defaults to "customer". Pass "all" to return users of every role instead of filtering.', 'agent-abilities-for-mcp' ),
 				),
 				'page'     => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
-					'maximum' => 100,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of customers to return per page, from 1 to 100. Defaults to 10.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'additionalProperties' => false,
@@ -506,8 +577,9 @@ function aafm_args_wc_get_customer(): array {
 			'type'                 => 'object',
 			'properties'           => array(
 				'customer_id' => array(
-					'type'    => 'integer',
-					'minimum' => 1,
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'WordPress user ID of the customer to read.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'customer_id' ),
@@ -552,8 +624,14 @@ function aafm_exec_wc_get_customer( array $input ) {
  */
 function aafm_args_wc_create_customer(): array {
 	$properties             = aafm_wc_customer_write_properties();
-	$properties['email']    = array( 'type' => 'string' );
-	$properties['username'] = array( 'type' => 'string' );
+	$properties['email']    = array(
+		'type'        => 'string',
+		'description' => __( "Customer's email address. Required; becomes both the account email and, when username is omitted, the basis for the generated username.", 'agent-abilities-for-mcp' ),
+	);
+	$properties['username'] = array(
+		'type'        => 'string',
+		'description' => __( 'WordPress login username. Defaults to the email address when omitted. The account password is generated automatically and is not returned or settable through this ability.', 'agent-abilities-for-mcp' ),
+	);
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-create-customer' ),
@@ -637,8 +715,9 @@ function aafm_exec_wc_create_customer( array $input ) {
 function aafm_args_wc_update_customer(): array {
 	$properties                = aafm_wc_customer_write_properties();
 	$properties['customer_id'] = array(
-		'type'    => 'integer',
-		'minimum' => 1,
+		'type'        => 'integer',
+		'minimum'     => 1,
+		'description' => __( 'WordPress user ID of the customer to update. Must reference an existing customer or the request fails.', 'agent-abilities-for-mcp' ),
 	);
 
 	return array(

@@ -255,7 +255,10 @@ function aafm_args_wc_get_payment_gateway(): array {
 			'additionalProperties' => false,
 			'required'             => array( 'gateway_id' ),
 			'properties'           => array(
-				'gateway_id' => array( 'type' => 'string' ),
+				'gateway_id' => array(
+					'type'        => 'string',
+					'description' => __( 'The payment gateway\'s id slug (e.g. "bacs", "cod", "stripe"), from wc-list-payment-gateways.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'output_schema'       => array(
@@ -321,16 +324,26 @@ function aafm_args_wc_update_payment_gateway(): array {
 			'additionalProperties' => false,
 			'required'             => array( 'gateway_id' ),
 			'properties'           => array(
-				'gateway_id'  => array( 'type' => 'string' ),
+				'gateway_id'  => array(
+					'type'        => 'string',
+					'description' => __( 'The payment gateway\'s id slug (e.g. "bacs", "cod", "stripe"), from wc-list-payment-gateways. Must reference an existing gateway or the request fails.', 'agent-abilities-for-mcp' ),
+				),
 				'enabled'     => array(
 					'type'        => 'boolean',
 					'description' => 'Whether the gateway is enabled, as a boolean (true/false). Note: this differs from the shipping-method abilities, where the equivalent enabled flag is the string "yes"/"no".',
 				),
-				'title'       => array( 'type' => 'string' ),
-				'description' => array( 'type' => 'string' ),
+				'title'       => array(
+					'type'        => 'string',
+					'description' => __( 'Customer-facing gateway name shown at checkout, overriding the gateway\'s default title.', 'agent-abilities-for-mcp' ),
+				),
+				'description' => array(
+					'type'        => 'string',
+					'description' => __( 'Customer-facing text shown under the gateway\'s title at checkout, describing the payment method.', 'agent-abilities-for-mcp' ),
+				),
 				'order'       => array(
-					'type'    => 'integer',
-					'minimum' => 0,
+					'type'        => 'integer',
+					'minimum'     => 0,
+					'description' => __( 'This gateway\'s raw position in the store\'s checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways\' order values, so two gateways can end up sharing the same position.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

@@ -992,20 +992,31 @@ function aafm_validate_post_status( string $status, bool $can_read_private ) {
 }
 
 /**
- * Whether a requested status is publicly viewable, so publishing authority is required.
+ * Whether a requested status requires this content type's publish capability to set.
  *
- * Keys on core's own public-status registry rather than the literal 'publish' string, so a
- * custom public status another plugin registers (register_post_status( 'featured',
- * array( 'public' => true ) )) is treated as a publish-equivalent and gated on the type's
- * publish_posts cap - not reachable with only edit capability. On stock WordPress the public
- * set is just 'publish', so behaviour there is unchanged.
+ * Mirrors core's own gate: WP_REST_Posts_Controller::handle_status_param() requires
+ * publish_posts for 'publish', 'future', AND 'private' alike - WordPress has no separate
+ * "set post private" capability, the post-edit screen only offers the Private radio when
+ * current_user_can( $post_type_object->cap->publish_posts ) (wp-admin/includes/meta-boxes.php,
+ * post_submit_meta_box()). 'future' is scheduling, not a public status in core's own registry
+ * (get_post_stati()), which is why a plain public-status check misses it; it is listed
+ * explicitly here for that reason. A custom public status another plugin registers
+ * (register_post_status( 'featured', array( 'public' => true ) )) is also treated as
+ * publish-equivalent via core's public-status registry - core's own REST handling leaves an
+ * unrecognized custom status ungated (falls to its `default` case), so gating it here is a
+ * deliberate strengthening, not a widening. 'draft' and 'pending' need no extra authority:
+ * every caller reaching this function already cleared at least edit_posts.
  *
  * @param string $status Requested status (raw; sanitized here).
- * @return bool True when the status is publicly viewable.
+ * @return bool True when the status requires the type's publish capability.
  */
 function aafm_status_requires_publish_cap( string $status ): bool {
+	$status = sanitize_key( $status );
+	if ( in_array( $status, array( 'future', 'private' ), true ) ) {
+		return true;
+	}
 	return in_array(
-		sanitize_key( $status ),
+		$status,
 		array_values( get_post_stati( array( 'public' => true ) ) ),
 		true
 	);

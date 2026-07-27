@@ -544,7 +544,7 @@ function aafm_write_content_schema( bool $require_title ): array {
 			),
 			'status'         => array(
 				'type'        => 'string',
-				'description' => __( 'Status for the post. A public status (for example publish) always requires this content type\'s publish capability; draft, pending, future, or private is otherwise accepted on create-draft, create-post, and create-page once the ability\'s base permission is met, but on update-post and update-page requires the type\'s edit-others capability instead. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator\'s force-draft setting can still coerce a public-status request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish.', 'agent-abilities-for-mcp' ),
+				'description' => __( 'Status for the post. A status that makes content publicly visible now or on a future date - publish, future, private, or a custom public status - always requires this content type\'s publish capability; draft and pending need only the ability\'s base edit permission. any, trash, auto-draft, inherit, and unrecognized values are rejected; the operator\'s force-draft setting can still coerce such a request to draft. Omitting this field on update leaves the current status unchanged; create-draft defaults to draft, create-post and create-page default to publish.', 'agent-abilities-for-mcp' ),
 			),
 			'slug'           => array(
 				'type'        => 'string',
@@ -676,16 +676,51 @@ function aafm_perm_create_draft( array $input ): bool {
 }
 
 /**
- * Resolve the effective post status for a create ability from `$input['status']`, falling
- * back to $fallback_status when the caller omitted it.
+ * Authorize and validate a requested post status against a specific capability.
  *
- * A request for a status core marks public (aafm_status_requires_publish_cap()) is refused
- * with a WP_Error unless the caller holds $publish_cap - this is the same escalation gate as
- * aafm_perm_create_draft, re-checked here so the guard lives at the one shared write
- * chokepoint rather than trusting the permission_callback alone. A non-public status
- * (draft/pending/future/private) is always accepted: every caller that reaches this function
- * already cleared at least edit_posts in its permission_callback, and 'any'/'trash'/
- * 'auto-draft'/'inherit'/unknown values are still rejected by aafm_validate_post_status().
+ * The single chokepoint every write path (create-draft, create-post, create-page,
+ * create-cpt-item, update-post, update-cpt-item) resolves a caller-supplied `status` through.
+ * $publish_cap must be resolved from the TARGET post type's own capability map by every
+ * caller (e.g. publish_products for a CPT, never a hardcoded 'publish_posts' literal), so a
+ * custom type is judged by its own capability model, not the generic post primitive.
+ *
+ * A status aafm_status_requires_publish_cap() flags as publish-equivalent (publish, future,
+ * private, or a custom public status) is refused with a WP_Error unless the caller holds
+ * $publish_cap. draft and pending need no extra authority beyond the edit_posts-equivalent
+ * floor every caller already cleared before reaching here - this function does not re-check
+ * that floor. 'any'/'trash'/'auto-draft'/'inherit'/unknown values are always rejected. This
+ * intentionally does NOT delegate to aafm_validate_post_status(): that function's
+ * $can_read_private flag is a single boolean covering draft/pending/future/private together,
+ * which is right for filtering reads but wrong here - draft/pending must always be allowed
+ * once edit_posts is cleared, while future/private must only be allowed once $publish_cap is
+ * held, and a single boolean cannot express both at once.
+ *
+ * @param string $requested   Raw requested status.
+ * @param string $publish_cap Capability required to request a publish-equivalent status.
+ * @return string|WP_Error Sanitized status, or WP_Error when unauthorized/unrecognized.
+ */
+function aafm_authorize_post_status( string $requested, string $publish_cap ) {
+	$status = sanitize_key( $requested );
+	if ( aafm_status_requires_publish_cap( $status ) && ! current_user_can( $publish_cap ) ) {
+		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
+	}
+	$recognized = array_merge(
+		array_values( get_post_stati( array( 'public' => true ) ) ),
+		array( 'draft', 'pending', 'future', 'private' )
+	);
+	if ( ! in_array( $status, $recognized, true ) ) {
+		return new WP_Error( 'aafm_invalid_status', __( 'Unsupported or unauthorized post status.', 'agent-abilities-for-mcp' ) );
+	}
+	return $status;
+}
+
+/**
+ * Resolve the effective post status for a create ability from `$input['status']`, falling
+ * back to $fallback_status when the caller omitted it. Delegates the authority + allow-list
+ * decision to aafm_authorize_post_status(), the shared chokepoint every create AND update
+ * write routes through - this is the same escalation gate as aafm_perm_create_draft,
+ * re-checked here so the guard lives at the write chokepoint rather than trusting the
+ * permission_callback alone.
  *
  * @param array<string,mixed> $input          Validated ability input.
  * @param string              $fallback_status Status to use when `status` is omitted.
@@ -696,11 +731,7 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
 	if ( ! isset( $input['status'] ) ) {
 		return $fallback_status;
 	}
-	$requested = (string) $input['status'];
-	if ( aafm_status_requires_publish_cap( $requested ) && ! current_user_can( $publish_cap ) ) {
-		return new WP_Error( 'aafm_status_forbidden', __( 'You do not have permission to set that status.', 'agent-abilities-for-mcp' ) );
-	}
-	return aafm_validate_post_status( $requested, true );
+	return aafm_authorize_post_status( (string) $input['status'], $publish_cap );
 }
 
 /**

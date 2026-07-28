@@ -339,11 +339,12 @@ final class MediaReadTest extends TestCase {
 	}
 
 	/**
-	 * The count read (aafm/count-media) and the list read (aafm/get-media) must agree for the same caller. A count
-	 * that disagrees with its own list is the exact contradiction 1.3.2 was built
-	 * to remove, so this is asserted directly rather than inferred from either
-	 * ability's own tests. Covers both branches of aafm_exec_count_media(): WPML
-	 * inactive (the default in this suite) and active.
+	 * The count read (aafm/count-media) and the list read (aafm/get-media) must agree for the
+	 * same caller. A count that disagrees with its own list is the exact contradiction 1.3.2
+	 * was built to remove, so this is asserted directly rather than inferred from either
+	 * ability's own tests. This covers the WPML-INACTIVE branch of aafm_exec_count_media()
+	 * (wp_count_attachments() is author-blind, so a scoped caller routes through the
+	 * query-based counter instead); the WPML-active branch is the next test.
 	 */
 	public function test_the_media_count_agrees_with_the_media_list(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
@@ -359,6 +360,35 @@ final class MediaReadTest extends TestCase {
 			$list['total'],
 			$count['total'],
 			'A count that disagrees with its own list is the contradiction 1.3.2 removed. Do not reintroduce it.'
+		);
+	}
+
+	/**
+	 * The same agreement, on the WPML-ACTIVE branch of aafm_exec_count_media(): with WPML
+	 * loaded, the count goes through aafm_query_attachment_counts_by_mime() (the WPML-aware
+	 * query-based counter) rather than wp_count_attachments(), a genuinely different code path
+	 * that needs its own proof rather than inheriting the inactive branch's coverage. No
+	 * language is requested here (aafm_resolve_lang() returns null without a 'lang' input
+	 * regardless of WPML state), so this isolates the author-scoping behaviour from language
+	 * scoping - the two compose, but this test is about ownership, not language.
+	 */
+	public function test_the_media_count_agrees_with_the_media_list_when_wpml_is_active(): void {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook, fired to simulate WPML being loaded (mirrors WpmlLanguageTest's fake_wpml()).
+		do_action( 'wpml_loaded' );
+
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->create_attachment_for( $author );
+		$this->create_attachment_for( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		wp_set_current_user( $author );
+
+		$list  = wp_get_ability( 'aafm/get-media' )->execute( array() );
+		$count = wp_get_ability( 'aafm/count-media' )->execute( array() );
+
+		$this->assertSame(
+			$list['total'],
+			$count['total'],
+			'The WPML-active count path must agree with the list just as the inactive path does.'
 		);
 	}
 

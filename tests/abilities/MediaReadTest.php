@@ -43,6 +43,88 @@ final class MediaReadTest extends TestCase {
 		$this->assertTrue( wp_get_ability( 'aafm/get-media' )->check_permissions( array() ) );
 	}
 
+	/**
+	 * A subscriber (neither upload_files nor edit_posts) is still denied outright.
+	 * The scoping this file adds changes what an AUTHORIZED caller sees; it must not
+	 * touch who is authorized in the first place.
+	 */
+	public function test_a_subscriber_is_still_denied_outright(): void {
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_perm_get_media() );
+	}
+
+	/**
+	 * Create a real attachment owned by the given user, for the media-scoping tests.
+	 *
+	 * @param int $author The post_author to stamp on the attachment.
+	 * @return int Attachment id.
+	 */
+	private function create_attachment_for( int $author ): int {
+		return (int) self::factory()->attachment->create_object(
+			'pic-' . $author . '.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+				'post_author'    => $author,
+			)
+		);
+	}
+
+	/**
+	 * An Author (below edit_others_posts) sees only the attachments they uploaded,
+	 * not another user's - the media-scoping decision this file implements.
+	 */
+	public function test_an_author_sees_only_their_own_attachments(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$mine   = $this->create_attachment_for( $author );
+		$theirs = $this->create_attachment_for( $other );
+
+		wp_set_current_user( $author );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
+
+		$ids = wp_list_pluck( $out['media'], 'id' );
+		$this->assertContains( $mine, $ids );
+		$this->assertNotContains( $theirs, $ids, "An author must not see another user's uploads." );
+	}
+
+	/**
+	 * A caller holding edit_others_posts (editor and up) still sees the whole
+	 * library, matching today's behaviour - the scoping change is additive, not a
+	 * new restriction on callers who already had full-library visibility.
+	 */
+	public function test_a_user_with_edit_others_posts_sees_the_whole_library(): void {
+		$editor = self::factory()->user->create( array( 'role' => 'editor' ) );
+		$other  = self::factory()->user->create( array( 'role' => 'author' ) );
+		$theirs = $this->create_attachment_for( $other );
+
+		wp_set_current_user( $editor );
+		$out = wp_get_ability( 'aafm/get-media' )->execute( array() );
+
+		$this->assertContains( $theirs, wp_list_pluck( $out['media'], 'id' ) );
+	}
+
+	/**
+	 * The single-item read (aafm/get-media-item) refuses another user's attachment for a caller below
+	 * edit_others_posts, with the SAME generic error the ability already returns
+	 * for an unknown id - the scoping must not become an existence oracle that
+	 * tells a caller which attachment ids exist.
+	 */
+	public function test_get_media_item_refuses_another_users_attachment_for_an_author(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$theirs = $this->create_attachment_for( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		wp_set_current_user( $author );
+		$refused = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => $theirs ) );
+		$unknown = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => 999999 ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $refused );
+		$this->assertInstanceOf( \WP_Error::class, $unknown );
+		$this->assertSame( $unknown->get_error_code(), $refused->get_error_code() );
+		$this->assertSame( $unknown->get_error_message(), $refused->get_error_message() );
+	}
+
 	public function test_get_media_returns_inventory_shape(): void {
 		$this->acting_as( 'author' );
 		$att = self::factory()->attachment->create_object(
@@ -254,6 +336,30 @@ final class MediaReadTest extends TestCase {
 
 		$this->acting_as( 'author' );
 		$this->assertTrue( wp_get_ability( 'aafm/count-media' )->check_permissions( array() ) );
+	}
+
+	/**
+	 * The count read (aafm/count-media) and the list read (aafm/get-media) must agree for the same caller. A count
+	 * that disagrees with its own list is the exact contradiction 1.3.2 was built
+	 * to remove, so this is asserted directly rather than inferred from either
+	 * ability's own tests. Covers both branches of aafm_exec_count_media(): WPML
+	 * inactive (the default in this suite) and active.
+	 */
+	public function test_the_media_count_agrees_with_the_media_list(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		$this->create_attachment_for( $author );
+		$this->create_attachment_for( self::factory()->user->create( array( 'role' => 'author' ) ) );
+
+		wp_set_current_user( $author );
+
+		$list  = wp_get_ability( 'aafm/get-media' )->execute( array() );
+		$count = wp_get_ability( 'aafm/count-media' )->execute( array() );
+
+		$this->assertSame(
+			$list['total'],
+			$count['total'],
+			'A count that disagrees with its own list is the contradiction 1.3.2 removed. Do not reintroduce it.'
+		);
 	}
 
 	public function test_count_media_totals_and_breaks_down_by_mime(): void {

@@ -94,12 +94,13 @@ final class AnnotationScanner {
 	 * risk of unbounded call-graph walking.
 	 *
 	 * @param array<string,array<string,mixed>> $registry Registry keyed by ability name.
-	 * @return array{scanned:int,abilities:array<int,string>,violations:array<int,array<string,mixed>>,suppressed:array<int,array<string,mixed>>}
+	 * @return array{scanned:int,abilities:array<int,string>,violations:array<int,array<string,mixed>>,suppressed:array<int,array<string,mixed>>,skipped:array<int,array{ability:string,reason:string}>}
 	 */
 	public static function scan( array $registry ): array {
 		$abilities  = array();
 		$violations = array();
 		$suppressed = array();
+		$skipped    = array();
 
 		foreach ( $registry as $name => $row ) {
 			if ( ! is_array( $row ) ) {
@@ -123,8 +124,13 @@ final class AnnotationScanner {
 				}
 			}
 
-			// Not a read/readonly claim: a legitimate skip, outside this guard's scope.
+			// Not a read/readonly claim: a legitimate skip, outside this guard's scope. Recorded
+			// with its reason so a future scanned-versus-registry gap is visible, not silent.
 			if ( array() === $claim ) {
+				$skipped[] = array(
+					'ability' => $name,
+					'reason'  => 'not a risk:read or readonly claim',
+				);
 				continue;
 			}
 
@@ -171,6 +177,7 @@ final class AnnotationScanner {
 			'abilities'  => $abilities,
 			'violations' => $violations,
 			'suppressed' => $suppressed,
+			'skipped'    => $skipped,
 		);
 	}
 

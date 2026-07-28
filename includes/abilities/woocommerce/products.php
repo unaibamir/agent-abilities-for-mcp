@@ -960,7 +960,7 @@ function aafm_args_wc_delete_product(): array {
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_delete_product',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_delete_product',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,
@@ -968,6 +968,55 @@ function aafm_args_wc_delete_product(): array {
 			),
 		),
 	);
+}
+
+/**
+ * Whether the current user may delete this specific product object.
+ *
+ * Mirrors the per-object pattern the post abilities use for delete
+ * (aafm_can_delete_post_object() in includes/helpers.php): gate on the object's
+ * own relationship to the caller via the post type's meta capability, not only
+ * a capability floor. WooCommerce registers 'product' with map_meta_cap => true
+ * and its own capability_type ('product'), so current_user_can() resolves
+ * delete_products (own) vs delete_others_products the same way core resolves
+ * delete_posts vs delete_others_posts.
+ *
+ * @param WP_Post $product The product's backing post object.
+ * @return bool
+ */
+function aafm_wc_can_delete_product_object( WP_Post $product ): bool {
+	$type = get_post_type_object( $product->post_type );
+	if ( ! $type instanceof WP_Post_Type || ! $type->map_meta_cap ) {
+		return false;
+	}
+	return current_user_can( $type->cap->delete_post, $product->ID );
+}
+
+/**
+ * Permission for aafm/wc-delete-product: the capability floor (manage_woocommerce) AND
+ * the caller's own relationship to the specific product, not the floor alone.
+ *
+ * A nonexistent id, or a product with no real backing WP_Post to gate on, falls back to
+ * the floor already checked: there is nothing more specific to authorize against, and the
+ * WC data store (not a missing capability) is what reports "not found" from execute().
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_wc_delete_product( array $input ): bool {
+	if ( ! aafm_wc_perm() ) {
+		return false;
+	}
+	$id      = isset( $input['product_id'] ) ? absint( $input['product_id'] ) : 0;
+	$product = $id ? aafm_wc_get_product( $id ) : null;
+	if ( null === $product ) {
+		return true;
+	}
+	$post = get_post( $product->get_id() );
+	if ( ! $post instanceof WP_Post ) {
+		return true;
+	}
+	return aafm_wc_can_delete_product_object( $post );
 }
 
 /**

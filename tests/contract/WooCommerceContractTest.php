@@ -656,4 +656,62 @@ final class WooCommerceContractTest extends TestCase {
 		$order->delete( true );
 		$product->delete( true );
 	}
+
+	/**
+	 * WC1.3 per-object ownership: a caller who clears the manage_woocommerce floor but does
+	 * not own the specific product and lacks the others-level capability must be refused,
+	 * the same per-object pattern the post abilities already use for delete (see
+	 * aafm_can_delete_post_object() / aafm_perm_delete_post() in includes/helpers.php and
+	 * includes/abilities/posts.php). Needs a REAL WC_Product: WooCommerce registers 'product'
+	 * with map_meta_cap => true and its own delete_product(s)/delete_others_products
+	 * capability_type, which the unit suite's WcStubStore never backs with a real WP_Post, so
+	 * this is not exercisable there.
+	 */
+	public function test_delete_product_denies_a_caller_who_does_not_own_it_and_lacks_the_others_capability(): void {
+		if ( ! class_exists( '\WC_Product' ) ) {
+			$this->markTestSkipped( 'WC_Product unavailable.' );
+		}
+
+		$owner = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $owner );
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Ownership Widget' );
+		$product->set_regular_price( '5.00' );
+		$product->set_status( 'publish' );
+		$product_id = $product->save();
+		$this->assertGreaterThan( 0, $product_id );
+		$this->assertSame( $owner, (int) get_post( $product_id )->post_author, 'Fixture sanity: the product is authored by $owner.' );
+
+		// A caller who clears manage_woocommerce and can delete THEIR OWN products, but was
+		// never granted the others-level capability - a scoped role an operator could actually
+		// configure, distinct from the stock shop_manager/administrator roles that WooCommerce
+		// grants the full capability set to on install.
+		$scoped = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user   = new \WP_User( $scoped );
+		$user->add_cap( 'manage_woocommerce' );
+		$user->add_cap( 'edit_products' );
+		$user->add_cap( 'delete_products' );
+		$user->add_cap( 'delete_published_products' );
+		wp_set_current_user( $scoped );
+
+		$this->assertFalse(
+			aafm_perm_wc_delete_product( array( 'product_id' => $product_id ) ),
+			'A caller who does not own this product and lacks delete_others_products must be refused.'
+		);
+
+		// The owner, with the exact same scoped grant, is authorized for their own product.
+		$owner_user = new \WP_User( $owner );
+		$owner_user->add_cap( 'manage_woocommerce' );
+		$owner_user->add_cap( 'edit_products' );
+		$owner_user->add_cap( 'delete_products' );
+		$owner_user->add_cap( 'delete_published_products' );
+		wp_set_current_user( $owner );
+
+		$this->assertTrue(
+			aafm_perm_wc_delete_product( array( 'product_id' => $product_id ) ),
+			'The owner must still be authorized for their own product.'
+		);
+
+		$product->delete( true );
+	}
 }

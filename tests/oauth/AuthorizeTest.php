@@ -254,6 +254,92 @@ class AuthorizeTest extends TestCase {
 	}
 
 	/**
+	 * Capture the redirect target of a function that ends in wp_redirect() + exit,
+	 * the same short-circuit idiom run_authorize_get() below uses for the full init
+	 * handler, scoped here to a single redirect-issuing helper instead.
+	 *
+	 * @param callable $callback The redirecting call, invoked with no arguments.
+	 * @return string The captured Location target.
+	 */
+	private function capture_redirect( callable $callback ): string {
+		$captured = '';
+		$catch    = static function ( $location ) use ( &$captured ) {
+			$captured = (string) $location;
+			throw new \RuntimeException( 'aafm_test_redirect' );
+		};
+		add_filter( 'wp_redirect', $catch, 1 );
+
+		// Both redirect builders emit raw header() calls before wp_redirect(). Under the
+		// CLI test SAPI headers are already "sent" (bootstrap printed), so header() would
+		// raise a warning the suite escalates to an exception before the wp_redirect
+		// filter ever runs - the same trap run_authorize_get() below works around.
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- test harness only: demotes the CLI "headers already sent" warning so the redirect capture runs.
+		set_error_handler(
+			static function ( $errno, $errstr ) {
+				return str_contains( $errstr, 'Cannot modify header information' );
+			},
+			E_WARNING
+		);
+
+		try {
+			$callback();
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		} finally {
+			restore_error_handler();
+			remove_filter( 'wp_redirect', $catch, 1 );
+		}
+		return $captured;
+	}
+
+	/**
+	 * RFC 9207 §2: an authorization server supporting the spec MUST include iss in
+	 * authorization responses. §2.3 requires the value be single-sourced with the
+	 * issuer the AS metadata publishes, so this pins both at once - a future change
+	 * to one without the other fails here.
+	 */
+	public function test_authorization_response_carries_iss_matching_the_metadata_issuer(): void {
+		$client = $this->register_client();
+		$user   = self::factory()->user->create();
+		$valid  = $this->valid_params( $client );
+
+		$location = $this->capture_redirect(
+			static function () use ( $valid, $user ) {
+				aafm_oauth_issue_code_and_redirect( $valid, $user );
+			}
+		);
+
+		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+
+		$this->assertArrayHasKey( 'iss', $query, 'RFC 9207 section 2 requires iss on the authorization response.' );
+		$this->assertSame(
+			aafm_oauth_authorization_server_metadata()['issuer'],
+			$query['iss'],
+			'iss must be single-sourced with the published issuer or a validating client rejects a legitimate response.'
+		);
+	}
+
+	/**
+	 * RFC 9207 §2 explicitly extends the iss requirement to error responses ("In
+	 * authorization responses to the client, including error responses, an
+	 * authorization server supporting this specification MUST indicate its identity
+	 * by including the iss parameter"). aafm_oauth_redirect_error() is the function
+	 * that builds that redirect, so it carries iss too.
+	 */
+	public function test_error_redirect_also_carries_iss(): void {
+		$location = $this->capture_redirect(
+			static function () {
+				aafm_oauth_redirect_error( 'https://app.example/cb', 'access_denied', 'xyz' );
+			}
+		);
+
+		parse_str( (string) wp_parse_url( $location, PHP_URL_QUERY ), $query );
+
+		$this->assertArrayHasKey( 'iss', $query, 'RFC 9207 section 2 requires iss on error redirects too.' );
+		$this->assertSame( aafm_oauth_authorization_server_metadata()['issuer'], $query['iss'] );
+	}
+
+	/**
 	 * Drive the full init handler for one authorize GET, capturing the first redirect
 	 * or any rendered output without letting it exit the process.
 	 *

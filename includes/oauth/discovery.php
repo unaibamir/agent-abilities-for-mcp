@@ -149,6 +149,21 @@ function aafm_oauth_protected_resource_metadata(): array {
 }
 
 /**
+ * This site's OAuth issuer identifier.
+ *
+ * Single-sourced so the `issuer` the AS metadata publishes (RFC 8414) and the
+ * `iss` parameter RFC 9207 requires on every authorization response are always
+ * the same value. Two independent home_url() calls would drift, and a drifted
+ * `iss` is worse than an absent one: a client that validates it rejects an
+ * otherwise legitimate response.
+ *
+ * @return string
+ */
+function aafm_oauth_issuer(): string {
+	return home_url();
+}
+
+/**
  * Authorization-server metadata (RFC 8414).
  *
  * Describes the endpoints and capabilities of this site as an OAuth 2.1
@@ -165,19 +180,25 @@ function aafm_oauth_protected_resource_metadata(): array {
  * itself is enabled, so checking the DCR toggle here is sufficient without
  * repeating that outer gate.
  *
+ * `authorization_response_iss_parameter_supported` is RFC 9207 section 3: an
+ * authorization server that provides the iss parameter (we now do on every
+ * authorization response, success and error alike) MUST advertise that support
+ * in its metadata, so a validating client knows to expect and check it.
+ *
  * @return array<string, mixed>
  */
 function aafm_oauth_authorization_server_metadata(): array {
 	$metadata = array(
-		'issuer'                                => home_url(),
-		'authorization_endpoint'                => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
-		'token_endpoint'                        => rest_url( 'agent-abilities-for-mcp/oauth/token' ),
-		'registration_endpoint'                 => rest_url( 'agent-abilities-for-mcp/oauth/register' ),
-		'revocation_endpoint'                   => rest_url( 'agent-abilities-for-mcp/oauth/revoke' ),
-		'response_types_supported'              => array( 'code' ),
-		'grant_types_supported'                 => array( 'authorization_code', 'refresh_token' ),
-		'code_challenge_methods_supported'      => array( 'S256' ),
-		'token_endpoint_auth_methods_supported' => array( 'none' ),
+		'issuer'                                         => aafm_oauth_issuer(),
+		'authorization_endpoint'                         => add_query_arg( 'aafm_oauth', 'authorize', home_url( '/' ) ),
+		'token_endpoint'                                 => rest_url( 'agent-abilities-for-mcp/oauth/token' ),
+		'registration_endpoint'                          => rest_url( 'agent-abilities-for-mcp/oauth/register' ),
+		'revocation_endpoint'                            => rest_url( 'agent-abilities-for-mcp/oauth/revoke' ),
+		'response_types_supported'                       => array( 'code' ),
+		'grant_types_supported'                          => array( 'authorization_code', 'refresh_token' ),
+		'code_challenge_methods_supported'               => array( 'S256' ),
+		'token_endpoint_auth_methods_supported'          => array( 'none' ),
+		'authorization_response_iss_parameter_supported' => true,
 	);
 
 	if ( ! aafm_oauth_dcr_enabled() ) {

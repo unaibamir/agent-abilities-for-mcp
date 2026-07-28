@@ -397,7 +397,11 @@ function aafm_oauth_render_local_error( int $status, string $message ): void {
  * @return void
  */
 function aafm_oauth_redirect_error( string $redirect_uri, string $error, string $state ): void {
-	$args = array( 'error' => $error );
+	// RFC 9207 §2 requires iss on every authorization response, error responses included.
+	$args = array(
+		'error' => $error,
+		'iss'   => aafm_oauth_issuer(),
+	);
 	if ( '' !== $state ) {
 		$args['state'] = $state;
 	}
@@ -451,7 +455,12 @@ function aafm_oauth_issue_code_and_redirect( array $valid, int $user_id ): void 
 		);
 	}
 
-	$args = array( 'code' => $code );
+	// RFC 9207 §2 requires iss on every authorization response, single-sourced with the
+	// issuer the AS metadata publishes (aafm_oauth_issuer()) so the two can never drift.
+	$args = array(
+		'code' => $code,
+		'iss'  => aafm_oauth_issuer(),
+	);
 	if ( '' !== $valid['state'] ) {
 		$args['state'] = $valid['state'];
 	}

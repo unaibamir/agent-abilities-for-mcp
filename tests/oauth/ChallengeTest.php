@@ -205,6 +205,44 @@ final class ChallengeTest extends TestCase {
 	}
 
 	/**
+	 * The route match must be case-insensitive, mirroring how core itself matches REST
+	 * routes (class-wp-rest-server.php builds its route regex with the `i` modifier) and
+	 * how the sibling aafm_oauth_filter_malformed_json() already matches its own route
+	 * family. A differently-cased request must still get the discovery pointer.
+	 */
+	public function test_filter_sets_header_on_a_differently_cased_mcp_route(): void {
+		wp_set_current_user( 0 );
+		$response = new \WP_REST_Response( null, 401 );
+		$request  = $this->request_for_route( strtoupper( self::MCP_ROUTE ) );
+
+		$out = aafm_oauth_filter_rest_challenge( $response, rest_get_server(), $request );
+
+		$this->assertSame(
+			aafm_oauth_challenge_header(),
+			$out->get_headers()['WWW-Authenticate'] ?? '',
+			'A differently-cased MCP route must still get the discovery pointer.'
+		);
+	}
+
+	/**
+	 * The negative case that proves the case-insensitive match did not become an
+	 * over-broad one: a non-MCP route, differently cased or not, still gets nothing.
+	 */
+	public function test_filter_still_ignores_a_non_mcp_route_regardless_of_case(): void {
+		wp_set_current_user( 0 );
+		$response = new \WP_REST_Response( null, 401 );
+		$request  = $this->request_for_route( strtoupper( '/wp/v2/posts' ) );
+
+		$out = aafm_oauth_filter_rest_challenge( $response, rest_get_server(), $request );
+
+		$this->assertArrayNotHasKey(
+			'WWW-Authenticate',
+			$out->get_headers(),
+			'A non-MCP route must never get the challenge. Loosening the match must not over-reach.'
+		);
+	}
+
+	/**
 	 * Integration through the registered hook: an unauthenticated dispatch to the
 	 * MCP route yields a 401, and running that 401 through the rest_post_dispatch
 	 * filter chain - the exact apply_filters() core fires in WP_REST_Server::serve_request()

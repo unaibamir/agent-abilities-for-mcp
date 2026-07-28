@@ -130,6 +130,23 @@ if ( ! class_exists( 'WC_Product' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Data_Exception' ) ) {
+	/**
+	 * Minimal WC_Data_Exception signature for static analysis only. Thrown by
+	 * WC_Product::set_sku() (and other WC_Data setters) on an invalid/duplicate value.
+	 */
+	class WC_Data_Exception extends Exception {
+		/** @param string $code @param string $message @param int $http_status_code @param array<string,mixed> $data */
+		public function __construct( $code = '', $message = '', $http_status_code = 400, $data = array() ) {
+			parent::__construct( $message );
+		}
+		/** @return string */
+		public function getErrorCode() {
+			return '';
+		}
+	}
+}
+
 if ( ! class_exists( 'WC_Product_Variation' ) ) {
 	/**
 	 * Minimal WooCommerce product-variation signature for static analysis only.
@@ -812,10 +829,20 @@ if ( ! class_exists( 'WC_Coupon' ) ) {
 if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 	/**
 	 * @param string $code
+	 * @param int    $exclude
 	 * @return int
 	 */
-	function wc_get_coupon_id_by_code( $code ) {
+	function wc_get_coupon_id_by_code( $code, $exclude = 0 ) {
 		return 0;
+	}
+}
+if ( ! function_exists( 'wc_format_coupon_code' ) ) {
+	/**
+	 * @param string $value
+	 * @return string
+	 */
+	function wc_format_coupon_code( $value ) {
+		return $value;
 	}
 }
 if ( ! class_exists( 'WC_Shipping_Zone' ) ) {

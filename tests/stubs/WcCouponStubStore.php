@@ -97,11 +97,16 @@ class WcCouponStubStore {
 	/**
 	 * Look up a coupon id by its code string (mirrors wc_get_coupon_id_by_code()).
 	 *
-	 * @param string $code Coupon code.
+	 * @param string $code    Coupon code.
+	 * @param int    $exclude A coupon id to skip - real WC's own signature, used by an update
+	 *                        that keeps its current code so it never collides with itself.
 	 * @return int 0 when not found.
 	 */
-	public static function get_id_by_code( string $code ): int {
+	public static function get_id_by_code( string $code, int $exclude = 0 ): int {
 		foreach ( self::$coupons as $id => $data ) {
+			if ( $id === $exclude ) {
+				continue;
+			}
 			if ( strtolower( (string) ( $data['code'] ?? '' ) ) === strtolower( $code ) ) {
 				return $id;
 			}

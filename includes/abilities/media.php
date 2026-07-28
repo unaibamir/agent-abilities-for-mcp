@@ -152,34 +152,54 @@ function aafm_perm_get_media(): bool {
 }
 
 /**
+ * The author id media reads should scope to, or null for the unscoped full library.
+ *
+ * A caller holding edit_others_posts sees the whole library, unchanged from before.
+ * Anyone else who cleared the aafm_perm_get_media() floor (upload_files or
+ * edit_posts) sees only the attachments they uploaded themselves. Applies to the
+ * list read, the single-object read, and the count read alike - scoping the list
+ * without the count would recreate the count-versus-list contradiction 1.3.2 was
+ * built to remove.
+ *
+ * @return int|null
+ */
+function aafm_media_scope_author_id(): ?int {
+	return current_user_can( 'edit_others_posts' ) ? null : get_current_user_id();
+}
+
+/**
  * Execute aafm/get-media.
  *
  * Lists attachments in the media library, redacted to a safe inventory shape:
  * id, title, mime type, the public URL, alt text, and dimensions. The absolute
  * server file path (get_attached_file / _wp_attached_file) and any uploader PII
- * are never returned.
+ * are never returned. Scoped to the caller's own uploads per
+ * aafm_media_scope_author_id().
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
  */
 function aafm_exec_get_media( array $input ): array {
-	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+	$paging    = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+	$author_id = aafm_media_scope_author_id();
 
 	$lang  = aafm_resolve_lang( $input );
 	$query = aafm_with_language(
 		$lang,
-		static function () use ( $input, $paging ): WP_Query {
-			return new WP_Query(
-				array(
-					'post_type'        => 'attachment',
-					'post_status'      => 'inherit',
-					's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-					'posts_per_page'   => $paging['per_page'],
-					'paged'            => $paging['page'],
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
-				)
+		static function () use ( $input, $paging, $author_id ): WP_Query {
+			$args = array(
+				'post_type'        => 'attachment',
+				'post_status'      => 'inherit',
+				's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+				'posts_per_page'   => $paging['per_page'],
+				'paged'            => $paging['page'],
+				'no_found_rows'    => false,
+				'suppress_filters' => false,
 			);
+			if ( null !== $author_id ) {
+				$args['author'] = $author_id;
+			}
+			return new WP_Query( $args );
 		}
 	);
 
@@ -262,6 +282,14 @@ function aafm_exec_get_media_item( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Scoped to the caller's own uploads, same as the list read. The SAME generic
+	// error as an unknown id, deliberately: a distinct message here would make the
+	// scoping an existence oracle telling the caller which attachment ids exist.
+	$author_id = aafm_media_scope_author_id();
+	if ( null !== $author_id && (int) $attachment->post_author !== $author_id ) {
+		return aafm_generic_error();
+	}
+
 	return array( 'media' => aafm_media_item_payload( $attachment ) );
 }
 
@@ -326,11 +354,21 @@ function aafm_args_count_media(): array {
  * @return array<string,mixed>
  */
 function aafm_exec_count_media( array $input ): array {
-	$filter = isset( $input['mime_type'] ) ? sanitize_text_field( (string) $input['mime_type'] ) : '';
-	$lang   = aafm_resolve_lang( $input );
+	$filter    = isset( $input['mime_type'] ) ? sanitize_text_field( (string) $input['mime_type'] ) : '';
+	$lang      = aafm_resolve_lang( $input );
+	$author_id = aafm_media_scope_author_id();
 
 	if ( aafm_wpml_active() ) {
-		$counts = aafm_with_language( $lang, 'aafm_query_attachment_counts_by_mime' );
+		$counts = aafm_with_language(
+			$lang,
+			static function () use ( $author_id ): array {
+				return aafm_query_attachment_counts_by_mime( $author_id );
+			}
+		);
+	} elseif ( null !== $author_id ) {
+		// wp_count_attachments() cannot be author-scoped, so a scoped caller goes
+		// through the same query-based counter the WPML branch uses.
+		$counts = aafm_query_attachment_counts_by_mime( $author_id );
 	} else {
 		$counts = (array) wp_count_attachments();
 	}
@@ -367,20 +405,24 @@ function aafm_exec_count_media( array $input ): array {
 /**
  * Count non-trashed attachments grouped by their exact post_mime_type, mirroring
  * wp_count_attachments()'s key shape but via WP_Query so WPML's language filters
- * apply. Called only from inside aafm_with_language() - see aafm_exec_count_media().
+ * apply. Called from inside aafm_with_language() and directly - see aafm_exec_count_media().
  *
+ * @param int|null $author_id Restrict to this author's attachments, or null for the
+ *                            unscoped full library (aafm_media_scope_author_id()).
  * @return array<string,int> Mime type => count.
  */
-function aafm_query_attachment_counts_by_mime(): array {
-	$query = new WP_Query(
-		array(
-			'post_type'        => 'attachment',
-			'post_status'      => 'inherit',
-			'posts_per_page'   => -1,
-			'no_found_rows'    => true,
-			'suppress_filters' => false,
-		)
+function aafm_query_attachment_counts_by_mime( ?int $author_id = null ): array {
+	$args = array(
+		'post_type'        => 'attachment',
+		'post_status'      => 'inherit',
+		'posts_per_page'   => -1,
+		'no_found_rows'    => true,
+		'suppress_filters' => false,
 	);
+	if ( null !== $author_id ) {
+		$args['author'] = $author_id;
+	}
+	$query = new WP_Query( $args );
 
 	$counts = array();
 	foreach ( $query->posts as $post ) {

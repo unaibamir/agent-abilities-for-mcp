@@ -77,6 +77,58 @@ jobs:
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --no-progress --error-format=checkstyle | cs2pr
 
+  # The shipped translation template must match the source it was generated from.
+  #
+  # This exists because it silently did not. The .pot went stale on 2026-06-25 and stayed that
+  # way through four releases, missing every string 1.4.2 added, which was most of the plugin's
+  # translatable text. Nothing caught it: Plugin Check does not compare the template to the
+  # source, so every other gate stayed green while translators were handed an incomplete file.
+  # Regenerating was a documented release step that simply got forgotten, which is exactly the
+  # kind of step that needs a machine watching it rather than a human remembering it.
+  i18n:
+    name: Translation template (POT)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: wp-cli
+
+      - name: Regenerate the template and compare
+        run: |
+          set -euo pipefail
+          POT=languages/agent-abilities-for-mcp.pot
+          # Same excludes as the documented recipe in LESSONS-LEARNED. Keep these in step with
+          # the command in the release docs, or the two will disagree about what ships.
+          wp i18n make-pot . /tmp/expected.pot \
+            --slug=agent-abilities-for-mcp \
+            --exclude=vendor,tests,wp,node_modules,.claude,build,bin,.ddev,scratchpad,.wordpress-org
+
+          # POT-Creation-Date changes on every run by design, so it is not evidence of drift.
+          # Everything else is.
+          strip() { grep -v '^"POT-Creation-Date:' "$1"; }
+          if diff -u <(strip "$POT") <(strip /tmp/expected.pot) > /tmp/pot.diff; then
+            echo "Translation template is current."
+            exit 0
+          fi
+
+          echo "::error::$POT is out of date. Regenerate it and commit the result:"
+          echo "::error::  wp i18n make-pot . $POT --slug=agent-abilities-for-mcp --exclude=vendor,tests,wp,node_modules,.claude,build,bin,.ddev,scratchpad,.wordpress-org"
+          echo
+          echo "First 80 lines of the difference (committed vs regenerated):"
+          head -80 /tmp/pot.diff
+          exit 1
+
   # PHPUnit across the supported PHP (>= 8.0) and WordPress (>= 6.9) range.
   phpunit:
     name: PHP ${{ matrix.php }} · WP ${{ matrix.wp }}
@@ -163,7 +215,7 @@ jobs:
   # require in branch protection, so the matrix can change without re-wiring.
   test-result:
     name: Test Suite Result
-    needs: [phpcs, phpstan, phpunit]
+    needs: [phpcs, phpstan, i18n, phpunit]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     permissions: {}
@@ -172,6 +224,7 @@ jobs:
         run: |
           if [ "${{ needs.phpcs.result }}" != "success" ] \
             || [ "${{ needs.phpstan.result }}" != "success" ] \
+            || [ "${{ needs.i18n.result }}" != "success" ] \
             || [ "${{ needs.phpunit.result }}" != "success" ]; then
             echo "One or more required checks failed."
             exit 1

@@ -333,4 +333,120 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( 'aafm-bridge/demo-a-b', $collisions['demo/a--b']['wrapper'] );
 		$this->assertArrayNotHasKey( 'demo/a-b', $collisions, 'The winner is not a collision.' );
 	}
+
+	/**
+	 * Register a foreign ability with an explicit output_schema and execute_callback, for the
+	 * bridge schema-validation tests. Uses the same 'demo-things' category ensure_categories()
+	 * already wires, so no extra category registration is needed here.
+	 *
+	 * @param string              $slug     The foreign ability slug.
+	 * @param array<string,mixed> $schema   The declared output_schema.
+	 * @param callable            $execute  The execute_callback, called with the ability input.
+	 * @return void
+	 */
+	private function register_foreign_with_schema( string $slug, array $schema, callable $execute ): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $slug, $schema, $execute ): void {
+				wp_register_ability(
+					$slug,
+					array(
+						'label'               => $slug,
+						'description'         => 'Bridge schema-validation fixture.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'output_schema'       => $schema,
+						'execute_callback'    => $execute,
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * A bridged ability whose execute() result contradicts its own declared
+	 * output_schema must surface as a WP_Error, not pass through under our
+	 * wrapper name - the decision this task set out to enforce.
+	 *
+	 * Investigation finding, recorded rather than papered over: this was already
+	 * true before any bridge.php change, and stays true with none. WP core's
+	 * WP_Ability::execute() has validated a result against its declared
+	 * output_schema since 6.9.0 (wp-includes/abilities-api/class-wp-ability.php,
+	 * execute() calling validate_output() on every non-error result), and this is
+	 * the plugin's stated minimum WordPress version. The bridge wrapper's
+	 * execute_callback calls $live->execute() on the FOREIGN ability object, so
+	 * the foreign ability validates its own output against its own schema before
+	 * our closure ever sees the result; a mismatch already comes back a WP_Error.
+	 * Separately, aafm_register_enabled_bridged_abilities() copies that same
+	 * schema onto our OWN wrapper's registration, so our wrapper's execute() would
+	 * independently validate again even if the foreign ability somehow did not.
+	 * Both layers are core's, not this file's. No bridge.php change was made; this
+	 * test pins the invariant so a future refactor that bypasses WP_Ability::execute()
+	 * (e.g. calling the raw execute_callback directly) cannot reopen the hole
+	 * silently.
+	 */
+	public function test_a_bridged_result_that_contradicts_its_declared_schema_is_an_error(): void {
+		$this->register_foreign_with_schema(
+			'vendor/lies-about-its-shape',
+			array(
+				'type'       => 'object',
+				'properties' => array( 'count' => array( 'type' => 'integer' ) ),
+				'required'   => array( 'count' ),
+			),
+			static fn(): array => array( 'count' => 'not an integer' )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/lies-about-its-shape' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-lies-about-its-shape' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertStringContainsString( 'vendor/lies-about-its-shape', $result->get_error_message() );
+		$this->assertStringContainsString(
+			'count',
+			$result->get_error_message(),
+			'The operator needs the field name to report this upstream.'
+		);
+	}
+
+	/**
+	 * The negative case: a bridged result that DOES conform to its declared schema
+	 * passes through unchanged. Proves the validation is a real check, not a
+	 * blanket rejection.
+	 */
+	public function test_a_conforming_bridged_result_passes_through_unchanged(): void {
+		$this->register_foreign_with_schema(
+			'vendor/honest',
+			array(
+				'type'       => 'object',
+				'properties' => array( 'count' => array( 'type' => 'integer' ) ),
+			),
+			static fn(): array => array( 'count' => 7 )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/honest' ) );
+		$this->register_wrappers();
+
+		$this->assertSame(
+			array( 'count' => 7 ),
+			wp_get_ability( 'aafm-bridge/vendor-honest' )->execute( array() )
+		);
+	}
 }

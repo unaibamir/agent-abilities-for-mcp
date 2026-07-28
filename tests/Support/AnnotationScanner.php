@@ -68,6 +68,19 @@ final class AnnotationScanner {
 	);
 
 	/**
+	 * Dynamic-dispatch signatures: a callback named at runtime rather than a literal call this
+	 * scanner's regex-based delegate discovery (collect_aafm_calls()) can see in source. A body
+	 * that resolves its actual delegate through one of these can hide a write behind a name the
+	 * scanner never follows, so a match here is treated as unscannable - a violation, not a pass -
+	 * the same way a closure or an unreadable function body already is.
+	 *
+	 * @var array<int,string>
+	 */
+	private const DYNAMIC_DISPATCH_PATTERNS = array(
+		'\b(?:call_user_func|call_user_func_array|forward_static_call|forward_static_call_array)\s*\(',
+	);
+
+	/**
 	 * Inline suppression marker, mirroring the wp-abilities-verify convention. A write on (or
 	 * adjacent to) a line carrying `// verify-ignore: readonly -- <reason>` is recorded as a
 	 * suppressed exception with its reason, not a violation. Accepts the readonly/read/all
@@ -142,9 +155,12 @@ final class AnnotationScanner {
 			$abilities[] = $name;
 
 			// A read/readonly claim this scanner cannot reflect is a violation, not a silent pass:
-			// a closure execute_callback or an unresolvable args_builder hides exactly the kind of
-			// write a lying annotation would make.
-			if ( null === $execute ) {
+			// a closure execute_callback, an unresolvable args_builder, or a STRING name that
+			// resolves (function_exists() true) but still has no body a scanner can read - an
+			// internal PHP function, for instance - all hide exactly the kind of write a lying
+			// annotation would make. is_string() alone proves nothing about whether the source is
+			// actually reachable, so that has to be checked too, not assumed from the type.
+			if ( null === $execute || null === self::body_of( $execute ) ) {
 				$violations[] = array(
 					'ability' => $name,
 					'claim'   => $claim_string,
@@ -152,9 +168,7 @@ final class AnnotationScanner {
 					'file'    => null,
 					'line'    => 0,
 					'via'     => null,
-					'reason'  => $built['ok']
-						? 'execute_callback is not a named function (likely a closure) and cannot be reflected'
-						: $built['reason'],
+					'reason'  => self::unscannable_execute_reason( $execute, $built ),
 				);
 				continue;
 			}
@@ -226,6 +240,28 @@ final class AnnotationScanner {
 	}
 
 	/**
+	 * The reason string for an unscannable claimed-read row, covering all three ways a row can
+	 * land here: a closure (no name to reflect), an unresolvable args_builder (never got as far
+	 * as an execute_callback), or a named, resolvable function whose body still cannot be read
+	 * (e.g. a PHP internal function, which has no source file at all).
+	 *
+	 * @param string|null         $execute The resolved execute_callback name, or null.
+	 * @param array<string,mixed> $built   The build_args() result for this row.
+	 * @return string
+	 */
+	private static function unscannable_execute_reason( ?string $execute, array $built ): string {
+		if ( null === $execute ) {
+			return $built['ok']
+				? 'execute_callback is not a named function (likely a closure) and cannot be reflected'
+				: (string) $built['reason'];
+		}
+		return sprintf(
+			'execute_callback "%s" is a resolvable named function but has no readable source (e.g. a PHP internal function) and cannot be reflected',
+			$execute
+		);
+	}
+
+	/**
 	 * Scan one ability's execute callback plus one level of aafm_* delegation.
 	 *
 	 * @param string $execute Execute-callback function name.
@@ -280,6 +316,19 @@ final class AnnotationScanner {
 				$reason     = self::suppression_reason( $body['lines'], $line_number );
 				$findings[] = array(
 					'call'   => trim( $matches[0] ),
+					'file'   => self::relative_path( $body['file'] ),
+					'line'   => $line_number,
+					'via'    => $via,
+					'reason' => $reason,
+				);
+			}
+			foreach ( self::DYNAMIC_DISPATCH_PATTERNS as $pattern ) {
+				if ( 1 !== preg_match( '~' . $pattern . '~', $code, $matches ) ) {
+					continue;
+				}
+				$reason     = self::suppression_reason( $body['lines'], $line_number );
+				$findings[] = array(
+					'call'   => trim( $matches[0] ) . ' [dynamic dispatch: delegate not resolvable from source]',
 					'file'   => self::relative_path( $body['file'] ),
 					'line'   => $line_number,
 					'via'    => $via,

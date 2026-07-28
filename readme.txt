@@ -378,7 +378,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 = 1.4.3 =
 
-Changes what media reads return. An agent connected as an author or contributor now sees only its own uploads instead of the whole library; users who can edit other people's posts are unaffected. If you have an agent that relies on browsing all media at a lower role, it will see less after this update. Also closes a WooCommerce delete permission gap and two OAuth conformance bugs.
+Media reads now return only the caller's own uploads unless they can edit other people's posts. An agent on a lower role will see less than before. Also fixes a WooCommerce delete permission gap and two OAuth conformance bugs.
 
 = 1.4.2 =
 

@@ -247,8 +247,11 @@ function aafm_oauth_filter_rest_challenge( $response, $server, $request ) {
 
 	$route = $request instanceof WP_REST_Request ? $request->get_route() : '';
 
-	// The MCP route the adapter registers (single-sourced in bootstrap.php).
-	if ( aafm_mcp_rest_route() !== $route ) {
+	// The MCP route the adapter registers (single-sourced in bootstrap.php), matched
+	// case-insensitively like core itself matches REST routes (class-wp-rest-server.php
+	// builds its route regex with the `i` modifier) and like the sibling
+	// aafm_oauth_filter_malformed_json() already matches its own route family.
+	if ( 0 !== strcasecmp( aafm_mcp_rest_route(), $route ) ) {
 		return $response;
 	}
 

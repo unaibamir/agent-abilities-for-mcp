@@ -106,31 +106,55 @@ final class AnnotationScanner {
 				continue;
 			}
 
-			$risk    = isset( $row['risk'] ) ? (string) $row['risk'] : '';
-			$args    = self::build_args( $row );
-			$claim   = array();
-			$execute = isset( $args['execute_callback'] ) && is_string( $args['execute_callback'] )
-				? $args['execute_callback']
-				: null;
+			$name  = (string) $name;
+			$risk  = isset( $row['risk'] ) ? (string) $row['risk'] : '';
+			$built = self::build_args( $row );
 
-			$readonly = $args['meta']['annotations']['readonly'] ?? null;
-			if ( true === $readonly ) {
-				$claim[] = 'readonly';
-			}
+			// The claim is decided first, from whatever is available: risk lives on the row itself
+			// and survives a failed build, the readonly annotation only exists once args are built.
+			$claim = array();
 			if ( 'read' === $risk ) {
 				$claim[] = 'risk:read';
 			}
+			if ( $built['ok'] ) {
+				$readonly = $built['args']['meta']['annotations']['readonly'] ?? null;
+				if ( true === $readonly ) {
+					$claim[] = 'readonly';
+				}
+			}
 
-			// Not a read/readonly claim, or nothing reflectable to read: outside this guard's scope.
-			if ( array() === $claim || null === $execute ) {
+			// Not a read/readonly claim: a legitimate skip, outside this guard's scope.
+			if ( array() === $claim ) {
 				continue;
 			}
 
-			$abilities[]  = (string) $name;
 			$claim_string = implode( '+', $claim );
+			$execute      = $built['ok'] && isset( $built['args']['execute_callback'] ) && is_string( $built['args']['execute_callback'] )
+				? $built['args']['execute_callback']
+				: null;
+
+			$abilities[] = $name;
+
+			// A read/readonly claim this scanner cannot reflect is a violation, not a silent pass:
+			// a closure execute_callback or an unresolvable args_builder hides exactly the kind of
+			// write a lying annotation would make.
+			if ( null === $execute ) {
+				$violations[] = array(
+					'ability' => $name,
+					'claim'   => $claim_string,
+					'call'    => null,
+					'file'    => null,
+					'line'    => 0,
+					'via'     => null,
+					'reason'  => $built['ok']
+						? 'execute_callback is not a named function (likely a closure) and cannot be reflected'
+						: $built['reason'],
+				);
+				continue;
+			}
 
 			foreach ( self::scan_callback( $execute ) as $finding ) {
-				$finding['ability'] = (string) $name;
+				$finding['ability'] = $name;
 				$finding['claim']   = $claim_string;
 				if ( null !== $finding['reason'] ) {
 					$suppressed[] = $finding;
@@ -157,16 +181,41 @@ final class AnnotationScanner {
 	 * and execute callback live on what that builder returns (see includes/register.php, which calls
 	 * the builder at registration time). All builders are zero-argument.
 	 *
+	 * `ok` is false for two distinct failure modes, both surfaced with their own `reason` rather than
+	 * collapsed into the same empty array: the row declares no args_builder at all, or it declares one
+	 * that does not resolve to a real named function (missing, or not a string, as a closure would be).
+	 * A caller that cannot tell "nothing to build" from "built successfully into nothing" cannot tell a
+	 * claimed-read row it failed to verify from one that legitimately has no execute_callback.
+	 *
 	 * @param array<string,mixed> $row Registry row.
-	 * @return array<string,mixed> Built args, or empty when the row has no callable builder.
+	 * @return array{ok:bool,args:array<string,mixed>,reason?:string}
 	 */
 	private static function build_args( array $row ): array {
-		$builder = $row['args_builder'] ?? null;
-		if ( ! is_string( $builder ) || ! function_exists( $builder ) ) {
-			return array();
+		if ( ! isset( $row['args_builder'] ) ) {
+			return array(
+				'ok'     => false,
+				'args'   => array(),
+				'reason' => 'no args_builder declared on the registry row',
+			);
 		}
+
+		$builder = $row['args_builder'];
+		if ( ! is_string( $builder ) || ! function_exists( $builder ) ) {
+			return array(
+				'ok'     => false,
+				'args'   => array(),
+				'reason' => sprintf(
+					'args_builder "%s" is not a resolvable named function',
+					is_string( $builder ) ? $builder : gettype( $builder )
+				),
+			);
+		}
+
 		$args = call_user_func( $builder );
-		return is_array( $args ) ? $args : array();
+		return array(
+			'ok'   => true,
+			'args' => is_array( $args ) ? $args : array(),
+		);
 	}
 
 	/**
@@ -248,7 +297,7 @@ final class AnnotationScanner {
 		}
 		try {
 			$reflection = new ReflectionFunction( $fn_name );
-		} catch ( ReflectionException $e ) {
+		} catch ( ReflectionException ) {
 			return null;
 		}
 
@@ -324,7 +373,7 @@ final class AnnotationScanner {
 		}
 		try {
 			$reflection = new ReflectionFunction( $fn_name );
-		} catch ( ReflectionException $e ) {
+		} catch ( ReflectionException ) {
 			return false;
 		}
 		if ( $reflection->isInternal() ) {

@@ -19,6 +19,7 @@
 			<directory>tests/admin</directory>
 			<directory>tests/oauth</directory>
 			<directory>tests/coexistence</directory>
+			<file>tests/WireShapeTest.php</file>
 		</testsuite>
 	</testsuites>
 	<!--

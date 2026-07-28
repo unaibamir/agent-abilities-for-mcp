@@ -92,4 +92,20 @@ final class AnnotationCorrectnessTest extends TestCase {
 
 		$this->assertNotEmpty( $result['violations'] );
 	}
+
+	/**
+	 * A gate that cannot say what it did not look at will hide the next hole the way it hid this
+	 * one: every ability the scan passes over, for a legitimate reason, must be named and the
+	 * reason recorded, not folded into an unexplained gap between the registry size and `scanned`.
+	 */
+	public function test_scan_reports_what_it_skipped_and_why(): void {
+		$result = AnnotationScanner::scan( aafm_get_abilities_registry() );
+
+		$this->assertArrayHasKey( 'skipped', $result );
+		$this->assertIsInt( $result['scanned'] );
+		foreach ( $result['skipped'] as $row ) {
+			$this->assertArrayHasKey( 'ability', $row );
+			$this->assertNotSame( '', $row['reason'], 'Every skip must carry a reason.' );
+		}
+	}
 }

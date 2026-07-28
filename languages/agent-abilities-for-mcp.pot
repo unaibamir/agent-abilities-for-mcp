@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-07-29T02:15:00+05:00\n"
+"POT-Creation-Date: 2026-07-29T02:18:39+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -2125,7 +2125,7 @@ msgid "Customer-facing text shown under the gateway's title at checkout, describ
 msgstr ""
 
 #: includes/abilities/woocommerce/gateways.php:346
-msgid "This gateway's raw position in the store's checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways' order values, so two gateways can end up sharing the same position."
+msgid "This gateway's raw position in the store's checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways' order values, so two gateways can end up sharing the same position. Reading the gateway back afterwards does not return this number: the read reports the gateway's resolved zero-based rank among all gateways, so a value of 5 written here can come back as 2. Both are correct, they answer different questions."
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:65
@@ -5616,7 +5616,7 @@ msgstr ""
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools."
 msgstr ""
 
-#: includes/bridge.php:406
+#: includes/bridge.php:418
 msgid "The bridged ability is no longer available."
 msgstr ""
 

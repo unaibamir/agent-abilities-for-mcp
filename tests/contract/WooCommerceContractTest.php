@@ -714,4 +714,104 @@ final class WooCommerceContractTest extends TestCase {
 
 		$product->delete( true );
 	}
+
+	/**
+	 * WC_Product::set_sku() throws WC_Data_Exception on a duplicate SKU
+	 * (abstract-wc-product.php: $this->error('product_invalid_sku', ...) when
+	 * !wc_product_has_unique_sku()). Unguarded, that surfaces as an uncaught
+	 * exception rather than a clean WP_Error. Needs a real WC_Product: the unit
+	 * suite's stub set_sku() never throws.
+	 */
+	public function test_create_product_with_a_duplicate_sku_is_a_clean_error(): void {
+		if ( ! class_exists( '\WC_Product' ) ) {
+			$this->markTestSkipped( 'WC_Product unavailable.' );
+		}
+
+		$first = new \WC_Product();
+		$first->set_name( 'AAFM Contract SKU Widget One' );
+		$first->set_sku( 'AAFM-CONTRACT-DUPLICATE-SKU' );
+		$first_id = $first->save();
+		$this->assertGreaterThan( 0, $first_id );
+
+		$result = aafm_exec_wc_create_product(
+			array(
+				'name' => 'AAFM Contract SKU Widget Two',
+				'sku'  => 'AAFM-CONTRACT-DUPLICATE-SKU',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A duplicate SKU must be a clean error, not an uncaught exception.' );
+		$this->assertStringContainsString( 'AAFM-CONTRACT-DUPLICATE-SKU', $result->get_error_message() );
+
+		$first->delete( true );
+	}
+
+	/**
+	 * A real WC_Coupon does NOT throw on a duplicate code. Verified directly against
+	 * this WooCommerce version: WC_Coupon::set_code() only calls set_prop(), and
+	 * wc_get_coupon_id_by_code() duplicate detection lives solely in
+	 * WC_REST_Coupons_V1/V2_Controller (rest-api/Controllers/.../class-wc-rest-coupons-v*-controller.php),
+	 * never in the WC_Coupon object our ability calls directly. Two coupon posts with
+	 * the identical code both save without error today; a WC_Data_Exception guard
+	 * around set_code() would be dead code; there is nothing to catch.
+	 *
+	 * The fix that actually closes the gap is the one the REST controller itself uses:
+	 * check wc_get_coupon_id_by_code() before saving and refuse a real collision.
+	 */
+	public function test_create_coupon_with_a_duplicate_code_is_a_clean_error(): void {
+		if ( ! class_exists( '\WC_Coupon' ) ) {
+			$this->markTestSkipped( 'WC_Coupon unavailable.' );
+		}
+
+		$first = new \WC_Coupon();
+		$first->set_code( 'AAFM-CONTRACT-DUPLICATE-CODE' );
+		$first->set_discount_type( 'percent' );
+		$first->set_amount( 10 );
+		$first_id = $first->save();
+		$this->assertGreaterThan( 0, $first_id );
+
+		$result = aafm_exec_wc_create_coupon(
+			array(
+				'code'          => 'AAFM-CONTRACT-DUPLICATE-CODE',
+				'discount_type' => 'percent',
+				'amount'        => '15',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A duplicate coupon code must be a clean error.' );
+		// wc_format_coupon_code() lowercases the code, matching how WC itself stores and
+		// compares coupon codes, so the message carries the lowercased form.
+		$this->assertStringContainsString( 'aafm-contract-duplicate-code', $result->get_error_message() );
+
+		$first->delete( true );
+	}
+
+	/**
+	 * The duplicate-code check must exclude the coupon's OWN row: re-saving a coupon
+	 * with the code it already has is not a collision.
+	 */
+	public function test_update_coupon_keeping_its_own_code_is_not_a_false_collision(): void {
+		if ( ! class_exists( '\WC_Coupon' ) ) {
+			$this->markTestSkipped( 'WC_Coupon unavailable.' );
+		}
+
+		$coupon = new \WC_Coupon();
+		$coupon->set_code( 'AAFM-CONTRACT-SELF-CODE' );
+		$coupon->set_discount_type( 'percent' );
+		$coupon->set_amount( 10 );
+		$id = $coupon->save();
+		$this->assertGreaterThan( 0, $id );
+
+		$result = aafm_exec_wc_update_coupon(
+			array(
+				'coupon_id' => $id,
+				'code'      => 'AAFM-CONTRACT-SELF-CODE',
+				'amount'    => '12',
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result, "Keeping a coupon's own code must not be treated as a collision." );
+
+		$coupon->delete( true );
+	}
 }

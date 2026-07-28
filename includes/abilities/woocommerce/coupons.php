@@ -270,13 +270,33 @@ function aafm_wc_coupon_write_properties(): array {
  * Only the keys present in $input are applied; absent keys leave the coupon unchanged, which is
  * what makes an empty PATCH a no-op.
  *
+ * WC_Coupon::set_code() does NOT throw on a duplicate code - verified directly against this
+ * WooCommerce version: it only calls set_prop(). The duplicate-code guard core itself uses lives
+ * solely in WC_REST_Coupons_V1/V2_Controller, never in the WC_Coupon object this ability calls
+ * directly, so two coupon posts with the identical code both save without error today. This
+ * ports that REST-controller check (wc_get_coupon_id_by_code(), excluding the coupon's own id so
+ * an update that keeps its own code is not a false collision) rather than catching an exception
+ * that does not exist here.
+ *
  * @param \WC_Coupon          $coupon Coupon object to mutate.
  * @param array<string,mixed> $input  Validated input fields (coupon_id already extracted).
- * @return void
+ * @return \WP_Error|null Null on success, or a WP_Error naming the conflicting code.
  */
-function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
+function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'code', $input ) ) {
-		$coupon->set_code( sanitize_text_field( (string) $input['code'] ) );
+		$code           = wc_format_coupon_code( sanitize_text_field( (string) $input['code'] ) );
+		$conflicting_id = wc_get_coupon_id_by_code( $code, $coupon->get_id() );
+		if ( $conflicting_id ) {
+			return new \WP_Error(
+				'aafm_wc_duplicate_coupon_code',
+				sprintf(
+					/* translators: %s: the conflicting coupon code. */
+					__( 'The coupon code "%s" is already in use by another coupon.', 'agent-abilities-for-mcp' ),
+					$code
+				)
+			);
+		}
+		$coupon->set_code( $code );
 	}
 	if ( array_key_exists( 'amount', $input ) ) {
 		$coupon->set_amount( sanitize_text_field( (string) $input['amount'] ) );
@@ -325,6 +345,7 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): void {
 			)
 		);
 	}
+	return null;
 }
 
 // =============================================================================
@@ -538,7 +559,10 @@ function aafm_exec_wc_create_coupon( array $input ) {
 	}
 
 	$coupon = new \WC_Coupon();
-	aafm_wc_apply_coupon_input( $coupon, $input );
+	$error  = aafm_wc_apply_coupon_input( $coupon, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 
 	$id = $coupon->save();
 	if ( ! $id ) {
@@ -611,7 +635,10 @@ function aafm_exec_wc_update_coupon( array $input ) {
 	// Strip the routing key before diffing so an id-only PATCH is a genuine no-op.
 	$fields = $input;
 	unset( $fields['coupon_id'] );
-	aafm_wc_apply_coupon_input( $coupon, $fields );
+	$error = aafm_wc_apply_coupon_input( $coupon, $fields );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$saved_id = (int) $coupon->save();
 	if ( $saved_id < 1 ) {
 		return aafm_generic_error();

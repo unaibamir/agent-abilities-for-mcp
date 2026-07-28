@@ -1080,7 +1080,13 @@ PHP;
 		}
 		if ( ! function_exists( 'wc_get_coupon_id_by_code' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_coupon_id_by_code( $code ) { return \AAFM\Tests\WcCouponStubStore::get_id_by_code( (string) $code ); }' );
+			eval( 'function wc_get_coupon_id_by_code( $code, $exclude = 0 ) { return \AAFM\Tests\WcCouponStubStore::get_id_by_code( (string) $code, (int) $exclude ); }' );
+		}
+		if ( ! function_exists( 'wc_format_coupon_code' ) ) {
+			// Mirrors real WC's woocommerce_coupon_code filter chain (wc_sanitize_coupon_code +
+			// wc_strtolower), collapsed to the observable effect for the stub: trim and lowercase.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_format_coupon_code( $value ) { return strtolower( trim( (string) $value ) ); }' );
 		}
 	}
 

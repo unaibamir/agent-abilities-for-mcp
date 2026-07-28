@@ -563,11 +563,15 @@ function aafm_wc_product_write_properties(): array {
  * $input are written (PATCH semantics), so an update leaves unsent fields intact. Every value is
  * sanitized for its kind before it reaches a setter; caller input never reaches a setter raw.
  *
+ * WC_Product::set_sku() throws WC_Data_Exception when the SKU collides with another product
+ * (abstract-wc-product.php: wc_product_has_unique_sku() fails). Caught here rather than left to
+ * surface as an uncaught exception; every other setter in this function is not known to throw.
+ *
  * @param \WC_Product         $product The product to mutate.
  * @param array<string,mixed> $input   Validated input (already schema-checked).
- * @return void
+ * @return \WP_Error|null Null on success, or a WP_Error naming the conflicting SKU.
  */
-function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void {
+function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'name', $input ) ) {
 		$product->set_name( sanitize_text_field( (string) $input['name'] ) );
 	}
@@ -575,7 +579,19 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void
 		$product->set_status( sanitize_key( (string) $input['status'] ) );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
-		$product->set_sku( sanitize_text_field( (string) $input['sku'] ) );
+		$sku = sanitize_text_field( (string) $input['sku'] );
+		try {
+			$product->set_sku( $sku );
+		} catch ( \WC_Data_Exception ) {
+			return new \WP_Error(
+				'aafm_wc_duplicate_sku',
+				sprintf(
+					/* translators: %s: the conflicting SKU value. */
+					__( 'The SKU "%s" is already in use by another product.', 'agent-abilities-for-mcp' ),
+					$sku
+				)
+			);
+		}
 	}
 	if ( array_key_exists( 'description', $input ) ) {
 		$product->set_description( wp_kses_post( (string) $input['description'] ) );
@@ -619,6 +635,7 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): void
 			aafm_wc_build_product_attributes( $sanitized, (array) $product->get_attributes() )
 		);
 	}
+	return null;
 }
 
 /**
@@ -812,7 +829,10 @@ function aafm_exec_wc_create_product( array $input ) {
 
 	$product = new \WC_Product();
 	unset( $input['type'] );
-	aafm_wc_apply_product_input( $product, $input );
+	$error = aafm_wc_apply_product_input( $product, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$id = (int) $product->save();
 
 	$saved = aafm_wc_get_product( $id );
@@ -898,7 +918,10 @@ function aafm_exec_wc_update_product( array $input ) {
 	}
 
 	unset( $input['product_id'], $input['type'] );
-	aafm_wc_apply_product_input( $product, $input );
+	$error = aafm_wc_apply_product_input( $product, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$id = (int) $product->save();
 
 	$saved = aafm_wc_get_product( $id );

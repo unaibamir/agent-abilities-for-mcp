@@ -51,6 +51,18 @@ function aafm_normalize_json_schema( $schema ): array {
 const AAFM_SCHEMA_MAX_DEPTH = 30;
 
 /**
+ * The namespace every bridged wrapper is registered under.
+ *
+ * Single-sourced because this string appears in two different shapes and they have to stay in
+ * step. Ability names use `aafm-bridge/<slug>`, but the MCP adapter rewrites the slash to a
+ * hyphen (RegisterAbilityAsMcpTool, mirrored by aafm_mcp_tool_name()), so on the wire the same
+ * ability is `aafm-bridge-<slug>`. Anything matching the wire form must derive it from here
+ * rather than hardcode it: a prefix that stops matching does not raise an error, it just
+ * silently stops firing, which is the failure mode that looks exactly like success.
+ */
+const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
+
+/**
  * Whether an array has sequential integer keys starting at 0 (a list / tuple).
  *
  * A PHP 8.0-safe stand-in for array_is_list() (8.1+), used to tell tuple-form JSON Schema
@@ -148,7 +160,7 @@ function aafm_bridge_tool_name( string $foreign_slug ): string {
 	$norm = strtolower( $foreign_slug );
 	$norm = (string) preg_replace( '/[^a-z0-9]+/', '-', $norm );
 	$norm = trim( $norm, '-' );
-	return 'aafm-bridge/' . $norm;
+	return AAFM_BRIDGE_NAMESPACE . '/' . $norm;
 }
 
 /**
@@ -239,7 +251,7 @@ function aafm_discover_foreign_abilities(): array {
 		$slug = (string) $slug;
 		$pos  = strpos( $slug, '/' );
 		$ns   = false !== $pos ? substr( $slug, 0, $pos ) : 'core';
-		if ( 'aafm' === $ns || 'aafm-bridge' === $ns ) {
+		if ( 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns ) {
 			continue;
 		}
 		$risk                         = aafm_bridge_risk( $ability );
@@ -305,7 +317,7 @@ function aafm_get_enabled_bridged_abilities(): array {
 function aafm_bridge_is_native_namespace( string $slug ): bool {
 	$pos = strpos( $slug, '/' );
 	$ns  = false !== $pos ? substr( $slug, 0, $pos ) : '';
-	return 'aafm' === $ns || 'aafm-bridge' === $ns;
+	return 'aafm' === $ns || AAFM_BRIDGE_NAMESPACE === $ns;
 }
 
 /**
@@ -459,7 +471,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 	unset( $args );
 
-	if ( ! is_string( $tool_name ) || ! str_starts_with( $tool_name, 'aafm-bridge-' ) ) {
+	if ( ! is_string( $tool_name ) || ! str_starts_with( $tool_name, AAFM_BRIDGE_NAMESPACE . '-' ) ) {
 		return $result;
 	}
 

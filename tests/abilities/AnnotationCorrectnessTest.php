@@ -94,6 +94,54 @@ final class AnnotationCorrectnessTest extends TestCase {
 	}
 
 	/**
+	 * A named, resolvable execute_callback (function_exists() true, is_string() true) that still
+	 * cannot be reflected - an internal PHP function has no source - must be a violation, not a
+	 * pass. The closure/missing-name guard checks whether $execute is a string at all; it never
+	 * checks whether that string is actually readable, so this string execute_callback sailed
+	 * through the exact same hole from the other side.
+	 */
+	public function test_unreflectable_named_function_on_a_readonly_ability_is_a_violation(): void {
+		$registry = array(
+			'aafm/fixture-internal-function-read' => array(
+				'risk'         => 'read',
+				'args_builder' => 'aafm_test_fixture_internal_function_args',
+			),
+		);
+
+		$result = AnnotationScanner::scan( $registry );
+
+		$this->assertNotEmpty(
+			$result['violations'],
+			'A readonly ability whose execute_callback cannot be reflected must be a violation, not a silent pass.'
+		);
+		$this->assertSame( 'aafm/fixture-internal-function-read', $result['violations'][0]['ability'] );
+	}
+
+	/**
+	 * A write reached only through dynamic dispatch (call_user_func() naming the delegate at
+	 * runtime, never a literal aafm_*( call in source) must be a violation. The one-hop delegate
+	 * scanner only follows literal calls it can see in the comment-stripped source; it has no way
+	 * to know call_user_func('aafm_writer') means the same thing, so the delegate - and the write
+	 * inside it - was never reached.
+	 */
+	public function test_dynamic_dispatch_hiding_a_write_is_a_violation(): void {
+		$registry = array(
+			'aafm/fixture-dynamic-dispatch-read' => array(
+				'risk'         => 'read',
+				'args_builder' => 'aafm_test_fixture_dynamic_dispatch_args',
+			),
+		);
+
+		$result = AnnotationScanner::scan( $registry );
+
+		$this->assertNotEmpty(
+			$result['violations'],
+			'A readonly ability that reaches a write only through dynamic dispatch must be a violation, not a silent pass.'
+		);
+		$this->assertSame( 'aafm/fixture-dynamic-dispatch-read', $result['violations'][0]['ability'] );
+	}
+
+	/**
 	 * A gate that cannot say what it did not look at will hide the next hole the way it hid this
 	 * one: every ability the scan passes over, for a legitimate reason, must be named and the
 	 * reason recorded, not folded into an unexplained gap between the registry size and `scanned`.

@@ -421,3 +421,51 @@ function aafm_register_enabled_bridged_abilities(): void {
 	// Publish this pass's collisions so the admin directory can flag any losing slug.
 	aafm_bridge_collisions( $collisions );
 }
+
+/**
+ * Safety net for a bridged ability whose result is a bare top-level JSON list.
+ *
+ * When a foreign ability declares no output_schema, aafm_bridge_output_schema() returns null
+ * and our wrapper's own registration omits output_schema too (see
+ * aafm_register_enabled_bridged_abilities() above). Core's WP_Ability::execute() ->
+ * validate_output() then short-circuits true on an empty schema without checking anything, so
+ * whatever the foreign ability returns reaches structuredContent under our tool name unchecked.
+ * If that is a bare top-level array, strict MCP clients reject the response - upstream issue
+ * WordPress/mcp-adapter#253, reproduced there against real WooCommerce REST list/report
+ * endpoints, which we bridge. This hooks the adapter's mcp_adapter_tool_call_result filter
+ * (fired after $mcp_tool->execute() in ToolsHandler::handle_tool_call(), since 0.5.0) and wraps
+ * a bare list under a `data` key so the wire shape is always an object.
+ *
+ * Scoped to aafm-bridge-* tool names only, not applied to our own aafm-* results. Every native
+ * ability's result is already asserted object-shaped by tests/WireShapeTest.php against the
+ * exact same execute() call this filter would otherwise see, so a native list-shape defect is a
+ * bug to fix at the source, not to paper over here. A blanket wrap would also produce a
+ * `{data: [...]}` shape that matches neither a native ability's documented output_schema nor a
+ * hypothetical buggy shape, masking the defect instead of surfacing it. For a bridged ability we
+ * do not control the schema at all, so a generic wrapper is the best available response.
+ *
+ * Uses aafm_bridge_is_list() (defined above in this file), a hand-rolled sequential-key check
+ * that never calls PHP 8.1's array_is_list() - this plugin's floor is PHP 8.0 - so no version
+ * branching is needed here. An empty array counts as a list (it JSON-encodes as [], the exact
+ * defect being guarded against) and is wrapped the same as a populated one. Cannot double-wrap:
+ * once wrapped, the result carries a string key and is no longer a list, so a second pass is a
+ * no-op by construction.
+ *
+ * @param mixed $result    The raw tool execution result (may be WP_Error).
+ * @param mixed $args      The tool arguments used (unused here).
+ * @param mixed $tool_name The MCP tool name that was called.
+ * @return mixed The result, wrapped under `data` only when it is a bridged bare list.
+ */
+function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
+	unset( $args );
+
+	if ( ! is_string( $tool_name ) || ! str_starts_with( $tool_name, 'aafm-bridge-' ) ) {
+		return $result;
+	}
+
+	if ( ! is_array( $result ) || ! aafm_bridge_is_list( $result ) ) {
+		return $result;
+	}
+
+	return array( 'data' => $result );
+}

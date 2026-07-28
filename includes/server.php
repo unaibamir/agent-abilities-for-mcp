@@ -491,6 +491,10 @@ function aafm_register_mcp_server( $adapter ): void {
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
 	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
 
+	// Wrap a bridged ability's bare top-level list result under a `data` key (see
+	// aafm_filter_bridged_tool_call_result() in bridge.php for the full rationale).
+	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 3 );
+
 	$adapter->create_server(
 		'aafm-server',
 		AAFM_MCP_NAMESPACE,

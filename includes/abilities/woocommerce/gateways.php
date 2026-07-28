@@ -343,7 +343,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 				'order'       => array(
 					'type'        => 'integer',
 					'minimum'     => 0,
-					'description' => __( 'This gateway\'s raw position in the store\'s checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways\' order values, so two gateways can end up sharing the same position.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'This gateway\'s raw position in the store\'s checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways\' order values, so two gateways can end up sharing the same position. Reading the gateway back afterwards does not return this number: the read reports the gateway\'s resolved zero-based rank among all gateways, so a value of 5 written here can come back as 2. Both are correct, they answer different questions.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),

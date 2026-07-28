@@ -43,8 +43,25 @@ jobs:
           fetch-depth: 0     # full history + tags for the changelog range
           persist-credentials: true
 
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: wp-cli
+
       - name: Sync version and generate the changelog
         run: python3 .github/scripts/prepare_release.py
+
+      # Rebuild the translation template so the release PR carries one that matches the code it
+      # is releasing. The Test workflow's i18n job would reject a stale one anyway; doing it here
+      # means the release path fixes it instead of just failing on it.
+      - name: Regenerate the translation template
+        run: |
+          set -euo pipefail
+          wp i18n make-pot . languages/agent-abilities-for-mcp.pot \
+            --slug=agent-abilities-for-mcp \
+            --exclude=vendor,tests,wp,node_modules,.claude,build,bin,.ddev,scratchpad,.wordpress-org
 
       - name: Open the release PR
         env:
@@ -63,7 +80,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
-          git add readme.txt README.md
+          git add readme.txt README.md languages/agent-abilities-for-mcp.pot
           git commit -m "Release $VERSION"
           git push -u origin "$BRANCH"
 

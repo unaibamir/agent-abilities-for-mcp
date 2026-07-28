@@ -41,6 +41,15 @@ namespace AAFM\Tests;
 
 final class WireShapeTest extends TestCase {
 
+	/**
+	 * The stylesheet active before this test switched to a block theme, restored in
+	 * tear_down() - the same idiom ThemesTest uses for the same reason (get-template needs
+	 * a real block template to resolve).
+	 *
+	 * @var string|null
+	 */
+	private ?string $previous_stylesheet = null;
+
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_activity_log();
@@ -53,10 +62,28 @@ final class WireShapeTest extends TestCase {
 		update_option( 'aafm_allowed_meta_keys', array( 'aafm_wire_shape_probe' ) );
 		add_filter( 'aafm_allowed_user_meta_keys', static fn(): array => array( 'aafm_wire_shape_probe' ) );
 		add_filter( 'aafm_allowed_term_meta_keys', static fn(): array => array( 'aafm_wire_shape_probe' ) );
+
+		// The WordPress test library boots with the non-block "default" theme, so get-template
+		// has no real block template to resolve without this - see executable_read_results().
+		$this->previous_stylesheet = get_stylesheet();
+		switch_theme( 'twentytwentyfive' );
+	}
+
+	public function tear_down(): void {
+		if ( null !== $this->previous_stylesheet ) {
+			switch_theme( $this->previous_stylesheet );
+		}
+		parent::tear_down();
 	}
 
 	/**
 	 * No native read ability's runtime result is a top-level JSON array.
+	 *
+	 * Every ability exercised here is expected to reach a real, non-error result: the test
+	 * fixture is built specifically so each one has something genuine to read. Reporting what
+	 * was skipped and why (rather than silently excluding a WP_Error result from the shape
+	 * check) is the same principle Task 2 applied to the annotation gate - a check that can
+	 * quietly narrow its own coverage is a hole with the same shape as a missing check.
 	 */
 	public function test_no_native_ability_returns_a_top_level_array(): void {
 		$results = $this->executable_read_results();
@@ -67,13 +94,33 @@ final class WireShapeTest extends TestCase {
 			'This test enumerated fewer core reads than expected, so it is not exercising the catalog it claims to.'
 		);
 
+		$skipped = array();
+		$checked = array();
 		foreach ( $results as $name => $result ) {
 			if ( is_wp_error( $result ) ) {
-				// A handful of fixtures here are deliberately minimal (e.g. get-template with
-				// no matching id) - an error is not a shape violation, it is a correctly
-				// reported miss.
+				$skipped[ $name ] = $result->get_error_message();
 				continue;
 			}
+			$checked[ $name ] = $result;
+		}
+
+		$this->assertSame(
+			array(),
+			$skipped,
+			sprintf(
+				"Every fixture in this test is built to reach a real result. An ability that errored here never reached the shape assertion below, narrowing this test's actual coverage silently (ability => error):\n%s",
+				implode(
+					"\n",
+					array_map(
+						static fn( string $name, string $reason ): string => "  $name: $reason",
+						array_keys( $skipped ),
+						array_values( $skipped )
+					)
+				)
+			)
+		);
+
+		foreach ( $checked as $name => $result ) {
 			$this->assertIsArray( $result, "$name returned a non-array result." );
 			$this->assertTrue(
 				array() === $result || ! array_is_list( $result ),
@@ -149,6 +196,20 @@ final class WireShapeTest extends TestCase {
 			)
 		);
 
+		// A real database template override, tied to the active theme via the wp_theme
+		// taxonomy term, exactly as ThemesTest does - so get-template resolves a genuine
+		// template instead of erroring on a deliberately-missing id.
+		$template_post = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_template',
+				'post_status'  => 'publish',
+				'post_name'    => 'wire-shape-probe',
+				'post_content' => '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->',
+			)
+		);
+		wp_set_object_terms( $template_post, get_stylesheet(), 'wp_theme' );
+		$template_id = get_stylesheet() . '//wire-shape-probe';
+
 		return array(
 			'aafm/get-posts'            => aafm_exec_get_posts( array() ),
 			'aafm/count-posts'          => aafm_exec_count_posts( array() ),
@@ -212,7 +273,7 @@ final class WireShapeTest extends TestCase {
 			'aafm/get-active-theme'     => aafm_exec_get_active_theme(),
 			'aafm/list-themes'          => aafm_exec_list_themes(),
 			'aafm/list-templates'       => aafm_exec_list_templates( array() ),
-			'aafm/get-template'         => aafm_exec_get_template( array( 'template_id' => 'aafm-wire-shape-probe//does-not-exist' ) ),
+			'aafm/get-template'         => aafm_exec_get_template( array( 'template_id' => $template_id ) ),
 			'aafm/get-global-styles'    => aafm_exec_get_global_styles(),
 		);
 	}

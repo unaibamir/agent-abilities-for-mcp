@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, seo
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.4.2
+Stable tag: 1.4.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -238,6 +238,16 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.4.3 =
+
+* **Fix:** Media reads handed back the whole library to anyone who could upload a file or edit a post. An agent connected as an author now sees only what it uploaded, and the full library still goes to users who can edit other people's posts. The media count follows the same rule, so it can no longer report a total that disagrees with the list beside it.
+* **Fix:** Deleting a WooCommerce product only checked that you manage the store, not whether that particular product was yours to delete.
+* **Fix:** A duplicate product SKU or coupon code came back as an uncaught error rather than a message naming what it collided with.
+* **Fix:** An ability bridged from another plugin could answer with a bare list where the protocol asks for an object, and some strict clients reject that outright. Bridged results are now always shaped as an object before they reach the wire.
+* **Fix:** The OAuth pointer sent on a 401 compared the request path case-sensitively, so a request that differed only in casing got no pointer at all and the client had nowhere to start.
+* **Fix:** The OAuth authorization response left out the issuer that RFC 9207 requires, which is how a client confirms which server actually answered it. Error redirects carry it now as well.
+* **Chore:** Tightened the build checks that guard these tools, including one that quietly passed any ability whose code it could not read.
+
 = 1.4.2 =
 
 * **Fix:** Asking for a post status when creating content did nothing. "Create a post as a draft" published it live instead, and reported success. Create post, page and draft now honour the status you ask for, and refuse it when your user lacks the capability to publish.
@@ -365,6 +375,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.4.3 =
+
+Changes what media reads return. An agent connected as an author or contributor now sees only its own uploads instead of the whole library; users who can edit other people's posts are unaffected. If you have an agent that relies on browsing all media at a lower role, it will see less after this update. Also closes a WooCommerce delete permission gap and two OAuth conformance bugs.
 
 = 1.4.2 =
 

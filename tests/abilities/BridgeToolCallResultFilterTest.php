@@ -139,4 +139,47 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 			)
 		);
 	}
+
+	/**
+	 * Every test above calls aafm_filter_bridged_tool_call_result() directly, which proves its
+	 * logic but not that it is actually reachable from a real tools/call. This pins the
+	 * registration itself: an accidental deregistration (e.g. a refactor that moves the
+	 * add_filter call, or drops it during a merge) would leave every test above passing while
+	 * the real fix silently stopped running, exactly the gap McpErrorStatusTest's own
+	 * registration pin closes for its sibling filter.
+	 *
+	 * A live end-to-end wire check (real initialize -> tools/call against a bridged fixture
+	 * ability with no output_schema, run on the DDEV bench) confirmed the full path once:
+	 * a bare-list result came back as structuredContent {"data":[...]} and an honest
+	 * associative result passed through unchanged. That manual pass is not repeatable in CI
+	 * (the vendored McpServer/ToolsHandler is one-instance-per-process with no reset method,
+	 * so a fresh bridged ability added mid-suite is not reliably visible to it - the same
+	 * constraint McpErrorStatusTest's own real-adapter test documents), so this registration
+	 * pin is the permanent, CI-safe substitute: it proves the filter is still wired with the
+	 * accepted-arg count ToolsHandler::call_tool() actually calls it with (3, matching this
+	 * function's signature; the adapter itself passes 5, and WordPress silently drops the
+	 * extra ones the callback did not ask for).
+	 */
+	public function test_filter_is_registered_on_mcp_adapter_tool_call_result(): void {
+		// The add_filter call lives inside aafm_register_mcp_server(), itself hooked on
+		// mcp_adapter_init - so it must be fired explicitly here (matching
+		// ServerToolsTest.php / McpErrorStatusTest.php) rather than assumed to have already
+		// run earlier in the suite. The registration is idempotent (aafm_register_mcp_server()
+		// no-ops once 'aafm-server' exists), so calling it again is always safe.
+		$adapter = \WP\MCP\Core\McpAdapter::instance();
+		$this->in_action(
+			'mcp_adapter_init',
+			static function () use ( $adapter ): void {
+				aafm_register_mcp_server( $adapter );
+			}
+		);
+
+		$priority = has_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result' );
+
+		$this->assertSame(
+			10,
+			$priority,
+			'aafm_filter_bridged_tool_call_result must be hooked on mcp_adapter_tool_call_result at priority 10.'
+		);
+	}
 }

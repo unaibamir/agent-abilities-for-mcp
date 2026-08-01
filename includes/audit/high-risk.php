@@ -53,8 +53,13 @@ function aafm_high_risk_abilities(): array {
 
 	/**
 	 * Filters EXTRA ability names to treat as high-risk. Built-ins are re-merged after, so
-	 * this can only ADD abilities to the locked set, never remove one. Accepts a bridged
-	 * ability name too, which is how an operator locks a neighbouring plugin's ability.
+	 * this can only ADD abilities to the locked set, never remove one.
+	 *
+	 * Covers native aafm/* abilities ONLY. Naming a bridged ability (aafm-bridge/*) here has
+	 * no effect: the bridge keeps its own enabled option and its own registration walk, and
+	 * aafm_all_server_ability_names() merges bridged names in after the floor has already run
+	 * over the native set. Locking a neighbouring plugin's ability is not something this
+	 * filter can do yet, and there is no warning if you try.
 	 *
 	 * @param list<string> $extra Extra ability names.
 	 */

@@ -242,6 +242,38 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
+	 * Regression test for the linkify bug where the id pattern was matched against the
+	 * already-escaped detail string. esc_html() turns an apostrophe into `&#039;`, and `#039`
+	 * satisfies `/#(\d+)/` just as well as a real id - since that entity sits earlier in the
+	 * string than the real "#<id>", the old code matched it first every time, regardless of what
+	 * the real id was. Depending on whether a post with id 39 happened to exist, the result was
+	 * either a link to the wrong post or no link at all (str_replace found no literal "#39" to
+	 * replace unless the real id happened to start with "39"). Matching against the raw string
+	 * fixes both: the link always points at the real id, and the visible text is never mangled.
+	 */
+	public function test_a_detail_with_an_apostrophe_links_the_real_id_not_an_escaped_entity_fragment(): void {
+		$this->acting_as( 'administrator' );
+		$page_id = self::factory()->post->create( array( 'post_type' => 'page' ) );
+
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/create-page',
+				'status'  => 'success',
+				'detail'  => "Updated the site's page #{$page_id}",
+			)
+		);
+
+		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
+
+		// The apostrophe survives, escaped, ahead of the real id in the string.
+		$this->assertStringContainsString( 'Updated the site&#039;s page', $html );
+		// The link points at the real id...
+		$this->assertStringContainsString( 'post.php?post=' . $page_id, $html );
+		// ...and the visible identifier is the real id, not a mangled or truncated fragment.
+		$this->assertStringContainsString( '>#' . $page_id . '<', $html );
+	}
+
+	/**
 	 * Render the activity tab as an administrator and return its markup.
 	 *
 	 * @return string

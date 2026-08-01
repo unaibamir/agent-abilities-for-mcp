@@ -158,10 +158,30 @@ final class BridgeDirectorySaveTest extends TestCase {
 	}
 
 	public function test_group_label_is_title_cased(): void {
+		// An unrecognized namespace still falls back to the generic Title Case transform.
 		$this->assertSame( 'Events Manager', aafm_bridge_display_label( 'events-manager' ) );
-		$this->assertSame( 'Woocommerce', aafm_bridge_display_label( 'woocommerce' ) );
 		$this->assertSame( 'Core', aafm_bridge_display_label( 'core' ) );
 		$this->assertSame( 'My Cool Plugin', aafm_bridge_display_label( 'my_cool-plugin' ) );
+	}
+
+	/**
+	 * Regression guard: a bridged namespace matching a real, known plugin must render that
+	 * plugin's real display name, not a raw ucwords() of its slug ("Woocommerce" instead of
+	 * "WooCommerce", "Wp Mail Smtp" instead of "WP Mail SMTP"). Five of these resolve through the
+	 * Integrations tab's own labels (aafm_integration_cards()); WP Mail SMTP is not one of our
+	 * native integrations, so it resolves through the bridge's own known-plugin map instead.
+	 */
+	public function test_known_plugin_namespaces_render_their_real_name(): void {
+		$this->assertSame( 'WooCommerce', aafm_bridge_display_label( 'woocommerce' ) );
+		$this->assertSame( 'Yoast SEO', aafm_bridge_display_label( 'yoast' ) );
+		$this->assertSame( 'Yoast SEO', aafm_bridge_display_label( 'wordpress-seo' ) );
+		$this->assertSame( 'Rank Math', aafm_bridge_display_label( 'rankmath' ) );
+		$this->assertSame( 'Rank Math', aafm_bridge_display_label( 'rank-math' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'aioseo' ) );
+		$this->assertSame( 'All in One SEO', aafm_bridge_display_label( 'all-in-one-seo-pack' ) );
+		$this->assertSame( 'ACF', aafm_bridge_display_label( 'acf' ) );
+		$this->assertSame( 'ACF', aafm_bridge_display_label( 'advanced-custom-fields' ) );
+		$this->assertSame( 'WP Mail SMTP', aafm_bridge_display_label( 'wp-mail-smtp' ) );
 	}
 
 	public function test_directory_renders_title_case_header_and_bulk_controls(): void {

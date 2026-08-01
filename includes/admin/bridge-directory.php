@@ -181,17 +181,56 @@ function aafm_render_bridge_filter(): void {
 }
 
 /**
+ * Known display names for third-party namespaces whose real brand casing a generic Title Case
+ * transform gets wrong ("Woocommerce" instead of "WooCommerce") or drops entirely (an SEO plugin
+ * abbreviated to initials, e.g. "ACF"). Keyed by the exact namespace slug (the part of the
+ * ability name before the first "/").
+ *
+ * This list is necessarily incomplete - the Abilities API has no way to ask "what is your
+ * plugin's display name" for an arbitrary namespace - so an unlisted plugin still falls back to
+ * Title Case in aafm_bridge_display_label(). Extend this map as specific known-bad namespaces
+ * are reported.
+ *
+ * @return array<string,string>
+ */
+function aafm_bridge_known_plugin_labels(): array {
+	return array(
+		'wordpress-seo'          => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
+		'rank-math'              => __( 'Rank Math', 'agent-abilities-for-mcp' ),
+		'all-in-one-seo-pack'    => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
+		'advanced-custom-fields' => __( 'ACF', 'agent-abilities-for-mcp' ),
+		'secure-custom-fields'   => __( 'ACF', 'agent-abilities-for-mcp' ),
+		'wp-mail-smtp'           => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
+		'wpmailsmtp'             => __( 'WP Mail SMTP', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Turn a source namespace slug into a readable group heading.
  *
- * The namespace comes off the ability slug lowercased and hyphenated (e.g. "events-manager").
- * Title-case each word for display: "events-manager" -> "Events Manager". We cannot recover a
- * plugin's exact brand casing (e.g. "WooCommerce") from a lowercase slug, so Title Case is the
- * honest generic transform.
+ * The namespace comes off the ability slug lowercased and hyphenated (e.g. "events-manager"),
+ * with no way to recover a plugin's real brand casing from it. Three lookups, in order:
+ * 1. aafm_bridge_known_plugin_labels() - namespaces whose real name Title Case gets wrong.
+ * 2. aafm_integration_cards() - the Integrations tab's own labels, for the namespaces that
+ *    happen to match our internal integration slugs exactly (yoast, rankmath, aioseo, acf,
+ *    woocommerce), so the two tabs never disagree about the same plugin's name.
+ * 3. A generic Title Case transform ("events-manager" -> "Events Manager") as the last resort
+ *    for any namespace we cannot otherwise resolve.
  *
  * @param string $ns Source namespace.
  * @return string
  */
 function aafm_bridge_display_label( string $ns ): string {
+	$known = aafm_bridge_known_plugin_labels();
+	if ( isset( $known[ $ns ] ) ) {
+		return $known[ $ns ];
+	}
+
+	$cards = aafm_integration_cards();
+	if ( isset( $cards[ $ns ]['label'] ) ) {
+		return (string) $cards[ $ns ]['label'];
+	}
+
 	$words = str_replace( array( '-', '_' ), ' ', $ns );
 	$words = trim( (string) preg_replace( '/\s+/', ' ', $words ) );
 	return '' === $words ? $ns : ucwords( $words );

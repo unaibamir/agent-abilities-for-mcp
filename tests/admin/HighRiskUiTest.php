@@ -15,17 +15,31 @@ use AAFM\Tests\TestCase;
 final class HighRiskUiTest extends TestCase {
 
 	/**
-	 * Render one ability row and return its markup.
+	 * Render one Abilities-tab ability row and return its markup.
 	 *
-	 * The entry comes from the FULL registry view so a WooCommerce ability still resolves on a
-	 * bench with no WooCommerce installed - the host guard withholds those rows from the live
-	 * registry, and every high-risk name in the built-in set is a WooCommerce one.
+	 * INVALID UNTIL 2026-08-01: this file used to call aafm_render_ability_row() with
+	 * 'aafm/wc-create-order-refund'. That pairing can never happen in production. Every built-in
+	 * high-risk ability is subject=woocommerce, and aafm_render_abilities_tab() only ever passes
+	 * this renderer a row whose subject is one of the six aafm_abilities_subjects() lists
+	 * (content, taxonomies, comments, users, media, site) - it filters $by_subject down to
+	 * exactly that list at page.php:1289-1294 before this renderer is ever called. So no built-in
+	 * high-risk ability has ever actually reached this renderer's lock branch: it rendered, it
+	 * passed, and it proved nothing. See test_no_builtin_high_risk_ability_belongs_to_an_abilities_tab_subject()
+	 * below, which pins the fact that made the old test invalid.
+	 *
+	 * The lock branch is still real, reachable code, though: aafm_high_risk_abilities is a public
+	 * filter (spec 146 §4.3/§10.3), the operator's own escape hatch for locking an ability we did
+	 * not ship as high-risk - including an ordinary content/user/media ability that genuinely does
+	 * render here. These tests exercise that path instead of the impossible one: mark an ordinary
+	 * six-subject ability high-risk for the duration of the test via make_high_risk(), then render
+	 * it through the real renderer. The registry read also switched from the FULL view back to the
+	 * live one, since the fixture abilities are always registered regardless of WooCommerce.
 	 *
 	 * @param string $name Ability name.
 	 * @return string
 	 */
 	private function render_row( string $name ): string {
-		$registry = aafm_get_abilities_registry_full();
+		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( $name, $registry, "Unknown ability: $name" );
 
 		ob_start();
@@ -37,22 +51,63 @@ final class HighRiskUiTest extends TestCase {
 		return (string) ob_get_clean();
 	}
 
+	/**
+	 * Mark an already-registered, ordinary ability high-risk for the duration of one test, via the
+	 * same aafm_high_risk_abilities filter an operator would use to lock something this plugin
+	 * did not ship as high-risk. Mirrors HighRiskTest::test_the_filter_can_add_an_ability().
+	 *
+	 * @param string $name Ability name already present in the live registry.
+	 * @return void
+	 */
+	private function make_high_risk( string $name ): void {
+		add_filter(
+			'aafm_high_risk_abilities',
+			static fn( array $e ): array => array_merge( $e, array( $name ) )
+		);
+	}
+
+	/**
+	 * Codifies the fact that made the old formulation of these tests invalid: none of the eight
+	 * built-in high-risk abilities has a subject the Abilities tab ever renders, so
+	 * aafm_render_ability_row()'s lock branch has never actually fired for any ability this
+	 * plugin ships - only the Integrations-tab renderer (HighRiskUiTest's
+	 * render_integration_row() tests below) has. If this ever fails, a built-in high-risk ability
+	 * just became reachable from the Abilities tab and the fixture-based tests above need
+	 * re-examining, since they would then be standing in for a real combination instead of a
+	 * hypothetical one.
+	 */
+	public function test_no_builtin_high_risk_ability_belongs_to_an_abilities_tab_subject(): void {
+		$abilities_tab_subjects = array_keys( aafm_abilities_subjects() );
+		$registry               = aafm_get_abilities_registry_full();
+		foreach ( aafm_high_risk_abilities_builtin() as $name ) {
+			$subject = (string) ( $registry[ $name ]['subject'] ?? '' );
+			$this->assertNotContains(
+				$subject,
+				$abilities_tab_subjects,
+				"{$name}'s subject '{$subject}' would make it reachable via aafm_render_ability_row(), contradicting this file's tests."
+			);
+		}
+	}
+
 	public function test_a_locked_row_renders_no_checkbox(): void {
-		$html = $this->render_row( 'aafm/wc-create-order-refund' );
+		$this->make_high_risk( 'aafm/create-page' );
+		$html = $this->render_row( 'aafm/create-page' );
 		$this->assertStringNotContainsString( 'type="checkbox"', $html );
 		$this->assertStringContainsString( 'aafm-ability-locked', $html );
 	}
 
 	public function test_a_locked_row_points_at_the_setting(): void {
+		$this->make_high_risk( 'aafm/create-page' );
 		$this->assertStringContainsString(
 			'High-risk abilities',
-			$this->render_row( 'aafm/wc-create-order-refund' )
+			$this->render_row( 'aafm/create-page' )
 		);
 	}
 
 	public function test_an_unlocked_high_risk_row_renders_a_checkbox_and_keeps_the_badge(): void {
+		$this->make_high_risk( 'aafm/create-page' );
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
-		$html = $this->render_row( 'aafm/wc-create-order-refund' );
+		$html = $this->render_row( 'aafm/create-page' );
 		$this->assertStringContainsString( 'type="checkbox"', $html );
 		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
 	}
@@ -70,9 +125,10 @@ final class HighRiskUiTest extends TestCase {
 	 * never shipped.
 	 */
 	public function test_a_locked_row_still_shows_the_ability_and_its_high_risk_badge(): void {
-		$html = $this->render_row( 'aafm/wc-create-order-refund' );
+		$this->make_high_risk( 'aafm/create-page' );
+		$html = $this->render_row( 'aafm/create-page' );
 		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
-		$this->assertStringContainsString( aafm_ability_label( 'aafm/wc-create-order-refund' ), $html );
+		$this->assertStringContainsString( aafm_ability_label( 'aafm/create-page' ), $html );
 	}
 
 	/**
@@ -81,20 +137,24 @@ final class HighRiskUiTest extends TestCase {
 	 * left to the looser "contains a checkbox" assertion above.
 	 */
 	public function test_an_unlocked_row_keeps_the_exact_input_contract(): void {
+		$this->make_high_risk( 'aafm/create-page' );
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		$this->assertStringContainsString(
-			'name="aafm_abilities[]" value="aafm/wc-create-order-refund"',
-			$this->render_row( 'aafm/wc-create-order-refund' )
+			'name="aafm_abilities[]" value="aafm/create-page"',
+			$this->render_row( 'aafm/create-page' )
 		);
 	}
 
 	/**
 	 * Render one Integrations-tab ability row and return its markup.
 	 *
-	 * Mirrors render_row() above but drives aafm_render_integration_ability_row() - the renderer
-	 * that shipped without a lock branch at all, so a locked ability's checkbox rendered live from
-	 * a card whose master switch was off. It shares the lock treatment with the Abilities-tab
-	 * renderer via aafm_render_ability_toggle_control(); these tests pin that both renderers agree.
+	 * This is THE real path for every built-in high-risk ability, not a secondary case: all eight
+	 * are subject=woocommerce, and subject=woocommerce never reaches aafm_render_ability_row()
+	 * (see render_row()'s docblock above and test_no_builtin_high_risk_ability_belongs_to_an_abilities_tab_subject()).
+	 * aafm_render_integration_ability_row() shipped without a lock branch at all, so a locked
+	 * ability's checkbox rendered live from a card whose master switch was off - the actual bug
+	 * an operator hit. It now shares the lock treatment with the Abilities-tab renderer via
+	 * aafm_render_ability_toggle_control(); these tests exercise the renderer that matters.
 	 *
 	 * @param string $name Ability name.
 	 * @return string
@@ -132,6 +192,7 @@ final class HighRiskUiTest extends TestCase {
 			'name="aafm_abilities[]" value="aafm/wc-create-order-refund"',
 			$html
 		);
+		$this->assertStringContainsString( 'aafm-badge-high-risk', $html, 'The high-risk badge must persist once unlocked, or the row is indistinguishable from an ordinary write ability.' );
 	}
 
 	public function test_an_integrations_tab_ordinary_row_is_unchanged(): void {

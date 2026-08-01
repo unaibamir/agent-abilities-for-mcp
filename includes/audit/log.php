@@ -141,6 +141,23 @@ function aafm_source_ip(): string {
 }
 
 /**
+ * Normalize a detail string before it reaches the column.
+ *
+ * The allowlist in includes/audit/detail.php is the real guarantee that only identifier-safe
+ * values get this far; this is the independent last line, so a caller that builds a detail by
+ * hand (the toggle and setting events do) still cannot write markup, a newline, or an unbounded
+ * string into an audit row that an admin screen later renders.
+ *
+ * @param string $detail Raw detail string.
+ * @return string Sanitized, single-line, at most 255 characters.
+ */
+function aafm_sanitize_activity_detail( string $detail ): string {
+	$clean = sanitize_text_field( $detail );
+	$clean = (string) preg_replace( '/\s+/', ' ', $clean );
+	return mb_substr( trim( $clean ), 0, 255 );
+}
+
+/**
  * Write one activity row. Records argument KEYS only - never values.
  *
  * @param array<string,mixed> $record {

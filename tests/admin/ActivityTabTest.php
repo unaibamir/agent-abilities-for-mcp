@@ -105,6 +105,27 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
+	 * The marker row is an event in its own right, not an ability call, so it has to say so in
+	 * the column that exists for exactly that. The ability name stays synthetic on purpose: rows
+	 * written before v5 carry no event_type, and keeping the name means old and new markers still
+	 * read as the same thing in an operator's log.
+	 */
+	public function test_the_cleared_marker_carries_the_log_cleared_event_type(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin );
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		$this->run_handler( 'aafm_ajax_clear_log' );
+		$rows = aafm_query_activity( array( 'per_page' => 1 ) );
+		$this->assertSame( 'log_cleared', $rows[0]['event_type'] );
+		$this->assertSame( 'aafm/activity-log-cleared', $rows[0]['ability'] );
+	}
+
+	/**
 	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
 	 * Mirrors the pattern in BridgeDirectorySaveTest / OauthRevokeAjaxTest.
 	 *

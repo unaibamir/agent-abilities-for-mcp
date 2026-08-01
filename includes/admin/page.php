@@ -1816,7 +1816,8 @@ function aafm_render_activity_tab(): void {
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Ability', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Event', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th>' . esc_html__( 'Detail', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '<th>' . esc_html__( 'Arg keys', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '</tr></thead><tbody>';
@@ -1873,16 +1874,18 @@ function aafm_activity_filter_status( string $filter ): ?string {
 /**
  * Render one page of activity rows as escaped <tr> HTML.
  *
- * Every cell is run through esc_html()/esc_attr(); the log only ever holds argument KEYS
- * (never values) plus a REMOTE_ADDR source IP, so standard escaping is sufficient. An empty
- * set renders a single "no activity" row so the table never collapses to a bare <tbody>.
+ * Every cell is run through esc_html()/esc_attr(); the log holds argument KEYS (never values),
+ * a REMOTE_ADDR source IP, and since v5 a short detail string. The detail is identifier-only:
+ * includes/audit/detail.php is an allowlist of field types with no string or text type, so a
+ * detail can never carry an argument value. Standard escaping is sufficient for all of it. An
+ * empty set renders a single "no activity" row so the table never collapses to a bare <tbody>.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
  * @return string Escaped <tr>…</tr> markup.
  */
 function aafm_activity_rows_html( array $rows ): string {
 	if ( empty( $rows ) ) {
-		return '<tr><td colspan="5">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
+		return '<tr><td colspan="6">' . esc_html__( 'No activity recorded yet.', 'agent-abilities-for-mcp' ) . '</td></tr>';
 	}
 
 	// Map each log status to a pill variant; the status word stays visible (never colour-only).
@@ -1898,10 +1901,11 @@ function aafm_activity_rows_html( array $rows ): string {
 		$status  = (string) ( $row['status'] ?? '' );
 		$variant = $status_variants[ $status ] ?? 'neutral';
 		$html   .= sprintf(
-			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td><span class="aafm-pill aafm-pill-%4$s aafm-status aafm-status-%5$s">%6$s</span></td><td>%7$s</td></tr>',
+			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td><span class="aafm-pill aafm-pill-%5$s aafm-status aafm-status-%6$s">%7$s</span></td><td>%8$s</td></tr>',
 			esc_html( (string) ( $row['created_at'] ?? '' ) ),
 			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
 			esc_html( (string) ( $row['ability'] ?? '' ) ),
+			esc_html( (string) ( $row['detail'] ?? '' ) ),
 			esc_attr( $variant ),
 			esc_attr( $status ),
 			esc_html( $status ),

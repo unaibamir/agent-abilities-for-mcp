@@ -129,6 +129,42 @@ function aafm_integration_plugin_file_exists( string $plugin_file ): bool {
 }
 
 /**
+ * Build the "N read, N write[, N destructive]" breakdown segment of a card header count.
+ *
+ * The manifest already tallies destructive abilities into their own bucket via
+ * aafm_integration_manifest() (total === read + write + destructive), but this string used to
+ * interpolate only read and write, so a card with any destructive ability (WooCommerce has two:
+ * trashing/deleting an order) showed a read+write sum that fell short of the total next to it -
+ * "0 / 52 · 27 read, 23 write" adds up to 50, silently dropping the two destructive rows from the
+ * visible breakdown.
+ * The destructive segment only appears when the count is non-zero, so a card with none stays the
+ * familiar two-part string rather than always showing "0 destructive".
+ *
+ * @param array{total:int,read:int,write:int,destructive:int} $counts Manifest counts for one integration.
+ * @return string Plain text (escaped by the caller).
+ */
+function aafm_integration_count_breakdown( array $counts ): string {
+	$destructive = (int) ( $counts['destructive'] ?? 0 );
+
+	if ( $destructive > 0 ) {
+		return sprintf(
+			/* translators: 1: read count, 2: write count, 3: destructive count. */
+			__( '%1$d read, %2$d write, %3$d destructive', 'agent-abilities-for-mcp' ),
+			(int) $counts['read'],
+			(int) $counts['write'],
+			$destructive
+		);
+	}
+
+	return sprintf(
+		/* translators: 1: read count, 2: write count. */
+		__( '%1$d read, %2$d write', 'agent-abilities-for-mcp' ),
+		(int) $counts['read'],
+		(int) $counts['write']
+	);
+}
+
+/**
  * Render the Integrations tab: the disclaimer header, then one card per integration.
  *
  * @return void
@@ -234,12 +270,11 @@ function aafm_render_integrations_tab(): void {
 				'<p class="aafm-integration-count">%s</p>',
 				esc_html(
 					sprintf(
-						/* translators: 1: enabled abilities, 2: total abilities, 3: read count, 4: write count. */
-						__( '%1$d / %2$d · %3$d read, %4$d write', 'agent-abilities-for-mcp' ),
+						/* translators: 1: enabled abilities, 2: total abilities, 3: read/write/destructive breakdown, e.g. "27 read, 23 write, 2 destructive". */
+						__( '%1$d / %2$d · %3$s', 'agent-abilities-for-mcp' ),
 						(int) $counts['enabled'],
 						(int) $counts['total'],
-						(int) $counts['read'],
-						(int) $counts['write']
+						aafm_integration_count_breakdown( $counts )
 					)
 				)
 			);

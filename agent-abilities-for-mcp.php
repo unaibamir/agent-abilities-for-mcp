@@ -49,6 +49,7 @@ aafm_eager_load_adapter();
 
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
+require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 
 /**

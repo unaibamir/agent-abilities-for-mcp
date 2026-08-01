@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
-Stable tag: 1.4.3
+Stable tag: 1.5.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -244,6 +244,31 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.5.0 =
+
+* **Feature:** Eight WooCommerce abilities that move money or grant authority (refunds, order status, order updates, payment gateway settings, coupon creation and updates, and tax rate creation and updates) are now locked by default behind a single audited master switch on the Settings tab.
+* **Feature:** The activity log now records ability toggles and setting changes, not only ability calls, using a new event-type vocabulary and a detail column that names what changed.
+* **Feature:** Every ability you enable or disable is now recorded in the activity log. Before this release, that option was written with no audit trail at all.
+* **Feature:** Identifiers in the activity log's detail column now link to the object's edit screen.
+* **Feature:** The activity log can now be exported as a CSV, carrying whatever filter is currently applied.
+* **Feature:** A failed Application Password attempt against the MCP endpoint is now logged, and rate limited per source IP so a credential-stuffing run cannot flood the log.
+* **Fix:** Creating a WooCommerce customer used to require only the capability to manage WooCommerce. It now also requires the capability to create users, since the ability creates a real WordPress account.
+* **Fix:** Listing or reading a WooCommerce customer's details used to require only the capability to manage WooCommerce, which let a caller with just that one capability read any WordPress user's email, address, and phone, administrators included. Both abilities now also require the capability to list users, the same one WordPress itself requires to browse Users in wp-admin. A stock WooCommerce Shop Manager does not hold that capability, and is now denied both abilities where it was not before.
+* **Fix:** A high-risk ability could still be switched on and saved as an ordinary toggle from the Integrations tab, and the activity log recorded an enable that never actually took effect.
+* **Fix:** Payment gateway and shipping settings could return secrets under field names the redaction list did not match, such as passphrase and salt.
+* **Fix:** Deleting a WooCommerce product variation did not check the caller's capability on that specific product the way deleting a product does.
+* **Fix:** An identifier in the activity log could link to the wrong object when the detail text ahead of it contained an apostrophe.
+* **Fix:** The activity log's Event and Detail columns could misalign after filtering or paging.
+* **Fix:** Exporting a large activity log could produce a truncated file that still looked complete, and exporting while the log was being written could duplicate rows.
+* **Fix:** Integration and ability counts on the admin screens did not refresh after a save until the page was reloaded.
+* **Fix:** Bridge group headers counted destructive abilities as ordinary writes, and showed a plugin's raw slug instead of its name.
+* **Fix:** Turning the high-risk switch off left a stored value behind instead of clearing the setting.
+* **Chore:** Copy now says an Application Password is a whole-site credential bounded by the WordPress role it belongs to, and that this plugin's allowlist, high-risk floor, and audit log only govern calls made through its own MCP endpoint.
+* **Chore:** Copy now says uninstalling does not revoke an agent's access on its own, and names what survives.
+* **Chore:** Copy now says an OAuth grant's requested scope does not limit what the resulting token can do.
+* **Chore:** The rate limit setting now says it ships off by default, and suggests a starting value.
+* **Chore:** Regenerated the translation template.
+
 = 1.4.3 =
 
 * **Fix:** Media reads handed back the whole library to anyone who could upload a file or edit a post. An agent connected as an author now sees only what it uploaded, and the full library still goes to users who can edit other people's posts. The media count follows the same rule, so it can no longer report a total that disagrees with the list beside it.
@@ -381,6 +406,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+
+Creating a WooCommerce customer now also requires the create-users capability, and listing or reading a customer now also requires list-users; a stock Shop Manager loses both by default. Eight WooCommerce abilities that move money or grant authority are locked until you switch on a new master switch on Settings.
 
 = 1.4.3 =
 

@@ -1975,6 +1975,11 @@ function aafm_csv_cell( string $value ): string {
  * while the export is mid-run shifts the OFFSET window and the same row can be written twice -
  * nothing is skipped, but a duplicate in a compliance export is still a real defect.
  *
+ * Time limits and connection-abort handling are lifted for the same reason a partial export is
+ * dangerous here: an operator relying on a compliance export getting cut off with a file that
+ * still looks complete is worse than the request failing outright, so each batch is flushed to
+ * the client as soon as it is written rather than held until the whole export finishes.
+ *
  * @param string|null $status Optional status filter, matching the tab's current filter.
  * @return void
  */
@@ -1992,6 +1997,11 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 		'client_id',
 		'result_count',
 	);
+
+	if ( function_exists( 'set_time_limit' ) ) {
+		set_time_limit( 0 );
+	}
+	ignore_user_abort( true );
 
 	// php://output is a stream wrapper, not a real filesystem path, so WP_Filesystem (which only
 	// targets the real filesystem) cannot write to it - fopen()/fclose() are the correct tool here.
@@ -2025,6 +2035,7 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 		// Testing hook: lets the test suite insert rows between batches to prove the max_id
 		// snapshot above keeps them out of this export instead of shifting the OFFSET window.
 		do_action( 'aafm_activity_export_batch', $page, $rows );
+		flush();
 		++$page;
 	}
 

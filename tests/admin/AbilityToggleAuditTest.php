@@ -63,7 +63,12 @@ final class AbilityToggleAuditTest extends TestCase {
 		aafm_log_high_risk_switch_change( false, true );
 		$rows = aafm_query_activity( array( 'per_page' => 1 ) );
 		$this->assertSame( 'setting_changed', $rows[0]['event_type'] );
-		$this->assertSame( '', $rows[0]['ability'] );
+		// The Event column (both the initial render and the AJAX-paginated one) puts the raw
+		// `ability` value straight into the cell with no fallback to event_type, so a blank
+		// ability here used to mean a blank Event cell for every master-switch row. This synthetic,
+		// ability-like name is what makes the row readable in the log, the same way
+		// aafm/activity-log-cleared does for the log-cleared marker.
+		$this->assertSame( 'aafm/high-risk-abilities-unlocked', $rows[0]['ability'] );
 		$this->assertSame( 'High-risk abilities unlocked', $rows[0]['detail'] );
 	}
 

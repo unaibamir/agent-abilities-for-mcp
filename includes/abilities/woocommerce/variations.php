@@ -5,7 +5,9 @@
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
- * server.php case). Shared helpers live in _shared.php, loaded before this file.
+ * server.php case); wc-delete-product-variation additionally checks the caller's own relationship to
+ * the specific variation, mirroring wc-delete-product's aafm_perm_wc_delete_product() (products.php).
+ * Shared helpers live in _shared.php, loaded before this file.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -646,6 +648,70 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 }
 
 /**
+ * Whether the current user may delete this specific variation object.
+ *
+ * Deliberately its own helper rather than a reuse of aafm_wc_can_delete_product_object()
+ * (products.php): that helper returns false outright unless the resolved post type's own
+ * map_meta_cap is true, which is correct for the 'product' post type - WooCommerce registers it
+ * with map_meta_cap => true - but would make this always return false for 'product_variation'.
+ * WooCommerce registers product_variation with capability_type => 'product' and no explicit
+ * map_meta_cap (WC_Post_Types::register_post_types()), so that post type's own WP_Post_Type object
+ * always has map_meta_cap === false, unlike 'product'.
+ *
+ * That gap in WooCommerce's own registration means WordPress's map_meta_cap() cannot resolve
+ * delete_product against a specific variation into the own-vs-others distinction it gives the
+ * 'product' post type (see the `! $post_type->map_meta_cap` branch of the delete_post case in
+ * wp-includes/capabilities.php - it short-circuits straight to the flat capability instead of
+ * checking post_author). current_user_can( 'delete_product', $variation_id ) still runs and still
+ * requires the caller to hold the delete_product capability; it just cannot tell "your own
+ * variation" from "someone else's" the way the product check can. That is still real value over the
+ * bare manage_woocommerce floor - a custom role holding manage_woocommerce without WooCommerce's
+ * product capabilities is denied here - it is just not the identical per-object guarantee
+ * aafm_wc_can_delete_product_object() gives, because that guarantee is a property of how
+ * WooCommerce itself registered the post type, not something this callback controls.
+ *
+ * @param WP_Post $variation The variation's backing post object.
+ * @return bool
+ */
+function aafm_wc_can_delete_variation_object( WP_Post $variation ): bool {
+	$type = get_post_type_object( $variation->post_type );
+	if ( ! $type instanceof WP_Post_Type ) {
+		return false;
+	}
+	return current_user_can( $type->cap->delete_post, $variation->ID );
+}
+
+/**
+ * Permission for aafm/wc-delete-product-variation: the capability floor (manage_woocommerce) AND
+ * the caller's own relationship to the specific variation, mirroring aafm_perm_wc_delete_product()
+ * (products.php) so delete-product and delete-product-variation share the same floor shape. See
+ * aafm_wc_can_delete_variation_object() above for why the variation check cannot be the identical
+ * per-object guarantee the product check gets.
+ *
+ * A nonexistent id, or a variation with no real backing WP_Post to gate on, falls back to the
+ * floor already checked: there is nothing more specific to authorize against, and the WC data
+ * store (not a missing capability) is what reports "not found" from execute().
+ *
+ * @param array<string,mixed> $input Ability input.
+ * @return bool
+ */
+function aafm_perm_wc_delete_product_variation( array $input ): bool {
+	if ( ! aafm_wc_perm() ) {
+		return false;
+	}
+	$id        = isset( $input['variation_id'] ) ? absint( $input['variation_id'] ) : 0;
+	$variation = $id ? aafm_wc_get_variation( $id ) : null;
+	if ( null === $variation ) {
+		return true;
+	}
+	$post = get_post( $variation->get_id() );
+	if ( ! $post instanceof WP_Post ) {
+		return true;
+	}
+	return aafm_wc_can_delete_variation_object( $post );
+}
+
+/**
  * Args for aafm/wc-delete-product-variation.
  *
  * @return array<string,mixed>
@@ -675,7 +741,7 @@ function aafm_args_wc_delete_product_variation(): array {
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_delete_product_variation',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_delete_product_variation',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,

@@ -605,6 +605,82 @@ final class WooVariationsTest extends TestCase {
 	}
 
 	/**
+	 * Alignment finding: wc-delete-product-variation must carry the same per-object floor as
+	 * wc-delete-product, not the flat manage_woocommerce gate alone.
+	 *
+	 * Every other test in this file resolves a variation with no real backing WP_Post (the WcStubStore
+	 * ids are pure data, never inserted via wp_insert_post), so aafm_perm_wc_delete_product_variation()
+	 * takes its "nothing more specific to check" fallback and never reaches the per-object branch -
+	 * exactly like aafm_perm_wc_delete_product() does for every other product test in this suite. This
+	 * test builds a real backing WP_Post, registered as WooCommerce itself registers product_variation
+	 * (capability_type 'product', no explicit map_meta_cap), so the per-object branch actually runs.
+	 *
+	 * A role holding manage_woocommerce but not the resolved delete_product capability must be denied;
+	 * granting delete_product on top of the same role must then allow it - proving the check is a real
+	 * capability test, not a hardcoded false.
+	 */
+	public function test_delete_variation_requires_delete_product_capability_on_real_backing_post(): void {
+		if ( ! post_type_exists( 'product_variation' ) ) {
+			register_post_type(
+				'product_variation',
+				array(
+					'public'          => false,
+					'capability_type' => 'product',
+				)
+			);
+		}
+
+		$post_id = wp_insert_post(
+			array(
+				'post_type'   => 'product_variation',
+				'post_status' => 'publish',
+				'post_title'  => 'Real backing variation post',
+			),
+			true
+		);
+		$this->assertIsInt( $post_id, 'wp_insert_post must succeed for the real backing post.' );
+
+		WcStubStore::seed(
+			$post_id,
+			array(
+				'id'        => $post_id,
+				'parent_id' => 500,
+				'type'      => 'variation',
+			)
+		);
+
+		add_role(
+			'aafm_test_wc_variation_scoped',
+			'AAFM Test WC Variation Scoped',
+			array(
+				'read'               => true,
+				'manage_woocommerce' => true,
+			)
+		);
+		$user_id = self::factory()->user->create( array( 'role' => 'aafm_test_wc_variation_scoped' ) );
+		wp_set_current_user( $user_id );
+
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-delete-product-variation' )->check_permissions( array( 'variation_id' => $post_id ) ),
+			'manage_woocommerce without delete_product must not be enough against a real variation post.'
+		);
+
+		get_role( 'aafm_test_wc_variation_scoped' )->add_cap( 'delete_product' );
+		// wp_set_current_user() short-circuits to the cached WP_User when $user_id already matches the
+		// current user, so it will not pick up the capability just added to the role - refresh the
+		// current user's own capability cache directly instead.
+		wp_get_current_user()->get_role_caps();
+
+		$this->assertTrue(
+			wp_get_ability( 'aafm/wc-delete-product-variation' )->check_permissions( array( 'variation_id' => $post_id ) ),
+			'Granting delete_product on top of manage_woocommerce must allow the delete.'
+		);
+
+		remove_role( 'aafm_test_wc_variation_scoped' );
+		wp_delete_post( $post_id, true );
+	}
+
+	/**
 	 * Audit: a denied permission check is recorded, and the gate actually denies.
 	 *
 	 * @dataProvider provide_denied_audit_cases

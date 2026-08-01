@@ -1368,13 +1368,27 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-ability-title-' . sanitize_key( $name );
 
+	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
+	// this just stops the screen offering a switch that the registration walk would ignore. Native
+	// aafm/* rows only - a bridged ability is registered through its own walk that the floor never
+	// touches, and this renderer is never called for one (the Bridge tab has its own).
+	$locked = aafm_ability_is_locked( $name );
+
 	echo '<div class="aafm-ability-row">';
-	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s><span class="aafm-switch-track"></span></label>',
-		esc_attr( $name ),
-		esc_attr( $title_id ),
-		checked( in_array( $name, $enabled, true ), true, false )
-	);
+	if ( $locked ) {
+		printf(
+			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
+			esc_attr__( 'Locked', 'agent-abilities-for-mcp' ),
+			wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() )
+		);
+	} else {
+		printf(
+			'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s><span class="aafm-switch-track"></span></label>',
+			esc_attr( $name ),
+			esc_attr( $title_id ),
+			checked( in_array( $name, $enabled, true ), true, false )
+		);
+	}
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -1390,10 +1404,23 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
 	}
 
+	// Membership in the high-risk category does not change when the operator unlocks it, so the
+	// badge stays on an unlocked, enabled row too. It marks what the ability can do, not whether
+	// the floor is currently in the way.
+	if ( aafm_ability_is_high_risk( $name ) ) {
+		echo ' <span class="aafm-badge aafm-badge-high-risk">' . esc_html__( 'high-risk', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
 	printf(
-		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
+		'</div><p class="aafm-ability-hint">%1$s</p>',
 		esc_html( $hint )
 	);
+
+	if ( $locked ) {
+		echo '<p class="aafm-ability-locked-note">' . esc_html__( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' ) . '</p>';
+	}
+
+	echo '</div></div>';
 }
 
 /**

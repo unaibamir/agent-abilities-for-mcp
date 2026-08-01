@@ -775,6 +775,13 @@
 			background: #e6f0f7;
 			color: #0a4b78;
 		}
+
+		/* Deliberately darker than the destructive badge sitting beside it: this one marks
+		   money and authority, and it has to read as the heavier of the two at a glance. */
+		&.aafm-badge-high-risk {
+			background: #b32d2e;
+			color: #fff;
+		}
 	}
 
 	/* ---------- Ability rows (grouped toggle list inside a card) ---------- */
@@ -815,6 +822,26 @@
 		&:hover { background: var(--aafm-surface-2); }
 
 		.aafm-switch { margin-block-start: 1px; }
+
+		/* Sits in the switch's slot and holds its width, so a locked row keeps the same
+		   left edge as the switched rows above and below it rather than jogging inward. */
+		.aafm-ability-locked {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			inline-size: 38px;
+			block-size: 22px;
+			flex: 0 0 auto;
+			margin-block-start: 1px;
+			color: var(--aafm-text-subtle);
+		}
+
+		.aafm-ability-locked-note {
+			margin-block: 4px 0;
+			max-inline-size: 80ch;
+			font-size: 12px;
+			color: var(--aafm-text-subtle);
+		}
 	}
 
 	.aafm-ability-main {

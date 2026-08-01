@@ -252,7 +252,8 @@ final class LogExportTest extends TestCase {
 
 	/**
 	 * The admin_post handler refuses a request carrying no valid nonce, even from an
-	 * administrator - check_admin_referer() runs before the capability check.
+	 * administrator - the capability check passes here (an administrator has manage_options),
+	 * so this specifically exercises check_admin_referer(), which runs second.
 	 */
 	public function test_the_export_handler_refuses_a_missing_nonce(): void {
 		$this->acting_as( 'administrator' );

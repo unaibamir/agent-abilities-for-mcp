@@ -850,10 +850,14 @@ function aafm_ajax_get_log_page(): void {
  * @return void
  */
 function aafm_handle_export_activity_log(): void {
-	check_admin_referer( 'aafm_admin' );
+	// Capability first, then nonce - the WordPress convention, and not just style here: with the
+	// nonce checked first, an unauthenticated or under-privileged caller got a nonce failure
+	// ("link expired") instead of an authorization failure, which is the wrong refusal reason to
+	// show them even though aafm_export_activity_csv() was never reachable either way.
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) );
 	}
+	check_admin_referer( 'aafm_admin' );
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; sanitized and unslashed two lines down once confirmed to be a string, never an array.
 	$raw_filter = $_GET['filter'] ?? null;

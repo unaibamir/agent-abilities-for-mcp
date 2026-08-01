@@ -1353,6 +1353,35 @@
 		}
 
 		/**
+		 * Build the Detail column's <td>, linking the row's identifier when the server resolved
+		 * one.
+		 *
+		 * `row.detail_link` (when present) carries the before/id/url/after parts already split
+		 * server-side, so this never concatenates untrusted text into an HTML string: the anchor
+		 * is a real DOM node, its href is assigned as a property (not parsed as markup), and every
+		 * text fragment goes through textContent / createTextNode. No innerHTML anywhere in this
+		 * path.
+		 *
+		 * @param {Object} row Row object from the aafm_get_log_page response.
+		 * @return {HTMLTableCellElement}
+		 */
+		#buildDetailCell( row ) {
+			const td = document.createElement( 'td' );
+			const link = row.detail_link;
+			if ( ! link || typeof link !== 'object' ) {
+				td.textContent = row.detail ?? '';
+				return td;
+			}
+			td.append( document.createTextNode( link.before ?? '' ) );
+			const anchor = document.createElement( 'a' );
+			anchor.href = link.url ?? '';
+			anchor.textContent = `#${ link.id ?? '' }`;
+			td.append( anchor );
+			td.append( document.createTextNode( link.after ?? '' ) );
+			return td;
+		}
+
+		/**
 		 * Replace the activity table body with a page of rows, built cell-by-cell with
 		 * textContent (never innerHTML). An empty set renders a single "no activity" row.
 		 *
@@ -1368,7 +1397,7 @@
 			if ( ! rows.length ) {
 				const tr = document.createElement( 'tr' );
 				const td = document.createElement( 'td' );
-				td.colSpan = 5;
+				td.colSpan = 6;
 				td.textContent = this.#t( 'noActivity', 'No activity recorded yet.' );
 				tr.append( td );
 				tbody.append( tr );
@@ -1387,6 +1416,7 @@
 				tr.append( cell( row.time ) );
 				tr.append( cell( row.principal ) );
 				tr.append( cell( row.ability ) );
+				tr.append( this.#buildDetailCell( row ) );
 
 				const statusTd = document.createElement( 'td' );
 				const pill = document.createElement( 'span' );

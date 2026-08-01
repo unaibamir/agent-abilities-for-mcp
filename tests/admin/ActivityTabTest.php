@@ -274,6 +274,39 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
+	 * Regression test for the gap that shipped in 5576dac: the activity table's header declared
+	 * six columns (Time, Principal, Event, Detail, Status, Arg keys) but aafm_activity_rows_data()
+	 * - the shape admin.js's #renderLogRows() builds AJAX-refreshed rows from - never carried a
+	 * 'detail' field, so the JS renderer built only five cells and every column after Event
+	 * rendered one header off. Pins one field per header column so a future column change cannot
+	 * silently desync the AJAX row shape from the header again.
+	 */
+	public function test_the_ajax_row_data_carries_one_field_per_header_column(): void {
+		aafm_log_activity(
+			array(
+				'ability'    => 'aafm/create-page',
+				'status'     => 'success',
+				'event_type' => 'ability_call',
+				'detail'     => 'Created page #482',
+				'arg_keys'   => array( 'title' ),
+			)
+		);
+
+		$rows = aafm_activity_rows_data( aafm_query_activity( array( 'per_page' => 1 ) ) );
+		$this->assertCount( 1, $rows );
+
+		// One field per header column - Time, Principal, Event, Detail, Status, Arg keys.
+		foreach ( array( 'time', 'principal', 'ability', 'detail', 'status', 'arg_keys' ) as $key ) {
+			$this->assertArrayHasKey(
+				$key,
+				$rows[0],
+				"aafm_activity_rows_data() is missing the '{$key}' field admin.js needs to render that column."
+			);
+		}
+		$this->assertSame( 'Created page #482', $rows[0]['detail'] );
+	}
+
+	/**
 	 * Render the activity tab as an administrator and return its markup.
 	 *
 	 * @return string

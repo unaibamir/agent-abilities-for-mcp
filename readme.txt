@@ -409,7 +409,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 = 1.5.0 =
 
-Creating a WooCommerce customer now also requires the create-users capability, and listing or reading a customer now also requires list-users; a stock Shop Manager loses both by default. Eight WooCommerce abilities that move money or grant authority are locked until you switch on a new master switch on Settings.
+Creating a WooCommerce customer now also requires create-users, and listing or reading a customer now also requires list-users; a stock Shop Manager loses both. Eight WooCommerce abilities that move money or grant authority stay locked until you switch on a new master switch on Settings.
 
 = 1.4.3 =
 

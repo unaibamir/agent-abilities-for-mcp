@@ -874,14 +874,38 @@ function aafm_handle_export_activity_log(): void {
 }
 
 /**
+ * Column headers for the activity log table, in render order.
+ *
+ * The single list backing both the server-rendered <thead> and the AJAX row shape's expected
+ * column count (see ActivityTabTest), so a future column change cannot silently desync the
+ * header from either row renderer - the HTML row builder and the JS renderer fed by
+ * aafm_activity_rows_data() both have to produce exactly one cell per entry here.
+ *
+ * @return array<int,string> Translated column labels, in display order.
+ */
+function aafm_activity_log_headers(): array {
+	return array(
+		__( 'Time (UTC)', 'agent-abilities-for-mcp' ),
+		__( 'Principal', 'agent-abilities-for-mcp' ),
+		__( 'Event', 'agent-abilities-for-mcp' ),
+		__( 'Detail', 'agent-abilities-for-mcp' ),
+		__( 'Status', 'agent-abilities-for-mcp' ),
+		__( 'Arg keys', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Normalize activity rows to a flat, JSON-safe shape for the client renderer.
  *
- * The JS builds each table cell with textContent (never innerHTML), so it needs plain values,
- * not markup. Only the columns the table shows are exposed; the log holds argument KEYS (never
- * values) plus a REMOTE_ADDR source IP, so there is no PII to strip beyond shaping.
+ * The JS builds each table cell with textContent (never innerHTML), so this exposes plain values,
+ * not markup - including for the detail column's link. `detail` is the raw text; `detail_link`
+ * is null when the detail carries no linkable identifier, or the before/id/url/after parts a
+ * renderer can assemble into an anchor without ever concatenating untrusted text into HTML. Only
+ * the columns the table shows are exposed; the log holds argument KEYS (never values) plus a
+ * REMOTE_ADDR source IP, so there is no PII to strip beyond shaping.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
- * @return array<int,array{time:string,principal:string,ability:string,status:string,variant:string,arg_keys:string}>
+ * @return array<int,array{time:string,principal:string,ability:string,detail:string,detail_link:array{before:string,id:int,url:string,after:string}|null,status:string,variant:string,arg_keys:string}>
  */
 function aafm_activity_rows_data( array $rows ): array {
 	$status_variants = array(
@@ -893,14 +917,18 @@ function aafm_activity_rows_data( array $rows ): array {
 
 	$out = array();
 	foreach ( $rows as $row ) {
-		$status = (string) ( $row['status'] ?? '' );
-		$out[]  = array(
-			'time'      => (string) ( $row['created_at'] ?? '' ),
-			'principal' => (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')',
-			'ability'   => (string) ( $row['ability'] ?? '' ),
-			'status'    => $status,
-			'variant'   => $status_variants[ $status ] ?? 'neutral',
-			'arg_keys'  => (string) ( $row['arg_keys'] ?? '' ),
+		$status     = (string) ( $row['status'] ?? '' );
+		$ability    = (string) ( $row['ability'] ?? '' );
+		$detail_raw = (string) ( $row['detail'] ?? '' );
+		$out[]      = array(
+			'time'        => (string) ( $row['created_at'] ?? '' ),
+			'principal'   => (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')',
+			'ability'     => $ability,
+			'detail'      => $detail_raw,
+			'detail_link' => aafm_activity_detail_link( $ability, $detail_raw ),
+			'status'      => $status,
+			'variant'     => $status_variants[ $status ] ?? 'neutral',
+			'arg_keys'    => (string) ( $row['arg_keys'] ?? '' ),
 		);
 	}
 	return $out;
@@ -1866,12 +1894,9 @@ function aafm_render_activity_tab(): void {
 		esc_attr( (string) $total_pages )
 	);
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
-	echo '<th>' . esc_html__( 'Time (UTC)', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Principal', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Event', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Detail', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Status', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Arg keys', 'agent-abilities-for-mcp' ) . '</th>';
+	foreach ( aafm_activity_log_headers() as $header_label ) {
+		echo '<th>' . esc_html( $header_label ) . '</th>';
+	}
 	echo '</tr></thead><tbody>';
 
 	echo wp_kses( aafm_activity_rows_html( $rows ), aafm_admin_allowed_html() );

@@ -39,6 +39,20 @@ function aafm_activity_statuses( bool $include_started = true ): array {
 }
 
 /**
+ * The single source of truth for the activity-log event_type values.
+ *
+ * 'ability_call' is the column's SQL default, so every row written before schema v5 and every
+ * caller that never supplies one means exactly this. The other four are events that are not
+ * ability calls: the two ability-toggle events, a security-relevant setting change, and the
+ * tamper-evident log-cleared marker. Mirrors aafm_activity_statuses().
+ *
+ * @return string[] The allowed event_type values.
+ */
+function aafm_activity_event_types(): array {
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'setting_changed', 'log_cleared' );
+}
+
+/**
  * The activity log table name for the current blog.
  *
  * @return string

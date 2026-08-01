@@ -13,6 +13,32 @@ use AAFM\Tests\TestCase;
 
 final class HighRiskTest extends TestCase {
 
+	/**
+	 * The golden set. Membership IS the security decision this file encodes, so it is pinned in
+	 * both directions: the eight signed-off names in order, and nothing else. A later edit that
+	 * drops an entry, renames one, or folds in an ability that was deliberately left out has to
+	 * change this assertion to pass, which is the point at which someone has to justify it.
+	 *
+	 * The aafm/wc-create-customer name is called out because it is the one most likely to be added
+	 * back in good faith. It is handled at the capability layer instead, not here.
+	 */
+	public function test_the_builtin_set_is_exactly_the_signed_off_eight(): void {
+		$this->assertSame(
+			array(
+				'aafm/wc-create-order-refund',
+				'aafm/wc-update-order-status',
+				'aafm/wc-update-order',
+				'aafm/wc-update-payment-gateway',
+				'aafm/wc-create-coupon',
+				'aafm/wc-update-coupon',
+				'aafm/wc-create-tax-rate',
+				'aafm/wc-update-tax-rate',
+			),
+			aafm_high_risk_abilities_builtin()
+		);
+		$this->assertNotContains( 'aafm/wc-create-customer', aafm_high_risk_abilities_builtin() );
+	}
+
 	public function test_the_master_switch_is_off_by_default(): void {
 		$this->assertFalse( aafm_high_risk_unlocked() );
 	}

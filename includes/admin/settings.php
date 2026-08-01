@@ -495,8 +495,8 @@ function aafm_render_settings_tab(): void {
 	ob_start();
 
 	$high_risk_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, payment gateway settings, tax rates, and customer accounts to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change a payment gateway setting, change a tax rate, or create a customer account, no matter what you have enabled on the Abilities tab. Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab. Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
 	$high_risk_control .= '<p class="help">' . esc_html__( 'This switch covers this plugin\'s own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	aafm_render_set_row(

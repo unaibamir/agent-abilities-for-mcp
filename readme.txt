@@ -267,6 +267,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Chore:** Copy now says uninstalling does not revoke an agent's access on its own, and names what survives.
 * **Chore:** Copy now says an OAuth grant's requested scope does not limit what the resulting token can do.
 * **Chore:** The rate limit setting now says it ships off by default, and suggests a starting value.
+* **Chore:** The listing description now leads with what the plugin is rather than how it works, and the tags swap seo for woocommerce.
 * **Chore:** Regenerated the translation template.
 
 = 1.4.3 =

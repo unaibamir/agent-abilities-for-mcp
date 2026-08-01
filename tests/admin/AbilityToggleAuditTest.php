@@ -58,4 +58,24 @@ final class AbilityToggleAuditTest extends TestCase {
 		$rows = aafm_query_activity( array( 'per_page' => 1 ) );
 		$this->assertSame( $user_id, (int) $rows[0]['principal_user_id'] );
 	}
+
+	public function test_flipping_the_master_switch_writes_a_setting_changed_row(): void {
+		aafm_log_high_risk_switch_change( false, true );
+		$rows = aafm_query_activity( array( 'per_page' => 1 ) );
+		$this->assertSame( 'setting_changed', $rows[0]['event_type'] );
+		$this->assertSame( '', $rows[0]['ability'] );
+		$this->assertSame( 'High-risk abilities unlocked', $rows[0]['detail'] );
+	}
+
+	public function test_locking_it_again_writes_the_opposite_row(): void {
+		aafm_log_high_risk_switch_change( true, false );
+		$rows = aafm_query_activity( array( 'per_page' => 1 ) );
+		$this->assertSame( 'High-risk abilities locked', $rows[0]['detail'] );
+	}
+
+	public function test_saving_without_changing_it_writes_nothing(): void {
+		$before = aafm_activity_count_filtered();
+		aafm_log_high_risk_switch_change( true, true );
+		$this->assertSame( $before, aafm_activity_count_filtered() );
+	}
 }

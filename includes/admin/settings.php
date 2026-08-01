@@ -134,7 +134,18 @@ function aafm_ajax_save_settings(): void {
 	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
 	update_option( 'aafm_block_guard_strict', $clean['aafm_block_guard_strict'] );
 	update_option( 'aafm_delete_data_on_uninstall', $clean['aafm_delete_data_on_uninstall'] );
-	update_option( 'aafm_high_risk_abilities_unlocked', $clean['aafm_high_risk_abilities_unlocked'] );
+	// Delete rather than store false: locked is the option's out-of-the-box (row-absent) state, and
+	// both readers (this file's checked() call and aafm_high_risk_unlocked()) already default to
+	// off on a missing row, so a stored false and an absent row behave identically today. But an
+	// explicit false is a state a fresh install can never be in, and it is the one state the UI
+	// itself cannot restore to once the switch has been touched once. Deleting on "off" keeps a
+	// site that never unlocks the category, or that unlocks then re-locks it, in the same absent
+	// row either way.
+	if ( $clean['aafm_high_risk_abilities_unlocked'] ) {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+	} else {
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+	}
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );

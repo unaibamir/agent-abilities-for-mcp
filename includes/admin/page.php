@@ -303,6 +303,12 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 	// out of the live registry too, so a plain live-registry check would drop it exactly like
 	// M9's Abilities-tab bug - it can never have been intentionally toggled off since its
 	// checkbox never rendered, so it is always preserved rather than scope-checked.
+	//
+	// A locked high-risk ability is the same story from the other direction: the floor takes its
+	// checkbox away while the ability itself is still sitting in the option, so its absence from
+	// the POST is the lock speaking, not the operator. Preserve it too, or the first save of the
+	// section it lives in discards a choice the operator never got the chance to restate, and
+	// unlocking the category later offers a blank slate instead of what was there.
 	$preserved = array();
 	foreach ( aafm_get_stored_enabled_abilities_raw() as $name ) {
 		if ( ! isset( $registry_full[ $name ] ) ) {
@@ -310,6 +316,10 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 		}
 		if ( ! in_array( $name, $known, true ) ) {
 			$preserved[] = $name; // Inactive-host ability: always preserved.
+			continue;
+		}
+		if ( aafm_ability_is_locked( $name ) ) {
+			$preserved[] = $name; // Locked: its checkbox never rendered, so its absence is not intent.
 			continue;
 		}
 		$subject = (string) ( $registry[ $name ]['subject'] ?? '' );

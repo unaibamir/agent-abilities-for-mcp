@@ -6,7 +6,9 @@
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
  * server.php case); wc-create-customer adds create_users on top, because it creates a real
- * WordPress user account. Shared helpers live in _shared.php, loaded before this file.
+ * WordPress user account, and wc-list-customers / wc-get-customer add list_users on top, because
+ * manage_woocommerce alone lets a caller read PII for any WordPress user, not just customers. Shared
+ * helpers live in _shared.php, loaded before this file.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -59,7 +61,7 @@ function aafm_wc_customers_registry_definitions(): array {
 		// Customers (sub-slice W4-WC3) - PII-exposing abilities gated on manage_woocommerce.
 		'aafm/wc-list-customers'  => array(
 			'label'        => __( 'List WooCommerce customers', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce customers with their id, email, name, username, order count, and total spent. Customer email is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce and list-users capabilities: this reads PII for the WordPress users matched by the role filter, not only genuine customers.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -68,7 +70,7 @@ function aafm_wc_customers_registry_definitions(): array {
 
 		'aafm/wc-get-customer'    => array(
 			'label'        => __( 'Get WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce customer by id, including email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads one WooCommerce customer by id, including email, name, username, order count, total spent, date created, and the full billing address (including phone) and shipping address. Customer PII is returned in full under the Integrations security disclaimer. Requires the manage-WooCommerce and list-users capabilities: the id is any WordPress user id, not only genuine customers.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -439,6 +441,42 @@ function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): v
 	}
 }
 
+/**
+ * Permission floor for aafm/wc-list-customers and aafm/wc-get-customer: manage_woocommerce plus
+ * list_users.
+ *
+ * The manage_woocommerce capability alone lets a caller read PII for any WordPress user, not just
+ * customers. wc-list-customers' role input carries no enum and is passed straight into
+ * WP_User_Query, so role=administrator returns every admin's id, email, username, order count, and
+ * total spent. wc-get-customer constructs a WC_Customer for any WordPress user id with no role
+ * check at all, returning that user's full profile including billing/shipping address and phone.
+ * WordPress core deliberately withholds list_users from the stock Shop Manager role - a Shop
+ * Manager cannot open wp-admin -> Users - so manage_woocommerce was never meant to grant "read
+ * any account's PII."
+ * Requiring list_users on top closes that gap the same way aafm_perm_wc_create_customer() (below)
+ * requires create_users on top for the write side.
+ *
+ * Compatibility note: an existing install whose agent-facing user or role holds manage_woocommerce
+ * but not list_users will see these two reads start failing (permission denied) after this change. A
+ * stock WordPress administrator is unaffected, since administrators hold list_users by default. A
+ * stock WooCommerce Shop Manager does NOT hold list_users and is now denied here, matching what that
+ * role already can't do in wp-admin. Only a custom role built specifically to hold manage_woocommerce
+ * without list_users loses access - which is exactly the gap this closes.
+ *
+ * Deliberately NOT folded into aafm_wc_perm() (_shared.php): that floor is shared by every
+ * WooCommerce ability, and adding list_users there would gate reading an order list on a
+ * user-management capability it has nothing to do with.
+ *
+ * Takes no object id, so both abilities stay object-independent and still fall through to this
+ * callback at discovery with empty input, exactly as aafm_wc_perm() documents. No server.php case is
+ * needed.
+ *
+ * @return bool
+ */
+function aafm_perm_wc_customer_pii_read(): bool {
+	return aafm_wc_perm() && current_user_can( 'list_users' );
+}
+
 // aafm/wc-list-customers (R).
 
 /**
@@ -495,7 +533,7 @@ function aafm_args_wc_list_customers(): array {
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_list_customers',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_customer_pii_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,
@@ -593,7 +631,7 @@ function aafm_args_wc_get_customer(): array {
 			'properties' => aafm_wc_customer_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_customer_pii_read',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => true,

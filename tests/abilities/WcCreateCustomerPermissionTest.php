@@ -97,11 +97,28 @@ final class WcCreateCustomerPermissionTest extends TestCase {
 	}
 
 	public function test_no_other_woocommerce_ability_was_changed(): void {
-		foreach ( array( 'aafm/wc-list-orders', 'aafm/wc-get-customer', 'aafm/wc-update-customer' ) as $name ) {
+		foreach ( array( 'aafm/wc-list-orders', 'aafm/wc-update-customer' ) as $name ) {
 			$this->assertSame(
 				'aafm_wc_perm',
 				$this->permission_callback_for( $name ),
 				"{$name} must keep the shared WooCommerce permission floor."
+			);
+		}
+	}
+
+	/**
+	 * These two are a later, separate fix from a PII-exposure audit finding, not this file's
+	 * create_users gap: manage_woocommerce alone let a caller read PII for any
+	 * WordPress user, not just customers. Both now require list_users on top, via the shared
+	 * aafm_perm_wc_customer_pii_read() (customers.php) - pinned here, not in the "unchanged" list
+	 * above, because they deliberately did change.
+	 */
+	public function test_customer_pii_reads_use_the_list_users_gate(): void {
+		foreach ( array( 'aafm/wc-list-customers', 'aafm/wc-get-customer' ) as $name ) {
+			$this->assertSame(
+				'aafm_perm_wc_customer_pii_read',
+				$this->permission_callback_for( $name ),
+				"{$name} must use the PII-read floor (manage_woocommerce + list_users)."
 			);
 		}
 	}

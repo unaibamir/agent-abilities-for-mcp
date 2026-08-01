@@ -142,6 +142,94 @@ final class WooCustomersTest extends TestCase {
 	}
 
 
+	// =========================================================================
+	// PII audit finding: manage_woocommerce alone must not expose any WP user's PII.
+	// =========================================================================
+
+	/**
+	 * A role holding manage_woocommerce but not list_users - the exact shape of a Shop-Manager-like
+	 * role, which WordPress core deliberately withholds list_users from - must be denied on both
+	 * PII-exposing reads. Before this fix, manage_woocommerce alone was enough for either call.
+	 */
+	public function test_list_and_get_customer_deny_manage_woocommerce_without_list_users(): void {
+		add_role(
+			'aafm_test_wc_scoped_reader',
+			'AAFM Test WC Scoped Reader',
+			array(
+				'read'               => true,
+				'manage_woocommerce' => true,
+			)
+		);
+		$user_id = self::factory()->user->create( array( 'role' => 'aafm_test_wc_scoped_reader' ) );
+		wp_set_current_user( $user_id );
+
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-list-customers' )->check_permissions( array() ),
+			'manage_woocommerce without list_users must not be enough for wc-list-customers.'
+		);
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => $this->customer_id ) ),
+			'manage_woocommerce without list_users must not be enough for wc-get-customer.'
+		);
+
+		remove_role( 'aafm_test_wc_scoped_reader' );
+	}
+
+	/**
+	 * Passing role=administrator to return other admins' PII is only reachable by a caller who ALSO
+	 * holds list_users - the same capability that lets them browse wp-admin -> Users. A stock administrator
+	 * (who holds list_users by default) can still see it: this ability now requires the same floor
+	 * wp-admin itself requires to browse arbitrary accounts, not a lesser one.
+	 */
+	public function test_list_customers_role_administrator_requires_list_users(): void {
+		// aafm_exec_wc_list_customers() only surfaces a matched WP_User_Query id when
+		// aafm_wc_get_customer_object() can resolve it - seed_wc_customer_user() creates both the real
+		// WP user AND the stub WC_Customer row the executor reads, unlike a bare factory user.
+		$other_admin_id = $this->seed_wc_customer_user(
+			array(
+				'role'     => 'administrator',
+				'email'    => 'otheradmin@example.com',
+				'username' => 'otheradmin',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-customers' )->execute( array( 'role' => 'administrator' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$ids = wp_list_pluck( $res['customers'], 'id' );
+		$this->assertContains(
+			$other_admin_id,
+			$ids,
+			'An administrator (who holds list_users by default) can still see role=administrator PII.'
+		);
+	}
+
+	/**
+	 * Calling wc-get-customer against ANY WordPress user id, not only a genuine customer, is refused
+	 * for a caller who lacks list_users - even though the id resolves to a real user WC_Customer can wrap.
+	 */
+	public function test_get_customer_against_non_customer_user_denied_without_list_users(): void {
+		$other_admin_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
+
+		add_role(
+			'aafm_test_wc_scoped_reader2',
+			'AAFM Test WC Scoped Reader 2',
+			array(
+				'read'               => true,
+				'manage_woocommerce' => true,
+			)
+		);
+		$user_id = self::factory()->user->create( array( 'role' => 'aafm_test_wc_scoped_reader2' ) );
+		wp_set_current_user( $user_id );
+
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-get-customer' )->check_permissions( array( 'customer_id' => $other_admin_id ) ),
+			'Reading an arbitrary WP user id through wc-get-customer must require list_users.'
+		);
+
+		remove_role( 'aafm_test_wc_scoped_reader2' );
+	}
+
 	/**
 	 * Host-inactive: customer abilities must be absent from the registry when WooCommerce is off.
 	 */

@@ -210,7 +210,10 @@ final class LogExportTest extends TestCase {
 		array_shift( $lines ); // Drop the header row.
 		$details = array_map(
 			static function ( string $line ): string {
-				$fields = str_getcsv( $line );
+				// Mirror the exporter's own escape argument. PHP 8.4 deprecates relying on the
+				// implicit default, and reading back with a different escape than fputcsv() wrote
+				// with would parse a quoted field wrong the moment one contains a backslash.
+				$fields = str_getcsv( $line, escape: '' );
 				return $fields[3] ?? ''; // detail is column index 3: created_at,event_type,ability,detail,...
 			},
 			$lines

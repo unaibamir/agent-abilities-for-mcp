@@ -122,6 +122,26 @@ final class HighRiskUiTest extends TestCase {
 		$this->assertLessThan( $danger_at, $high_risk_at, 'The high-risk card must not be inside or after the Danger zone card.' );
 	}
 
+	/**
+	 * The card sitting before the Danger zone is not enough on its own: the Danger zone renders
+	 * AFTER </form>, so a card that drifted into that gap would still satisfy the ordering check
+	 * above while admin.js's form.querySelector() returned null, the field never reached the POST
+	 * body, and the option went back to locked on every save. That is the exact bug this task
+	 * exists to close, so the boundary that actually matters is pinned against the </form> tag.
+	 */
+	public function test_the_switch_sits_inside_the_settings_form(): void {
+		$html      = $this->render_settings_tab();
+		$form_end  = strpos( $html, '</form>' );
+		$switch_at = strpos( $html, 'name="aafm_high_risk_abilities_unlocked"' );
+		$this->assertNotFalse( $form_end, 'The settings form has no closing tag.' );
+		$this->assertNotFalse( $switch_at, 'The master switch is missing from the Settings tab.' );
+		$this->assertLessThan(
+			$form_end,
+			$switch_at,
+			'The master switch must sit inside #aafm-settings-form or admin.js cannot read it.'
+		);
+	}
+
 	public function test_the_switch_defaults_to_off_in_the_markup(): void {
 		$this->assertStringNotContainsString(
 			'name="aafm_high_risk_abilities_unlocked" checked',

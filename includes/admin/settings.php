@@ -444,12 +444,19 @@ function aafm_render_settings_tab(): void {
 
 	// Delete data on uninstall. Same toggle-switch contract as force draft; the <input>
 	// name/value/checked() is what the save handler and uninstall.php bind to, not this markup.
+	// The control carries its own explanatory paragraph so a second, distinct caution - that
+	// uninstalling never revokes an agent's access on its own, whichever way this switch is set -
+	// can render as its own paragraph via the row's 'help' arg, after it, rather than the two
+	// getting run together.
+	$delete_on_uninstall_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), true, false ) . '><span class="aafm-switch-track"></span></label> '
+		. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>';
+	$delete_on_uninstall_control .= '<p class="help">' . esc_html__( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ),
-			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), true, false ) . '><span class="aafm-switch-track"></span></label> '
-				. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ),
+			'control' => $delete_on_uninstall_control,
+			'help'    => __( "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin.", 'agent-abilities-for-mcp' ),
 		)
 	);
 

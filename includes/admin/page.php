@@ -229,6 +229,46 @@ function aafm_get_stored_enabled_abilities_raw(): array {
 }
 
 /**
+ * Persist the enabled-abilities option: strip any locked high-risk name first, and write an
+ * ability_enable_blocked audit row for every one that was actually attempted.
+ *
+ * This is the single choke point every caller that changes aafm_enabled_abilities must go
+ * through - update_option() is never called on this option anywhere else, and no future caller
+ * should add a second one. The registration-time floor (aafm_get_enabled_abilities()) already
+ * keeps a locked ability out of tools/list, so a locked name reaching the option is inert either
+ * way; this exists because the UI is not a trustworthy authorization boundary. "A locked ability
+ * has no rendered checkbox, so it can never appear in $_POST" was the exact assumption that
+ * shipped the bug this guards against - the Integrations tab's renderer skipped its lock branch
+ * and posted one anyway, and it was saved and logged as a genuine enable. Strip and log here, not
+ * only at the one call site that happened to notice, so neither gap can come back through a
+ * caller that has not been written yet.
+ *
+ * A name already present in the option before this call is treated as stale carried-forward
+ * data, not a new attempt: aafm_resolve_scoped_enabled_input() preserves a previously-stored
+ * locked name through its preserve branch (its absence from a scoped POST is the lock hiding the
+ * control, not intent to disable it), and that carry-forward must not read as a fresh blocked
+ * attempt on every later resave.
+ *
+ * @param array<int,string> $enabled Ability names to persist.
+ * @return array<int,string> The names actually written (locked names removed).
+ */
+function aafm_set_enabled_abilities( array $enabled ): array {
+	$before = aafm_get_stored_enabled_abilities_raw();
+
+	$locked  = array_values( array_filter( $enabled, 'aafm_ability_is_locked' ) );
+	$blocked = array_diff( $locked, $before );
+
+	$clean = array_values( array_diff( $enabled, $locked ) );
+	update_option( 'aafm_enabled_abilities', $clean );
+
+	if ( ! empty( $blocked ) ) {
+		aafm_log_blocked_ability_enables( $blocked );
+	}
+
+	return $clean;
+}
+
+/**
  * Sanitize posted ability toggles down to known registry keys.
  *
  * The result is intersected with the live registry, so a stale, unknown, or smuggled
@@ -351,8 +391,8 @@ function aafm_ajax_save_abilities(): void {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$before  = aafm_get_stored_enabled_abilities_raw();
-	$enabled = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	update_option( 'aafm_enabled_abilities', $enabled );
+	$posted  = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$enabled = aafm_set_enabled_abilities( $posted );
 	aafm_log_ability_toggle_diff( $before, $enabled );
 	wp_send_json_success( array( 'enabled' => $enabled ) );
 }
@@ -783,6 +823,46 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
 			);
 			++$written;
 		}
+	}
+
+	return $written;
+}
+
+/**
+ * Write one audit row per locked high-risk ability a save attempted to enable.
+ *
+ * Called by aafm_set_enabled_abilities() with the locked names it just stripped and that were
+ * genuinely new (not already sitting in the option). A locked ability has no rendered checkbox
+ * (see aafm_render_ability_row() and aafm_render_integration_ability_row()), so its name arriving
+ * here means the request bypassed the UI - a forged POST, a stale cached form, or a bug like the
+ * one this replaces: the Integrations tab used to skip the lock branch, save the name, and log it
+ * as a real "Enabled" event even though it was never actually reachable. A refused attempt is
+ * still security signal, so it is recorded explicitly rather than left silent.
+ *
+ * @param array<int,string> $blocked Locked ability names a save just attempted to enable.
+ * @return int Number of rows written.
+ */
+function aafm_log_blocked_ability_enables( array $blocked ): int {
+	if ( empty( $blocked ) ) {
+		return 0;
+	}
+
+	$user    = wp_get_current_user();
+	$written = 0;
+
+	foreach ( $blocked as $name ) {
+		aafm_log_activity(
+			array(
+				'ability'           => (string) $name,
+				'principal_user_id' => (int) $user->ID,
+				'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+				'status'            => 'denied',
+				'event_type'        => 'ability_enable_blocked',
+				/* translators: %s: ability name. */
+				'detail'            => sprintf( __( 'Blocked %s (high-risk locked)', 'agent-abilities-for-mcp' ), (string) $name ),
+			)
+		);
+		++$written;
 	}
 
 	return $written;

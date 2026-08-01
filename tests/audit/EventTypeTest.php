@@ -1,6 +1,6 @@
 <?php
 /**
- * The activity-log event-type vocabulary: the five literals every later caller binds to.
+ * The activity-log event-type vocabulary: the six literals every later caller binds to.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -18,9 +18,9 @@ final class EventTypeTest extends TestCase {
 		aafm_install_activity_log();
 	}
 
-	public function test_event_type_vocabulary_is_the_documented_five(): void {
+	public function test_event_type_vocabulary_is_the_documented_six(): void {
 		$this->assertSame(
-			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'setting_changed', 'log_cleared' ),
+			array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared' ),
 			aafm_activity_event_types()
 		);
 	}

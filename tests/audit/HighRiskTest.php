@@ -218,11 +218,22 @@ final class HighRiskTest extends TestCase {
 	}
 
 	/**
-	 * A locked ability has no checkbox, so its absence from a save is the lock hiding the control,
-	 * not the operator turning it off. The scoped save has to carry it forward the way it already
-	 * carries an inactive-host ability. Without this, the first save of the WooCommerce panel after
-	 * the floor lands rewrites the stored option, and unlocking the category later hands the
-	 * operator a blank slate instead of what they had chosen.
+	 * A locked ability has no checkbox in either renderer now - aafm_render_ability_row() and
+	 * aafm_render_integration_ability_row() share the lock treatment via
+	 * aafm_render_ability_toggle_control() - so its absence from a save is normally the lock hiding
+	 * the control, not the operator turning it off. This test only covers that normal case: the
+	 * scoped save still has to carry a locked ability forward the way it already carries an
+	 * inactive-host ability, or the first save of the WooCommerce panel after the floor lands
+	 * rewrites the stored option and unlocking the category later hands the operator a blank slate.
+	 *
+	 * Relying on "it has no checkbox" as the ONLY guard is exactly what shipped the
+	 * wc-create-order-refund bug: the Integrations tab's renderer used to have no lock branch at
+	 * all, so a locked name could and did reach $_POST, this preserve logic had nothing to do with
+	 * it, and aafm_resolve_scoped_enabled_input() has no lock check of its own on a name that is
+	 * actually posted (see test_a_posted_locked_ability_never_persists() in
+	 * tests/audit/HighRiskSaveGuardTest.php). aafm_set_enabled_abilities() is the independent
+	 * backstop that closes that gap: it strips a locked name before it is ever written regardless
+	 * of how it arrived, so persistence no longer depends on this preserve behaviour alone.
 	 */
 	public function test_a_locked_ability_survives_a_save_of_its_own_section(): void {
 		$this->register_woocommerce_fixture( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders', 'aafm/wc-get-order' );

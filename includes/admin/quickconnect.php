@@ -161,7 +161,11 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	$known   = array_keys( aafm_get_abilities_registry() );
 	$enabled = array_values( array_intersect( $enabled, $known ) );
 
-	update_option( 'aafm_enabled_abilities', $enabled );
+	// aafm_set_enabled_abilities() is the single choke point for this option: it strips any
+	// locked high-risk name before it persists. The wizard's read/write bundles never include one
+	// by construction (content-subject, non-destructive abilities only), so this is a defensive
+	// pass-through rather than something expected to fire here.
+	aafm_set_enabled_abilities( $enabled );
 }
 
 /**

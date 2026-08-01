@@ -287,7 +287,12 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 /**
  * Query activity rows, most recent first.
  *
- * @param array<string,mixed> $args Query arguments: per_page, page, status, ability.
+ * @param array<string,mixed> $args Query arguments: per_page, page, status, ability, max_id.
+ *                                  max_id (optional) bounds the result to id <= max_id - a
+ *                                  caller paginating across multiple calls (the CSV exporter)
+ *                                  uses it to pin every page to a snapshot taken before the
+ *                                  first page ran, so a row inserted mid-run can never shift the
+ *                                  OFFSET window and appear on two pages.
  * @return array<int,array<string,mixed>>
  */
 function aafm_query_activity( array $args ): array {
@@ -309,6 +314,10 @@ function aafm_query_activity( array $args ): array {
 	if ( ! empty( $args['ability'] ) ) {
 		$where   .= ' AND ability = %s';
 		$params[] = (string) $args['ability'];
+	}
+	if ( ! empty( $args['max_id'] ) ) {
+		$where   .= ' AND id <= %d';
+		$params[] = (int) $args['max_id'];
 	}
 
 	$params[] = $per_page;
@@ -352,6 +361,23 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$count = $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE status = %s', $table, $status ) );
 	return max( 0, (int) $count );
+}
+
+/**
+ * The highest activity row id currently in the table, or 0 when empty.
+ *
+ * A caller paginating with aafm_query_activity() across several calls (the CSV exporter) snapshots
+ * this once, before the first page runs, and passes it back as max_id on every page - so a row
+ * inserted mid-run can never shift an OFFSET window and be exported twice.
+ *
+ * @return int
+ */
+function aafm_activity_max_id(): int {
+	global $wpdb;
+	$table = aafm_activity_log_table();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$max = $wpdb->get_var( $wpdb->prepare( 'SELECT MAX(id) FROM %i', $table ) );
+	return null === $max ? 0 : max( 0, (int) $max );
 }
 
 /**

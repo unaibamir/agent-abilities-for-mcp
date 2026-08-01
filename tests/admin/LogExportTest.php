@@ -93,6 +93,134 @@ final class LogExportTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Regression test for the pagination primitive aafm_export_activity_csv() is built on:
+	 * aafm_query_activity() paginated with LIMIT/OFFSET over a table that can grow between calls.
+	 * A row inserted between two page fetches shifts the OFFSET window, so rows near the page
+	 * boundary reappear on the next page - nothing is skipped, but a duplicate in a compliance
+	 * export is still a real defect. Bounding every page to a snapshot of the highest row id taken
+	 * before the first page ran (max_id) fixes it: rows inserted after the snapshot fall outside
+	 * `id <= max_id` and can never appear in a page that belongs to this run.
+	 *
+	 * Deliberately exercises aafm_query_activity() directly rather than going through the full
+	 * exporter, so the test needs no fix-specific instrumentation to reproduce the bug: it fails
+	 * against the unmodified pre-fix aafm_query_activity() (which silently ignores an unknown
+	 * 'max_id' key and falls back to plain OFFSET pagination) exactly as it would inside the real
+	 * export loop, and passes once max_id is honoured.
+	 */
+	public function test_id_bounded_pagination_excludes_rows_inserted_between_pages(): void {
+		for ( $i = 0; $i < 200; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+					'detail'  => 'seed-' . $i,
+				)
+			);
+		}
+		// The newest row's id (aafm_query_activity() already sorts created_at DESC, id DESC) -
+		// deliberately not aafm_activity_max_id(), which is new code added by this fix and would
+		// make the "fails against pre-fix code" proof depend on code that did not exist yet.
+		$newest = aafm_query_activity(
+			array(
+				'per_page' => 1,
+				'page'     => 1,
+			)
+		);
+		$max_id = (int) ( $newest[0]['id'] ?? 0 );
+
+		$page1 = aafm_query_activity(
+			array(
+				'per_page' => 200,
+				'page'     => 1,
+				'max_id'   => $max_id,
+			)
+		);
+
+		// Simulate 3 MCP calls landing between the exporter's first and second page fetches.
+		for ( $i = 0; $i < 3; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+					'detail'  => 'mid-export-' . $i,
+				)
+			);
+		}
+
+		$page2 = aafm_query_activity(
+			array(
+				'per_page' => 200,
+				'page'     => 2,
+				'max_id'   => $max_id,
+			)
+		);
+
+		$this->assertCount( 200, $page1, 'The first page should hold every seeded row.' );
+		$this->assertCount( 0, $page2, 'A second page bound to the pre-insert snapshot must find nothing - not the mid-fetch inserts, and no seed row shifted into it.' );
+
+		$page1_ids = array_column( $page1, 'id' );
+		$page2_ids = array_column( $page2, 'id' );
+		$this->assertEmpty( array_intersect( $page1_ids, $page2_ids ), 'No row id should appear on both pages.' );
+	}
+
+	/**
+	 * End-to-end companion to the primitive test above: proves the real CSV output the operator
+	 * downloads has no duplicate lines, not just that the underlying query is bounded correctly.
+	 * aafm_activity_export_batch fires once per page and is the hook this test uses to insert
+	 * rows "mid-export" without needing real concurrency; each row's detail is a unique marker so
+	 * a duplicate line in the CSV is detectable without an id column (the export deliberately does
+	 * not carry one). The hook itself is new, added by this fix for exactly this purpose, so this
+	 * test cannot reproduce the bug against genuinely unmodified pre-fix code - there was no
+	 * per-page observation point to hook into before the fix - the primitive-level test above is
+	 * the one that fails against the pre-fix pagination.
+	 */
+	public function test_no_row_is_exported_twice_when_new_rows_arrive_mid_export(): void {
+		for ( $i = 0; $i < 200; $i++ ) {
+			aafm_log_activity(
+				array(
+					'ability' => 'aafm/get-posts',
+					'status'  => 'success',
+					'detail'  => 'seed-' . $i,
+				)
+			);
+		}
+
+		$inserted          = false;
+		$insert_mid_export = function () use ( &$inserted ): void {
+			if ( $inserted ) {
+				return;
+			}
+			$inserted = true;
+			for ( $i = 0; $i < 3; $i++ ) {
+				aafm_log_activity(
+					array(
+						'ability' => 'aafm/get-posts',
+						'status'  => 'success',
+						'detail'  => 'mid-export-' . $i,
+					)
+				);
+			}
+		};
+		add_action( 'aafm_activity_export_batch', $insert_mid_export );
+
+		$csv = $this->capture_export();
+
+		$lines = array_values( array_filter( explode( "\n", trim( $csv ) ) ) );
+		array_shift( $lines ); // Drop the header row.
+		$details = array_map(
+			static function ( string $line ): string {
+				$fields = str_getcsv( $line );
+				return $fields[3] ?? ''; // detail is column index 3: created_at,event_type,ability,detail,...
+			},
+			$lines
+		);
+
+		$this->assertCount( 200, $details, 'Every seeded row should be exported exactly once.' );
+		$this->assertSame( $details, array_values( array_unique( $details ) ), 'A row was exported more than once.' );
+		$this->assertStringNotContainsString( 'mid-export-', $csv, 'Rows inserted after the export snapshot must not appear in this export.' );
+	}
+
 	public function test_a_field_with_no_formula_prefix_is_left_untouched(): void {
 		aafm_log_activity(
 			array(

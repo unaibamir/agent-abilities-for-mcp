@@ -1970,6 +1970,11 @@ function aafm_csv_cell( string $value ): string {
  * query for an unbounded one on a table that can hold tens of thousands of rows. Memory stays flat
  * regardless of table size: each page is fetched, written, and released before the next page loads.
  *
+ * Every page is bound to a snapshot of the highest row id taken before the first page runs, not
+ * just an OFFSET into "however many rows exist right now". Without that bound, a row inserted
+ * while the export is mid-run shifts the OFFSET window and the same row can be written twice -
+ * nothing is skipped, but a duplicate in a compliance export is still a real defect.
+ *
  * @param string|null $status Optional status filter, matching the tab's current filter.
  * @return void
  */
@@ -1997,6 +2002,7 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 	}
 	fputcsv( $out, $columns );
 
+	$max_id    = aafm_activity_max_id();
 	$page      = 1;
 	$row_count = 200;
 	while ( 200 === $row_count ) {
@@ -2005,6 +2011,7 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 				'per_page' => 200,
 				'page'     => $page,
 				'status'   => $status,
+				'max_id'   => $max_id,
 			)
 		);
 		$row_count = count( $rows );
@@ -2015,6 +2022,9 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 			}
 			fputcsv( $out, $line );
 		}
+		// Testing hook: lets the test suite insert rows between batches to prove the max_id
+		// snapshot above keeps them out of this export instead of shifting the OFFSET window.
+		do_action( 'aafm_activity_export_batch', $page, $rows );
 		++$page;
 	}
 

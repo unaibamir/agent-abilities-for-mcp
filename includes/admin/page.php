@@ -340,8 +340,10 @@ function aafm_ajax_save_abilities(): void {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
+	$before  = aafm_get_stored_enabled_abilities_raw();
 	$enabled = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	update_option( 'aafm_enabled_abilities', $enabled );
+	aafm_log_ability_toggle_diff( $before, $enabled );
 	wp_send_json_success( array( 'enabled' => $enabled ) );
 }
 
@@ -715,6 +717,61 @@ function aafm_log_activity_cleared_marker(): void {
 			'status'            => 'success',
 		)
 	);
+}
+
+/**
+ * Write one audit row per ability whose enabled state changed.
+ *
+ * Toggling an ability is what makes it reachable at all, and until now that moment left no trace:
+ * only calls were logged, never the enable. After an incident the question is usually "when did
+ * this become reachable, and who made it so", and this is the row that answers it. Both directions
+ * are recorded, because an ability being switched off is equally part of the timeline.
+ *
+ * Only changed abilities produce a row, so a re-save with no edits writes nothing and a bulk
+ * "enable all" writes one row per ability it actually turned on.
+ *
+ * @param array<int,string> $before Enabled ability names before the save.
+ * @param array<int,string> $after  Enabled ability names after the save.
+ * @return int Number of rows written.
+ */
+function aafm_log_ability_toggle_diff( array $before, array $after ): int {
+	$enabled  = array_diff( $after, $before );
+	$disabled = array_diff( $before, $after );
+	if ( empty( $enabled ) && empty( $disabled ) ) {
+		return 0;
+	}
+
+	$user    = wp_get_current_user();
+	$written = 0;
+
+	$changes = array(
+		'ability_enabled'  => $enabled,
+		'ability_disabled' => $disabled,
+	);
+
+	foreach ( $changes as $event => $names ) {
+		foreach ( $names as $name ) {
+			$detail = 'ability_enabled' === $event
+				/* translators: %s: ability name. */
+				? sprintf( __( 'Enabled %s', 'agent-abilities-for-mcp' ), (string) $name )
+				/* translators: %s: ability name. */
+				: sprintf( __( 'Disabled %s', 'agent-abilities-for-mcp' ), (string) $name );
+
+			aafm_log_activity(
+				array(
+					'ability'           => (string) $name,
+					'principal_user_id' => (int) $user->ID,
+					'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+					'status'            => 'success',
+					'event_type'        => $event,
+					'detail'            => $detail,
+				)
+			);
+			++$written;
+		}
+	}
+
+	return $written;
 }
 
 /**

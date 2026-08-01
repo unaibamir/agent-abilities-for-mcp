@@ -156,7 +156,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// uses the raw permission stored above, which never enters this decorated closure
 		// and so never consumes a token. With the limit off (default) aafm_rate_limit_consume()
 		// returns true, making this block a no-op - the path stays identical to today.
-		$p = $principal();
+		$p         = $principal();
+		$call_args = is_array( $input ) ? $input : array();
 		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume( $p['principal_user_id'] ) ) {
 			aafm_log_activity(
 				array_merge(
@@ -164,8 +165,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 					array(
 						'ability'   => $name,
 						'status'    => 'denied',
-						'arg_keys'  => is_array( $input ) ? array_keys( $input ) : array(),
+						'arg_keys'  => array_keys( $call_args ),
 						'client_id' => aafm_oauth_current_client_id(),
+						'detail'    => aafm_build_activity_detail( $name, $call_args ),
 					)
 				)
 			);
@@ -183,8 +185,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 					array(
 						'ability'   => $name,
 						'status'    => 'denied',
-						'arg_keys'  => is_array( $input ) ? array_keys( $input ) : array(),
+						'arg_keys'  => array_keys( $call_args ),
 						'client_id' => aafm_oauth_current_client_id(),
+						'detail'    => aafm_build_activity_detail( $name, $call_args ),
 					)
 				)
 			);
@@ -193,7 +196,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	};
 
 	$args['execute_callback'] = static function ( $input = null ) use ( $original_execute, $name, $principal, $is_read_ability ) {
-		$arg_keys = is_array( $input ) ? array_keys( $input ) : array();
+		$call_args = is_array( $input ) ? $input : array();
+		$arg_keys  = array_keys( $call_args );
 
 		// One row at 'started' (intent), then updated in place with the real outcome -
 		// one row per call, not two. A crash mid-execute leaves a visible 'started' row.
@@ -205,6 +209,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 					'status'    => 'started',
 					'arg_keys'  => $arg_keys,
 					'client_id' => aafm_oauth_current_client_id(),
+					// Identifier-only, and only for an ability the detail allowlist names. Null for
+					// everything else, which leaves the column exactly as it was before v5.
+					'detail'    => aafm_build_activity_detail( $name, $call_args ),
 				)
 			)
 		);
@@ -215,7 +222,14 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// $result or the logged status, so a mis-shaped result simply logs no count.
 		$result_count = ( $is_read_ability && ! is_wp_error( $result ) ) ? aafm_result_magnitude( $result ) : null;
 
-		aafm_update_activity_status( $row_id, is_wp_error( $result ) ? 'error' : 'success', $result_count );
+		// A create's identifier only exists once the call returns, so the resolve carries it. Null
+		// for every other ability, and null leaves whatever the insert wrote in place.
+		aafm_update_activity_status(
+			$row_id,
+			is_wp_error( $result ) ? 'error' : 'success',
+			$result_count,
+			aafm_build_activity_detail_from_result( $name, $result )
+		);
 
 		return $result;
 	};

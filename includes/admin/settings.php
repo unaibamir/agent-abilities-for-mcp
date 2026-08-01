@@ -363,7 +363,10 @@ function aafm_render_settings_tab(): void {
 	// only the surrounding wrapper moved onto the shared .aafm-section component.
 	ob_start();
 
-	// Rate limit.
+	// Rate limit. Ships off (0) by default, same as every other optional control on this tab, but
+	// this one is easy to miss because a 0 in a number field does not read as "off" the way an
+	// unchecked switch does - so the help text says so plainly, suggests a concrete starting
+	// value, and names the filter a developer can set it with instead.
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Rate limit', 'agent-abilities-for-mcp' ),
@@ -372,7 +375,7 @@ function aafm_render_settings_tab(): void {
 				'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
 				esc_attr( (string) aafm_rate_limit_per_min() )
 			),
-			'help'    => __( 'How many agent calls one connection can make per minute. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
+			'help'    => __( 'How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

@@ -383,6 +383,12 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 /**
  * AJAX: save the enabled-abilities toggles.
  *
+ * Both the Integrations tab and the Abilities tab post here (same shared option, different
+ * scope). The response carries the full persisted enabled list - the server's authoritative
+ * answer, not whatever the client had checked - plus the global enabled-ability total, so the
+ * card/section headers on either tab can be patched to the real count right after save instead
+ * of reading stale until the next page load.
+ *
  * @return void
  */
 function aafm_ajax_save_abilities(): void {
@@ -394,7 +400,12 @@ function aafm_ajax_save_abilities(): void {
 	$posted  = aafm_resolve_scoped_enabled_input( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$enabled = aafm_set_enabled_abilities( $posted );
 	aafm_log_ability_toggle_diff( $before, $enabled );
-	wp_send_json_success( array( 'enabled' => $enabled ) );
+	wp_send_json_success(
+		array(
+			'enabled'               => $enabled,
+			'ability_enabled_total' => aafm_enabled_ability_count(),
+		)
+	);
 }
 
 /**
@@ -1316,8 +1327,12 @@ function aafm_render_abilities_tab(): void {
 	echo wp_kses( aafm_icon( 'bolt' ), aafm_svg_allowed_html() );
 	echo '</span>';
 	echo '</div>';
+	// This stat aggregates core abilities plus every integration's total, so unlike the section
+	// counts below it cannot be recomputed from this tab's own checkboxes after a save (the
+	// integration abilities live on a different page load entirely). It carries its own class
+	// so admin.js can set it directly from the AJAX response's authoritative total instead.
 	printf(
-		'<div class="stat-value">%1$s <small>%2$s</small></div>',
+		'<div class="stat-value"><span class="aafm-stat-enabled-num">%1$s</span> <small>%2$s</small></div>',
 		esc_html( number_format_i18n( $ability_enabled ) ),
 		esc_html(
 			sprintf(
@@ -1407,8 +1422,10 @@ function aafm_render_abilities_tab(): void {
 		}
 		// H2 so the document outline runs H1 (page title) → H2 (subject group) → H3 (Reads/Writes)
 		// → H4 (each ability), with no skipped level. The visible weight is unchanged in CSS.
+		// The enabled figure is wrapped in its own span so admin.js can patch just that number
+		// after a save, instead of this heading reading stale until the next full page load.
 		printf(
-			'<h2 class="aafm-subject-heading"><span class="aafm-count-badge">%1$s / %2$s</span> %3$s</h2>',
+			'<h2 class="aafm-subject-heading"><span class="aafm-count-badge"><span class="aafm-enabled-num">%1$s</span> / %2$s</span> %3$s</h2>',
 			esc_html( (string) $subject_enabled ),
 			esc_html( (string) $subject_total ),
 			esc_html__( 'enabled', 'agent-abilities-for-mcp' )
@@ -1456,8 +1473,11 @@ function aafm_render_abilities_tab(): void {
 				}
 			}
 
+			// Same live-update span as the subject heading above; the group's ability rows are
+			// the immediate next sibling (.aafm-ability-list), which is how admin.js finds the
+			// checkbox universe to recount after a save.
 			printf(
-				'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge">%2$s / %3$s</span></div>',
+				'<div class="aafm-ability-group-head"><h3>%1$s</h3><span class="aafm-count-badge"><span class="aafm-enabled-num">%2$s</span> / %3$s</span></div>',
 				esc_html( $heading ),
 				esc_html( (string) $group_enabled ),
 				esc_html( (string) count( $rows ) )

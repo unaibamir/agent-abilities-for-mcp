@@ -94,8 +94,15 @@ final class IntegrationsTabTest extends TestCase {
 		// ability is ever added to or removed from another integration's manifest.
 		$wc = aafm_integration_manifest()['woocommerce'];
 		$this->assertStringContainsString( 'aafm-integration-count', $html );
+		// The enabled figure is wrapped in its own span so admin.js can patch it after a save
+		// (see the Integrations card staleness fix); assert the wrapped form the renderer
+		// actually produces, not the bare digit.
 		$this->assertStringContainsString(
-			sprintf( '0 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
+			sprintf(
+				'<span class="aafm-enabled-num">0</span> / %1$d · %2$s',
+				$wc['total'],
+				aafm_integration_count_breakdown( $wc )
+			),
 			$html
 		);
 	}
@@ -175,14 +182,23 @@ final class IntegrationsTabTest extends TestCase {
 
 		// The header reports the REAL enabled count (3), the total, and the read/write/destructive
 		// breakdown - the exact format the fix produces. n is 3 (> 0), proving the count is
-		// computed, not the literal 0.
+		// computed, not the literal 0. The figure is wrapped in its own span so admin.js can
+		// patch it after a save (see the Integrations card staleness fix).
 		$this->assertStringContainsString(
-			sprintf( '3 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
+			sprintf(
+				'<span class="aafm-enabled-num">3</span> / %1$d · %2$s',
+				$wc['total'],
+				aafm_integration_count_breakdown( $wc )
+			),
 			$summary
 		);
 		// And it must NOT have regressed to the hardcoded "0 / <total>".
 		$this->assertStringNotContainsString(
-			sprintf( '0 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
+			sprintf(
+				'<span class="aafm-enabled-num">0</span> / %1$d · %2$s',
+				$wc['total'],
+				aafm_integration_count_breakdown( $wc )
+			),
 			$summary
 		);
 	}

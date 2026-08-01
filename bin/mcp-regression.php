@@ -36,6 +36,13 @@
  *   (--remote-blocks) stay opt-in because neither can be fully cleaned over MCP; each leaves one warned
  *   residue (an orphan category term, a trashed wp_block).
  *
+ *   The high-risk floor section is local-only for a different reason: it does not create fixtures at all,
+ *   it flips two live plugin settings (the high-risk master switch and the enabled-ability allow-list) to
+ *   prove that a locked, money-moving ability stays off the MCP surface even when the allow-list names it.
+ *   Both are snapshotted before anything moves and restored afterwards, and both are registered with the
+ *   pending-restore registry first so a mid-section fatal() still puts them back. On a remote target it
+ *   SKIPs rather than reaching for the bridge.
+ *
  * USAGE
  *   php bin/mcp-regression.php --url=https://example.com --user=admin --pass="xxxx xxxx xxxx xxxx xxxx xxxx"
  *
@@ -108,6 +115,43 @@ final class AAFM_Mcp_Regression {
 	private const MCP_ROUTE       = '/wp-json/agent-abilities-for-mcp/mcp';
 	private const PROTOCOL        = '2025-06-18';
 	private const FIXTURE_PREFIX  = 'AAFM-REGRESSION';
+
+	/**
+	 * The high-risk ability floor, spelled out here on purpose.
+	 *
+	 * This list is deliberately NOT read from aafm_high_risk_abilities_builtin(). A test that
+	 * imports the implementation's own list agrees with the implementation by construction: delete
+	 * a name from the source and the expectation quietly deletes itself too, and the check that was
+	 * meant to catch a money-moving ability going unlocked passes on an empty set. So the harness
+	 * carries its own copy and compares the two (see the drift check in test_high_risk_floor()),
+	 * which turns a silent narrowing of the floor into a visible FAIL.
+	 *
+	 * Sourced from includes/audit/high-risk.php as of the v5 high-risk build.
+	 */
+	private const HIGH_RISK_ABILITIES = [
+		'aafm/wc-create-order-refund',
+		'aafm/wc-update-order-status',
+		'aafm/wc-update-order',
+		'aafm/wc-update-payment-gateway',
+		'aafm/wc-create-coupon',
+		'aafm/wc-update-coupon',
+		'aafm/wc-create-tax-rate',
+		'aafm/wc-update-tax-rate',
+	];
+
+	/** The option the settings screen writes when the operator unlocks the high-risk category. */
+	private const HIGH_RISK_OPTION = 'aafm_high_risk_abilities_unlocked';
+
+	/** The operator's enabled-ability allow-list. */
+	private const ENABLED_OPTION = 'aafm_enabled_abilities';
+
+	/**
+	 * An order id used only to prove a refund call reached its execute callback. Nothing is
+	 * refunded: aafm_exec_wc_create_order_refund() resolves the id first and bails with a generic
+	 * error when wc_get_order() finds nothing, so the call fails before wc_create_refund() is
+	 * reached. The harness re-confirms the id is unused before calling anyway.
+	 */
+	private const ABSENT_ORDER_ID = 2147483647;
 
 	/** @var array<string,mixed> */
 	private array $opts;
@@ -261,6 +305,9 @@ final class AAFM_Mcp_Regression {
 		$this->test_menus_lifecycle();
 		$this->test_blocks_lifecycle();
 		$this->test_acf_lifecycle();
+		// Last on purpose: this one flips live plugin settings rather than creating fixtures, so it
+		// runs after every other section has finished reading the surface it would otherwise move.
+		$this->test_high_risk_floor();
 
 		// Cleanup runs now (so the baseline comparison sees a clean site), and the
 		// shutdown handler becomes a no-op afterwards.
@@ -310,10 +357,16 @@ final class AAFM_Mcp_Regression {
 	}
 
 	/**
-	 * @return list<string> Exposed tool names (short, without the server prefix).
+	 * Ask the server what it exposes, without publishing the answer to resolve_tool().
+	 *
+	 * The high-risk section re-lists tools several times as it flips the floor, and each of those
+	 * lists is a subject under test rather than the working tool table, so it must not overwrite
+	 * what the rest of the run resolves against.
+	 *
+	 * @return list<string> Exposed tool names, sorted.
 	 */
-	private function discover_tools(): array {
-		$body = $this->rpc( 'tools/list', (object) [] );
+	private function fetch_tool_names(): array {
+		$body  = $this->rpc( 'tools/list', (object) [] );
 		$tools = $body['result']['tools'] ?? [];
 		$names = [];
 		foreach ( $tools as $t ) {
@@ -322,6 +375,14 @@ final class AAFM_Mcp_Regression {
 			}
 		}
 		sort( $names );
+		return $names;
+	}
+
+	/**
+	 * @return list<string> Exposed tool names (short, without the server prefix).
+	 */
+	private function discover_tools(): array {
+		$names            = $this->fetch_tool_names();
 		$this->tool_names = $names; // Publish for resolve_tool().
 
 		$expected = [
@@ -2065,6 +2126,299 @@ final class AAFM_Mcp_Regression {
 		}
 	}
 
+	/**
+	 * The high-risk floor, proved over the wire rather than in the admin screen.
+	 *
+	 * The spec's claim is specific and worth restating, because it is what these checks exist to
+	 * falsify: the floor is a registration-time filter, not a UI state. A locked ability is absent
+	 * from the MCP surface entirely, not present-and-erroring, and it stays absent even when the
+	 * operator's own `aafm_enabled_abilities` row lists it. That last part is the whole point. A UI
+	 * that lets someone tick a locked ability and save is a cosmetic bug; a floor that then honours
+	 * the tick is a money-moving ability reachable by any agent holding a token.
+	 *
+	 * So the run deliberately writes every high-risk name into the enabled option, with the master
+	 * switch off, and demands the surface stay empty anyway. Then it unlocks and demands the same
+	 * abilities appear and reach their callbacks, because a floor that never lifts proves nothing
+	 * about a floor.
+	 *
+	 * Local mode only: flipping the switch and staging the option row need the WP-CLI bridge. Both
+	 * options are snapshotted before anything moves and restored at the end, and both are
+	 * registered with the pending-restore registry first so a mid-test fatal() still puts them back.
+	 */
+	private function test_high_risk_floor(): void {
+		$section = 'High-risk floor';
+
+		if ( ! $this->cli_targets_endpoint() ) {
+			$this->record( $section, 'high-risk floor enforced over the wire', 'SKIP', 'needs the local DDEV WP-CLI bridge to flip the master switch; not available for a remote target' );
+			return;
+		}
+
+		// Drift check first. If the plugin's own list has grown or shrunk against the copy this
+		// harness carries, every assertion below is measuring the wrong set and should be read as
+		// such - so say so before running them rather than after.
+		$plugin_list = $this->cli_plugin_high_risk_builtin();
+		if ( null === $plugin_list ) {
+			$this->record( $section, 'harness high-risk list matches the plugin', 'SKIP', 'could not read aafm_high_risk_abilities_builtin() over the bridge' );
+		} else {
+			$missing = array_values( array_diff( $plugin_list, self::HIGH_RISK_ABILITIES ) );
+			$extra   = array_values( array_diff( self::HIGH_RISK_ABILITIES, $plugin_list ) );
+			$drift   = array_merge(
+				$missing ? [ 'plugin has, harness does not: ' . implode( ' ', $missing ) ] : [],
+				$extra ? [ 'harness expects, plugin dropped: ' . implode( ' ', $extra ) ] : []
+			);
+			$this->record(
+				$section,
+				'harness high-risk list matches the plugin (' . count( self::HIGH_RISK_ABILITIES ) . ' abilities)',
+				$drift ? 'FAIL' : 'PASS',
+				$drift ? implode( '; ', $drift ) : 'no drift'
+			);
+		}
+
+		// Absence only proves a floor when the ability exists to be blocked. Without WooCommerce
+		// these abilities are never registered at all, and eight vacuous PASSes would read exactly
+		// like eight real ones.
+		$registered = $this->cli_registered_high_risk();
+		if ( null === $registered || [] === $registered ) {
+			$this->record( $section, 'high-risk abilities exist in the registry on this target', 'SKIP', 'none of the high-risk abilities are registered here (WooCommerce inactive?); absence from tools/list would prove nothing' );
+			return;
+		}
+		$this->record( $section, 'high-risk abilities exist in the registry on this target', 'PASS', count( $registered ) . ' of ' . count( self::HIGH_RISK_ABILITIES ) . ' registered' );
+
+		// Snapshot both options BEFORE anything moves, and register them for restore so cleanup()
+		// repairs them even if a transport fatal() exits mid-section.
+		$switch_before  = $this->cli_high_risk_unlocked();
+		$switch_snap    = $this->snapshot_option_for_restore( self::HIGH_RISK_OPTION );
+		$enabled_snap   = $this->snapshot_option_for_restore( self::ENABLED_OPTION );
+		$enabled_before = $this->cli_get_option( self::ENABLED_OPTION );
+
+		$stored = [];
+		if ( null !== $enabled_before && $enabled_before['exists'] ) {
+			$decoded = json_decode( $enabled_before['json'], true );
+			$stored  = is_array( $decoded ) ? array_values( array_filter( array_map( 'strval', $decoded ) ) ) : [];
+		}
+
+		// The option-row scenario: the reported admin bug let a locked ability be ticked and saved,
+		// so stage exactly that state rather than hoping to catch it naturally.
+		$staged = array_values( array_unique( array_merge( $stored, $registered ) ) );
+		if ( ! $this->cli_set_option_array( self::ENABLED_OPTION, $staged ) ) {
+			$this->record( $section, 'stage the locked abilities into ' . self::ENABLED_OPTION, 'FAIL', 'could not write the option over the bridge; the rest of the section cannot run' );
+			$this->restore_high_risk_state( $section, $switch_snap, $enabled_snap );
+			return;
+		}
+		$this->record( $section, 'locked abilities staged into ' . self::ENABLED_OPTION . ' (the reported UI bug\'s end state)', 'PASS', count( $registered ) . ' high-risk name(s) written into the operator allow-list' );
+
+		// ---- Floor DOWN: the surface must be empty regardless of the option row. ----
+		$locked_state = $this->cli_set_high_risk_unlocked( false );
+		if ( true !== $locked_state ) {
+			$this->record( $section, 'master switch reads locked after being switched off', false === $locked_state ? 'PASS' : 'FAIL', false === $locked_state ? '' : 'site did not confirm the lock state' );
+		} else {
+			$this->record( $section, 'master switch reads locked after being switched off', 'FAIL', 'still unlocked after writing false; a force-block filter or a stale cache is in play' );
+		}
+
+		$this->assert_high_risk_absent( $section, 'locked', $registered );
+		$this->assert_high_risk_uncallable( $section, $registered );
+
+		// ---- Floor UP: the same abilities must come back, and must reach their callbacks. ----
+		$unlocked_state = $this->cli_set_high_risk_unlocked( true );
+		if ( true !== $unlocked_state ) {
+			$this->record( $section, 'master switch reads unlocked after being switched on', 'FAIL', 'site did not report the category as unlocked' );
+		} else {
+			$this->record( $section, 'master switch reads unlocked after being switched on', 'PASS', '' );
+			$this->assert_high_risk_present( $section, $registered );
+			$this->assert_high_risk_reaches_callback( $section, $registered );
+		}
+
+		// ---- Floor DOWN again: unlocking must be reversible, not a one-way door. ----
+		$relocked = $this->cli_set_high_risk_unlocked( false );
+		$this->record( $section, 'master switch locks again after being switched back off', false === $relocked ? 'PASS' : 'FAIL', false === $relocked ? '' : 'site did not report the category as locked' );
+		if ( false === $relocked ) {
+			$this->assert_high_risk_absent( $section, 're-locked', $registered );
+		}
+
+		$this->restore_high_risk_state( $section, $switch_snap, $enabled_snap );
+
+		// Report the switch's original state so a run that started from an unlocked site is legible
+		// in the transcript rather than looking like the harness invented the value it restored.
+		$this->record(
+			$section,
+			'master switch restored to the state the run found',
+			$this->cli_high_risk_unlocked() === $switch_before ? 'PASS' : 'FAIL',
+			'found ' . ( $switch_before ? 'unlocked' : 'locked' )
+		);
+	}
+
+	/**
+	 * Assert per ability that a locked name is absent from tools/list. Per ability on purpose: one
+	 * rolled-up "none of them leaked" check names nothing when it fails, and which one leaked is
+	 * the only detail that matters at that point.
+	 *
+	 * @param list<string> $abilities Ability names expected to be absent.
+	 */
+	private function assert_high_risk_absent( string $section, string $phase, array $abilities ): void {
+		$exposed = $this->fetch_tool_names();
+		foreach ( $abilities as $ability ) {
+			$tool = $this->high_risk_tool_name( $ability );
+			$this->record(
+				$section,
+				"{$ability} absent from tools/list while {$phase}",
+				in_array( $tool, $exposed, true ) ? 'FAIL' : 'PASS',
+				in_array( $tool, $exposed, true ) ? "REACHABLE OVER MCP as {$tool}" : ''
+			);
+		}
+	}
+
+	/**
+	 * Assert per ability that an unlocked name is back on the surface.
+	 *
+	 * @param list<string> $abilities Ability names expected to be present.
+	 */
+	private function assert_high_risk_present( string $section, array $abilities ): void {
+		$exposed = $this->fetch_tool_names();
+		foreach ( $abilities as $ability ) {
+			$tool = $this->high_risk_tool_name( $ability );
+			$this->record(
+				$section,
+				"{$ability} appears in tools/list once unlocked",
+				in_array( $tool, $exposed, true ) ? 'PASS' : 'FAIL',
+				in_array( $tool, $exposed, true ) ? '' : "expected tool {$tool}"
+			);
+		}
+	}
+
+	/**
+	 * Assert that calling a locked ability is refused as an unknown tool.
+	 *
+	 * The distinction being drawn here is the whole contract. TOOL_NOT_FOUND (-32003) is the server
+	 * saying it has never heard of this tool, which is what "absent from the surface" has to mean
+	 * once you stop trusting tools/list and actually call the thing. A permission denial (-32008)
+	 * or a tool-level isError would both mean the opposite: the tool exists, the request reached
+	 * it, and only a check inside it turned the request away. That is present-and-erroring, which
+	 * the spec explicitly rejects, and it is one bad capability check away from executing.
+	 *
+	 * Called by exact tool name rather than through resolve_tool(), which falls back to the bare
+	 * short name when it cannot find a match - that fallback would quietly change what is being
+	 * asked for at exactly the moment the tool is supposed to be missing.
+	 *
+	 * @param list<string> $abilities Ability names expected to be uncallable.
+	 */
+	private function assert_high_risk_uncallable( string $section, array $abilities ): void {
+		foreach ( $abilities as $ability ) {
+			$tool = $this->high_risk_tool_name( $ability );
+			$body = $this->rpc( 'tools/call', [ 'name' => $tool, 'arguments' => (object) [] ] );
+
+			$code    = isset( $body['error']['code'] ) ? (int) $body['error']['code'] : null;
+			$result  = $body['result'] ?? null;
+			$is_tool = is_array( $result );
+
+			if ( -32003 === $code ) {
+				$this->record( $section, "tools/call {$tool} is refused as an unknown tool while locked", 'PASS', 'JSON-RPC -32003 tool not found' );
+				continue;
+			}
+			if ( $is_tool ) {
+				$this->record(
+					$section,
+					"tools/call {$tool} is refused as an unknown tool while locked",
+					'FAIL',
+					'the call REACHED THE TOOL: ' . ( ! empty( $result['isError'] ) ? 'tool-level error' : 'tool-level SUCCESS' ) . ' - ' . $this->one_line( (string) ( $result['content'][0]['text'] ?? '' ) )
+				);
+				continue;
+			}
+			$this->record(
+				$section,
+				"tools/call {$tool} is refused as an unknown tool while locked",
+				'FAIL',
+				'expected -32003, got ' . ( null === $code ? 'no error code' : (string) $code ) . ': ' . $this->one_line( (string) ( $body['error']['message'] ?? '' ) )
+			);
+		}
+	}
+
+	/**
+	 * Prove an unlocked high-risk ability genuinely runs, using the one that would cost real money
+	 * if the proof were sloppy.
+	 *
+	 * Reaching the execute callback is the assertion; succeeding is not. The refund is aimed at an
+	 * order id confirmed not to exist, so aafm_exec_wc_create_order_refund() bails at the
+	 * wc_get_order() resolve and returns before wc_create_refund() is ever called. A tool-level
+	 * error therefore counts as a PASS here - it can only have come from inside the callback - while
+	 * a JSON-RPC -32003 would mean the tool was still missing and the unlock did nothing.
+	 *
+	 * @param list<string> $abilities Registered high-risk ability names.
+	 */
+	private function assert_high_risk_reaches_callback( string $section, array $abilities ): void {
+		$ability = 'aafm/wc-create-order-refund';
+		if ( ! in_array( $ability, $abilities, true ) ) {
+			$this->record( $section, 'an unlocked high-risk ability reaches its execute callback', 'SKIP', $ability . ' is not registered on this target' );
+			return;
+		}
+
+		// Never send a refund at an id that might resolve. Confirm it is unused first.
+		$exists = $this->cli_order_exists( self::ABSENT_ORDER_ID );
+		if ( false !== $exists ) {
+			$this->record( $section, 'an unlocked high-risk ability reaches its execute callback', 'SKIP', 'could not confirm order #' . self::ABSENT_ORDER_ID . ' is absent; refusing to send a refund call' );
+			return;
+		}
+
+		$tool = $this->high_risk_tool_name( $ability );
+		$body = $this->rpc( 'tools/call', [
+			'name'      => $tool,
+			'arguments' => [ 'order_id' => self::ABSENT_ORDER_ID, 'amount' => '0.00' ],
+		] );
+
+		$code   = isset( $body['error']['code'] ) ? (int) $body['error']['code'] : null;
+		$result = $body['result'] ?? null;
+
+		if ( is_array( $result ) ) {
+			// Reached the tool. Either outcome proves registration; an error is the expected one,
+			// since the order does not exist.
+			$this->record(
+				$section,
+				"tools/call {$tool} reaches its callback once unlocked",
+				'PASS',
+				! empty( $result['isError'] ) ? 'refused inside the callback on a nonexistent order, as expected' : 'callback returned a result'
+			);
+			return;
+		}
+		$this->record(
+			$section,
+			"tools/call {$tool} reaches its callback once unlocked",
+			'FAIL',
+			-32003 === $code ? 'still TOOL_NOT_FOUND after unlocking; the unlock did not register it' : 'JSON-RPC error ' . ( null === $code ? '(none)' : (string) $code ) . ': ' . $this->one_line( (string) ( $body['error']['message'] ?? '' ) )
+		);
+	}
+
+	/**
+	 * Put both options back exactly as the run found them, and say plainly whether it worked. A
+	 * failure here is a leaked live setting, not a cosmetic one, so it is recorded rather than
+	 * left to the silent cleanup path.
+	 *
+	 * @param array{exists:bool,json:string}|null $switch_snap  Prior high-risk switch state.
+	 * @param array{exists:bool,json:string}|null $enabled_snap Prior enabled-abilities state.
+	 */
+	private function restore_high_risk_state( string $section, ?array $switch_snap, ?array $enabled_snap ): void {
+		$enabled_ok = $this->cli_restore_option( self::ENABLED_OPTION, $enabled_snap );
+		if ( $enabled_ok ) {
+			$this->clear_pending_restore( self::ENABLED_OPTION );
+		}
+		$this->record( $section, self::ENABLED_OPTION . ' restored to its prior state', $enabled_ok ? 'PASS' : 'FAIL', '' );
+
+		$switch_ok = $this->cli_restore_option( self::HIGH_RISK_OPTION, $switch_snap );
+		if ( $switch_ok ) {
+			$this->clear_pending_restore( self::HIGH_RISK_OPTION );
+		}
+		$this->record( $section, self::HIGH_RISK_OPTION . ' restored to its prior state', $switch_ok ? 'PASS' : 'FAIL', '' );
+	}
+
+	/** The MCP tool name an ability is exposed under: McpNameSanitizer turns the slash into a hyphen. */
+	private function high_risk_tool_name( string $ability ): string {
+		return str_replace( '/', '-', trim( $ability ) );
+	}
+
+	/** Squash a message to one short line so a FAIL detail stays readable in the matrix. */
+	private function one_line( string $s ): string {
+		$s = trim( (string) preg_replace( '/\s+/', ' ', $s ) );
+		return strlen( $s ) > 120 ? substr( $s, 0, 117 ) . '...' : $s;
+	}
+
 	private function verify_baseline_restored(): void {
 		if ( isset( $this->opts['keep'] ) ) {
 			return;
@@ -2729,6 +3083,102 @@ PHP;
 		// Verify the write actually took.
 		$check = $this->cli_get_option( $name );
 		return null !== $check && $check['exists'] && $check['json'] === $json;
+	}
+
+	/**
+	 * Set the high-risk master switch exactly the way the settings screen does - update_option()
+	 * with a real bool, so the stored shape ("1" / "") matches a genuine operator save rather than
+	 * some WP-CLI-flavoured stand-in. Returns the state the site actually reports afterwards, or
+	 * null when the bridge is unavailable.
+	 */
+	private function cli_set_high_risk_unlocked( bool $unlocked ): ?bool {
+		if ( ! $this->cli_targets_endpoint() ) {
+			return null;
+		}
+		$this->ddev_wp( [ 'eval', sprintf( 'update_option( %s, %s );', var_export( self::HIGH_RISK_OPTION, true ), $unlocked ? 'true' : 'false' ) ] );
+		return $this->cli_high_risk_unlocked();
+	}
+
+	/**
+	 * Ask the site for the authoritative lock state. Deliberately calls aafm_high_risk_unlocked()
+	 * rather than reading the option, because the option is only half the answer: the
+	 * aafm_force_block_high_risk_abilities filter can hold the floor shut over the top of it, and a
+	 * harness that read the raw row would report "unlocked" on a site that is anything but.
+	 *
+	 * @return bool|null Null when the bridge is unavailable or the site did not answer.
+	 */
+	private function cli_high_risk_unlocked(): ?bool {
+		$out = $this->ddev_wp( [ 'eval', 'echo aafm_high_risk_unlocked() ? "AAFM-UNLOCKED" : "AAFM-LOCKED";' ] );
+		if ( ! is_string( $out ) ) {
+			return null;
+		}
+		if ( false !== strpos( $out, 'AAFM-UNLOCKED' ) ) {
+			return true;
+		}
+		if ( false !== strpos( $out, 'AAFM-LOCKED' ) ) {
+			return false;
+		}
+		return null;
+	}
+
+	/**
+	 * Which of the harness's high-risk names the site's ability registry actually knows about.
+	 *
+	 * Needed because absence from tools/list only proves the floor works when the ability exists to
+	 * be blocked. On a site without WooCommerce these abilities are never registered at all, and
+	 * eight vacuous PASSes would read exactly like eight real ones.
+	 *
+	 * @return list<string>|null Null when the bridge is unavailable.
+	 */
+	private function cli_registered_high_risk(): ?array {
+		$php = sprintf(
+			'echo implode( ",", array_values( array_intersect( %s, array_keys( aafm_get_abilities_registry() ) ) ) );',
+			var_export( self::HIGH_RISK_ABILITIES, true )
+		);
+		$out = $this->ddev_wp( [ 'eval', $php ] );
+		if ( ! is_string( $out ) ) {
+			return null;
+		}
+		// WP-CLI can print notices ahead of the value, so pick the line that carries our names.
+		foreach ( preg_split( '/\r?\n/', $out ) as $line ) {
+			$line = trim( $line );
+			if ( '' !== $line && false !== strpos( $line, 'aafm/' ) ) {
+				return array_values( array_filter( explode( ',', $line ), static fn( $n ) => str_starts_with( $n, 'aafm/' ) ) );
+			}
+		}
+		return [];
+	}
+
+	/**
+	 * The plugin's own high-risk list, used only to detect drift against the harness's hardcoded
+	 * copy. Never used as the expectation itself - see the HIGH_RISK_ABILITIES docblock.
+	 *
+	 * @return list<string>|null Null when the bridge is unavailable.
+	 */
+	private function cli_plugin_high_risk_builtin(): ?array {
+		$out = $this->ddev_wp( [ 'eval', 'echo implode( ",", aafm_high_risk_abilities_builtin() );' ] );
+		if ( ! is_string( $out ) ) {
+			return null;
+		}
+		foreach ( preg_split( '/\r?\n/', $out ) as $line ) {
+			$line = trim( $line );
+			if ( '' !== $line && false !== strpos( $line, 'aafm/' ) ) {
+				return array_values( array_filter( explode( ',', $line ), static fn( $n ) => str_starts_with( $n, 'aafm/' ) ) );
+			}
+		}
+		return [];
+	}
+
+	/** Whether an order id resolves to a real WooCommerce order on the target. */
+	private function cli_order_exists( int $order_id ): ?bool {
+		$out = $this->ddev_wp( [ 'eval', sprintf( 'echo ( function_exists( "wc_get_order" ) && wc_get_order( %d ) ) ? "AAFM-ORDER-YES" : "AAFM-ORDER-NO";', $order_id ) ] );
+		if ( ! is_string( $out ) ) {
+			return null;
+		}
+		if ( false !== strpos( $out, 'AAFM-ORDER-YES' ) ) {
+			return true;
+		}
+		return false !== strpos( $out, 'AAFM-ORDER-NO' ) ? false : null;
 	}
 
 	/**

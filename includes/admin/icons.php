@@ -70,6 +70,10 @@ function aafm_icon( string $name ): string {
 		'info'               => '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
 		'success'            => '<path d="m5 12 4.5 4.5L19 7"/>',
 		'error'              => '<path d="M6 6l12 12M18 6 6 18"/>',
+
+		// Locked high-risk ability row (Abilities tab), drawn in the shackle-closed
+		// style the settings shield already uses for its stroke weight.
+		'lock'               => '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
 	);
 
 	// Per-glyph stroke width: most are 1.7; a few need a heavier stroke to match

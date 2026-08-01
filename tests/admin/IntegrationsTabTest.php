@@ -88,12 +88,55 @@ final class IntegrationsTabTest extends TestCase {
 		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
 
 		// The inactive WooCommerce card shows its manifest count so the operator sees what
-		// activating the plugin would unlock (27 read + 23 write of 52).
+		// activating the plugin would unlock (27 read + 23 write + 2 destructive of 52). The
+		// breakdown is built the same way the renderer builds it (aafm_integration_count_breakdown())
+		// rather than a hardcoded "read, write" string, so this stays correct if a destructive
+		// ability is ever added to or removed from another integration's manifest.
 		$wc = aafm_integration_manifest()['woocommerce'];
 		$this->assertStringContainsString( 'aafm-integration-count', $html );
 		$this->assertStringContainsString(
-			sprintf( '0 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			sprintf( '0 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
 			$html
+		);
+	}
+
+	/**
+	 * Regression guard for the count-header math bug: the header string only interpolated read
+	 * and write, so a card with any destructive ability (WooCommerce has two - trashing and
+	 * deleting an order) showed "27 read, 23 write" next to a total of 52, silently dropping the
+	 * two destructive rows rather than accounting for them. This asserts the arithmetic
+	 * independently of aafm_integration_count_breakdown() (so a bug reintroduced inside that
+	 * helper itself would still be caught here) and that the word "destructive" actually reaches
+	 * the rendered card when the count is non-zero.
+	 */
+	public function test_woocommerce_card_count_accounts_for_destructive_abilities(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'aafm_yoast_active', '__return_false', 99 );
+		add_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		add_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		ob_start();
+		aafm_render_integrations_tab();
+		$html = (string) ob_get_clean();
+		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
+		remove_filter( 'aafm_aioseo_active', '__return_false', 99 );
+		remove_filter( 'aafm_rankmath_active', '__return_false', 99 );
+		remove_filter( 'aafm_yoast_active', '__return_false', 99 );
+
+		$wc = aafm_integration_manifest()['woocommerce'];
+		$this->assertGreaterThan( 0, $wc['destructive'], 'This test needs WooCommerce to carry at least one destructive ability to be meaningful.' );
+		$this->assertSame( $wc['total'], $wc['read'] + $wc['write'] + $wc['destructive'], 'The manifest tallies must sum to the total.' );
+
+		$wc_open = strpos( $html, 'aafm-integration-woocommerce' );
+		$this->assertNotFalse( $wc_open, 'The WooCommerce card should render.' );
+		$summary_open  = strpos( $html, '<summary class="aafm-card-head', $wc_open );
+		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
+		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
+
+		$this->assertStringContainsString(
+			sprintf( '%1$d read, %2$d write, %3$d destructive', $wc['read'], $wc['write'], $wc['destructive'] ),
+			$summary,
+			'The destructive count must be visible in the card header, not silently dropped from the breakdown.'
 		);
 	}
 
@@ -130,15 +173,16 @@ final class IntegrationsTabTest extends TestCase {
 		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
 		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
 
-		// The header reports the REAL enabled count (3), the total, and the read/write tallies - the
-		// exact format the fix produces. n is 3 (> 0), proving the count is computed, not the literal 0.
+		// The header reports the REAL enabled count (3), the total, and the read/write/destructive
+		// breakdown - the exact format the fix produces. n is 3 (> 0), proving the count is
+		// computed, not the literal 0.
 		$this->assertStringContainsString(
-			sprintf( '3 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			sprintf( '3 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
 			$summary
 		);
 		// And it must NOT have regressed to the hardcoded "0 / <total>".
 		$this->assertStringNotContainsString(
-			sprintf( '0 / %1$d · %2$d read, %3$d write', $wc['total'], $wc['read'], $wc['write'] ),
+			sprintf( '0 / %1$d · %2$s', $wc['total'], aafm_integration_count_breakdown( $wc ) ),
 			$summary
 		);
 	}

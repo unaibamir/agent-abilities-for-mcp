@@ -17,6 +17,15 @@ final class DetailTest extends TestCase {
 	use IntegrationStubs;
 
 	/**
+	 * Give every case an empty activity log to assert against.
+	 */
+	public function set_up(): void {
+		parent::set_up();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+	}
+
+	/**
 	 * Drop the trait's filters and stub stores again after every case.
 	 */
 	public function tear_down(): void {
@@ -337,5 +346,128 @@ final class DetailTest extends TestCase {
 			$ids += isset( $entry['result_id'] ) ? 1 : 0;
 			$this->assertSame( 1, $ids, "{$ability} declares {$ids} linkable ids; 146 section 6.3 allows one." );
 		}
+	}
+
+	public function test_a_logged_call_carries_its_detail_end_to_end(): void {
+		$id = aafm_log_activity(
+			array(
+				'ability'  => 'aafm/update-post-meta',
+				'status'   => 'started',
+				'arg_keys' => array( 'meta_key', 'post_id', 'meta_value' ),
+				'detail'   => aafm_build_activity_detail(
+					'aafm/update-post-meta',
+					array(
+						'meta_key'   => '_desc', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+						'post_id'    => 482,
+						'meta_value' => 'payload', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value -- test fixture: ability-input array key, not a meta query.
+					)
+				),
+			)
+		);
+		aafm_update_activity_status( $id, 'success' );
+
+		$row = $this->row( $id );
+		$this->assertSame( 'Updated meta key `_desc` on post #482', $row['detail'] );
+		$this->assertSame( 'ability_call', $row['event_type'] );
+		$this->assertStringNotContainsString( 'payload', (string) $row['detail'] );
+		$this->assertStringContainsString( 'meta_value', (string) $row['arg_keys'] );
+	}
+
+	/**
+	 * The registration wrapper, not the caller, is what puts the detail on the row.
+	 *
+	 * The test above proves the builder and the column agree; this one proves the call path
+	 * actually reaches for the builder, which is the only thing that makes the feature real for
+	 * an agent's call.
+	 */
+	public function test_the_call_path_builds_the_detail_from_the_arguments(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$post_id = self::factory()->post->create();
+		$this->register_enabled( array( 'aafm/update-post-meta' ) );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/update-post-meta' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ability-input array key, not a meta query.
+				'value'    => 'CONFIDENTIAL PAYLOAD',
+			)
+		);
+		$this->assertIsArray( $result, 'update-post-meta returned an error; fix the input before asserting on detail.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( "Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $row['detail'] );
+		$this->assertStringContainsString( 'value', (string) $row['arg_keys'] );
+	}
+
+	/**
+	 * A create's identifier does not exist until the call returns, so the resolve path has to
+	 * carry it.
+	 */
+	public function test_the_call_path_builds_the_detail_from_the_result(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/create-page' ) );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/create-page' )->execute(
+			array(
+				'title'   => 'Some Page',
+				'content' => 'body',
+			)
+		);
+		$this->assertIsArray( $result, 'create-page returned an error; fix the input before asserting on detail.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( 'Created page #' . (int) $result['post']['id'], $row['detail'] );
+	}
+
+	/**
+	 * An ability the map says nothing about still logs, and still logs no detail.
+	 */
+	public function test_an_unmapped_ability_logs_a_null_detail(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/get-posts' ) );
+		aafm_clear_activity_log();
+
+		wp_get_ability( 'aafm/get-posts' )->execute( array() );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertNull( $row['detail'] );
+	}
+
+	/**
+	 * Read one activity row by id.
+	 *
+	 * @param int $row_id Row id.
+	 * @return array<string,mixed>
+	 */
+	private function row( int $row_id ): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', aafm_activity_log_table(), $row_id ),
+			ARRAY_A
+		);
+		return is_array( $row ) ? $row : array();
+	}
+
+	/**
+	 * Read the most recently written activity row.
+	 *
+	 * @return array<string,mixed>
+	 */
+	private function latest_row(): array {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$row = $wpdb->get_row(
+			$wpdb->prepare( 'SELECT * FROM %i ORDER BY id DESC LIMIT 1', aafm_activity_log_table() ),
+			ARRAY_A
+		);
+		return is_array( $row ) ? $row : array();
 	}
 }

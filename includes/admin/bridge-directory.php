@@ -249,15 +249,33 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	$rows  = isset( $group['abilities'] ) && is_array( $group['abilities'] ) ? $group['abilities'] : array();
 	$label = aafm_bridge_display_label( (string) ( $group['label'] ?? $ns ) );
 
-	$read  = 0;
-	$write = 0;
+	// Tallied the same way aafm_integration_manifest() tallies a native integration's rows, so the
+	// header goes through aafm_integration_count_breakdown() below instead of a second read/write
+	// string. This tab is the one place the high-risk floor does NOT reach - bridged abilities are
+	// explicitly out of scope for it (see the Settings copy) - so folding destructive into write
+	// here would understate reach on exactly the screen where the operator has the least other
+	// protection and is relying most on what the header tells them.
+	$read        = 0;
+	$write       = 0;
+	$destructive = 0;
 	foreach ( $rows as $row ) {
-		if ( 'read' === (string) ( $row['risk'] ?? '' ) ) {
-			++$read;
-		} else {
-			++$write; // Destructive counts as a write.
+		switch ( (string) ( $row['risk'] ?? 'write' ) ) {
+			case 'read':
+				++$read;
+				break;
+			case 'destructive':
+				++$destructive;
+				break;
+			default:
+				++$write;
 		}
 	}
+	$counts = array(
+		'total'       => count( $rows ),
+		'read'        => $read,
+		'write'       => $write,
+		'destructive' => $destructive,
+	);
 
 	printf(
 		'<details class="aafm-card aafm-integration-card aafm-integration-%1$s%2$s">',
@@ -277,11 +295,10 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 		'<p class="aafm-integration-count">%s</p>',
 		esc_html(
 			sprintf(
-				/* translators: 1: total abilities, 2: read count, 3: write count. */
-				_n( '%1$d ability · %2$d read, %3$d write', '%1$d abilities · %2$d read, %3$d write', count( $rows ), 'agent-abilities-for-mcp' ),
+				/* translators: 1: total abilities, 2: read/write/destructive breakdown, e.g. "27 read, 23 write, 2 destructive". */
+				_n( '%1$d ability · %2$s', '%1$d abilities · %2$s', count( $rows ), 'agent-abilities-for-mcp' ),
 				count( $rows ),
-				$read,
-				$write
+				aafm_integration_count_breakdown( $counts )
 			)
 		)
 	);

@@ -184,6 +184,103 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertSame( 'WP Mail SMTP', aafm_bridge_display_label( 'wp-mail-smtp' ) );
 	}
 
+	/**
+	 * Build a minimal synthetic bridge ability row for aafm_render_bridge_group(), bypassing real
+	 * Abilities API registration so the count-header tests below can control the exact risk mix.
+	 *
+	 * @param string $slug Ability slug.
+	 * @param string $risk One of 'read' | 'write' | 'destructive'.
+	 * @return array<string,mixed>
+	 */
+	private function synthetic_bridge_row( string $slug, string $risk ): array {
+		return array(
+			'slug'        => $slug,
+			'label'       => $slug,
+			'description' => '',
+			'risk'        => $risk,
+			'readonly'    => 'read' === $risk,
+			'destructive' => 'destructive' === $risk,
+			'tool_name'   => aafm_mcp_tool_name( aafm_bridge_tool_name( $slug ) ),
+		);
+	}
+
+	/**
+	 * Render a synthetic group with $disabled = true.
+	 *
+	 * The header count logic under test does not depend on the disabled state, but a live (not
+	 * disabled) row tries to resolve its real permission callback via wp_get_ability(), which
+	 * triggers a WP "ability not found" doing-it-wrong notice for a slug that was never actually
+	 * registered through the Abilities API - these rows are synthetic count fixtures, not real
+	 * abilities. $disabled = true skips that lookup (see aafm_render_bridge_permission_line())
+	 * without affecting anything the count-header assertions check.
+	 *
+	 * @param array<string,mixed> $group Group data for aafm_render_bridge_group().
+	 * @return string Rendered HTML.
+	 */
+	private function render_synthetic_group( array $group ): string {
+		ob_start();
+		aafm_render_bridge_group( 'counttest', $group, array(), true );
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Regression guard for the bridge equivalent of the Integrations-tab count bug fixed in
+	 * b1e18ba: the header tallied only read/write and folded destructive rows into write, so a
+	 * group with three destructive abilities (WooCommerce delete-product, update-order-status,
+	 * update-product, in the reported case) showed "7 abilities · 2 read, 5 write" - destructive
+	 * reach silently absent from the one screen (bridged abilities) the high-risk floor does not
+	 * cover. Asserts all three segments render with the real counts.
+	 */
+	public function test_group_header_shows_destructive_segment_with_correct_counts(): void {
+		$group = array(
+			'label'     => 'counttest',
+			'abilities' => array(
+				$this->synthetic_bridge_row( 'counttest/read-a', 'read' ),
+				$this->synthetic_bridge_row( 'counttest/read-b', 'read' ),
+				$this->synthetic_bridge_row( 'counttest/write-a', 'write' ),
+				$this->synthetic_bridge_row( 'counttest/write-b', 'write' ),
+				$this->synthetic_bridge_row( 'counttest/write-c', 'write' ),
+				$this->synthetic_bridge_row( 'counttest/destroy-a', 'destructive' ),
+			),
+		);
+
+		$html = $this->render_synthetic_group( $group );
+
+		$summary_open  = strpos( $html, '<summary class="aafm-card-head' );
+		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
+		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
+
+		$this->assertStringContainsString(
+			'6 abilities · 2 read, 3 write, 1 destructive',
+			$summary,
+			'The destructive count must be visible in the header, not folded into write.'
+		);
+	}
+
+	/**
+	 * The other half of the same regression guard: a group with no destructive abilities must keep
+	 * the familiar two-part string rather than always showing "0 destructive".
+	 */
+	public function test_group_header_stays_two_part_when_no_destructive_abilities(): void {
+		$group = array(
+			'label'     => 'counttest',
+			'abilities' => array(
+				$this->synthetic_bridge_row( 'counttest/read-a', 'read' ),
+				$this->synthetic_bridge_row( 'counttest/read-b', 'read' ),
+				$this->synthetic_bridge_row( 'counttest/write-a', 'write' ),
+			),
+		);
+
+		$html = $this->render_synthetic_group( $group );
+
+		$summary_open  = strpos( $html, '<summary class="aafm-card-head' );
+		$summary_close = strpos( $html, '</summary>', (int) $summary_open );
+		$summary       = substr( $html, (int) $summary_open, (int) $summary_close - (int) $summary_open );
+
+		$this->assertStringContainsString( '3 abilities · 2 read, 1 write', $summary );
+		$this->assertStringNotContainsString( 'destructive', $summary );
+	}
+
 	public function test_directory_renders_title_case_header_and_bulk_controls(): void {
 		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
 		ob_start();

@@ -259,6 +259,72 @@ final class DetailTest extends TestCase {
 		}
 	}
 
+	public function test_every_template_expects_exactly_the_arguments_the_builder_passes_it(): void {
+		// vsprintf()/sprintf() throw ArgumentCountError when a template asks for more values than
+		// it is handed, and ValueError on an unknown conversion. Either one would escape the
+		// builder and break the call it was only meant to describe, so the arity is pinned per
+		// entry rather than left to whoever hand-adds the remaining map entries.
+		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
+			$scan = $this->sprintf_conversions( (string) $entry['template'] );
+
+			$this->assertSame(
+				'',
+				$scan['residue'],
+				"{$ability}'s template carries a percent sign that is not a valid conversion or a %% literal."
+			);
+
+			if ( isset( $entry['args'] ) ) {
+				$this->assertSame(
+					count( $entry['args'] ),
+					$scan['arity'],
+					"{$ability} passes " . count( $entry['args'] ) . ' argument(s) but its template expects ' . $scan['arity'] . '.'
+				);
+			}
+
+			if ( isset( $entry['result_id'] ) ) {
+				$this->assertSame(
+					1,
+					$scan['arity'],
+					"{$ability} passes one resolved id but its template expects {$scan['arity']} argument(s)."
+				);
+			}
+		}
+	}
+
+	/**
+	 * Count how many arguments a sprintf template demands, and report anything left over.
+	 *
+	 * Positional specs (%1$s) are counted by their highest index, plain ones (%s) by how many
+	 * appear, and a template mixing both needs whichever is larger. %% is a literal percent and
+	 * is stripped before either count so it can never be mistaken for a conversion.
+	 *
+	 * @param string $template The template to scan.
+	 * @return array{arity:int,residue:string}
+	 */
+	private function sprintf_conversions( string $template ): array {
+		$scan       = str_replace( '%%', '', $template );
+		$sequential = 0;
+		$highest    = 0;
+
+		$residue = preg_replace_callback(
+			'/%(?:(\d+)\$)?(?:[-+ 0#]|\'.)*\d*(?:\.\d+)?[bcdeEfFgGosuxX]/',
+			static function ( array $spec ) use ( &$sequential, &$highest ): string {
+				if ( isset( $spec[1] ) && '' !== $spec[1] ) {
+					$highest = max( $highest, (int) $spec[1] );
+				} else {
+					++$sequential;
+				}
+				return '';
+			},
+			$scan
+		);
+
+		return array(
+			'arity'   => max( $highest, $sequential ),
+			'residue' => (string) preg_replace( '/[^%]/', '', (string) $residue ),
+		);
+	}
+
 	public function test_no_map_entry_declares_more_than_one_linkable_id(): void {
 		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
 			if ( ! isset( $entry['link'] ) ) {

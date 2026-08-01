@@ -529,6 +529,69 @@
 		}
 
 		/**
+		 * Patch the enabled-count numbers in a saved form back to what the server actually
+		 * persisted, instead of leaving them showing whatever was on the page before the save
+		 * (e.g. a WooCommerce card stuck on "0 / 52" right after a successful save).
+		 *
+		 * Membership in `enabledList` - the AJAX response's authoritative enabled list - is
+		 * what decides each count, never a checkbox's own .checked state: a save can legally
+		 * persist something other than exactly what was submitted (a locked high-risk ability
+		 * silently dropped, an off-scope ability preserved from the stored option), so reading
+		 * .checked would still show intent instead of reality in those cases. The set of
+		 * checkbox VALUES within each scope (the denominator) is stable and safe to read
+		 * straight off the DOM; only membership in the enabled set comes from the server.
+		 *
+		 * Three scopes are patched, each carrying its own `.aafm-enabled-num` span server-side:
+		 * an integration card's header (Integrations tab), a subject panel's heading, and a
+		 * Reads/Writes group's heading (both Abilities tab). A card/panel/group with no such
+		 * span (the Bridge tab's cards show no enabled count at all) is left alone.
+		 *
+		 * @param {Element}  scopeRoot   The form to search within.
+		 * @param {string[]} enabledList The enabled ability names the server just confirmed.
+		 */
+		#refreshLocalCounts( scopeRoot, enabledList ) {
+			const enabledSet = new Set( enabledList );
+			const countEnabled = ( container ) =>
+				[
+					...container.querySelectorAll(
+						'input[name="aafm_abilities[]"]'
+					),
+				].filter( ( box ) => enabledSet.has( box.value ) ).length;
+
+			scopeRoot
+				.querySelectorAll( '.aafm-integration-card' )
+				.forEach( ( card ) => {
+					const num = card.querySelector(
+						'.aafm-integration-count .aafm-enabled-num'
+					);
+					if ( num ) {
+						num.textContent = String( countEnabled( card ) );
+					}
+				} );
+
+			scopeRoot
+				.querySelectorAll( '.aafm-subject-panel' )
+				.forEach( ( panel ) => {
+					const num = panel.querySelector(
+						'.aafm-subject-heading .aafm-enabled-num'
+					);
+					if ( num ) {
+						num.textContent = String( countEnabled( panel ) );
+					}
+				} );
+
+			scopeRoot
+				.querySelectorAll( '.aafm-ability-group-head' )
+				.forEach( ( head ) => {
+					const num = head.querySelector( '.aafm-enabled-num' );
+					const list = head.nextElementSibling;
+					if ( num && list ) {
+						num.textContent = String( countEnabled( list ) );
+					}
+				} );
+		}
+
+		/**
 		 * Save the Integrations tab's per-ability toggles. Reuses the same
 		 * aafm_save_abilities action and flat aafm_abilities[] contract as the
 		 * Abilities tab; the stored option is one shared enabled-ability list.
@@ -573,6 +636,12 @@
 					json = await res.json();
 				} catch {
 					json = { success: false };
+				}
+				if ( json?.success ) {
+					this.#refreshLocalCounts(
+						form,
+						json.data?.enabled ?? []
+					);
 				}
 				if ( status ) {
 					status.textContent = json?.success
@@ -814,6 +883,20 @@
 					json = await res.json();
 				} catch {
 					json = { success: false };
+				}
+				if ( json?.success ) {
+					this.#refreshLocalCounts( form, json.data?.enabled ?? [] );
+					const statTotal = document.querySelector(
+						'.aafm-stat-enabled-num'
+					);
+					if (
+						statTotal &&
+						undefined !== json.data?.ability_enabled_total
+					) {
+						statTotal.textContent = String(
+							json.data.ability_enabled_total
+						);
+					}
 				}
 				if ( status ) {
 					status.textContent = json?.success

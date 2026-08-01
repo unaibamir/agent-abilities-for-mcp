@@ -123,8 +123,10 @@ final class AbilitiesDisclosureTest extends TestCase {
 			}
 		}
 
+		// The enabled figure is wrapped in its own span so admin.js can patch it after a save
+		// (see the Abilities tab section-count staleness fix); match the wrapped form.
 		$this->assertMatchesRegularExpression(
-			'~aafm-count-badge[^>]*>\s*1\s*/\s*' . $content_total . '~',
+			'~aafm-count-badge[^>]*><span class="aafm-enabled-num">1</span>\s*/\s*' . $content_total . '~',
 			$html,
 			'Content subject count badge must show enabled/total (1 / ' . $content_total . ').'
 		);

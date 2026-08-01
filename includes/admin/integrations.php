@@ -266,16 +266,21 @@ function aafm_render_integrations_tab(): void {
 
 		echo '<span class="abilities-count">';
 		if ( null !== $counts ) {
+			// The enabled figure is wrapped in its own span so admin.js can patch just that
+			// number after a save, instead of the whole card header reading stale ("0 / 52")
+			// until the next full page load. wp_kses (not esc_html) because the composed
+			// string now carries that one span of our own trusted markup around an escaped int.
 			printf(
 				'<p class="aafm-integration-count">%s</p>',
-				esc_html(
+				wp_kses(
 					sprintf(
-						/* translators: 1: enabled abilities, 2: total abilities, 3: read/write/destructive breakdown, e.g. "27 read, 23 write, 2 destructive". */
-						__( '%1$d / %2$d · %3$s', 'agent-abilities-for-mcp' ),
-						(int) $counts['enabled'],
+						/* translators: 1: enabled abilities (wrapped for a live update after save), 2: total abilities, 3: read/write/destructive breakdown, e.g. "27 read, 23 write, 2 destructive". */
+						__( '%1$s / %2$d · %3$s', 'agent-abilities-for-mcp' ),
+						'<span class="aafm-enabled-num">' . esc_html( (string) (int) $counts['enabled'] ) . '</span>',
 						(int) $counts['total'],
-						aafm_integration_count_breakdown( $counts )
-					)
+						esc_html( aafm_integration_count_breakdown( $counts ) )
+					),
+					aafm_admin_allowed_html()
 				)
 			);
 		}

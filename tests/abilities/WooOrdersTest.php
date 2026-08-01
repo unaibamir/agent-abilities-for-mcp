@@ -28,6 +28,7 @@ final class WooOrdersTest extends TestCase {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
+		$this->unlock_high_risk_abilities();
 		// stub_woocommerce() adds manage_woocommerce to administrator and defines the base WC classes.
 		$this->stub_woocommerce();
 		// Seed order test fixtures including a PII-carrying order.

@@ -68,6 +68,10 @@ final class CatalogTest extends TestCase {
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		// "The whole catalog" is the point of this helper, and aafm_get_enabled_abilities() withholds
+		// the locked high-risk set, so the floor has to be down for the walk to reach every name. The
+		// floor itself is proved in tests/audit/HighRiskTest.php, not here.
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}

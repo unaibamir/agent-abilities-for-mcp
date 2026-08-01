@@ -72,6 +72,10 @@ final class SecurityRegressionTest extends TestCase {
 	 */
 	private function register_whole_catalog(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		// This suite's claim is that no ability anywhere is reachable without a real gate, which is
+		// strictly stronger when the high-risk floor is down: with the floor up the eight locked
+		// abilities would simply be absent and would go unchecked rather than proven safe.
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_enabled_abilities', array_keys( aafm_get_abilities_registry() ) );
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}

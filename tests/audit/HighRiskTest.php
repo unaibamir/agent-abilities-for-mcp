@@ -85,6 +85,56 @@ final class HighRiskTest extends TestCase {
 		$this->assertFalse( aafm_high_risk_unlocked() );
 	}
 
+	/**
+	 * Put a high-risk name into the LIVE registry for the duration of a test.
+	 *
+	 * The enabled-abilities reader intersects the stored option against the live registry, and that
+	 * registry is host-gated: with WooCommerce inactive (which is the case under PHPUnit) every wc-*
+	 * row is absent, so an assertion that a locked ability is missing from the enabled set would pass
+	 * on the host gate alone and prove nothing about the floor. Registering the row here takes the
+	 * host gate out of the picture, leaving the subtraction as the only thing that can still drop the
+	 * name.
+	 *
+	 * @param string $name Ability name to register.
+	 * @return void
+	 */
+	private function register_high_risk_fixture( string $name ): void {
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ) use ( $name ): array {
+				$registry[ $name ] = array(
+					'label' => 'High-risk fixture',
+					'group' => 'writes',
+				);
+				return $registry;
+			}
+		);
+		aafm_flush_registry_cache();
+	}
+
+	public function test_a_locked_ability_is_never_registered_even_when_enabled(): void {
+		$this->register_high_risk_fixture( 'aafm/wc-create-order-refund' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts', 'aafm/wc-create-order-refund' ) );
+		$enabled = aafm_get_enabled_abilities();
+		$this->assertContains( 'aafm/get-posts', $enabled );
+		$this->assertNotContains( 'aafm/wc-create-order-refund', $enabled );
+	}
+
+	public function test_unlocking_restores_it_to_the_registered_set(): void {
+		$this->register_high_risk_fixture( 'aafm/wc-create-order-refund' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/wc-create-order-refund' ) );
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$this->assertContains( 'aafm/wc-create-order-refund', aafm_get_enabled_abilities() );
+	}
+
+	public function test_the_stored_option_is_never_rewritten_by_the_subtraction(): void {
+		$this->register_high_risk_fixture( 'aafm/wc-create-order-refund' );
+		$stored = array( 'aafm/wc-create-order-refund' );
+		update_option( 'aafm_enabled_abilities', $stored );
+		aafm_get_enabled_abilities();
+		$this->assertSame( $stored, get_option( 'aafm_enabled_abilities' ) );
+	}
+
 	public function test_every_builtin_names_a_registered_ability(): void {
 		$registry = aafm_get_abilities_registry_full();
 		foreach ( aafm_high_risk_abilities_builtin() as $name ) {

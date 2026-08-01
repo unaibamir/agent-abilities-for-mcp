@@ -350,7 +350,7 @@ function aafm_quickconnect_render(): void {
 									<span class="sn">1</span>
 									<div class="sc">
 										<div class="sl"><?php esc_html_e( 'Create a dedicated agent user', 'agent-abilities-for-mcp' ); ?></div>
-										<div class="sd"><?php echo wp_kses( __( 'A real, low-privilege <code>subscriber</code> account. The agent signs in as this user, so its reach is capped by that role from the start.', 'agent-abilities-for-mcp' ), array( 'code' => array() ) ); ?></div>
+										<div class="sd"><?php echo wp_kses( __( 'A real, low-privilege <code>subscriber</code> account. The agent signs in as this user, so its reach is capped by that role from the start. One thing to know: the Application Password you generate next is a whole-site credential, not something this plugin can scope. It works anywhere that role can authenticate, REST API and XML-RPC included; the abilities and safety controls below only govern calls made through this plugin\'s MCP endpoint.', 'agent-abilities-for-mcp' ), array( 'code' => array() ) ); ?></div>
 										<div class="aafm-qc-userrow">
 											<input class="aafm-qc-uinput" value="<?php echo esc_attr( $login ); ?>" readonly aria-label="<?php esc_attr_e( 'Agent username', 'agent-abilities-for-mcp' ); ?>">
 											<button type="button" class="aafm-btn aafm-btn-primary aafm-btn-sm" id="aafm-qc-create-user"><?php esc_html_e( 'Create agent user', 'agent-abilities-for-mcp' ); ?></button>

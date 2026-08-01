@@ -1011,6 +1011,9 @@
 				const oauthDcrEnabled = form.querySelector(
 					'input[name="aafm_oauth_dcr_enabled"]'
 				);
+				const highRiskUnlocked = form.querySelector(
+					'input[name="aafm_high_risk_abilities_unlocked"]'
+				);
 				const allowlist = form.querySelector( 'textarea[name="aafm_ip_allowlist"]' );
 
 				const body = new URLSearchParams();
@@ -1038,6 +1041,9 @@
 				}
 				if ( oauthDcrEnabled?.checked ) {
 					body.append( 'aafm_oauth_dcr_enabled', '1' );
+				}
+				if ( highRiskUnlocked?.checked ) {
+					body.append( 'aafm_high_risk_abilities_unlocked', '1' );
 				}
 				body.append( 'aafm_ip_allowlist', allowlist?.value ?? '' );
 

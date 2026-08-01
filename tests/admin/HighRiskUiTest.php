@@ -1,6 +1,6 @@
 <?php
 /**
- * The locked ability row on the Abilities tab.
+ * The locked ability row on the Abilities tab, and the master switch on the Settings tab.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -84,6 +84,78 @@ final class HighRiskUiTest extends TestCase {
 		$this->assertStringContainsString(
 			'name="aafm_abilities[]" value="aafm/wc-create-order-refund"',
 			$this->render_row( 'aafm/wc-create-order-refund' )
+		);
+	}
+
+	/**
+	 * Render the whole Settings tab and return its markup.
+	 *
+	 * @return string
+	 */
+	private function render_settings_tab(): string {
+		ob_start();
+		aafm_render_settings_tab();
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Pull just the master-switch <input> tag out of the Settings markup.
+	 *
+	 * @return string
+	 */
+	private function high_risk_input(): string {
+		$html = $this->render_settings_tab();
+		$this->assertSame(
+			1,
+			preg_match( '/<input[^>]*name="aafm_high_risk_abilities_unlocked"[^>]*>/', $html, $m ),
+			'The master-switch input is missing from the Settings tab.'
+		);
+		return $m[0];
+	}
+
+	public function test_the_section_is_its_own_card_not_the_danger_zone(): void {
+		$html = $this->render_settings_tab();
+		$this->assertStringContainsString( 'High-risk abilities', $html );
+
+		$high_risk_at = strpos( $html, 'High-risk abilities' );
+		$danger_at    = strpos( $html, 'Danger zone' );
+		$this->assertLessThan( $danger_at, $high_risk_at, 'The high-risk card must not be inside or after the Danger zone card.' );
+	}
+
+	public function test_the_switch_defaults_to_off_in_the_markup(): void {
+		$this->assertStringNotContainsString(
+			'name="aafm_high_risk_abilities_unlocked" checked',
+			$this->render_settings_tab()
+		);
+	}
+
+	/**
+	 * The assertion above only catches a `checked` that lands immediately after the name
+	 * attribute, and the house markup puts it after `value="1"`. These two read the input tag
+	 * itself, so the default-off claim holds wherever checked() places the attribute.
+	 */
+	public function test_the_switch_input_carries_no_checked_attribute_by_default(): void {
+		$this->assertStringNotContainsString( 'checked', $this->high_risk_input() );
+	}
+
+	public function test_the_switch_input_reflects_a_stored_unlock(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$this->assertStringContainsString( 'checked', $this->high_risk_input() );
+	}
+
+	/**
+	 * Two things the card has to state outright, because an operator cannot infer either one.
+	 * The floor covers native abilities only, and the enable and disable entries expire on the
+	 * shared retention schedule rather than being kept indefinitely.
+	 */
+	public function test_the_card_says_bridged_abilities_are_not_covered(): void {
+		$this->assertStringContainsString( 'bridged in from other plugins', $this->render_settings_tab() );
+	}
+
+	public function test_the_card_points_at_the_shared_log_retention(): void {
+		$this->assertStringContainsString(
+			'same number of days as everything else in the activity log',
+			$this->render_settings_tab()
 		);
 	}
 }

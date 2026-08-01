@@ -489,6 +489,11 @@ function aafm_render_settings_tab(): void {
 	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div></div>';
 
+	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
+	// screen tells the approving human the app acts with their full capabilities either way - but
+	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
+	echo '<p class="help">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
+
 	$oauth_body = (string) ob_get_clean();
 	aafm_render_section(
 		array(

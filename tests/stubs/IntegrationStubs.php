@@ -260,6 +260,22 @@ PHP;
 	}
 
 	/**
+	 * Define wc_get_order_statuses() alone, without the rest of the WooCommerce surface.
+	 *
+	 * Split out of stub_woocommerce() so a pure unit test that only needs the status vocabulary
+	 * (the detail map's enum resolver) does not have to drag in the WC_Product/WC_Order class
+	 * stubs and their backing stores.
+	 *
+	 * @return void
+	 */
+	protected function stub_wc_order_statuses(): void {
+		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_order_statuses() { return array( "wc-pending" => "Pending", "wc-processing" => "Processing", "wc-on-hold" => "On hold", "wc-completed" => "Completed", "wc-cancelled" => "Cancelled", "wc-refunded" => "Refunded", "wc-failed" => "Failed" ); }' );
+		}
+	}
+
+	/**
 	 * Define the minimal WooCommerce host surface so detection reports WooCommerce active and the
 	 * product abilities can list/read/create/update/delete through the WC CRUD layer.
 	 *
@@ -404,10 +420,7 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
-		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
-			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order_statuses() { return array( "wc-pending" => "Pending", "wc-processing" => "Processing", "wc-on-hold" => "On hold", "wc-completed" => "Completed", "wc-cancelled" => "Cancelled", "wc-refunded" => "Refunded", "wc-failed" => "Failed" ); }' );
-		}
+		$this->stub_wc_order_statuses();
 
 		// Note and refund stubs (W4-WC2.3). These delegate entirely to WcOrderStubStore so tests
 		// can seed notes/refunds per test and assert round-trip reads/creates/deletes without WC.

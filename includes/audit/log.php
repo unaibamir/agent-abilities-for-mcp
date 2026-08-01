@@ -142,6 +142,89 @@ function aafm_source_ip(): string {
 }
 
 /**
+ * Cap on how many failed Application Password attempts against the MCP endpoint one source IP
+ * can add to the activity log inside AAFM_FAILED_AUTH_LOG_WINDOW. Mirrors the reasoning behind
+ * aafm_oauth_log_event()'s 'bearer' skip (includes/oauth/audit.php): a real signal still gets a
+ * real audit row, but the number of rows one attacker can generate stays bounded, so hammering
+ * the endpoint with bad credentials cannot grow the log without limit.
+ */
+if ( ! defined( 'AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW' ) ) {
+	define( 'AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW', 5 );
+}
+
+/**
+ * The rolling window, in seconds, the cap above applies to.
+ */
+if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
+	define( 'AAFM_FAILED_AUTH_LOG_WINDOW', 10 * MINUTE_IN_SECONDS );
+}
+
+/**
+ * Log a failed Application Password authentication attempt against the MCP endpoint.
+ *
+ * Hooked on WordPress core's `application_password_failed_authentication` action. Core fires it
+ * from `wp_authenticate_application_password()` on the `determine_current_user` filter for an
+ * unknown username, application passwords being disabled, or a wrong password - and passes only a
+ * WP_Error, never the presented username or password, so there is nothing credential-shaped to log
+ * even by accident. Before this hook existed, a wrong Application Password against the endpoint
+ * produced no audit row at all: aafm_transport_permission_callback() returns its 401 before
+ * aafm_log_activity() is ever reached, so credential stuffing against the endpoint was invisible in
+ * the plugin's own log.
+ *
+ * Two guards keep this narrow, matching how the OAuth bearer resolver treats the same class of
+ * signal:
+ * - Scoped to the MCP route only, via aafm_oauth_request_targets_mcp_route() - the same
+ *   determine_current_user-safe route check the OAuth bearer resolver uses (validator.php).
+ *   Core fires this action for ANY REST or XML-RPC request presenting Basic Auth, so without this
+ *   guard a failed Application Password attempt against an unrelated route - core's own REST API,
+ *   another plugin's - would land in this plugin's audit log too.
+ * - Bounded per source IP (AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW), the same anti-flood reasoning
+ *   aafm_oauth_log_event() applies to a fabricated OAuth bearer, via a cap rather than an outright
+ *   skip: unlike a fabricated bearer, this event is already proven real, because WordPress core
+ *   itself just checked a presented credential and rejected it.
+ *
+ * The function_exists() guards mirror aafm_oauth_resolve_current_user()'s own, and for the same
+ * reason: this action can fire during determine_current_user before this plugin's own
+ * plugins_loaded callback has required every file it depends on, if another active plugin
+ * resolves the current user earlier in the load order. aafm_oauth_request_targets_mcp_route()
+ * itself calls aafm_mcp_rest_route() (bootstrap.php) with no internal guard, so that dependency
+ * is checked here too, exactly as aafm_oauth_resolve_current_user() checks it before calling the
+ * same route helper. When either is missing this simply skips logging rather than fatal on an
+ * undefined function.
+ *
+ * @param mixed $error The authentication WP_Error core just raised. Never read or logged - its
+ *                      presence is the whole signal.
+ * @return void
+ */
+function aafm_log_failed_application_password_auth( $error ): void {
+	unset( $error );
+
+	if ( ! function_exists( 'aafm_mcp_rest_route' ) || ! function_exists( 'aafm_oauth_request_targets_mcp_route' ) ) {
+		return;
+	}
+	if ( ! aafm_oauth_request_targets_mcp_route() ) {
+		return;
+	}
+
+	$ip    = aafm_source_ip();
+	$key   = 'aafm_fa_' . ( '' !== $ip ? md5( $ip ) : 'unknown' );
+	$count = (int) get_transient( $key );
+	if ( $count >= AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW ) {
+		return; // Bounded: this IP already used its cap for the current window.
+	}
+	set_transient( $key, $count + 1, AAFM_FAILED_AUTH_LOG_WINDOW );
+
+	aafm_log_activity(
+		array(
+			'ability' => '(transport)',
+			'status'  => 'denied',
+			'detail'  => __( 'Invalid Application Password', 'agent-abilities-for-mcp' ),
+		)
+	);
+}
+add_action( 'application_password_failed_authentication', 'aafm_log_failed_application_password_auth' );
+
+/**
  * Normalize a detail string before it reaches the column.
  *
  * The allowlist in includes/audit/detail.php is the real guarantee that only identifier-safe

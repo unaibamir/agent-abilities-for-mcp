@@ -309,6 +309,7 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_save_settings', 'aafm_ajax_save_settings' );
 		add_action( 'wp_ajax_aafm_clear_log', 'aafm_ajax_clear_log' );
 		add_action( 'wp_ajax_aafm_get_log_page', 'aafm_ajax_get_log_page' );
+		add_action( 'admin_post_aafm_export_log', 'aafm_handle_export_activity_log' );
 		add_action( 'wp_ajax_aafm_reset_plugin', 'aafm_ajax_reset_plugin' );
 		add_action( 'wp_ajax_aafm_create_agent_user', 'aafm_ajax_create_agent_user' );
 		add_action( 'wp_ajax_aafm_test_connection', 'aafm_ajax_test_connection' );

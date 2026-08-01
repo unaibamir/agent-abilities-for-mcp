@@ -700,10 +700,12 @@ function aafm_ajax_clear_log(): void {
  * Write a tamper-evident marker row recording that the activity log was cleared.
  *
  * Shared by the direct "Clear log" action and aafm_reset_plugin() (which also empties the
- * log), so either path leaves the same trace: who cleared it and when. Uses a synthetic
+ * log), so either path leaves the same trace: who cleared it and when. The row says what it is
+ * in its event_type, which is the column that exists for that. It also keeps a synthetic
  * ability name that can never collide with a real ability (the ability column is free text,
- * not registry-validated) so it renders in the Activity tab like any other row but is never
- * mistaken for an actual agent call.
+ * not registry-validated) - not because that is still how the row is identified, but because
+ * markers written before schema v5 have no event_type, and keeping the name means an operator's
+ * old and new markers still read as the same event.
  *
  * @return void
  */
@@ -715,6 +717,8 @@ function aafm_log_activity_cleared_marker(): void {
 			'principal_user_id' => (int) $user->ID,
 			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
 			'status'            => 'success',
+			'event_type'        => 'log_cleared',
+			'detail'            => __( 'Activity log cleared', 'agent-abilities-for-mcp' ),
 		)
 	);
 }

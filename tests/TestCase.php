@@ -22,6 +22,12 @@ abstract class TestCase extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 		delete_option( 'aafm_enabled_abilities' );
+		// The high-risk floor is off-by-default, and a test that finds it already lifted would assert
+		// against a security posture no fresh install has. It needs an explicit reset for the same
+		// reason the enabled-abilities option above does: aafm_clear_activity_log() issues a TRUNCATE,
+		// which MySQL treats as DDL and implicitly commits, so any option a suite writes in its own
+		// set_up before calling it escapes the per-test rollback and lands in the next test.
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).

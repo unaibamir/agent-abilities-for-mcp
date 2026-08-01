@@ -44,6 +44,24 @@ trait IntegrationStubs {
 	}
 
 	/**
+	 * Lift the high-risk floor for the current test.
+	 *
+	 * The enabled-abilities reader subtracts the locked high-risk set, so while the floor is up the
+	 * eight money-and-authority WooCommerce abilities never register and every suite that exercises
+	 * their behaviour gets a null ability back. Those suites are testing what the ability does once
+	 * the operator has reached it, which is the state after the master switch is on, so they opt
+	 * into that state here rather than each poking the option by hand.
+	 *
+	 * Call this only where an unlocked category is genuinely the state under test, never to make an
+	 * unrelated failure go away: the floor being up is the default a test has to justify leaving.
+	 *
+	 * @return void
+	 */
+	protected function unlock_high_risk_abilities(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+	}
+
+	/**
 	 * Define the minimal Yoast host surface: the WPSEO_VERSION constant so detection reports Yoast
 	 * active, plus a rendered-head filter so the yoast-get-head ability returns a non-empty string.
 	 *

@@ -28,6 +28,7 @@ final class WooCouponsTest extends TestCase {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
 		$this->force_integration( 'woocommerce' );
+		$this->unlock_high_risk_abilities();
 		$this->stub_woocommerce();
 		$this->stub_wc_coupons();
 		$this->seed_wc_coupons();

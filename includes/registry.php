@@ -226,8 +226,23 @@ function aafm_get_enabled_abilities(): array {
 	$stored = is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
 
 	// Only honor keys that still exist in the registry (stale keys never enable anything).
-	$known = array_keys( aafm_get_abilities_registry() );
-	return array_values( array_intersect( $stored, $known ) );
+	$known   = array_keys( aafm_get_abilities_registry() );
+	$enabled = array_values( array_intersect( $stored, $known ) );
+
+	// The high-risk floor. Locked abilities are removed from the REGISTERED set only; the stored
+	// option keeps the operator's choice untouched, so unlocking the category restores exactly what
+	// was ticked before rather than presenting a blank slate. This is the security boundary for
+	// includes/audit/high-risk.php: the admin lock icon is presentation, this is the thing that
+	// keeps a locked ability out of tools/list entirely.
+	//
+	// The lock state and the high-risk set are read once for the whole list rather than per ability
+	// via aafm_ability_is_locked(): that helper re-runs get_option() and both filters on every call,
+	// and this walks the operator's full enabled list on any request that needs the registered set.
+	if ( aafm_high_risk_unlocked() ) {
+		return $enabled;
+	}
+
+	return array_values( array_diff( $enabled, aafm_high_risk_abilities() ) );
 }
 
 /**

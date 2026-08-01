@@ -399,8 +399,39 @@ final class DetailTest extends TestCase {
 		$row = $this->latest_row();
 		$this->assertSame( 'success', $row['status'] );
 		$this->assertSame( "Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
-		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $row['detail'] );
 		$this->assertStringContainsString( 'value', (string) $row['arg_keys'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	/**
+	 * A refused call is the row an operator most wants a detail on, and it is the one built from
+	 * caller input the ability's own permission check has just rejected.
+	 */
+	public function test_a_denied_call_still_records_what_it_tried_to_touch(): void {
+		update_option( 'aafm_allowed_meta_keys', array( 'subtitle' ) );
+		$post_id = self::factory()->post->create();
+		$this->register_enabled( array( 'aafm/update-post-meta' ) );
+
+		// Registration is done; drop to a role that cannot edit the post, so the decorated
+		// permission callback denies and the execute callback never runs.
+		$this->acting_as( 'subscriber' );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/update-post-meta' )->execute(
+			array(
+				'post_id'  => $post_id,
+				'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- ability-input array key, not a meta query.
+				'value'    => 'CONFIDENTIAL PAYLOAD',
+			)
+		);
+		$this->assertWPError( $result, 'The call must be refused, or this is not testing the denial site.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'denied', $row['status'] );
+		$this->assertSame( "Updated meta key `subtitle` on post #{$post_id}", $row['detail'] );
+		$this->assertStringContainsString( 'value', (string) $row['arg_keys'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+		$this->assertSame( '', get_post_meta( $post_id, 'subtitle', true ), 'The denied write must not have happened.' );
 	}
 
 	/**
@@ -438,6 +469,22 @@ final class DetailTest extends TestCase {
 		$row = $this->latest_row();
 		$this->assertSame( 'success', $row['status'] );
 		$this->assertNull( $row['detail'] );
+	}
+
+	/**
+	 * The argument VALUE must appear in no column of the row, not just in the detail.
+	 *
+	 * @param array<string,mixed> $row An activity row.
+	 * @return void
+	 */
+	private function assertRowIsFreeOfTheValue( array $row ): void {
+		foreach ( $row as $column => $value ) {
+			$this->assertStringNotContainsString(
+				'CONFIDENTIAL',
+				(string) $value,
+				"The argument value leaked into the {$column} column."
+			);
+		}
 	}
 
 	/**

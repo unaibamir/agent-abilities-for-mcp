@@ -57,4 +57,15 @@ final class EventTypeTest extends TestCase {
 		$indexes = $wpdb->get_results( "SHOW INDEX FROM {$table}", ARRAY_A );
 		$this->assertContains( 'event_created', array_column( $indexes, 'Key_name' ) );
 	}
+
+	public function test_detail_sanitiser_strips_markup_and_collapses_whitespace(): void {
+		$this->assertSame(
+			'Created page #482',
+			aafm_sanitize_activity_detail( "  Created  <b>page</b>\n#482 " )
+		);
+	}
+
+	public function test_detail_sanitiser_caps_length(): void {
+		$this->assertSame( 255, strlen( aafm_sanitize_activity_detail( str_repeat( 'a', 400 ) ) ) );
+	}
 }

@@ -68,4 +68,77 @@ final class EventTypeTest extends TestCase {
 	public function test_detail_sanitiser_caps_length(): void {
 		$this->assertSame( 255, strlen( aafm_sanitize_activity_detail( str_repeat( 'a', 400 ) ) ) );
 	}
+
+	public function test_a_caller_that_supplies_neither_key_gets_the_defaults(): void {
+		$id  = aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+			)
+		);
+		$row = $this->fetch_row( $id );
+		$this->assertSame( 'ability_call', $row['event_type'] );
+		$this->assertNull( $row['detail'] );
+	}
+
+	public function test_an_unknown_event_type_falls_back_to_ability_call(): void {
+		$id = aafm_log_activity(
+			array(
+				'ability'    => 'x',
+				'status'     => 'success',
+				'event_type' => 'nonsense',
+			)
+		);
+		$this->assertSame( 'ability_call', $this->fetch_row( $id )['event_type'] );
+	}
+
+	public function test_a_known_event_type_and_detail_are_stored(): void {
+		$id  = aafm_log_activity(
+			array(
+				'ability'    => 'aafm/wc-create-refund',
+				'status'     => 'success',
+				'event_type' => 'ability_enabled',
+				'detail'     => 'Enabled wc-create-refund',
+			)
+		);
+		$row = $this->fetch_row( $id );
+		$this->assertSame( 'ability_enabled', $row['event_type'] );
+		$this->assertSame( 'Enabled wc-create-refund', $row['detail'] );
+	}
+
+	public function test_update_status_without_detail_leaves_the_column_untouched(): void {
+		$id = aafm_log_activity(
+			array(
+				'ability' => 'aafm/create-page',
+				'status'  => 'started',
+				'detail'  => 'seeded',
+			)
+		);
+		aafm_update_activity_status( $id, 'success' );
+		$this->assertSame( 'seeded', $this->fetch_row( $id )['detail'] );
+	}
+
+	public function test_update_status_writes_detail_when_supplied(): void {
+		$id = aafm_log_activity(
+			array(
+				'ability' => 'aafm/create-page',
+				'status'  => 'started',
+			)
+		);
+		aafm_update_activity_status( $id, 'success', null, 'Created page #482' );
+		$this->assertSame( 'Created page #482', $this->fetch_row( $id )['detail'] );
+	}
+
+	/**
+	 * Read a written row straight back out of the table.
+	 *
+	 * @param int $id Row id.
+	 * @return array<string,mixed>
+	 */
+	private function fetch_row( int $id ): array {
+		global $wpdb;
+		$table = aafm_activity_log_table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (array) $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id = %d', $table, $id ), ARRAY_A );
+	}
 }

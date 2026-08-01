@@ -170,6 +170,12 @@ function aafm_sanitize_activity_detail( string $detail ): string {
  *     @type string[] $arg_keys           Input argument keys (values are never logged).
  *     @type string   $client_id          OAuth client id the call is attributed to, or '' for a
  *                                        non-OAuth (Application Password) call. Optional.
+ *     @type string   $event_type         What kind of event the row records, one of
+ *                                        aafm_activity_event_types(). Optional; anything else
+ *                                        (including an omitted key) means 'ability_call'.
+ *     @type string   $detail             Short human-readable note about what the event touched.
+ *                                        Optional; omitted leaves the column NULL, so "no detail
+ *                                        declared" stays distinct from "declared and empty".
  * }
  * @return int The inserted row id (0 on failure).
  */
@@ -192,9 +198,15 @@ function aafm_log_activity( array $record ): int {
 			'arg_keys'          => $arg_keys,
 			'source_ip'         => aafm_source_ip(),
 			'client_id'         => isset( $record['client_id'] ) ? (string) $record['client_id'] : '',
+			'event_type'        => in_array( $record['event_type'] ?? '', aafm_activity_event_types(), true )
+				? (string) $record['event_type']
+				: 'ability_call',
+			'detail'            => isset( $record['detail'] )
+				? aafm_sanitize_activity_detail( (string) $record['detail'] )
+				: null,
 			'created_at'        => current_time( 'mysql', true ),
 		),
-		array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s' )
+		array( '%s', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 	);
 
 	$row_id = (int) $wpdb->insert_id;
@@ -239,15 +251,18 @@ function aafm_prune_activity_log(): void {
  *
  * $result_count (L5) is written only when the caller supplies one - omitting it leaves the
  * column at its NULL default rather than overwriting it, so a write call or an unmeasured
- * result never gets a fabricated magnitude.
+ * result never gets a fabricated magnitude. $detail follows the same rule: a resolve that has
+ * nothing new to say leaves whatever the insert wrote in place rather than blanking it.
  *
- * @param int      $row_id       Row id returned by aafm_log_activity().
- * @param string   $status       One of success|error|denied.
- * @param int|null $result_count Optional magnitude of a list/read call's result. Null (default)
- *                               leaves the column untouched.
+ * @param int         $row_id       Row id returned by aafm_log_activity().
+ * @param string      $status       One of success|error|denied.
+ * @param int|null    $result_count Optional magnitude of a list/read call's result. Null (default)
+ *                                  leaves the column untouched.
+ * @param string|null $detail       Optional note about what the call touched, known only once it
+ *                                  resolved. Null (default) leaves the column untouched.
  * @return void
  */
-function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null ): void {
+function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): void {
 	global $wpdb;
 	if ( $row_id <= 0 ) {
 		return;
@@ -259,6 +274,10 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 	if ( null !== $result_count ) {
 		$data['result_count'] = $result_count;
 		$format[]             = '%d';
+	}
+	if ( null !== $detail ) {
+		$data['detail'] = aafm_sanitize_activity_detail( $detail );
+		$format[]       = '%s';
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching

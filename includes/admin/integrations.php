@@ -448,15 +448,13 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 		esc_attr( $risk ),
 		$disabled ? ' aria-disabled="true"' : ''
 	);
+
 	// An inactive host has nothing enabled, so a disabled row never renders checked; it also
-	// carries the disabled attribute so it stays out of the submitted aafm_abilities[] list.
-	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s%4$s><span class="aafm-switch-track"></span></label>',
-		esc_attr( $name ),
-		esc_attr( $title_id ),
-		$disabled ? '' : checked( in_array( $name, $enabled, true ), true, false ),
-		$disabled ? ' disabled' : ''
-	);
+	// carries the disabled attribute so it stays out of the submitted aafm_abilities[] list. A
+	// locked high-risk ability gets the same lock treatment as the Abilities tab instead of a
+	// checkbox - see aafm_render_ability_toggle_control(). The two are independent: a row can be
+	// host-disabled, lock-disabled, both, or neither.
+	$locked = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -468,8 +466,21 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	if ( 'read' === $risk ) {
 		echo ' <span class="aafm-badge aafm-badge-readonly aafm-readonly-badge">' . esc_html__( 'read-only', 'agent-abilities-for-mcp' ) . '</span>';
 	}
+
+	// Membership in the high-risk category does not change when the operator unlocks it, so the
+	// badge stays on an unlocked, enabled row too - mirrors aafm_render_ability_row().
+	if ( aafm_ability_is_high_risk( $name ) ) {
+		echo ' <span class="aafm-badge aafm-badge-high-risk">' . esc_html__( 'high-risk', 'agent-abilities-for-mcp' ) . '</span>';
+	}
+
 	printf(
-		'</div><p class="aafm-ability-hint">%1$s</p></div></div>',
+		'</div><p class="aafm-ability-hint">%1$s</p>',
 		esc_html( $hint )
 	);
+
+	if ( $locked ) {
+		echo '<p class="aafm-ability-locked-note">' . esc_html__( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' ) . '</p>';
+	}
+
+	echo '</div></div>';
 }

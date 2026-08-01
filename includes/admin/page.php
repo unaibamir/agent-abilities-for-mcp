@@ -1517,27 +1517,13 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-ability-title-' . sanitize_key( $name );
 
+	echo '<div class="aafm-ability-row">';
+
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
 	// this just stops the screen offering a switch that the registration walk would ignore. Native
 	// aafm/* rows only - a bridged ability is registered through its own walk that the floor never
 	// touches, and this renderer is never called for one (the Bridge tab has its own).
-	$locked = aafm_ability_is_locked( $name );
-
-	echo '<div class="aafm-ability-row">';
-	if ( $locked ) {
-		printf(
-			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
-			esc_attr__( 'Locked', 'agent-abilities-for-mcp' ),
-			wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() )
-		);
-	} else {
-		printf(
-			'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s><span class="aafm-switch-track"></span></label>',
-			esc_attr( $name ),
-			esc_attr( $title_id ),
-			checked( in_array( $name, $enabled, true ), true, false )
-		);
-	}
+	$locked = aafm_render_ability_toggle_control( $name, $title_id, $enabled );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(

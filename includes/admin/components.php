@@ -92,6 +92,52 @@ function aafm_render_section( array $args ): void {
 }
 
 /**
+ * Echo the toggle control for one ability row: a lock icon when the ability is high-risk and
+ * locked, or a checkbox otherwise.
+ *
+ * Shared by aafm_render_ability_row() (the Abilities tab) and
+ * aafm_render_integration_ability_row() (the Integrations tab) so both surfaces render the same
+ * lock treatment from one place. This exists because they didn't: the Integrations renderer never
+ * learned about the lock at all and kept emitting a live checkbox for a locked ability, which is
+ * exactly how a high-risk ability got enabled, saved, and logged from a card whose master switch
+ * was off.
+ *
+ * STRUCTURAL ONLY, same convention as the rest of this file: `$name` and `$title_id` are escaped
+ * here; the caller owns everything else about the row.
+ *
+ * @param string            $name          Ability name.
+ * @param string            $title_id      Id of the row's <h4>, referenced via aria-labelledby.
+ * @param array<int,string> $enabled       Enabled ability names.
+ * @param bool              $host_disabled True when the row's host integration is inactive - an
+ *                                         unlocked checkbox then renders disabled so it never
+ *                                         submits. Ignored when the ability is locked, since a
+ *                                         locked row never renders a checkbox at all.
+ * @return bool True when the ability is locked (so the caller knows to render the locked note).
+ */
+function aafm_render_ability_toggle_control( string $name, string $title_id, array $enabled, bool $host_disabled = false ): bool {
+	$locked = aafm_ability_is_locked( $name );
+
+	if ( $locked ) {
+		printf(
+			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
+			esc_attr__( 'Locked', 'agent-abilities-for-mcp' ),
+			wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() )
+		);
+		return true;
+	}
+
+	printf(
+		'<label class="aafm-switch"><input type="checkbox" name="aafm_abilities[]" value="%1$s" aria-labelledby="%2$s" %3$s%4$s><span class="aafm-switch-track"></span></label>',
+		esc_attr( $name ),
+		esc_attr( $title_id ),
+		$host_disabled ? '' : checked( in_array( $name, $enabled, true ), true, false ),
+		$host_disabled ? ' disabled' : ''
+	);
+
+	return false;
+}
+
+/**
  * Echo a labelled set-row: a `.aafm-set-label` (label text + optional `.opt`
  * sub-label) beside a `.aafm-set-control` (the pre-built control markup), with an
  * optional `.help` element below.

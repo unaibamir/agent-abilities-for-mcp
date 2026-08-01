@@ -1,6 +1,7 @@
 <?php
 /**
- * The locked ability row on the Abilities tab, and the master switch on the Settings tab.
+ * The locked ability row on the Abilities and Integrations tabs, and the master switch on the
+ * Settings tab.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -85,6 +86,59 @@ final class HighRiskUiTest extends TestCase {
 			'name="aafm_abilities[]" value="aafm/wc-create-order-refund"',
 			$this->render_row( 'aafm/wc-create-order-refund' )
 		);
+	}
+
+	/**
+	 * Render one Integrations-tab ability row and return its markup.
+	 *
+	 * Mirrors render_row() above but drives aafm_render_integration_ability_row() - the renderer
+	 * that shipped without a lock branch at all, so a locked ability's checkbox rendered live from
+	 * a card whose master switch was off. It shares the lock treatment with the Abilities-tab
+	 * renderer via aafm_render_ability_toggle_control(); these tests pin that both renderers agree.
+	 *
+	 * @param string $name Ability name.
+	 * @return string
+	 */
+	private function render_integration_row( string $name ): string {
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertArrayHasKey( $name, $registry, "Unknown ability: $name" );
+
+		ob_start();
+		aafm_render_integration_ability_row(
+			array( 'name' => $name ) + $registry[ $name ],
+			array(),
+			aafm_ability_disclosures()
+		);
+		return (string) ob_get_clean();
+	}
+
+	public function test_an_integrations_tab_locked_row_renders_no_checkbox(): void {
+		$html = $this->render_integration_row( 'aafm/wc-create-order-refund' );
+		$this->assertStringNotContainsString( 'type="checkbox"', $html );
+		$this->assertStringContainsString( 'aafm-ability-locked', $html );
+	}
+
+	public function test_an_integrations_tab_locked_row_shows_the_high_risk_badge_and_note(): void {
+		$html = $this->render_integration_row( 'aafm/wc-create-order-refund' );
+		$this->assertStringContainsString( 'aafm-badge-high-risk', $html );
+		$this->assertStringContainsString( 'High-risk abilities', $html );
+	}
+
+	public function test_an_integrations_tab_unlocked_high_risk_row_still_renders_a_checkbox(): void {
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$html = $this->render_integration_row( 'aafm/wc-create-order-refund' );
+		$this->assertStringContainsString( 'type="checkbox"', $html );
+		$this->assertStringContainsString(
+			'name="aafm_abilities[]" value="aafm/wc-create-order-refund"',
+			$html
+		);
+	}
+
+	public function test_an_integrations_tab_ordinary_row_is_unchanged(): void {
+		$html = $this->render_integration_row( 'aafm/get-posts' );
+		$this->assertStringContainsString( 'type="checkbox"', $html );
+		$this->assertStringNotContainsString( 'aafm-badge-high-risk', $html );
+		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
 	}
 
 	/**

@@ -1281,6 +1281,19 @@
 			// allowed to render - older responses are dropped.
 			let loadToken = 0;
 
+			// Light the segmented button matching `filter` and dim the rest. Called only from
+			// inside load() - once on success, and once on failure to snap the buttons back to
+			// the last filter that actually loaded - so the active button can never disagree
+			// with what the table and the export link are actually showing.
+			const setActiveFilterButton = ( filter ) => {
+				segButtons.forEach( ( b ) => {
+					const on = b.dataset.filter === filter;
+					b.classList.toggle( 'is-active', on );
+					b.classList.toggle( 'on', on );
+					b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+				} );
+			};
+
 			const load = async ( page, filter ) => {
 				const token = ++loadToken;
 				const pagerStatus = document.querySelector( '.aafm-pager-status' );
@@ -1296,7 +1309,9 @@
 					return;
 				}
 				if ( ! json?.success ) {
-					// Leave the current view in place and restore the pager label.
+					// The request failed: leave the rows and export link on the last filter that
+					// actually loaded, and snap the segmented buttons back to agree with it.
+					setActiveFilterButton( wrap.dataset.filter ?? 'all' );
 					this.#updatePager(
 						Number( wrap.dataset.page ) || 1,
 						Number( wrap.dataset.totalPages ) || 1
@@ -1308,6 +1323,7 @@
 				wrap.dataset.page = String( data.page ?? 1 );
 				wrap.dataset.filter = String( data.filter ?? filter );
 				wrap.dataset.totalPages = String( data.total_pages ?? 1 );
+				setActiveFilterButton( wrap.dataset.filter );
 				this.#updatePager(
 					Number( data.page ) || 1,
 					Number( data.total_pages ) || 1
@@ -1321,15 +1337,11 @@
 
 			segButtons.forEach( ( btn ) => {
 				btn.addEventListener( 'click', () => {
-					const filter = btn.dataset.filter ?? 'all';
-					segButtons.forEach( ( b ) => {
-						const on = b === btn;
-						b.classList.toggle( 'is-active', on );
-						b.classList.toggle( 'on', on );
-						b.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
-					} );
-					// A filter change always restarts at page 1.
-					load( 1, filter );
+					// A filter change always restarts at page 1. The active button itself is set
+					// by load() once the request resolves, not here - a failed request must never
+					// leave the clicked filter looking active while the data underneath it is
+					// still the old one.
+					load( 1, btn.dataset.filter ?? 'all' );
 				} );
 			} );
 

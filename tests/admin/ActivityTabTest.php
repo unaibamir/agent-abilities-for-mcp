@@ -125,6 +125,63 @@ final class ActivityTabTest extends TestCase {
 		$this->assertSame( 'aafm/activity-log-cleared', $rows[0]['ability'] );
 	}
 
+	public function test_the_header_row_is_the_v5_six(): void {
+		$html = $this->render_activity_tab();
+		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {
+			$this->assertStringContainsString( '<th>' . $header, $html );
+		}
+		$this->assertStringNotContainsString( '<th>Ability', $html );
+	}
+
+	/**
+	 * The acceptance test from 146 section 7.3, written against the exact shape of the rows
+	 * already sitting in the operator's bench log: no event_type, no detail supplied. Such a row
+	 * still has to render, with the detail cell simply empty.
+	 */
+	public function test_a_legacy_row_renders_with_an_empty_detail_cell(): void {
+		// Exactly the shape of a row written before v5: no event_type, no detail supplied.
+		aafm_log_activity(
+			array(
+				'ability'  => 'aafm/get-posts',
+				'status'   => 'success',
+				'arg_keys' => array( 'per_page' ),
+			)
+		);
+
+		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
+		$this->assertStringContainsString( 'aafm/get-posts', $html );
+		$this->assertStringContainsString( 'per_page', $html );
+		$this->assertSame( 6, substr_count( $html, '<td' ) );
+	}
+
+	public function test_the_empty_state_spans_all_six_columns(): void {
+		$this->assertStringContainsString( 'colspan="6"', aafm_activity_rows_html( array() ) );
+	}
+
+	public function test_a_detail_bearing_row_renders_its_detail(): void {
+		aafm_log_activity(
+			array(
+				'ability'    => 'aafm/create-page',
+				'status'     => 'success',
+				'event_type' => 'ability_call',
+				'detail'     => 'Created page #482',
+			)
+		);
+		$this->assertStringContainsString( 'Created page #482', aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) ) );
+	}
+
+	/**
+	 * Render the activity tab as an administrator and return its markup.
+	 *
+	 * @return string
+	 */
+	private function render_activity_tab(): string {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_render_activity_tab();
+		return (string) ob_get_clean();
+	}
+
 	/**
 	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
 	 * Mirrors the pattern in BridgeDirectorySaveTest / OauthRevokeAjaxTest.

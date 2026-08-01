@@ -1239,6 +1239,23 @@
 		}
 
 		/**
+		 * Keep the "Export CSV" link's filter query arg in step with the currently selected
+		 * status filter, so a click always exports what the operator is looking at rather than
+		 * whatever filter happened to be active on first page load.
+		 *
+		 * @param {string} filter One of all|success|error|denied.
+		 */
+		#syncExportLinkFilter( filter ) {
+			const link = document.querySelector( '#aafm-export-log' );
+			if ( ! link ) {
+				return;
+			}
+			const url = new URL( link.href, window.location.origin );
+			url.searchParams.set( 'filter', filter );
+			link.href = url.toString();
+		}
+
+		/**
 		 * Wire the activity log's status filter (segmented buttons) and Prev/Next pager.
 		 *
 		 * Both are server-side: only one page of rows is ever in the DOM, so a filter or a
@@ -1299,6 +1316,7 @@
 				if ( num && typeof data.total === 'number' ) {
 					num.textContent = new Intl.NumberFormat().format( data.total );
 				}
+				this.#syncExportLinkFilter( wrap.dataset.filter );
 			};
 
 			segButtons.forEach( ( btn ) => {

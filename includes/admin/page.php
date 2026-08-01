@@ -840,6 +840,40 @@ function aafm_ajax_get_log_page(): void {
 }
 
 /**
+ * The admin_post handler that streams the activity log as a CSV download.
+ *
+ * Not AJAX - a browser navigation to admin-post.php so the response can be a file download rather
+ * than JSON. Nonce and capability are checked the same way the AJAX handlers on this page are,
+ * just via check_admin_referer() (GET-safe) instead of check_ajax_referer(). The actual export is
+ * aafm_export_activity_csv(), kept separate so it is testable without a request.
+ *
+ * @return void
+ */
+function aafm_handle_export_activity_log(): void {
+	check_admin_referer( 'aafm_admin' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) );
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified above.
+	$filter = isset( $_GET['filter'] ) ? sanitize_key( wp_unslash( (string) $_GET['filter'] ) ) : 'all';
+	if ( ! in_array( $filter, array( 'all', 'success', 'error', 'denied' ), true ) ) {
+		$filter = 'all';
+	}
+
+	$filename = sanitize_file_name(
+		get_bloginfo( 'name' ) . '-activity-log-' . gmdate( 'Y-m-d' ) . '.csv'
+	);
+
+	nocache_headers();
+	header( 'Content-Type: text/csv; charset=utf-8' );
+	header( 'Content-Disposition: attachment; filename="' . $filename . '"' );
+
+	aafm_export_activity_csv( aafm_activity_filter_status( $filter ) );
+	exit;
+}
+
+/**
  * Normalize activity rows to a flat, JSON-safe shape for the client renderer.
  *
  * The JS builds each table cell with textContent (never innerHTML), so it needs plain values,
@@ -1806,6 +1840,24 @@ function aafm_render_activity_tab(): void {
 		esc_html( $count_note )
 	);
 
+	// Export link carries the filter as a query arg so "export what I'm looking at" holds; it
+	// starts at "all" (the filter the tab always opens on) and admin.js keeps it in sync with the
+	// segmented filter buttons as the operator switches between them.
+	$export_url = wp_nonce_url(
+		add_query_arg(
+			array(
+				'action' => 'aafm_export_log',
+				'filter' => 'all',
+			),
+			admin_url( 'admin-post.php' )
+		),
+		'aafm_admin'
+	);
+	printf(
+		'<a href="%1$s" class="aafm-btn aafm-btn-secondary" id="aafm-export-log">%2$s</a> ',
+		esc_url( $export_url ),
+		esc_html__( 'Export CSV', 'agent-abilities-for-mcp' )
+	);
 	echo '<button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-clear-log">' . esc_html__( 'Clear log', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-clear-status" aria-live="polite"></span>';
 	echo '</div>';
 
@@ -1869,6 +1921,80 @@ function aafm_activity_page_size(): int {
  */
 function aafm_activity_filter_status( string $filter ): ?string {
 	return in_array( $filter, array( 'success', 'error', 'denied' ), true ) ? $filter : null;
+}
+
+/**
+ * Neutralise a spreadsheet formula prefix in one CSV cell.
+ *
+ * Every field the log stores is a constrained identifier, so this is defence in depth rather than
+ * a live hole. It exists because a CSV export's most likely destination is a spreadsheet, and
+ * detail and arg_keys are the widest fields in the table.
+ *
+ * @param string $value Cell value.
+ * @return string
+ */
+function aafm_csv_cell( string $value ): string {
+	return ( '' !== $value && false !== strpbrk( $value[0], "=+-@\t\r" ) ) ? "'" . $value : $value;
+}
+
+/**
+ * Stream the activity log to php://output as CSV.
+ *
+ * Batched at aafm_query_activity()'s existing 200-row page cap rather than pulling the whole
+ * table in one query - that cap is a safety property, and routing around it would trade a bounded
+ * query for an unbounded one on a table that can hold tens of thousands of rows. Memory stays flat
+ * regardless of table size: each page is fetched, written, and released before the next page loads.
+ *
+ * @param string|null $status Optional status filter, matching the tab's current filter.
+ * @return void
+ */
+function aafm_export_activity_csv( ?string $status = null ): void {
+	$columns = array(
+		'created_at',
+		'event_type',
+		'ability',
+		'detail',
+		'status',
+		'arg_keys',
+		'principal_login',
+		'principal_user_id',
+		'source_ip',
+		'client_id',
+		'result_count',
+	);
+
+	// php://output is a stream wrapper, not a real filesystem path, so WP_Filesystem (which only
+	// targets the real filesystem) cannot write to it - fopen()/fclose() are the correct tool here.
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
+	$out = fopen( 'php://output', 'w' );
+	if ( false === $out ) {
+		return;
+	}
+	fputcsv( $out, $columns );
+
+	$page      = 1;
+	$row_count = 200;
+	while ( 200 === $row_count ) {
+		$rows      = aafm_query_activity(
+			array(
+				'per_page' => 200,
+				'page'     => $page,
+				'status'   => $status,
+			)
+		);
+		$row_count = count( $rows );
+		foreach ( $rows as $row ) {
+			$line = array();
+			foreach ( $columns as $column ) {
+				$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
+			}
+			fputcsv( $out, $line );
+		}
+		++$page;
+	}
+
+	// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
+	fclose( $out );
 }
 
 /**

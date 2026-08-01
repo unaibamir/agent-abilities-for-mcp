@@ -734,6 +734,104 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * PayFast's official WooCommerce gateway stores its IPN-signing secret under the literal field
+	 * name "passphrase" - missed by the original pattern, which matches "password", not "pass".
+	 */
+	public function test_get_payment_gateway_redacts_passphrase(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title'      => 'PayPal',
+					'passphrase' => 'payfast-style-signing-secret',
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayNotHasKey( 'passphrase', $res['settings'], 'A "passphrase" key must be redacted.' );
+	}
+
+	/**
+	 * PayU-style gateways sign requests with a "salt" value.
+	 */
+	public function test_get_payment_gateway_redacts_salt(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title' => 'PayPal',
+					'salt'  => 'payu-style-hash-salt',
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayNotHasKey( 'salt', $res['settings'], 'A "salt" key must be redacted.' );
+	}
+
+	/**
+	 * Pin/certificate/pem round out the expanded denylist, each exercised standalone and with a
+	 * plausible underscore-joined variant so the boundary-anchored match still catches a real field.
+	 */
+	public function test_get_payment_gateway_redacts_pin_certificate_and_pem(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title'           => 'PayPal',
+					'pin'             => 'a-card-pin',
+					'security_pin'    => 'another-pin-value',
+					'ssl_certificate' => 'cert-contents',
+					'client_cert'     => 'cert-contents-2',
+					'private_key_pem' => 'pem-contents',
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$this->assertArrayNotHasKey( 'pin', $res['settings'] );
+		$this->assertArrayNotHasKey( 'security_pin', $res['settings'] );
+		$this->assertArrayNotHasKey( 'ssl_certificate', $res['settings'] );
+		$this->assertArrayNotHasKey( 'client_cert', $res['settings'] );
+		$this->assertArrayNotHasKey( 'private_key_pem', $res['settings'] );
+	}
+
+	/**
+	 * The boundary-anchored "pin" token must NOT over-redact a benign key that merely contains "pin"
+	 * as a substring - e.g. "shipping" (s-h-i-PIN-g) - proving the anchoring works, not just the
+	 * token addition. A loose substring match here would silently strip a legitimate setting on
+	 * every gateway/method whose settings happen to mention shipping.
+	 */
+	public function test_get_payment_gateway_does_not_over_redact_pin_substring(): void {
+		\AAFM\Tests\WcGatewayStubStore::save_gateway(
+			'paypal',
+			array(
+				'settings' => array(
+					'title'                 => 'PayPal',
+					'enable_local_shipping' => 'yes',
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayHasKey(
+			'enable_local_shipping',
+			$res['settings'],
+			'A benign key merely containing "pin" as a substring (shipping) must survive.'
+		);
+	}
+
+	/**
 	 * Get gateway returns WP_Error for an unknown id.
 	 */
 	public function test_get_payment_gateway_not_found(): void {

@@ -66,7 +66,7 @@ function aafm_wc_gateways_registry_definitions(): array {
 
 		'aafm/wc-get-payment-gateway'    => array(
 			'label'        => __( 'Get WooCommerce payment gateway', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Credential and key fields are always redacted. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads one WooCommerce payment gateway by id, including its title, description, enabled state, order, and non-secret settings. Common credential and key field names are redacted on a best-effort basis; a gateway that stores a secret under an unusual field name may not be caught. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -95,13 +95,34 @@ function aafm_wc_gateways_registry_definitions(): array {
  * and the walk recurses into nested arrays so a credential hidden under a benign parent key
  * (or several levels down) can't slip through. The pattern covers the obvious credential
  * tokens (key, secret, token, password/pwd, api, private, auth, credential, signature/sign,
- * client_id) so a value stored under a slightly unconventional name is still caught.
+ * client_id) plus a second, boundary-anchored group (passphrase, salt, pin, certificate/cert,
+ * pem) added after an audit found the official PayFast gateway storing its IPN-signing secret
+ * under the literal field name "passphrase" (which the original pattern misses - it matches
+ * "password", not "pass") and PayU-style gateways using "salt". Those two field names are live,
+ * not hypothetical: they are reachable today through wc-get-payment-gateway, which is a read
+ * and is not in the high-risk locked set.
+ *
+ * The second group is boundary-anchored (start/end of the key, or an underscore/hyphen) rather
+ * than a loose substring match, because "pin" as a bare substring also matches "shipping"
+ * (s-h-i-PIN-g) and would silently strip a benign field on every shipping-method settings row
+ * that reuses this same redactor. The original token group stays a loose substring match on
+ * purpose: over-redacting a benign field is the safe direction, so it is left as-is rather than
+ * risk narrowing it and un-redacting something a wp.org reviewer or a past audit already relied
+ * on being caught.
+ *
+ * Honesty about the limit: this is a denylist over field NAMES chosen by third-party gateway and
+ * shipping-method plugins this codebase has no visibility into, so it cannot be exhaustive - a
+ * plugin that stores a live secret under a name outside this list still leaks it through. An
+ * allowlist of "known-safe" field names was considered instead and rejected: a gateway or
+ * shipping method's settings array has no fixed schema, so a safe allowlist would have to
+ * enumerate every WooCommerce extension ever installed, and would go stale the moment a new one
+ * ships. Treat this as best-effort, expanded as new gaps are found, not a completeness guarantee.
  *
  * @param array<int|string,mixed> $settings Raw settings array (may be nested).
  * @return array<int|string,mixed>
  */
 function aafm_wc_redact_settings_deep( array $settings ): array {
-	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)/i';
+	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)|(?:^|[_-])(?:passphrase|salt|pin|certificate|cert|pem)(?:[_-]|$)/i';
 	$redacted       = array();
 	foreach ( $settings as $key => $value ) {
 		if ( preg_match( $secret_pattern, (string) $key ) ) {

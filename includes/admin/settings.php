@@ -178,7 +178,13 @@ function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
 	$user = wp_get_current_user();
 	aafm_log_activity(
 		array(
-			'ability'           => '',
+			// Both the admin table (page.php's Event column) and the AJAX-paginated re-render put
+			// the raw `ability` value straight into the Event cell - neither reads `event_type` at
+			// all. A blank ability therefore rendered as a blank Event cell for every master-switch
+			// row, while every other non-call event (log_cleared) already carries a synthetic
+			// ability-like name for exactly this reason. Mirrors aafm_log_activity_cleared_marker()'s
+			// 'aafm/activity-log-cleared'; the direction (locked/unlocked) stays in detail below.
+			'ability'           => 'aafm/high-risk-abilities-unlocked',
 			'principal_user_id' => (int) $user->ID,
 			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
 			'status'            => 'success',

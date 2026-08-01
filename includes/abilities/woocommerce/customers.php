@@ -5,7 +5,8 @@
  * Registers ONLY when WooCommerce is active (aafm_integration_active('woocommerce')); a host-inactive
  * site contributes zero entries to the registry. Every ability gates on the flat, object-independent
  * manage_woocommerce capability and falls through to its real permission_callback at discovery (no
- * server.php case). Shared helpers live in _shared.php, loaded before this file.
+ * server.php case); wc-create-customer adds create_users on top, because it creates a real
+ * WordPress user account. Shared helpers live in _shared.php, loaded before this file.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -76,7 +77,7 @@ function aafm_wc_customers_registry_definitions(): array {
 
 		'aafm/wc-create-customer' => array(
 			'label'        => __( 'Create WooCommerce customer', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce customer from an email and username, with optional first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Creates a WooCommerce customer from an email and username, with optional first name, last name, and billing/shipping address. Returns the full customer shape including PII under the Integrations security disclaimer. Creates a real WordPress user account, so it requires the create-users capability as well as the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -98,7 +99,9 @@ function aafm_wc_customers_registry_definitions(): array {
 // =============================================================================
 // WC3 -- Customers: list, get, create, update
 // All abilities gate on the flat, object-independent manage_woocommerce cap
-// (aafm_wc_perm). None needs a server.php case - they fall through at discovery.
+// (aafm_wc_perm); create additionally requires create_users, since it creates a
+// real WordPress account (aafm_perm_wc_create_customer).
+// None needs a server.php case - they fall through at discovery.
 // Customer PII (email, billing phone, billing/shipping addresses) is returned in
 // full under the Integrations security disclaimer (aafm_woocommerce_disclaimer).
 // =============================================================================
@@ -618,6 +621,33 @@ function aafm_exec_wc_get_customer( array $input ) {
 // aafm/wc-create-customer (W).
 
 /**
+ * Permission floor for aafm/wc-create-customer.
+ *
+ * This ability calls wc_create_new_customer(), which creates a real WordPress user account, so
+ * manage_woocommerce alone is the wrong gate: it would turn a shop-manager grant into
+ * account-creation authority. Requires create_users on top, matching aafm/create-user
+ * (users.php:403-405), which is the same operation reached through a different door.
+ *
+ * Deliberately NOT folded into aafm_wc_perm() (_shared.php:27-29): that callback is shared by every
+ * WooCommerce ability, and adding create_users there would gate reading an order list on a
+ * user-management capability. Follows the aafm_perm_wc_delete_product precedent
+ * (products.php:1029-1043) of a per-ability callback where the flat cap is not the right floor.
+ *
+ * No default_role floor is needed here, unlike aafm/create-user (users.php:441-453): the new
+ * account's role is hardcoded to 'customer' by WooCommerce itself
+ * (woocommerce/includes/wc-user-functions.php:146), never read from the site's default_role option.
+ *
+ * Takes no object id, so the ability stays object-independent and still falls through to this
+ * callback at discovery with empty input, exactly as aafm_wc_perm() documents. No server.php case
+ * is needed.
+ *
+ * @return bool
+ */
+function aafm_perm_wc_create_customer(): bool {
+	return aafm_wc_perm() && current_user_can( 'create_users' );
+}
+
+/**
  * Args builder for aafm/wc-create-customer.
  *
  * @return array<string,mixed>
@@ -648,7 +678,7 @@ function aafm_args_wc_create_customer(): array {
 			'properties' => aafm_wc_customer_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_create_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_create_customer',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,

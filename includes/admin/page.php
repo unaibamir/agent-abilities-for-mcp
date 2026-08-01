@@ -2010,7 +2010,10 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 	if ( false === $out ) {
 		return;
 	}
-	fputcsv( $out, $columns );
+	// PHP 8.4 deprecated relying on fputcsv()'s implicit default escape character, so it's passed
+	// explicitly here. An empty string is also the RFC 4180-correct behaviour: no escape prefix,
+	// just double-doubled quotes around an embedded enclosure character.
+	fputcsv( $out, $columns, escape: '' );
 
 	$max_id    = aafm_activity_max_id();
 	$page      = 1;
@@ -2030,7 +2033,7 @@ function aafm_export_activity_csv( ?string $status = null ): void {
 			foreach ( $columns as $column ) {
 				$line[] = aafm_csv_cell( (string) ( $row[ $column ] ?? '' ) );
 			}
-			fputcsv( $out, $line );
+			fputcsv( $out, $line, escape: '' );
 		}
 		// Testing hook: lets the test suite insert rows between batches to prove the max_id
 		// snapshot above keeps them out of this export instead of shifting the OFFSET window.

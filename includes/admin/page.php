@@ -855,8 +855,11 @@ function aafm_handle_export_activity_log(): void {
 		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) );
 	}
 
-	// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- nonce verified above.
-	$filter = isset( $_GET['filter'] ) ? sanitize_key( wp_unslash( (string) $_GET['filter'] ) ) : 'all';
+	// phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- nonce verified above; sanitized and unslashed two lines down once confirmed to be a string, never an array.
+	$raw_filter = $_GET['filter'] ?? null;
+	// ?filter[]=x arrives here as an array; casting that to string would emit a PHP warning
+	// before the headers below are sent, breaking the download with "headers already sent".
+	$filter = is_string( $raw_filter ) ? sanitize_key( wp_unslash( $raw_filter ) ) : 'all';
 	if ( ! in_array( $filter, array( 'all', 'success', 'error', 'denied' ), true ) ) {
 		$filter = 'all';
 	}

@@ -472,6 +472,177 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
+	 * F3: create-post's detail reads the real return shape, not a hand-built fixture.
+	 *
+	 * Calling the real executor is what would have caught the bare `id` bug an earlier draft of
+	 * this map shipped: aafm_exec_create_post() delegates to the same aafm_insert_post() as
+	 * create-page, wrapping its payload under `post`.
+	 */
+	public function test_create_post_detail_reads_the_real_return_shape(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = aafm_exec_create_post(
+			array(
+				'title'   => 'Some Post',
+				'content' => 'body',
+			)
+		);
+		$this->assertIsArray( $result, 'create-post returned a WP_Error; fix the input before asserting on detail.' );
+
+		$this->assertSame(
+			'Created post #' . (int) $result['post']['id'],
+			aafm_build_activity_detail_from_result( 'aafm/create-post', $result )
+		);
+	}
+
+	/**
+	 * F3: create-draft's detail reads the real return shape.
+	 */
+	public function test_create_draft_detail_reads_the_real_return_shape(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = aafm_exec_create_draft(
+			array(
+				'title'   => 'Some Draft',
+				'content' => 'body',
+			)
+		);
+		$this->assertIsArray( $result, 'create-draft returned a WP_Error; fix the input before asserting on detail.' );
+
+		$this->assertSame(
+			'Created draft #' . (int) $result['post']['id'],
+			aafm_build_activity_detail_from_result( 'aafm/create-draft', $result )
+		);
+	}
+
+	/**
+	 * F3: create-user's detail reads the real return shape (`user.id`, not a top-level `id`).
+	 */
+	public function test_create_user_detail_reads_the_real_return_shape(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$result = aafm_exec_create_user(
+			array(
+				'username' => 'aafm-detail-test-user',
+				'email'    => 'aafm-detail-test-user@example.com',
+			)
+		);
+		$this->assertIsArray( $result, 'create-user returned a WP_Error; fix the input before asserting on detail.' );
+		$this->assertArrayHasKey( 'user', $result, 'The payload is wrapped under `user`; result_id must be a path into it.' );
+
+		$this->assertSame(
+			'Created user #' . (int) $result['user']['id'],
+			aafm_build_activity_detail_from_result( 'aafm/create-user', $result )
+		);
+	}
+
+	public function test_delete_post_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted meta key `subtitle` on post #55',
+			aafm_build_activity_detail(
+				'aafm/delete-post-meta',
+				array(
+					'meta_key' => 'subtitle', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'post_id'  => 55,
+				)
+			)
+		);
+	}
+
+	public function test_update_post_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated post #310',
+			aafm_build_activity_detail( 'aafm/update-post', array( 'post_id' => 310 ) )
+		);
+	}
+
+	/**
+	 * The update-page entry uses page_id, NOT post_id - aafm_args_update_page() names its own id
+	 * field distinctly from aafm/update-post's post_id even though both edit a wp_posts row.
+	 */
+	public function test_update_page_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated page #77',
+			aafm_build_activity_detail( 'aafm/update-page', array( 'page_id' => 77 ) )
+		);
+	}
+
+	public function test_delete_post_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted post #44',
+			aafm_build_activity_detail( 'aafm/delete-post', array( 'post_id' => 44 ) )
+		);
+	}
+
+	public function test_delete_page_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted page #99',
+			aafm_build_activity_detail( 'aafm/delete-page', array( 'page_id' => 99 ) )
+		);
+	}
+
+	public function test_trash_post_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Trashed post #12',
+			aafm_build_activity_detail( 'aafm/trash-post', array( 'post_id' => 12 ) )
+		);
+	}
+
+	public function test_trash_page_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Trashed page #13',
+			aafm_build_activity_detail( 'aafm/trash-page', array( 'page_id' => 13 ) )
+		);
+	}
+
+	/**
+	 * The restore-revision entry declares only revision_id, even though the ability also requires
+	 * post_id - the map names the one identifier worth showing, not the whole schema.
+	 */
+	public function test_restore_revision_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Restored revision #501',
+			aafm_build_activity_detail(
+				'aafm/restore-revision',
+				array(
+					'post_id'     => 310,
+					'revision_id' => 501,
+				)
+			)
+		);
+	}
+
+	public function test_update_user_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated user #8',
+			aafm_build_activity_detail( 'aafm/update-user', array( 'user_id' => 8 ) )
+		);
+	}
+
+	public function test_delete_user_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted user #9',
+			aafm_build_activity_detail( 'aafm/delete-user', array( 'user_id' => 9 ) )
+		);
+	}
+
+	public function test_wc_create_order_refund_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Refunded order #2001',
+			aafm_build_activity_detail( 'aafm/wc-create-order-refund', array( 'order_id' => 2001 ) )
+		);
+	}
+
+	/**
+	 * The wc-update-payment-gateway identifier is a slug (type `key`), never a numeric id, and
+	 * the entry declares no link - there is no post/user/term/order to point a gateway at.
+	 */
+	public function test_wc_update_payment_gateway_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated payment gateway `stripe`',
+			aafm_build_activity_detail( 'aafm/wc-update-payment-gateway', array( 'gateway_id' => 'stripe' ) )
+		);
+		$this->assertNull( aafm_activity_detail_link_type( 'aafm/wc-update-payment-gateway' ) );
+	}
+
+	/**
 	 * The argument VALUE must appear in no column of the row, not just in the detail.
 	 *
 	 * @param array<string,mixed> $row An activity row.

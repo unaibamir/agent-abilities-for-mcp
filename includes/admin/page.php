@@ -2027,7 +2027,7 @@ function aafm_activity_rows_html( array $rows ): string {
 		$status  = (string) ( $row['status'] ?? '' );
 		$variant = $status_variants[ $status ] ?? 'neutral';
 		$ability = (string) ( $row['ability'] ?? '' );
-		$detail  = aafm_activity_detail_html( $ability, esc_html( (string) ( $row['detail'] ?? '' ) ) );
+		$detail  = aafm_activity_detail_html( $ability, (string) ( $row['detail'] ?? '' ) );
 		$html   .= sprintf(
 			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td><span class="aafm-pill aafm-pill-%5$s aafm-status aafm-status-%6$s">%7$s</span></td><td>%8$s</td></tr>',
 			esc_html( (string) ( $row['created_at'] ?? '' ) ),
@@ -2044,25 +2044,35 @@ function aafm_activity_rows_html( array $rows ): string {
 }
 
 /**
- * Turn the single object identifier in a detail string into an edit link, when the acting admin
- * can reach it.
+ * Locate the single object identifier in a raw detail string and, when the ability's declared
+ * link type resolves to a real edit URL, split the detail into the parts either renderer needs
+ * to build a link around it.
+ *
+ * Operates on the RAW (unescaped) detail text - never on an already-escaped one. Matching against
+ * esc_html() output is a real bug, not a theoretical one: esc_html() turns an apostrophe into
+ * `&#039;`, and `#039` satisfies `/#(\d+)/` just as well as a real id, so an escaped string can
+ * match the wrong id entirely (or the right id at the wrong offset). Byte offsets from
+ * PREG_OFFSET_CAPTURE are safe to slice with substr() here because the pattern only ever matches
+ * ASCII `#` and digits, so a split point can never land inside a multi-byte UTF-8 sequence.
  *
  * The link type comes from the ability's own declaration in aafm_activity_detail_map(), never from
  * pattern-matching the text itself - a string that merely looks like it holds an id is left alone.
  * The activity tab is already manage_options-gated, so linking adds no exposure beyond what the
  * viewer can already reach through the object's own edit screen. A deleted or inaccessible object
- * (get_edit_*_link() returns falsy) renders as plain text, never a dead link.
+ * (get_edit_*_link() returns falsy) is reported as no link, never a dead one.
  *
- * @param string $ability Ability name from the row.
- * @param string $detail  Already-escaped detail text.
- * @return string Detail text, possibly with one linked identifier.
+ * @param string $ability    Ability name from the row.
+ * @param string $detail_raw Raw (unescaped) detail text from the log.
+ * @return array{before:string,id:int,url:string,after:string}|null Null when there is nothing to link.
  */
-function aafm_activity_detail_html( string $ability, string $detail ): string {
+function aafm_activity_detail_link( string $ability, string $detail_raw ): ?array {
 	$type = aafm_activity_detail_link_type( $ability );
-	if ( null === $type || ! preg_match( '/#(\d+)/', $detail, $matches ) ) {
-		return $detail;
+	if ( null === $type || ! preg_match( '/#(\d+)/', $detail_raw, $matches, PREG_OFFSET_CAPTURE ) ) {
+		return null;
 	}
-	$id = (int) $matches[1];
+	$id        = (int) $matches[1][0];
+	$offset    = $matches[0][1];
+	$match_len = strlen( $matches[0][0] );
 
 	switch ( $type ) {
 		case 'post':
@@ -2085,14 +2095,34 @@ function aafm_activity_detail_html( string $ability, string $detail ): string {
 	}
 
 	if ( ! $url ) {
-		return $detail; // Deleted or inaccessible object: plain text, never a dead link.
+		return null; // Deleted or inaccessible object: plain text, never a dead link.
 	}
 
-	return str_replace(
-		'#' . $id,
-		'<a href="' . esc_url( $url ) . '">#' . (int) $id . '</a>',
-		$detail
+	return array(
+		'before' => substr( $detail_raw, 0, $offset ),
+		'id'     => $id,
+		'url'    => $url,
+		'after'  => substr( $detail_raw, $offset + $match_len ),
 	);
+}
+
+/**
+ * Turn the single object identifier in a detail string into an edit link, when the acting admin
+ * can reach it, escaping the rest of the string around it.
+ *
+ * @param string $ability    Ability name from the row.
+ * @param string $detail_raw Raw (unescaped) detail text from the log.
+ * @return string Escaped HTML: the detail text, possibly with one linked identifier.
+ */
+function aafm_activity_detail_html( string $ability, string $detail_raw ): string {
+	$link = aafm_activity_detail_link( $ability, $detail_raw );
+	if ( null === $link ) {
+		return esc_html( $detail_raw );
+	}
+
+	return esc_html( $link['before'] )
+		. '<a href="' . esc_url( $link['url'] ) . '">#' . (int) $link['id'] . '</a>'
+		. esc_html( $link['after'] );
 }
 
 /**

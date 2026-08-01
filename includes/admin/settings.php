@@ -191,6 +191,10 @@ function aafm_config_option_names(): array {
 		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall
 		// keeps the agent user, so its marker travels with the account.
 		'aafm_agent_user_marker_backfilled',
+		// The high-risk unlock switch. Locked is the safe default, so clearing this on reset is the
+		// point: a reset must land the money-moving abilities back behind the floor, never leave them
+		// reachable because someone unlocked the category once.
+		'aafm_high_risk_abilities_unlocked',
 	);
 }
 

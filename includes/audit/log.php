@@ -17,10 +17,16 @@ if ( ! defined( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION' ) ) {
 	// caller that never supplies one) is unaffected. v4 adds the nullable result_count column
 	// (L5) so a list/read call's magnitude is observable; NULL by default so an unmeasured or
 	// write call is distinguishable from a genuine zero-item result, and every existing row is
-	// unaffected. Bumping this makes aafm_maybe_upgrade_activity_log() re-run dbDelta so existing
-	// installs pick the change up without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in
-	// includes/oauth/schema.php.
-	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '4' );
+	// unaffected. v5 adds event_type and detail so the log can hold events that are not ability
+	// calls (an ability being toggled, a security-relevant setting change, the log-cleared
+	// marker) and so a row can say what it touched, not only which ability ran. event_type is
+	// NOT NULL DEFAULT 'ability_call', so the ALTER writes the correct meaning into every
+	// existing row and no backfill is needed; detail is nullable so "no detail declared" stays
+	// distinguishable from "declared and empty". The event_created index mirrors v2's composite
+	// indexes so an event-filtered query is index-backed. Bumping this makes
+	// aafm_maybe_upgrade_activity_log() re-run dbDelta so existing installs pick the change up
+	// without a reactivation. Mirrors AAFM_OAUTH_SCHEMA_VERSION in includes/oauth/schema.php.
+	define( 'AAFM_ACTIVITY_LOG_SCHEMA_VERSION', '5' );
 }
 
 /**
@@ -86,11 +92,14 @@ function aafm_install_activity_log(): void {
 		source_ip VARCHAR(45) NOT NULL DEFAULT '',
 		client_id VARCHAR(191) NOT NULL DEFAULT '',
 		result_count BIGINT UNSIGNED NULL,
+		event_type VARCHAR(32) NOT NULL DEFAULT 'ability_call',
+		detail TEXT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		KEY created_at (created_at),
 		KEY status_created (status, created_at),
-		KEY ability_created (ability, created_at)
+		KEY ability_created (ability, created_at),
+		KEY event_created (event_type, created_at)
 	) {$charset_collate};";
 
 	dbDelta( $sql );

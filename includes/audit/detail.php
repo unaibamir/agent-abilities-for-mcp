@@ -69,7 +69,7 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
  */
 function aafm_activity_detail_map(): array {
 	return array(
-		'aafm/update-post-meta'       => array(
+		'aafm/update-post-meta'          => array(
 			/* translators: 1: meta key name. 2: the post's numeric ID. */
 			'template' => __( 'Updated meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -84,7 +84,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/create-page'            => array(
+		'aafm/create-page'               => array(
 			/* translators: %s: the new page's numeric ID. */
 			'template'  => __( 'Created page #%s', 'agent-abilities-for-mcp' ),
 			// Dotted path, NOT a bare 'id'. aafm_insert_post() returns
@@ -94,7 +94,7 @@ function aafm_activity_detail_map(): array {
 			'result_id' => 'post.id',
 			'link'      => 'post',
 		),
-		'aafm/wc-update-order-status' => array(
+		'aafm/wc-update-order-status'    => array(
 			/* translators: 1: the order's numeric ID. 2: the new order status key. */
 			'template' => __( 'Set order #%1$s to status `%2$s`', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -109,6 +109,178 @@ function aafm_activity_detail_map(): array {
 				),
 			),
 			'link'     => 'order',
+		),
+
+		// The starter set below extends the three entries above to fifteen abilities. Every key
+		// name is verified against the ability's own args builder (or, for a result entry, the
+		// executor's actual return shape) before being written here - see LESSONS-LEARNED and
+		// DetailTest for why a guessed key is a silent-wrong-answer bug, not a loud one.
+		'aafm/create-post'               => array(
+			/* translators: %s: the new post's numeric ID. */
+			'template'  => __( 'Created post #%s', 'agent-abilities-for-mcp' ),
+			// aafm_exec_create_post() delegates to aafm_insert_post(), which returns
+			// array( 'post' => aafm_redact_post( … ) ) - same wrapped shape as create-page.
+			'result_id' => 'post.id',
+			'link'      => 'post',
+		),
+		'aafm/create-draft'              => array(
+			/* translators: %s: the new draft's numeric ID. */
+			'template'  => __( 'Created draft #%s', 'agent-abilities-for-mcp' ),
+			'result_id' => 'post.id',
+			'link'      => 'post',
+		),
+		'aafm/create-user'               => array(
+			/* translators: %s: the new user's numeric ID. */
+			'template'  => __( 'Created user #%s', 'agent-abilities-for-mcp' ),
+			// aafm_exec_create_user() returns array( 'user' => aafm_rich_user( … ) ), never a
+			// top-level id.
+			'result_id' => 'user.id',
+			'link'      => 'user',
+		),
+		'aafm/delete-post-meta'          => array(
+			/* translators: 1: meta key name. 2: the post's numeric ID. */
+			'template' => __( 'Deleted meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'meta_key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/update-post'               => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Updated post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/update-page'               => array(
+			/* translators: %s: the page's numeric ID. */
+			'template' => __( 'Updated page #%s', 'agent-abilities-for-mcp' ),
+			// aafm_args_update_page() names its own id field page_id, not post_id - confirmed
+			// against pages.php. update-post and update-page take different keys even though
+			// both end up writing the same wp_posts row.
+			'args'     => array(
+				array(
+					'key'  => 'page_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-post'               => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Deleted post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-page'               => array(
+			/* translators: %s: the page's numeric ID. */
+			'template' => __( 'Deleted page #%s', 'agent-abilities-for-mcp' ),
+			// page_id, not post_id - see aafm/update-page above.
+			'args'     => array(
+				array(
+					'key'  => 'page_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/trash-post'                => array(
+			/* translators: %s: the post's numeric ID. */
+			'template' => __( 'Trashed post #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'post_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/trash-page'                => array(
+			/* translators: %s: the page's numeric ID. */
+			'template' => __( 'Trashed page #%s', 'agent-abilities-for-mcp' ),
+			// page_id, not post_id - see aafm/update-page above.
+			'args'     => array(
+				array(
+					'key'  => 'page_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/restore-revision'          => array(
+			/* translators: %s: the restored revision's numeric ID. */
+			'template' => __( 'Restored revision #%s', 'agent-abilities-for-mcp' ),
+			// revision_id, confirmed against aafm_args_restore_revision(). post_id is also a
+			// required arg on this ability but is deliberately not declared here - the map's job
+			// is to name the one identifier worth showing, not to mirror the whole schema.
+			'args'     => array(
+				array(
+					'key'  => 'revision_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/update-user'               => array(
+			/* translators: %s: the user's numeric ID. */
+			'template' => __( 'Updated user #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
+		'aafm/delete-user'               => array(
+			/* translators: %s: the user's numeric ID. */
+			'template' => __( 'Deleted user #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
+		'aafm/wc-create-order-refund'    => array(
+			/* translators: %s: the order's numeric ID. */
+			'template' => __( 'Refunded order #%s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'order_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'order',
+		),
+		'aafm/wc-update-payment-gateway' => array(
+			/* translators: %s: the payment gateway's id slug. */
+			'template' => __( 'Updated payment gateway `%s`', 'agent-abilities-for-mcp' ),
+			// gateway_id is a slug ("bacs", "cod", "stripe"), never a numeric id, so it takes the
+			// key type and declares no link - there is no post/user/term/order to point it at.
+			'args'     => array(
+				array(
+					'key'  => 'gateway_id',
+					'type' => 'key',
+				),
+			),
 		),
 	);
 }

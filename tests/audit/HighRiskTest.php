@@ -189,6 +189,65 @@ final class HighRiskTest extends TestCase {
 		$this->assertContains( 'aafm/get-posts', aafm_get_enabled_abilities() );
 	}
 
+	/**
+	 * Put WooCommerce-subject rows into the LIVE registry for the duration of a test.
+	 *
+	 * Same reason as register_high_risk_fixture(), one step further along: the scoped save preserves
+	 * anything the host gate has dropped, and under PHPUnit WooCommerce is inactive, so every wc-*
+	 * row would be carried forward on the host gate alone and an assertion about the locked one
+	 * would prove nothing. The subject is what puts them inside the posted scope.
+	 *
+	 * @param string ...$names Ability names to register.
+	 * @return void
+	 */
+	private function register_woocommerce_fixture( string ...$names ): void {
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ) use ( $names ): array {
+				foreach ( $names as $name ) {
+					$registry[ $name ] = array(
+						'label'   => 'WooCommerce fixture',
+						'group'   => 'writes',
+						'subject' => 'woocommerce',
+					);
+				}
+				return $registry;
+			}
+		);
+		aafm_flush_registry_cache();
+	}
+
+	/**
+	 * A locked ability has no checkbox, so its absence from a save is the lock hiding the control,
+	 * not the operator turning it off. The scoped save has to carry it forward the way it already
+	 * carries an inactive-host ability. Without this, the first save of the WooCommerce panel after
+	 * the floor lands rewrites the stored option, and unlocking the category later hands the
+	 * operator a blank slate instead of what they had chosen.
+	 */
+	public function test_a_locked_ability_survives_a_save_of_its_own_section(): void {
+		$this->register_woocommerce_fixture( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders', 'aafm/wc-get-order' );
+		update_option(
+			'aafm_enabled_abilities',
+			array( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders', 'aafm/wc-get-order' )
+		);
+
+		// The WooCommerce panel is saved with only the visible (unlocked) checkbox ticked. The
+		// locked ability has no checkbox, so it is absent from the POST.
+		$resolved = aafm_resolve_scoped_enabled_input(
+			array(
+				'aafm_scope'     => array( 'woocommerce' ),
+				'aafm_abilities' => array( 'aafm/wc-list-orders' ),
+			)
+		);
+
+		$this->assertContains( 'aafm/wc-create-order-refund', $resolved, 'A locked ability must be preserved, not silently dropped.' );
+		$this->assertContains( 'aafm/wc-list-orders', $resolved );
+		// wc-get-order is ordinary, in scope, and unticked, so it MUST go. This is what proves the
+		// fixture reached the live registry: if the host gate were still dropping these rows, every
+		// name above would be preserved and the locked assertion would pass on its own.
+		$this->assertNotContains( 'aafm/wc-get-order', $resolved, 'An unlocked in-scope ability the form turned off is still removed.' );
+	}
+
 	public function test_every_builtin_names_a_registered_ability(): void {
 		$registry = aafm_get_abilities_registry_full();
 		foreach ( aafm_high_risk_abilities_builtin() as $name ) {

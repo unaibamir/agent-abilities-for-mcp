@@ -23,7 +23,9 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  * - aafm_rate_limit_per_min, aafm_max_title_len: floored at 0 (negative/garbage -> 0) and
  *   capped at AAFM_SETTINGS_NUMERIC_MAX. Note max( 0, (int) ) rather than absint(), so a
  *   negative value clamps down to 0 instead of flipping to its positive magnitude.
- * - aafm_force_draft: a plain bool from presence of the field (unchecked checkbox -> false).
+ * - aafm_force_draft, aafm_high_risk_abilities_unlocked: a plain bool from presence of the field
+ *   (unchecked checkbox -> false). Both readers default off on a missing option, so unlike the
+ *   OAuth pair below there is nothing to work around: a stored false reads as off either way.
  * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present,
  *   '0' when absent. The OAuth readers default on and treat every falsy stored form as off, so
  *   the off state must be the literal '0' string - a PHP bool false would not store as false on
@@ -33,7 +35,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -43,6 +45,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$draft       = ! empty( $posted['aafm_force_draft'] );
 	$block_guard = ! empty( $posted['aafm_block_guard_strict'] );
 	$delete_on   = ! empty( $posted['aafm_delete_data_on_uninstall'] );
+	$high_risk   = ! empty( $posted['aafm_high_risk_abilities_unlocked'] );
 
 	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
 	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
@@ -58,15 +61,16 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	}
 
 	return array(
-		'aafm_rate_limit_per_min'       => $rate,
-		'aafm_max_title_len'            => $title,
-		'aafm_log_retention_days'       => $retention,
-		'aafm_force_draft'              => $draft,
-		'aafm_block_guard_strict'       => $block_guard,
-		'aafm_delete_data_on_uninstall' => $delete_on,
-		'aafm_oauth_enabled'            => $oauth,
-		'aafm_oauth_dcr_enabled'        => $oauth_dcr,
-		'aafm_ip_allowlist'             => array_values( array_unique( $lines ) ),
+		'aafm_rate_limit_per_min'           => $rate,
+		'aafm_max_title_len'                => $title,
+		'aafm_log_retention_days'           => $retention,
+		'aafm_force_draft'                  => $draft,
+		'aafm_block_guard_strict'           => $block_guard,
+		'aafm_delete_data_on_uninstall'     => $delete_on,
+		'aafm_high_risk_abilities_unlocked' => $high_risk,
+		'aafm_oauth_enabled'                => $oauth,
+		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
+		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
 	);
 }
 
@@ -119,29 +123,69 @@ function aafm_ajax_save_settings(): void {
 	$raw_allowlist = isset( $posted['aafm_ip_allowlist'] ) ? (string) $posted['aafm_ip_allowlist'] : '';
 	$dropped       = aafm_count_dropped_ip_lines( $raw_allowlist );
 
+	// Read the stored master switch before anything is written, so the audit row below compares
+	// against what was actually in place. The raw option, not aafm_high_risk_unlocked(), because a
+	// site that hard-blocks the category through the filter still has an operator setting to record.
+	$high_risk_before = (bool) get_option( 'aafm_high_risk_abilities_unlocked', false );
+
 	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
 	update_option( 'aafm_log_retention_days', $clean['aafm_log_retention_days'] );
 	update_option( 'aafm_force_draft', $clean['aafm_force_draft'] );
 	update_option( 'aafm_block_guard_strict', $clean['aafm_block_guard_strict'] );
 	update_option( 'aafm_delete_data_on_uninstall', $clean['aafm_delete_data_on_uninstall'] );
+	update_option( 'aafm_high_risk_abilities_unlocked', $clean['aafm_high_risk_abilities_unlocked'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
+	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'] );
+
 	wp_send_json_success(
 		array(
-			'aafm_rate_limit_per_min'       => $clean['aafm_rate_limit_per_min'],
-			'aafm_max_title_len'            => $clean['aafm_max_title_len'],
-			'aafm_log_retention_days'       => $clean['aafm_log_retention_days'],
-			'aafm_force_draft'              => $clean['aafm_force_draft'],
-			'aafm_block_guard_strict'       => $clean['aafm_block_guard_strict'],
-			'aafm_delete_data_on_uninstall' => $clean['aafm_delete_data_on_uninstall'],
-			'aafm_oauth_enabled'            => $clean['aafm_oauth_enabled'],
-			'aafm_oauth_dcr_enabled'        => $clean['aafm_oauth_dcr_enabled'],
-			'aafm_ip_allowlist'             => $clean['aafm_ip_allowlist'],
-			'aafm_ip_allowlist_text'        => implode( "\n", $clean['aafm_ip_allowlist'] ),
-			'aafm_ip_dropped'               => $dropped,
+			'aafm_rate_limit_per_min'           => $clean['aafm_rate_limit_per_min'],
+			'aafm_max_title_len'                => $clean['aafm_max_title_len'],
+			'aafm_log_retention_days'           => $clean['aafm_log_retention_days'],
+			'aafm_force_draft'                  => $clean['aafm_force_draft'],
+			'aafm_block_guard_strict'           => $clean['aafm_block_guard_strict'],
+			'aafm_delete_data_on_uninstall'     => $clean['aafm_delete_data_on_uninstall'],
+			'aafm_high_risk_abilities_unlocked' => $clean['aafm_high_risk_abilities_unlocked'],
+			'aafm_oauth_enabled'                => $clean['aafm_oauth_enabled'],
+			'aafm_oauth_dcr_enabled'            => $clean['aafm_oauth_dcr_enabled'],
+			'aafm_ip_allowlist'                 => $clean['aafm_ip_allowlist'],
+			'aafm_ip_allowlist_text'            => implode( "\n", $clean['aafm_ip_allowlist'] ),
+			'aafm_ip_dropped'                   => $dropped,
+		)
+	);
+}
+
+/**
+ * Record a change to the high-risk abilities master switch.
+ *
+ * Unlocking this category is the single highest-consequence setting in the plugin: it is what
+ * makes refunds, gateway settings, and account creation reachable at all. It gets the same
+ * treatment as an ability toggle, for the same reason, so an incident timeline shows who opened
+ * the category and when, not only which call fired afterwards.
+ *
+ * @param bool $before Previous value.
+ * @param bool $after  New value.
+ * @return void
+ */
+function aafm_log_high_risk_switch_change( bool $before, bool $after ): void {
+	if ( $before === $after ) {
+		return;
+	}
+	$user = wp_get_current_user();
+	aafm_log_activity(
+		array(
+			'ability'           => '',
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'success',
+			'event_type'        => 'setting_changed',
+			'detail'            => $after
+				? __( 'High-risk abilities unlocked', 'agent-abilities-for-mcp' )
+				: __( 'High-risk abilities locked', 'agent-abilities-for-mcp' ),
 		)
 	);
 }

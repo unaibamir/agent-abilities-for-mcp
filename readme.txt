@@ -1,6 +1,6 @@
 === Agent Abilities for MCP - MCP Server for AI Agents ===
 Contributors: unaibamir
-Tags: ai, chatgpt, claude, mcp, seo
+Tags: ai, chatgpt, claude, mcp, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 8.0
@@ -8,7 +8,7 @@ Stable tag: 1.4.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect AI agents to your WordPress site as a scoped, least-privilege user over MCP. Off by default, every call audited.
+WordPress MCP server for AI agents like Claude and ChatGPT. Governed, off by default, least privilege, every call audited.
 
 == Description ==
 

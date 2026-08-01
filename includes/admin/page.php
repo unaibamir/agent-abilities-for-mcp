@@ -1900,12 +1900,14 @@ function aafm_activity_rows_html( array $rows ): string {
 	foreach ( $rows as $row ) {
 		$status  = (string) ( $row['status'] ?? '' );
 		$variant = $status_variants[ $status ] ?? 'neutral';
+		$ability = (string) ( $row['ability'] ?? '' );
+		$detail  = aafm_activity_detail_html( $ability, esc_html( (string) ( $row['detail'] ?? '' ) ) );
 		$html   .= sprintf(
 			'<tr><td>%1$s</td><td>%2$s</td><td>%3$s</td><td>%4$s</td><td><span class="aafm-pill aafm-pill-%5$s aafm-status aafm-status-%6$s">%7$s</span></td><td>%8$s</td></tr>',
 			esc_html( (string) ( $row['created_at'] ?? '' ) ),
 			esc_html( (string) ( $row['principal_login'] ?? '' ) . ' (#' . (int) ( $row['principal_user_id'] ?? 0 ) . ')' ),
-			esc_html( (string) ( $row['ability'] ?? '' ) ),
-			esc_html( (string) ( $row['detail'] ?? '' ) ),
+			esc_html( $ability ),
+			$detail,
 			esc_attr( $variant ),
 			esc_attr( $status ),
 			esc_html( $status ),
@@ -1913,6 +1915,58 @@ function aafm_activity_rows_html( array $rows ): string {
 		);
 	}
 	return $html;
+}
+
+/**
+ * Turn the single object identifier in a detail string into an edit link, when the acting admin
+ * can reach it.
+ *
+ * The link type comes from the ability's own declaration in aafm_activity_detail_map(), never from
+ * pattern-matching the text itself - a string that merely looks like it holds an id is left alone.
+ * The activity tab is already manage_options-gated, so linking adds no exposure beyond what the
+ * viewer can already reach through the object's own edit screen. A deleted or inaccessible object
+ * (get_edit_*_link() returns falsy) renders as plain text, never a dead link.
+ *
+ * @param string $ability Ability name from the row.
+ * @param string $detail  Already-escaped detail text.
+ * @return string Detail text, possibly with one linked identifier.
+ */
+function aafm_activity_detail_html( string $ability, string $detail ): string {
+	$type = aafm_activity_detail_link_type( $ability );
+	if ( null === $type || ! preg_match( '/#(\d+)/', $detail, $matches ) ) {
+		return $detail;
+	}
+	$id = (int) $matches[1];
+
+	switch ( $type ) {
+		case 'post':
+			$url = get_edit_post_link( $id );
+			break;
+		case 'user':
+			$url = get_edit_user_link( $id );
+			break;
+		case 'term':
+			$url = get_edit_term_link( $id );
+			break;
+		case 'order':
+			// Never hand-build this URL. Under HPOS a WooCommerce order's edit screen is not
+			// post.php?post=N, and order rows are exactly where that assumption is likeliest.
+			$order = function_exists( 'wc_get_order' ) ? wc_get_order( $id ) : null;
+			$url   = ( $order && method_exists( $order, 'get_edit_order_url' ) ) ? $order->get_edit_order_url() : null;
+			break;
+		default:
+			$url = null;
+	}
+
+	if ( ! $url ) {
+		return $detail; // Deleted or inaccessible object: plain text, never a dead link.
+	}
+
+	return str_replace(
+		'#' . $id,
+		'<a href="' . esc_url( $url ) . '">#' . (int) $id . '</a>',
+		$detail
+	);
 }
 
 /**

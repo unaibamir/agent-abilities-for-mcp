@@ -171,6 +171,77 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
+	 * F2: a post detail's identifier links to that post's edit screen.
+	 *
+	 * The detail string is built through the real result builder against the real return shape
+	 * of aafm_exec_create_page(), never hand-typed - a hand-built fixture would still pass even
+	 * if aafm_build_activity_detail_from_result() were broken, which is exactly how the bare
+	 * result_id bug survived an earlier draft of this feature undetected.
+	 */
+	public function test_a_post_detail_links_to_the_edit_screen(): void {
+		$this->acting_as( 'administrator' );
+		$result = aafm_exec_create_page(
+			array(
+				'title'   => 'Some Page',
+				'content' => 'body',
+			)
+		);
+		$this->assertIsArray( $result, 'create-page returned an error; fix the input before asserting on the link.' );
+		$detail = aafm_build_activity_detail_from_result( 'aafm/create-page', $result );
+		$this->assertNotNull( $detail, 'The builder produced no detail; the linkification test is meaningless without one.' );
+
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/create-page',
+				'status'  => 'success',
+				'detail'  => $detail,
+			)
+		);
+
+		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
+		$this->assertStringContainsString( 'post.php?post=' . (int) $result['post']['id'], $html );
+		$this->assertStringContainsString( '<a href=', $html );
+	}
+
+	/**
+	 * A detail that names an object which no longer exists (or that get_edit_post_link() refuses)
+	 * must never render a dead link - the identifier stays as plain text.
+	 */
+	public function test_a_deleted_object_renders_plain_text_not_a_dead_link(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/create-page',
+				'status'  => 'success',
+				'detail'  => 'Created page #999999',
+			)
+		);
+
+		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
+		$this->assertStringContainsString( 'Created page #999999', $html );
+		$this->assertStringNotContainsString( '<a', $html );
+	}
+
+	/**
+	 * An ability the detail map declares no `link` for is never linkified, even when its detail
+	 * string happens to contain something that looks like an id.
+	 */
+	public function test_an_ability_with_no_link_declaration_is_never_linkified(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'success',
+				'detail'  => 'Saw post #12',
+			)
+		);
+
+		$html = aafm_activity_rows_html( aafm_query_activity( array( 'per_page' => 1 ) ) );
+		$this->assertStringContainsString( 'Saw post #12', $html );
+		$this->assertStringNotContainsString( '<a', $html );
+	}
+
+	/**
 	 * Render the activity tab as an administrator and return its markup.
 	 *
 	 * @return string

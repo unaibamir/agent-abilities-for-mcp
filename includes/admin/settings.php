@@ -481,6 +481,36 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
+	// The high-risk master switch. Its own card, deliberately not folded into Safety controls and
+	// deliberately not inside the Danger zone: it is a normal setting an operator is expected to
+	// reach on purpose, not a destructive action. Same .aafm-switch / .aafm-set-row contract as the
+	// rows above, so the save handler binds to the <input> name, not to this markup. It sits inside
+	// #aafm-settings-form because admin.js reads the checkbox off the form.
+	ob_start();
+
+	$high_risk_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, payment gateway settings, tax rates, and customer accounts to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change a payment gateway setting, change a tax rate, or create a customer account, no matter what you have enabled on the Abilities tab. Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_control .= '<p class="help">' . esc_html__( 'This switch covers this plugin\'s own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Unlock the category', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
+			'control' => $high_risk_control,
+			'help'    => __( 'The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting above if you want a longer record of when the category was opened.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
+	$high_risk_body = (string) ob_get_clean();
+	aafm_render_section(
+		array(
+			'icon'  => 'lock',
+			'title' => __( 'High-risk abilities', 'agent-abilities-for-mcp' ),
+			'body'  => $high_risk_body,
+		)
+	);
+
 	aafm_render_notice(
 		'warning',
 		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'agent-abilities-for-mcp' )

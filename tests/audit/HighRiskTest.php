@@ -95,17 +95,19 @@ final class HighRiskTest extends TestCase {
 	 * host gate out of the picture, leaving the subtraction as the only thing that can still drop the
 	 * name.
 	 *
-	 * @param string $name Ability name to register.
+	 * @param string ...$names Ability names to register.
 	 * @return void
 	 */
-	private function register_high_risk_fixture( string $name ): void {
+	private function register_high_risk_fixture( string ...$names ): void {
 		add_filter(
 			'aafm_abilities_registry',
-			static function ( array $registry ) use ( $name ): array {
-				$registry[ $name ] = array(
-					'label' => 'High-risk fixture',
-					'group' => 'writes',
-				);
+			static function ( array $registry ) use ( $names ): array {
+				foreach ( $names as $name ) {
+					$registry[ $name ] = array(
+						'label' => 'High-risk fixture',
+						'group' => 'writes',
+					);
+				}
 				return $registry;
 			}
 		);
@@ -133,6 +135,58 @@ final class HighRiskTest extends TestCase {
 		update_option( 'aafm_enabled_abilities', $stored );
 		aafm_get_enabled_abilities();
 		$this->assertSame( $stored, get_option( 'aafm_enabled_abilities' ) );
+	}
+
+	/**
+	 * The floor is decided twice, by two independent implementations of one rule:
+	 * aafm_ability_is_locked() in includes/audit/high-risk.php, which the admin UI reads to draw the
+	 * lock, and the inline re-derivation inside aafm_get_enabled_abilities(), which decides what
+	 * actually registers. They agree today, but nothing structural forces that, and a third
+	 * condition added to one and not the other fails in the dangerous direction: the screen shows a
+	 * padlock while the ability is still reachable over MCP.
+	 *
+	 * So assert the two answers are the same answer, for every builtin, in both lock states. The
+	 * "not registered" side doubles as proof the fixture registration held, since an ability missing
+	 * from the registry for any other reason would report locked here and fail against an unlocked
+	 * predicate.
+	 */
+	public function test_the_two_locked_predicates_never_disagree(): void {
+		$builtins = aafm_high_risk_abilities_builtin();
+		$this->register_high_risk_fixture( ...$builtins );
+
+		foreach ( array( true, false ) as $unlocked ) {
+			update_option( 'aafm_high_risk_abilities_unlocked', $unlocked );
+			update_option( 'aafm_enabled_abilities', $builtins );
+			$registered = aafm_get_enabled_abilities();
+
+			foreach ( $builtins as $name ) {
+				$this->assertSame(
+					aafm_ability_is_locked( $name ),
+					! in_array( $name, $registered, true ),
+					sprintf(
+						'%s: aafm_ability_is_locked() and the registration subtraction disagree with the category %s.',
+						$name,
+						$unlocked ? 'unlocked' : 'locked'
+					)
+				);
+			}
+		}
+	}
+
+	/**
+	 * The subtraction has to honour a filter-added name, not just the builtins. This is the branch
+	 * the "filters can only narrow" constraint rests on: the filter's whole purpose is letting an
+	 * operator lock something we did not ship as high-risk, and that is worth nothing if the
+	 * registration path only ever consults the builtin list.
+	 */
+	public function test_a_filter_added_high_risk_ability_is_subtracted_too(): void {
+		add_filter( 'aafm_high_risk_abilities', static fn( array $e ): array => array_merge( $e, array( 'aafm/get-posts' ) ) );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-posts' ) );
+
+		$this->assertNotContains( 'aafm/get-posts', aafm_get_enabled_abilities() );
+
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$this->assertContains( 'aafm/get-posts', aafm_get_enabled_abilities() );
 	}
 
 	public function test_every_builtin_names_a_registered_ability(): void {

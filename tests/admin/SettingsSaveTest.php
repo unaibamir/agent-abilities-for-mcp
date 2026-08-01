@@ -214,4 +214,100 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertFalse( aafm_is_valid_ip_or_cidr( '10.0.0.0/' ) );
 		$this->assertFalse( aafm_is_valid_ip_or_cidr( '' ) );
 	}
+
+	public function set_up(): void {
+		parent::set_up();
+		// The AJAX handler logs every flip of the high-risk switch (aafm_log_high_risk_switch_change()),
+		// so the activity-log table needs to exist for the two AJAX tests below, mirroring
+		// AbilityToggleAuditTest's set_up.
+		aafm_install_activity_log();
+	}
+
+	public function tear_down(): void {
+		remove_all_filters( 'wp_die_ajax_handler' );
+		remove_all_filters( 'wp_die_handler' );
+		remove_filter( 'wp_doing_ajax', '__return_true' );
+		unset( $_POST['nonce'], $_REQUEST['nonce'], $_POST['aafm_high_risk_abilities_unlocked'] );
+		parent::tear_down();
+	}
+
+	/**
+	 * Route wp_send_json through a throwing wp_die so the handler is observable in-process.
+	 * Mirrors BridgeDirectorySaveTest::intercept_die().
+	 *
+	 * @return void
+	 */
+	private function intercept_die(): void {
+		add_filter( 'wp_doing_ajax', '__return_true' );
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_ajax_handler', static fn() => $die );
+		add_filter( 'wp_die_handler', static fn() => $die );
+	}
+
+	/**
+	 * Run an AJAX handler and return its captured JSON payload.
+	 *
+	 * @param callable $handler The AJAX callback to invoke.
+	 * @return array<string,mixed>
+	 */
+	private function run_handler( callable $handler ): array {
+		ob_start();
+		try {
+			$handler();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		}
+		$body = (string) ob_get_clean();
+		$json = json_decode( $body, true );
+		return is_array( $json ) ? $json : array();
+	}
+
+	/**
+	 * Turning the master switch off through the Settings AJAX handler must delete the option row
+	 * rather than store a falsy value - the fresh-install default is an absent row, and the
+	 * plugin's own UI otherwise has no way back to it once the switch has been touched once. The
+	 * sentinel default on get_option() is what actually proves this: a stored empty string or a
+	 * stored false would both read back as falsy against a plain `false` default, but only a
+	 * genuinely absent row fails to override a sentinel the option could never legitimately hold.
+	 */
+	public function test_ajax_save_settings_deletes_high_risk_option_when_switch_turned_off(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_high_risk_abilities_unlocked', true ); // Start unlocked.
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		// The switch's checkbox is absent from $_POST entirely - exactly what a browser sends
+		// when an unchecked checkbox is submitted.
+
+		$json = $this->run_handler( 'aafm_ajax_save_settings' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertSame(
+			'MISSING',
+			get_option( 'aafm_high_risk_abilities_unlocked', 'MISSING' ),
+			'Turning the switch off must delete the option row, not store a falsy value.'
+		);
+		$this->assertFalse( get_option( 'aafm_high_risk_abilities_unlocked', false ) );
+	}
+
+	/**
+	 * The other side of the fix above: turning the switch on must still store an explicit true, not
+	 * also be swept into a delete.
+	 */
+	public function test_ajax_save_settings_keeps_high_risk_option_stored_true_when_switch_on(): void {
+		$this->acting_as( 'administrator' );
+		$this->intercept_die();
+		$nonce                                      = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']                             = $nonce;
+		$_REQUEST['nonce']                          = $nonce;
+		$_POST['aafm_high_risk_abilities_unlocked'] = '1';
+
+		$json = $this->run_handler( 'aafm_ajax_save_settings' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertTrue( get_option( 'aafm_high_risk_abilities_unlocked', false ) );
+	}
 }

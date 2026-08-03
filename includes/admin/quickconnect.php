@@ -130,13 +130,26 @@ function aafm_quickconnect_write_abilities(): array {
 }
 
 /**
- * Apply the wizard's content-access choice to the enabled-abilities option.
+ * Apply the wizard's content-access choice to the enabled-abilities option, and set the site's
+ * read-only mode to match it.
  *
  * The Read bundle is always turned on (the wizard's Read row is on by default and cannot be turned
  * off there). The Write bundle is turned on when $write is true and turned off when it is false, so
  * a run of the wizard is authoritative for its own two rows. Any other enabled ability the operator
  * set elsewhere (the full Abilities tab, an integration) is preserved untouched. The result is
  * intersected with the live registry so no stale name is ever written.
+ *
+ * The mode is what makes the wizard's promise durable. Leaving the write row off used to be a
+ * one-time set of ticks that eroded the moment anyone switched a single write on somewhere else;
+ * setting the mode instead means the read-only posture the operator chose on day one is still the
+ * posture in month six. Turning the write row ON has to clear the mode in the same breath, or the
+ * wizard would enable a write bundle that the floor then refuses to register - a screen saying yes
+ * over a server saying no.
+ *
+ * The mode is set FIRST, before the option is written, for two reasons: the enabled list is read
+ * raw below so the floor cannot subtract the operator's existing writes out of their own option,
+ * and aafm_set_enabled_abilities() refuses a write that is not already stored while the mode is on,
+ * which would otherwise swallow the write bundle this call is trying to enable.
  *
  * @param bool $write Whether the optional write bundle should be enabled.
  * @return void
@@ -145,7 +158,14 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	$read_set  = aafm_quickconnect_read_abilities();
 	$write_set = aafm_quickconnect_write_abilities();
 
-	$current = aafm_get_enabled_abilities();
+	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
+	aafm_set_read_only_mode( ! $write );
+	aafm_log_read_only_switch_change( $read_only_before, ! $write );
+
+	// The RAW stored list, not aafm_get_enabled_abilities(): with read-only mode already on from a
+	// previous run, the floored reader would hand back reads only and every write the operator had
+	// chosen elsewhere would be dropped from their own option by a wizard finish.
+	$current = aafm_get_stored_enabled_abilities_raw();
 
 	// Start from what is already enabled, then turn the Read bundle on unconditionally.
 	$enabled = array_values( array_unique( array_merge( $current, $read_set ) ) );
@@ -435,7 +455,7 @@ function aafm_quickconnect_render(): void {
 							</label>
 							<div class="cx">
 								<div class="cl accent"><?php esc_html_e( 'Read content', 'agent-abilities-for-mcp' ); ?> <span class="soft">&middot; <?php esc_html_e( 'on by default', 'agent-abilities-for-mcp' ); ?></span></div>
-								<div class="cd"><?php esc_html_e( 'Core and content: posts, pages, media, and terms. Read-only and safe, so the agent can see the site without changing it.', 'agent-abilities-for-mcp' ); ?></div>
+								<div class="cd"><?php esc_html_e( 'Core and content: posts, pages, media, and terms. Read-only and safe, so the agent can see the site without changing it.', 'agent-abilities-for-mcp' ); ?> <?php esc_html_e( 'Leaving the write row below off also turns on read-only mode, so nothing that writes can be switched on anywhere until you turn that off in Settings.', 'agent-abilities-for-mcp' ); ?></div>
 							</div>
 						</div>
 

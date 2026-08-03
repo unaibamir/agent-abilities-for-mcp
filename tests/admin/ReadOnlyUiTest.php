@@ -19,6 +19,72 @@ final class ReadOnlyUiTest extends TestCase {
 		aafm_install_activity_log();
 	}
 
+	public function tear_down(): void {
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			if ( 0 === strncmp( (string) $slug, 'demo/', 5 ) ) {
+				wp_unregister_ability( (string) $slug );
+			}
+		}
+		parent::tear_down();
+	}
+
+	/**
+	 * Register a live read-only and a live write foreign ability.
+	 *
+	 * The Bridge tab only ever renders rows it discovered from the live registry, so a row whose
+	 * slug is not registered is a combination production cannot produce on an active card. These
+	 * fixtures make the risk classification real rather than incidentally correct: the renderer
+	 * resolves each slug and reads its actual annotations, the same as it would on a real site.
+	 *
+	 * @return void
+	 */
+	private function register_bridge_fixtures(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				$base = array(
+					'category'            => 'demo-things',
+					'description'         => 'Fixture.',
+					'execute_callback'    => '__return_empty_array',
+					'permission_callback' => '__return_true',
+				);
+				wp_register_ability(
+					'demo/reader',
+					$base + array(
+						'label' => 'Reader',
+						'meta'  => array( 'annotations' => array( 'readonly' => true ) ),
+					)
+				);
+				wp_register_ability(
+					'demo/writer',
+					$base + array(
+						'label' => 'Writer',
+						'meta'  => array(
+							'annotations' => array(
+								'readonly'    => false,
+								'destructive' => false,
+							),
+						),
+					)
+				);
+			}
+		);
+	}
+
 	/**
 	 * Render one Abilities-tab ability row and return its markup.
 	 *
@@ -315,13 +381,93 @@ final class ReadOnlyUiTest extends TestCase {
 
 		$this->assertStringContainsString( "querySelectorAll( '.aafm-enable-reads' )", $js );
 		$this->assertStringContainsString(
-			'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]',
+			'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
 			$js,
 			'The bulk control must scope to read rows only, through the attribute the renderer emits.'
 		);
-		// The scope roots it walks up to are the two containers the two tabs actually render.
+		// The Bridge tab posts its own field name through its own AJAX save, so the binding has to
+		// match that too or the button is a silent no-op on exactly the tab spec 1.4 put in scope.
+		$this->assertStringContainsString(
+			'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="bridged_abilities[]"]:not([disabled])',
+			$js,
+			'The bulk control must also match the Bridge tab field name.'
+		);
+		// The scope roots it walks up to are the containers the three tabs actually render.
 		$this->assertStringContainsString( '.aafm-subject-panel, .aafm-integration-card', $js );
 	}
+
+	/**
+	 * Render one bridge group and return its markup.
+	 *
+	 * @param array<int,array<string,mixed>> $rows Ability display records.
+	 * @return string
+	 */
+	private function render_bridge_group( array $rows ): string {
+		$this->register_bridge_fixtures();
+		ob_start();
+		aafm_render_bridge_group( 'demo', array( 'abilities' => $rows ), array(), false );
+		return (string) ob_get_clean();
+	}
+
+	public function test_the_bridge_tab_offers_enable_all_reads(): void {
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/reader',
+					'label' => 'Reader',
+					'risk'  => 'read',
+				),
+			)
+		);
+
+		$this->assertStringContainsString( 'aafm-enable-reads', $html );
+		$this->assertStringContainsString( 'Enable all reads', $html );
+		// It sits beside the existing pair, per spec 1.8.
+		$this->assertStringContainsString( 'data-bridge-bulk="enable"', $html );
+		$this->assertStringContainsString( 'data-bridge-bulk="disable"', $html );
+	}
+
+	/**
+	 * The binding walks up to `.aafm-integration-card`, and on this tab that class lands on the
+	 * group's own <details>. If the bridge group ever stopped carrying it the button would find no
+	 * scope and silently do nothing, which is the failure mode that looks exactly like success.
+	 */
+	public function test_the_bridge_group_carries_the_scope_root_the_binding_walks_to(): void {
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/reader',
+					'label' => 'Reader',
+					'risk'  => 'read',
+				),
+			)
+		);
+
+		$this->assertStringContainsString( 'aafm-integration-card', $html );
+		$this->assertMatchesRegularExpression( '/<details[^>]*class="[^"]*aafm-integration-card/', $html );
+	}
+
+	public function test_a_bridge_read_row_carries_the_risk_the_bulk_control_scopes_on(): void {
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/reader',
+					'label' => 'Reader',
+					'risk'  => 'read',
+				),
+				array(
+					'slug'  => 'demo/writer',
+					'label' => 'Writer',
+					'risk'  => 'write',
+				),
+			)
+		);
+
+		$this->assertStringContainsString( 'data-risk="read"', $html );
+		$this->assertStringContainsString( 'data-risk="write"', $html );
+		$this->assertStringContainsString( 'name="bridged_abilities[]" value="demo/reader"', $html );
+	}
+
 
 	public function test_the_integrations_tab_offers_it_too(): void {
 		ob_start();

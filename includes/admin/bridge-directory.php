@@ -317,7 +317,11 @@ function aafm_render_bridge_group( string $ns, array $group, array $enabled, boo
 	if ( ! $disabled && $rows ) {
 		echo '<div class="aafm-bridge-bulk">';
 		echo '<button type="button" class="aafm-btn aafm-btn-secondary" data-bridge-bulk="enable">' . esc_html__( 'Enable all', 'agent-abilities-for-mcp' ) . '</button> ';
-		echo '<button type="button" class="aafm-btn aafm-btn-secondary" data-bridge-bulk="disable">' . esc_html__( 'Disable all', 'agent-abilities-for-mcp' ) . '</button>';
+		echo '<button type="button" class="aafm-btn aafm-btn-secondary" data-bridge-bulk="disable">' . esc_html__( 'Disable all', 'agent-abilities-for-mcp' ) . '</button> ';
+		// Read-only mode covers bridged abilities, so the friction it creates lands here too: on a
+		// plugin that annotates many abilities readonly, the operator would otherwise tick each one
+		// by hand. Same control as the other two tabs, scoped by the group card this sits in.
+		echo '<button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">' . esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ) . '</button>';
 		echo '</div>';
 	}
 

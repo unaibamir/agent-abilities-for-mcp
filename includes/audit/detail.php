@@ -35,7 +35,11 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 	// is_numeric() only accepts a numeric string with trailing whitespace since PHP 8.0, so an
 	// identical value can validate on 8.x and fail on the plugin's PHP 7.4 floor. Trim a string
 	// candidate before the check so both cases agree; a non-string $value passes through untouched.
-	$candidate = is_string( $value ) ? trim( $value ) : $value;
+	// The charlist adds \f: trim()'s default charlist (" \t\n\r\0\x0B") strips a vertical tab but
+	// not a form feed, while is_numeric()'s own whitespace set includes both, so a trailing \f
+	// would still diverge between 7.4 and 8.x without it. Only $candidate feeds the id/count
+	// branches below; key/slug/enum read the untrimmed $value, so this never loosens those.
+	$candidate = is_string( $value ) ? trim( $value, " \t\n\r\0\x0B\f" ) : $value;
 
 	switch ( $type ) {
 		case 'id':

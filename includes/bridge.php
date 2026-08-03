@@ -270,10 +270,30 @@ function aafm_discover_foreign_abilities(): array {
 	}
 	ksort( $groups );
 	foreach ( $groups as &$group ) {
-		usort(
+		// usort() only became stable in PHP 8.0. Duplicate labels are especially plausible here -
+		// these come from foreign plugins we do not control - so a tie could reorder on this
+		// plugin's PHP 7.4 floor. Pair each row with its original position and tie-break on it,
+		// so every PHP version reproduces PHP 8's current stable order byte-for-byte.
+		$paired = array_map(
+			static function ( array $item, int $index ): array {
+				return array( $item, $index );
+			},
 			$group['abilities'],
-			static fn( array $a, array $b ): int => strcasecmp( (string) $a['label'], (string) $b['label'] )
+			array_keys( $group['abilities'] )
 		);
+		usort(
+			$paired,
+			static function ( array $a, array $b ): int {
+				$cmp = strcasecmp( (string) $a[0]['label'], (string) $b[0]['label'] );
+				if ( 0 !== $cmp ) {
+					return $cmp;
+				}
+				// Ties break toward the earlier ability (original order), matching PHP 8's stable
+				// usort() so this plugin's PHP 7.4 floor and PHP 8.x produce identical output.
+				return $a[1] <=> $b[1];
+			}
+		);
+		$group['abilities'] = array_column( $paired, 0 );
 	}
 	unset( $group );
 	return $groups;

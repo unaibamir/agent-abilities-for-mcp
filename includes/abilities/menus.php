@@ -320,14 +320,34 @@ function aafm_exec_list_menu_items( array $input ): array {
 		$decorated[] = wp_setup_nav_menu_item( $post );
 	}
 
-	usort(
+	// usort() only became stable in PHP 8.0. Programmatic nav menus commonly carry menu_order 0
+	// on every item, and on this plugin's PHP 7.4 floor a tie could reshuffle both the returned
+	// sequence and the renumbered `order` field below - the comment on that renumbering step
+	// requires byte-identical output to the pre-fix behaviour, so this cannot be allowed to
+	// drift. Pair each item with its original position and tie-break on it, so every PHP version
+	// reproduces PHP 8's current stable order byte-for-byte.
+	$paired = array_map(
+		static function ( $item, int $index ): array {
+			return array( $item, $index );
+		},
 		$decorated,
-		static function ( $a, $b ): int {
-			$a_order = isset( $a->menu_order ) ? (int) $a->menu_order : 0;
-			$b_order = isset( $b->menu_order ) ? (int) $b->menu_order : 0;
-			return $a_order <=> $b_order;
+		array_keys( $decorated )
+	);
+	usort(
+		$paired,
+		static function ( array $a, array $b ): int {
+			$a_order = isset( $a[0]->menu_order ) ? (int) $a[0]->menu_order : 0;
+			$b_order = isset( $b[0]->menu_order ) ? (int) $b[0]->menu_order : 0;
+			$cmp     = $a_order <=> $b_order;
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+			// Ties break toward the earlier item (original position), matching PHP 8's stable
+			// usort() so this plugin's PHP 7.4 floor and PHP 8.x produce identical output.
+			return $a[1] <=> $b[1];
 		}
 	);
+	$decorated = array_column( $paired, 0 );
 
 	$items = array();
 	$order = 0;

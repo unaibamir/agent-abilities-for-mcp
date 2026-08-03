@@ -247,6 +247,38 @@ final class RegisterWrapperTest extends TestCase {
 	}
 
 	/**
+	 * Every execute_callback is contracted to return array|WP_Error. That contract used to be a
+	 * native PHP union return type on the ability functions themselves; removing it for the PHP
+	 * 7.4 floor left static analysis as the only compile-time enforcement, so this wrapper must
+	 * catch a wrong-shaped return at runtime instead. Before this guard, a non-array, non-WP_Error
+	 * result flowed straight through and was logged as a SUCCESS, because status is decided by
+	 * is_wp_error() alone - a silent wrong answer, not a loud one.
+	 */
+	public function test_malformed_result_is_converted_to_a_logged_error(): void {
+		$this->acting_as( 'administrator' );
+		$this->register(
+			'aafm/read-malformed',
+			array(
+				'label'               => 'Read malformed',
+				'description'         => 'A read ability whose callback returns the wrong shape.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => 'not-an-array-or-wp-error',
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$result = wp_get_ability( 'aafm/read-malformed' )->execute( null );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'a wrong-shaped return must never reach the caller as-is.' );
+		$this->assertSame( 'aafm_malformed_ability_result', $result->get_error_code() );
+
+		$rows = aafm_query_activity( array() );
+		$this->assertSame( 'error', $rows[0]['status'], 'a wrong-shaped return must be logged as an error, never a success.' );
+		$this->assertNull( $rows[0]['result_count'] );
+	}
+
+	/**
 	 * M16: a plain (non-OAuth) call - no bearer ever resolved this request - logs client_id as ''.
 	 */
 	public function test_activity_log_has_no_client_id_for_a_non_oauth_call(): void {

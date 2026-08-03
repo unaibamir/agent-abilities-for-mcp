@@ -53,6 +53,9 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
 // The high-risk floor. Required at top level, not inside the bootstrap, because both the admin
 // screens and the registration walk read it, and neither should have to care which ran first.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
+// Read-only mode, the second floor. Same reasoning as the line above: the admin screens, the
+// native registration walk, and the bridge walk all read it.
+require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 
 /**

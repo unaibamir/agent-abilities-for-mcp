@@ -375,8 +375,38 @@ function aafm_exec_wc_get_top_sellers_report( array $input ) {
 		// Stop once a short (or empty) page is returned: that is the last page of the window.
 	} while ( $page_count === $per_page );
 
-	arsort( $qty_by_product );
-	$qty_by_product = array_slice( $qty_by_product, 0, $limit, true );
+	// arsort() only became stable in PHP 8.0; on this plugin's PHP 7.4 floor, two products tied
+	// on quantity sold can come back in a different order, and because the slice below cuts
+	// through the tie, 7.4 could return a genuinely different SET of top sellers, not merely a
+	// different order. Decorate each row with its original insertion index and tie-break on it,
+	// so every PHP version reproduces PHP 8's current stable order byte-for-byte.
+	$decorated = array();
+	$index     = 0;
+	foreach ( $qty_by_product as $product_id => $quantity ) {
+		$decorated[] = array(
+			'product_id' => $product_id,
+			'quantity'   => $quantity,
+			'index'      => $index++,
+		);
+	}
+	usort(
+		$decorated,
+		static function ( array $a, array $b ): int {
+			$cmp = $b['quantity'] <=> $a['quantity'];
+			if ( 0 !== $cmp ) {
+				return $cmp;
+			}
+			// Ties break toward the earlier product (original insertion order), matching PHP 8's
+			// stable arsort() so this plugin's PHP 7.4 floor and PHP 8.x produce identical output.
+			return $a['index'] <=> $b['index'];
+		}
+	);
+	$decorated = array_slice( $decorated, 0, $limit );
+
+	$qty_by_product = array();
+	foreach ( $decorated as $row ) {
+		$qty_by_product[ $row['product_id'] ] = $row['quantity'];
+	}
 
 	$items = array();
 	foreach ( $qty_by_product as $product_id => $quantity ) {

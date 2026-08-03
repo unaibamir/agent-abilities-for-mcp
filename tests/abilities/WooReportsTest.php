@@ -419,6 +419,48 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * PHP 7.4's sort functions are not stable (PHP 8.0+ made arsort() stable), and because the
+	 * report slices straight through a tie, an unstable sort would return a genuinely different
+	 * SET of top sellers on 7.4, not merely a different order. Seed enough tied products to
+	 * exceed the ~16-element threshold below which PHP 7.4's insertion sort happens to stay
+	 * stable by accident, and pin that ties preserve original insertion order.
+	 */
+	public function test_get_top_sellers_ties_preserve_original_order(): void {
+		\AAFM\Tests\WcOrderStubStore::reset();
+		$today = gmdate( 'Y-m-d\TH:i:s' );
+
+		$product_ids = range( 9001, 9025 );
+		$items       = array();
+		foreach ( $product_ids as $product_id ) {
+			\AAFM\Tests\WcStubStore::seed( $product_id, array( 'name' => "Tied Product $product_id" ) );
+			$items[] = array(
+				'product_id' => $product_id,
+				'quantity'   => 1,
+			);
+		}
+		\AAFM\Tests\WcOrderStubStore::seed(
+			9500,
+			array(
+				'status'       => 'completed',
+				'date_created' => $today,
+				'items'        => $items,
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = aafm_exec_wc_get_top_sellers_report(
+			array(
+				'period' => 'year',
+				'limit'  => 25,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$actual_ids = array_column( $res['items'], 'product_id' );
+		$this->assertSame( $product_ids, $actual_ids, 'a fully tied set must preserve original insertion order on every PHP version, not just PHP 8+.' );
+	}
+
+	/**
 	 * Top sellers returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_get_top_sellers_inactive_wc(): void {

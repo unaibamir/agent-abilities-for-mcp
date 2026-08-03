@@ -462,6 +462,43 @@ final class MenusTest extends TestCase {
 		$this->assertSame( array( 1, 2 ), array_column( $res['items'], 'order' ), 'emitted order is a contiguous 1..N index, not the raw 5/10.' );
 	}
 
+	/**
+	 * PHP 7.4's usort() is not stable (PHP 8.0+ made it stable), and programmatic nav menus
+	 * commonly carry menu_order 0 on every item. Seed enough tied items to exceed the
+	 * ~16-element threshold below which PHP 7.4's insertion sort happens to stay stable by
+	 * accident, and pin that ties preserve creation order in both the returned sequence and the
+	 * renumbered `order` field.
+	 */
+	public function test_list_menu_items_ties_preserve_original_order(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Tied' );
+
+		for ( $i = 1; $i <= 20; $i++ ) {
+			wp_update_nav_menu_item(
+				$menu_id,
+				0,
+				array(
+					'menu-item-title'    => "Item $i",
+					'menu-item-url'      => home_url( "/item-$i" ),
+					'menu-item-position' => 5,
+					'menu-item-status'   => 'publish',
+				)
+			);
+		}
+
+		$res      = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$titles   = array_column( $res['items'], 'title' );
+		$expected = array_map(
+			static function ( int $i ): string {
+				return "Item $i";
+			},
+			range( 1, 20 )
+		);
+		$this->assertSame( $expected, $titles, 'a fully tied menu_order set must preserve creation order on every PHP version, not just PHP 8+.' );
+		$this->assertSame( range( 1, 20 ), array_column( $res['items'], 'order' ), 'the renumbered order field must stay contiguous 1..N in creation order.' );
+	}
+
 	public function test_list_menu_items_excludes_draft_items(): void {
 		// Publish-only parity pin: get_objects_in_term() applies no post_status filter, so the exec
 		// must skip non-published items to match the old wp_get_nav_menu_items() default. A draft item

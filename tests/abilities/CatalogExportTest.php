@@ -103,4 +103,38 @@ final class CatalogExportTest extends TestCase {
 		$names = wp_list_pluck( $cat['plugins'], 'namespace' );
 		$this->assertNotContains( 'aafm', $names, 'Foreign-only by default.' );
 	}
+
+	/**
+	 * PHP 7.4's usort() is not stable (PHP 8.0+ made it stable), and a label collision is
+	 * plausible in the real registry too. Feed the native catalog builder a registry of tied
+	 * labels exceeding the ~16-element threshold below which PHP 7.4's insertion sort happens to
+	 * stay stable by accident, and pin that ties preserve original registry order.
+	 */
+	public function test_native_catalog_group_ties_preserve_original_order(): void {
+		$cb = static function ( array $r ): array {
+			unset( $r );
+			$fixture = array();
+			for ( $i = 1; $i <= 20; $i++ ) {
+				$fixture[ "aafm-test/tied-$i" ] = array(
+					'label' => 'Tied Label',
+					'group' => 'reads',
+				);
+			}
+			return $fixture;
+		};
+		add_filter( 'aafm_abilities_registry', $cb );
+
+		$group = aafm_build_native_catalog_group();
+
+		remove_filter( 'aafm_abilities_registry', $cb );
+
+		$expected = array_map(
+			static function ( int $i ): string {
+				return "aafm-test/tied-$i";
+			},
+			range( 1, 20 )
+		);
+		$actual   = array_column( $group['abilities'], 'slug' );
+		$this->assertSame( $expected, $actual, 'a fully tied label set must preserve original registry order on every PHP version, not just PHP 8+.' );
+	}
 }

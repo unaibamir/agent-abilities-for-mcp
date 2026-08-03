@@ -142,4 +142,39 @@ final class BridgeDiscoveryTest extends TestCase {
 		$this->assertFalse( $row['destructive'] );
 		$this->assertFalse( $row['readonly'] );
 	}
+
+	/**
+	 * PHP 7.4's usort() is not stable (PHP 8.0+ made it stable), and a duplicate label is
+	 * especially plausible here - these labels come from other plugins we do not control.
+	 * Register enough tied-label foreign abilities to exceed the ~16-element threshold below
+	 * which PHP 7.4's insertion sort happens to stay stable by accident, and pin that ties
+	 * preserve original registration order.
+	 */
+	public function test_discovery_ties_preserve_original_order(): void {
+		for ( $i = 1; $i <= 20; $i++ ) {
+			$this->register_foreign(
+				"demo/tied-$i",
+				array(
+					'label'               => 'Tied Label',
+					'description'         => 'Tied ability.',
+					'input_schema'        => array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					'execute_callback'    => static fn() => array(),
+					'permission_callback' => '__return_true',
+					'meta'                => array( 'annotations' => array( 'readonly' => true ) ),
+				)
+			);
+		}
+
+		$slugs    = wp_list_pluck( aafm_discover_foreign_abilities()['demo']['abilities'], 'slug' );
+		$expected = array_map(
+			static function ( int $i ): string {
+				return "demo/tied-$i";
+			},
+			range( 1, 20 )
+		);
+		$this->assertSame( $expected, $slugs, 'a fully tied label set must preserve original registration order on every PHP version, not just PHP 8+.' );
+	}
 }

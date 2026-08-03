@@ -218,6 +218,22 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		$result = $original_execute( $input );
 
+		// Every ability's execute_callback is contracted to return array|WP_Error. That contract
+		// used to be a native PHP union return type on the ability functions themselves, so a
+		// violation was an uncaught TypeError - a 500 with no audit row. Removing those types for
+		// the PHP 7.4 floor (static analysis still enforces the contract) moved the last line of
+		// defense here, to runtime. Without this check a wrong-shaped result would flow straight
+		// through to the `is_wp_error( $result ) ? 'error' : 'success'` line below and get logged
+		// as a SUCCESS, since status is decided by is_wp_error() alone - a silent wrong answer is
+		// strictly worse than the crash it replaces. Catch it here and turn it into a real,
+		// logged, visible error instead.
+		if ( ! is_array( $result ) && ! is_wp_error( $result ) ) {
+			$result = new \WP_Error(
+				'aafm_malformed_ability_result',
+				__( 'This ability returned an unexpected result. Please try again or contact the site administrator.', 'agent-abilities-for-mcp' )
+			);
+		}
+
 		// L5: a list/read call's magnitude is observability only - it is never used to alter
 		// $result or the logged status, so a mis-shaped result simply logs no count.
 		$result_count = ( $is_read_ability && ! is_wp_error( $result ) ) ? aafm_result_magnitude( $result ) : null;

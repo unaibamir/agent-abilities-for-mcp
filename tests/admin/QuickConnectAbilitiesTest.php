@@ -14,6 +14,13 @@ use AAFM\Tests\TestCase;
 
 final class QuickConnectAbilitiesTest extends TestCase {
 
+	public function set_up(): void {
+		parent::set_up();
+		// aafm_quickconnect_apply_abilities() sets read-only mode, and that flip is audited, so the
+		// log table has to exist or the write surfaces as raw wpdb output mid-test.
+		aafm_install_activity_log();
+	}
+
 	/**
 	 * The Read bundle is core + content reads only: it carries the safe read-only abilities and
 	 * never a write, never a personal-data subject (users/comments), and never an integration.

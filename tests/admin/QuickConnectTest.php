@@ -22,6 +22,9 @@ final class QuickConnectTest extends TestCase {
 		delete_option( 'aafm_quickconnect_finished' );
 		delete_option( 'aafm_quickconnect_dismissed' );
 		delete_option( 'aafm_oauth_enabled' );
+		// Finishing the wizard sets read-only mode, and that is audited like any other flip of the
+		// switch, so the log table has to exist or the write surfaces as raw wpdb output.
+		aafm_install_activity_log();
 	}
 
 	/**

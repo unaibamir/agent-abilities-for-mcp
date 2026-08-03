@@ -154,7 +154,7 @@ function aafm_args_wc_get_sales_report(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_sales_report( array $input ): array|\WP_Error {
+function aafm_exec_wc_get_sales_report( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
 		return aafm_generic_error();
 	}
@@ -297,18 +297,20 @@ function aafm_args_wc_get_top_sellers_report(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_top_sellers_report( array $input ): array|\WP_Error {
+function aafm_exec_wc_get_top_sellers_report( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
 	$period = sanitize_text_field( (string) ( $input['period'] ?? 'month' ) );
 	$limit  = max( 1, min( 100, (int) ( $input['limit'] ?? 10 ) ) );
 
-	$start = match ( $period ) {
-		'week'  => gmdate( 'Y-m-d', strtotime( '-1 week' ) ),
-		'year'  => gmdate( 'Y-01-01' ),
-		default => gmdate( 'Y-m-01' ),
-	};
+	if ( 'week' === $period ) {
+		$start = gmdate( 'Y-m-d', strtotime( '-1 week' ) );
+	} elseif ( 'year' === $period ) {
+		$start = gmdate( 'Y-01-01' );
+	} else {
+		$start = gmdate( 'Y-m-01' );
+	}
 
 	if ( ! function_exists( 'wc_get_orders' ) ) {
 		return aafm_generic_error();
@@ -439,7 +441,7 @@ function aafm_args_wc_count_orders(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_count_orders( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
 		return aafm_generic_error();
 	}
@@ -543,7 +545,7 @@ function aafm_args_wc_count_products(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_count_products( array $input ): array|\WP_Error {
+function aafm_exec_wc_count_products( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}

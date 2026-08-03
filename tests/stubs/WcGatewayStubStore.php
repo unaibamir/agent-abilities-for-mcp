@@ -120,7 +120,7 @@ class WcGatewayStubStore {
 	 * @param mixed  $value      Setting value.
 	 * @return bool
 	 */
-	public static function update_option( string $gateway_id, string $key, mixed $value ): bool {
+	public static function update_option( string $gateway_id, string $key, $value ): bool {
 		if ( ! isset( self::$gateways[ $gateway_id ] ) ) {
 			return false;
 		}

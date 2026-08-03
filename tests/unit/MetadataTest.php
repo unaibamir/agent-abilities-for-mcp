@@ -22,9 +22,9 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( '6.9', $this->plugin_headers()['RequiresWP'] );
 	}
 
-	public function test_requires_php_80(): void {
+	public function test_requires_php_74(): void {
 		require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		$this->assertSame( '8.0', $this->plugin_headers()['RequiresPHP'] );
+		$this->assertSame( '7.4', $this->plugin_headers()['RequiresPHP'] );
 	}
 
 	public function test_version_constant_matches_header(): void {

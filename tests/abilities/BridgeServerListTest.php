@@ -133,11 +133,20 @@ final class BridgeServerListTest extends TestCase {
 	private function tool_dto( string $name ): object {
 		return new class( $name ) {
 			/**
+			 * Tool name.
+			 *
+			 * @var string
+			 */
+			private string $name;
+
+			/**
 			 * Stub Tool DTO.
 			 *
 			 * @param string $name Tool name.
 			 */
-			public function __construct( private string $name ) {}
+			public function __construct( string $name ) {
+				$this->name = $name;
+			}
 
 			public function getName(): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- mirrors the adapter DTO accessor.
 				return $this->name;

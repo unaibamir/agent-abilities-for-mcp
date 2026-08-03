@@ -949,7 +949,7 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @param string $slug Optional slug.
 		 * @return array<string,string>|\WP_Error
 		 */
-		public static function create_tax_class( string $name, string $slug = '' ): array|\WP_Error { return array(); }
+		public static function create_tax_class( string $name, string $slug = '' ) { return array(); }
 
 		/**
 		 * Delete a tax class by field/value.
@@ -958,7 +958,7 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @param string $value Field value.
 		 * @return bool|\WP_Error
 		 */
-		public static function delete_tax_class_by( string $field, string $value ): bool|\WP_Error { return false; }
+		public static function delete_tax_class_by( string $field, string $value ) { return false; }
 
 		/**
 		 * Insert a single tax rate row and return its new id.

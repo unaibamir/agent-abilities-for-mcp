@@ -353,7 +353,7 @@ final class AnnotationScanner {
 		}
 		try {
 			$reflection = new ReflectionFunction( $fn_name );
-		} catch ( ReflectionException ) {
+		} catch ( ReflectionException $e ) {
 			return null;
 		}
 
@@ -429,7 +429,7 @@ final class AnnotationScanner {
 		}
 		try {
 			$reflection = new ReflectionFunction( $fn_name );
-		} catch ( ReflectionException ) {
+		} catch ( ReflectionException $e ) {
 			return false;
 		}
 		if ( $reflection->isInternal() ) {

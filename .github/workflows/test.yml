@@ -129,6 +129,50 @@ jobs:
           head -80 /tmp/pot.diff
           exit 1
 
+  # Parse-check the shipped export on a real PHP 7.4 binary. PHPStan's phpVersion setting
+  # (phpstan.neon.dist) catches most PHP 8-only syntax at this floor, but not all of it: the
+  # nullsafe operator, `mixed`, `never`, a `static` return type, a trailing comma in a parameter
+  # list, and a new-in-initializer default value are all missed, and every one is a parse error
+  # on 7.4. `git archive` honours export-ignore, so this scans exactly what ships in the zip -
+  # including bundled vendor/ code that no PHPUnit run fully loads.
+  lint74:
+    name: Parse check (PHP 7.4, shipped export)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '7.4'
+          coverage: none
+
+      - name: Export the shipped tree and lint every file
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/shipped
+          git archive HEAD | tar -x -C /tmp/shipped
+
+          fail=0
+          while IFS= read -r -d '' file; do
+            if ! output=$(php -l "$file" 2>&1); then
+              echo "$output"
+              fail=1
+            fi
+          done < <(find /tmp/shipped -name '*.php' -print0)
+
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::One or more shipped files failed to parse on PHP 7.4."
+            exit 1
+          fi
+          echo "All shipped PHP files parse on PHP 7.4."
+
   # PHPUnit across the supported PHP (>= 7.4) and WordPress (>= 6.9) range.
   phpunit:
     name: PHP ${{ matrix.php }} · WP ${{ matrix.wp }}
@@ -215,7 +259,7 @@ jobs:
   # require in branch protection, so the matrix can change without re-wiring.
   test-result:
     name: Test Suite Result
-    needs: [phpcs, phpstan, i18n, phpunit]
+    needs: [phpcs, phpstan, i18n, lint74, phpunit]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     permissions: {}
@@ -225,6 +269,7 @@ jobs:
           if [ "${{ needs.phpcs.result }}" != "success" ] \
             || [ "${{ needs.phpstan.result }}" != "success" ] \
             || [ "${{ needs.i18n.result }}" != "success" ] \
+            || [ "${{ needs.lint74.result }}" != "success" ] \
             || [ "${{ needs.phpunit.result }}" != "success" ]; then
             echo "One or more required checks failed."
             exit 1

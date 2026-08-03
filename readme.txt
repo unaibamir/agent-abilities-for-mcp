@@ -4,7 +4,7 @@ Tags: ai, chatgpt, claude, mcp, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -244,6 +244,19 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.6.0 =
+
+* **Feature:** Read-only mode, a switch on the Settings tab that stops any ability that writes from being registered as an MCP tool, whatever is ticked. It covers abilities from other plugins as well, each classified by its own annotation.
+* **Feature:** Turning read-only mode on or off enables and disables nothing by itself. Your selections are left as they are, so switching the mode back off gives you exactly what you had chosen before.
+* **Feature:** An "Enable all reads" button on the Abilities, Integrations and Bridge tabs, which ticks every read ability in a section and leaves the writes alone.
+* **Feature:** The page header now states the site's posture on every tab: read-only, read plus write, or read plus write with high-risk unlocked. It is worked out from what would actually register, not from the stored setting.
+* **Feature:** Finishing the Quick Connect wizard without choosing write access now turns read-only mode on rather than ticking a set of boxes, so it still holds months later once you have enabled other things.
+* **Feature:** Turning read-only mode on or off is recorded in the activity log.
+* **Chore:** The minimum PHP version is now 7.4, down from 8.0. WordPress core itself requires 7.2, and about half the sites running a plugin in this category are still on 7.4.
+* **Fix:** A refund amount sent with surrounding whitespace is now trimmed before the numeric check, so it is accepted or rejected the same way on every supported PHP version.
+* **Fix:** Several lists could come back in a different order on PHP 7.4 than on 8.x. They now sort the same way everywhere.
+* **Fix:** An ability from another plugin that returns a result in an unexpected shape is now caught and reported instead of failing further down with a less useful error.
+
 = 1.5.0 =
 
 * **Feature:** Eight WooCommerce abilities that move money or grant authority (refunds, order status, order updates, payment gateway settings, coupon creation and updates, and tax rate creation and updates) are now locked by default behind a single audited master switch on the Settings tab.
@@ -407,6 +420,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+
+Read-only mode is new: one switch on Settings stops every write ability from registering, including abilities from other plugins. It enables and disables nothing on its own, so your selections are untouched. Minimum PHP is now 7.4.
 
 = 1.5.0 =
 

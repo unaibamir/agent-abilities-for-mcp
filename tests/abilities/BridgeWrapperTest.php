@@ -455,6 +455,61 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * Data provider pairing a scalar output_schema with the matching legal value it describes.
+	 * This is the exact shape the wrap-then-copy-schema defect (568388b) reopened: a bridged
+	 * ability that legitimately declares a scalar output type and returns a value of that type,
+	 * as opposed to the schema-less cases in scalar_result_provider() below, which never
+	 * exercised the copied-schema validation at all.
+	 *
+	 * @return array<string,array{0:array<string,mixed>,1:mixed}>
+	 */
+	public function scalar_schema_provider(): array {
+		return array(
+			'boolean schema, bool result'  => array( array( 'type' => 'boolean' ), true ),
+			'string schema, string result' => array( array( 'type' => 'string' ), 'deleted' ),
+			'integer schema, int result'   => array( array( 'type' => 'integer' ), 42 ),
+		);
+	}
+
+	/**
+	 * The regression an adversarial Codex pass found and no existing test covered: a bridged
+	 * ability that declares a scalar output_schema (e.g. `{type: boolean}`) and legitimately
+	 * returns a matching scalar (e.g. `true`) must succeed and return that scalar unchanged.
+	 * Wrapping it into `array( 'data' => $value )` - as includes/bridge.php did between
+	 * 568388b and the revert in this branch - fails validation against the very schema this
+	 * file copies from the foreign ability onto our own wrapper's registration, turning a real
+	 * success into a spurious `ability_invalid_output` error. register_foreign_with_schema()
+	 * lets a schema and an execute_callback be declared together; register_foreign_returning()
+	 * used below is deliberately schema-less, which is exactly why it never caught this.
+	 *
+	 * @dataProvider scalar_schema_provider
+	 * @param array<string,mixed> $schema The foreign ability's declared output_schema.
+	 * @param mixed               $value  The value returned, matching that schema.
+	 */
+	public function test_bridged_ability_with_scalar_schema_returning_matching_scalar_succeeds( array $schema, $value ): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_with_schema( 'vendor/scalar-schema', $schema, static fn() => $value );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/scalar-schema' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-scalar-schema' )->execute( array() );
+
+		$this->assertSame(
+			$value,
+			$result,
+			'A bridged ability whose result matches its own declared scalar schema must succeed and return the value unchanged.'
+		);
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-scalar-schema' ) );
+		$this->assertNotEmpty( $rows );
+		$this->assertSame(
+			'success',
+			(string) $rows[0]['status'],
+			'A schema-conforming scalar result must log success, not error.'
+		);
+	}
+
+	/**
 	 * Register a foreign ability that declares no output_schema and executes to the given
 	 * value, exactly like register_foreign() above but with a caller-supplied callback. No
 	 * output_schema means core's validate_output() short-circuits true on any shape, so this is
@@ -517,17 +572,18 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
-	 * The heart of the bug: before the fix, a bridged ability returning a legal scalar was
-	 * caught by the malformed-result guard in aafm_register_ability_with_log() - a guard
-	 * written for OUR array|WP_Error contract, wrongly applied to a wider foreign contract -
-	 * and turned into a WP_Error even though the foreign write had already happened. The fix
-	 * normalizes at the bridge layer (includes/bridge.php) so the guard never sees a bare
-	 * scalar from a bridged wrapper.
+	 * The heart of the original bug: a bridged ability returning a legal scalar was caught by
+	 * the malformed-result guard in aafm_register_ability_with_log() - a guard written for OUR
+	 * array|WP_Error contract, wrongly applied to a wider foreign contract - and turned into a
+	 * WP_Error even though the foreign write had already happened. The fix scopes that guard to
+	 * native (aafm/*) ability names only, so a bridged wrapper's execute_callback returns a
+	 * scalar result exactly as the foreign ability produced it - no wrap, no wider contract
+	 * applied to code we do not control.
 	 *
 	 * @dataProvider scalar_result_provider
 	 * @param mixed $scalar The legal scalar value a foreign ability returns.
 	 */
-	public function test_bridged_scalar_result_is_wrapped_not_rejected_as_malformed( $scalar ): void {
+	public function test_bridged_scalar_result_passes_through_not_rejected_as_malformed( $scalar ): void {
 		$this->acting_as( 'administrator' );
 		$this->register_foreign_returning( 'vendor/scalar-result', static fn() => $scalar );
 		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/scalar-result' ) );
@@ -540,14 +596,14 @@ final class BridgeWrapperTest extends TestCase {
 			$result,
 			'A bridged ability legally returning a scalar must not be treated as malformed.'
 		);
-		$this->assertSame( array( 'data' => $scalar ), $result );
+		$this->assertSame( $scalar, $result );
 	}
 
 	/**
 	 * Same call as above, but asserting the audit row - this is the actual observable damage
 	 * the bug caused: the write had already happened, but the log said 'error', which is what
-	 * an operator or calling agent actually sees. Wrapping the scalar must produce a 'success'
-	 * row, not an 'error' one.
+	 * an operator or calling agent actually sees. A legal scalar result must produce a
+	 * 'success' row, not an 'error' one.
 	 *
 	 * @dataProvider scalar_result_provider
 	 * @param mixed $scalar The legal scalar value a foreign ability returns.

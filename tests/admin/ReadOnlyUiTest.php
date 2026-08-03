@@ -468,6 +468,94 @@ final class ReadOnlyUiTest extends TestCase {
 		$this->assertStringContainsString( 'name="bridged_abilities[]" value="demo/reader"', $html );
 	}
 
+	/**
+	 * The bridge renderer computes its read-only lock inline rather than through
+	 * aafm_ability_lock_reason(), and this is the test that pins WHY.
+	 *
+	 * That helper falls through to aafm_ability_is_locked(), which is a plain
+	 * in_array() over aafm_high_risk_abilities() - the built-ins plus whatever the public
+	 * aafm_high_risk_abilities filter adds. A site that names a FOREIGN slug in that filter would
+	 * make it return true. The high-risk floor never subtracts from the bridged registration walk,
+	 * so the row would show a padlock over an ability that still registers: a lock the floor does
+	 * not enforce, which is exactly the defect class 1.5.0 shipped.
+	 *
+	 * So: a filter-added foreign slug must still render a live checkbox here. This fails the moment
+	 * anyone routes this renderer through the shared helper.
+	 */
+	public function test_a_bridge_row_never_renders_a_high_risk_lock(): void {
+		add_filter(
+			'aafm_high_risk_abilities',
+			static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) )
+		);
+		$this->assertTrue(
+			aafm_ability_is_locked( 'demo/writer' ),
+			'Fixture check: the filter must actually make the shared predicate report this slug locked.'
+		);
+
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/writer',
+					'label' => 'Writer',
+					'risk'  => 'write',
+				),
+			)
+		);
+
+		$this->assertStringContainsString(
+			'name="bridged_abilities[]" value="demo/writer"',
+			$html,
+			'The high-risk floor does not reach bridged abilities, so this row must stay toggleable.'
+		);
+		$this->assertStringNotContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringNotContainsString( 'Turn on High-risk abilities', $html );
+	}
+
+	/**
+	 * The "Unavailable" group renders enabled slugs whose host plugin is inactive, so by definition
+	 * none of its slugs is a registered ability. Core treats wp_get_ability() on an unregistered
+	 * slug as a programming error and raises _doing_it_wrong(), which the WP test case converts into
+	 * a failure, so rendering the group with nothing registered IS the assertion.
+	 *
+	 * The `$disabled ? '' : ...` short-circuit in aafm_render_bridge_permission_line() is what
+	 * protects it today, by skipping the lookup entirely for an orphan row. That
+	 * is load-bearing and was previously unpinned: removing the short-circuit makes this test fail
+	 * with the notice above. Every other caller of aafm_bridge_permission_label() comes from
+	 * aafm_discover_foreign_abilities(), which enumerates wp_get_abilities(), so its slug is always
+	 * registered. The two facts together are why the label helper needs no guard of its own.
+	 */
+	public function test_the_orphan_group_renders_without_a_doing_it_wrong_notice(): void {
+		$this->assertFalse( wp_has_ability( 'demo/gone' ), 'Fixture check: the orphan slug must NOT be registered.' );
+
+		ob_start();
+		aafm_render_bridge_orphan_group( array( 'demo/gone' ) );
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'demo/gone', $html, 'An orphan must still be shown, not silently dropped.' );
+	}
+
+	/**
+	 * The other side of it: read-only mode DOES reach bridged abilities, so the inline clause has
+	 * to still lock a write. Without this, "do not use the shared helper" could be satisfied by
+	 * doing no locking at all.
+	 */
+	public function test_read_only_mode_still_locks_a_bridged_write(): void {
+		update_option( 'aafm_read_only_mode', true );
+
+		$html = $this->render_bridge_group(
+			array(
+				array(
+					'slug'  => 'demo/writer',
+					'label' => 'Writer',
+					'risk'  => 'write',
+				),
+			)
+		);
+
+		$this->assertStringNotContainsString( 'type="checkbox"', $html );
+		$this->assertStringContainsString( 'aafm-ability-locked', $html );
+		$this->assertStringContainsString( 'Read-only mode', $html );
+	}
 
 	public function test_the_integrations_tab_offers_it_too(): void {
 		ob_start();

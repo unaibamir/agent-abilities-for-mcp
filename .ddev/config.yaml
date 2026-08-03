@@ -10,6 +10,16 @@ database:
     type: mariadb
     version: "11.8"
 performance_mode: none
+# Pinned so this project always lands on the same URL instead of floating to whatever
+# port is free at start time. Valet's nginx owns 80/443 system-wide for its own *.test
+# sites, so DDEV's router can never bind those - it has to use something else, and without
+# a pin it picks a different "something else" every time the router container restarts
+# (e.g. after `orbctl stop` / a force-quit). Pinned to 33000/33001 (not 8080/8443) because
+# Elementor content on this LearnDash/BuddyBoss clone bakes absolute URLs with the port
+# into serialized post data - matching the port that's already baked in avoids a
+# site-wide search-replace. Valet keeps 80/443, this project always lands on 33000/33001.
+router_http_port: "33000"
+router_https_port: "33001"
 use_dns_when_possible: true
 composer_version: "2"
 web_environment:

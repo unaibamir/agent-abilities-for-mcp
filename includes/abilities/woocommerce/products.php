@@ -582,7 +582,7 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		$sku = sanitize_text_field( (string) $input['sku'] );
 		try {
 			$product->set_sku( $sku );
-		} catch ( \WC_Data_Exception ) {
+		} catch ( \WC_Data_Exception $e ) {
 			return new \WP_Error(
 				'aafm_wc_duplicate_sku',
 				sprintf(

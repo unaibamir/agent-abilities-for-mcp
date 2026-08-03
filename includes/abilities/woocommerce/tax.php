@@ -256,7 +256,7 @@ function aafm_args_wc_list_tax_rates(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_tax_rates( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_list_tax_rates( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
@@ -327,7 +327,7 @@ function aafm_args_wc_get_tax_rate(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_tax_rate( array $input ): array|\WP_Error {
+function aafm_exec_wc_get_tax_rate( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
@@ -435,7 +435,7 @@ function aafm_args_wc_create_tax_rate(): array {
  * @param mixed $raw Raw rate value from input.
  * @return string|\WP_Error Clean decimal string, or WP_Error when the value is not numeric.
  */
-function aafm_wc_normalize_tax_rate( $raw ): string|\WP_Error {
+function aafm_wc_normalize_tax_rate( $raw ) {
 	$value = trim( (string) $raw );
 	if ( '' === $value || ! is_numeric( $value ) ) {
 		return new \WP_Error(
@@ -452,7 +452,7 @@ function aafm_wc_normalize_tax_rate( $raw ): string|\WP_Error {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_tax_rate( array $input ): array|\WP_Error {
+function aafm_exec_wc_create_tax_rate( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( '\WC_Tax' ) ) {
 		return aafm_generic_error();
 	}
@@ -585,7 +585,7 @@ function aafm_args_wc_update_tax_rate(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_tax_rate( array $input ): array|\WP_Error {
+function aafm_exec_wc_update_tax_rate( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) || ! class_exists( '\WC_Tax' ) ) {
 		return aafm_generic_error();
 	}
@@ -735,7 +735,7 @@ function aafm_args_wc_list_tax_classes(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_tax_classes( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_list_tax_classes( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
@@ -800,7 +800,7 @@ function aafm_args_wc_create_tax_class(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_create_tax_class( array $input ): array|\WP_Error {
+function aafm_exec_wc_create_tax_class( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}

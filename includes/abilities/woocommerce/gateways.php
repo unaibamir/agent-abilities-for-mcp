@@ -238,7 +238,7 @@ function aafm_args_wc_list_payment_gateways(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_payment_gateways( array $input ): array|\WP_Error { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
@@ -311,7 +311,7 @@ function aafm_args_wc_get_payment_gateway(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_get_payment_gateway( array $input ): array|\WP_Error {
+function aafm_exec_wc_get_payment_gateway( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
@@ -401,7 +401,7 @@ function aafm_args_wc_update_payment_gateway(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_update_payment_gateway( array $input ): array|\WP_Error {
+function aafm_exec_wc_update_payment_gateway( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}

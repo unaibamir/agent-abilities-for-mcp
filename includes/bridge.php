@@ -300,14 +300,17 @@ function aafm_discover_foreign_abilities(): array {
 }
 
 /**
- * The foreign slugs the operator has enabled for bridging (sanitized, de-duplicated).
+ * The foreign slugs stored in the operator's bridge allow-list (sanitized, de-duplicated).
  *
  * Reads option aafm_enabled_bridged_abilities, kept SEPARATE from aafm_enabled_abilities so a
- * foreign plugin deactivating can never corrupt the native enabled list.
+ * foreign plugin deactivating can never corrupt the native enabled list. This is the RAW list: no
+ * floor is applied, so it is what the admin screen renders its switches from and what a save must
+ * carry forward. Anything deciding what actually registers wants
+ * aafm_get_enabled_bridged_abilities() instead.
  *
  * @return array<int,string>
  */
-function aafm_get_enabled_bridged_abilities(): array {
+function aafm_get_stored_bridged_abilities_raw(): array {
 	$stored = get_option( 'aafm_enabled_bridged_abilities', array() );
 	if ( ! is_array( $stored ) ) {
 		return array();
@@ -324,6 +327,55 @@ function aafm_get_enabled_bridged_abilities(): array {
 	}
 
 	return array_values( array_unique( $clean ) );
+}
+
+/**
+ * The foreign slugs that may actually be bridged right now.
+ *
+ * The stored list with the read-only floor applied. Read-only mode covers bridged abilities the
+ * same way it covers native ones, classified by the foreign ability's own annotations through
+ * aafm_bridge_risk() - the same annotation this plugin already trusts to decide the operator's
+ * "can delete data" confirm and what it reports to MCP clients, so filtering on it here is not a
+ * new trust assumption.
+ *
+ * Fails closed: a slug whose ability is not resolvable right now (host plugin inactive) is not a
+ * read, and neither is one that declares nothing, since aafm_bridge_risk() already treats an
+ * unannotated ability as destructive.
+ *
+ * The stored option is never rewritten by this, so turning the mode off restores exactly what was
+ * enabled before.
+ *
+ * @return array<int,string>
+ */
+function aafm_get_enabled_bridged_abilities(): array {
+	$clean = aafm_get_stored_bridged_abilities_raw();
+
+	if ( ! aafm_read_only_mode() ) {
+		return $clean;
+	}
+
+	if ( ! function_exists( 'wp_get_ability' ) || ! function_exists( 'wp_has_ability' ) ) {
+		return array();
+	}
+
+	$reads = array();
+	foreach ( $clean as $slug ) {
+		// wp_has_ability() first: an enabled slug whose host plugin is currently inactive is an
+		// ordinary state here, and wp_get_ability() would raise a _doing_it_wrong notice for it on
+		// every request that asks what may register.
+		if ( ! wp_has_ability( $slug ) ) {
+			continue;
+		}
+		$ability = wp_get_ability( $slug );
+		if ( ! $ability instanceof WP_Ability ) {
+			continue;
+		}
+		if ( 'read' === aafm_bridge_risk( $ability )['risk'] ) {
+			$reads[] = $slug;
+		}
+	}
+
+	return $reads;
 }
 
 /**

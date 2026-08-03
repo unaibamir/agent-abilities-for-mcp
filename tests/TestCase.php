@@ -28,6 +28,10 @@ abstract class TestCase extends WP_UnitTestCase {
 		// which MySQL treats as DDL and implicitly commits, so any option a suite writes in its own
 		// set_up before calling it escapes the per-test rollback and lands in the next test.
 		delete_option( 'aafm_high_risk_abilities_unlocked' );
+		// Read-only mode, off-by-default and escaping the rollback the same way for the same
+		// TRUNCATE reason. A suite that leaves it on would silently subtract every write ability
+		// from the next test's registered set.
+		delete_option( 'aafm_read_only_mode' );
 		// The registry catalog is memoized per request; tests mutate the
 		// aafm_abilities_registry filter set between cases, so start each one with a
 		// fresh build (the next registry read rebuilds).

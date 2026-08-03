@@ -24,11 +24,15 @@ final class BridgeWrapperTest extends TestCase {
 
 	public function tear_down(): void {
 		delete_option( 'aafm_enabled_bridged_abilities' );
-		// The abilities registry persists across tests, so drop the demo fixtures and any
-		// wrappers this case registered to keep the next test isolated.
+		// The abilities registry persists across tests, so drop the demo/vendor fixtures and
+		// any wrappers this case registered to keep the next test (and the next data-provider
+		// iteration of the SAME test) isolated. Without 'vendor/' here, a scalar-result test
+		// re-registering the same foreign slug across data-provider runs trips core's
+		// "already registered" incorrect-usage notice and keeps executing the FIRST run's
+		// closure instead of the new one.
 		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
 			$slug = (string) $slug;
-			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
+			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'vendor/', 7 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
 				wp_unregister_ability( $slug );
 			}
 		}
@@ -448,5 +452,144 @@ final class BridgeWrapperTest extends TestCase {
 			array( 'count' => 7 ),
 			wp_get_ability( 'aafm-bridge/vendor-honest' )->execute( array() )
 		);
+	}
+
+	/**
+	 * Register a foreign ability that declares no output_schema and executes to the given
+	 * value, exactly like register_foreign() above but with a caller-supplied callback. No
+	 * output_schema means core's validate_output() short-circuits true on any shape, so this is
+	 * the realistic path for a foreign ability that legitimately returns a bare scalar.
+	 *
+	 * @param string   $slug    The foreign ability slug.
+	 * @param callable $execute The execute_callback, called with the ability input.
+	 * @return void
+	 */
+	private function register_foreign_returning( string $slug, callable $execute ): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $slug, $execute ): void {
+				wp_register_ability(
+					$slug,
+					array(
+						'label'               => $slug,
+						'description'         => 'Bridged scalar-result fixture.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'execute_callback'    => $execute,
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * Data provider of legal-but-scalar foreign return values. WP core documents
+	 * WP_Ability::execute() as returning mixed|WP_Error - unlike our OWN contract of
+	 * array|WP_Error - so a bridged ability returning true (a common "the write succeeded"
+	 * result) or a bare string/int is not a contract violation on the foreign side.
+	 *
+	 * @return array<string,array{0:mixed}>
+	 */
+	public function scalar_result_provider(): array {
+		return array(
+			'bool true' => array( true ),
+			'string'    => array( 'deleted' ),
+			'int'       => array( 42 ),
+		);
+	}
+
+	/**
+	 * The heart of the bug: before the fix, a bridged ability returning a legal scalar was
+	 * caught by the malformed-result guard in aafm_register_ability_with_log() - a guard
+	 * written for OUR array|WP_Error contract, wrongly applied to a wider foreign contract -
+	 * and turned into a WP_Error even though the foreign write had already happened. The fix
+	 * normalizes at the bridge layer (includes/bridge.php) so the guard never sees a bare
+	 * scalar from a bridged wrapper.
+	 *
+	 * @dataProvider scalar_result_provider
+	 * @param mixed $scalar The legal scalar value a foreign ability returns.
+	 */
+	public function test_bridged_scalar_result_is_wrapped_not_rejected_as_malformed( $scalar ): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/scalar-result', static fn() => $scalar );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/scalar-result' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-scalar-result' )->execute( array() );
+
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			'A bridged ability legally returning a scalar must not be treated as malformed.'
+		);
+		$this->assertSame( array( 'data' => $scalar ), $result );
+	}
+
+	/**
+	 * Same call as above, but asserting the audit row - this is the actual observable damage
+	 * the bug caused: the write had already happened, but the log said 'error', which is what
+	 * an operator or calling agent actually sees. Wrapping the scalar must produce a 'success'
+	 * row, not an 'error' one.
+	 *
+	 * @dataProvider scalar_result_provider
+	 * @param mixed $scalar The legal scalar value a foreign ability returns.
+	 */
+	public function test_bridged_scalar_result_logs_activity_success( $scalar ): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning( 'vendor/scalar-result', static fn() => $scalar );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/scalar-result' ) );
+		$this->register_wrappers();
+
+		wp_get_ability( 'aafm-bridge/vendor-scalar-result' )->execute( array() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-scalar-result' ) );
+		$this->assertNotEmpty( $rows );
+		$this->assertSame(
+			'success',
+			(string) $rows[0]['status'],
+			'A legal scalar result from a bridged ability must log success, not error.'
+		);
+	}
+
+	/**
+	 * A bridged ability that genuinely errors (returns a WP_Error itself, not a schema
+	 * mismatch) must still surface as that same WP_Error, unwrapped. The scalar-normalization
+	 * fix in includes/bridge.php only touches non-array, non-WP_Error results.
+	 */
+	public function test_bridged_wp_error_result_still_surfaces_unwrapped(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_foreign_returning(
+			'vendor/errors',
+			static fn() => new \WP_Error( 'vendor_boom', 'The vendor ability failed.' )
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/errors' ) );
+		$this->register_wrappers();
+
+		$result = wp_get_ability( 'aafm-bridge/vendor-errors' )->execute( array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'vendor_boom', $result->get_error_code() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/vendor-errors' ) );
+		$this->assertNotEmpty( $rows );
+		$this->assertSame( 'error', (string) $rows[0]['status'] );
 	}
 }

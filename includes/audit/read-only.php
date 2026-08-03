@@ -109,7 +109,16 @@ function aafm_ability_is_read( string $name ): bool {
  * to the switch that is actually holding the ability down: turning off the high-risk category while
  * read-only mode is on would change nothing.
  *
- * @param string $name Ability name, native or aafm-bridge/*, or a foreign slug.
+ * NATIVE aafm/* NAMES ONLY. Do not pass a bridged or foreign slug. The high-risk branch below falls
+ * through to aafm_ability_is_locked(), which is an in_array() over a set the public
+ * aafm_high_risk_abilities filter can add any string to, so a site naming a foreign slug there makes
+ * this return 'high_risk' for it. The high-risk floor only subtracts inside
+ * aafm_get_enabled_abilities(), which walks the native registry and never touches the bridge, so the
+ * caller would draw a padlock over an ability that still registers. Bridged callers evaluate the
+ * read-only clause on its own instead: see includes/admin/bridge-directory.php:500 for the worked
+ * example and the tests that hold it.
+ *
+ * @param string $name Native ability name (aafm/*).
  * @return string|null 'read_only', 'high_risk', or null when the ability is freely toggleable.
  */
 function aafm_ability_lock_reason( string $name ): ?string {

@@ -1743,14 +1743,17 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 		foreach ( $input['line_items'] as $item ) {
 			$item         = (array) $item;
 			$line_item_id = isset( $item['line_item_id'] ) ? (int) $item['line_item_id'] : 0;
-			$refund_total = isset( $item['refund_total'] ) ? (string) $item['refund_total'] : '0.00';
-			$refund_tax   = isset( $item['refund_tax'] ) ? (string) $item['refund_tax'] : '0.00';
+			$refund_total = isset( $item['refund_total'] ) ? trim( (string) $item['refund_total'] ) : '0.00';
+			$refund_tax   = isset( $item['refund_tax'] ) ? trim( (string) $item['refund_tax'] ) : '0.00';
 
 			// MONEY SAFETY: the input schema constrains the per-line refund_total/refund_tax only to
 			// `type: string`, not to a non-negative number (unlike the top-level `amount`, which has a
 			// `^\d+(\.\d{1,2})?$` pattern). Reject a non-numeric or negative value here, before
 			// wc_create_refund() ever sees it, so a malformed line can never drive a garbage/negative
-			// refund amount.
+			// refund amount. Trimmed above (same treatment as aafm_wc_normalize_tax_rate()) because
+			// is_numeric() only accepts trailing whitespace in a numeric string since PHP 8.0; without
+			// the trim, an identical trailing-space value validates on 8.x and fails on the plugin's
+			// PHP 7.4 floor.
 			if ( ! is_numeric( $refund_total ) || (float) $refund_total < 0
 				|| ! is_numeric( $refund_tax ) || (float) $refund_tax < 0
 			) {

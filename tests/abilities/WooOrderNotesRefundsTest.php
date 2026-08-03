@@ -550,6 +550,38 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must not run on a bad refund amount.' );
 	}
 
+	/**
+	 * PHP's is_numeric() only accepts a numeric string with trailing whitespace since PHP 8.0, so
+	 * "12.50 " validates on 8.x and fails on the plugin's PHP 7.4 floor - the exact kind of
+	 * cross-version divergence this plugin's floor change must not introduce. A trailing-space
+	 * refund_total/refund_tax must be trimmed and accepted identically on every supported PHP
+	 * version, and the trimmed value (not the raw one) is what reaches wc_create_refund().
+	 */
+	public function test_create_order_refund_trims_trailing_whitespace_from_line_amounts(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 1,
+						'refund_total' => '12.50 ',
+						'refund_tax'   => '0.00 ',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'a trailing-space refund_total/refund_tax must be accepted, not rejected.' );
+		$line_items = WcOrderStubStore::$last_refund_args['line_items'] ?? array();
+		$this->assertArrayHasKey( 1, $line_items );
+		$this->assertSame( '12.50', $line_items[1]['refund_total'], 'the trimmed value, not the raw whitespace-padded one, must reach wc_create_refund().' );
+	}
+
 	public function test_create_order_refund_unknown_order_returns_error(): void {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );

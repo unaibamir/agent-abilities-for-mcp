@@ -402,10 +402,18 @@
 		 * refuses to do for you - it ticks every read in the section or card it sits in and
 		 * nothing else, one time, visibly, and undoable by unticking.
 		 *
-		 * Scoped by walking up to the panel (Abilities) or card (Integrations) the button
-		 * renders inside, so one binding serves both tabs. Every ability row carries data-risk,
-		 * so "read" is read off the server-rendered row rather than guessed from its label. A
-		 * locked row emits no checkbox at all, so this can never sweep one in.
+		 * Scoped by walking up to the panel (Abilities) or the card (Integrations and Bridge,
+		 * whose group <details> carries .aafm-integration-card too) that the button renders
+		 * inside, so one binding serves all three tabs. Every ability row on every tab carries
+		 * data-risk, so "read" is read off the server-rendered row rather than guessed from a
+		 * label. A locked row emits no checkbox at all, so this can never sweep one in.
+		 *
+		 * Both field names are matched because the Bridge tab posts bridged_abilities[] through
+		 * its own AJAX save while the other two post aafm_abilities[]. Disabled inputs are
+		 * excluded in the selector, matching #bindBridgeBulk. No confirm strip needs hiding the
+		 * way the bridge bulk control does: a row is only data-risk="read" when its annotations
+		 * say readonly and not destructive, and the confirm strip only renders on a destructive
+		 * row, so a read row never has one.
 		 */
 		#bindEnableReads() {
 			document.querySelectorAll( '.aafm-enable-reads' ).forEach( ( btn ) => {
@@ -417,12 +425,10 @@
 						return;
 					}
 					const boxes = scope.querySelectorAll(
-						'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]'
+						'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]:not([disabled]), .aafm-ability-row[data-risk="read"] input[type="checkbox"][name="bridged_abilities[]"]:not([disabled])'
 					);
 					boxes.forEach( ( b ) => {
-						if ( ! b.disabled ) {
-							b.checked = true;
-						}
+						b.checked = true;
 					} );
 				} );
 			} );

@@ -588,7 +588,7 @@ function aafm_mcp_filter_governed_error_status( $response, $server, $request ) {
 	// already excludes it on its own - this guard adds no protection beyond that. It exists
 	// purely to state the intent explicitly, so a batch staying unrewritten does not depend
 	// on the accident of which check happens to run first.
-	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 8.0, so build the check
+	// array_is_list() needs PHP 8.1; this plugin's floor is PHP 7.4, so build the check
 	// by hand.
 	if ( array() === $data || array_keys( $data ) === range( 0, count( $data ) - 1 ) ) {
 		return $response;

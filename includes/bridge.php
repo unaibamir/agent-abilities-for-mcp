@@ -65,8 +65,9 @@ const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
 /**
  * Whether an array has sequential integer keys starting at 0 (a list / tuple).
  *
- * A PHP 8.0-safe stand-in for array_is_list() (8.1+), used to tell tuple-form JSON Schema
- * `items` (a list of subschemas) from a single-subschema object.
+ * A stand-in for array_is_list() (8.1+) that also works on this plugin's PHP 7.4 floor,
+ * used to tell tuple-form JSON Schema `items` (a list of subschemas) from a single-subschema
+ * object.
  *
  * @param array<int|string,mixed> $arr Array to test.
  * @return bool
@@ -457,7 +458,7 @@ function aafm_register_enabled_bridged_abilities(): void {
  * do not control the schema at all, so a generic wrapper is the best available response.
  *
  * Uses aafm_bridge_is_list() (defined above in this file), a hand-rolled sequential-key check
- * that never calls PHP 8.1's array_is_list() - this plugin's floor is PHP 8.0 - so no version
+ * that never calls PHP 8.1's array_is_list() - this plugin's floor is PHP 7.4 - so no version
  * branching is needed here. An empty array counts as a list (it JSON-encodes as [], the exact
  * defect being guarded against) and is wrapped the same as a populated one. Cannot double-wrap:
  * once wrapped, the result carries a string key and is no longer a list, so a second pass is a

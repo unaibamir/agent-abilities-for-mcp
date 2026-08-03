@@ -391,14 +391,30 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
-	 * Top sellers accepts all valid period values.
+	 * Top sellers accepts all valid period values AND computes the right date window for each -
+	 * not merely "no error", which a wrong branch (e.g. a `match`-to-`switch` conversion that
+	 * silently loosened the comparison) could still satisfy.
 	 */
 	public function test_get_top_sellers_accepts_all_periods(): void {
 		$this->acting_as( 'administrator' );
-		foreach ( array( 'week', 'month', 'year' ) as $period ) {
+
+		// Mirrors aafm_exec_wc_get_top_sellers_report()'s own per-period computation exactly, so
+		// this pins the actual computed window rather than just the absence of a WP_Error.
+		$expected_starts = array(
+			'week'  => gmdate( 'Y-m-d', strtotime( '-1 week' ) ) . ' 00:00:00',
+			'month' => gmdate( 'Y-m-01' ) . ' 00:00:00',
+			'year'  => gmdate( 'Y-01-01' ) . ' 00:00:00',
+		);
+
+		foreach ( $expected_starts as $period => $expected_start ) {
+			\AAFM\Tests\WcOrderStubStore::reset();
 			$res = aafm_exec_wc_get_top_sellers_report( array( 'period' => $period ) );
 			$this->assertNotInstanceOf( WP_Error::class, $res, "Period $period failed." );
 			$this->assertArrayHasKey( 'items', $res );
+
+			$expected_date_created = '>=' . (int) strtotime( $expected_start );
+			$args                  = \AAFM\Tests\WcOrderStubStore::$last_query_args;
+			$this->assertSame( $expected_date_created, $args['date_created'] ?? null, "Period $period computed the wrong date window." );
 		}
 	}
 

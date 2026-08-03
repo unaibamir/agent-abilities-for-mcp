@@ -166,7 +166,7 @@ The REST API exposes raw endpoints. MCP describes your site's abilities as disco
 
 = Which WordPress version do I need? =
 
-WordPress 6.9 or newer, which is where the Abilities API and the official MCP Adapter the plugin builds on are available. PHP 8.0 or newer is required.
+WordPress 6.9 or newer, which is where the Abilities API and the official MCP Adapter the plugin builds on are available. PHP 7.4 or newer is required.
 
 = Which AI clients work? =
 

@@ -582,6 +582,39 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( '12.50', $line_items[1]['refund_total'], 'the trimmed value, not the raw whitespace-padded one, must reach wc_create_refund().' );
 	}
 
+	/**
+	 * A narrower version of the divergence above: trim()'s default charlist
+	 * (" \t\n\r\0\x0B") strips a vertical tab but not a form feed, while is_numeric()'s
+	 * own whitespace set includes both. So a trailing form feed alone still diverged
+	 * across PHP versions even after the trim() fix above landed - rejected on 7.4,
+	 * accepted on 8.x, for the identical input. Same fixture shape as the trailing-space
+	 * test, just with "\f" instead of " ".
+	 */
+	public function test_create_order_refund_trims_trailing_form_feed_from_line_amounts(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 1,
+						'refund_total' => "12.50\f",
+						'refund_tax'   => "0.00\f",
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'a trailing-form-feed refund_total/refund_tax must be accepted, not rejected.' );
+		$line_items = WcOrderStubStore::$last_refund_args['line_items'] ?? array();
+		$this->assertArrayHasKey( 1, $line_items );
+		$this->assertSame( '12.50', $line_items[1]['refund_total'], 'the trimmed value, not the raw form-feed-padded one, must reach wc_create_refund().' );
+	}
+
 	public function test_create_order_refund_unknown_order_returns_error(): void {
 		$this->register_group_c();
 		$this->acting_as( 'administrator' );

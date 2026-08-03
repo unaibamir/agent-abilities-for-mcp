@@ -8,7 +8,7 @@ WordPress MCP server for AI agents like Claude and ChatGPT. Governed, off by def
 | **Tags** | ai, chatgpt, claude, mcp, seo |
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
-| **Requires PHP** | 8.0 |
+| **Requires PHP** | 7.4 |
 | **Stable tag** | 1.5.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 

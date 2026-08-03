@@ -5,7 +5,7 @@
  * Description:       WordPress MCP server for AI agents like Claude and ChatGPT. Governed, off by default, least privilege, every call audited.
  * Version:           1.5.0
  * Requires at least: 6.9
- * Requires PHP:      8.0
+ * Requires PHP:      7.4
  * Author:            Unaib Amir
  * Author URI:        https://unaib.com
  * License:           GPL-2.0-or-later

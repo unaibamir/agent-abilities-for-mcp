@@ -111,14 +111,14 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * The PHP 8.0 compatibility path, proven rather than assumed: aafm_bridge_is_list() (this
-	 * plugin's floor is PHP 8.0; array_is_list() needs 8.1) is a hand-rolled sequential-key
+	 * The pre-8.1 compatibility path, proven rather than assumed: aafm_bridge_is_list() (this
+	 * plugin's floor is PHP 7.4; array_is_list() needs 8.1) is a hand-rolled sequential-key
 	 * check that never calls the native function at all, so it needs no version branching and
 	 * behaves identically regardless of which PHP version runs it. Exercised directly against
 	 * the shapes that matter: a genuine list, a gap-keyed array (not a list despite being
 	 * numeric), a string-keyed array, and the empty-array edge case.
 	 */
-	public function test_the_list_check_is_php_80_safe_by_construction(): void {
+	public function test_the_list_check_works_without_the_native_array_is_list(): void {
 		$this->assertTrue( aafm_bridge_is_list( array( 'a', 'b', 'c' ) ) );
 		$this->assertTrue( aafm_bridge_is_list( array() ) );
 		$this->assertFalse(

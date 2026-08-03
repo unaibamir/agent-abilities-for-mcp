@@ -122,8 +122,8 @@ final class WireShapeTest extends TestCase {
 
 		foreach ( $checked as $name => $result ) {
 			$this->assertIsArray( $result, "$name returned a non-array result." );
-			// aafm_bridge_is_list(), not PHP 8.1's array_is_list(). This plugin's floor is PHP 8.0
-			// and the CI matrix runs an 8.0 leg, where the native function does not exist at all.
+			// aafm_bridge_is_list(), not PHP 8.1's array_is_list(). This plugin's floor is PHP 7.4
+			// and the CI matrix runs a 7.4 leg, where the native function does not exist at all.
 			// The empty-array short circuit below does NOT make a native call safe: it only skips
 			// the check for array(), so every non-empty result would still reach the undefined
 			// function and fatal. includes/server.php:591 and includes/bridge.php:56 avoid the

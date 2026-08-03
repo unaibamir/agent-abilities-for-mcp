@@ -32,7 +32,7 @@
 	<arg value="ps"/>
 
 	<config name="minimum_wp_version" value="6.9"/>
-	<config name="testVersion" value="8.0-"/>
+	<config name="testVersion" value="7.4-"/>
 
 	<rule ref="WordPress">
 		<!-- Allow short array syntax across the codebase (modern PHP house style). -->

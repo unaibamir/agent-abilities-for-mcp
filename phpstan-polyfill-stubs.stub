@@ -1,0 +1,22 @@
+<?php
+/**
+ * PHPStan-only stub for the WordPress core polyfills of two PHP 8.0 string functions.
+ *
+ * PHPStan's phpVersion is pinned to 70400 (this plugin's real floor), so its bundled function
+ * signature database correctly omits str_starts_with() and str_ends_with(), both PHP 8.0
+ * natives. That is the right call for a raw PHP 7.4 runtime, but this plugin never hits that
+ * gap: WordPress core has polyfilled both (and str_contains()) in wp-includes/compat.php since
+ * 5.9, and the plugin's WordPress floor is 6.9, so the polyfill is always loaded before any
+ * ability code runs. Registered via scanFiles (not stubFiles): PHPStan parses this file to learn
+ * the symbols exist, it never executes it, so there is no redeclaration risk on any PHP version.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+function str_starts_with( string $haystack, string $needle ): bool {
+	return false;
+}
+
+function str_ends_with( string $haystack, string $needle ): bool {
+	return false;
+}

@@ -32,13 +32,18 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 		return null;
 	}
 
+	// is_numeric() only accepts a numeric string with trailing whitespace since PHP 8.0, so an
+	// identical value can validate on 8.x and fail on the plugin's PHP 7.4 floor. Trim a string
+	// candidate before the check so both cases agree; a non-string $value passes through untouched.
+	$candidate = is_string( $value ) ? trim( $value ) : $value;
+
 	switch ( $type ) {
 		case 'id':
-			$id = is_numeric( $value ) ? (int) $value : 0;
+			$id = is_numeric( $candidate ) ? (int) $candidate : 0;
 			return $id > 0 ? (string) $id : null;
 
 		case 'count':
-			$count = is_numeric( $value ) ? (int) $value : -1;
+			$count = is_numeric( $candidate ) ? (int) $candidate : -1;
 			return $count >= 0 ? (string) $count : null;
 
 		case 'key':

@@ -3,7 +3,7 @@ includes:
 
 parameters:
 	level: 8
-	phpVersion: 80000
+	phpVersion: 70400
 	paths:
 		- agent-abilities-for-mcp.php
 		- includes
@@ -12,6 +12,8 @@ parameters:
 		- vendor/autoload.php
 		- tests/phpstan-bootstrap.php
 		- tests/phpstan-stubs.php
+	scanFiles:
+		- phpstan-polyfill-stubs.stub
 	scanDirectories:
 		- vendor/wordpress/mcp-adapter
 	excludePaths:

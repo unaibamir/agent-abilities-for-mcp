@@ -37,6 +37,7 @@
 /phpcs.xml.dist
 /phpstan.neon.dist
 /phpstan-baseline.neon
+/phpstan-polyfill-stubs.stub
 /phpunit.xml.dist
 /phpunit-contract.xml.dist
 

@@ -438,21 +438,20 @@ function aafm_register_enabled_bridged_abilities(): void {
 				if ( ! $live instanceof WP_Ability ) {
 					return new WP_Error( 'aafm_bridge_missing', __( 'The bridged ability is no longer available.', 'agent-abilities-for-mcp' ) );
 				}
-				$out = $live->execute( is_array( $input ) ? $input : array() );
-
 				// Our OWN abilities are contracted to return array|WP_Error, and
-				// aafm_register_ability_with_log() enforces that at runtime (see the malformed-
-				// result guard in register.php). A bridged ability is someone else's code: core
-				// documents WP_Ability::execute() as returning mixed|WP_Error, so a foreign
-				// ability legitimately returning e.g. true after a successful write is not a
-				// contract violation. Feeding that scalar into the guard built for OUR contract
-				// would convert a real success into a WP_Error, and the audit row would then log
-				// 'error' for a call that actually succeeded and already took effect - the same
-				// silent-wrong-answer defect the guard exists to prevent, just inverted. Normalize
-				// here instead, matching the existing bare-list wrap in
-				// aafm_filter_bridged_tool_call_result() so the guard downstream only ever sees a
-				// shape from bridged abilities that is legal under OUR contract too.
-				return ( is_array( $out ) || is_wp_error( $out ) ) ? $out : array( 'data' => $out );
+				// aafm_register_ability_with_log() enforces that at runtime for native names
+				// only (see the malformed-result guard in register.php). A bridged ability is
+				// someone else's code: core documents WP_Ability::execute() as returning
+				// mixed|WP_Error, so a foreign ability legitimately returning e.g. true after a
+				// successful write is not a contract violation. An earlier revision of this
+				// closure wrapped that scalar into array( 'data' => $out ) so the guard would
+				// only ever see a shape legal under our own contract - but the output_schema
+				// copied from the foreign ability onto our wrapper's registration below still
+				// describes the UNWRAPPED value, so core's own output validation then rejected
+				// the wrapped array against that schema, turning a real success into a spurious
+				// ability_invalid_output error. Returning the foreign result unchanged avoids
+				// that collision; the guard downstream is scoped to skip bridged names instead.
+				return $live->execute( is_array( $input ) ? $input : array() );
 			},
 		);
 

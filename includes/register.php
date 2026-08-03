@@ -218,16 +218,29 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		$result = $original_execute( $input );
 
-		// Every ability's execute_callback is contracted to return array|WP_Error. That contract
-		// used to be a native PHP union return type on the ability functions themselves, so a
-		// violation was an uncaught TypeError - a 500 with no audit row. Removing those types for
-		// the PHP 7.4 floor (static analysis still enforces the contract) moved the last line of
-		// defense here, to runtime. Without this check a wrong-shaped result would flow straight
-		// through to the `is_wp_error( $result ) ? 'error' : 'success'` line below and get logged
-		// as a SUCCESS, since status is decided by is_wp_error() alone - a silent wrong answer is
+		// Every NATIVE ability's execute_callback is contracted to return array|WP_Error. That
+		// contract used to be a native PHP union return type on the ability functions
+		// themselves, so a violation was an uncaught TypeError - a 500 with no audit row.
+		// Removing those types for the PHP 7.4 floor (static analysis still enforces the
+		// contract) moved the last line of defense here, to runtime. Without this check a
+		// wrong-shaped result would flow straight through to the
+		// `is_wp_error( $result ) ? 'error' : 'success'` line below and get logged as a
+		// SUCCESS, since status is decided by is_wp_error() alone - a silent wrong answer is
 		// strictly worse than the crash it replaces. Catch it here and turn it into a real,
 		// logged, visible error instead.
-		if ( ! is_array( $result ) && ! is_wp_error( $result ) ) {
+		//
+		// A bridged aafm-bridge/* wrapper is deliberately exempt: it fronts someone else's
+		// ability, and core documents WP_Ability::execute() as returning mixed|WP_Error, a
+		// wider contract than our own. Converting a foreign ability's legal scalar (e.g. `true`
+		// after a successful write) into a WP_Error here would misreport a real success as an
+		// error - the exact defect this guard exists to prevent, just aimed at code we do not
+		// control. $name here is the ABILITY slug ('aafm-bridge/vendor-thing', built by
+		// aafm_bridge_tool_name() in bridge.php with a slash separator) - a different string
+		// from the MCP TOOL name aafm_filter_bridged_tool_call_result() checks in that same
+		// file (dash-separated, after the adapter's own slug-to-tool-name transform), so the
+		// separator here is intentionally '/' rather than that function's '-'.
+		$is_bridged = str_starts_with( $name, AAFM_BRIDGE_NAMESPACE . '/' );
+		if ( ! $is_bridged && ! is_array( $result ) && ! is_wp_error( $result ) ) {
 			$result = new \WP_Error(
 				'aafm_malformed_ability_result',
 				__( 'This ability returned an unexpected result. Please try again or contact the site administrator.', 'agent-abilities-for-mcp' )

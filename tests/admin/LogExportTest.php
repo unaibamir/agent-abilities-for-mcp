@@ -213,7 +213,7 @@ final class LogExportTest extends TestCase {
 				// Mirror the exporter's own escape argument. PHP 8.4 deprecates relying on the
 				// implicit default, and reading back with a different escape than fputcsv() wrote
 				// with would parse a quoted field wrong the moment one contains a backslash.
-				$fields = str_getcsv( $line, escape: '' );
+				$fields = str_getcsv( $line, ',', '"', '' );
 				return $fields[3] ?? ''; // detail is column index 3: created_at,event_type,ability,detail,...
 			},
 			$lines

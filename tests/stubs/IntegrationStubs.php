@@ -1520,7 +1520,7 @@ class WC_Tax {
 	 * @param string $slug Optional slug; derived from name when empty.
 	 * @return array<string,string>|\WP_Error
 	 */
-	public static function create_tax_class( string $name, string $slug = '' ): array|\WP_Error {
+	public static function create_tax_class( string $name, string $slug = '' ) {
 		if ( \AAFM\Tests\WcTaxStubStore::$force_save_failure ) {
 			return new \WP_Error( 'wc_tax', 'Tax class save failed.' );
 		}
@@ -1539,7 +1539,7 @@ class WC_Tax {
 	 * @param string $value Field value.
 	 * @return bool|\WP_Error
 	 */
-	public static function delete_tax_class_by( string $field, string $value ): bool|\WP_Error {
+	public static function delete_tax_class_by( string $field, string $value ) {
 		if ( \AAFM\Tests\WcTaxStubStore::$force_delete_failure ) {
 			return new \WP_Error( 'wc_tax', 'Tax class delete failed.' );
 		}

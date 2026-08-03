@@ -4,7 +4,7 @@
   "type": "wordpress-plugin",
   "license": "GPL-2.0-or-later",
   "require": {
-    "php": ">=8.0",
+    "php": ">=7.4",
     "wordpress/mcp-adapter": "0.5.0"
   },
   "require-dev": {
@@ -24,7 +24,7 @@
       "dealerdirect/phpcodesniffer-composer-installer": true,
       "phpstan/extension-installer": true
     },
-    "platform": { "php": "8.0" },
+    "platform": { "php": "7.4" },
     "sort-packages": true,
     "optimize-autoloader": true
   },

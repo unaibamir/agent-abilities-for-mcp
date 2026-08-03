@@ -49,6 +49,7 @@
 			this.#bindOauthClientPicker();
 			this.#bindSubjectTabs();
 			this.#bindSectionToggles();
+			this.#bindEnableReads();
 			this.#bindIntegrationToggles();
 			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
@@ -389,6 +390,40 @@
 						label.textContent = original;
 						revertTimer = null;
 					}, 1500 );
+				} );
+			} );
+		}
+
+		/**
+		 * "Enable all reads" on both the Abilities and Integrations tabs.
+		 *
+		 * Read-only mode is a ceiling, not a bulk action: turning it on deliberately enables
+		 * nothing. This is the explicit, operator-initiated convenience that replaces what it
+		 * refuses to do for you - it ticks every read in the section or card it sits in and
+		 * nothing else, one time, visibly, and undoable by unticking.
+		 *
+		 * Scoped by walking up to the panel (Abilities) or card (Integrations) the button
+		 * renders inside, so one binding serves both tabs. Every ability row carries data-risk,
+		 * so "read" is read off the server-rendered row rather than guessed from its label. A
+		 * locked row emits no checkbox at all, so this can never sweep one in.
+		 */
+		#bindEnableReads() {
+			document.querySelectorAll( '.aafm-enable-reads' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const scope = btn.closest(
+						'.aafm-subject-panel, .aafm-integration-card'
+					);
+					if ( ! scope ) {
+						return;
+					}
+					const boxes = scope.querySelectorAll(
+						'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]'
+					);
+					boxes.forEach( ( b ) => {
+						if ( ! b.disabled ) {
+							b.checked = true;
+						}
+					} );
 				} );
 			} );
 		}

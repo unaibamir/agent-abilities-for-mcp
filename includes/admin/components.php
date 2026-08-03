@@ -28,17 +28,19 @@ defined( 'ABSPATH' ) || exit;
  * STRUCTURAL ONLY: `body`/`pill` are echoed verbatim - the caller must have
  * escaped them. `title`/`description` are escaped here with esc_html.
  *
- * Recognised $args keys: `id` (wrapper id attribute), `title` (heading, escaped),
- * `icon` (aafm_icon() key for the head glyph), `description` (sub-heading, escaped),
- * `pill` (pre-built pill HTML, echoed verbatim), `collapsible` (bool, default false),
- * `open` (bool, default true, honored only when collapsible), `badge` (count-badge
- * text for the summary, escaped), and `body` (pre-escaped inner HTML, echoed verbatim).
+ * Recognised $args keys: `id` (wrapper id attribute), `class` (extra wrapper classes,
+ * sanitized per class name), `title` (heading, escaped), `icon` (aafm_icon() key for the
+ * head glyph), `description` (sub-heading, escaped), `pill` (pre-built pill HTML, echoed
+ * verbatim), `collapsible` (bool, default false), `open` (bool, default true, honored only
+ * when collapsible), `badge` (count-badge text for the summary, escaped), and `body`
+ * (pre-escaped inner HTML, echoed verbatim).
  *
  * @param array<string,mixed> $args Section args (see the recognised keys above).
  * @return void
  */
 function aafm_render_section( array $args ): void {
 	$id          = isset( $args['id'] ) ? (string) $args['id'] : '';
+	$extra_class = isset( $args['class'] ) ? (string) $args['class'] : '';
 	$title       = isset( $args['title'] ) ? (string) $args['title'] : '';
 	$icon        = isset( $args['icon'] ) ? (string) $args['icon'] : '';
 	$description = isset( $args['description'] ) ? (string) $args['description'] : '';
@@ -50,6 +52,16 @@ function aafm_render_section( array $args ): void {
 
 	$id_attr = '' === $id ? '' : sprintf( ' id="%s"', esc_attr( $id ) );
 
+	// Each extra class goes through sanitize_html_class() individually, so a caller cannot smuggle
+	// a second attribute in through the class list.
+	$extra = '';
+	foreach ( array_filter( explode( ' ', $extra_class ) ) as $one ) {
+		$one = sanitize_html_class( $one );
+		if ( '' !== $one ) {
+			$extra .= ' ' . $one;
+		}
+	}
+
 	if ( $collapsible ) {
 		$open_attr  = $open ? ' open' : '';
 		$badge_html = '' === $badge
@@ -58,7 +70,8 @@ function aafm_render_section( array $args ): void {
 
 		echo wp_kses(
 			sprintf(
-				'<details class="aafm-section aafm-section--collapsible"%1$s%2$s><summary>%3$s%4$s</summary><div class="aafm-section-body">%5$s</div></details>',
+				'<details class="aafm-section aafm-section--collapsible%1$s"%2$s%3$s><summary>%4$s%5$s</summary><div class="aafm-section-body">%6$s</div></details>',
+				esc_attr( $extra ),
 				$id_attr,
 				esc_attr( $open_attr ),
 				esc_html( $title ),
@@ -79,7 +92,8 @@ function aafm_render_section( array $args ): void {
 
 	echo wp_kses(
 		sprintf(
-			'<section class="aafm-section aafm-card"%1$s><div class="aafm-card-head">%2$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%3$s</h3>%4$s</div>%5$s</div><div class="aafm-card-pad aafm-section-body">%6$s</div></section>',
+			'<section class="aafm-section aafm-card%1$s"%2$s><div class="aafm-card-head">%3$s<div class="aafm-card-head-text"><h3 class="aafm-card-head-title">%4$s</h3>%5$s</div>%6$s</div><div class="aafm-card-pad aafm-section-body">%7$s</div></section>',
+			esc_attr( $extra ),
 			$id_attr,
 			$icon_html,
 			esc_html( $title ),
@@ -92,8 +106,8 @@ function aafm_render_section( array $args ): void {
 }
 
 /**
- * Echo the toggle control for one ability row: a lock icon when the ability is high-risk and
- * locked, or a checkbox otherwise.
+ * Echo the toggle control for one ability row: a lock icon when a floor is holding the ability
+ * down, or a checkbox otherwise.
  *
  * Shared by aafm_render_ability_row() (the Abilities tab) and
  * aafm_render_integration_ability_row() (the Integrations tab) so both surfaces render the same
@@ -101,6 +115,10 @@ function aafm_render_section( array $args ): void {
  * learned about the lock at all and kept emitting a live checkbox for a locked ability, which is
  * exactly how a high-risk ability got enabled, saved, and logged from a card whose master switch
  * was off.
+ *
+ * A locked row emits NO <input> at all, rather than a disabled one. The bulk enable-all controls
+ * query `input[type="checkbox"][name="aafm_abilities[]"]` inside the card, so a greyed-out but
+ * present checkbox would still be swept in by them. That is the 1.5.0 bug and it must not come back.
  *
  * STRUCTURAL ONLY, same convention as the rest of this file: `$name` and `$title_id` are escaped
  * here; the caller owns everything else about the row.
@@ -112,18 +130,19 @@ function aafm_render_section( array $args ): void {
  *                                         unlocked checkbox then renders disabled so it never
  *                                         submits. Ignored when the ability is locked, since a
  *                                         locked row never renders a checkbox at all.
- * @return bool True when the ability is locked (so the caller knows to render the locked note).
+ * @return string|null The lock reason ('read_only' or 'high_risk') when the row is locked, so the
+ *                     caller can render the matching note, or null when it is freely toggleable.
  */
-function aafm_render_ability_toggle_control( string $name, string $title_id, array $enabled, bool $host_disabled = false ): bool {
-	$locked = aafm_ability_is_locked( $name );
+function aafm_render_ability_toggle_control( string $name, string $title_id, array $enabled, bool $host_disabled = false ): ?string {
+	$reason = aafm_ability_lock_reason( $name );
 
-	if ( $locked ) {
+	if ( null !== $reason ) {
 		printf(
 			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
 			esc_attr__( 'Locked', 'agent-abilities-for-mcp' ),
 			wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() )
 		);
-		return true;
+		return $reason;
 	}
 
 	printf(
@@ -134,7 +153,7 @@ function aafm_render_ability_toggle_control( string $name, string $title_id, arr
 		$host_disabled ? ' disabled' : ''
 	);
 
-	return false;
+	return null;
 }
 
 /**

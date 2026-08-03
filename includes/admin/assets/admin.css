@@ -65,6 +65,17 @@
 		.aafm-status-pill {
 			flex: 0 0 auto;
 		}
+
+		/* Posture pill + endpoint pill share the right edge. Their own tighter gap, so the
+		   pair reads as one status group rather than two unrelated head items. */
+		.aafm-page-head-pills {
+			display: flex;
+			align-items: center;
+			justify-content: flex-end;
+			flex: 0 0 auto;
+			flex-wrap: wrap;
+			gap: 8px;
+		}
 	}
 
 	/* ---------- Buttons (ported from app.css .btn*, renamed .aafm-btn) ----------
@@ -1902,6 +1913,16 @@
 
 		&:first-child { margin-block-start: 0; }
 		&:last-child { margin-block-end: 0; }
+
+		/* A section whose controls cannot change anything right now (today: the high-risk card
+		   while read-only mode holds every one of its abilities). Same treatment as an inactive
+		   integration card: the head stays at full strength so the title and its pill read
+		   clearly, and the body dims behind one overlay instead of muting each control. The
+		   inputs stay enabled underneath so their values still submit. */
+		&.is-inactive > .aafm-section-body {
+			opacity: 0.55;
+			pointer-events: none;
+		}
 	}
 
 	/* Collapsible variant reuses the abilities-details chevron affordance so the

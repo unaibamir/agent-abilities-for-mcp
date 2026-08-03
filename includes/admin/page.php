@@ -229,7 +229,7 @@ function aafm_get_stored_enabled_abilities_raw(): array {
 }
 
 /**
- * Persist the enabled-abilities option: strip any locked high-risk name first, and write an
+ * Persist the enabled-abilities option: strip any name a floor refuses first, and write an
  * ability_enable_blocked audit row for every one that was actually attempted.
  *
  * This is the single choke point every caller that changes aafm_enabled_abilities must go
@@ -259,6 +259,26 @@ function aafm_set_enabled_abilities( array $enabled ): array {
 	$blocked = array_diff( $locked, $before );
 
 	$clean = array_values( array_diff( $enabled, $locked ) );
+
+	// Read-only mode is handled differently from the high-risk floor, deliberately. It hides the
+	// checkbox on EVERY write on the site, so stripping the way the line above does would empty the
+	// operator's whole selection on the next save and leave nothing to restore when the mode goes
+	// off - the opposite of what the mode promises. So an already-stored write is carried forward
+	// untouched, and only a name that was NOT already stored is refused: it cannot have come from
+	// the screen, since the screen rendered no control for it.
+	if ( aafm_read_only_mode() ) {
+		$refused = array();
+		foreach ( $clean as $name ) {
+			if ( ! aafm_ability_is_read( $name ) && ! in_array( $name, $before, true ) ) {
+				$refused[] = $name;
+			}
+		}
+		if ( ! empty( $refused ) ) {
+			$clean   = array_values( array_diff( $clean, $refused ) );
+			$blocked = array_values( array_merge( $blocked, $refused ) );
+		}
+	}
+
 	update_option( 'aafm_enabled_abilities', $clean );
 
 	if ( ! empty( $blocked ) ) {
@@ -281,6 +301,10 @@ function aafm_set_enabled_abilities( array $enabled ): array {
  * registry) that was previously enabled, mirroring the orphan handling in
  * aafm_ajax_save_bridged_abilities().
  *
+ * A previously-enabled write that read-only mode is currently holding down is carried forward for
+ * the same reason: it rendered no checkbox either, so a plain intersect would wipe the operator's
+ * whole write selection on the first save made while the mode is on.
+ *
  * @param array<string,mixed> $posted The $_POST payload, already unslashed by the caller.
  * @return array<int,string>
  */
@@ -295,14 +319,27 @@ function aafm_sanitize_enabled_input( array $posted ): array {
 	$enabled = array_values( array_intersect( $enabled, $known ) );
 
 	$registry_full = aafm_get_abilities_registry_full();
-	$orphans       = array();
+	$carried       = array();
 	foreach ( aafm_get_stored_enabled_abilities_raw() as $name ) {
 		if ( ! in_array( $name, $known, true ) && isset( $registry_full[ $name ] ) ) {
-			$orphans[] = $name;
+			$carried[] = $name;
+			continue;
+		}
+		// A write held down by read-only mode rendered no checkbox, so it cannot appear in the POST
+		// and its absence is not the operator turning it off. The Abilities tab posts an unscoped,
+		// full-replace list, so without this every enabled write would be wiped from the option on
+		// the first save made while the mode is on, and turning the mode back off would hand back a
+		// blank slate instead of the selection it promised to restore.
+		//
+		// Only the read-only reason is carried here. A high-risk lock is left exactly as it was:
+		// aafm_set_enabled_abilities() strips those names before writing either way, so unioning
+		// them back would change nothing except the shape of this function's return value.
+		if ( isset( $registry_full[ $name ] ) && 'read_only' === aafm_ability_lock_reason( $name ) ) {
+			$carried[] = $name;
 		}
 	}
 
-	return array_values( array_unique( array_merge( $enabled, $orphans ) ) );
+	return array_values( array_unique( array_merge( $enabled, $carried ) ) );
 }
 
 /**
@@ -344,11 +381,12 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 	// M9's Abilities-tab bug - it can never have been intentionally toggled off since its
 	// checkbox never rendered, so it is always preserved rather than scope-checked.
 	//
-	// A locked high-risk ability is the same story from the other direction: the floor takes its
-	// checkbox away while the ability itself is still sitting in the option, so its absence from
-	// the POST is the lock speaking, not the operator. Preserve it too, or the first save of the
-	// section it lives in discards a choice the operator never got the chance to restate, and
-	// unlocking the category later offers a blank slate instead of what was there.
+	// A locked ability is the same story from the other direction: a floor takes its checkbox away
+	// while the ability itself is still sitting in the option, so its absence from the POST is the
+	// lock speaking, not the operator. Preserve it too, or the first save of the section it lives in
+	// discards a choice the operator never got the chance to restate, and lifting the floor later
+	// offers a blank slate instead of what was there. Both floors are read through the one lock
+	// predicate, so neither can be preserved while the other is quietly dropped.
 	$preserved = array();
 	foreach ( aafm_get_stored_enabled_abilities_raw() as $name ) {
 		if ( ! isset( $registry_full[ $name ] ) ) {
@@ -358,7 +396,7 @@ function aafm_resolve_scoped_enabled_input( array $posted ): array {
 			$preserved[] = $name; // Inactive-host ability: always preserved.
 			continue;
 		}
-		if ( aafm_ability_is_locked( $name ) ) {
+		if ( null !== aafm_ability_lock_reason( $name ) ) {
 			$preserved[] = $name; // Locked: its checkbox never rendered, so its absence is not intent.
 			continue;
 		}
@@ -1083,11 +1121,27 @@ function aafm_render_admin_page(): void {
 	echo '<h1>' . esc_html__( 'Agent Abilities for MCP', 'agent-abilities-for-mcp' ) . '</h1>';
 	echo '<p class="aafm-page-lede">' . esc_html__( 'Give an AI agent scoped, audited access to this site. Nothing is exposed until you turn it on, and every call is logged.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '</div>';
+
+	// Two pills, side by side: the site's exposure posture, then the endpoint state. The posture
+	// pill states the posture ALWAYS, not only when something is restricted, and it renders here in
+	// the page header rather than on the Abilities tab on purpose. That tab lists native abilities
+	// only - no WooCommerce, no bridged - and a global switch sitting on a partial list reads as
+	// scoped to that list, which is the exact mismatch that produced the 1.5.0 lock bug. This band
+	// is the one element on the page whose scope is unambiguously everything.
+	$posture = aafm_exposure_posture();
+	echo '<span class="aafm-page-head-pills">';
+	printf(
+		'<span class="aafm-status-pill aafm-pill aafm-pill-%1$s" data-posture="%2$s">%3$s</span>',
+		esc_attr( $posture['variant'] ),
+		esc_attr( $posture['state'] ),
+		esc_html( $posture['label'] )
+	);
 	printf(
 		'<span class="aafm-status-pill %1$s">%2$s</span>',
 		esc_attr( $pill_class ),
 		esc_html( $pill_label )
 	);
+	echo '</span>';
 	echo '</div>';
 
 	// Anchor for core's admin-notice relocation: the <h1> now sits inside
@@ -1442,10 +1496,11 @@ function aafm_render_abilities_tab(): void {
 			}
 		}
 		printf(
-			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button></p>',
+			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button></p>',
 			esc_attr( $slug ),
 			$has_destructive ? ' data-has-destructive="1"' : '',
-			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
+			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
+			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' )
 		);
 
 		if ( 'content' === $slug ) {
@@ -1537,13 +1592,15 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-ability-title-' . sanitize_key( $name );
 
-	echo '<div class="aafm-ability-row">';
+	// data-risk is what the "Enable all reads" bulk control scopes on, and it mirrors the attribute
+	// the Integrations rows already carry so one JS binding serves both tabs.
+	printf( '<div class="aafm-ability-row" data-risk="%s">', esc_attr( $risk ) );
 
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
 	// this just stops the screen offering a switch that the registration walk would ignore. Native
-	// aafm/* rows only - a bridged ability is registered through its own walk that the floor never
-	// touches, and this renderer is never called for one (the Bridge tab has its own).
-	$locked = aafm_render_ability_toggle_control( $name, $title_id, $enabled );
+	// aafm/* rows only - a bridged ability is registered through its own walk, and this renderer is
+	// never called for one (the Bridge tab has its own).
+	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -1571,8 +1628,8 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 		esc_html( $hint )
 	);
 
-	if ( $locked ) {
-		echo '<p class="aafm-ability-locked-note">' . esc_html__( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' ) . '</p>';
+	if ( null !== $lock_reason ) {
+		echo '<p class="aafm-ability-locked-note">' . esc_html( aafm_ability_lock_note( $lock_reason ) ) . '</p>';
 	}
 
 	echo '</div></div>';

@@ -442,10 +442,11 @@ function aafm_render_integration_abilities( string $slug, array $rows, array $en
 	// data-has-sensitive flag tells the JS to window.confirm() before bulk-enabling a group
 	// that can read or change personal data.
 	printf(
-		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button></p>',
+		'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-integration-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button></p>',
 		esc_attr( $slug ),
 		$has_sensitive ? ' data-has-sensitive="1"' : '',
-		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' )
+		esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
+		esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' )
 	);
 
 	// Each per-plugin card renders a flat ability list directly in the accordion body.
@@ -491,10 +492,10 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 
 	// An inactive host has nothing enabled, so a disabled row never renders checked; it also
 	// carries the disabled attribute so it stays out of the submitted aafm_abilities[] list. A
-	// locked high-risk ability gets the same lock treatment as the Abilities tab instead of a
-	// checkbox - see aafm_render_ability_toggle_control(). The two are independent: a row can be
-	// host-disabled, lock-disabled, both, or neither.
-	$locked = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled );
+	// locked ability - high-risk, or a write while read-only mode is on - gets the same lock
+	// treatment as the Abilities tab instead of a checkbox, see aafm_render_ability_toggle_control().
+	// The two are independent: a row can be host-disabled, lock-disabled, both, or neither.
+	$lock_reason = aafm_render_ability_toggle_control( $name, $title_id, $enabled, $disabled );
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -518,8 +519,8 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 		esc_html( $hint )
 	);
 
-	if ( $locked ) {
-		echo '<p class="aafm-ability-locked-note">' . esc_html__( 'Locked. Turn on High-risk abilities under Settings to make this available.', 'agent-abilities-for-mcp' ) . '</p>';
+	if ( null !== $lock_reason ) {
+		echo '<p class="aafm-ability-locked-note">' . esc_html( aafm_ability_lock_note( $lock_reason ) ) . '</p>';
 	}
 
 	echo '</div></div>';

@@ -8,7 +8,7 @@
  *
  * The markup mirrors includes/admin/integrations.php EXACTLY (same card / switch / badge / filter
  * classes) but posts to its OWN action (aafm_save_bridged_abilities) with its own field name
- * (bridged_abilities[]) and its own checked source (aafm_get_enabled_bridged_abilities()), so it can
+ * (bridged_abilities[]) and its own checked source (aafm_get_stored_bridged_abilities_raw()), so it can
  * never write into the native option. The only new classes are a .aafm-bridge scoping wrapper and an
  * .is-destructive row modifier.
  *
@@ -42,8 +42,12 @@ function aafm_render_bridge_directory(): void {
 		return;
 	}
 
-	$groups  = aafm_discover_foreign_abilities();
-	$enabled = aafm_get_enabled_bridged_abilities();
+	$groups = aafm_discover_foreign_abilities();
+	// The RAW stored list, never the floored one. Read-only mode subtracts writes from what
+	// registers, not from what the operator chose, so the switches here have to keep showing that
+	// choice - a floored read would render every enabled write unticked and the next save would
+	// make that lie permanent.
+	$enabled = aafm_get_stored_bridged_abilities_raw();
 
 	// Enabled slugs that are no longer discoverable (their host plugin is inactive) still need a
 	// home, so union them in as a disabled "Unavailable" group rather than dropping them silently.
@@ -490,14 +494,27 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 		$disabled ? ' aria-disabled="true"' : ''
 	);
 
-	printf(
-		'<label class="aafm-switch"><input type="checkbox" name="bridged_abilities[]" value="%1$s" aria-labelledby="%2$s"%3$s%4$s%5$s><span class="aafm-switch-track"></span></label>',
-		esc_attr( $slug ),
-		esc_attr( $title_id ),
-		$disabled ? '' : checked( in_array( $slug, $enabled, true ), true, false ),
-		$disabled ? ' disabled' : '',
-		$destructive ? ' data-destructive="1"' : ''
-	);
+	// Read-only mode reaches bridged abilities too, classified by the foreign ability's own
+	// annotation. A locked row renders the lock glyph and NO <input>, exactly like the native
+	// renderer, so the group's "Enable all" cannot sweep it back in.
+	$lock_reason = aafm_read_only_mode() && ! aafm_ability_is_read( $slug ) ? 'read_only' : null;
+
+	if ( null !== $lock_reason ) {
+		printf(
+			'<span class="aafm-ability-locked" role="img" aria-label="%1$s">%2$s</span>',
+			esc_attr__( 'Locked', 'agent-abilities-for-mcp' ),
+			wp_kses( aafm_icon( 'lock' ), aafm_svg_allowed_html() )
+		);
+	} else {
+		printf(
+			'<label class="aafm-switch"><input type="checkbox" name="bridged_abilities[]" value="%1$s" aria-labelledby="%2$s"%3$s%4$s%5$s><span class="aafm-switch-track"></span></label>',
+			esc_attr( $slug ),
+			esc_attr( $title_id ),
+			$disabled ? '' : checked( in_array( $slug, $enabled, true ), true, false ),
+			$disabled ? ' disabled' : '',
+			$destructive ? ' data-destructive="1"' : ''
+		);
+	}
 
 	echo '<div class="aafm-ability-main"><div class="aafm-ability-title">';
 	printf(
@@ -519,9 +536,14 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	// The effective permission gate, so the operator can judge exposure before enabling.
 	aafm_render_bridge_permission_line( $slug, $disabled );
 
+	if ( null !== $lock_reason ) {
+		echo '<p class="aafm-ability-locked-note">' . esc_html( aafm_ability_lock_note( $lock_reason ) ) . '</p>';
+	}
+
 	// Destructive confirm: an inline reveal, never a JS modal. admin.js shows it when the switch
-	// is flipped on; "Enable anyway" keeps it on, "Cancel" flips it back off.
-	if ( $destructive && ! $disabled ) {
+	// is flipped on; "Enable anyway" keeps it on, "Cancel" flips it back off. A locked row has no
+	// switch to flip, so it never renders one.
+	if ( $destructive && ! $disabled && null === $lock_reason ) {
 		echo '<div class="aafm-bridge-confirm" hidden>';
 		echo wp_kses(
 			aafm_get_notice_html(
@@ -570,12 +592,42 @@ function aafm_ajax_save_bridged_abilities(): void {
 
 	$allowed = array_values( array_unique( array_intersect( $submitted, $available ) ) );
 
+	$stored = aafm_get_stored_bridged_abilities_raw();
+
+	// While read-only mode is on, a bridged write has no checkbox, so a posted one did not come
+	// from the screen. Refuse a slug that is not already stored, the same rule
+	// aafm_set_enabled_abilities() applies to native names: an existing choice is carried forward,
+	// a fresh one is not accepted from a form that never offered it.
+	if ( aafm_read_only_mode() ) {
+		$allowed = array_values(
+			array_filter(
+				$allowed,
+				static function ( string $slug ) use ( $stored ): bool {
+					return aafm_ability_is_read( $slug ) || in_array( $slug, $stored, true );
+				}
+			)
+		);
+	}
+
 	// Enabled slugs whose host plugin is currently inactive are not in $available and their
 	// disabled checkboxes are never posted, so an unrelated save would silently drop them and
 	// reactivating the host would not restore the bridge. Union those orphans back in so an
 	// enabled-but-unavailable ability survives every save until it is explicitly turned off.
-	$orphans = array_diff( aafm_get_enabled_bridged_abilities(), $available );
-	$enabled = array_values( array_unique( array_merge( $allowed, $orphans ) ) );
+	//
+	// A slug the read-only floor has hidden is the same story: its checkbox never rendered, so its
+	// absence from the POST is the lock speaking, not the operator turning it off. Preserve it, or
+	// the first bridge save while the mode is on discards a choice that was never restated and
+	// turning the mode off hands back a blank slate.
+	$orphans   = array_diff( $stored, $available );
+	$lock_kept = array();
+	if ( aafm_read_only_mode() ) {
+		foreach ( $stored as $slug ) {
+			if ( ! aafm_ability_is_read( $slug ) ) {
+				$lock_kept[] = $slug;
+			}
+		}
+	}
+	$enabled = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
 	update_option( 'aafm_enabled_bridged_abilities', $enabled );
 
 	wp_send_json_success(

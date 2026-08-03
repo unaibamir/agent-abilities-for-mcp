@@ -23,9 +23,10 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  * - aafm_rate_limit_per_min, aafm_max_title_len: floored at 0 (negative/garbage -> 0) and
  *   capped at AAFM_SETTINGS_NUMERIC_MAX. Note max( 0, (int) ) rather than absint(), so a
  *   negative value clamps down to 0 instead of flipping to its positive magnitude.
- * - aafm_force_draft, aafm_high_risk_abilities_unlocked: a plain bool from presence of the field
- *   (unchecked checkbox -> false). Both readers default off on a missing option, so unlike the
- *   OAuth pair below there is nothing to work around: a stored false reads as off either way.
+ * - aafm_force_draft, aafm_high_risk_abilities_unlocked, aafm_read_only_mode: a plain bool from
+ *   presence of the field (unchecked checkbox -> false). Every reader defaults off on a missing
+ *   option, so unlike the OAuth pair below there is nothing to work around: a stored false reads as
+ *   off either way.
  * - aafm_oauth_enabled, aafm_oauth_dcr_enabled: the STRING '1' when the checkbox is present,
  *   '0' when absent. The OAuth readers default on and treat every falsy stored form as off, so
  *   the off state must be the literal '0' string - a PHP bool false would not store as false on
@@ -35,7 +36,7 @@ const AAFM_SETTINGS_NUMERIC_MAX = 100000;
  *   stored non-empty list is always made up entirely of usable entries.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
- * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
+ * @return array{aafm_rate_limit_per_min:int,aafm_max_title_len:int,aafm_log_retention_days:int,aafm_force_draft:bool,aafm_block_guard_strict:bool,aafm_delete_data_on_uninstall:bool,aafm_high_risk_abilities_unlocked:bool,aafm_read_only_mode:bool,aafm_oauth_enabled:string,aafm_oauth_dcr_enabled:string,aafm_ip_allowlist:list<string>}
  */
 function aafm_sanitize_settings_input( array $posted ): array {
 	$rate  = min( AAFM_SETTINGS_NUMERIC_MAX, max( 0, (int) ( $posted['aafm_rate_limit_per_min'] ?? 0 ) ) );
@@ -46,6 +47,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 	$block_guard = ! empty( $posted['aafm_block_guard_strict'] );
 	$delete_on   = ! empty( $posted['aafm_delete_data_on_uninstall'] );
 	$high_risk   = ! empty( $posted['aafm_high_risk_abilities_unlocked'] );
+	$read_only   = ! empty( $posted['aafm_read_only_mode'] );
 
 	$oauth     = empty( $posted['aafm_oauth_enabled'] ) ? '0' : '1';
 	$oauth_dcr = empty( $posted['aafm_oauth_dcr_enabled'] ) ? '0' : '1';
@@ -68,6 +70,7 @@ function aafm_sanitize_settings_input( array $posted ): array {
 		'aafm_block_guard_strict'           => $block_guard,
 		'aafm_delete_data_on_uninstall'     => $delete_on,
 		'aafm_high_risk_abilities_unlocked' => $high_risk,
+		'aafm_read_only_mode'               => $read_only,
 		'aafm_oauth_enabled'                => $oauth,
 		'aafm_oauth_dcr_enabled'            => $oauth_dcr,
 		'aafm_ip_allowlist'                 => array_values( array_unique( $lines ) ),
@@ -127,6 +130,9 @@ function aafm_ajax_save_settings(): void {
 	// against what was actually in place. The raw option, not aafm_high_risk_unlocked(), because a
 	// site that hard-blocks the category through the filter still has an operator setting to record.
 	$high_risk_before = (bool) get_option( 'aafm_high_risk_abilities_unlocked', false );
+	// Same again for read-only mode. The raw option, not aafm_read_only_mode(), so a site that
+	// forces the mode on through the filter still records what the operator actually changed.
+	$read_only_before = (bool) get_option( 'aafm_read_only_mode', false );
 
 	update_option( 'aafm_rate_limit_per_min', $clean['aafm_rate_limit_per_min'] );
 	update_option( 'aafm_max_title_len', $clean['aafm_max_title_len'] );
@@ -146,11 +152,14 @@ function aafm_ajax_save_settings(): void {
 	} else {
 		delete_option( 'aafm_high_risk_abilities_unlocked' );
 	}
+	// Off deletes the row here too, for the reason spelled out above the high-risk branch.
+	aafm_set_read_only_mode( $clean['aafm_read_only_mode'] );
 	update_option( 'aafm_oauth_enabled', $clean['aafm_oauth_enabled'] );
 	update_option( 'aafm_oauth_dcr_enabled', $clean['aafm_oauth_dcr_enabled'] );
 	update_option( 'aafm_ip_allowlist', $clean['aafm_ip_allowlist'] );
 
 	aafm_log_high_risk_switch_change( $high_risk_before, $clean['aafm_high_risk_abilities_unlocked'] );
+	aafm_log_read_only_switch_change( $read_only_before, $clean['aafm_read_only_mode'] );
 
 	wp_send_json_success(
 		array(
@@ -161,6 +170,7 @@ function aafm_ajax_save_settings(): void {
 			'aafm_block_guard_strict'           => $clean['aafm_block_guard_strict'],
 			'aafm_delete_data_on_uninstall'     => $clean['aafm_delete_data_on_uninstall'],
 			'aafm_high_risk_abilities_unlocked' => $clean['aafm_high_risk_abilities_unlocked'],
+			'aafm_read_only_mode'               => $clean['aafm_read_only_mode'],
 			'aafm_oauth_enabled'                => $clean['aafm_oauth_enabled'],
 			'aafm_oauth_dcr_enabled'            => $clean['aafm_oauth_dcr_enabled'],
 			'aafm_ip_allowlist'                 => $clean['aafm_ip_allowlist'],
@@ -256,6 +266,10 @@ function aafm_config_option_names(): array {
 		// money-moving abilities back behind the floor rather than leave them reachable because
 		// someone unlocked the category once; uninstall-with-delete-data removes the row outright.
 		'aafm_high_risk_abilities_unlocked',
+		// Read-only mode. Cleared for the same reason the switch above is, from the other side: a
+		// reset returns the site to out-of-the-box, and out of the box the mode is off. Nothing is
+		// exposed by that on its own, because a reset also clears every enabled ability.
+		'aafm_read_only_mode',
 	);
 }
 
@@ -513,12 +527,54 @@ function aafm_render_settings_tab(): void {
 		)
 	);
 
+	// Read-only mode. Sits immediately above the high-risk switch because it is the wider of the
+	// two ceilings: while it is on, the one below it cannot change anything. Same
+	// .aafm-switch / .aafm-set-row contract, and inside #aafm-settings-form so admin.js reads it.
+	ob_start();
+
+	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( (bool) get_option( 'aafm_read_only_mode', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
+	$read_only_control .= '<p class="help">' . esc_html__( 'While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable. That covers this plugin\'s own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them.', 'agent-abilities-for-mcp' ) . '</p>';
+	$read_only_control .= '<p class="help">' . esc_html__( 'A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Read-only mode', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
+			'control' => $read_only_control,
+			'help'    => __( 'Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it.', 'agent-abilities-for-mcp' ),
+		)
+	);
+
+	$read_only_body = (string) ob_get_clean();
+	aafm_render_section(
+		array(
+			'icon'  => 'shield',
+			'title' => __( 'Read-only mode', 'agent-abilities-for-mcp' ),
+			'body'  => $read_only_body,
+		)
+	);
+
 	// The high-risk master switch. Its own card, deliberately not folded into Safety controls and
 	// deliberately not inside the Danger zone: it is a normal setting an operator is expected to
 	// reach on purpose, not a destructive action. Same .aafm-switch / .aafm-set-row contract as the
 	// rows above, so the save handler binds to the <input> name, not to this markup. It sits inside
 	// #aafm-settings-form because admin.js reads the checkbox off the form.
 	ob_start();
+
+	// While read-only mode is on this switch is moot: all eight high-risk abilities are writes, so
+	// the read-only floor already has them. Say so, and dim the card, rather than leaving it looking
+	// live while flipping it changes nothing. The checkbox itself stays enabled so its current value
+	// still rides along on every save - disabling it would post nothing, and the sanitizer reads a
+	// missing field as off, which would quietly re-lock the category behind the operator's back.
+	$read_only_on = aafm_read_only_mode();
+	if ( $read_only_on ) {
+		aafm_render_notice(
+			'info',
+			__( 'Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch.', 'agent-abilities-for-mcp' ),
+			array( 'inline' => true )
+		);
+	}
 
 	$high_risk_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
 	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
@@ -538,7 +594,11 @@ function aafm_render_settings_tab(): void {
 	aafm_render_section(
 		array(
 			'icon'  => 'lock',
+			'class' => $read_only_on ? 'is-inactive' : '',
 			'title' => __( 'High-risk abilities', 'agent-abilities-for-mcp' ),
+			'pill'  => $read_only_on
+				? '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Held by read-only mode', 'agent-abilities-for-mcp' ) . '</span>'
+				: '',
 			'body'  => $high_risk_body,
 		)
 	);

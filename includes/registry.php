@@ -226,8 +226,8 @@ function aafm_get_enabled_abilities(): array {
 	$stored = is_array( $stored ) ? array_values( array_filter( array_map( 'strval', $stored ) ) ) : array();
 
 	// Only honor keys that still exist in the registry (stale keys never enable anything).
-	$known   = array_keys( aafm_get_abilities_registry() );
-	$enabled = array_values( array_intersect( $stored, $known ) );
+	$registry = aafm_get_abilities_registry();
+	$enabled  = array_values( array_intersect( $stored, array_keys( $registry ) ) );
 
 	// The high-risk floor. Locked abilities are removed from the REGISTERED set only; the stored
 	// option keeps the operator's choice untouched, so unlocking the category restores exactly what
@@ -238,11 +238,31 @@ function aafm_get_enabled_abilities(): array {
 	// The lock state and the high-risk set are read once for the whole list rather than per ability
 	// via aafm_ability_is_locked(): that helper re-runs get_option() and both filters on every call,
 	// and this walks the operator's full enabled list on any request that needs the registered set.
-	if ( aafm_high_risk_unlocked() ) {
+	if ( ! aafm_high_risk_unlocked() ) {
+		$enabled = array_values( array_diff( $enabled, aafm_high_risk_abilities() ) );
+	}
+
+	// The read-only floor, the second subtraction. Independent of the one above and applied after
+	// it, so unlocking the high-risk category can never put a write back while read-only mode is
+	// on. Same shape as the high-risk floor in every other respect: the stored option is untouched,
+	// so switching the mode off restores exactly what was ticked.
+	//
+	// The mode is read once for the whole list, and risk comes off the registry rows already in
+	// hand rather than through aafm_ability_is_read() per name, which would re-fetch the full
+	// registry view on every call. Anything the registry does not classify as a read is dropped -
+	// fail closed, the same rule aafm_ability_is_read() applies for the admin screens.
+	if ( ! aafm_read_only_mode() ) {
 		return $enabled;
 	}
 
-	return array_values( array_diff( $enabled, aafm_high_risk_abilities() ) );
+	$reads = array();
+	foreach ( $enabled as $name ) {
+		if ( 'read' === (string) ( $registry[ $name ]['risk'] ?? '' ) ) {
+			$reads[] = $name;
+		}
+	}
+
+	return $reads;
 }
 
 /**

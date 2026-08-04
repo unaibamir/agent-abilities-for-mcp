@@ -1135,6 +1135,9 @@
 				const oauthDcrEnabled = form.querySelector(
 					'input[name="aafm_oauth_dcr_enabled"]'
 				);
+				const readOnlyMode = form.querySelector(
+					'input[name="aafm_read_only_mode"]'
+				);
 				const highRiskUnlocked = form.querySelector(
 					'input[name="aafm_high_risk_abilities_unlocked"]'
 				);
@@ -1165,6 +1168,9 @@
 				}
 				if ( oauthDcrEnabled?.checked ) {
 					body.append( 'aafm_oauth_dcr_enabled', '1' );
+				}
+				if ( readOnlyMode?.checked ) {
+					body.append( 'aafm_read_only_mode', '1' );
 				}
 				if ( highRiskUnlocked?.checked ) {
 					body.append( 'aafm_high_risk_abilities_unlocked', '1' );

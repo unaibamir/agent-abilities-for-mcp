@@ -1002,6 +1002,10 @@
 				box-shadow: none;
 				border-radius: 0;
 			}
+
+			.aafm-integration-filter {
+				padding-inline: 20px;
+			}
 		}
 
 		/* Per-card search + read/write filter. */
@@ -1011,7 +1015,7 @@
 			align-items: center;
 			gap: 10px;
 			padding-block: 12px;
-			padding-inline: 20px;
+			padding-inline: 0px;
 			align-items: stretch;
 
 			.aafm-integration-search {

@@ -244,12 +244,16 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Screenshots ==
 
-1. The dashboard walks you through setup with a three-step checklist and shows enabled abilities, agent activity, audit size, and your MCP endpoint at a glance.
-2. Connect over OAuth by pasting your site URL and approving once in the browser. An Application Password is there as a fallback.
-3. Nothing is exposed until you switch it on. Abilities are grouped by area, each with its own toggle and an enable-all per section.
-4. Integrations for WooCommerce, ACF, and SEO show up only while the host plugin is active, and each one stays off until you turn it on.
-5. The activity log records every call: who made it, which ability, and whether it succeeded or was denied.
-6. Abilities from other plugins are grouped by the plugin that registers them, each off until you turn it on, with an enable-all or disable-all per plugin.
+1. The first run walks you through connecting an agent in three steps. Turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
+2. Nothing is exposed until you switch it on. Nine of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
+3. Read-only mode in force. Every ability that writes loses its checkbox completely and says which switch is holding it down, so a bulk enable cannot sweep one back in by accident.
+4. Read-only mode is a single switch on the Settings tab. While it is on, the high-risk category underneath is held as well, and says so instead of sitting there looking live.
+5. The WooCommerce abilities that move money or grant authority stay padlocked behind a second switch of their own, sitting among ordinary writes you can turn on one at a time.
+6. An integration only appears once the plugin it belongs to is active. WooCommerce is running here with 52 abilities available and none enabled yet, while the others wait until they are installed.
+7. Abilities that your other plugins register for themselves, grouped by the plugin that declared them, each one off until you turn it on and labelled with the risk that plugin reports.
+8. Your MCP endpoint, the OAuth approval flow that leaves no secret to store, and a dedicated low-privilege agent user. The Application Password fallback carries a plain warning that it reaches further than this plugin can scope.
+9. The activity log records what happened and who did it, including every change to what is enabled, with filters for successes, errors and denials, and a CSV export.
+10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==
 

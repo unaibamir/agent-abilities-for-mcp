@@ -1170,9 +1170,19 @@ function aafm_render_admin_page(): void {
 		);
 	}
 
-	// Right-aligned support links: quiet and permanent, no admin-wide nag. A review helps the
-	// plugin's wordpress.org standing; Get Help routes to the support forum. Both open in a new tab.
+	// Right-aligned support links: quiet and permanent, no admin-wide nag. Website is the
+	// plugin's own home and leads, which keeps the two wordpress.org destinations next to each
+	// other rather than split by it. A review helps the plugin's wordpress.org standing; Get Help
+	// routes to the support forum. All three open in a new tab.
+	//
+	// Website reuses the existing chain-link glyph rather than adding an SVG - it is the standard
+	// mark for "this goes somewhere else on the web", and the icon set has no globe.
 	$ext_links = array(
+		array(
+			'href'  => 'https://agentabilitieswp.com',
+			'icon'  => 'endpoint',
+			'label' => __( 'Website', 'agent-abilities-for-mcp' ),
+		),
 		array(
 			'href'  => 'https://wordpress.org/support/plugin/agent-abilities-for-mcp/reviews/#new-post',
 			'icon'  => 'star',

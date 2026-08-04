@@ -144,6 +144,45 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	/**
+	 * OAuth leads the tab: connecting an agent is the first thing an operator does here, and the
+	 * safety controls only start mattering once something is connected. The Danger zone stays last.
+	 * The "these safety controls are optional" caption travels with the card it names rather than
+	 * sitting at the head of the tab introducing OAuth.
+	 */
+	public function test_oauth_renders_above_safety_controls(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$html = (string) ob_get_clean();
+
+		$oauth_at   = strpos( $html, 'aafm-card-head-title">OAuth' );
+		$caption_at = strpos( $html, 'These safety controls are optional' );
+		$safety_at  = strpos( $html, 'aafm-card-head-title">Safety controls' );
+		$danger_at  = strpos( $html, 'aafm-card-head-title">Danger zone' );
+
+		$this->assertNotFalse( $oauth_at, 'The OAuth card is missing from the Settings tab.' );
+		$this->assertNotFalse( $caption_at, 'The safety-controls caption is missing from the Settings tab.' );
+		$this->assertNotFalse( $safety_at, 'The Safety controls card is missing from the Settings tab.' );
+		$this->assertNotFalse( $danger_at, 'The Danger zone card is missing from the Settings tab.' );
+
+		$this->assertLessThan( $safety_at, $oauth_at, 'OAuth must be the first card on the Settings tab.' );
+		$this->assertLessThan( $safety_at, $caption_at, 'The caption must introduce the Safety controls card.' );
+		$this->assertLessThan( $caption_at, $oauth_at, 'The caption belongs below OAuth, not above it.' );
+		$this->assertLessThan( $danger_at, $safety_at, 'The Danger zone stays last.' );
+
+		// Both OAuth switches move with the card, and both stay inside the form: admin.js reads
+		// them off #aafm-settings-form, so a card that drifted past </form> would post nothing and
+		// both toggles would silently save off.
+		$form_end = strpos( $html, '</form>' );
+		$this->assertNotFalse( $form_end );
+		foreach ( array( 'aafm_oauth_enabled', 'aafm_oauth_dcr_enabled' ) as $field ) {
+			$at = strpos( $html, 'name="' . $field . '"' );
+			$this->assertNotFalse( $at, $field . ' is missing from the Settings tab.' );
+			$this->assertLessThan( $safety_at, $at, $field . ' must render inside the OAuth card above Safety controls.' );
+			$this->assertLessThan( $form_end, $at, $field . ' must sit inside #aafm-settings-form.' );
+		}
+	}
+
+	/**
 	 * The Settings save handler (#bindSaveSettings in admin.js) builds its POST body field by
 	 * field rather than serializing the whole form, so every checkbox has to be forwarded
 	 * explicitly. It once forwarded only force-draft, delete-on-uninstall, and the numeric

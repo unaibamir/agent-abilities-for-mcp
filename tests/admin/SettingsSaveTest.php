@@ -310,4 +310,52 @@ final class SettingsSaveTest extends TestCase {
 		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
 		$this->assertTrue( get_option( 'aafm_high_risk_abilities_unlocked', false ) );
 	}
+
+	/**
+	 * Every field the Settings tab renders must be forwarded by the save payload in admin.js.
+	 *
+	 * The save handler does not serialise the form: admin.js names each field by hand and appends
+	 * it. A field that is rendered but never appended is not merely unsaved, it is actively saved
+	 * OFF, because aafm_sanitize_settings_input() reads an absent checkbox as false and the write
+	 * that follows then persists that false. So the switch appears to do nothing, and any later
+	 * save on that tab silently clears it.
+	 *
+	 * This has now happened twice: first to the OAuth, DCR and strict-block toggles, then to
+	 * aafm_read_only_mode in 1.6.0, which shipped through a full test suite and five review lanes
+	 * because every test on that surface asserted the PHP half only. Asserting the checkbox is
+	 * "inside the form" proves nothing here, since nothing reads the form.
+	 *
+	 * Pinning the two halves against each other is the only thing that catches it, so this test
+	 * derives the field list from the renderer rather than restating it.
+	 */
+	public function test_every_rendered_settings_field_is_forwarded_by_the_save_payload(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading local plugin source off disk, never a remote URL.
+		$php = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/settings.php' );
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+
+		$this->assertSame(
+			1,
+			preg_match_all( '/name="(aafm_[a-z_]+)"/', $php, $matches ) > 0 ? 1 : 0,
+			'The settings renderer should emit at least one named field.'
+		);
+
+		$rendered = array_values( array_unique( $matches[1] ) );
+		$this->assertContains(
+			'aafm_read_only_mode',
+			$rendered,
+			'Guard against this test silently passing if the switch is ever removed from the renderer.'
+		);
+
+		foreach ( $rendered as $field ) {
+			$this->assertStringContainsString(
+				"'" . $field . "'",
+				$js,
+				sprintf(
+					'The Settings tab renders %s but admin.js never appends it to the save payload, so saving that tab writes it off.',
+					$field
+				)
+			);
+		}
+	}
 }

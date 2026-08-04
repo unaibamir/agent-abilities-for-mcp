@@ -67,4 +67,28 @@ final class ShellTest extends TestCase {
 		$this->assertStringContainsString( '(opens in a new tab)', $anchor );
 		$this->assertStringContainsString( '<svg', $anchor, 'The website link should carry an icon like the other two.' );
 	}
+
+	/**
+	 * No two nav tabs may share a glyph.
+	 *
+	 * The nav renders its icon with aafm_icon( $slug ), so a duplicate is invisible in the source:
+	 * each tab looks like it has its own entry. 'bridge' shipped as a byte-identical copy of
+	 * 'integrations', and the two adjacent tabs were indistinguishable on screen until the operator
+	 * pointed it out. Comparing the rendered markup catches a copied path that a reader scanning
+	 * the icon array would not.
+	 */
+	public function test_every_nav_tab_has_a_distinct_icon(): void {
+		$seen = array();
+		foreach ( array_keys( aafm_admin_tabs() ) as $slug ) {
+			$svg = aafm_icon( (string) $slug );
+			$this->assertNotSame( '', $svg, sprintf( 'Tab %s renders no icon at all.', $slug ) );
+
+			$owner = array_search( $svg, $seen, true );
+			$this->assertFalse(
+				$owner,
+				sprintf( 'Tabs %s and %s render the same glyph, so the nav cannot tell them apart.', (string) $owner, $slug )
+			);
+			$seen[ $slug ] = $svg;
+		}
+	}
 }

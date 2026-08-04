@@ -33,7 +33,10 @@ function aafm_icon( string $name ): string {
 		'connection'         => '<path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5"/>',
 		'abilities'          => '<path d="M13 3 4 14h6l-1 7 9-11h-6l1-7Z"/>',
 		'integrations'       => '<path d="M9 7V4M15 7V4M9 7h6a2 2 0 0 1 2 2v3a5 5 0 0 1-10 0V9a2 2 0 0 1 2-2ZM12 17v3"/>',
-		'bridge'             => '<path d="M9 7V4M15 7V4M9 7h6a2 2 0 0 1 2 2v3a5 5 0 0 1-10 0V9a2 2 0 0 1 2-2ZM12 17v3"/>',
+		// Deliberately NOT the plug: 'integrations' owns that glyph, and this tab used to carry a
+		// byte-identical copy of it, so the two nav items were indistinguishable. An arrow landing
+		// in a tray reads as abilities arriving from somewhere else, which is what this tab is.
+		'bridge'             => '<path d="M12 3v10m-4-4 4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
 		'settings'           => '<circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l1.8-1.4-1.8-3.2-2.1.9a7.6 7.6 0 0 0-1.7-1L15.2 3H8.8l-.4 2.3a7.6 7.6 0 0 0-1.7 1l-2.1-.9-1.8 3.2L4.6 11a7.6 7.6 0 0 0 0 2l-1.8 1.4 1.8 3.2 2.1-.9a7.6 7.6 0 0 0 1.7 1l.4 2.3h6.4l.4-2.3a7.6 7.6 0 0 0 1.7-1l2.1.9 1.8-3.2L19.4 13Z"/>',
 		'activity'           => '<path d="M4 6h16M4 12h16M4 18h16"/>',
 		'help'               => '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .8-1 1.7M12 17h.01"/>',

@@ -28,6 +28,7 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
 * **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
+* **Read-only mode.** One switch stops every ability that writes from being registered at all, whatever is ticked, including abilities brought in from your other plugins. It turns nothing on or off by itself, so your selections are still there when you switch it back off.
 * **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs.
 * **Honest audit log.** Every call is recorded, denied attempts included, with the principal and the argument keys (never the values). It lives in your own database and clears from the admin.
 * **Bounded by construction.** No arbitrary option or meta access, no remote URL fetch, no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list, never fetched from a URL. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.

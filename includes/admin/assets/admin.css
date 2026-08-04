@@ -1011,7 +1011,7 @@
 			align-items: center;
 			gap: 10px;
 			padding-block: 12px;
-			padding-inline: 0px;
+			padding-inline: 20px;
 			align-items: stretch;
 
 			.aafm-integration-search {

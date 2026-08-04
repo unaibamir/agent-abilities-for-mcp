@@ -332,10 +332,12 @@ final class ReadOnlyUiTest extends TestCase {
 		$this->assertLessThan( $high_risk_at, $read_only_at, 'Read-only mode must sit above the high-risk switch.' );
 		$this->assertLessThan( $rate_limit_at, $high_risk_at, 'The two governance switches come before the per-behaviour controls.' );
 
-		// "First row" literally: exactly one .aafm-set-row has opened by the time the switch renders.
+		// "First row" literally: exactly one .aafm-set-row has opened between the card head and the
+		// switch. Counted from the card head rather than from the top of the tab, because the OAuth
+		// card sits above Safety controls now and brings two rows of its own with it.
 		$this->assertSame(
 			1,
-			substr_count( substr( $html, 0, $read_only_at ), 'aafm-set-row' ),
+			substr_count( substr( $html, $safety_at, $read_only_at - $safety_at ), 'aafm-set-row' ),
 			'Read-only mode must be the first row of the card, with nothing above it.'
 		);
 	}

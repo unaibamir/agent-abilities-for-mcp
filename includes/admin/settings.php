@@ -352,9 +352,10 @@ function aafm_ajax_reset_plugin(): void {
 }
 
 /**
- * Render the Settings tab: one Safety controls card of labelled rows - the two governance
- * switches first, then the optional per-behaviour controls - plus an OAuth card with its two
- * toggles.
+ * Render the Settings tab: an OAuth card with its two toggles, then one Safety controls card of
+ * labelled rows - the two governance switches first, then the optional per-behaviour controls -
+ * and the Danger zone last. Both cards sit inside #aafm-settings-form and share the one sticky
+ * save bar at its foot.
  *
  * Each control reads its current value through its safety.php getter (filterable, bounded,
  * default off) and writes via the aafm_save_settings AJAX action. Everything is escaped on
@@ -367,12 +368,59 @@ function aafm_render_settings_tab(): void {
 	echo '<div class="aafm-settings">';
 	wp_nonce_field( 'aafm_admin', 'aafm_settings_nonce' );
 
+	echo '<form id="aafm-settings-form">';
+
+	// OAuth: two additive switch rows. Same .aafm-switch / .aafm-set-row markup as the
+	// force-draft row below; the <input> name/value/checked() contract is what the save
+	// handler binds to, not this markup. Both readers default on (discovery.php).
+	//
+	// This card leads the tab because connecting an agent is the first thing an operator does
+	// here, and the safety controls below only start mattering once something is connected.
+	ob_start();
+
+	// Enable OAuth. The row title and the sentence label each carry an id, and the checkbox
+	// points at both with aria-labelledby, so the toggle's accessible name is the title plus the
+	// descriptive sentence. The sentence <label for> stays put - it is the existing single
+	// association, not a second one, so the redundant-`for` defect cannot recur. The set-row
+	// label carries the title id here so the existing aria-labelledby reference resolves.
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-control">';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+
+	// Enable dynamic client registration. Same tie-up as the row above.
+	echo '<div class="aafm-set-row">';
+	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
+	echo '<div class="aafm-set-control">';
+	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
+	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
+	echo '</div></div>';
+
+	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
+	// screen tells the approving human the app acts with their full capabilities either way - but
+	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
+	echo '<p class="help">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	$oauth_body = (string) ob_get_clean();
+	aafm_render_section(
+		array(
+			'icon'  => 'connection',
+			'title' => __( 'OAuth', 'agent-abilities-for-mcp' ),
+			'body'  => $oauth_body,
+		)
+	);
+
+	// Caption for the card immediately below it. It names the safety controls outright, so it
+	// travelled down with them when OAuth took the top of the tab rather than staying at the head
+	// of the page describing a card it no longer introduces.
 	aafm_render_notice(
 		'info',
 		__( 'These safety controls are optional. They all start off, and the plugin runs fine without any of them. Turn on only what you need.', 'agent-abilities-for-mcp' )
 	);
-
-	echo '<form id="aafm-settings-form">';
 
 	// Safety controls section. Each labelled control is a pre-built row passed to the shared
 	// aafm_render_section() component; the <input> name/value/checked() contracts are unchanged,
@@ -559,47 +607,6 @@ function aafm_render_settings_tab(): void {
 			'icon'  => 'shield',
 			'title' => __( 'Safety controls', 'agent-abilities-for-mcp' ),
 			'body'  => $safety_body,
-		)
-	);
-
-	// OAuth: two additive switch rows. Same .aafm-switch / .aafm-set-row markup as the
-	// force-draft row above; the <input> name/value/checked() contract is what the save
-	// handler binds to, not this markup. Both readers default on (discovery.php).
-	ob_start();
-
-	// Enable OAuth. The row title and the sentence label each carry an id, and the checkbox
-	// points at both with aria-labelledby, so the toggle's accessible name is the title plus the
-	// descriptive sentence. The sentence <label for> stays put - it is the existing single
-	// association, not a second one, so the redundant-`for` defect cannot recur. The set-row
-	// label carries the title id here so the existing aria-labelledby reference resolves.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label" id="aafm-oauth-enabled-title">' . esc_html__( 'Enable OAuth', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-set-control">';
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-enabled" name="aafm_oauth_enabled" value="1" aria-labelledby="aafm-oauth-enabled-title aafm-oauth-enabled-desc" ' . checked( aafm_oauth_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-enabled" id="aafm-oauth-enabled-desc">' . esc_html__( 'Let agents connect by pasting your site URL.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Let agents connect by pasting your site URL. Application Passwords keep working either way.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
-
-	// Enable dynamic client registration. Same tie-up as the row above.
-	echo '<div class="aafm-set-row">';
-	echo '<div class="aafm-set-label" id="aafm-oauth-dcr-enabled-title">' . esc_html__( 'Enable dynamic client registration', 'agent-abilities-for-mcp' ) . '</div>';
-	echo '<div class="aafm-set-control">';
-	echo '<label class="aafm-switch"><input type="checkbox" id="aafm-oauth-dcr-enabled" name="aafm_oauth_dcr_enabled" value="1" aria-labelledby="aafm-oauth-dcr-enabled-title aafm-oauth-dcr-enabled-desc" ' . checked( aafm_oauth_dcr_enabled(), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	echo '<label for="aafm-oauth-dcr-enabled" id="aafm-oauth-dcr-enabled-desc">' . esc_html__( 'Allow agents to self-register a client automatically.', 'agent-abilities-for-mcp' ) . '</label>';
-	echo '<p class="help">' . esc_html__( 'Allow agents to self-register a client automatically. Turn off to require manual client setup.', 'agent-abilities-for-mcp' ) . '</p>';
-	echo '</div></div>';
-
-	// Scope-is-not-a-boundary note. A connecting app can request an OAuth scope, and the consent
-	// screen tells the approving human the app acts with their full capabilities either way - but
-	// nothing said that on the admin side until now. Stated once, here, next to the two switches.
-	echo '<p class="help">' . esc_html__( 'If a connecting app requests a narrower OAuth scope, this plugin does not use it to limit what the resulting token can do. Every grant acts with the full capabilities of the account that approved it, unless a developer has wired the aafm_oauth_token_capabilities filter to narrow it.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	$oauth_body = (string) ob_get_clean();
-	aafm_render_section(
-		array(
-			'icon'  => 'connection',
-			'title' => __( 'OAuth', 'agent-abilities-for-mcp' ),
-			'body'  => $oauth_body,
 		)
 	);
 

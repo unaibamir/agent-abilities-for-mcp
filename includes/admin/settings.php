@@ -352,7 +352,9 @@ function aafm_ajax_reset_plugin(): void {
 }
 
 /**
- * Render the Settings tab: a card of labelled rows for the four optional safety controls, plus an OAuth card with its two toggles.
+ * Render the Settings tab: one Safety controls card of labelled rows - the two governance
+ * switches first, then the optional per-behaviour controls - plus an OAuth card with its two
+ * toggles.
  *
  * Each control reads its current value through its safety.php getter (filterable, bounded,
  * default off) and writes via the aafm_save_settings AJAX action. Everything is escaped on
@@ -376,6 +378,77 @@ function aafm_render_settings_tab(): void {
 	// aafm_render_section() component; the <input> name/value/checked() contracts are unchanged,
 	// only the surrounding wrapper moved onto the shared .aafm-section component.
 	ob_start();
+
+	// Read-only mode. The first row of the card, because it is the widest ceiling on this tab:
+	// while it is on, every write is held, including the ones the high-risk row below it governs.
+	// Same .aafm-switch / .aafm-set-row contract as every other row, and inside #aafm-settings-form
+	// so admin.js reads it.
+	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( (bool) get_option( 'aafm_read_only_mode', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
+	$read_only_control .= '<p class="help">' . esc_html__( 'While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	// The rest of the explanation sits behind a "See more" so this row reads at the same length as
+	// the plain ones above it. Collapsed, not cut: every sentence is still in the markup.
+	$read_only_more  = '<p class="help">' . esc_html__( 'That covers this plugin\'s own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them.', 'agent-abilities-for-mcp' ) . '</p>';
+	$read_only_more .= '<p class="help">' . esc_html__( 'A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one.', 'agent-abilities-for-mcp' ) . '</p>';
+	$read_only_more .= '<p class="help">' . esc_html__( 'Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	$read_only_control .= aafm_get_set_more_html(
+		__( 'See more about read-only mode', 'agent-abilities-for-mcp' ),
+		$read_only_more
+	);
+
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Read-only mode', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
+			'control' => $read_only_control,
+		)
+	);
+
+	// The high-risk master switch, directly beneath the switch that can hold it. It is a normal
+	// setting an operator is expected to reach on purpose, not a destructive action, so it stays
+	// here rather than in the Danger zone.
+	//
+	// While read-only mode is on this switch is moot: all eight high-risk abilities are writes, so
+	// the read-only floor already has them. Say so, and dim the row, rather than leaving it looking
+	// live while flipping it changes nothing. The checkbox itself stays enabled so its current value
+	// still rides along on every save - disabling it would post nothing, and the sanitizer reads a
+	// missing field as off, which would quietly re-lock the category behind the operator's back.
+	$read_only_on = aafm_read_only_mode();
+
+	$high_risk_control = $read_only_on
+		? aafm_get_notice_html(
+			'info',
+			__( 'Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch.', 'agent-abilities-for-mcp' ),
+			array( 'inline' => true )
+		)
+		: '';
+
+	$high_risk_control .= '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
+	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
+	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	$high_risk_more  = '<p class="help">' . esc_html__( 'Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_more .= '<p class="help">' . esc_html__( 'This switch covers this plugin\'s own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately.', 'agent-abilities-for-mcp' ) . '</p>';
+	$high_risk_more .= '<p class="help">' . esc_html__( 'The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting below if you want a longer record of when the category was opened.', 'agent-abilities-for-mcp' ) . '</p>';
+
+	$high_risk_control .= aafm_get_set_more_html(
+		__( 'See more about the high-risk category', 'agent-abilities-for-mcp' ),
+		$high_risk_more
+	);
+
+	aafm_render_set_row(
+		array(
+			'label'   => __( 'Unlock the category', 'agent-abilities-for-mcp' ),
+			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
+			'class'   => $read_only_on ? 'is-inactive' : '',
+			'pill'    => $read_only_on
+				? '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Held by read-only mode', 'agent-abilities-for-mcp' ) . '</span>'
+				: '',
+			'control' => $high_risk_control,
+		)
+	);
 
 	// Rate limit. Ships off (0) by default, same as every other optional control on this tab, but
 	// this one is easy to miss because a 0 in a number field does not read as "off" the way an
@@ -461,19 +534,22 @@ function aafm_render_settings_tab(): void {
 
 	// Delete data on uninstall. Same toggle-switch contract as force draft; the <input>
 	// name/value/checked() is what the save handler and uninstall.php bind to, not this markup.
-	// The control carries its own explanatory paragraph so a second, distinct caution - that
-	// uninstalling never revokes an agent's access on its own, whichever way this switch is set -
-	// can render as its own paragraph via the row's 'help' arg, after it, rather than the two
-	// getting run together.
+	// The second, distinct caution - that uninstalling never revokes an agent's access on its own,
+	// whichever way this switch is set - is long enough to break the rhythm of the card, so it sits
+	// behind the row's "See more" as its own paragraph rather than getting run together with the
+	// first one.
 	$delete_on_uninstall_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-delete-data-on-uninstall" name="aafm_delete_data_on_uninstall" value="1" ' . checked( (bool) get_option( 'aafm_delete_data_on_uninstall', false ), true, false ) . '><span class="aafm-switch-track"></span></label> '
 		. '<label for="aafm-delete-data-on-uninstall">' . esc_html__( 'Permanently remove all plugin data when the plugin is deleted.', 'agent-abilities-for-mcp' ) . '</label>';
 	$delete_on_uninstall_control .= '<p class="help">' . esc_html__( 'When this is off (the default), your settings, activity log, and OAuth data are kept if you delete the plugin, so a reinstall picks up your configuration. Turn it on only if you want everything removed. This cannot be undone.', 'agent-abilities-for-mcp' ) . '</p>';
+	$delete_on_uninstall_control .= aafm_get_set_more_html(
+		__( 'See more about deleting data on uninstall', 'agent-abilities-for-mcp' ),
+		'<p class="help">' . esc_html__( "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin.", 'agent-abilities-for-mcp' ) . '</p>'
+	);
 
 	aafm_render_set_row(
 		array(
 			'label'   => __( 'Delete data on uninstall', 'agent-abilities-for-mcp' ),
 			'control' => $delete_on_uninstall_control,
-			'help'    => __( "Either way, uninstalling this plugin never revokes an agent's access on its own. It never removes the dedicated agent user or any Application Password issued to it, since those are ordinary WordPress account credentials the plugin does not own. To cut off an agent, revoke its OAuth grant on the Connection tab, or delete its Application Password or user account from the Users screen, before or after you remove the plugin.", 'agent-abilities-for-mcp' ),
 		)
 	);
 
@@ -524,82 +600,6 @@ function aafm_render_settings_tab(): void {
 			'icon'  => 'connection',
 			'title' => __( 'OAuth', 'agent-abilities-for-mcp' ),
 			'body'  => $oauth_body,
-		)
-	);
-
-	// Read-only mode. Sits immediately above the high-risk switch because it is the wider of the
-	// two ceilings: while it is on, the one below it cannot change anything. Same
-	// .aafm-switch / .aafm-set-row contract, and inside #aafm-settings-form so admin.js reads it.
-	ob_start();
-
-	$read_only_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-read-only-mode" name="aafm_read_only_mode" value="1" ' . checked( (bool) get_option( 'aafm_read_only_mode', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$read_only_control .= '<label for="aafm-read-only-mode">' . esc_html__( 'Let agents read this site, and nothing else.', 'agent-abilities-for-mcp' ) . '</label>';
-	$read_only_control .= '<p class="help">' . esc_html__( 'While this is on, no ability that creates, changes, or deletes anything can be switched on, and none that is already switched on is reachable. That covers this plugin\'s own abilities and any bridged in from other plugins. It never turns anything on for you: your selections are kept exactly as they are, so switching this back off restores them.', 'agent-abilities-for-mcp' ) . '</p>';
-	$read_only_control .= '<p class="help">' . esc_html__( 'A bridged ability counts as a read only when the plugin that wrote it says so. That is the same declaration this plugin already trusts elsewhere, but it is the other plugin making it, not this one.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	aafm_render_set_row(
-		array(
-			'label'   => __( 'Read-only mode', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
-			'control' => $read_only_control,
-			'help'    => __( 'Every flip of this switch is recorded in the activity log, and those entries expire on the same retention schedule as everything else in it.', 'agent-abilities-for-mcp' ),
-		)
-	);
-
-	$read_only_body = (string) ob_get_clean();
-	aafm_render_section(
-		array(
-			'icon'  => 'shield',
-			'title' => __( 'Read-only mode', 'agent-abilities-for-mcp' ),
-			'body'  => $read_only_body,
-		)
-	);
-
-	// The high-risk master switch. Its own card, deliberately not folded into Safety controls and
-	// deliberately not inside the Danger zone: it is a normal setting an operator is expected to
-	// reach on purpose, not a destructive action. Same .aafm-switch / .aafm-set-row contract as the
-	// rows above, so the save handler binds to the <input> name, not to this markup. It sits inside
-	// #aafm-settings-form because admin.js reads the checkbox off the form.
-	ob_start();
-
-	// While read-only mode is on this switch is moot: all eight high-risk abilities are writes, so
-	// the read-only floor already has them. Say so, and dim the card, rather than leaving it looking
-	// live while flipping it changes nothing. The checkbox itself stays enabled so its current value
-	// still rides along on every save - disabling it would post nothing, and the sanitizer reads a
-	// missing field as off, which would quietly re-lock the category behind the operator's back.
-	$read_only_on = aafm_read_only_mode();
-	if ( $read_only_on ) {
-		aafm_render_notice(
-			'info',
-			__( 'Read-only mode is on, so this does nothing right now. Every high-risk ability writes, and read-only mode is already holding all of them. Turn read-only mode off above to use this switch.', 'agent-abilities-for-mcp' ),
-			array( 'inline' => true )
-		);
-	}
-
-	$high_risk_control  = '<label class="aafm-switch"><input type="checkbox" id="aafm-high-risk-unlocked" name="aafm_high_risk_abilities_unlocked" value="1" ' . checked( (bool) get_option( 'aafm_high_risk_abilities_unlocked', false ), true, false ) . '><span class="aafm-switch-track"></span></label> ';
-	$high_risk_control .= '<label for="aafm-high-risk-unlocked">' . esc_html__( 'Allow refunds, order changes, payment gateway settings, coupons, and tax rates to be switched on individually.', 'agent-abilities-for-mcp' ) . '</label>';
-	$high_risk_control .= '<p class="help">' . esc_html__( 'While this is off, no agent can issue a refund, change an order or a payment gateway setting, or create or change a coupon or a tax rate, no matter what you have enabled on the Integrations tab. Turn it on and each of those becomes an ordinary checkbox you switch on one at a time, still badged high-risk so you can always tell them apart.', 'agent-abilities-for-mcp' ) . '</p>';
-	$high_risk_control .= '<p class="help">' . esc_html__( 'This switch covers this plugin\'s own abilities only. Abilities bridged in from other plugins are not covered by it, so check those separately.', 'agent-abilities-for-mcp' ) . '</p>';
-
-	aafm_render_set_row(
-		array(
-			'label'   => __( 'Unlock the category', 'agent-abilities-for-mcp' ),
-			'opt'     => __( 'Off by default', 'agent-abilities-for-mcp' ),
-			'control' => $high_risk_control,
-			'help'    => __( 'The plugin logs every flip of this switch, and those entries are kept for the same number of days as everything else in the activity log. Raise the retention setting above if you want a longer record of when the category was opened.', 'agent-abilities-for-mcp' ),
-		)
-	);
-
-	$high_risk_body = (string) ob_get_clean();
-	aafm_render_section(
-		array(
-			'icon'  => 'lock',
-			'class' => $read_only_on ? 'is-inactive' : '',
-			'title' => __( 'High-risk abilities', 'agent-abilities-for-mcp' ),
-			'pill'  => $read_only_on
-				? '<span class="aafm-pill aafm-pill-neutral">' . esc_html__( 'Held by read-only mode', 'agent-abilities-for-mcp' ) . '</span>'
-				: '',
-			'body'  => $high_risk_body,
 		)
 	);
 

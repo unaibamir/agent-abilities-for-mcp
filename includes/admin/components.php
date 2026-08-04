@@ -161,21 +161,35 @@ function aafm_render_ability_toggle_control( string $name, string $title_id, arr
  * sub-label) beside a `.aafm-set-control` (the pre-built control markup), with an
  * optional `.help` element below.
  *
- * STRUCTURAL ONLY: `control` is echoed verbatim - the caller owns its escaping.
- * `label`/`opt`/`help` are escaped here with esc_html.
+ * STRUCTURAL ONLY: `control` and `pill` are echoed verbatim - the caller owns their
+ * escaping. `label`/`opt`/`help` are escaped here with esc_html.
  *
  * Recognised $args keys: `label` (row label, escaped), `opt` (optional sub-label
- * rendered in a `<span class="opt">`, escaped), `control` (pre-built control HTML,
- * echoed verbatim), and `help` (optional help text in a `.help` element, escaped).
+ * rendered in a `<span class="opt">`, escaped), `class` (extra wrapper classes,
+ * sanitized per class name), `pill` (pre-built pill HTML for the label cell, echoed
+ * verbatim), `control` (pre-built control HTML, echoed verbatim), and `help` (optional
+ * help text in a `.help` element, escaped).
  *
  * @param array<string,mixed> $args Row args (see the recognised keys above).
  * @return void
  */
 function aafm_render_set_row( array $args ): void {
-	$label   = isset( $args['label'] ) ? (string) $args['label'] : '';
-	$opt     = isset( $args['opt'] ) ? (string) $args['opt'] : '';
-	$control = isset( $args['control'] ) ? (string) $args['control'] : '';
-	$help    = isset( $args['help'] ) ? (string) $args['help'] : '';
+	$label       = isset( $args['label'] ) ? (string) $args['label'] : '';
+	$opt         = isset( $args['opt'] ) ? (string) $args['opt'] : '';
+	$extra_class = isset( $args['class'] ) ? (string) $args['class'] : '';
+	$pill        = isset( $args['pill'] ) ? (string) $args['pill'] : '';
+	$control     = isset( $args['control'] ) ? (string) $args['control'] : '';
+	$help        = isset( $args['help'] ) ? (string) $args['help'] : '';
+
+	// Same per-class sanitize as aafm_render_section(), so a caller cannot smuggle a second
+	// attribute in through the class list.
+	$extra = '';
+	foreach ( array_filter( explode( ' ', $extra_class ) ) as $one ) {
+		$one = sanitize_html_class( $one );
+		if ( '' !== $one ) {
+			$extra .= ' ' . $one;
+		}
+	}
 
 	$opt_html  = '' === $opt
 		? ''
@@ -186,12 +200,41 @@ function aafm_render_set_row( array $args ): void {
 
 	echo wp_kses(
 		sprintf(
-			'<div class="aafm-set-row"><div class="aafm-set-label">%1$s%2$s</div><div class="aafm-set-control">%3$s%4$s</div></div>',
+			'<div class="aafm-set-row%1$s"><div class="aafm-set-label">%2$s%3$s%4$s</div><div class="aafm-set-control">%5$s%6$s</div></div>',
+			esc_attr( $extra ),
 			esc_html( $label ),
 			$opt_html,
+			$pill,
 			$control,
 			$help_html
 		),
 		aafm_admin_allowed_html()
+	);
+}
+
+/**
+ * Build a "See more" disclosure for the tail of a long set-row description.
+ *
+ * A native `<details>`/`<summary>`, the same affordance the integration cards, the abilities
+ * list, and the Help accordion already use - so it needs no JavaScript, survives a page with
+ * scripts off, and gets its keyboard and screen-reader behaviour from the browser. Only the
+ * three rows whose copy runs much longer than the rest of the tab use it; the point is to
+ * keep the visual rhythm of the tab, not to hide anything, so nothing here is truncated -
+ * every sentence stays in the markup either side of the fold.
+ *
+ * STRUCTURAL ONLY, same convention as the rest of this file: `$body` is echoed verbatim and
+ * the caller owns its escaping. `$label` is the accessible name and IS escaped here.
+ *
+ * @param string $label Accessible name for the summary, e.g. "See more about read-only mode".
+ *                      The visible text stays the short shared "See more".
+ * @param string $body  Pre-escaped HTML for the collapsed remainder.
+ * @return string
+ */
+function aafm_get_set_more_html( string $label, string $body ): string {
+	return sprintf(
+		'<details class="aafm-set-more"><summary aria-label="%1$s">%2$s</summary><div class="aafm-set-more-body">%3$s</div></details>',
+		esc_attr( $label ),
+		esc_html__( 'See more', 'agent-abilities-for-mcp' ),
+		$body
 	);
 }

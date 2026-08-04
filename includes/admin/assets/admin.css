@@ -1107,6 +1107,14 @@
 				font-size: 12px;
 				margin-block-start: 2px;
 			}
+
+			/* Row-level status pill (today: "Held by read-only mode" on the high-risk row).
+			   Sits under the label and its sub-label so the row states why it is inactive
+			   without the operator having to read the notice beside the switch. */
+			.aafm-pill {
+				display: inline-block;
+				margin-block-start: 6px;
+			}
 		}
 
 		.aafm-set-control {
@@ -1117,6 +1125,68 @@
 			color: var(--aafm-text-subtle);
 			font-size: 12.5px;
 			margin-block: 8px 0;
+		}
+
+		/* A row whose control cannot change anything right now (today: the high-risk switch
+		   while read-only mode holds every one of its abilities). Same meaning the card-level
+		   .is-inactive used to carry, moved down to the row now that both governance switches
+		   live inside Safety controls: the label and its pill stay at full strength so the row
+		   reads clearly, and the control dims behind one overlay instead of muting each part.
+		   The <input> stays enabled underneath so its value still submits - a disabled checkbox
+		   posts nothing and the sanitizer reads a missing field as off. */
+		&.is-inactive .aafm-set-control {
+			opacity: 0.55;
+			pointer-events: none;
+
+			/* The explanation is the whole point of the dim, so its expander stays clickable. */
+			.aafm-set-more {
+				pointer-events: auto;
+			}
+		}
+	}
+
+	/* ---------- "See more" disclosure inside a settings row ----------
+	   Native <details>/<summary>, so it works with scripts off and gets its keyboard and
+	   screen-reader behaviour from the browser. Reuses the same solid-triangle chevron as the
+	   integration cards, the abilities list, and the Help accordion, so there is one chevron
+	   shape across the admin. */
+	details.aafm-set-more {
+		margin-block-start: 8px;
+
+		> summary {
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+			cursor: pointer;
+			list-style: none;
+			user-select: none;
+			font-size: 12.5px;
+			font-weight: 600;
+			color: var(--aafm-accent);
+
+			&::marker,
+			&::-webkit-details-marker { display: none; }
+
+			&::after {
+				content: "";
+				flex: 0 0 auto;
+				inline-size: 0;
+				block-size: 0;
+				border-inline-start: 5px solid transparent;
+				border-inline-end: 5px solid transparent;
+				border-block-start: 6px solid currentColor;
+				transition: transform 0.18s ease;
+			}
+		}
+
+		&[open] > summary::after {
+			transform: rotate(180deg);
+		}
+
+		/* The collapsed remainder keeps the row's own .help rhythm - the first paragraph sits
+		   tight under the summary rather than repeating its top margin. */
+		.aafm-set-more-body > .help:first-child {
+			margin-block-start: 6px;
 		}
 	}
 

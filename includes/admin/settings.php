@@ -615,7 +615,16 @@ function aafm_render_settings_tab(): void {
 		__( 'These controls change how agent requests behave. Test a connection after you change anything here so you do not lock yourself out or quietly drop valid requests.', 'agent-abilities-for-mcp' )
 	);
 
-	echo '<p><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></p>';
+	// One Save, in the shared .aafm-savebar the Abilities, Integrations and Bridge tabs already
+	// use: it sticks to the foot of the viewport while the tab is scrolled, so the operator never
+	// has to travel the whole tab to reach it, and it settles into flow at the end of the form.
+	// It is the only save control on the tab on purpose - a second one would mean a second binding
+	// and a second status element to keep in step. The button classes and the .aafm-save-status
+	// span are unchanged; admin.js binds to those.
+	//
+	// The bar's sticky range ends where the form does, so it can never ride over the Danger zone,
+	// which renders after </form>.
+	echo '<div class="aafm-savebar"><button type="submit" class="aafm-btn aafm-btn-primary">' . esc_html__( 'Save settings', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-save-status" aria-live="polite"></span></div>';
 	echo '</form>';
 
 	// Danger zone - a destructive, irreversible reset. Sits outside the settings <form> so the

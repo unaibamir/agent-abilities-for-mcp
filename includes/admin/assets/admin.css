@@ -1085,6 +1085,9 @@
 	.aafm-savebar {
 		display: flex;
 		align-items: center;
+		/* The Settings bar carries the longest label of the four, so let the status text drop
+		   under the button on a narrow viewport instead of squeezing it. */
+		flex-wrap: wrap;
 		gap: 12px;
 		margin-block-start: 24px;
 		padding-block: 12px;
@@ -1701,9 +1704,9 @@
 	}
 
 	/* One save affordance across every form tab: whether the Save sits in the sticky
-	   .aafm-savebar (Abilities/Integrations) or on an inline <p> (Settings, the post-type
-	   and meta-key selectors), its status text reads the same - muted, with the same
-	   leading gap from the button. */
+	   .aafm-savebar (Abilities, Integrations, Bridge, Settings) or on an inline <p> (the
+	   post-type and meta-key selectors), its status text reads the same - muted, with the
+	   same leading gap from the button. */
 	.aafm-save-status,
 	.aafm-user-status,
 	.aafm-test-status,

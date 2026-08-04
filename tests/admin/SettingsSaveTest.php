@@ -183,6 +183,33 @@ final class SettingsSaveTest extends TestCase {
 	}
 
 	/**
+	 * One Save on the tab, in the shared sticky bar, inside the form. Two save controls would mean
+	 * two bindings and two status elements to keep in step, and this tab has already shipped one
+	 * bug from a hand-maintained parallel list drifting. The button classes and the
+	 * .aafm-save-status span are what admin.js binds to, so they are pinned here too.
+	 */
+	public function test_the_single_save_control_sits_in_the_sticky_bar_inside_the_form(): void {
+		ob_start();
+		aafm_render_settings_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertSame( 1, substr_count( $html, 'type="submit"' ), 'The Settings tab carries exactly one submit button.' );
+		$this->assertSame( 1, substr_count( $html, 'aafm-save-status' ), 'One save control means one status element.' );
+		$this->assertSame( 1, substr_count( $html, 'aafm-savebar' ), 'The save bar renders once.' );
+
+		$bar_at   = strpos( $html, 'aafm-savebar' );
+		$form_end = strpos( $html, '</form>' );
+		$this->assertNotFalse( $bar_at );
+		$this->assertNotFalse( $form_end );
+		$this->assertLessThan( $form_end, $bar_at, 'The save bar must stay inside #aafm-settings-form or submitting breaks.' );
+
+		// The button keeps its exact class contract.
+		$bar = substr( $html, (int) $bar_at, $form_end - (int) $bar_at );
+		$this->assertStringContainsString( 'class="aafm-btn aafm-btn-primary"', $bar );
+		$this->assertStringContainsString( '<span class="aafm-save-status" aria-live="polite">', $bar );
+	}
+
+	/**
 	 * The Settings save handler (#bindSaveSettings in admin.js) builds its POST body field by
 	 * field rather than serializing the whole form, so every checkbox has to be forwarded
 	 * explicitly. It once forwarded only force-draft, delete-on-uninstall, and the numeric

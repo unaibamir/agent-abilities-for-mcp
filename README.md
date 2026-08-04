@@ -1,11 +1,11 @@
-# Agent Abilities for MCP - MCP Server for AI Agents
+# Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
 
-WordPress MCP server for AI agents like Claude and ChatGPT. Governed, off by default, least privilege, every call audited.
+WordPress MCP server for Claude and ChatGPT. Per-capability permission controls, everything off by default, and a full audit log.
 
 | | |
 |---|---|
 | **Contributors** | unaibamir |
-| **Tags** | ai, chatgpt, claude, mcp, seo |
+| **Tags** | chatgpt, claude, mcp, mcp-server, woocommerce |
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 7.4 |
@@ -18,7 +18,7 @@ WordPress MCP server for AI agents like Claude and ChatGPT. Governed, off by def
 
 Agent Abilities for MCP is a WordPress plugin that turns your site into a governed Model Context Protocol (MCP) server. It exposes 153 curated WordPress "abilities" (tools) to AI agents like ChatGPT, Claude, Cursor, and VS Code over MCP, so your AI client can read and, when you allow it, write to your site as a real, least-privilege WordPress user you choose. It is built on the WordPress 6.9 Abilities API and the official MCP Adapter, so there is no custom server or transport to trust.
 
-Nothing is exposed until you turn it on. The agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities and logged before it runs, denials included. You add reach as you build trust, not all at once. Your own AI client connects in to your site; the plugin makes no requests to any external or third-party service and has no telemetry.
+Nothing is exposed until you turn it on. Permission controls are the point: the agent only ever acts as the WordPress user you bind it to, never an admin-equivalent key, and every call is re-checked against that user's capabilities before it runs. The audit log covers the rest. Every call is written down before it runs, denied attempts included, so you can see both what the agent did and what it was stopped from doing. You add reach as you build trust, not all at once. Your own AI client connects in to your site; Agent Abilities for MCP makes no requests to any external or third-party service and has no telemetry.
 
 Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
@@ -26,9 +26,9 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 
 Model Context Protocol (MCP) is an open specification originally developed by Anthropic. Claude, ChatGPT, Cursor, VS Code, Gemini, and other product names are trademarks of their respective owners. Agent Abilities for MCP is a third-party plugin and is not affiliated with, endorsed by, or sponsored by any of them.
 
-**Quick links:** [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [Website](https://agentabilitieswp.com/)
+**Quick links:** [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [Prompt Library](https://agentabilitieswp.com/prompts/) | [Website](https://agentabilitieswp.com/)
 
-### 🛡️ Least-privilege access by design
+### 🛡️ Permission controls and an audit log on every call
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
 * **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
@@ -100,6 +100,14 @@ Connect any MCP client that can reach your endpoint. Hosted cloud apps (ChatGPT,
 
 No. The agent authenticates as whatever WordPress user you bind it to. Point it at the dedicated low-privilege user the plugin can create for you, and it can only do what that user can do. Each ability also re-checks the user's capability before it runs, so a connection can never call a tool its user is not allowed to use.
 
+### What permission controls do I get over the AI agent?
+
+Agent Abilities for MCP gives you three layers. Every ability is off until you enable it. The agent connects as a real WordPress user you choose, so it can only do what that user's role already allows. Every call re-checks that user's capability before it runs, and a call that fails the check is denied and recorded.
+
+### Is there an audit log of what the agent did?
+
+Yes. Agent Abilities for MCP writes every ability call to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, and the argument keys. Argument values are never stored. You can clear the log from the admin screen.
+
 ### Is it safe to connect an AI agent to my WordPress site?
 
 Yes, when the connection is scoped, which is what this plugin is built around. The agent connects as a real, least-privilege WordPress user you choose, never an admin-equivalent key. Every ability is off until you enable it, each call re-checks the user's capability before it runs, and every call is logged, denied attempts included. The plugin itself never holds an admin-equivalent key.
@@ -168,7 +176,7 @@ No. The plugin connects to no AI provider and makes no requests to any external 
 
 No. The plugin contacts no external service and has no telemetry. Your agent talks directly to your site.
 
-### What gets logged?
+### What does the audit log record?
 
 Every ability call, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, and the argument keys. Argument values are never stored. The activity log lives in your own database and can be cleared from the admin screen.
 
@@ -197,6 +205,9 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Feature:** Finishing the Quick Connect wizard without choosing write access now turns read-only mode on rather than ticking a set of boxes, so it still holds months later once you have enabled other things.
 * **Feature:** Turning read-only mode on or off is recorded in the activity log.
 * **Chore:** The minimum PHP version is now 7.4, down from 8.0. WordPress core itself requires 7.2, and about half the sites running a plugin in this category are still on 7.4.
+* **Chore:** The Settings tab is reorganised. OAuth leads, read-only mode and the high-risk switch are the first two rows of Safety controls, the longest descriptions fold behind a "See more", and Save settings now follows you down the page instead of sitting at the bottom.
+* **Chore:** The tab that lists abilities registered by your other plugins is now called "Other plugins", and it has its own icon rather than sharing the one Integrations uses.
+* **Chore:** The plugin's own listing now leads with what it actually gives you, permission controls and an audit log, rather than the generic "for AI agents" framing.
 * **Fix:** A refund amount sent with surrounding whitespace is now trimmed before the numeric check, so it is accepted or rejected the same way on every supported PHP version.
 * **Fix:** Several lists could come back in a different order on PHP 7.4 than on 8.x. They now sort the same way everywhere.
 * **Fix:** An ability from another plugin that returns a result in an unexpected shape is now caught and reported instead of failing further down with a less useful error.

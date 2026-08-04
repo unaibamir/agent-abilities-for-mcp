@@ -729,12 +729,17 @@
 			cursor: pointer;
 		}
 
+		/* The track is painted over the input (both are inset:0, the track comes later in
+		   the DOM), so it is the element the pointer actually lands on. Without a cursor of
+		   its own the input's `cursor: pointer` above never showed and every switch in the
+		   plugin hovered as a plain arrow. */
 		.aafm-switch-track {
 			position: absolute;
 			inset: 0;
 			border-radius: 999px;
 			background: var(--aafm-border-strong);
 			transition: background 0.18s ease;
+			cursor: pointer;
 
 			&::before {
 				content: "";
@@ -753,6 +758,12 @@
 		input:checked + .aafm-switch-track { background: var(--aafm-accent); }
 		input:checked + .aafm-switch-track::before { transform: translateX(16px); }
 		input:focus-visible + .aafm-switch-track { box-shadow: var(--aafm-ring); }
+
+		/* An inactive integration and an orphaned bridge row both render their checkbox
+		   disabled. Those must not read as clickable, so they keep the plain arrow - the
+		   same treatment .aafm-btn[disabled] and the wizard's own toggle already use. */
+		input:disabled,
+		input:disabled + .aafm-switch-track { cursor: default; }
 	}
 
 	/* ---------- Risk badges (preserved colors) ---------- */
@@ -1119,6 +1130,13 @@
 
 		.aafm-set-control {
 			max-inline-size: 560px;
+
+			/* The sentence beside a switch is a real `for=` label, so clicking it flips the
+			   checkbox. It hovered as a text caret, which hid that. The switch's own
+			   `.aafm-switch` wrapper carries no `for` and is styled separately. */
+			label[for] {
+				cursor: pointer;
+			}
 		}
 
 		.help {

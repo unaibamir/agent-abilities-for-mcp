@@ -889,7 +889,7 @@
 		max-inline-size: 80ch;
 	}
 
-	/* ---------- Bridge directory (Abilities from other plugins) ---------- */
+	/* ---------- Bridge directory (Other plugins) ---------- */
 	/* Destructive rows borrow the existing red accent - no new token. */
 	.aafm-ability-row.is-destructive {
 		border-inline-start: 3px solid var(--aafm-red);

@@ -693,7 +693,7 @@
 		}
 
 		/**
-		 * Save the "Abilities from other plugins" toggles. Posts to its OWN action
+		 * Save the "Other plugins" toggles. Posts to its OWN action
 		 * (aafm_save_bridged_abilities) with its own bridged_abilities[] field, so it never
 		 * touches the native enabled-abilities option.
 		 */

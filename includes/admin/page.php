@@ -1081,7 +1081,11 @@ function aafm_admin_tabs(): array {
 		'connection'   => __( 'Connection', 'agent-abilities-for-mcp' ),
 		'abilities'    => __( 'Abilities', 'agent-abilities-for-mcp' ),
 		'integrations' => __( 'Integrations', 'agent-abilities-for-mcp' ),
-		'bridge'       => __( 'Abilities from other plugins', 'agent-abilities-for-mcp' ),
+		// Short on purpose. This label renders twice, in the on-page tab strip and in the wp-admin
+		// submenu, and every other entry is one or two words. The page lede carries the explanation
+		// that these are abilities the other plugins registered themselves, rather than ones we
+		// ship for them, which is what separates this tab from Integrations.
+		'bridge'       => __( 'Other plugins', 'agent-abilities-for-mcp' ),
 		'settings'     => __( 'Settings', 'agent-abilities-for-mcp' ),
 		'activity'     => __( 'Activity Log', 'agent-abilities-for-mcp' ),
 		'help'         => __( 'Help', 'agent-abilities-for-mcp' ),

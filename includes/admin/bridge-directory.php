@@ -1,6 +1,6 @@
 <?php
 /**
- * "Abilities from other plugins" admin section + its AJAX save.
+ * "Other plugins" admin section + its AJAX save.
  *
  * Discovers WordPress Abilities registered by OTHER plugins (via aafm_discover_foreign_abilities())
  * and lets the operator opt each one in. An opted-in slug is stored in aafm_enabled_bridged_abilities
@@ -20,7 +20,7 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Render the "Abilities from other plugins" section.
+ * Render the "Other plugins" section.
  *
  * @return void
  */

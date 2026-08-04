@@ -228,13 +228,35 @@ final class HighRiskUiTest extends TestCase {
 		return $m[0];
 	}
 
-	public function test_the_section_is_its_own_card_not_the_danger_zone(): void {
+	/**
+	 * The switch is a row of Safety controls now, not a card of its own, but the thing that check
+	 * always protected is unchanged: it is an ordinary setting an operator reaches on purpose, so
+	 * it must never end up inside or after the Danger zone, where a destructive action lives.
+	 */
+	public function test_the_switch_is_a_safety_controls_row_not_the_danger_zone(): void {
 		$html = $this->render_settings_tab();
-		$this->assertStringContainsString( 'High-risk abilities', $html );
 
-		$high_risk_at = strpos( $html, 'High-risk abilities' );
+		$safety_at    = strpos( $html, 'Safety controls' );
+		$high_risk_at = strpos( $html, 'name="aafm_high_risk_abilities_unlocked"' );
 		$danger_at    = strpos( $html, 'Danger zone' );
-		$this->assertLessThan( $danger_at, $high_risk_at, 'The high-risk card must not be inside or after the Danger zone card.' );
+
+		$this->assertNotFalse( $safety_at, 'The Safety controls card is missing from the Settings tab.' );
+		$this->assertNotFalse( $high_risk_at, 'The master switch is missing from the Settings tab.' );
+		$this->assertNotFalse( $danger_at );
+		$this->assertLessThan( $high_risk_at, $safety_at, 'The switch must render inside the Safety controls card.' );
+		$this->assertLessThan( $danger_at, $high_risk_at, 'The switch must not be inside or after the Danger zone card.' );
+	}
+
+	/**
+	 * The standalone card is gone on purpose - two one-row cards broke the rhythm of the tab. Pin
+	 * its absence so it cannot quietly come back alongside the row and give the operator two
+	 * switches for one option.
+	 */
+	public function test_the_standalone_high_risk_card_is_gone(): void {
+		$this->assertStringNotContainsString(
+			'aafm-card-head-title">High-risk abilities',
+			$this->render_settings_tab()
+		);
 	}
 
 	/**

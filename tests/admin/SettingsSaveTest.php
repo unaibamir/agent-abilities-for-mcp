@@ -115,9 +115,10 @@ final class SettingsSaveTest extends TestCase {
 		aafm_render_settings_tab();
 		$html = (string) ob_get_clean();
 
-		// The five groups (Safety controls / OAuth / Read-only mode / High-risk abilities /
-		// Danger zone) each carry the shared card classes, so the pair appears five times.
-		$this->assertSame( 5, substr_count( $html, 'aafm-section aafm-card' ) );
+		// The three groups (Safety controls / OAuth / Danger zone) each carry the shared card
+		// classes, so the pair appears three times. Read-only mode and the high-risk switch used to
+		// be two more cards of their own; they are rows inside Safety controls now.
+		$this->assertSame( 3, substr_count( $html, 'aafm-section aafm-card' ) );
 
 		// Every frozen-contract input name survives the migration unchanged.
 		foreach (

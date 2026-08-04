@@ -310,26 +310,81 @@ final class ReadOnlyUiTest extends TestCase {
 	}
 
 	/**
-	 * Spec 1.5. While the mode is on, the high-risk switch is moot - all eight of its abilities are
-	 * writes and read-only already has them. The card has to say so and render inactive rather than
-	 * sitting there looking live while flipping it changes nothing.
+	 * Both governance switches are rows of the Safety controls card now, and read-only mode is the
+	 * first of them. That order is the meaning: it is the wider of the two ceilings, so an operator
+	 * reads it before the switch it can hold, and the high-risk row's "turn read-only mode off
+	 * above" note points at the row immediately preceding it rather than at another card.
 	 */
-	public function test_the_high_risk_card_renders_inactive_while_the_mode_is_on(): void {
+	public function test_read_only_mode_is_the_first_row_of_safety_controls(): void {
+		$html = $this->render_settings_tab();
+
+		$safety_at     = strpos( $html, 'Safety controls' );
+		$read_only_at  = strpos( $html, 'name="aafm_read_only_mode"' );
+		$high_risk_at  = strpos( $html, 'name="aafm_high_risk_abilities_unlocked"' );
+		$rate_limit_at = strpos( $html, 'name="aafm_rate_limit_per_min"' );
+
+		$this->assertNotFalse( $safety_at, 'The Safety controls card is missing from the Settings tab.' );
+		$this->assertNotFalse( $read_only_at, 'The read-only switch is missing from the Settings tab.' );
+		$this->assertNotFalse( $high_risk_at );
+		$this->assertNotFalse( $rate_limit_at );
+
+		$this->assertLessThan( $read_only_at, $safety_at, 'Read-only mode must render inside the Safety controls card.' );
+		$this->assertLessThan( $high_risk_at, $read_only_at, 'Read-only mode must sit above the high-risk switch.' );
+		$this->assertLessThan( $rate_limit_at, $high_risk_at, 'The two governance switches come before the per-behaviour controls.' );
+
+		// "First row" literally: exactly one .aafm-set-row has opened by the time the switch renders.
+		$this->assertSame(
+			1,
+			substr_count( substr( $html, 0, $read_only_at ), 'aafm-set-row' ),
+			'Read-only mode must be the first row of the card, with nothing above it.'
+		);
+	}
+
+	/**
+	 * The standalone card is gone; it was one row in a card of its own, which is what broke the
+	 * rhythm of the tab. Pin its absence so it cannot come back beside the row.
+	 */
+	public function test_the_standalone_read_only_card_is_gone(): void {
+		$this->assertStringNotContainsString(
+			'aafm-card-head-title">Read-only mode',
+			$this->render_settings_tab()
+		);
+	}
+
+	/**
+	 * Spec 1.5. While the mode is on, the high-risk switch is moot - all eight of its abilities are
+	 * writes and read-only already has them. That used to be said by dimming a whole card; now that
+	 * the switch is a row, the row carries it: the .is-inactive dim, a "Held by read-only mode"
+	 * pill beside the label, and the inline notice naming the switch directly above it.
+	 */
+	public function test_the_high_risk_row_renders_inactive_while_the_mode_is_on(): void {
 		$this->assertStringNotContainsString( 'is-inactive', $this->render_settings_tab() );
 
 		update_option( 'aafm_read_only_mode', true );
 		$html = $this->render_settings_tab();
 
-		$this->assertStringContainsString( 'is-inactive', $html );
+		$this->assertMatchesRegularExpression(
+			'/<div class="aafm-set-row is-inactive">/',
+			$html,
+			'The dim has to land on the high-risk ROW now that its card is gone.'
+		);
+		$this->assertStringContainsString( 'Held by read-only mode', $html );
 		$this->assertStringContainsString( 'Read-only mode is on, so this does nothing right now', $html );
+		$this->assertStringContainsString( 'Turn read-only mode off above to use this switch', $html );
+
+		// The dimmed row is the high-risk one, not some other row that happens to be inactive.
+		$inactive_at  = strpos( $html, 'aafm-set-row is-inactive' );
+		$high_risk_at = strpos( $html, 'name="aafm_high_risk_abilities_unlocked"' );
+		$this->assertNotFalse( $high_risk_at );
+		$this->assertLessThan( $high_risk_at, $inactive_at );
 	}
 
 	/**
-	 * The high-risk checkbox stays enabled underneath the dimmed card on purpose. A disabled input
+	 * The high-risk checkbox stays enabled underneath the dimmed row on purpose. A disabled input
 	 * posts nothing, and the sanitizer reads a missing field as off, so disabling it would quietly
 	 * re-lock the category on the operator's next save.
 	 */
-	public function test_the_inactive_card_still_submits_its_high_risk_value(): void {
+	public function test_the_inactive_row_still_submits_its_high_risk_value(): void {
 		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option( 'aafm_read_only_mode', true );
 
@@ -339,6 +394,44 @@ final class ReadOnlyUiTest extends TestCase {
 		);
 		$this->assertStringNotContainsString( 'disabled', $m[0] );
 		$this->assertStringContainsString( 'checked', $m[0] );
+	}
+
+	/**
+	 * Three rows carry much longer copy than the rest of the tab, so their tail sits behind a
+	 * native "See more". Collapsed is not cut: assert the tail is inside the <details> AND that the
+	 * lead sentence is not, so a future edit cannot satisfy this by deleting the long half.
+	 */
+	public function test_the_long_descriptions_collapse_without_losing_their_copy(): void {
+		$html = $this->render_settings_tab();
+
+		$this->assertSame(
+			3,
+			substr_count( $html, '<details class="aafm-set-more">' ),
+			'Exactly three rows collapse: read-only mode, the high-risk switch, and delete on uninstall.'
+		);
+
+		preg_match_all( '#<details class="aafm-set-more">(.*?)</details>#s', $html, $m );
+		$collapsed = implode( ' ', $m[1] );
+
+		foreach (
+			array(
+				'A bridged ability counts as a read only when the plugin that wrote it says so',
+				'Abilities bridged in from other plugins are not covered by it',
+				'ordinary WordPress account credentials the plugin does not own',
+			) as $tail
+		) {
+			$this->assertStringContainsString( $tail, $collapsed, 'The tail of a long description must survive behind the expander.' );
+		}
+
+		foreach (
+			array(
+				'no ability that creates, changes, or deletes anything can be switched on',
+				'your settings, activity log, and OAuth data are kept if you delete the plugin',
+			) as $lead
+		) {
+			$this->assertStringContainsString( $lead, $html );
+			$this->assertStringNotContainsString( $lead, $collapsed, 'The lead sentence stays visible; only the remainder collapses.' );
+		}
 	}
 
 	// ---------------------------------------------------------------------------------------

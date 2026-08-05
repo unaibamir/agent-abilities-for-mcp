@@ -454,16 +454,36 @@ function aafm_wc_variation_write_properties(): array {
  * present in $input are written (PATCH semantics). Every value is sanitized for its kind before it
  * reaches a setter; caller input never reaches a setter raw.
  *
+ * WC_Product_Variation::set_sku() throws WC_Data_Exception when the SKU collides with another
+ * product or variation (abstract-wc-product.php: wc_product_has_unique_sku() fails), the identical
+ * contract aafm_wc_apply_product_input() (products.php) already guards. WP_Ability::execute() on
+ * this plugin's WP 6.9 floor has no try/catch of its own (a later core hardened
+ * invoke_callback() with one, but 6.9 does not have it), so an uncaught exception here is a fatal
+ * over WordPress core's own Abilities REST route - caught here rather than left to surface as an
+ * uncaught exception; every other setter in this function is not known to throw.
+ *
  * @param \WC_Product_Variation $variation The variation to mutate.
  * @param array<string,mixed>   $input     Validated input (already schema-checked).
- * @return void
+ * @return \WP_Error|null Null on success, or a WP_Error naming the conflicting SKU.
  */
-function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array $input ): void {
+function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'status', $input ) ) {
 		$variation->set_status( sanitize_key( (string) $input['status'] ) );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
-		$variation->set_sku( sanitize_text_field( (string) $input['sku'] ) );
+		$sku = sanitize_text_field( (string) $input['sku'] );
+		try {
+			$variation->set_sku( $sku );
+		} catch ( \WC_Data_Exception $e ) {
+			return new \WP_Error(
+				'aafm_wc_duplicate_sku',
+				sprintf(
+					/* translators: %s: the conflicting SKU value. */
+					__( 'The SKU "%s" is already in use by another product or variation.', 'agent-abilities-for-mcp' ),
+					$sku
+				)
+			);
+		}
 	}
 	if ( array_key_exists( 'description', $input ) ) {
 		$variation->set_description( wp_kses_post( (string) $input['description'] ) );
@@ -489,6 +509,7 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 	if ( array_key_exists( 'attributes', $input ) ) {
 		$variation->set_attributes( aafm_wc_sanitize_variation_attributes( (array) $input['attributes'] ) );
 	}
+	return null;
 }
 
 /**
@@ -571,7 +592,10 @@ function aafm_exec_wc_create_product_variation( array $input ) {
 	unset( $input['product_id'] );
 	$variation = new \WC_Product_Variation();
 	$variation->set_parent_id( (int) $parent->get_id() );
-	aafm_wc_apply_variation_input( $variation, $input );
+	$error = aafm_wc_apply_variation_input( $variation, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$id = (int) $variation->save();
 
 	$saved = aafm_wc_get_variation( $id );
@@ -637,7 +661,10 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 		return aafm_generic_error();
 	}
 	unset( $input['variation_id'] );
-	aafm_wc_apply_variation_input( $variation, $input );
+	$error = aafm_wc_apply_variation_input( $variation, $input );
+	if ( null !== $error ) {
+		return $error;
+	}
 	$id = (int) $variation->save();
 
 	$saved = aafm_wc_get_variation( $id );

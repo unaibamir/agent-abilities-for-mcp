@@ -521,7 +521,54 @@ function aafm_register_enabled_bridged_abilities(): void {
 }
 
 /**
- * Safety net for a bridged ability whose result is a bare top-level JSON list.
+ * The output schema currently registered on a bridged tool's wrapper ability, or null.
+ *
+ * The filter below (aafm_filter_bridged_tool_call_result()) receives the MCP TOOL name
+ * (dash-separated, e.g. "aafm-bridge-vendor-thing" - the adapter's own slug-to-tool-name
+ * transform, aafm_mcp_tool_name() in server.php), while aafm_register_enabled_bridged_abilities()
+ * registers the wrapper under the
+ * ABILITY name (single slash, "aafm-bridge/vendor-thing") and copies the foreign ability's
+ * output_schema onto it, but only when aafm_bridge_output_schema() found one to copy. Reversing
+ * that same slash-to-dash transform recovers the wrapper's ability name, so this asks the
+ * CURRENTLY REGISTERED wrapper - the same object the adapter used to build the tool's advertised
+ * outputSchema - whether it carries one, instead of re-deriving the answer from the foreign
+ * ability a second time (which the filter, running post-execute, has no reference to anyway).
+ *
+ * @param string $tool_name The MCP tool name, e.g. "aafm-bridge-vendor-thing".
+ * @return array<string,mixed>|null The wrapper's declared output schema, or null when it has none.
+ */
+function aafm_bridge_declared_output_schema_for_tool( string $tool_name ): ?array {
+	if ( ! function_exists( 'wp_has_ability' ) || ! function_exists( 'wp_get_ability' ) ) {
+		return null;
+	}
+	$prefix = AAFM_BRIDGE_NAMESPACE . '-';
+	if ( ! str_starts_with( $tool_name, $prefix ) ) {
+		return null;
+	}
+	$wrapper_slug = AAFM_BRIDGE_NAMESPACE . '/' . substr( $tool_name, strlen( $prefix ) );
+	// wp_has_ability() first: a tool name with no live wrapper right now (never registered, or
+	// unregistered since) is an ordinary case here, and wp_get_ability() would raise a
+	// _doing_it_wrong notice for it - the same reasoning aafm_get_enabled_bridged_abilities()
+	// documents above for the identical guard.
+	if ( ! wp_has_ability( $wrapper_slug ) ) {
+		return null;
+	}
+	$wrapper = wp_get_ability( $wrapper_slug );
+	if ( ! $wrapper instanceof WP_Ability ) {
+		return null;
+	}
+	// No method_exists()/is_array() guard here (unlike aafm_bridge_output_schema() above): that
+	// function's $ability parameter carries no native type hint, so PHPStan cannot narrow it and
+	// the defensive checks earn their keep. $wrapper here is proven a WP_Ability by the instanceof
+	// check just above, and that class always declares get_output_schema(): array, so the same
+	// checks would be provably-always-true noise PHPStan correctly flags.
+	$schema = $wrapper->get_output_schema();
+	return array() !== $schema ? $schema : null;
+}
+
+/**
+ * Safety net for a bridged ability whose result is a bare top-level JSON list - but ONLY when
+ * doing so cannot contradict a schema we have already advertised.
  *
  * When a foreign ability declares no output_schema, aafm_bridge_output_schema() returns null
  * and our wrapper's own registration omits output_schema too (see
@@ -532,27 +579,47 @@ function aafm_register_enabled_bridged_abilities(): void {
  * WordPress/mcp-adapter#253, reproduced there against real WooCommerce REST list/report
  * endpoints, which we bridge. This hooks the adapter's mcp_adapter_tool_call_result filter
  * (fired after $mcp_tool->execute() in ToolsHandler::handle_tool_call(), since 0.5.0) and wraps
- * a bare list under a `data` key so the wire shape is always an object.
+ * a bare list under a `data` key so the wire shape is always an object - but only in that
+ * no-schema case.
+ *
+ * When the foreign ability DID declare an output_schema, wrapping is wrong even though the
+ * result is still a bare list on the PHP side. The adapter's SchemaTransformer rewrites a
+ * non-object-root schema into {type:object, properties:{result:<schema>}, required:['result']}
+ * and advertises THAT as the tool's outputSchema - so if we then wrapped the return value under
+ * 'data' instead, we would have published `required: ['result']` and sent `{"data":[...]}`:
+ * neither side's key exists in the other, and a spec-compliant client rejects the whole response.
+ * aafm_bridge_declared_output_schema_for_tool() answers "did the wrapper actually get a schema at
+ * registration time?" by asking the live wrapper ability itself, and a non-null answer here skips
+ * the wrap entirely, leaving the foreign ability's own return value - the one the advertised
+ * schema actually describes - untouched.
+ *
+ * A bare EMPTY array is never wrapped either way, schema or no schema. aafm_bridge_is_list()
+ * returns true for array() (it is a list, vacuously), so a naive check would wrap a foreign
+ * ability's legitimate "nothing found" result into {"data":[]} even when that ability's own
+ * schema is {type:object, additionalProperties:false} - a shape its own schema forbids. Excluding
+ * array() up front also means the earlier "an empty array counts as a list and is wrapped like
+ * any other" behaviour this docblock used to describe is gone: it was the exact defect just
+ * described, not a feature.
  *
  * Scoped to aafm-bridge-* tool names only, not applied to our own aafm-* results. Every native
  * ability's result is already asserted object-shaped by tests/WireShapeTest.php against the
  * exact same execute() call this filter would otherwise see, so a native list-shape defect is a
  * bug to fix at the source, not to paper over here. A blanket wrap would also produce a
  * `{data: [...]}` shape that matches neither a native ability's documented output_schema nor a
- * hypothetical buggy shape, masking the defect instead of surfacing it. For a bridged ability we
- * do not control the schema at all, so a generic wrapper is the best available response.
+ * hypothetical buggy shape, masking the defect instead of surfacing it. For a bridged ability
+ * whose foreign owner declared no schema at all, a generic wrapper is the best available
+ * response, because nothing downstream is validating or advertising a shape to contradict.
  *
  * Uses aafm_bridge_is_list() (defined above in this file), a hand-rolled sequential-key check
  * that never calls PHP 8.1's array_is_list() - this plugin's floor is PHP 7.4 - so no version
- * branching is needed here. An empty array counts as a list (it JSON-encodes as [], the exact
- * defect being guarded against) and is wrapped the same as a populated one. Cannot double-wrap:
- * once wrapped, the result carries a string key and is no longer a list, so a second pass is a
- * no-op by construction.
+ * branching is needed here. Cannot double-wrap: once wrapped, the result carries a string key
+ * and is no longer a list, so a second pass is a no-op by construction.
  *
  * @param mixed $result    The raw tool execution result (may be WP_Error).
  * @param mixed $args      The tool arguments used (unused here).
  * @param mixed $tool_name The MCP tool name that was called.
- * @return mixed The result, wrapped under `data` only when it is a bridged bare list.
+ * @return mixed The result, wrapped under `data` only for a bridged, non-empty, bare list whose
+ *               wrapper declared no output_schema.
  */
 function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 	unset( $args );
@@ -561,7 +628,19 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 		return $result;
 	}
 
-	if ( ! is_array( $result ) || ! aafm_bridge_is_list( $result ) ) {
+	// array() === $result excludes the empty-list case (M2): it is still a "list" by
+	// aafm_bridge_is_list()'s definition, but wrapping it can only ever make the wire shape worse
+	// - either it stays [] (fine under a type:array schema, or under no schema at all) or it
+	// becomes {"data":[]}, which a {type:object, additionalProperties:false} schema forbids.
+	if ( ! is_array( $result ) || array() === $result || ! aafm_bridge_is_list( $result ) ) {
+		return $result;
+	}
+
+	// A declared output schema means the adapter already advertised a shape for this tool (see
+	// this function's docblock for the {properties:{result:...}} rewrite) - wrapping under 'data'
+	// here would contradict that published shape, so leave the foreign ability's own return value
+	// exactly as it came back.
+	if ( null !== aafm_bridge_declared_output_schema_for_tool( $tool_name ) ) {
 		return $result;
 	}
 

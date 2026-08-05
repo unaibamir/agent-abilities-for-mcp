@@ -41,22 +41,22 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * Task 5 / M2: an empty array must NEVER be wrapped, regardless of whether an output schema
-	 * is declared for the tool. array_is_list(array()) === true, so array() is still a "list" by
-	 * aafm_bridge_is_list()'s definition - but wrapping it into {"data":[]} can only make the
-	 * wire shape worse: a foreign ability whose schema is {type:object,
-	 * additionalProperties:false} can legitimately return array() for "nothing found", and
-	 * {"data":[]} violates that schema outright. This test previously asserted the opposite
-	 * (that an empty list gets wrapped); that assertion was the bug, not a spec. See
-	 * OutputSchemaFidelityTest for the schema-declared variant of this same check.
+	 * An empty array from a no-schema bridged tool must still be wrapped, matching every other
+	 * bare list this filter handles. A prior revision special-cased array() as "never wrapped" on
+	 * the reasoning that a declared {type:object, additionalProperties:false} schema forbids the
+	 * extra `data` key - but that exclusion ran BEFORE any schema lookup, so it also caught the
+	 * ordinary no-schema case this test exercises: a bridged tool with no output_schema at all
+	 * returning "nothing found" reached the wire as a bare [], which is exactly the top-level-array
+	 * shape this filter exists to prevent (upstream mcp-adapter#253). {"data":[]} is the correct
+	 * wire shape here, matching what 1.6.0 sent and what every other non-empty list gets.
 	 */
-	public function test_bridged_empty_list_result_is_never_wrapped(): void {
+	public function test_bridged_empty_list_result_is_wrapped_like_any_other_list(): void {
 		$result = aafm_filter_bridged_tool_call_result( array(), array(), 'aafm-bridge-vendor-empty' );
 
 		$this->assertSame(
-			array(),
+			array( 'data' => array() ),
 			$result,
-			'An empty array must pass through unwrapped - there is no tool_name registered for "vendor-empty" here, so this also proves the empty-array exclusion runs before any schema lookup.'
+			'An empty array must be wrapped the same as any other bare list - a bare [] in structuredContent violates the MCP spec regardless of whether the array happens to be empty.'
 		);
 	}
 

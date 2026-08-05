@@ -87,10 +87,12 @@ function aafm_bridge_is_list( array $arr ): bool {
 /**
  * Recursively coerce empty associative object-containers to stdClass.
  *
- * Walks the object-keyed schema containers (properties, patternProperties, $defs, definitions),
- * the single-subschema keys (items, additionalProperties), and the composite arrays
- * (allOf/anyOf/oneOf). An empty object-container becomes stdClass so it emits {}; non-empty
- * containers and genuine list schemas are left untouched.
+ * Walks the object-keyed schema containers (properties, patternProperties, $defs, definitions,
+ * dependentSchemas), the single-subschema keys (items, additionalProperties, additionalItems,
+ * not, if, then, else, propertyNames, contains, unevaluatedProperties, unevaluatedItems), the
+ * tuple keys (items in list form, prefixItems), and the composite arrays (allOf/anyOf/oneOf). An
+ * empty object-container becomes stdClass so it emits {}; non-empty containers, genuine list
+ * schemas, and empty tuples are left untouched.
  *
  * @param mixed $node  Schema node.
  * @param int   $depth Current recursion depth (0 at the root).
@@ -105,8 +107,24 @@ function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 	if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
 		return $node;
 	}
+	// An empty array reaching this function AT AN ELEMENT POSITION (depth > 0 - i.e. this whole
+	// $node is itself a subschema a parent container recursed into) is the ordinary PHP way of
+	// writing "accepts anything": `'properties' => array( 'ctx' => array() )`,
+	// `'$defs' => array( 'Any' => array() )`, or a oneOf branch of bare `array()`. Left alone it
+	// json_encode()s as [] where JSON Schema requires {} for a subschema, and a strict MCP client
+	// rejects the whole tool as malformed. The ROOT node (depth 0) never reaches this function
+	// empty - both callers (aafm_normalize_json_schema() and
+	// aafm_bridge_normalize_output_schema()) already return their own default/guard before ever
+	// recursing on an empty root - so this only fires on genuine nested subschemas. It never fires
+	// on an empty array held as a plain VALUE (required:[], enum:[], const/default/examples, or an
+	// empty prefixItems tuple), because none of those keys are ever recursed into as a whole $node
+	// by this function; they are left as untouched sibling keys on the containing node, or (for
+	// prefixItems) walked per-ELEMENT below without touching the container itself when it is [].
+	if ( $depth > 0 && array() === $node ) {
+		return new stdClass();
+	}
 	$next         = $depth + 1;
-	$object_keyed = array( 'properties', 'patternProperties', '$defs', 'definitions' );
+	$object_keyed = array( 'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas' );
 	foreach ( $object_keyed as $key ) {
 		if ( array_key_exists( $key, $node ) ) {
 			if ( is_array( $node[ $key ] ) && array() === $node[ $key ] ) {
@@ -118,9 +136,22 @@ function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 			}
 		}
 	}
-	foreach ( array( 'items', 'additionalProperties' ) as $key ) {
+	$single_subschema = array(
+		'items',
+		'additionalProperties',
+		'additionalItems',
+		'not',
+		'if',
+		'then',
+		'else',
+		'propertyNames',
+		'contains',
+		'unevaluatedProperties',
+		'unevaluatedItems',
+	);
+	foreach ( $single_subschema as $key ) {
 		if ( ! array_key_exists( $key, $node ) || ! is_array( $node[ $key ] ) ) {
-			continue; // A boolean additionalProperties (true/false) is left as-is.
+			continue; // A boolean value (true/false) here is left as-is.
 		}
 		// An empty array here is a schema container, not a list: emit {} so it stays a valid
 		// (empty) schema. additionalProperties: [] in particular is invalid JSON Schema.
@@ -128,7 +159,10 @@ function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 			$node[ $key ] = new stdClass();
 			continue;
 		}
-		// Tuple-form items (a list of subschemas, one per position) recurse per element.
+		// Tuple-form items (a list of subschemas, one per position) recurse per element. This is
+		// the legacy (pre-2020-12) tuple syntax; the current dialect's tuple keyword is
+		// prefixItems, handled separately below because - unlike every key in this loop -
+		// prefixItems is ALWAYS a JSON array and must never be coerced to {} when empty.
 		if ( 'items' === $key && aafm_bridge_is_list( $node[ $key ] ) ) {
 			foreach ( $node[ $key ] as $i => $sub ) {
 				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub, $next );
@@ -136,6 +170,15 @@ function aafm_normalize_schema_node( $node, int $depth = 0 ) {
 			continue;
 		}
 		$node[ $key ] = aafm_normalize_schema_node( $node[ $key ], $next );
+	}
+	// prefixItems (JSON Schema 2020-12 tuple validation) is always a JSON array, never a single
+	// subschema, so an empty prefixItems is a legitimate empty tuple and must stay [] - it is
+	// deliberately NOT added to $single_subschema above. Only its elements are subschemas that may
+	// need the {} fix, so only those are recursed into.
+	if ( array_key_exists( 'prefixItems', $node ) && is_array( $node['prefixItems'] ) ) {
+		foreach ( $node['prefixItems'] as $i => $sub ) {
+			$node['prefixItems'][ $i ] = aafm_normalize_schema_node( $sub, $next );
+		}
 	}
 	foreach ( array( 'allOf', 'anyOf', 'oneOf' ) as $key ) {
 		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {

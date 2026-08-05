@@ -753,7 +753,17 @@ function aafm_exec_moderate_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array( 'status' => wp_get_comment_status( $id ) );
+	// aafm_comment_status_string(), not wp_get_comment_status() raw: the output schema declares
+	// 'status' => type:string, but wp_get_comment_status() falls through to boolean false whenever
+	// get_comment() can't resolve the id at read time. The 'post-trashed' value is one such case and
+	// already handled by the helper - but $ok can be true here even when the comment no longer
+	// exists at all: wp_set_comment_status() (used by approve/unapprove) fires its
+	// 'wp_set_comment_status' action AFTER its DB update succeeds and returns true unconditionally
+	// once that update ran, so a hook on that action (an anti-spam or moderation plugin reacting to
+	// the status change, say) that hard-deletes the row leaves $ok === true while get_comment($id)
+	// is already null by the time we read the status back. aafm_comment_status_string() reports
+	// 'unknown' for that case instead of the bare false that violates the schema.
+	return array( 'status' => aafm_comment_status_string( $id ) );
 }
 
 /**

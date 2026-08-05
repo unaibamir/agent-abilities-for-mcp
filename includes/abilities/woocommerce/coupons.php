@@ -298,6 +298,21 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 		}
 		$coupon->set_code( $code );
 	}
+	if ( array_key_exists( 'discount_type', $input ) ) {
+		// Applied BEFORE amount, deliberately. WC_Coupon::set_amount() (class-wc-coupon.php:
+		// 617-632) rejects an amount over 100 only once get_discount_type() ALREADY reads
+		// 'percent' - it reads the coupon's own current state, not the incoming input. A fresh
+		// WC_Coupon defaults to discount_type 'fixed_cart', so with amount applied first, a single
+		// create call carrying {discount_type:'percent', amount:'150'} used to sail straight
+		// through: set_amount() saw a still-fixed_cart coupon, accepted 150 without complaint, and
+		// only afterwards did set_discount_type() flip the type to 'percent' with nothing left to
+		// re-check it. The result was a coupon persisted at 150% off - a state WooCommerce's own
+		// setter exists to prevent - on a high-risk, money-moving ability, and WC_Coupon::save()
+		// does not re-validate afterwards. Setting discount_type first means set_amount() below
+		// always sees this call's real, final discount_type, so the same-request combination is
+		// now caught by the existing try/catch instead of persisting silently.
+		$coupon->set_discount_type( sanitize_text_field( (string) $input['discount_type'] ) );
+	}
 	if ( array_key_exists( 'amount', $input ) ) {
 		$amount = sanitize_text_field( (string) $input['amount'] );
 		try {
@@ -320,9 +335,6 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 				)
 			);
 		}
-	}
-	if ( array_key_exists( 'discount_type', $input ) ) {
-		$coupon->set_discount_type( sanitize_text_field( (string) $input['discount_type'] ) );
 	}
 	if ( array_key_exists( 'description', $input ) ) {
 		$coupon->set_description( sanitize_text_field( (string) $input['description'] ) );

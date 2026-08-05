@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -257,6 +257,23 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.6.1 =
+
+* **Fix:** Pages and posts with no categories, tags, or custom fields returned an empty array where the schema declares an object, so a strict MCP client rejected the whole response. Reported by an outside user as issue #81; the sweep it prompted found the same defect across the catalog.
+* **Fix:** Shipping method settings read WooCommerce's legacy global bucket, which has been empty for zone methods since WooCommerce 2.6. They now report the real per-instance configuration, so a title or cost you just wrote shows up in the response that follows it.
+* **Fix:** A variation reported that it manages its own stock when it was inheriting the parent's setting, telling an agent it could set a stock level it does not own.
+* **Fix:** Creating a percentage coupon over 100 in one call saved the coupon instead of rejecting it, because the amount was applied while the coupon was still a fixed-cart discount.
+* **Fix:** A duplicate variation SKU, a negative coupon amount, or a coupon maximum below its minimum crashed instead of returning an error.
+* **Fix:** An unexpected failure inside any ability now comes back as an error with the cause recorded in the activity log. Set the `aafm_rethrow_ability_exceptions` filter to true to let exceptions through while developing.
+* **Fix:** A comment whose parent post is in the trash reported a boolean where every other path reports a string. It now reports `post-trashed`, which is WordPress's own name for that state.
+* **Fix:** Block and comment writes returned an empty shape when the saved record could not be read back. They return an error instead.
+* **Fix:** Product image galleries and grouped product children encoded as an object rather than a list when the stored ids had gaps.
+* **Fix:** Payment gateway settings, title, and description could come back as an empty array or null against a declared object and string.
+* **Fix:** Site settings returned an empty array when the `aafm_allowed_site_settings` filter removed every entry.
+* **Fix:** Attachments that are not images returned an empty array for their sizes map.
+* **Fix:** Tools bridged from other plugins advertised an object type the source ability never declared, and advertised empty subschemas as arrays rather than objects.
+* **Chore:** Corrected code comments that called the settings redactor deny-by-default. It is a best-effort denylist over field names and cannot be exhaustive, so a carrier plugin storing a credential under an unusual field name can still reach the wire.
+
 = 1.6.0 =
 
 * **Feature:** Read-only mode, a switch on the Settings tab that stops any ability that writes from being registered as an MCP tool, whatever is ticked. It covers abilities from other plugins as well, each classified by its own annotation.
@@ -436,6 +453,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * Guided connection screen with endpoint diagnostics.
 
 == Upgrade Notice ==
+
+= 1.6.1 =
+
+A bug fix release. Empty term, meta, and settings maps now encode as objects, so strict MCP clients stop rejecting ordinary page reads. Shipping method settings report the real per-instance configuration. Several WooCommerce writes return an error where they used to crash.
 
 = 1.6.0 =
 

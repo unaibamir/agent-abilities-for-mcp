@@ -473,4 +473,89 @@ final class OutputSchemaFidelityTest extends TestCase {
 		remove_filter( 'aafm_allowed_site_settings', '__return_empty_array' );
 	}
 
+	/**
+	 * Register just enough abilities/categories to exercise the reusable-block write paths,
+	 * mirroring BlocksTest::register_blocks().
+	 *
+	 * @return void
+	 */
+	private function register_blocks_abilities(): void {
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/create-block', 'aafm/update-block' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+	}
+
+	/**
+	 * Task 14: a hook (or a cache race) that removes the just-written block between the write
+	 * returning and the executor's own re-fetch must not fall through to aafm_rich_block()'s
+	 * array() fallback, which would encode as [] against the seven-property object output
+	 * schema. wp_after_insert_post is the LAST action wp_insert_post() fires - deleting there
+	 * reproduces the race without corrupting core's own post-save processing, which has
+	 * already finished by the time that action runs.
+	 */
+	public function test_create_block_null_reread_returns_an_error_not_a_schema_violating_empty_shape(): void {
+		$this->register_blocks_abilities();
+		$this->acting_as( 'editor' );
+
+		add_action(
+			'wp_after_insert_post',
+			static function ( int $post_id ): void {
+				wp_delete_post( $post_id, true );
+			}
+		);
+
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
+			array(
+				'title'   => 'Doomed block',
+				'content' => '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame(
+			'aafm_error',
+			$res->get_error_code(),
+			'aafm_rich_block() returns array() for a non-WP_Post, which would encode as [] against the seven-property object output schema; the null-reread guard must return aafm_generic_error() instead of that schema-violating empty shape.'
+		);
+	}
+
+	/**
+	 * Task 14, the update-block call site: identical guard, identical race.
+	 */
+	public function test_update_block_null_reread_returns_an_error_not_a_schema_violating_empty_shape(): void {
+		$this->register_blocks_abilities();
+		$this->acting_as( 'editor' );
+		$id = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_title'   => 'Doomed update',
+				'post_content' => '<!-- wp:paragraph --><p>Old</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		add_action(
+			'wp_after_insert_post',
+			static function ( int $post_id ): void {
+				wp_delete_post( $post_id, true );
+			}
+		);
+
+		$res = wp_get_ability( 'aafm/update-block' )->execute(
+			array(
+				'block_id' => $id,
+				'content'  => '<!-- wp:list --><ul><li>a</li></ul><!-- /wp:list -->',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame(
+			'aafm_error',
+			$res->get_error_code(),
+			'aafm_rich_block() returns array() for a non-WP_Post, which would encode as [] against the seven-property object output schema; the null-reread guard must return aafm_generic_error() instead of that schema-violating empty shape.'
+		);
+	}
+
 }

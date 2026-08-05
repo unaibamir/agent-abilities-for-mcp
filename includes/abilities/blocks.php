@@ -343,7 +343,16 @@ function aafm_exec_create_block( array $input ) {
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
 	}
-	return aafm_block_with_warnings( aafm_rich_block( get_post( (int) $id ) ), $guard['warnings'] );
+	// Re-read the saved block to return the canonical rich shape. If the re-fetch comes back
+	// null (a hook deleted it, or a cache race), aafm_rich_block() would fall back to array(),
+	// which encodes as [] against the seven-property object the output schema declares - so
+	// surface a generic error instead of redacting null into a schema-violating empty shape
+	// (same guard as the menu-item writes, menus.php:669).
+	$saved = get_post( (int) $id );
+	if ( ! $saved instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	return aafm_block_with_warnings( aafm_rich_block( $saved ), $guard['warnings'] );
 }
 
 /**
@@ -441,7 +450,13 @@ function aafm_exec_update_block( array $input ) {
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
-	return aafm_block_with_warnings( aafm_rich_block( get_post( (int) $result ) ), $guard['warnings'] );
+	// Same null-reread guard as create-block above: aafm_rich_block() falls back to array()
+	// for a non-WP_Post, which would violate the object output schema.
+	$saved = get_post( (int) $result );
+	if ( ! $saved instanceof WP_Post ) {
+		return aafm_generic_error();
+	}
+	return aafm_block_with_warnings( aafm_rich_block( $saved ), $guard['warnings'] );
 }
 
 /**

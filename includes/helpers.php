@@ -1318,10 +1318,46 @@ function aafm_redact_comment( $comment ): array {
 		'post_id'     => (int) $comment->comment_post_ID,
 		'author_name' => $comment->comment_author,
 		'content'     => $comment->comment_content,
-		'status'      => wp_get_comment_status( $comment ),
+		'status'      => aafm_comment_status_string( $comment ),
 		'date_gmt'    => $comment->comment_date_gmt,
 		'parent'      => (int) $comment->comment_parent,
 	);
+}
+
+/**
+ * Wraps wp_get_comment_status(), naming WordPress's own 'post-trashed' value instead of silently
+ * degrading to boolean false.
+ *
+ * When a post is trashed, wp_trash_post_comments() sets every one of its comments'
+ * comment_approved to the literal string 'post-trashed', regardless of what the comment's own
+ * status was beforehand. Core's own wp_get_comment_status() has no branch for that value and
+ * falls through to `return false;`, so aafm_redact_comment() would emit `status: false` where
+ * every other path emits a string - a wire-shape inconsistency an agent has no principled way to
+ * interpret (is it "unknown"? "moderation failed"? there's no way to tell from a bare false).
+ * 'post-trashed' is accurate (the comment itself was never trashed, its parent post was) and
+ * matches the literal WordPress already uses internally, so it costs nothing to hand back
+ * verbatim instead of inventing a new vocabulary. Every other status value core recognizes
+ * passes through unchanged.
+ *
+ * @param WP_Comment|int $comment Comment object or id.
+ * @return string
+ */
+function aafm_comment_status_string( $comment ): string {
+	$status = wp_get_comment_status( $comment );
+	if ( false !== $status ) {
+		return (string) $status;
+	}
+
+	$comment_object = $comment instanceof WP_Comment ? $comment : get_comment( $comment );
+	if ( $comment_object instanceof WP_Comment && 'post-trashed' === $comment_object->comment_approved ) {
+		return 'post-trashed';
+	}
+
+	// wp_get_comment_status() can also fall through to false for a comment_approved value core
+	// does not recognize at all (not one of 1/0/spam/trash/post-trashed) - e.g. a custom value a
+	// third-party plugin wrote. Report it verbatim rather than fabricating a status string with no
+	// basis, still keeping the wire type a string per the schema.
+	return $comment_object instanceof WP_Comment ? (string) $comment_object->comment_approved : 'unknown';
 }
 
 /**

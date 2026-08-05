@@ -299,7 +299,27 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 		$coupon->set_code( $code );
 	}
 	if ( array_key_exists( 'amount', $input ) ) {
-		$coupon->set_amount( sanitize_text_field( (string) $input['amount'] ) );
+		$amount = sanitize_text_field( (string) $input['amount'] );
+		try {
+			// WooCommerce's own set_amount() (class-wc-coupon.php:617-632) uses a throw as
+			// ordinary input validation: it rejects a negative amount outright, and separately
+			// rejects an amount over 100 once the coupon's discount_type is 'percent'. The
+			// amount input schema is a bare string with no pattern/minimum/maximum, so both
+			// conditions can reach this setter unfiltered. Catch here and return a WP_Error
+			// instead of letting WC_Data_Exception escape - the same pattern already used for
+			// set_sku() in aafm_wc_apply_variation_input() (variations.php) and for the
+			// duplicate-code guard a few lines above in this same function.
+			$coupon->set_amount( $amount );
+		} catch ( \WC_Data_Exception $e ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_amount',
+				sprintf(
+					/* translators: %s: the rejected amount value. */
+					__( 'The discount amount "%s" is not valid. It must not be negative, and a percentage coupon cannot exceed 100.', 'agent-abilities-for-mcp' ),
+					$amount
+				)
+			);
+		}
 	}
 	if ( array_key_exists( 'discount_type', $input ) ) {
 		$coupon->set_discount_type( sanitize_text_field( (string) $input['discount_type'] ) );

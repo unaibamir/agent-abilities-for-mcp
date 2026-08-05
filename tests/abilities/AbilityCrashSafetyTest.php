@@ -176,10 +176,10 @@ final class AbilityCrashSafetyTest extends TestCase {
 	 * The true Red Gate for the percent-over-100 branch. WC_Coupon::set_amount() only rejects an
 	 * amount over 100 once the coupon's own discount_type is already 'percent' (it reads
 	 * get_discount_type(), not the incoming input), so the coupon under test is constructed with
-	 * that type already set, mirroring the "update an existing percent coupon" case the brief's
-	 * ordering subtlety describes - set_amount() runs before set_discount_type() in
-	 * aafm_wc_apply_coupon_input(), so a same-request create of amount+discount_type=percent can
-	 * never reach this branch; only a second call against an already-percent coupon can.
+	 * that type already set, exercising the branch directly and independently of any input
+	 * ordering. See test_apply_coupon_input_returns_an_error_for_a_same_call_percent_amount_over_one_hundred()
+	 * below for the same-call case, now also caught since aafm_wc_apply_coupon_input() applies
+	 * discount_type before amount.
 	 */
 	public function test_apply_coupon_input_returns_an_error_instead_of_throwing_on_a_percent_amount_over_one_hundred(): void {
 		$coupon = new \WC_Coupon();
@@ -191,6 +191,37 @@ final class AbilityCrashSafetyTest extends TestCase {
 			WP_Error::class,
 			$result,
 			'aafm_wc_apply_coupon_input() must catch WC_Data_Exception from set_amount() on a percent coupon over 100 and return a WP_Error, not let it escape uncaught.'
+		);
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $result->get_error_code() );
+	}
+
+	/**
+	 * The same-request Red Gate finding 5 of the final review identified: aafm_wc_apply_coupon_input()
+	 * used to apply amount BEFORE discount_type. A fresh WC_Coupon defaults to discount_type
+	 * 'fixed_cart', and WC_Coupon::set_amount() only rejects an amount over 100 once
+	 * get_discount_type() already reads 'percent' - so a single create call carrying BOTH
+	 * discount_type=percent and amount=150 never triggered the throw: set_amount() ran first
+	 * against the still-fixed_cart coupon, accepted 150 without complaint, and set_discount_type()
+	 * then applied 'percent' afterwards with nothing left to re-check it. The coupon persisted as a
+	 * 150%-off coupon, a state WooCommerce's own setter exists to prevent, on a high-risk
+	 * money-moving ability. Reordering so discount_type is applied first means set_amount() sees
+	 * the real, final discount_type and throws in the same call that requested it.
+	 */
+	public function test_apply_coupon_input_returns_an_error_for_a_same_call_percent_amount_over_one_hundred(): void {
+		$coupon = new \WC_Coupon();
+
+		$result = aafm_wc_apply_coupon_input(
+			$coupon,
+			array(
+				'discount_type' => 'percent',
+				'amount'        => '150',
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A single call carrying discount_type=percent and amount=150 together must be rejected - applying discount_type before amount means set_amount() sees the real discount_type in the same request, not two requests later.'
 		);
 		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $result->get_error_code() );
 	}
@@ -220,10 +251,13 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
-	 * End-to-end through the real ability: an existing percent coupon updated past 100. Exercises
-	 * the ordering subtlety directly - the coupon must already carry discount_type=percent before
-	 * the update, because set_amount() runs before set_discount_type() inside
-	 * aafm_wc_apply_coupon_input() and so cannot see a same-request discount_type change.
+	 * End-to-end through the real ability: an existing percent coupon updated past 100. Deliberately
+	 * two calls - create a percent coupon first, then send only `amount` on the update - to cover
+	 * the update path, where a caller loads an existing coupon and changes just its amount without
+	 * repeating discount_type. The same-request combination (both fields in one create call) is
+	 * covered at the unit level by
+	 * test_apply_coupon_input_returns_an_error_for_a_same_call_percent_amount_over_one_hundred()
+	 * above.
 	 */
 	public function test_update_percent_coupon_over_one_hundred_returns_the_plugins_own_error_not_the_cores(): void {
 		$this->acting_as( 'administrator' );

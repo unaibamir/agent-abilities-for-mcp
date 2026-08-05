@@ -569,15 +569,40 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	$instance_title = (string) $method->title;
 	$display_title  = ( '' !== $instance_title ) ? $instance_title : (string) $method->method_title;
 
+	// Shipping plugins store carrier API keys / account creds / license keys in settings.
+	// Run them through the recursive deny-by-default redactor before returning.
+	// $method->settings is WooCommerce's LEGACY GLOBAL bucket and is empty for every zone
+	// method instance on WC 2.6+. The real per-instance configuration (title, cost,
+	// tax_status) lives in instance_settings, which is also where our own write path
+	// stores it. Reading the legacy bucket returned {"type":"class"} for flat_rate and []
+	// for free_shipping/local_pickup, so a write never showed up in its own response.
+	$settings = aafm_wc_redact_settings_deep( aafm_wc_instance_settings( $method ) );
+	// Cast only the empty case so it encodes to "{}" per the declared object schema; a
+	// populated map is already string-keyed, encodes correctly as-is, and stays
+	// array-accessible for callers (same convention as aafm_rich_post()'s terms/meta).
+	$settings_out = array() === $settings ? (object) array() : $settings;
+
 	return array(
 		'instance_id'  => (int) $method->instance_id,
 		'id'           => (string) $method->id,
 		'method_title' => $display_title,
 		'enabled'      => (string) $method->enabled,
-		// Shipping plugins store carrier API keys / account creds / license keys in settings.
-		// Run them through the recursive deny-by-default redactor before returning.
-		'settings'     => aafm_wc_redact_settings_deep( (array) $method->settings ),
+		'settings'     => $settings_out,
 	);
+}
+
+/**
+ * Read a shipping method's per-instance settings, initialising them if the object has not
+ * loaded them yet. Returns an empty array for a method that stores nothing.
+ *
+ * @param \WC_Shipping_Method $method Shipping method instance from WC_Shipping_Zone::get_shipping_methods().
+ * @return array<string,mixed>
+ */
+function aafm_wc_instance_settings( $method ): array {
+	if ( method_exists( $method, 'init_instance_settings' ) && empty( $method->instance_settings ) ) {
+		$method->init_instance_settings();
+	}
+	return is_array( $method->instance_settings ) ? $method->instance_settings : array();
 }
 
 /**

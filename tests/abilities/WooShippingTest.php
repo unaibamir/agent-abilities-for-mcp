@@ -383,14 +383,21 @@ final class WooShippingTest extends TestCase {
 				'id'           => 'flat_rate',
 				'method_title' => 'Flat rate',
 				'enabled'      => 'yes',
-				'settings'     => array(
-					'title'      => 'Flat rate',
-					'api_key'    => 'carrier-api-key-value',
-					'credential' => 'carrier-credential-value',
-					'advanced'   => array(
-						'mode'          => 'live',
-						'account_token' => 'nested-account-token-value',
-					),
+			)
+		);
+		// A zone method's real configuration lives in its per-instance option, not the
+		// legacy settings bucket seed_method() writes above (see aafm_wc_instance_settings()
+		// in shipping.php). Seed the secrets there so this proves the redactor against the
+		// bucket production code actually reads, not against a fiction.
+		update_option(
+			'woocommerce_flat_rate_1_settings',
+			array(
+				'title'      => 'Flat rate',
+				'api_key'    => 'carrier-api-key-value',
+				'credential' => 'carrier-credential-value',
+				'advanced'   => array(
+					'mode'          => 'live',
+					'account_token' => 'nested-account-token-value',
 				),
 			)
 		);

@@ -136,7 +136,9 @@ function aafm_wc_redact_settings_deep( array $settings ): array {
 /**
  * Redact secret/key/token/password fields from a gateway's settings array.
  *
- * Thin wrapper over the recursive deny-by-default redactor.
+ * Thin wrapper over aafm_wc_redact_settings_deep() - a recursive DENYLIST over field names
+ * (see that function's docblock above), not a deny-by-default redactor. Best-effort: it catches
+ * names matching a known secret pattern and cannot be exhaustive.
  *
  * @param array<string,mixed> $settings Raw gateway settings array.
  * @return array<int|string,mixed>

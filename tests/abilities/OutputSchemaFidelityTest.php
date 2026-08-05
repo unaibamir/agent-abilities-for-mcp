@@ -15,6 +15,7 @@ namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcGatewayStubStore;
 use AAFM\Tests\WcShippingStubStore;
 use AAFM\Tests\WcStubStore;
 
@@ -451,4 +452,25 @@ final class OutputSchemaFidelityTest extends TestCase {
 		$methods = $zone->get_shipping_methods();
 		return $methods[ $instance_id ];
 	}
+
+	/**
+	 * Task 13: aafm_allowed_site_settings() is filterable (helpers.php:583-592). A site that
+	 * hooks the filter down to an empty list - the natural way to stop exposing settings
+	 * without disabling the whole ability - makes the settings map empty, and an empty PHP
+	 * array encodes as [] against the declared object schema (settings.php:84).
+	 */
+	public function test_get_site_settings_encodes_as_an_empty_object_when_the_allowlist_is_filtered_empty(): void {
+		add_filter( 'aafm_allowed_site_settings', '__return_empty_array' );
+
+		$result = aafm_exec_get_site_settings();
+
+		$this->assertSame(
+			'{}',
+			wp_json_encode( $result['settings'] ),
+			'settings is declared type:object at settings.php:84; a filter-emptied allowlist must still encode as {} not [].'
+		);
+
+		remove_filter( 'aafm_allowed_site_settings', '__return_empty_array' );
+	}
+
 }

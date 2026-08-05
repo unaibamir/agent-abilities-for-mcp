@@ -698,4 +698,23 @@ final class OutputSchemaFidelityTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Task 17: aafm_redact_user()/aafm_rich_user() fall back to an empty shape for a
+	 * non-WP_User, which would encode as [] against the 'user' => object declarations
+	 * (users.php:170, :322, :465). All three call sites (users.php:201, :263, :412, :647)
+	 * already guard against this, so it is unreachable through any ability - call the helpers
+	 * directly to prove the backstop itself is correct, rather than fabricating an unreachable
+	 * ability path to make it look live.
+	 */
+	public function test_redact_user_encodes_as_an_empty_object_for_a_non_wp_user(): void {
+		$this->assertSame( '{}', wp_json_encode( aafm_redact_user( false ) ) );
+	}
+
+	/**
+	 * Task 17, the rich-user variant.
+	 */
+	public function test_rich_user_encodes_as_an_empty_object_for_a_non_wp_user(): void {
+		$this->assertSame( '{}', wp_json_encode( aafm_rich_user( false ) ) );
+	}
+
 }

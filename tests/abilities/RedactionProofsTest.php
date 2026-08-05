@@ -98,8 +98,15 @@ final class RedactionProofsTest extends TestCase {
 		$this->assertSame( array( 'id', 'display_name', 'email', 'roles', 'post_count' ), array_keys( $shape ) );
 	}
 
-	public function test_redact_user_on_non_user_returns_empty(): void {
-		$this->assertSame( array(), aafm_redact_user( false ) );
+	/**
+	 * Task 17 (1.6.1): this test used to assert `assertSame( array(), aafm_redact_user( false ) )`
+	 * - the PHP array() this branch returned before the fix. That value encodes as [] against
+	 * the 'user' => object declarations (users.php:170, :322, :465), so the assertion was
+	 * pinning the bug rather than proving anything safe. Flipped to assert the corrected
+	 * (object) array() return - see OutputSchemaFidelityTest for the wire-encoding proof.
+	 */
+	public function test_redact_user_on_non_user_returns_an_empty_object(): void {
+		$this->assertEquals( (object) array(), aafm_redact_user( false ) );
 	}
 
 	public function test_redact_comment_omits_email_ip_and_agent(): void {

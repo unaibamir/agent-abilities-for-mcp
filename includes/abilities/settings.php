@@ -109,8 +109,13 @@ function aafm_exec_get_site_settings(): array {
 	foreach ( aafm_allowed_site_settings() as $key ) {
 		$out[ $key ] = get_option( $key );
 	}
-	// The allowlist is never empty, so the map always has keys and stays a JSON object.
-	return array( 'settings' => $out );
+	// aafm_allowed_site_settings() is filterable (helpers.php:583-592). A site that hooks the
+	// filter down to an empty list - e.g. add_filter( 'aafm_allowed_site_settings',
+	// '__return_empty_array' ), the natural way to stop exposing settings without disabling
+	// the ability - makes $out empty. An empty PHP array encodes as [], not {}, and the
+	// adapter passes the return value verbatim into structuredContent, which would violate the
+	// declared object schema. Cast so the map still JSON-encodes to {} in that case.
+	return array( 'settings' => array() === $out ? (object) $out : $out );
 }
 
 /**

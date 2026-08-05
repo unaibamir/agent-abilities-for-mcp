@@ -66,6 +66,44 @@ final class CommentsCrudTest extends TestCase {
 		$this->assertStringNotContainsString( '203.0.113.7', wp_json_encode( $out ) );
 	}
 
+	/**
+	 * Calling wp_trash_post_comments() (via wp_trash_post()) sets EVERY comment on the trashed
+	 * post's comment_approved to the literal string 'post-trashed', regardless of what the
+	 * comment's own status was. Core's wp_get_comment_status() has no branch for that value and
+	 * falls through to `return false`, so without Task 11's fix aafm_redact_comment() would emit
+	 * `status: false` here - a bool where every other status is a string. Assert on the
+	 * JSON-encoded form per SHARED-CONTEXT: only the encoded output distinguishes a JSON boolean
+	 * from a JSON string.
+	 */
+	public function test_get_comment_on_a_trashed_post_reports_a_string_status_not_false(): void {
+		$this->acting_as( 'editor' );
+		$post    = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID'  => $post,
+				'comment_approved' => '1',
+				'comment_content'  => 'Still here after the post is trashed',
+			)
+		);
+
+		wp_trash_post( $post );
+
+		$out = wp_get_ability( 'aafm/get-comment' )->execute( array( 'comment_id' => $comment ) );
+
+		$this->assertIsArray( $out );
+		$shape = $out['comment'];
+		$this->assertIsString(
+			$shape['status'],
+			'A trashed post\'s comment must report a string status, not the boolean false wp_get_comment_status() falls through to for the unrecognized "post-trashed" value.'
+		);
+		$this->assertSame( 'post-trashed', $shape['status'] );
+		$this->assertSame(
+			'"post-trashed"',
+			wp_json_encode( $shape['status'] ),
+			'The wire value must be the JSON string "post-trashed", not the JSON boolean false.'
+		);
+	}
+
 	public function test_get_comment_missing_id_returns_error(): void {
 		$this->acting_as( 'editor' );
 		$out = wp_get_ability( 'aafm/get-comment' )->execute( array( 'comment_id' => 999999 ) );

@@ -45,7 +45,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 	);
 	$registry['aafm/get-comment']          = array(
 		'label'        => __( 'Get comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Read one comment by id (email and IP are never returned).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Read one comment by id (email and IP are never returned). status is usually approved/unapproved/spam/trash; a comment whose parent post is trashed reports status post-trashed - the comment itself was never trashed, its post was.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'comments',

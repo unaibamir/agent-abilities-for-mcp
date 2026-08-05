@@ -88,51 +88,19 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
-	 * Task 5 / issue found alongside #81: aafm_filter_bridged_tool_call_result() wrapped ANY
-	 * bare list under {"data": ...}, even when the foreign ability's own output_schema declared a
-	 * non-object root. The adapter advertises {type:object, properties:{result:<schema>},
-	 * required:['result']} for a non-object-root schema (SchemaTransformer::
-	 * transform_to_object_schema()), so a wrapped {"data":[...]} body satisfies neither the
-	 * published shape (no 'result' key) nor omits the undeclared one ('data' isn't in the
-	 * published properties either) - a strict client rejects the whole response.
-	 */
-	public function test_a_bridged_ability_with_a_declared_output_schema_is_not_wrapped(): void {
-		$this->register_bridged_fixture(
-			'demo/list-with-schema',
-			array(
-				'type'  => 'array',
-				'items' => array( 'type' => 'string' ),
-			)
-		);
-
-		$result = aafm_filter_bridged_tool_call_result(
-			array( 'a', 'b', 'c' ),
-			array(),
-			'aafm-bridge-demo-list-with-schema'
-		);
-
-		$this->assertArrayNotHasKey(
-			'data',
-			is_array( $result ) ? $result : array( 'data' => null ),
-			'A wrapper with a declared output schema advertises that schema verbatim (or the adapter\'s {result:...} rewrite of it); wrapping under "data" is a key neither side declares.'
-		);
-		$this->assertSame(
-			array( 'a', 'b', 'c' ),
-			$result,
-			'The foreign ability\'s own return value must reach the wire unchanged when its schema is declared.'
-		);
-		$this->assertSame(
-			'["a","b","c"]',
-			wp_json_encode( $result ),
-			'The wire body must match the array the schema describes, not a {"data": [...]} envelope.'
-		);
-	}
-
-	/**
-	 * The regression guard: when the foreign ability declares NO output_schema at all, the
-	 * original wrap must still fire. Nothing downstream is validating or advertising a shape in
-	 * that case, so wrapping a bare list into an object is still the best available response to
-	 * upstream mcp-adapter#253 (see aafm_filter_bridged_tool_call_result()'s docblock).
+	 * The one case aafm_filter_bridged_tool_call_result() still special-cases at all: when the
+	 * foreign ability declares NO output_schema, nothing downstream is validating or advertising a
+	 * shape, so the wrap is the only available response to upstream mcp-adapter#253 (see the
+	 * function's docblock). This plugin used to also carry two tests asserting the OPPOSITE for a
+	 * DECLARED schema - that a bare list should NOT be wrapped, on the theory that the adapter's
+	 * {result:<schema>} rewrite for a non-object-root schema would make a {"data":[...]} body
+	 * satisfy neither side. That theory does not hold: for a declared non-object-root schema, the
+	 * adapter's own McpTool::execute() already wraps the value under `result` BEFORE this filter
+	 * ever runs, so a bare list calling the filter directly with such a schema - the only way those
+	 * two tests could construct their fixture - is a shape production can never actually produce.
+	 * They were deleted rather than kept as tests that pass but prove nothing about real behaviour;
+	 * see the fix's report for the reasoning. The wrap is now unconditional for every bridged bare
+	 * list, declared schema or not (see aafm_filter_bridged_tool_call_result()).
 	 */
 	public function test_a_bridged_ability_with_no_declared_output_schema_is_still_wrapped(): void {
 		$this->register_bridged_fixture( 'demo/list-no-schema', null );
@@ -152,39 +120,6 @@ final class OutputSchemaFidelityTest extends TestCase {
 			'{"data":["a","b","c"]}',
 			wp_json_encode( $result ),
 			'The wire body for the no-schema case must keep the original {"data": [...]} envelope.'
-		);
-	}
-
-	/**
-	 * M2: a bare empty array must never be wrapped, schema or no schema. array() is a "list" by
-	 * aafm_bridge_is_list()'s definition (vacuously true), so the pre-fix code wrapped it into
-	 * {"data":[]} unconditionally - even for a foreign ability whose declared schema is
-	 * {type:object, additionalProperties:false}, which that shape violates outright.
-	 */
-	public function test_a_bridged_empty_array_result_is_never_wrapped_even_with_a_declared_schema(): void {
-		$this->register_bridged_fixture(
-			'demo/list-empty-forbidding-extra-keys',
-			array(
-				'type'                 => 'object',
-				'additionalProperties' => false,
-			)
-		);
-
-		$result = aafm_filter_bridged_tool_call_result(
-			array(),
-			array(),
-			'aafm-bridge-demo-list-empty-forbidding-extra-keys'
-		);
-
-		$this->assertSame(
-			array(),
-			$result,
-			'An empty array must pass through untouched: wrapping it into {"data":[]} would add a key that additionalProperties:false explicitly forbids.'
-		);
-		$this->assertSame(
-			'[]',
-			wp_json_encode( $result ),
-			'The wire body for an empty result must stay [] - no "data" envelope added.'
 		);
 	}
 

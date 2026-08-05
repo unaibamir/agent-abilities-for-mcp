@@ -369,6 +369,35 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 }
 
 /**
+ * Record a caught ability exception's class and message onto its already-started activity row.
+ *
+ * A crash mid-execute used to leave the row stuck at 'started' forever - that stuck row was
+ * itself the only forensic signal a crash had happened (see the comment in
+ * aafm_register_ability_with_log() in includes/register.php). Once the catch there resolves
+ * every crash to a normal 'error' row like any ordinary validation failure, that signal is gone
+ * unless the exception is written down somewhere - here, in the same row's detail column. This
+ * does not insert a second row: it updates the one aafm_log_activity() already wrote at
+ * 'started', the same "one row per call" contract every other resolve follows.
+ *
+ * The message written here is for the admin-only activity log ONLY. The caller of
+ * aafm_register_ability_with_log() must build the WP_Error returned to the client from a fixed,
+ * translatable string, never from $e->getMessage() - a raw vendor exception message can contain
+ * internal detail (file paths, object state) that has no business reaching an MCP client.
+ *
+ * @param int        $row_id  The 'started' row id returned by aafm_log_activity() for this call.
+ * @param \Throwable $e       The caught exception or error.
+ * @return void
+ */
+function aafm_log_ability_exception( int $row_id, \Throwable $e ): void {
+	aafm_update_activity_status(
+		$row_id,
+		'error',
+		null,
+		sprintf( '%1$s: %2$s', get_class( $e ), $e->getMessage() )
+	);
+}
+
+/**
  * Query activity rows, most recent first.
  *
  * @param array<string,mixed> $args Query arguments: per_page, page, status, ability, max_id.

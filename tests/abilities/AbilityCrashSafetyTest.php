@@ -251,4 +251,107 @@ final class AbilityCrashSafetyTest extends TestCase {
 			'A percent coupon pushed over 100 must surface as this plugin\'s own aafm_wc_invalid_coupon_amount error, not core\'s generic ability_callback_exception fallback.'
 		);
 	}
+
+	// -------------------------------------------------------------------------
+	// Task 6: the choke-point floor. Tasks 3 and 4 guard two known WooCommerce
+	// setters by name; this proves the wrapper in register.php catches ANY
+	// throwing execute_callback, native or bridged, known vendor or not.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Registers a fixture ability whose execute_callback always throws, through the same
+	 * decorated wrapper every real ability goes through (aafm_register_ability_with_log()),
+	 * inside a simulated wp_abilities_api_init action - core's wp_register_ability() refuses to
+	 * run outside one (see TestCase::in_action()). Registering directly with wp_register_ability()
+	 * instead would bypass the decorated closure entirely and test nothing.
+	 */
+	private function register_throwing_fixture(): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/throws',
+					array(
+						'label'               => 'Throws on purpose',
+						'description'         => 'Test fixture that throws from its execute callback.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'output_schema'       => array(
+							'type'       => 'object',
+							'properties' => array(),
+						),
+						'execute_callback'    => static function () {
+							throw new \RuntimeException( 'boom from the ability' );
+						},
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * The choke point in aafm_register_ability_with_log() must catch every Throwable from
+	 * $original_execute(), not only the two WooCommerce setters Tasks 3 and 4 guard by name -
+	 * the WooCommerce integration alone has 103 setter call sites and only 2 try/catch blocks,
+	 * and the next vendor release can add a throw anywhere.
+	 *
+	 * The WP_DEBUG rethrow is filter-gated off here on purpose: WP_DEBUG is true in this
+	 * project's PHPUnit environment (tests/../wp-tests-config.php), so without disabling
+	 * `aafm_rethrow_ability_exceptions` the exception would always re-escape and this test would
+	 * only prove the rethrow branch works, never the catch-and-log branch it exists to cover.
+	 *
+	 * On this project's PHPUnit core (7.0.2), WP_Ability::invoke_callback() also wraps every
+	 * callback in its own try ( Throwable $e ) - a hardening change added to core after this
+	 * plugin's WP 6.9 floor. Without this fix the RuntimeException still gets caught, just one
+	 * layer further out by core's fallback, and reported as the generic 'ability_callback_exception'
+	 * - which, unlike this plugin's own catch, embeds the raw exception message straight into the
+	 * error text. The specific error CODE and the "message never leaks" assertion below are what
+	 * distinguish "this plugin's own catch ran" from "core's fallback silently absorbed the gap
+	 * instead", the same technique the two tests above use for set_sku()/set_amount() (see
+	 * test_create_variation_with_a_duplicate_sku_returns_the_plugins_own_error_not_the_cores).
+	 */
+	public function test_a_throwing_ability_returns_an_error_and_records_a_resolved_audit_row(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_throwing_fixture();
+
+		$result = wp_get_ability( 'aafm-test/throws' )->execute( array() );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A throwing ability must return WP_Error, never let the exception reach the caller uncaught.'
+		);
+		$this->assertSame(
+			'aafm_ability_exception',
+			$result->get_error_code(),
+			'A generic ability_callback_exception here would mean the RuntimeException escaped this plugin\'s own choke point in register.php uncaught and was only caught by WP_Ability\'s own Throwable guard - which is a newer-core addition this plugin\'s WP 6.9 floor does not have.'
+		);
+		$this->assertStringNotContainsString(
+			'boom from the ability',
+			(string) $result->get_error_message(),
+			'The internal exception message must never reach the calling client - it belongs only in the activity log detail column, which is admin-only. Core\'s own ability_callback_exception fallback embeds it verbatim, which is part of why this plugin cannot rely on that fallback.'
+		);
+
+		// A crash mid-execute used to leave the row stuck at 'started' - the only forensic signal
+		// a crash happened, per the comment at register.php:202-203. Catching the exception
+		// resolves the row like any ordinary call, so the exception's class and message must be
+		// written into detail or that signal is lost outright.
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/throws' ) );
+		$this->assertCount( 1, $rows, 'One row per call: the started row is updated in place, never duplicated.' );
+		$this->assertSame( 'error', $rows[0]['status'], 'The row must resolve to error, not stay stuck at started.' );
+		$this->assertStringContainsString(
+			'RuntimeException',
+			(string) $rows[0]['detail'],
+			'The activity log detail column is the admin-only forensic trail - it must name the exception class.'
+		);
+		$this->assertStringContainsString(
+			'boom from the ability',
+			(string) $rows[0]['detail'],
+			'And the exception message, so a crash stays distinguishable from an ordinary validation error in the log.'
+		);
+	}
 }

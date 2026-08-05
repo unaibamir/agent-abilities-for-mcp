@@ -216,7 +216,39 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			)
 		);
 
-		$result = $original_execute( $input );
+		try {
+			$result = $original_execute( $input );
+		} catch ( \Throwable $e ) {
+			// One catch for the whole catalog, not per-vendor-call-site. WooCommerce (and other
+			// vendors) routinely use exceptions as ordinary input validation - WC_Data::error()
+			// throws - and this codebase has 103 WooCommerce setter call sites against 2
+			// individual try/catch blocks (Tasks 3 and 4). A future vendor release can add a
+			// throw anywhere; this closure wraps every native AND bridged ability's
+			// execute_callback, so it is the one place a new throw cannot slip past. On this
+			// plugin's WP 6.9 floor WP_Ability::execute() has no Throwable guard of its own, so
+			// without this an uncaught exception here is a raw 500 with no audit row at all.
+			// Individual abilities still catch specific exceptions where a precise error code and
+			// message help the caller (aafm_wc_duplicate_sku, aafm_wc_invalid_coupon_amount); this
+			// is the floor beneath them, not a replacement for them.
+			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG );
+			if ( $rethrow ) {
+				// Deliberately skips both the WP_Error below AND aafm_log_ability_exception(): the
+				// row is left stuck at 'started', same as before this catch existed. That stuck row
+				// is itself development's forensic signal something crashed uncaught; resolving it
+				// here would erase the one thing this branch exists to keep loud.
+				throw $e; // Keep programming errors loud in development.
+			}
+
+			// Record the exception's class and message onto the row this call already opened, so
+			// a crash stays distinguishable from an ordinary validation error in the activity log -
+			// the same signal the stuck 'started' row used to carry before this catch existed.
+			aafm_log_ability_exception( $row_id, $e );
+
+			$result = new \WP_Error(
+				'aafm_ability_exception',
+				__( 'This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log.', 'agent-abilities-for-mcp' )
+			);
+		}
 
 		// Every NATIVE ability's execute_callback is contracted to return array|WP_Error. That
 		// contract used to be a native PHP union return type on the ability functions

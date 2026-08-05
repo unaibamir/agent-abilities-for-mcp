@@ -1416,7 +1416,14 @@ class WC_Shipping_Method {
 		}
 	}
 	public function get_instance_id() { return $this->instance_id; }
-	public function init_instance_settings() { $this->instance_settings = (array) $this->settings; }
+	// Mirrors WC_Settings_API::init_instance_settings(): instance settings are read from the
+	// per-instance option and are INDEPENDENT of $settings. Real WooCommerce leaves $settings
+	// (the legacy global bucket) empty for zone method instances; a stub that copies one into
+	// the other cannot distinguish the two and will hide a wrong-bucket read.
+	public function init_instance_settings() {
+		$stored = get_option( $this->get_instance_option_key(), array() );
+		$this->instance_settings = is_array( $stored ) ? $stored : array();
+	}
 	public function get_instance_option_key() { return 'woocommerce_' . $this->id . '_' . $this->instance_id . '_settings'; }
 	// Mirrors WC_Settings_API::update_option(): persist a single instance setting into the WP
 	// option keyed by get_instance_option_key(), the same place the constructor reads back from.

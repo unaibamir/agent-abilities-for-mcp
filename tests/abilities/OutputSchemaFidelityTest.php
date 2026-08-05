@@ -717,4 +717,38 @@ final class OutputSchemaFidelityTest extends TestCase {
 		$this->assertSame( '{}', wp_json_encode( aafm_rich_user( false ) ) );
 	}
 
+	/**
+	 * Task 18: aafm_media_item_payload() only populates $sizes when
+	 * wp_get_attachment_image_src() returns truthy, which never happens for a non-image
+	 * attachment (PDF, zip, audio) - so every non-image attachment encodes sizes as [] while
+	 * every image encodes {}. media.php declares 'media' as a bare type:object with no nested
+	 * properties today, so nothing rejects this yet, but it is the same class as issue #81 and
+	 * becomes live the moment anyone tightens that schema.
+	 */
+	public function test_media_item_sizes_encodes_as_an_empty_object_for_a_non_image_attachment(): void {
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/get-media-item' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->acting_as( 'administrator' );
+
+		$att_id = self::factory()->attachment->create_object(
+			'document.pdf',
+			0,
+			array(
+				'post_mime_type' => 'application/pdf',
+				'post_type'      => 'attachment',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/get-media-item' )->execute( array( 'attachment_id' => $att_id ) );
+
+		$this->assertIsArray( $res );
+		$this->assertSame(
+			'{}',
+			wp_json_encode( $res['media']['sizes'] ),
+			'wp_get_attachment_image_src() never returns truthy for a non-image attachment, so sizes stays array() - it must still encode as {} not [], the same class as issue #81.'
+		);
+	}
 }

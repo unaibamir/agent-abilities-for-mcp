@@ -361,6 +361,13 @@ PHP;
 			// WooCommerce does. Defined before WC_Product so set_attributes() can reference it.
 			eval( $this->aafm_wc_product_attribute_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'WC_Data_Exception' ) ) {
+			// Real WooCommerce throws this from WC_Product::set_sku() (and other WC_Data setters) on
+			// an invalid/duplicated value - see WooCommerceContractTest::
+			// test_create_product_with_a_duplicate_sku_is_a_clean_error() for the vendor-verified
+			// contract. Defined before WC_Product/WC_Product_Variation so their set_sku() can throw it.
+			eval( 'class WC_Data_Exception extends \Exception { protected $error_code = ""; public function __construct( $code = "", $message = "", $http_status_code = 400, $data = array() ) { $this->error_code = (string) $code; parent::__construct( (string) $message ); } public function getErrorCode() { return $this->error_code; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
+		}
 		if ( ! class_exists( 'WC_Product' ) ) {
 			// A minimal WC_Product backed by WcStubStore: getters read the stored data, setters stage
 			// changes on the instance, save() persists, delete() removes. Only the methods the product
@@ -749,7 +756,7 @@ class WC_Product {
 	}
 	public function set_name( $v ) { $this->data['name'] = (string) $v; }
 	public function set_status( $v ) { $this->data['status'] = (string) $v; }
-	public function set_sku( $v ) { $this->data['sku'] = (string) $v; }
+	public function set_sku( $v ) { $v = (string) $v; if ( \AAFM\Tests\WcStubStore::sku_taken_by_other( $v, $this->get_id() ) ) { throw new \WC_Data_Exception( 'product_invalid_sku', 'Invalid or duplicated SKU.' ); } $this->data['sku'] = $v; }
 	public function set_description( $v ) { $this->data['description'] = (string) $v; }
 	public function set_short_description( $v ) { $this->data['short_description'] = (string) $v; }
 	public function set_regular_price( $v ) { $this->data['regular_price'] = (string) $v; $this->data['price'] = (string) $v; } // price tracks regular only (sale price never mirrors here).
@@ -804,7 +811,7 @@ class WC_Product_Variation {
 	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
 	public function set_parent_id( $v ) { $this->data['parent_id'] = (int) $v; }
 	public function set_status( $v ) { $this->data['status'] = (string) $v; }
-	public function set_sku( $v ) { $this->data['sku'] = (string) $v; }
+	public function set_sku( $v ) { $v = (string) $v; if ( \AAFM\Tests\WcStubStore::sku_taken_by_other( $v, $this->get_id() ) ) { throw new \WC_Data_Exception( 'product_invalid_sku', 'Invalid or duplicated SKU.' ); } $this->data['sku'] = $v; }
 	public function set_description( $v ) { $this->data['description'] = (string) $v; }
 	public function set_regular_price( $v ) { $this->data['regular_price'] = (string) $v; $this->data['price'] = (string) $v; } // price tracks regular only.
 	public function set_sale_price( $v ) { $this->data['sale_price'] = (string) $v; }

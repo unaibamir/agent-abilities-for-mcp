@@ -1137,12 +1137,15 @@ PHP;
 	 * mirror the real WooCommerce WC_Coupon API the coupon abilities call. Setters stage changes on
 	 * the instance; save() persists to the store; delete() removes. A test-only stub, never shipped.
 	 *
-	 * set_amount() is the one setter that models a real WC_Coupon throw contract rather than just
-	 * staging a value: real WooCommerce (class-wc-coupon.php:617-632) rejects a negative amount
-	 * outright, and separately rejects an amount over 100 once the coupon is discount_type=percent,
-	 * both via WC_Data_Exception. Without this the stub would always succeed and no test could ever
-	 * exercise the crash path aafm_wc_apply_coupon_input() has to guard (the same gap Task 3 found
-	 * and fixed for set_sku()).
+	 * set_amount() and set_maximum_amount() are the two setters that model a real WC_Coupon throw
+	 * contract rather than just staging a value:
+	 * - set_amount() (class-wc-coupon.php:617-632) rejects a negative amount outright, and
+	 *   separately rejects an amount over 100 once the coupon is discount_type=percent.
+	 * - set_maximum_amount() (class-wc-coupon.php:807-813) rejects a non-zero maximum that is
+	 *   below the coupon's current minimum_amount.
+	 * Both throw WC_Data_Exception. Without these the stub would always succeed and no test could
+	 * ever exercise the crash paths aafm_wc_apply_coupon_input() has to guard (the same gap Task 3
+	 * found and fixed for set_sku()).
 	 *
 	 * @return string
 	 */
@@ -1188,7 +1191,7 @@ class WC_Coupon {
 	public function set_usage_limit( $v ) { $this->data['usage_limit'] = ( null === $v ) ? null : (int) $v; }
 	public function set_usage_limit_per_user( $v ) { $this->data['usage_limit_per_user'] = ( null === $v ) ? null : (int) $v; }
 	public function set_minimum_amount( $v ) { $this->data['minimum_amount'] = (string) $v; }
-	public function set_maximum_amount( $v ) { $this->data['maximum_amount'] = (string) $v; }
+	public function set_maximum_amount( $v ) { $amount = (float) $v; if ( $amount && (float) $this->get_minimum_amount() > $amount ) { throw new \WC_Data_Exception( 'coupon_invalid_maximum_amount', 'Invalid maximum spend value.' ); } $this->data['maximum_amount'] = (string) $v; }
 	public function set_individual_use( $v ) { $this->data['individual_use'] = (bool) $v; }
 	public function set_exclude_sale_items( $v ) { $this->data['exclude_sale_items'] = (bool) $v; }
 	public function set_product_ids( $v ) { $this->data['product_ids'] = array_map( 'intval', (array) $v ); }

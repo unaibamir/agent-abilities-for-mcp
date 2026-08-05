@@ -234,7 +234,11 @@ final class RichPostTest extends TestCase {
 		$shape = aafm_rich_post( get_post( $post_id ) );
 
 		$this->assertArrayHasKey( 'meta', $shape );
-		$this->assertSame( array(), $shape['meta'], 'A non-editor must receive no allowlisted meta.' );
+		$this->assertSame(
+			'{}',
+			wp_json_encode( $shape['meta'] ),
+			'A non-editor must receive no allowlisted meta, encoded as an empty object per the schema.'
+		);
 		$this->assertStringNotContainsString( 'A Governed Subtitle', (string) wp_json_encode( $shape ) );
 	}
 

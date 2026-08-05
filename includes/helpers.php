@@ -1208,7 +1208,12 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 		$shape['content'] = 'raw' === $format ? (string) $post->post_content : $rendered;
 	}
 
-	$shape['terms'] = aafm_post_terms_grouped( $post );
+	// Cast an empty map so it encodes to "{}" per the declared object schema, never "[]".
+	// A populated map is already string-keyed and encodes correctly, so it is left as an
+	// array and stays array-accessible for callers. Cast here rather than inside
+	// aafm_post_terms_grouped(), which is contracted to return array.
+	$grouped        = aafm_post_terms_grouped( $post );
+	$shape['terms'] = array() === $grouped ? (object) array() : $grouped;
 
 	$author          = get_userdata( (int) $post->post_author );
 	$shape['author'] = $author instanceof WP_User
@@ -1243,7 +1248,9 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
 			}
 		}
 	}
-	$shape['meta'] = $meta;
+	// Same empty-map contract as terms above: the meta allowlist is empty by default, so
+	// this is the common case on a stock install, not an edge case.
+	$shape['meta'] = array() === $meta ? (object) array() : $meta;
 
 	return $shape;
 }

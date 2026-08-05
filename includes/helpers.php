@@ -1270,13 +1270,16 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
  */
 function aafm_redact_user( $user, ?int $post_count = null ) {
 	if ( ! $user instanceof WP_User ) {
-		// All three call sites (users.php:201, :412, :647) already guard against a non-WP_User
-		// before reaching here, so this branch is unreachable through any ability today. Fixed
-		// anyway as a backstop: array() would encode as [] against the 'user' => object
-		// declarations (users.php:170, :322, :465), while (object) array() encodes as {} - and a
-		// future call site that forgets the guard should fail safe rather than reintroduce the
-		// schema violation. The native return type widens from array to none so this branch can
-		// return a stdClass; PHP 7.4 has no union return types to declare it precisely.
+		// This branch is genuinely reachable, not just a defensive backstop: users.php:412
+		// (`aafm_rich_user( get_userdata( (int) $result ) )`) and users.php:647
+		// (`aafm_rich_user( get_userdata( $id ) )`) both call get_userdata() inline with no
+		// instanceof guard, and get_userdata() returns WP_User|false. Only users.php:201 guards
+		// explicitly before calling in; users.php:263 is safe by construction instead, since
+		// get_users() always returns an array of WP_User objects. A bare array() here would
+		// encode as [] against the 'user' => object declarations (users.php:170, :322, :465),
+		// while (object) array() encodes as {}. The native return type widens from array to none
+		// so this branch can return a stdClass; PHP 7.4 has no union return types to declare it
+		// precisely.
 		return (object) array();
 	}
 	return array(
@@ -1302,9 +1305,11 @@ function aafm_redact_user( $user, ?int $post_count = null ) {
  */
 function aafm_rich_user( $user, ?int $post_count = null ) {
 	if ( ! $user instanceof WP_User ) {
-		// Same unreachable-backstop reasoning as aafm_redact_user() above: all three call sites
-		// (users.php:201, :412, :647) already guard, but a bare array() here would still encode
-		// as [] against a declared object schema if that guard were ever removed.
+		// Same reasoning as aafm_redact_user() above, and the same two genuinely reachable call
+		// sites: users.php:412 and users.php:647 both pass get_userdata()'s result straight into
+		// aafm_rich_user() with no instanceof guard, so a bare array() here would encode as []
+		// against a declared object schema on an ordinary WP_User|false result, not just a
+		// hypothetical future regression.
 		return (object) array();
 	}
 	// $user is a real WP_User here, so aafm_redact_user() takes its non-empty branch and always

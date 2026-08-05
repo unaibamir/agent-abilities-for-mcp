@@ -187,7 +187,14 @@ if ( ! class_exists( 'WC_Product_Variation' ) ) {
 		public function get_stock_quantity() {
 			return null;
 		}
-		public function get_manage_stock(): bool {
+		// Unlike WC_Product::get_manage_stock() above (always bool), the real
+		// WC_Product_Variation::get_manage_stock() (class-wc-product-variation.php:323-331) can
+		// also return the STRING 'parent' when the variation inherits the setting from its parent
+		// product - the exact case Task 12 (includes/abilities/woocommerce/variations.php) guards
+		// against. A bool-only signature here would make PHPStan flag that guard's
+		// `'parent' === $manage_stock` check as always-false.
+		/** @return bool|string */
+		public function get_manage_stock() {
 			return false;
 		}
 		public function get_image_id(): int {

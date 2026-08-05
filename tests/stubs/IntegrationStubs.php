@@ -806,7 +806,20 @@ class WC_Product_Variation {
 	public function get_sale_price() { return (string) ( $this->data['sale_price'] ?? '' ); }
 	public function get_stock_status() { return (string) ( $this->data['stock_status'] ?? 'instock' ); }
 	public function get_stock_quantity() { return $this->data['stock_quantity'] ?? null; }
-	public function get_manage_stock() { return (bool) ( $this->data['manage_stock'] ?? false ); }
+	// Mirrors real WC_Product_Variation::get_manage_stock() (class-wc-product-variation.php:
+	// 323-331): when the variation's OWN manage_stock is false, it inherits and reports the
+	// STRING 'parent' if the parent product manages its own stock. Without this the stub could
+	// never exercise Task 12's fix, which depends on that string reaching aafm_rich_wc_variation().
+	public function get_manage_stock() {
+		$value = (bool) ( $this->data['manage_stock'] ?? false );
+		if ( false === $value ) {
+			$parent = \AAFM\Tests\WcStubStore::get( $this->get_parent_id() );
+			if ( is_array( $parent ) && ! empty( $parent['manage_stock'] ) ) {
+				return 'parent';
+			}
+		}
+		return $value;
+	}
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
 	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
 	public function set_parent_id( $v ) { $this->data['parent_id'] = (int) $v; }

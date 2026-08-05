@@ -371,6 +371,54 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
+	 * Task 12: WC_Product_Variation::get_manage_stock() can return the STRING 'parent' when the
+	 * variation does not manage its own stock but its parent does. (bool) 'parent' is true, so
+	 * unguarded this would report manage_stock: true for a variation that owns no stock_quantity
+	 * of its own - the "silent wrong answer" class, not a schema violation (the wire type stays a
+	 * valid boolean either way, which is exactly why wp_json_encode() alone cannot catch this one;
+	 * only the VALUE is wrong). Seeds a parent that manages its own stock and a variation that does
+	 * not, so get_manage_stock() actually returns the 'parent' string rather than a plain bool.
+	 */
+	public function test_variation_manage_stock_reports_false_when_it_is_inherited_from_the_parent(): void {
+		$this->stub_woocommerce(
+			array(
+				array(
+					'id'           => 700,
+					'name'         => 'Stock-managed parent',
+					'type'         => 'variable',
+					'manage_stock' => true,
+				),
+			)
+		);
+		WcStubStore::seed(
+			701,
+			array(
+				'id'        => 701,
+				'parent_id' => 700,
+				'type'      => 'variation',
+				'sku'       => 'INHERITS-701',
+				// manage_stock deliberately absent: the variation does not manage its own stock,
+				// so get_manage_stock() must consult the parent and return 'parent', not a bool.
+			)
+		);
+
+		$variation = \wc_get_product( 701 );
+		$this->assertSame(
+			'parent',
+			$variation->get_manage_stock(),
+			'Fixture setup check: the stub must actually reproduce the string \'parent\' return, or this test proves nothing about the fix.'
+		);
+
+		$row = aafm_rich_wc_variation( $variation );
+
+		$this->assertFalse(
+			$row['manage_stock'],
+			'A variation inheriting manage_stock from its parent does not manage its own stock and must report false, not the truthy cast of the string \'parent\'.'
+		);
+		$this->assertSame( 'false', wp_json_encode( $row['manage_stock'] ) );
+	}
+
+	/**
 	 * WooCommerce is never installed in this test environment - WC_Shipping_Zone,
 	 * WC_Shipping_Method, and WC_Shipping_Zones come from the IntegrationStubs trait (see
 	 * WooShippingTest's class docblock). Define them and reset the process-wide store so each

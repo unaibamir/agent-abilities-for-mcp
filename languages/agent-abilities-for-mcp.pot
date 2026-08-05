@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log 1.6.0\n"
+"Project-Id-Version: Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log 1.6.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/agent-abilities-for-mcp\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-04T16:42:52+05:00\n"
+"POT-Creation-Date: 2026-08-06T03:09:54+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -313,15 +313,15 @@ msgstr ""
 msgid "Title for the new reusable block. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/blocks.php:384
+#: includes/abilities/blocks.php:393
 msgid "ID of the reusable block to update. The caller must have edit access to this specific block."
 msgstr ""
 
-#: includes/abilities/blocks.php:388
+#: includes/abilities/blocks.php:397
 msgid "New title for the block. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/blocks.php:462
+#: includes/abilities/blocks.php:477
 msgid "ID of the reusable block to move to the Trash. The caller must have delete access to this specific block. This is a Trash move, not a permanent delete, so it can be restored."
 msgstr ""
 
@@ -354,7 +354,7 @@ msgid "Get comment"
 msgstr ""
 
 #: includes/abilities/comments.php:48
-msgid "Read one comment by id (email and IP are never returned)."
+msgid "Read one comment by id (email and IP are never returned). status is usually approved/unapproved/spam/trash; a comment whose parent post is trashed reports status post-trashed - the comment itself was never trashed, its post was."
 msgstr ""
 
 #: includes/abilities/comments.php:55
@@ -370,7 +370,7 @@ msgid "Update comment"
 msgstr ""
 
 #: includes/abilities/comments.php:64
-msgid "Edit a comment's content (requires edit access to that comment)."
+msgid "Edit a comment's content (requires edit access to that comment). The returned comment's status is usually approved/unapproved/spam/trash; because this ability re-reads the comment with no status filter, it can also report post-trashed when the comment's parent post is trashed - the comment itself was never trashed, its post was."
 msgstr ""
 
 #: includes/abilities/comments.php:71
@@ -418,15 +418,15 @@ msgstr ""
 msgid "Unsupported moderation action."
 msgstr ""
 
-#: includes/abilities/comments.php:780
+#: includes/abilities/comments.php:790
 msgid "ID of the comment to edit. Requires moderate-comments plus edit access to this specific comment."
 msgstr ""
 
-#: includes/abilities/comments.php:790
+#: includes/abilities/comments.php:800
 msgid "New comment body. Sanitized with wp_kses_post. Only the body changes here; the parent post, author, email, and IP can never be altered through this ability."
 msgstr ""
 
-#: includes/abilities/comments.php:894
+#: includes/abilities/comments.php:915
 msgid "ID of the comment to permanently delete. This bypasses the Trash and cannot be undone; use moderate-comment's trash action instead for a recoverable delete."
 msgstr ""
 
@@ -503,7 +503,7 @@ msgstr ""
 #: includes/abilities/posts.php:323
 #: includes/abilities/search.php:103
 #: includes/abilities/terms.php:138
-#: includes/abilities/woocommerce/products.php:320
+#: includes/abilities/woocommerce/products.php:331
 #: includes/abilities/woocommerce/reports.php:556
 msgid "The WPML language the list was scoped to (\"all\" for every language), or null when WPML is inactive."
 msgstr ""
@@ -1305,24 +1305,24 @@ msgstr ""
 msgid "Write a small allowlist of site settings, passed as a settings object whose keys are the setting names and values the new values. Accepted keys: blogname (site name), blogdescription (tagline), timezone_string, date_format, time_format, start_of_week (0-6), posts_per_page (1-100). String values are sanitized; the two integer settings are clamped into their legal ranges. Any unrecognized key rejects the entire call with nothing written. It can never change the site URL, admin email, default role, or open registration. Requires manage-options. Off by default."
 msgstr ""
 
-#: includes/abilities/settings.php:135
+#: includes/abilities/settings.php:140
 msgid "A map of setting name to new value. Allowed keys: blogname, blogdescription, timezone_string, date_format, time_format, start_of_week, posts_per_page. Any other key rejects the whole call."
 msgstr ""
 
 #. translators: 1: the rejected setting key, 2: the comma-separated list of allowed setting keys.
-#: includes/abilities/settings.php:189
+#: includes/abilities/settings.php:194
 #, php-format
 msgid "The setting \"%1$s\" cannot be changed. Allowed settings are: %2$s."
 msgstr ""
 
 #. translators: %s: the setting key that received a boolean value.
-#: includes/abilities/settings.php:211
+#: includes/abilities/settings.php:216
 #, php-format
 msgid "The setting \"%s\" expects a text value, not true/false."
 msgstr ""
 
 #. translators: %s: the setting key WordPress rejected as invalid.
-#: includes/abilities/settings.php:237
+#: includes/abilities/settings.php:242
 #, php-format
 msgid "The value for \"%s\" is not valid and was not applied."
 msgstr ""
@@ -1886,19 +1886,31 @@ msgstr ""
 msgid "The coupon code \"%s\" is already in use by another coupon."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:373
+#. translators: %s: the rejected amount value.
+#: includes/abilities/woocommerce/coupons.php:333
+#, php-format
+msgid "The discount amount \"%s\" is not valid. It must not be negative, and a percentage coupon cannot exceed 100."
+msgstr ""
+
+#. translators: 1: the rejected maximum amount, 2: the coupon's current minimum amount.
+#: includes/abilities/woocommerce/coupons.php:376
+#, php-format
+msgid "The maximum spend \"%1$s\" is not valid: it cannot be less than the coupon's minimum amount of \"%2$s\"."
+msgstr ""
+
+#: includes/abilities/woocommerce/coupons.php:428
 msgid "Number of coupons per page, 1 to 100. Defaults to 10."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:378
+#: includes/abilities/woocommerce/coupons.php:433
 msgid "Page number of coupons to return, 1-indexed. Defaults to 1."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:481
+#: includes/abilities/woocommerce/coupons.php:536
 msgid "The WooCommerce coupon's post id."
 msgstr ""
 
-#: includes/abilities/woocommerce/coupons.php:594
+#: includes/abilities/woocommerce/coupons.php:649
 msgid "The coupon to update. An empty request body besides this id is a no-op success."
 msgstr ""
 
@@ -2103,28 +2115,28 @@ msgstr ""
 msgid "Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:281
+#: includes/abilities/woocommerce/gateways.php:293
 msgid "The payment gateway's id slug (e.g. \"bacs\", \"cod\", \"stripe\"), from wc-list-payment-gateways."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:324
-#: includes/abilities/woocommerce/gateways.php:414
+#: includes/abilities/woocommerce/gateways.php:336
+#: includes/abilities/woocommerce/gateways.php:426
 msgid "Payment gateway not found."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:350
+#: includes/abilities/woocommerce/gateways.php:362
 msgid "The payment gateway's id slug (e.g. \"bacs\", \"cod\", \"stripe\"), from wc-list-payment-gateways. Must reference an existing gateway or the request fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:358
+#: includes/abilities/woocommerce/gateways.php:370
 msgid "Customer-facing gateway name shown at checkout, overriding the gateway's default title."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:362
+#: includes/abilities/woocommerce/gateways.php:374
 msgid "Customer-facing text shown under the gateway's title at checkout, describing the payment method."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:367
+#: includes/abilities/woocommerce/gateways.php:379
 msgid "This gateway's raw position in the store's checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways' order values, so two gateways can end up sharing the same position. Reading the gateway back afterwards does not return this number: the read reports the gateway's resolved zero-based rank among all gateways, so a value of 5 written here can come back as 2. Both are correct, they answer different questions."
 msgstr ""
 
@@ -2366,103 +2378,103 @@ msgstr ""
 msgid "Permanently deletes a WooCommerce product by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:276
+#: includes/abilities/woocommerce/products.php:287
 msgid "Page number of products to return, 1-indexed. Defaults to 1."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:282
+#: includes/abilities/woocommerce/products.php:293
 msgid "Number of products per page, 1 to 100. Defaults to 20."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:411
+#: includes/abilities/woocommerce/products.php:422
 msgid "The WooCommerce product id to read."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:470
+#: includes/abilities/woocommerce/products.php:481
 msgid "The product's full description, shown on the single product page. Accepts the same HTML as post content."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:474
+#: includes/abilities/woocommerce/products.php:485
 msgid "A short summary shown near the price on the single product page. Accepts limited HTML."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:478
+#: includes/abilities/woocommerce/products.php:489
 msgid "The product's SKU (stock keeping unit). WooCommerce requires SKUs to be unique across products."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:493
+#: includes/abilities/woocommerce/products.php:504
 msgid "Whether the product is in stock, out of stock, or on backorder."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:502
+#: includes/abilities/woocommerce/products.php:513
 msgid "Whether WooCommerce tracks a numeric stock_quantity for this product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:506
+#: includes/abilities/woocommerce/products.php:517
 msgid "Whether the product is marked as featured (used by 'featured products' widgets and shortcodes)."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:514
+#: includes/abilities/woocommerce/products.php:525
 msgid "Product category term ids. Replaces the product's current categories."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:522
+#: includes/abilities/woocommerce/products.php:533
 msgid "Product tag term ids. Replaces the product's current tags."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:527
+#: includes/abilities/woocommerce/products.php:538
 msgid "Attachment id to use as the product's main image."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:535
+#: includes/abilities/woocommerce/products.php:546
 msgid "Attachment ids for the product's image gallery, in display order. Replaces the current gallery."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:544
+#: includes/abilities/woocommerce/products.php:555
 msgid "Display name of the custom attribute, for example \"Material\". This is also the key it is upserted by, so reusing an existing name updates that attribute rather than adding a second one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:549
+#: includes/abilities/woocommerce/products.php:560
 msgid "The attribute's possible values, for example [\"Cotton\", \"Wool\"]. Sending this replaces that attribute's full option list rather than appending to it."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:556
+#: includes/abilities/woocommerce/products.php:567
 msgid "Custom (product-level) attributes as {name, options[]} objects. Each is upserted by name; existing custom attributes not included here are left unchanged, not removed. Global/taxonomy attributes already on the product are not affected by this field."
 msgstr ""
 
 #. translators: %s: the conflicting SKU value.
-#: includes/abilities/woocommerce/products.php:590
+#: includes/abilities/woocommerce/products.php:601
 #, php-format
 msgid "The SKU \"%s\" is already in use by another product."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:773
+#: includes/abilities/woocommerce/products.php:784
 msgid "The product's title. Required; the product is not created without one."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:779
+#: includes/abilities/woocommerce/products.php:790
 msgid "The product's type. This ability only creates simple products; requesting grouped, external, or variable fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:855
+#: includes/abilities/woocommerce/products.php:866
 msgid "The WooCommerce product id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:860
+#: includes/abilities/woocommerce/products.php:871
 msgid "The product's title. Omit to leave the existing title unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:869
+#: includes/abilities/woocommerce/products.php:880
 msgid "The product's current type. A value matching the product's existing type is accepted as a no-op; a different value is rejected with an error, since converting a product between simple, grouped, external, and variable is not supported. Omit this field to leave the type unchanged."
 msgstr ""
 
 #. translators: 1: the product's actual current type. 2: the type the caller requested.
-#: includes/abilities/woocommerce/products.php:949
+#: includes/abilities/woocommerce/products.php:960
 #, php-format
 msgid "This product is a %1$s product and cannot be changed to %2$s -- converting a product between types is not supported. Omit type, or send its current value, to leave it unchanged."
 msgstr ""
 
-#: includes/abilities/woocommerce/products.php:972
+#: includes/abilities/woocommerce/products.php:983
 msgid "The WooCommerce product id to permanently delete."
 msgstr ""
 
@@ -2589,20 +2601,20 @@ msgstr ""
 msgid "The shipping zone's id to update. Must reference an existing zone or the request fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:623
+#: includes/abilities/woocommerce/shipping.php:653
 msgid "The shipping zone's id whose methods to list. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:702
-#: includes/abilities/woocommerce/shipping.php:839
+#: includes/abilities/woocommerce/shipping.php:732
+#: includes/abilities/woocommerce/shipping.php:869
 msgid "The shipping zone's id the method instance belongs to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:765
+#: includes/abilities/woocommerce/shipping.php:795
 msgid "The shipping zone's id to add the method to. Use 0 for the \"Rest of the World\" zone."
 msgstr ""
 
-#: includes/abilities/woocommerce/shipping.php:848
+#: includes/abilities/woocommerce/shipping.php:878
 msgid "Display name shown for this method instance at checkout, overriding the shipping method type's generic label (e.g. \"Flat rate\"). Falls back to the method type's own title when never set."
 msgstr ""
 
@@ -2771,47 +2783,53 @@ msgstr ""
 msgid "Permanently deletes a product variation by id. This bypasses the Trash and cannot be undone. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:250
+#: includes/abilities/woocommerce/variations.php:260
 msgid "Page number of variations to return, 1-indexed. Defaults to 1."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:256
+#: includes/abilities/woocommerce/variations.php:266
 msgid "Number of variations per page, 1 to 100. Defaults to 20."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:350
+#: includes/abilities/woocommerce/variations.php:360
 msgid "The variation's own product id (not the parent product's id)."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:406
+#: includes/abilities/woocommerce/variations.php:416
 msgid "The variation's own description. Shown instead of the parent product's description when this variation is selected."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:410
+#: includes/abilities/woocommerce/variations.php:420
 msgid "The variation's own SKU. WooCommerce requires SKUs to be unique across products and variations."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:425
+#: includes/abilities/woocommerce/variations.php:435
 msgid "Whether this variation is in stock, out of stock, or on backorder."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:434
+#: includes/abilities/woocommerce/variations.php:444
 msgid "Whether WooCommerce tracks a numeric stock_quantity for this variation, independent of the parent product."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:439
+#: includes/abilities/woocommerce/variations.php:449
 msgid "Attachment id for this variation's own image. Falls back to the parent product's image when unset."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:594
+#. translators: %s: the conflicting SKU value.
+#: includes/abilities/woocommerce/variations.php:492
+#, php-format
+msgid "The SKU \"%s\" is already in use by another product or variation."
+msgstr ""
+
+#: includes/abilities/woocommerce/variations.php:628
 msgid "The variation id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:601
+#: includes/abilities/woocommerce/variations.php:635
 msgid "A flat map of attribute name to the chosen value (strings only). Unlike every other field on this ability, this replaces the variation's entire attribute map: any attribute not included here is cleared, not preserved."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:730
+#: includes/abilities/woocommerce/variations.php:767
 msgid "The variation id to permanently delete."
 msgstr ""
 
@@ -5927,7 +5945,7 @@ msgstr ""
 msgid "Agent Abilities for MCP is disabled: another active plugin is loading MCP Adapter %1$s, which is newer than this plugin supports (below %2$s). Update Agent Abilities for MCP, or deactivate that plugin, to enable agent tools."
 msgstr ""
 
-#: includes/bridge.php:491
+#: includes/bridge.php:573
 msgid "The bridged ability is no longer available."
 msgstr ""
 
@@ -5978,11 +5996,11 @@ msgstr ""
 msgid "Present on single-post reads and when include_content=true; omitted for password-protected posts."
 msgstr ""
 
-#: includes/helpers.php:1523
+#: includes/helpers.php:1596
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:1555
+#: includes/helpers.php:1628
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
@@ -6249,7 +6267,11 @@ msgstr ""
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
-#: includes/register.php:246
+#: includes/register.php:249
+msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
+msgstr ""
+
+#: includes/register.php:278
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 

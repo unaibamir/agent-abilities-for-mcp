@@ -61,7 +61,7 @@ function aafm_register_comments_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-comment']       = array(
 		'label'        => __( 'Update comment', 'agent-abilities-for-mcp' ),
-		'description'  => __( "Edit a comment's content (requires edit access to that comment).", 'agent-abilities-for-mcp' ),
+		'description'  => __( "Edit a comment's content (requires edit access to that comment). The returned comment's status is usually approved/unapproved/spam/trash; because this ability re-reads the comment with no status filter, it can also report post-trashed when the comment's parent post is trashed - the comment itself was never trashed, its post was.", 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'comments',
@@ -863,10 +863,21 @@ function aafm_exec_update_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
-	// The comment was confirmed to exist above and the update did not fail, so the
-	// re-fetch is the fresh, post-update record. aafm_redact_comment() tolerates a
-	// non-WP_Comment by returning an empty array, so the response is always well-formed.
-	return array( 'comment' => aafm_redact_comment( get_comment( $id ) ) );
+	// The comment was confirmed to exist above and the update did not fail, so the re-fetch is
+	// expected to be the fresh, post-update record. But if it comes back null anyway (a hook
+	// deleted the comment, or a cache race), aafm_redact_comment() falls back to array(), which
+	// encodes as [] against the declared object schema, not the {} an empty object needs -
+	// surface a generic error instead of redacting null into a schema-violating empty shape.
+	$saved = get_comment( $id );
+	// The wordpress-stubs conditional return type for get_comment() treats this call as
+	// referentially transparent with the WP_Comment check at the top of this function, for the
+	// same $id, so PHPStan reports the instanceof below as always true. That is a static-analysis
+	// artifact, not a runtime guarantee: wp_update_comment() ran in between, and a hook or cache
+	// race can still make this specific re-fetch return null - the guard stays.
+	if ( ! $saved instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue
+		return aafm_generic_error();
+	}
+	return array( 'comment' => aafm_redact_comment( $saved ) );
 }
 
 /**

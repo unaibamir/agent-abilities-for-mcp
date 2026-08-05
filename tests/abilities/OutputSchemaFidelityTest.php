@@ -558,4 +558,67 @@ final class OutputSchemaFidelityTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Task 15: update-comment's null-reread guard, the same shape as Task 14. wp_update_comment()
+	 * fires exactly one 'edit_comment' action and then does its OWN get_comment() re-read (to
+	 * feed wp_transition_comment_status()) before it returns - verified against
+	 * wp-includes/comment.php:2752-2753. Let that one internal read through untouched, then null
+	 * every 'get_comment' call after it, so only the EXECUTOR's own re-read (the one
+	 * aafm_exec_update_comment() performs once wp_update_comment() has already returned) sees
+	 * null. Nulling the core-internal read too would make wp_update_comment() dereference a null
+	 * $comment and trip a PHP warning, which fails this suite's failOnWarning gate for the wrong
+	 * reason entirely.
+	 */
+	public function test_update_comment_null_reread_returns_an_error_not_a_schema_violating_empty_shape(): void {
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/update-comment' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+		$this->acting_as( 'editor' );
+
+		$post    = self::factory()->post->create();
+		$comment = self::factory()->comment->create(
+			array(
+				'comment_post_ID' => $post,
+				'comment_content' => 'before',
+			)
+		);
+
+		$past_edit        = false;
+		$calls_after_edit = 0;
+		add_action(
+			'edit_comment',
+			static function () use ( &$past_edit ): void {
+				$past_edit = true;
+			}
+		);
+		add_filter(
+			'get_comment',
+			static function ( $comment_object ) use ( &$past_edit, &$calls_after_edit ) {
+				if ( ! $past_edit ) {
+					return $comment_object;
+				}
+				++$calls_after_edit;
+				// The first post-edit_comment call is wp_update_comment()'s own internal read;
+				// only the second (the executor's re-read) gets nulled.
+				return 1 === $calls_after_edit ? $comment_object : null;
+			}
+		);
+
+		$res = wp_get_ability( 'aafm/update-comment' )->execute(
+			array(
+				'comment_id' => $comment,
+				'content'    => 'after',
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $res );
+		$this->assertSame(
+			'aafm_error',
+			$res->get_error_code(),
+			'aafm_redact_comment() returns array() for a non-WP_Comment, which would encode as [] against the declared object schema; the null-reread guard must return aafm_generic_error() instead of that schema-violating empty shape.'
+		);
+	}
+
 }

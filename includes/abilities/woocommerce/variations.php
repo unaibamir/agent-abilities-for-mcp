@@ -186,13 +186,23 @@ function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
 
 	$base = aafm_redact_wc_variation( $variation );
 
+	// WC_Product_Variation::get_manage_stock() (class-wc-product-variation.php:323-331) can
+	// return the STRING 'parent' when the variation does not manage its own stock but its parent
+	// product does. (bool) 'parent' is true, so a plain cast never trips the output_schema's
+	// declared boolean type - the wire stays valid while lying: it claims the variation manages
+	// its own stock while also reporting a stock_quantity the variation does not actually own
+	// (the quantity that matters is the parent's). The schema stays boolean (widening it is a
+	// breaking change, not this fix's call), so the honest answer for 'parent' is false, matching
+	// what every other non-managing variation already reports.
+	$manage_stock = $variation->get_manage_stock();
+
 	return array_merge(
 		$base,
 		array(
 			'description'    => (string) $variation->get_description(),
 			'regular_price'  => (string) $variation->get_regular_price(),
 			'sale_price'     => (string) $variation->get_sale_price(),
-			'manage_stock'   => (bool) $variation->get_manage_stock(),
+			'manage_stock'   => 'parent' === $manage_stock ? false : (bool) $manage_stock,
 			'stock_quantity' => null === $variation->get_stock_quantity() ? null : (int) $variation->get_stock_quantity(),
 			'image_id'       => (int) $variation->get_image_id(),
 			// Cast so an empty attributes map encodes to "{}" (object) per the schema, never "[]".

@@ -1137,6 +1137,13 @@ PHP;
 	 * mirror the real WooCommerce WC_Coupon API the coupon abilities call. Setters stage changes on
 	 * the instance; save() persists to the store; delete() removes. A test-only stub, never shipped.
 	 *
+	 * set_amount() is the one setter that models a real WC_Coupon throw contract rather than just
+	 * staging a value: real WooCommerce (class-wc-coupon.php:617-632) rejects a negative amount
+	 * outright, and separately rejects an amount over 100 once the coupon is discount_type=percent,
+	 * both via WC_Data_Exception. Without this the stub would always succeed and no test could ever
+	 * exercise the crash path aafm_wc_apply_coupon_input() has to guard (the same gap Task 3 found
+	 * and fixed for set_sku()).
+	 *
 	 * @return string
 	 */
 	private function aafm_wc_coupon_class_source(): string {
@@ -1174,7 +1181,7 @@ class WC_Coupon {
 	public function get_excluded_product_ids() { return (array) ( $this->data['excluded_product_ids'] ?? array() ); }
 	public function get_email_restrictions() { return (array) ( $this->data['email_restrictions'] ?? array() ); }
 	public function set_code( $v ) { $this->data['code'] = strtolower( (string) $v ); }
-	public function set_amount( $v ) { $this->data['amount'] = (string) $v; }
+	public function set_amount( $v ) { $amount = (float) $v; if ( $amount < 0 ) { throw new \WC_Data_Exception( 'coupon_invalid_amount', 'Invalid discount amount' ); } if ( 'percent' === $this->get_discount_type() && $amount > 100 ) { throw new \WC_Data_Exception( 'coupon_invalid_amount', 'Invalid discount amount' ); } $this->data['amount'] = (string) $v; }
 	public function set_discount_type( $v ) { $this->data['discount_type'] = (string) $v; }
 	public function set_description( $v ) { $this->data['description'] = (string) $v; }
 	public function set_date_expires( $v ) { $this->data['date_expires'] = ( null === $v ) ? null : (string) $v; }

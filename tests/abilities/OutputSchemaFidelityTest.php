@@ -621,4 +621,81 @@ final class OutputSchemaFidelityTest extends TestCase {
 		);
 	}
 
+	/**
+	 * Task 16: a gateway that never calls init_settings() - nothing in the WC_Payment_Gateway
+	 * contract requires it, even though every WooCommerce core gateway does - leaves $settings
+	 * at the class default, an empty array, which encodes as [] against the declared object
+	 * schema.
+	 */
+	public function test_gateway_settings_encodes_as_an_empty_object_when_never_initialized(): void {
+		$this->stub_woocommerce();
+		$this->stub_wc_gateways();
+
+		$gateway = new \WC_Payment_Gateway(
+			array(
+				'id'    => 'bare',
+				'title' => 'Bare Gateway',
+			)
+		);
+
+		$row = aafm_wc_gateway_shape( $gateway, 0 );
+
+		$this->assertSame(
+			'{}',
+			wp_json_encode( $row['settings'] ),
+			'settings is declared type:object; a gateway with no initialized settings must still encode as {} not [].'
+		);
+	}
+
+	/**
+	 * Task 16: WC_Payment_Gateway declares $title/$description with no default (this project's
+	 * test stub gives them '' only for round-tripping convenience - real WooCommerce does not),
+	 * so an unassigned title/description reads back as null against the declared string schema.
+	 */
+	public function test_gateway_title_and_description_encode_as_strings_even_when_unassigned(): void {
+		$this->stub_woocommerce();
+		$this->stub_wc_gateways();
+
+		$gateway              = new \WC_Payment_Gateway( array( 'id' => 'bare' ) );
+		$gateway->title       = null;
+		$gateway->description = null;
+
+		$row = aafm_wc_gateway_shape( $gateway, 0 );
+
+		$this->assertSame( '""', wp_json_encode( $row['title'] ), 'title is declared type:string; an unassigned title must not encode as null.' );
+		$this->assertSame( '""', wp_json_encode( $row['description'] ), 'description is declared type:string; an unassigned description must not encode as null.' );
+	}
+
+	/**
+	 * Task 16: the same missing-default risk reaches wc-list-payment-gateways too, through a
+	 * separate hand-built row rather than aafm_wc_gateway_shape(). Reached through the real
+	 * exec function (not a direct shape-builder call) because this path is reachable with only
+	 * a stub-store fixture, no manual property poke required.
+	 */
+	public function test_list_payment_gateways_title_encodes_as_a_string_even_when_unassigned(): void {
+		$this->stub_woocommerce();
+		$this->force_integration( 'woocommerce' );
+		$this->stub_wc_gateways();
+		WcGatewayStubStore::$gateways['bare'] = array(
+			'id'    => 'bare',
+			'title' => null,
+		);
+
+		$res = aafm_exec_wc_list_payment_gateways( array() );
+
+		$this->assertIsArray( $res );
+		$bare = null;
+		foreach ( $res['gateways'] as $row ) {
+			if ( 'bare' === $row['id'] ) {
+				$bare = $row;
+			}
+		}
+		$this->assertNotNull( $bare, 'Fixture setup check: the bare gateway must appear in the list.' );
+		$this->assertSame(
+			'""',
+			wp_json_encode( $bare['title'] ),
+			'title is declared type:string in wc-list-payment-gateways; an unassigned title must not encode as null.'
+		);
+	}
+
 }

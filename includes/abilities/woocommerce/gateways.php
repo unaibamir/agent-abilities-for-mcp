@@ -175,13 +175,20 @@ function aafm_wc_gateway_order( string $gateway_id, array $gateways ): int {
  * @return array<string,mixed>
  */
 function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): array {
+	// WC_Payment_Gateway declares $title and $description with no default; a gateway that
+	// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
+	// back as null, which would violate the declared string schema. Cast defensively.
+	$settings = aafm_wc_redact_gateway_settings( $gateway->settings );
 	return array(
 		'id'          => $gateway->id,
-		'title'       => $gateway->title,
-		'description' => $gateway->description,
+		'title'       => (string) $gateway->title,
+		'description' => (string) $gateway->description,
 		'enabled'     => 'yes' === $gateway->enabled,
 		'order'       => $order,
-		'settings'    => aafm_wc_redact_gateway_settings( $gateway->settings ),
+		// A gateway that never calls init_settings() (again, a non-conforming third-party
+		// gateway) leaves $settings as an empty array, which encodes as [] rather than the {}
+		// the declared object schema needs.
+		'settings'    => array() === $settings ? (object) $settings : $settings,
 	);
 }
 
@@ -250,7 +257,10 @@ function aafm_exec_wc_list_payment_gateways( array $input ) { // phpcs:ignore Ge
 	foreach ( $gateways as $gateway ) {
 		$items[] = array(
 			'id'      => $gateway->id,
-			'title'   => $gateway->title,
+			// Same missing-default risk as aafm_wc_gateway_shape(): WC_Payment_Gateway declares
+			// no default for $title, so an unassigned one would read back as null against the
+			// declared string schema.
+			'title'   => (string) $gateway->title,
 			'enabled' => 'yes' === $gateway->enabled,
 		);
 	}

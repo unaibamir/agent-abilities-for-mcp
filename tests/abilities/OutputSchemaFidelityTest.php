@@ -22,8 +22,168 @@ final class OutputSchemaFidelityTest extends TestCase {
 	use IntegrationStubs;
 
 	public function tear_down(): void {
+		// The abilities registry persists across tests; drop the demo fixture and any wrapper it
+		// grew so a bridge fixture from one test never leaks into another (same pattern as
+		// BridgeDiscoveryTest / BridgeWrapperTest).
+		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
+			$slug = (string) $slug;
+			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
+				wp_unregister_ability( $slug );
+			}
+		}
+		delete_option( 'aafm_enabled_bridged_abilities' );
 		$this->reset_integration_stubs();
 		parent::tear_down();
+	}
+
+	/**
+	 * Register a throwaway foreign ability and turn it into a live aafm-bridge/* wrapper, the
+	 * same two-step BridgeWrapperTest/BridgeDiscoveryTest use elsewhere: gated-action
+	 * registration of the foreign ability, then aafm_register_enabled_bridged_abilities() to
+	 * produce the wrapper aafm_filter_bridged_tool_call_result() actually looks up.
+	 *
+	 * @param string     $foreign_slug  Foreign ability slug, e.g. 'demo/list-with-schema'.
+	 * @param array|null $output_schema Output schema to declare, or null to declare none.
+	 * @return void
+	 */
+	private function register_bridged_fixture( string $foreign_slug, ?array $output_schema ): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $foreign_slug, $output_schema ): void {
+				$args = array(
+					'label'               => $foreign_slug,
+					'description'         => 'Fixture foreign ability for the bridge result-filter tests.',
+					'category'            => 'demo-things',
+					'input_schema'        => array(
+						'type'       => 'object',
+						'properties' => array(),
+					),
+					'execute_callback'    => static fn() => array(),
+					'permission_callback' => '__return_true',
+				);
+				if ( null !== $output_schema ) {
+					$args['output_schema'] = $output_schema;
+				}
+				wp_register_ability( $foreign_slug, $args );
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( $foreign_slug ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities' );
+	}
+
+	/**
+	 * Task 5 / issue found alongside #81: aafm_filter_bridged_tool_call_result() wrapped ANY
+	 * bare list under {"data": ...}, even when the foreign ability's own output_schema declared a
+	 * non-object root. The adapter advertises {type:object, properties:{result:<schema>},
+	 * required:['result']} for a non-object-root schema (SchemaTransformer::
+	 * transform_to_object_schema()), so a wrapped {"data":[...]} body satisfies neither the
+	 * published shape (no 'result' key) nor omits the undeclared one ('data' isn't in the
+	 * published properties either) - a strict client rejects the whole response.
+	 */
+	public function test_a_bridged_ability_with_a_declared_output_schema_is_not_wrapped(): void {
+		$this->register_bridged_fixture(
+			'demo/list-with-schema',
+			array(
+				'type'  => 'array',
+				'items' => array( 'type' => 'string' ),
+			)
+		);
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'a', 'b', 'c' ),
+			array(),
+			'aafm-bridge-demo-list-with-schema'
+		);
+
+		$this->assertArrayNotHasKey(
+			'data',
+			is_array( $result ) ? $result : array( 'data' => null ),
+			'A wrapper with a declared output schema advertises that schema verbatim (or the adapter\'s {result:...} rewrite of it); wrapping under "data" is a key neither side declares.'
+		);
+		$this->assertSame(
+			array( 'a', 'b', 'c' ),
+			$result,
+			'The foreign ability\'s own return value must reach the wire unchanged when its schema is declared.'
+		);
+		$this->assertSame(
+			'["a","b","c"]',
+			wp_json_encode( $result ),
+			'The wire body must match the array the schema describes, not a {"data": [...]} envelope.'
+		);
+	}
+
+	/**
+	 * The regression guard: when the foreign ability declares NO output_schema at all, the
+	 * original wrap must still fire. Nothing downstream is validating or advertising a shape in
+	 * that case, so wrapping a bare list into an object is still the best available response to
+	 * upstream mcp-adapter#253 (see aafm_filter_bridged_tool_call_result()'s docblock).
+	 */
+	public function test_a_bridged_ability_with_no_declared_output_schema_is_still_wrapped(): void {
+		$this->register_bridged_fixture( 'demo/list-no-schema', null );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'a', 'b', 'c' ),
+			array(),
+			'aafm-bridge-demo-list-no-schema'
+		);
+
+		$this->assertSame(
+			array( 'data' => array( 'a', 'b', 'c' ) ),
+			$result,
+			'With no declared output_schema, nothing advertises a shape to contradict, so the data-wrap safety net must still apply.'
+		);
+		$this->assertSame(
+			'{"data":["a","b","c"]}',
+			wp_json_encode( $result ),
+			'The wire body for the no-schema case must keep the original {"data": [...]} envelope.'
+		);
+	}
+
+	/**
+	 * M2: a bare empty array must never be wrapped, schema or no schema. array() is a "list" by
+	 * aafm_bridge_is_list()'s definition (vacuously true), so the pre-fix code wrapped it into
+	 * {"data":[]} unconditionally - even for a foreign ability whose declared schema is
+	 * {type:object, additionalProperties:false}, which that shape violates outright.
+	 */
+	public function test_a_bridged_empty_array_result_is_never_wrapped_even_with_a_declared_schema(): void {
+		$this->register_bridged_fixture(
+			'demo/list-empty-forbidding-extra-keys',
+			array(
+				'type'                 => 'object',
+				'additionalProperties' => false,
+			)
+		);
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array(),
+			array(),
+			'aafm-bridge-demo-list-empty-forbidding-extra-keys'
+		);
+
+		$this->assertSame(
+			array(),
+			$result,
+			'An empty array must pass through untouched: wrapping it into {"data":[]} would add a key that additionalProperties:false explicitly forbids.'
+		);
+		$this->assertSame(
+			'[]',
+			wp_json_encode( $result ),
+			'The wire body for an empty result must stay [] - no "data" envelope added.'
+		);
 	}
 
 	public function test_a_page_with_no_terms_encodes_terms_as_an_empty_object(): void {

@@ -41,14 +41,23 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * An empty array is still a list (array_is_list(array()) === true; it JSON-encodes as [],
-	 * the exact defect this filter guards against) and must be wrapped the same way a
-	 * populated list is - there is no size threshold below which the wire shape stops mattering.
+	 * Task 5 / M2: an empty array must NEVER be wrapped, regardless of whether an output schema
+	 * is declared for the tool. array_is_list(array()) === true, so array() is still a "list" by
+	 * aafm_bridge_is_list()'s definition - but wrapping it into {"data":[]} can only make the
+	 * wire shape worse: a foreign ability whose schema is {type:object,
+	 * additionalProperties:false} can legitimately return array() for "nothing found", and
+	 * {"data":[]} violates that schema outright. This test previously asserted the opposite
+	 * (that an empty list gets wrapped); that assertion was the bug, not a spec. See
+	 * OutputSchemaFidelityTest for the schema-declared variant of this same check.
 	 */
-	public function test_bridged_empty_list_result_is_also_wrapped(): void {
+	public function test_bridged_empty_list_result_is_never_wrapped(): void {
 		$result = aafm_filter_bridged_tool_call_result( array(), array(), 'aafm-bridge-vendor-empty' );
 
-		$this->assertSame( array( 'data' => array() ), $result );
+		$this->assertSame(
+			array(),
+			$result,
+			'An empty array must pass through unwrapped - there is no tool_name registered for "vendor-empty" here, so this also proves the empty-array exclusion runs before any schema lookup.'
+		);
 	}
 
 	/**

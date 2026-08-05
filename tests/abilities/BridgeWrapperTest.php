@@ -510,6 +510,53 @@ final class BridgeWrapperTest extends TestCase {
 	}
 
 	/**
+	 * Task 8: a foreign ability's output_schema built from a bare `oneOf` - with no top-level
+	 * 'type' - is a legal, spec-compliant JSON Schema (JSON Schema does not require 'type', and
+	 * WP core's rest_validate_value_from_schema() explicitly supports this: it derives the
+	 * effective type from whichever oneOf branch matches the actual value, see
+	 * wp-includes/rest-api.php around the `isset( $args['oneOf'] )` block). A schema declaring a
+	 * bare top-level 'type' with nothing else, e.g. {description:'...'}, was tried first here and
+	 * rejected as a fixture: core's own validate_output() throws on that even for a DIRECT call
+	 * (an unrelated core limitation, not this bug), so it could not isolate the bridge defect.
+	 * aafm_bridge_output_schema() used to route every foreign output schema through
+	 * aafm_normalize_json_schema(), which is INPUT-oriented and defaults a typeless schema to
+	 * {type:object, properties:{}} because a call's arguments are always an object. Stamping
+	 * type:object onto a oneOf schema disables core's per-branch type inference (it only fires
+	 * when 'type' is unset), so when the foreign ability legitimately returned a scalar (matching
+	 * its real, typeless oneOf schema), OUR wrapper's own WP_Ability::execute() validated that
+	 * scalar against the FABRICATED {type:object} schema and rejected it with
+	 * ability_invalid_output - even though the identical ability called directly (validated
+	 * against its real schema) succeeded. This proves the bridged call now succeeds and returns
+	 * the exact same value the direct call does.
+	 */
+	public function test_bridged_ability_with_typeless_output_schema_returning_scalar_succeeds(): void {
+		$this->acting_as( 'administrator' );
+		$typeless_oneof_schema = array(
+			'oneOf' => array(
+				array( 'type' => 'string' ),
+				array( 'type' => 'integer' ),
+			),
+		);
+		$this->register_foreign_with_schema(
+			'vendor/typeless-output',
+			$typeless_oneof_schema, // No top-level 'type' - legal JSON Schema.
+			static fn(): string => 'new-id-123'
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'vendor/typeless-output' ) );
+		$this->register_wrappers();
+
+		$direct  = wp_get_ability( 'vendor/typeless-output' )->execute( array() );
+		$bridged = wp_get_ability( 'aafm-bridge/vendor-typeless-output' )->execute( array() );
+
+		$this->assertSame( 'new-id-123', $direct, 'Sanity check: the foreign ability itself succeeds directly.' );
+		$this->assertSame(
+			$direct,
+			$bridged,
+			'A typeless oneOf output schema must not gain a fabricated type:object from our normalizer - the bridged call must return the same value the direct call does, not an ability_invalid_output WP_Error.'
+		);
+	}
+
+	/**
 	 * Register a foreign ability that declares no output_schema and executes to the given
 	 * value, exactly like register_foreign() above but with a caller-supplied callback. No
 	 * output_schema means core's validate_output() short-circuits true on any shape, so this is

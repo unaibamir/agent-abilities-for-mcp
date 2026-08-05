@@ -169,6 +169,35 @@ class WcStubStore {
 	}
 
 	/**
+	 * Whether a non-empty SKU is already held by a different product/variation row in the store.
+	 *
+	 * Mirrors real WooCommerce's wc_product_has_unique_sku() (called from
+	 * WC_Product::set_sku() via abstract-wc-product.php), which scans every product AND variation
+	 * for a SKU collision, not just siblings under the same parent - see
+	 * WooCommerceContractTest::test_create_product_with_a_duplicate_sku_is_a_clean_error() for the
+	 * vendor-verified contract this models. An empty SKU is never a collision (WC treats '' as
+	 * "no SKU set" and does not enforce uniqueness on it).
+	 *
+	 * @param string $sku        The SKU being set.
+	 * @param int    $exclude_id The row's own id (0 for a not-yet-saved product), excluded from the scan.
+	 * @return bool
+	 */
+	public static function sku_taken_by_other( string $sku, int $exclude_id ): bool {
+		if ( '' === $sku ) {
+			return false;
+		}
+		foreach ( self::$products as $id => $row ) {
+			if ( $id === $exclude_id ) {
+				continue;
+			}
+			if ( ( $row['sku'] ?? '' ) === $sku ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Every stored product's data, in id order (the wc_get_products() source).
 	 *
 	 * @return array<int,array<string,mixed>>

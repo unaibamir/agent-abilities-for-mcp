@@ -260,6 +260,30 @@ function aafm_bridge_input_schema( $ability ): array {
 }
 
 /**
+ * Normalize a foreign ability's OUTPUT schema so empty object-containers still serialize as {},
+ * without inventing structure the foreign ability never declared.
+ *
+ * The general aafm_normalize_json_schema() is INPUT-oriented: because a call's arguments are
+ * always a JSON object, it defaults a typeless schema to {type:object, properties:{}}. An output
+ * schema carries no such guarantee - a foreign ability may legally declare a bare
+ * {description:'...'} or a oneOf/const schema and return a scalar. Routing that through the
+ * input-oriented normalizer stamped type:object onto a schema the foreign ability never declared
+ * that shape for, so OUR OWN wrapper's execute() (WP_Ability::execute() validates a result against
+ * output_schema after every call, see WP core 6.9.0+) then rejected the foreign ability's own
+ * scalar result with ability_invalid_output - even though the SAME ability called directly
+ * succeeded, because it was validated against its real, typeless schema. This pass fixes only the
+ * [] vs {} wire-encoding bug (recursing into nested containers via aafm_normalize_schema_node())
+ * and otherwise leaves type/properties exactly as declared, including "declares neither".
+ *
+ * @param array<string,mixed> $schema Non-empty raw output schema.
+ * @return array<string,mixed>
+ */
+function aafm_bridge_normalize_output_schema( array $schema ): array {
+	$normalized = aafm_normalize_schema_node( $schema, 0 );
+	return is_array( $normalized ) ? $normalized : $schema;
+}
+
+/**
  * The foreign ability's output schema, normalized - or null when it exposes none.
  *
  * Returns null (not a default object schema) when the foreign ability has no output schema, so the
@@ -275,7 +299,7 @@ function aafm_bridge_output_schema( $ability ): ?array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
 		return null;
 	}
-	return aafm_normalize_json_schema( $schema );
+	return aafm_bridge_normalize_output_schema( $schema );
 }
 
 /**

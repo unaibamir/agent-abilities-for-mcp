@@ -1266,11 +1266,18 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
  *
  * @param WP_User|false $user       User object.
  * @param int|null      $post_count Pre-computed post count, or null to resolve here.
- * @return array<string,mixed>
+ * @return array<string,mixed>|object
  */
-function aafm_redact_user( $user, ?int $post_count = null ): array {
+function aafm_redact_user( $user, ?int $post_count = null ) {
 	if ( ! $user instanceof WP_User ) {
-		return array();
+		// All three call sites (users.php:201, :412, :647) already guard against a non-WP_User
+		// before reaching here, so this branch is unreachable through any ability today. Fixed
+		// anyway as a backstop: array() would encode as [] against the 'user' => object
+		// declarations (users.php:170, :322, :465), while (object) array() encodes as {} - and a
+		// future call site that forgets the guard should fail safe rather than reintroduce the
+		// schema violation. The native return type widens from array to none so this branch can
+		// return a stdClass; PHP 7.4 has no union return types to declare it precisely.
+		return (object) array();
 	}
 	return array(
 		'id'           => (int) $user->ID,
@@ -1291,12 +1298,23 @@ function aafm_redact_user( $user, ?int $post_count = null ): array {
  *
  * @param WP_User|false $user       User object.
  * @param int|null      $post_count Pre-resolved post count, or null to compute.
- * @return array<string,mixed>
+ * @return array<string,mixed>|object
  */
-function aafm_rich_user( $user, ?int $post_count = null ): array {
+function aafm_rich_user( $user, ?int $post_count = null ) {
 	if ( ! $user instanceof WP_User ) {
-		return array();
+		// Same unreachable-backstop reasoning as aafm_redact_user() above: all three call sites
+		// (users.php:201, :412, :647) already guard, but a bare array() here would still encode
+		// as [] against a declared object schema if that guard were ever removed.
+		return (object) array();
 	}
+	// $user is a real WP_User here, so aafm_redact_user() takes its non-empty branch and always
+	// returns a plain array - the union return type only exists for that function's own
+	// unreachable guard.
+	/**
+	 * Narrow the type so the array writes below type-check.
+	 *
+	 * @var array<string,mixed> $base
+	 */
 	$base               = aafm_redact_user( $user, $post_count );
 	$base['registered'] = $user->user_registered;
 	$base['bio']        = (string) get_user_meta( $user->ID, 'description', true );

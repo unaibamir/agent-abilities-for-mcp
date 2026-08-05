@@ -16,6 +16,7 @@ namespace AAFM\Tests\Abilities;
 use AAFM\Tests\TestCase;
 use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\WcShippingStubStore;
+use AAFM\Tests\WcStubStore;
 
 final class OutputSchemaFidelityTest extends TestCase {
 
@@ -297,6 +298,76 @@ final class OutputSchemaFidelityTest extends TestCase {
 			$row['settings'],
 			'A key that exists ONLY in the legacy $settings bucket must not leak into the instance_settings-based output.'
 		);
+	}
+
+	/**
+	 * Task 10: get_gallery_image_ids() is built through array_filter() then wp_parse_id_list()
+	 * (array_unique(array_map('absint', ...))), all key-preserving. A stored
+	 * _product_image_gallery meta of "12,0,34" yields [0=>12, 2=>34] - a PHP array with a gap - and
+	 * only wp_json_encode() reveals that this differs from a clean list: a gap-keyed array encodes
+	 * as a JSON OBJECT ({"0":12,"2":34}), not the JSON array the output_schema declares. Seeded
+	 * directly on a fixture product's stub row (never a live product) to reproduce the exact PHP
+	 * shape a gallery meta with a gap would produce, without depending on real WordPress post meta
+	 * plumbing this test harness's WC_Product stub does not use.
+	 */
+	public function test_product_images_with_a_key_gap_still_encodes_as_a_json_array(): void {
+		$this->stub_woocommerce();
+		WcStubStore::seed(
+			301,
+			array(
+				'id'                => 301,
+				'name'              => 'Gallery Gap',
+				'type'              => 'simple',
+				// The gap at key 1 mirrors what array_filter()+wp_parse_id_list() would leave behind
+				// for a raw gallery meta of "12,0,34" (the 0 gets filtered out, but its key does not
+				// get closed).
+				'gallery_image_ids' => array(
+					0 => 12,
+					2 => 34,
+				),
+			)
+		);
+
+		$row = aafm_rich_wc_product( \wc_get_product( 301 ) );
+
+		$this->assertSame(
+			array( 12, 34 ),
+			$row['images'],
+			'array_values() must close the key gap so the PHP value is a clean list.'
+		);
+		$this->assertStringStartsWith(
+			'[',
+			wp_json_encode( $row['images'] ),
+			'images is declared type:array; a key-gapped array must not encode as a JSON object.'
+		);
+		$this->assertSame( '[12,34]', wp_json_encode( $row['images'] ) );
+	}
+
+	/**
+	 * Task 10 / L3: variation_ids has the identical key-gap risk via get_children() on a grouped
+	 * product, but it never self-heals - the grouped data store persists the array verbatim on
+	 * save rather than imploding it back to a clean sequence the way the gallery meta does. Same
+	 * seed-the-gap-directly approach as the images test above.
+	 */
+	public function test_product_variation_ids_with_a_key_gap_still_encodes_as_a_json_array(): void {
+		$this->stub_woocommerce();
+		WcStubStore::seed(
+			302,
+			array(
+				'id'       => 302,
+				'name'     => 'Grouped Gap',
+				'type'     => 'grouped',
+				'children' => array(
+					0 => 401,
+					2 => 402,
+				),
+			)
+		);
+
+		$row = aafm_rich_wc_product( \wc_get_product( 302 ) );
+
+		$this->assertSame( array( 401, 402 ), $row['variation_ids'] );
+		$this->assertSame( '[401,402]', wp_json_encode( $row['variation_ids'] ) );
 	}
 
 	/**

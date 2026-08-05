@@ -164,10 +164,21 @@ function aafm_rich_wc_product( \WC_Product $product ): array {
 			'stock_quantity'    => null === $product->get_stock_quantity() ? null : (int) $product->get_stock_quantity(),
 			'tags'              => array_map( 'intval', (array) $product->get_tag_ids() ),
 			'image_id'          => (int) $product->get_image_id(),
-			'images'            => array_map( 'intval', (array) $product->get_gallery_image_ids() ),
+			// array_values() re-keys sequentially. get_gallery_image_ids() runs the stored
+			// _product_image_gallery meta through array_filter() then wp_parse_id_list()
+			// (array_unique(array_map('absint', ...))), which are both key-preserving. A gallery
+			// meta of "12,0,34" (a gap left by anything writing that meta directly - migrations,
+			// importers, third-party plugins - since only WooCommerce's own save path self-heals
+			// it) yields [0=>12, 2=>34], which json_encode()s as an OBJECT ({"0":12,"2":34})
+			// against a schema declaring type: array. array_values() forces the JSON array shape.
+			'images'            => array_values( array_map( 'intval', (array) $product->get_gallery_image_ids() ) ),
 			// Cast so an empty attributes map encodes to "{}" (object) per the schema, never "[]".
 			'attributes'        => (object) $attributes,
-			'variation_ids'     => array_map( 'intval', (array) $product->get_children() ),
+			// Same key-gap risk as images, but it never self-heals here: get_children() on a
+			// grouped product reads its child list from the grouped data store, which persists the
+			// array verbatim on save (class-wc-product-grouped-data-store-cpt.php:35) rather than
+			// imploding it back to a clean sequence the way the gallery meta does.
+			'variation_ids'     => array_values( array_map( 'intval', (array) $product->get_children() ) ),
 		)
 	);
 }

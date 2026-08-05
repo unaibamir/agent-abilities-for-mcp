@@ -636,12 +636,19 @@ final class OutputSchemaFidelityTest extends TestCase {
 	/**
 	 * Task 17: aafm_redact_user()/aafm_rich_user() fall back to an empty shape for a
 	 * non-WP_User, which would encode as [] against the 'user' => object declarations
-	 * (users.php:170, :322, :465). This backstop is genuinely reachable, not just defensive:
-	 * users.php:412 and users.php:647 both call get_userdata() inline with no instanceof guard,
-	 * and get_userdata() returns WP_User|false. Only users.php:201 guards explicitly before
-	 * calling in; users.php:263 is safe by construction, since get_users() always returns an
-	 * array of WP_User objects. Calling the helpers directly here still isolates the backstop
-	 * itself from the two real call sites' surrounding logic, which is exercised elsewhere.
+	 * (users.php:170, :322, :465).
+	 *
+	 * The two helpers differ in whether that fallback can actually fire, so do not collapse
+	 * them into one claim. aafm_rich_user()'s guard IS reachable: users.php:412 and :647 pass
+	 * get_userdata()'s result straight in with no instanceof check, and get_userdata() returns
+	 * WP_User|false. aafm_redact_user()'s guard is NOT reachable: its only production callers
+	 * are users.php:263, inside a foreach that `continue`s on a non-WP_User, and
+	 * aafm_rich_user() itself, which delegates only after its own guard has returned.
+	 *
+	 * Both are asserted here because both must encode as {}, and because the unreachable one
+	 * becomes reachable the moment either caller's guard is removed. Calling the helpers
+	 * directly is the point: it isolates the fallback rather than fabricating an ability path
+	 * that cannot reach it.
 	 */
 	public function test_redact_user_encodes_as_an_empty_object_for_a_non_wp_user(): void {
 		$this->assertSame( '{}', wp_json_encode( aafm_redact_user( false ) ) );

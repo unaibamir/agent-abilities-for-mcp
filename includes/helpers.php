@@ -1270,16 +1270,17 @@ function aafm_rich_post( WP_Post $post, array $options = array() ): array {
  */
 function aafm_redact_user( $user, ?int $post_count = null ) {
 	if ( ! $user instanceof WP_User ) {
-		// This branch is genuinely reachable, not just a defensive backstop: users.php:412
-		// (`aafm_rich_user( get_userdata( (int) $result ) )`) and users.php:647
-		// (`aafm_rich_user( get_userdata( $id ) )`) both call get_userdata() inline with no
-		// instanceof guard, and get_userdata() returns WP_User|false. Only users.php:201 guards
-		// explicitly before calling in; users.php:263 is safe by construction instead, since
-		// get_users() always returns an array of WP_User objects. A bare array() here would
-		// encode as [] against the 'user' => object declarations (users.php:170, :322, :465),
-		// while (object) array() encodes as {}. The native return type widens from array to none
-		// so this branch can return a stdClass; PHP 7.4 has no union return types to declare it
-		// precisely.
+		// Unreachable backstop, deliberately kept. This function has exactly two production
+		// callers and neither can pass a non-WP_User: users.php:263 sits inside a foreach that
+		// `continue`s on anything that is not a WP_User, and aafm_rich_user() below delegates
+		// here only after its own instanceof guard has already returned. The reachable
+		// get_userdata() call sites (users.php:412 and :647) enter through aafm_rich_user(),
+		// not through this function, so its guard is the one that actually fires - see the
+		// matching comment there. Kept anyway: a bare array() would encode as [] against the
+		// 'user' => object declarations (users.php:170, :322, :465) if either caller's guard
+		// were ever removed, while (object) array() encodes as {}. The native return type
+		// widens from array to none so this branch can return a stdClass; PHP 7.4 has no union
+		// return types to declare it precisely.
 		return (object) array();
 	}
 	return array(

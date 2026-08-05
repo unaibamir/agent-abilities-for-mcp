@@ -275,6 +275,21 @@ function aafm_bridge_input_schema( $ability ): array {
  * [] vs {} wire-encoding bug (recursing into nested containers via aafm_normalize_schema_node())
  * and otherwise leaves type/properties exactly as declared, including "declares neither".
  *
+ * What this claim does NOT extend to - the advertised outputSchema on the wire. The reasoning
+ * above is about OUR wrapper's own validate_output() call, not what a client actually sees:
+ * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema
+ * itself when building the tool's advertised outputSchema, and McpTool::execute() wraps a scalar
+ * result under `result`. So for a bare oneOf schema that returns a string, this fix genuinely
+ * makes the bridged call EXECUTE instead of erroring (our wrapper no longer rejects it) - but the
+ * advertised schema still ends up {oneOf:[...], type:'object'} while the body is
+ * {"result":"..."}, which does not validate either. "Matches the direct call" is true only at the
+ * ability layer, not the wire. This also narrows behaviour deliberately: a foreign output schema
+ * with neither `type` nor `oneOf`/`anyOf` (e.g. bare {description:'...'}) used to be repaired by
+ * the input-oriented normalizer's type:object stamp and now fails core's
+ * rest_validate_value_from_schema() the same way a direct call to that ability already does -
+ * which is the correct direction (bridged should not be more permissive than direct), but is
+ * worth naming rather than leaving as a silent side effect.
+ *
  * @param array<string,mixed> $schema Non-empty raw output schema.
  * @return array<string,mixed>
  */

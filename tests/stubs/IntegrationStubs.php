@@ -1450,6 +1450,16 @@ class WC_Shipping_Method {
 	// per-instance option and are INDEPENDENT of $settings. Real WooCommerce leaves $settings
 	// (the legacy global bucket) empty for zone method instances; a stub that copies one into
 	// the other cannot distinguish the two and will hide a wrong-bucket read.
+	//
+	// This stub deliberately models only the option-PRESENT branch. Real
+	// WC_Settings_API::init_instance_settings() (abstract-wc-shipping-method.php:583-591) falls
+	// back, when the option is absent, to
+	// array_merge( array_fill_keys( array_keys( $this->form_fields ), '' ), wp_list_pluck( $this->form_fields, 'default' ) )
+	// - i.e. every declared form field defaulted to '' and then overwritten by its own 'default'
+	// key where one exists - rather than a bare array(). The direction here is safe (it makes the
+	// empty-instance-settings case testable at all, and the real fallback is a superset of this
+	// stub's array()), but a test asserting the SHAPE of a never-configured method's settings
+	// (as opposed to just that it round-trips correctly) would need the real fallback modeled.
 	public function init_instance_settings() {
 		$stored = get_option( $this->get_instance_option_key(), array() );
 		$this->instance_settings = is_array( $stored ) ? $stored : array();

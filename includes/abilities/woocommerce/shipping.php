@@ -570,7 +570,12 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	$display_title  = ( '' !== $instance_title ) ? $instance_title : (string) $method->method_title;
 
 	// Shipping plugins store carrier API keys / account creds / license keys in settings.
-	// Run them through the recursive deny-by-default redactor before returning.
+	// Run them through aafm_wc_redact_settings_deep() before returning - a recursive DENYLIST
+	// over field names (see its docblock in gateways.php), not a deny-by-default allowlist. It
+	// catches names matching a known secret pattern (key/secret/token/password/api/...) and
+	// cannot be exhaustive: a carrier plugin storing a credential under an unlisted field name
+	// (e.g. account_number, merchant_id, shipper_number) still reaches the wire. Best-effort,
+	// not a completeness guarantee - see the final review's finding 4.
 	// $method->settings is WooCommerce's LEGACY GLOBAL bucket and is empty for every zone
 	// method instance on WC 2.6+. The real per-instance configuration (title, cost,
 	// tax_status) lives in instance_settings, which is also where our own write path

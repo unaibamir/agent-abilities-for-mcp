@@ -61,6 +61,43 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
+	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1 (the schema-fidelity plan's MEDIUM
+	 * finding M2). This is a characterization test, not an aspiration: it pins what this filter
+	 * ACTUALLY does today, not what a perfectly schema-faithful implementation would do.
+	 *
+	 * A foreign ability that declares an output_schema of {type:object,
+	 * additionalProperties:false} and returns array() (an ordinary "nothing found" result) still
+	 * gets wrapped into {"data":[]} by this filter - which technically contradicts that ability's
+	 * own schema, since 'data' is a key additionalProperties:false forbids. This filter has no way
+	 * to know at this point whether a declared schema exists or what it says (it runs post-execute
+	 * on the raw PHP value only, see the function's own docblock for why a schema-aware gate was
+	 * removed as unreachable dead code). The alternative - leaving array() unwrapped as a bare [] -
+	 * is strictly worse: a bare top-level JSON array in structuredContent violates the MCP spec's
+	 * requirement that it be an object, for EVERY consumer, not just the one foreign ability whose
+	 * schema gets contradicted. Trading one ability's schema violation for a universal spec
+	 * violation is the correct call.
+	 *
+	 * IF A FUTURE CHANGE MAKES THIS TEST FAIL, THAT MAY BE AN IMPROVEMENT - read this docblock
+	 * before "fixing" it back. A fix would need some way to know the foreign schema forbids extra
+	 * keys AND leave array() genuinely unwrapped WITHOUT reintroducing the array()===$result
+	 * exclusion this project already tried and reverted (see FIX A of the 1.6.1 final review: that
+	 * exclusion ran before any schema check and broke the ordinary no-schema case instead).
+	 */
+	public function test_an_empty_result_is_wrapped_even_when_the_foreign_schema_forbids_it(): void {
+		$result = aafm_filter_bridged_tool_call_result(
+			array(),
+			array(),
+			'aafm-bridge-vendor-forbids-extra-keys'
+		);
+
+		$this->assertSame(
+			array( 'data' => array() ),
+			$result,
+			'This is the accepted trade-off, not a bug: {"data":[]} technically violates a {additionalProperties:false} schema, but the alternative (a bare []) violates the MCP spec for every client.'
+		);
+	}
+
+	/**
 	 * The negative case that proves this is a real check, not a blanket rewrap: a bridged
 	 * ability that already returns a proper associative array passes through byte-for-byte
 	 * unchanged, no `data` wrapper added.

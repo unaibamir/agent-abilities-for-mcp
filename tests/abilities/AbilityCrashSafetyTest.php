@@ -253,6 +253,66 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	// -------------------------------------------------------------------------
+	// Task 7: WC_Coupon::set_maximum_amount() - maximum below minimum
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The true Red Gate: calls aafm_wc_apply_coupon_input() directly, bypassing WP_Ability
+	 * entirely, per the same reasoning documented on the SKU and amount tests above.
+	 *
+	 * The minimum_amount field is applied earlier in aafm_wc_apply_coupon_input() than
+	 * maximum_amount, so a single call carrying both fields reaches the throw in one pass - no
+	 * second call needed, unlike the percent-over-100 amount case above.
+	 */
+	public function test_apply_coupon_input_returns_an_error_instead_of_throwing_on_a_maximum_below_the_minimum(): void {
+		$coupon = new \WC_Coupon();
+
+		$result = aafm_wc_apply_coupon_input(
+			$coupon,
+			array(
+				'minimum_amount' => '100',
+				'maximum_amount' => '50',
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'aafm_wc_apply_coupon_input() must catch WC_Data_Exception from set_maximum_amount() when the maximum is below the minimum and return a WP_Error, not let it escape uncaught.'
+		);
+		$this->assertSame( 'aafm_wc_invalid_coupon_maximum', $result->get_error_code() );
+		$this->assertStringContainsString( '50', $result->get_error_message() );
+		$this->assertStringContainsString( '100', $result->get_error_message() );
+	}
+
+	/**
+	 * End-to-end through the real ability: a create carrying minimum_amount=100 and
+	 * maximum_amount=50 in the same request. As with the SKU and amount tests above, the
+	 * differentiator that proves this plugin's own catch ran (rather than core's Throwable
+	 * fallback) is the specific error code, not just instanceof WP_Error.
+	 */
+	public function test_create_coupon_with_a_maximum_below_the_minimum_returns_the_plugins_own_error_not_the_cores(): void {
+		$this->acting_as( 'administrator' );
+
+		$result = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'           => 'aafm-max-below-min',
+				'amount'         => '5',
+				'discount_type'  => 'fixed_cart',
+				'minimum_amount' => '100',
+				'maximum_amount' => '50',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_invalid_coupon_maximum',
+			$result->get_error_code(),
+			'A maximum below the minimum must surface as this plugin\'s own aafm_wc_invalid_coupon_maximum error, not core\'s generic ability_callback_exception fallback.'
+		);
+	}
+
+	// -------------------------------------------------------------------------
 	// Task 6: the choke-point floor. Tasks 3 and 4 guard two known WooCommerce
 	// setters by name; this proves the wrapper in register.php catches ANY
 	// throwing execute_callback, native or bridged, known vendor or not.

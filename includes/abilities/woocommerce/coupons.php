@@ -343,7 +343,30 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 		$coupon->set_minimum_amount( sanitize_text_field( (string) $input['minimum_amount'] ) );
 	}
 	if ( array_key_exists( 'maximum_amount', $input ) ) {
-		$coupon->set_maximum_amount( sanitize_text_field( (string) $input['maximum_amount'] ) );
+		$maximum_amount = sanitize_text_field( (string) $input['maximum_amount'] );
+		try {
+			// WooCommerce's own set_maximum_amount() (class-wc-coupon.php:807-813) throws when
+			// the new maximum is non-zero and below the coupon's CURRENT minimum_amount - the
+			// same "throw as input validation" pattern set_amount() guards above. Reachable
+			// directly: minimum_amount is applied a few lines above this block, so a single
+			// create/update carrying minimum_amount=100 and maximum_amount=50 hits this
+			// unguarded. The maximum_amount input schema has no relationship constraint against
+			// minimum_amount (it can't - the two are independent optional fields), so nothing
+			// upstream stops the combination from reaching this setter. Catch here so the
+			// exception cannot escape into the adapter, mirroring the set_amount() guard above
+			// and set_sku()'s guard in aafm_wc_apply_variation_input() (variations.php).
+			$coupon->set_maximum_amount( $maximum_amount );
+		} catch ( \WC_Data_Exception $e ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_maximum',
+				sprintf(
+					/* translators: 1: the rejected maximum amount, 2: the coupon's current minimum amount. */
+					__( 'The maximum spend "%1$s" is not valid: it cannot be less than the coupon\'s minimum amount of "%2$s".', 'agent-abilities-for-mcp' ),
+					$maximum_amount,
+					$coupon->get_minimum_amount()
+				)
+			);
+		}
 	}
 	if ( array_key_exists( 'individual_use', $input ) ) {
 		$coupon->set_individual_use( (bool) $input['individual_use'] );

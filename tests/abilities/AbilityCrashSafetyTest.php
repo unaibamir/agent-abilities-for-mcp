@@ -37,9 +37,25 @@ final class AbilityCrashSafetyTest extends TestCase {
 				),
 			)
 		);
+		// Coupon abilities (Task 4) live on their own stub surface, registered after
+		// stub_woocommerce() the same way WooCouponsTest does. wc-create-coupon/wc-update-coupon
+		// are on the high-risk floor (includes/audit/high-risk.php), so registration silently
+		// drops them from the enabled set unless unlocked - without this the ability-level tests
+		// below would call wp_get_ability() on a name that never registered and fail with a
+		// fixture error ("call to a member function execute() on null"), not the crash-safety
+		// signal they exist to prove.
+		$this->stub_wc_coupons();
+		$this->unlock_high_risk_abilities();
 		aafm_registry_cache_should_flush( true );
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
-		update_option( 'aafm_enabled_abilities', array( 'aafm/wc-create-product-variation' ) );
+		update_option(
+			'aafm_enabled_abilities',
+			array(
+				'aafm/wc-create-product-variation',
+				'aafm/wc-create-coupon',
+				'aafm/wc-update-coupon',
+			)
+		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
@@ -130,6 +146,109 @@ final class AbilityCrashSafetyTest extends TestCase {
 			'aafm_wc_duplicate_sku',
 			$result->get_error_code(),
 			'A duplicate SKU must surface as this plugin\'s own aafm_wc_duplicate_sku error. A generic ability_callback_exception here would mean the WC_Data_Exception escaped aafm_wc_apply_variation_input() and was only caught by WP_Ability\'s own Throwable guard - which does not exist on this plugin\'s WP 6.9 floor.'
+		);
+	}
+
+	// -------------------------------------------------------------------------
+	// Task 4: WC_Coupon::set_amount() - negative amount, and percent over 100
+	// -------------------------------------------------------------------------
+
+	/**
+	 * The true Red Gate for the negative-amount branch: calls aafm_wc_apply_coupon_input()
+	 * directly, bypassing WP_Ability entirely, per the same reasoning documented on the SKU test
+	 * above (this test core's WP_Ability::invoke_callback() already catches every Throwable, which
+	 * would mask a missing guard at the ability layer).
+	 */
+	public function test_apply_coupon_input_returns_an_error_instead_of_throwing_on_a_negative_amount(): void {
+		$coupon = new \WC_Coupon();
+
+		$result = aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '-5' ) );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'aafm_wc_apply_coupon_input() must catch WC_Data_Exception from set_amount() on a negative amount and return a WP_Error, not let it escape uncaught.'
+		);
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $result->get_error_code() );
+	}
+
+	/**
+	 * The true Red Gate for the percent-over-100 branch. WC_Coupon::set_amount() only rejects an
+	 * amount over 100 once the coupon's own discount_type is already 'percent' (it reads
+	 * get_discount_type(), not the incoming input), so the coupon under test is constructed with
+	 * that type already set, mirroring the "update an existing percent coupon" case the brief's
+	 * ordering subtlety describes - set_amount() runs before set_discount_type() in
+	 * aafm_wc_apply_coupon_input(), so a same-request create of amount+discount_type=percent can
+	 * never reach this branch; only a second call against an already-percent coupon can.
+	 */
+	public function test_apply_coupon_input_returns_an_error_instead_of_throwing_on_a_percent_amount_over_one_hundred(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_discount_type( 'percent' );
+
+		$result = aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '150' ) );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'aafm_wc_apply_coupon_input() must catch WC_Data_Exception from set_amount() on a percent coupon over 100 and return a WP_Error, not let it escape uncaught.'
+		);
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $result->get_error_code() );
+	}
+
+	/**
+	 * End-to-end through the real ability: a negative amount on create. As with the SKU test above,
+	 * the differentiator that proves this plugin's own catch ran (rather than core's Throwable
+	 * fallback) is the specific error code, not just instanceof WP_Error.
+	 */
+	public function test_create_coupon_with_a_negative_amount_returns_the_plugins_own_error_not_the_cores(): void {
+		$this->acting_as( 'administrator' );
+
+		$result = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'          => 'aafm-negative',
+				'amount'        => '-5',
+				'discount_type' => 'fixed_cart',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_invalid_coupon_amount',
+			$result->get_error_code(),
+			'A negative coupon amount must surface as this plugin\'s own aafm_wc_invalid_coupon_amount error, not core\'s generic ability_callback_exception fallback.'
+		);
+	}
+
+	/**
+	 * End-to-end through the real ability: an existing percent coupon updated past 100. Exercises
+	 * the ordering subtlety directly - the coupon must already carry discount_type=percent before
+	 * the update, because set_amount() runs before set_discount_type() inside
+	 * aafm_wc_apply_coupon_input() and so cannot see a same-request discount_type change.
+	 */
+	public function test_update_percent_coupon_over_one_hundred_returns_the_plugins_own_error_not_the_cores(): void {
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'          => 'aafm-percent',
+				'amount'        => '10',
+				'discount_type' => 'percent',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+
+		$result = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id' => $created['id'],
+				'amount'    => '150',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_invalid_coupon_amount',
+			$result->get_error_code(),
+			'A percent coupon pushed over 100 must surface as this plugin\'s own aafm_wc_invalid_coupon_amount error, not core\'s generic ability_callback_exception fallback.'
 		);
 	}
 }

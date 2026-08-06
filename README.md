@@ -204,14 +204,21 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** A variation reported that it manages its own stock when it was inheriting the parent's setting, telling an agent it could set a stock level it does not own.
 * **Fix:** Creating a percentage coupon over 100 in one call saved the coupon instead of rejecting it, because the amount was applied while the coupon was still a fixed-cart discount.
 * **Fix:** A duplicate variation SKU, a negative coupon amount, or a coupon maximum below its minimum crashed instead of returning an error.
-* **Fix:** An unexpected failure inside any ability now comes back as an error with the cause recorded in the activity log. Set the `aafm_rethrow_ability_exceptions` filter to true to let exceptions through while developing.
+* **Fix:** An unexpected failure inside any ability now comes back as an error with the cause recorded in the activity log. The `aafm_rethrow_ability_exceptions` filter controls this, and it already follows `WP_DEBUG`, so a development site lets exceptions through by default. Set it to false if you would rather a debug site kept converting them to logged errors.
 * **Fix:** A comment whose parent post is in the trash reported a boolean where every other path reports a string. It now reports `post-trashed`, which is WordPress's own name for that state.
 * **Fix:** Block and comment writes returned an empty shape when the saved record could not be read back. They return an error instead.
 * **Fix:** Product image galleries and grouped product children encoded as an object rather than a list when the stored ids had gaps.
 * **Fix:** Payment gateway settings, title, and description could come back as an empty array or null against a declared object and string.
 * **Fix:** Site settings returned an empty array when the `aafm_allowed_site_settings` filter removed every entry.
 * **Fix:** Attachments that are not images returned an empty array for their sizes map.
-* **Fix:** Tools bridged from other plugins advertised an object type the source ability never declared, and advertised empty subschemas as arrays rather than objects.
+* **Fix:** Bridging an ability from another plugin and then calling it with arguments could take the site down with an uncaught error, which affects 1.6.0 as shipped. The bridge was rewriting the source plugin's schema into a shape WordPress core's own validator cannot read. That rewrite never reached an MCP client anyway, because the adapter undoes it before the tool is advertised, so it is gone.
+* **Fix:** Tools bridged from other plugins no longer advertise an object type the source ability never declared, and a bridged output schema is now republished exactly as the foreign plugin wrote it.
+* **Fix:** The activity log stored the raw text of an unexpected error. For a plugin like WooCommerce that text often quotes the value that caused the failure, such as an email address or a SKU, which broke this plugin's promise that argument values are never stored. It now records the error's type and where it happened, which names the fault at least as precisely and cannot carry your data.
+* **Fix:** A permission check that failed unexpectedly returned the underlying error text to the connected agent and left no trace in the activity log. It now denies the call and records it. The same failure while a client was listing tools could empty the entire list, hiding every healthy tool along with the broken one.
+* **Fix:** Changing an existing coupon's discount type to percentage, without touching its amount, could save a coupon discounting more than 100 percent and report success. Raising a minimum spend past the coupon's stored maximum did the same. Both are now checked against the resulting coupon rather than the fields you happened to send.
+* **Feature:** A new `aafm_ability_resolved` action fires whenever a call finishes, so an uptime monitor or a logging plugin can react to a failure instead of waiting for someone to open wp-admin.
+* **Feature:** The activity-log ability returns each entry's detail, so an agent can read why a call failed rather than only that it did.
+* **Chore:** The consent screen and the two shipping method reads now say that a method carries its own per-instance settings, which is where a carrier or gateway plugin may keep account details.
 * **Chore:** Corrected code comments that called the settings redactor deny-by-default. It is a best-effort denylist over field names and cannot be exhaustive, so a carrier plugin storing a credential under an unusual field name can still reach the wire.
 
 ### 1.6.0

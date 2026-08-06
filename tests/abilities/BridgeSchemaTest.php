@@ -1,6 +1,6 @@
 <?php
 /**
- * Bridge schema normalizer: empty object-containers must serialize as {} not [].
+ * Bridge schema normalizer: a foreign schema must survive core's own validator untouched.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -10,295 +10,194 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
-use stdClass;
 
 final class BridgeSchemaTest extends TestCase {
 
-	public function test_empty_schema_becomes_object_schema(): void {
-		$out = aafm_normalize_json_schema( array() );
-		$this->assertSame( 'object', $out['type'] );
-		$this->assertInstanceOf( stdClass::class, $out['properties'] );
-		$this->assertSame( '{"type":"object","properties":{}}', wp_json_encode( $out ) );
-	}
+	/**
+	 * Every empty-schema position must survive core's own validator. Before 1.6.1's revert, seven of
+	 * these coerced to stdClass and fataled inside rest_validate_value_from_schema(), because core
+	 * reads schema nodes with array syntax and that is an Error against a non-ArrayAccess object.
+	 *
+	 * @dataProvider empty_schema_positions
+	 *
+	 * @param array<string,mixed> $raw                   The foreign schema as declared.
+	 * @param mixed               $value                 A value to validate against it.
+	 * @param bool                $expects_doing_it_wrong Whether core emits an incorrect-usage notice.
+	 */
+	public function test_no_normalized_schema_position_fatals_in_core_validation( array $raw, $value, bool $expects_doing_it_wrong ): void {
+		if ( $expects_doing_it_wrong ) {
+			$this->setExpectedIncorrectUsage( 'rest_validate_value_from_schema' );
+		}
 
-	public function test_empty_properties_serialize_as_object(): void {
-		$in  = array(
-			'type'       => 'object',
-			'properties' => array(),
+		$schema = aafm_normalize_json_schema( $raw );
+
+		$warnings = array();
+		// A scoped handler, not a suppression. Core emits a real PHP warning for a subschema with no
+		// type (see the assertion below), and PHPUnit converts warnings to exceptions, which would
+		// mask the ONE outcome this test exists to distinguish: a warning that lets validation
+		// continue versus the uncaught Error the coercion used to raise. Catching them here keeps
+		// both visible and asserted.
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- Not debug code: this test's whole subject is which diagnostic core emits, so it has to capture one. Scoped to a single call and restored in the finally below.
+		set_error_handler(
+			static function ( $errno, $errstr ) use ( &$warnings ): bool {
+				$warnings[] = $errstr;
+				return true;
+			},
+			E_WARNING | E_NOTICE
 		);
-		$out = aafm_normalize_json_schema( $in );
-		$this->assertStringContainsString( '"properties":{}', (string) wp_json_encode( $out ) );
+		try {
+			$result = rest_validate_value_from_schema( $value, $schema );
+		} finally {
+			restore_error_handler();
+		}
+
+		// The real protection is that the line above did not THROW - an uncaught Error is reported by
+		// PHPUnit before any assertion here runs. This asserts the call also produced a sane return.
+		$this->assertTrue(
+			true === $result || is_wp_error( $result ),
+			'A normalized foreign schema must validate to true or a WP_Error, never fatal.'
+		);
+
+		// Whatever core complains about, it must never be the Error the stdClass coercion raised.
+		foreach ( $warnings as $warning ) {
+			$this->assertStringNotContainsString(
+				'stdClass',
+				$warning,
+				'No schema position may hand core an object it reads with array syntax.'
+			);
+		}
+
+		// A subschema carrying no keys at all is genuinely unvalidatable, and core says so twice: the
+		// _doing_it_wrong above, then an "Undefined array key" warning at rest-api.php:2216 (7.0.2),
+		// because it reads $args['type'] unconditionally on the line after warning that it is
+		// missing. That warning is core's, fires with or without our normalizer, and is inert - the
+		// null falls through is_array() and validation continues. It is recorded as a known
+		// limitation of bridging a foreign schema with an empty subschema, not as a defect here.
+		$this->assertSame(
+			$expects_doing_it_wrong,
+			in_array( 'Undefined array key "type"', $warnings, true ),
+			'Only the keyless-subschema cases may reach core\'s typeless branch.'
+		);
 	}
 
-	public function test_nested_empty_property_object_preserved(): void {
-		$in  = array(
-			'type'       => 'object',
-			'properties' => array(
-				'meta' => array(
+	/**
+	 * Every case pins every OTHER empty position so a fatal is attributable to the one it names.
+	 *
+	 * Three things here are load-bearing. 'patternProperties element' carries a NON-EMPTY
+	 * properties, because with an empty or absent one the root stamp re-arms and the case dies at
+	 * the properties position instead, exercising nothing it claims to. 'oneOf branch' declares a
+	 * type for the same reason. And the third column is per-case rather than unconditional because
+	 * WP_UnitTestCase_Base fails a test for an UNMET incorrect-usage expectation as well as an
+	 * unexpected notice, so setting it everywhere would fail the four cases that emit none.
+	 *
+	 * @return array<string,array{0:array<string,mixed>,1:mixed,2:bool}>
+	 */
+	public function empty_schema_positions(): array {
+		// Third column: does this case emit _doing_it_wrong AFTER the revert? Measured, not guessed.
+		return array(
+			'properties element'        => array(
+				array(
+					'type'       => 'object',
+					'properties' => array( 'ctx' => array() ),
+				),
+				array( 'ctx' => array( 'a' => 1 ) ),
+				true,
+			),
+			'patternProperties element' => array(
+				array(
+					'type'              => 'object',
+					'properties'        => array( 'keep' => array( 'type' => 'string' ) ),
+					'patternProperties' => array( '^a' => array() ),
+				),
+				array( 'ab' => 1 ),
+				true,
+			),
+			'properties container'      => array(
+				array(
 					'type'       => 'object',
 					'properties' => array(),
 				),
+				array( 'a' => 1 ),
+				false,
+			),
+			'items empty'               => array(
+				array(
+					'type'  => 'array',
+					'items' => array(),
+				),
+				array( 1, 2 ),
+				true,
+			),
+			'anyOf branch'              => array(
+				array(
+					'type'  => 'string',
+					'anyOf' => array( array() ),
+				),
+				'x',
+				false,
+			),
+			'oneOf branch'              => array(
+				array(
+					'type'  => 'string',
+					'oneOf' => array( array(), array( 'type' => 'integer' ) ),
+				),
+				'x',
+				false,
+			),
+			'wholly empty'              => array(
+				array(),
+				array( 'a' => 1 ),
+				false,
 			),
 		);
-		$out = aafm_normalize_json_schema( $in );
-		$this->assertStringContainsString( '"meta":{"type":"object","properties":{}}', (string) wp_json_encode( $out ) );
 	}
 
-	public function test_deeply_nested_schema_normalizes_without_unbounded_recursion(): void {
-		// A hostile/buggy foreign schema could nest far beyond any real need. Build one well past
-		// the depth cap and assert normalization returns rather than exhausting the stack.
-		$schema = array(
+	/**
+	 * The normalizer defaults a typeless foreign schema to type:object, but it must not invent a
+	 * properties key the foreign ability never declared. The adapter deletes an empty root
+	 * properties before advertising anyway (SchemaTransformer::normalize()), and JSON Schema
+	 * 2020-12 section 10.3.2.1 makes an omitted properties behave identically to an empty one.
+	 */
+	public function test_normalize_does_not_stamp_a_properties_key_on_a_schema_that_lacks_one(): void {
+		$this->assertArrayNotHasKey( 'properties', aafm_normalize_json_schema( array() ) );
+		$this->assertArrayNotHasKey( 'properties', aafm_normalize_json_schema( array( 'type' => 'object' ) ) );
+	}
+
+	/**
+	 * The type default is not part of the coercion revert: a foreign schema that declares no type
+	 * must not be advertised typeless, and a declared type must survive untouched.
+	 */
+	public function test_normalize_defaults_a_missing_type_and_preserves_a_declared_one(): void {
+		$this->assertSame( 'object', aafm_normalize_json_schema( array() )['type'] );
+		$this->assertSame( 'object', aafm_normalize_json_schema( array( 'description' => 'x' ) )['type'] );
+		$this->assertSame( 'array', aafm_normalize_json_schema( array( 'type' => 'array' ) )['type'] );
+	}
+
+	/**
+	 * A declared schema round-trips untouched apart from the type default. This is the whole
+	 * contract after the revert, and it is asserted on the WIRE form because array() and
+	 * (object) array() are indistinguishable in PHP and opposite in JSON.
+	 */
+	public function test_a_declared_schema_round_trips_unchanged(): void {
+		$in = array(
 			'type'       => 'object',
-			'properties' => array(),
+			'properties' => array(
+				'id'  => array( 'type' => 'integer' ),
+				'ctx' => array(),
+			),
+			'required'   => array( 'id' ),
 		);
-		$node   = &$schema;
-		for ( $i = 0; $i < 200; $i++ ) {
-			$node['properties']['child'] = array(
-				'type'       => 'object',
-				'properties' => array(),
-			);
-			$node                        = &$node['properties']['child'];
-		}
-		unset( $node );
 
-		$out = aafm_normalize_json_schema( $schema );
-		$this->assertIsArray( $out );
-		$this->assertSame( 'object', $out['type'] );
-	}
-
-	public function test_self_referential_schema_terminates(): void {
-		// A cyclic reference would recurse forever without the depth cap. The cap terminates it.
-		$schema                       = array(
-			'type'       => 'object',
-			'properties' => array(),
-		);
-		$schema['properties']['loop'] = &$schema;
-
-		$out = aafm_normalize_json_schema( $schema );
-		$this->assertIsArray( $out );
-		$this->assertSame( 'object', $out['type'] );
-	}
-
-	public function test_empty_items_serialize_as_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'  => 'array',
-				'items' => array(),
-			)
-		);
-		$this->assertStringContainsString( '"items":{}', (string) wp_json_encode( $out ) );
-	}
-
-	public function test_empty_additional_properties_serialize_as_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'                 => 'object',
-				'properties'           => array(),
-				'additionalProperties' => array(),
-			)
-		);
-		$this->assertStringContainsString( '"additionalProperties":{}', (string) wp_json_encode( $out ) );
-	}
-
-	public function test_tuple_items_are_recursed_per_element(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'  => 'array',
-				'items' => array(
-					array(
-						'type'       => 'object',
-						'properties' => array(),
-					),
-					array( 'type' => 'string' ),
-				),
-			)
-		);
-		// The empty properties INSIDE the first tuple element must be coerced to {}.
-		$this->assertStringContainsString( '"properties":{}', (string) wp_json_encode( $out ) );
-		$this->assertSame( 'string', $out['items'][1]['type'] );
-	}
-
-	public function test_non_empty_properties_untouched(): void {
-		$in  = array(
-			'type'       => 'object',
-			'properties' => array( 'id' => array( 'type' => 'integer' ) ),
-		);
-		$out = aafm_normalize_json_schema( $in );
-		$this->assertSame( 'integer', $out['properties']['id']['type'] );
-	}
-
-	/**
-	 * Task 9 (element position, part 1 of L1): every existing test above only exercised a WHOLE
-	 * empty container (e.g. properties => array()). A subschema that is itself empty but lives
-	 * INSIDE an otherwise non-empty container - the ordinary PHP way to write "this property
-	 * accepts anything" - survived untouched before this fix and serialized as "ctx":[], which a
-	 * strict MCP client rejects as a malformed inputSchema.
-	 */
-	public function test_empty_property_element_becomes_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'       => 'object',
-				'properties' => array(
-					'ctx' => array(),
-				),
-			)
-		);
-		$this->assertSame( '{"type":"object","properties":{"ctx":{}}}', wp_json_encode( $out ) );
-	}
-
-	/**
-	 * Same element-position gap, inside $defs: `'$defs' => array( 'Any' => array() )` is a real
-	 * pattern a foreign ability can declare (a named schema with no constraints), and the empty
-	 * value at the 'Any' element position must become {}, not survive as [].
-	 */
-	public function test_empty_defs_element_becomes_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'  => 'object',
-				'$defs' => array( 'Any' => array() ),
-			)
-		);
-		$this->assertStringContainsString( '"$defs":{"Any":{}}', (string) wp_json_encode( $out ) );
-	}
-
-	/**
-	 * Same element-position gap, inside a oneOf branch: `oneOf => array( array(), array('type' =>
-	 * 'string') )` means "anything, or specifically a string". The bare array() branch must become
-	 * {}, not [].
-	 */
-	public function test_empty_oneof_branch_becomes_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'oneOf' => array( array(), array( 'type' => 'string' ) ),
-			)
-		);
-		$this->assertStringContainsString( '"oneOf":[{},{"type":"string"}]', (string) wp_json_encode( $out ) );
-	}
-
-	/**
-	 * Same element-position gap, inside a tuple-form items list (the pre-2020-12 syntax): the
-	 * empty first element must become {}, not survive as [].
-	 */
-	public function test_empty_tuple_items_element_becomes_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'  => 'array',
-				'items' => array( array(), array( 'type' => 'string' ) ),
-			)
-		);
-		$this->assertStringContainsString( '"items":[{},{"type":"string"}]', (string) wp_json_encode( $out ) );
-	}
-
-	/**
-	 * Same element-position gap, inside prefixItems (the 2020-12 tuple keyword). Its ELEMENTS are
-	 * ordinary subschemas and get the same {} fix as tuple-form items; the container itself is
-	 * covered separately in test_required_enum_and_literal_value_keys_stay_arrays() below, which
-	 * proves an empty prefixItems container stays [].
-	 */
-	public function test_empty_prefixitems_element_becomes_object(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'        => 'array',
-				'prefixItems' => array( array(), array( 'type' => 'string' ) ),
-			)
-		);
-		$this->assertStringContainsString( '"prefixItems":[{},{"type":"string"}]', (string) wp_json_encode( $out ) );
-	}
-
-	/**
-	 * Task 9 (L1, unvisited applicator keywords): `not` was never walked before this fix, so an
-	 * empty `not` subschema (a legal "not: no constraints", i.e. "reject everything") serialized
-	 * as [] instead of {}.
-	 */
-	public function test_not_subschema_is_recursed(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type' => 'object',
-				'not'  => array(),
-			)
-		);
-		$this->assertStringContainsString( '"not":{}', (string) wp_json_encode( $out ) );
-	}
-
-	/**
-	 * L1: if/then/else were never walked before this fix.
-	 */
-	public function test_conditional_subschemas_are_recursed(): void {
-		$out     = aafm_normalize_json_schema(
-			array(
-				'type' => 'object',
-				'if'   => array(),
-				'then' => array( 'properties' => array() ),
-				'else' => array(),
-			)
-		);
-		$encoded = (string) wp_json_encode( $out );
-		$this->assertStringContainsString( '"if":{}', $encoded );
-		$this->assertStringContainsString( '"then":{"properties":{}}', $encoded );
-		$this->assertStringContainsString( '"else":{}', $encoded );
-	}
-
-	/**
-	 * L1: propertyNames and contains were never walked before this fix.
-	 */
-	public function test_property_names_and_contains_are_recursed(): void {
-		$out     = aafm_normalize_json_schema(
-			array(
-				'type'          => 'object',
-				'propertyNames' => array(),
-				'contains'      => array(),
-			)
-		);
-		$encoded = (string) wp_json_encode( $out );
-		$this->assertStringContainsString( '"propertyNames":{}', $encoded );
-		$this->assertStringContainsString( '"contains":{}', $encoded );
-	}
-
-	/**
-	 * L1: additionalItems, unevaluatedProperties, and unevaluatedItems were never walked before
-	 * this fix.
-	 */
-	public function test_additional_items_and_unevaluated_keywords_are_recursed(): void {
-		$out     = aafm_normalize_json_schema(
-			array(
-				'type'                  => 'array',
-				'additionalItems'       => array(),
-				'unevaluatedProperties' => array(),
-				'unevaluatedItems'      => array(),
-			)
-		);
-		$encoded = (string) wp_json_encode( $out );
-		$this->assertStringContainsString( '"additionalItems":{}', $encoded );
-		$this->assertStringContainsString( '"unevaluatedProperties":{}', $encoded );
-		$this->assertStringContainsString( '"unevaluatedItems":{}', $encoded );
-	}
-
-	/**
-	 * L1: dependentSchemas (an object-keyed map, like properties) was never walked before this
-	 * fix.
-	 */
-	public function test_dependent_schemas_map_is_recursed(): void {
-		$out = aafm_normalize_json_schema(
-			array(
-				'type'             => 'object',
-				'dependentSchemas' => array( 'creditCard' => array() ),
-			)
-		);
-		$this->assertStringContainsString( '"dependentSchemas":{"creditCard":{}}', (string) wp_json_encode( $out ) );
+		$this->assertSame( wp_json_encode( $in ), wp_json_encode( aafm_normalize_json_schema( $in ) ) );
 	}
 
 	/**
 	 * REGRESSION GUARD, not a Red Gate - this test is expected to pass BOTH before and after the
-	 * element-position fix above, and that is correct, not a mistake. An empty PHP array is the
-	 * CORRECT encoding for `required: []`, `enum: []`, and as the literal VALUE of `const`,
-	 * `default`, or `examples` - none of these keys are ever recursed into as a $node in their own
-	 * right by aafm_normalize_schema_node() (they are not in $object_keyed, $single_subschema, the
-	 * tuple branches, or the composite-array branch), so the new `$depth > 0 && array() === $node`
-	 * check can never reach them. An empty `prefixItems` is likewise a real, zero-length JSON
-	 * tuple and must stay `[]`. Converting any of these to `{}` would corrupt an otherwise-valid
-	 * foreign schema: `required` and `enum` MUST be JSON arrays per spec, and `prefixItems` MUST
-	 * be a JSON array even when empty. Confirmed passing against both unfixed and fixed
-	 * includes/bridge.php - see the Task 9 report's "Regression guard" section for the run.
+	 * 1.6.1 revert, and that is correct, not a mistake. An empty PHP array is the CORRECT encoding
+	 * for `required: []`, `enum: []`, and as the literal VALUE of `const`, `default`, or
+	 * `examples`, and an empty `prefixItems` is a real, zero-length JSON tuple. Converting any of
+	 * these to `{}` would corrupt an otherwise-valid foreign schema: `required` and `enum` MUST be
+	 * JSON arrays per spec, and `prefixItems` MUST be a JSON array even when empty.
 	 */
 	public function test_required_enum_and_literal_value_keys_stay_arrays(): void {
 		$out = aafm_normalize_json_schema(

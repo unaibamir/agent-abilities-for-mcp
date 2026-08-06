@@ -15,38 +15,47 @@ declare( strict_types=1 );
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Normalize a foreign ability's JSON schema so empty object-containers serialize as {} not [].
+ * Default a foreign ability's JSON schema to an object type, and otherwise leave it alone.
  *
- * A foreign get_input_schema() may be empty or use PHP arrays that json_encode as [] where JSON
- * Schema requires {} (objects). A tool whose inputSchema.properties serializes as [] is rejected
- * by strict MCP clients, so any empty associative object-container is coerced to stdClass.
+ * A call's arguments are always a JSON object, so a foreign get_input_schema() that declares no
+ * type is advertised as one rather than typeless. Nothing else about the schema is rewritten.
+ *
+ * This function used to coerce every empty JSON-Schema container to stdClass so it would serialize
+ * as {} instead of []. That was removed in 1.6.1 because it could not work and was actively
+ * dangerous. The vendored MCP adapter routes every schema through
+ * SchemaTransformer::transform_to_object_schema(), whose normalize() pass recursively converts
+ * every stdClass at every depth back to an array and unsets an empty root properties outright, so
+ * the coercion never reached the wire. Meanwhile the same stdClass WAS handed to WordPress core,
+ * which reads schema nodes with array syntax - a fatal Error on PHP 8 against a non-ArrayAccess
+ * object, including inside isset(). Seven schema positions fataled inside
+ * rest_validate_value_from_schema(), three of them on the shipped 1.6.0.
+ *
+ * The residual (a nested empty subschema still emitting [] on the wire) is real, but the adapter
+ * produces it on the adapter's side of the boundary and it belongs upstream in
+ * WordPress/mcp-adapter, not here.
  *
  * @param mixed $schema Raw schema (array) or empty.
  * @return array<string,mixed>
  */
 function aafm_normalize_json_schema( $schema ): array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
-		return array(
-			'type'       => 'object',
-			'properties' => new stdClass(),
-		);
+		return array( 'type' => 'object' );
 	}
 	if ( empty( $schema['type'] ) ) {
 		$schema['type'] = 'object';
 	}
-	if ( 'object' === $schema['type'] && ! array_key_exists( 'properties', $schema ) ) {
-		$schema['properties'] = new stdClass();
-	}
-	return aafm_normalize_schema_node( $schema, 0 );
+	return $schema;
 }
 
 /**
- * The maximum schema nesting depth the normalizer will recurse into.
+ * The maximum nesting depth a recursive walk over attacker-influenced data will descend into.
  *
- * A foreign get_input_schema()/get_output_schema() is attacker-influenced: a self-referential or
- * pathologically deep schema would otherwise recurse unbounded and fatal on every discovery/admin
- * render. Real schemas are shallow, so 30 is far above any legitimate need and the cap doubles as
- * a cycle breaker (a reference loop terminates once it hits the depth).
+ * Read by aafm_sanitize_schema_array() in includes/integrations.php, the recursive JSON-LD
+ * sanitizer, which falls back to 32 when this file has not defined it. That input is
+ * attacker-influenced: a self-referential or pathologically deep graph would otherwise recurse
+ * unbounded and exhaust the stack. Real JSON-LD graphs are only a handful of levels deep, so 30 is
+ * far above any legitimate need and the cap doubles as a cycle breaker (a reference loop
+ * terminates once it hits the depth).
  */
 const AAFM_SCHEMA_MAX_DEPTH = 30;
 
@@ -82,112 +91,6 @@ function aafm_bridge_is_list( array $arr ): bool {
 		++$expected;
 	}
 	return true;
-}
-
-/**
- * Recursively coerce empty associative object-containers to stdClass.
- *
- * Walks the object-keyed schema containers (properties, patternProperties, $defs, definitions,
- * dependentSchemas), the single-subschema keys (items, additionalProperties, additionalItems,
- * not, if, then, else, propertyNames, contains, unevaluatedProperties, unevaluatedItems), the
- * tuple keys (items in list form, prefixItems), and the composite arrays (allOf/anyOf/oneOf). An
- * empty object-container becomes stdClass so it emits {}; non-empty containers, genuine list
- * schemas, and empty tuples are left untouched.
- *
- * @param mixed $node  Schema node.
- * @param int   $depth Current recursion depth (0 at the root).
- * @return mixed
- */
-function aafm_normalize_schema_node( $node, int $depth = 0 ) {
-	if ( ! is_array( $node ) ) {
-		return $node;
-	}
-	// Fail closed past the depth cap: stop recursing and hand the node back untouched. This
-	// bounds a pathologically deep foreign schema and terminates any cyclic reference.
-	if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
-		return $node;
-	}
-	// An empty array reaching this function AT AN ELEMENT POSITION (depth > 0 - i.e. this whole
-	// $node is itself a subschema a parent container recursed into) is the ordinary PHP way of
-	// writing "accepts anything": `'properties' => array( 'ctx' => array() )`,
-	// `'$defs' => array( 'Any' => array() )`, or a oneOf branch of bare `array()`. Left alone it
-	// json_encode()s as [] where JSON Schema requires {} for a subschema, and a strict MCP client
-	// rejects the whole tool as malformed. The ROOT node (depth 0) never reaches this function
-	// empty - both callers (aafm_normalize_json_schema() and
-	// aafm_bridge_normalize_output_schema()) already return their own default/guard before ever
-	// recursing on an empty root - so this only fires on genuine nested subschemas. It never fires
-	// on an empty array held as a plain VALUE (required:[], enum:[], const/default/examples, or an
-	// empty prefixItems tuple), because none of those keys are ever recursed into as a whole $node
-	// by this function; they are left as untouched sibling keys on the containing node, or (for
-	// prefixItems) walked per-ELEMENT below without touching the container itself when it is [].
-	if ( $depth > 0 && array() === $node ) {
-		return new stdClass();
-	}
-	$next         = $depth + 1;
-	$object_keyed = array( 'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas' );
-	foreach ( $object_keyed as $key ) {
-		if ( array_key_exists( $key, $node ) ) {
-			if ( is_array( $node[ $key ] ) && array() === $node[ $key ] ) {
-				$node[ $key ] = new stdClass();
-			} elseif ( is_array( $node[ $key ] ) ) {
-				foreach ( $node[ $key ] as $prop => $sub ) {
-					$node[ $key ][ $prop ] = aafm_normalize_schema_node( $sub, $next );
-				}
-			}
-		}
-	}
-	$single_subschema = array(
-		'items',
-		'additionalProperties',
-		'additionalItems',
-		'not',
-		'if',
-		'then',
-		'else',
-		'propertyNames',
-		'contains',
-		'unevaluatedProperties',
-		'unevaluatedItems',
-	);
-	foreach ( $single_subschema as $key ) {
-		if ( ! array_key_exists( $key, $node ) || ! is_array( $node[ $key ] ) ) {
-			continue; // A boolean value (true/false) here is left as-is.
-		}
-		// An empty array here is a schema container, not a list: emit {} so it stays a valid
-		// (empty) schema. additionalProperties: [] in particular is invalid JSON Schema.
-		if ( array() === $node[ $key ] ) {
-			$node[ $key ] = new stdClass();
-			continue;
-		}
-		// Tuple-form items (a list of subschemas, one per position) recurse per element. This is
-		// the legacy (pre-2020-12) tuple syntax; the current dialect's tuple keyword is
-		// prefixItems, handled separately below because - unlike every key in this loop -
-		// prefixItems is ALWAYS a JSON array and must never be coerced to {} when empty.
-		if ( 'items' === $key && aafm_bridge_is_list( $node[ $key ] ) ) {
-			foreach ( $node[ $key ] as $i => $sub ) {
-				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub, $next );
-			}
-			continue;
-		}
-		$node[ $key ] = aafm_normalize_schema_node( $node[ $key ], $next );
-	}
-	// prefixItems (JSON Schema 2020-12 tuple validation) is always a JSON array, never a single
-	// subschema, so an empty prefixItems is a legitimate empty tuple and must stay [] - it is
-	// deliberately NOT added to $single_subschema above. Only its elements are subschemas that may
-	// need the {} fix, so only those are recursed into.
-	if ( array_key_exists( 'prefixItems', $node ) && is_array( $node['prefixItems'] ) ) {
-		foreach ( $node['prefixItems'] as $i => $sub ) {
-			$node['prefixItems'][ $i ] = aafm_normalize_schema_node( $sub, $next );
-		}
-	}
-	foreach ( array( 'allOf', 'anyOf', 'oneOf' ) as $key ) {
-		if ( array_key_exists( $key, $node ) && is_array( $node[ $key ] ) ) {
-			foreach ( $node[ $key ] as $i => $sub ) {
-				$node[ $key ][ $i ] = aafm_normalize_schema_node( $sub, $next );
-			}
-		}
-	}
-	return $node;
 }
 
 /**
@@ -260,51 +163,26 @@ function aafm_bridge_input_schema( $ability ): array {
 }
 
 /**
- * Normalize a foreign ability's OUTPUT schema so empty object-containers still serialize as {},
- * without inventing structure the foreign ability never declared.
+ * The foreign ability's output schema exactly as it declared it - or null when it exposes none.
  *
- * The general aafm_normalize_json_schema() is INPUT-oriented: because a call's arguments are
- * always a JSON object, it defaults a typeless schema to {type:object, properties:{}}. An output
- * schema carries no such guarantee - a foreign ability may legally declare a bare
- * {description:'...'} or a oneOf/const schema and return a scalar. Routing that through the
- * input-oriented normalizer stamped type:object onto a schema the foreign ability never declared
- * that shape for, so OUR OWN wrapper's execute() (WP_Ability::execute() validates a result against
- * output_schema after every call, see WP core 6.9.0+) then rejected the foreign ability's own
- * scalar result with ability_invalid_output - even though the SAME ability called directly
- * succeeded, because it was validated against its real, typeless schema. This pass fixes only the
- * [] vs {} wire-encoding bug (recursing into nested containers via aafm_normalize_schema_node())
- * and otherwise leaves type/properties exactly as declared, including "declares neither".
- *
- * What this claim does NOT extend to - the advertised outputSchema on the wire. The reasoning
- * above is about OUR wrapper's own validate_output() call, not what a client actually sees:
- * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema
- * itself when building the tool's advertised outputSchema, and McpTool::execute() wraps a scalar
- * result under `result`. So for a bare oneOf schema that returns a string, this fix genuinely
- * makes the bridged call EXECUTE instead of erroring (our wrapper no longer rejects it) - but the
- * advertised schema still ends up {oneOf:[...], type:'object'} while the body is
- * {"result":"..."}, which does not validate either. "Matches the direct call" is true only at the
- * ability layer, not the wire. This also narrows behaviour deliberately: a foreign output schema
- * with neither `type` nor `oneOf`/`anyOf` (e.g. bare {description:'...'}) used to be repaired by
- * the input-oriented normalizer's type:object stamp and now fails core's
- * rest_validate_value_from_schema() the same way a direct call to that ability already does -
- * which is the correct direction (bridged should not be more permissive than direct), but is
- * worth naming rather than leaving as a silent side effect.
- *
- * @param array<string,mixed> $schema Non-empty raw output schema.
- * @return array<string,mixed>
- */
-function aafm_bridge_normalize_output_schema( array $schema ): array {
-	$normalized = aafm_normalize_schema_node( $schema, 0 );
-	return is_array( $normalized ) ? $normalized : $schema;
-}
-
-/**
- * The foreign ability's output schema, normalized - or null when it exposes none.
+ * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
+ * a call's arguments are always a JSON object, so it defaults a typeless schema to type:object. An
+ * output schema carries no such guarantee, because a foreign ability may legally declare a bare
+ * {description:'...'} or a oneOf/const schema and return a scalar. Stamping type:object onto it
+ * made OUR OWN wrapper's execute() reject the foreign ability's own result with
+ * ability_invalid_output (WP_Ability::execute() validates every result against output_schema),
+ * even though the same ability called directly succeeded against its real, typeless schema.
  *
  * Returns null (not a default object schema) when the foreign ability has no output schema, so the
- * wrapper simply omits output_schema and inherits core's no-output-validation default. A default
- * {type:object, properties:{}} here would instead make core validate every execute result against
- * an empty stdClass container and fatal.
+ * wrapper simply omits output_schema and inherits core's no-output-validation default.
+ *
+ * One caveat worth naming rather than leaving as a silent side effect: this is about our wrapper's
+ * own validate_output() call, not about what a client sees.
+ * SchemaTransformer::transform_to_object_schema() stamps type:object onto a typeless schema itself
+ * when building the advertised outputSchema, and McpTool::execute() wraps a scalar result under
+ * `result`. So for a bare oneOf schema returning a string the bridged call now EXECUTES instead of
+ * erroring, but the advertised schema still ends up {oneOf:[...], type:'object'} against a
+ * {"result":"..."} body, which does not validate either. That is an adapter-side shape.
  *
  * @param \WP_Ability $ability The foreign ability.
  * @return array<string,mixed>|null
@@ -314,7 +192,7 @@ function aafm_bridge_output_schema( $ability ): ?array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
 		return null;
 	}
-	return aafm_bridge_normalize_output_schema( $schema );
+	return $schema;
 }
 
 /**

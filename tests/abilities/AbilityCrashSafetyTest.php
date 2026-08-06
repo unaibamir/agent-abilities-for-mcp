@@ -705,8 +705,9 @@ final class AbilityCrashSafetyTest extends TestCase {
 	 * aafm_register_ability_with_log() runs unconditionally on the SAME row a crash already
 	 * resolved. Once aafm_build_activity_detail_from_result() grew a WP_Error branch, that tail
 	 * would overwrite the exception's class and throw site with the string 'aafm_ability_exception',
-	 * which names only our own wrapper. The $crash_detail_written flag suppresses it. Without this
-	 * test the flag could be dropped and every other test in this file would still pass.
+	 * which names only our own wrapper. Passing a null detail on that second write suppresses it.
+	 * Without this test the suppression could be dropped and every other test in this file would
+	 * still pass.
 	 */
 	public function test_a_crashed_call_keeps_the_exception_detail_not_the_wrapper_code(): void {
 		// A distinct fixture name: the abilities registry is process-wide and is not reset between

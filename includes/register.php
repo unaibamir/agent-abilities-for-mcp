@@ -247,7 +247,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			)
 		);
 
-		$crash_detail_written = false;
+		// Null on a clean call; the crash's class and throw site once the catch below has written it.
+		$crash_detail = null;
 		try {
 			$result = $original_execute( $input );
 		} catch ( \Throwable $e ) {
@@ -291,8 +292,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// Record the exception's class and throw site onto the row this call already opened, so
 			// a crash stays distinguishable from an ordinary validation error in the activity log -
 			// the same signal the stuck 'started' row used to carry before this catch existed.
-			aafm_log_ability_exception( $row_id, $e );
-			$crash_detail_written = true;
+			$crash_detail = aafm_log_ability_exception( $row_id, $e );
 
 			$result = new \WP_Error(
 				'aafm_ability_exception',
@@ -335,23 +335,33 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		// A create's identifier only exists once the call returns, so the resolve carries it. Null
 		// for every other ability, and null leaves whatever the insert wrote in place.
-		//
+		$status          = is_wp_error( $result ) ? 'error' : 'success';
+		$resolved_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail_from_result( $name, $result );
+
 		// This is deliberately a SECOND update on a crashed call - aafm_log_ability_exception()
-		// above already resolved the row - and the flag is what keeps that harmless. Collapsing the
-		// two writes would buy one query and put both the one-row-per-call invariant and the crash
-		// detail's survival at risk, so it is not worth doing.
+		// above already resolved the row - and passing null for the detail is what keeps that
+		// harmless. Collapsing the two writes would buy one query and put both the one-row-per-call
+		// invariant and the crash detail's survival at risk, so it is not worth doing.
 		//
 		// A crash already wrote the exception's class and throw site. Passing null here leaves it in
 		// place: the throw site names the actual defect, while 'aafm_ability_exception' only names
-		// our own wrapper. Without the flag, the WP_Error branch of
+		// our own wrapper. Without this, the WP_Error branch of
 		// aafm_build_activity_detail_from_result() would overwrite the throw site with that wrapper
 		// code on every crashed call.
-		aafm_update_activity_status(
+		$written = aafm_update_activity_status(
 			$row_id,
-			is_wp_error( $result ) ? 'error' : 'success',
+			$status,
 			$result_count,
-			$crash_detail_written ? null : aafm_build_activity_detail_from_result( $name, $result )
+			null !== $crash_detail ? null : $resolved_detail
 		);
+
+		// Announced from here rather than from inside the writer, and exactly once: this is the only
+		// scope that knows both the final status and the detail the row ended up carrying. The
+		// re-throw branch above never reaches this line, so a re-thrown crash announces nothing,
+		// which matches the row it deliberately leaves at 'started'.
+		if ( $written ) {
+			aafm_announce_ability_resolved( $row_id, $status, $result_count, $resolved_detail );
+		}
 
 		return $result;
 	};

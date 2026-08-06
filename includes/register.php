@@ -159,7 +159,8 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$p         = $principal();
 		$call_args = is_array( $input ) ? $input : array();
 		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume( $p['principal_user_id'] ) ) {
-			aafm_log_activity(
+			$rate_detail = aafm_build_activity_detail( $name, $call_args );
+			$rate_row_id = aafm_log_activity(
 				array_merge(
 					$p,
 					array(
@@ -167,10 +168,17 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						'status'    => 'denied',
 						'arg_keys'  => array_keys( $call_args ),
 						'client_id' => aafm_oauth_current_client_id(),
-						'detail'    => aafm_build_activity_detail( $name, $call_args ),
+						'detail'    => $rate_detail,
 					)
 				)
 			);
+			// A refused call is a call that finished, so it announces like any other resolve. This
+			// row is written rather than resolved - there is no 'started' row on the permission
+			// phase - so the announcement is gated on the INSERT having landed instead of on an
+			// update's return.
+			if ( $rate_row_id > 0 ) {
+				aafm_announce_ability_resolved( $rate_row_id, 'denied', null, $rate_detail );
+			}
 			return false;
 		}
 
@@ -207,7 +215,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.
 		if ( true !== $allowed ) {
-			aafm_log_activity(
+			// A crashed check records the throw site instead of the ability's mapped argument
+			// detail: the defect is what matters on this row, and the mapped detail is already on
+			// the ordinary-denial rows.
+			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args );
+			$denied_row_id = aafm_log_activity(
 				array_merge(
 					$p,
 					array(
@@ -215,13 +227,18 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						'status'    => 'denied',
 						'arg_keys'  => array_keys( $call_args ),
 						'client_id' => aafm_oauth_current_client_id(),
-						// A crashed check records the throw site instead of the ability's mapped
-						// argument detail: the defect is what matters on this row, and the mapped
-						// detail is already on the ordinary-denial rows.
-						'detail'    => null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args ),
+						'detail'    => $denied_detail,
 					)
 				)
 			);
+			// Announce, for the same reason the execute side does: a refused call has finished, and
+			// a permission callback that exploded is the failure an operator most wants paged
+			// about - it is the very class of crash the discovery guard in includes/server.php
+			// exists to survive. Exactly one fire per call, because a denial returns false here and
+			// the execute closure never runs.
+			if ( $denied_row_id > 0 ) {
+				aafm_announce_ability_resolved( $denied_row_id, 'denied', null, $denied_detail );
+			}
 		}
 		return $allowed;
 	};

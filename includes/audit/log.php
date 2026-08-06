@@ -407,6 +407,14 @@ function aafm_announce_ability_resolved( int $row_id, string $status, ?int $resu
 	 * aafm_rethrow_ability_exceptions filter) fires nothing at all and leaves its row at 'started' -
 	 * that absence is the development-time signal, and it is deliberate.
 	 *
+	 * A DENIED call announces too, including one whose permission callback crashed. That is the
+	 * failure an operator most wants to hear about and the reason $status can be 'denied' here even
+	 * though a denial writes its own row instead of resolving a 'started' one. What does NOT
+	 * announce is discovery: the tools/list visibility probe in includes/server.php runs the raw
+	 * permission callback over every enabled ability on every logged-in page load, and a call that
+	 * was never made has not resolved. A crash there is still audited, just not broadcast - read
+	 * the 'denied' rows for it.
+	 *
 	 * The record deliberately carries no ability name or principal. The resolve path receives
 	 * neither, and includes/audit/log.php exposes no read-by-id helper, so including them would mean
 	 * a new helper plus an extra SELECT on every single resolve. Join on row_id against the

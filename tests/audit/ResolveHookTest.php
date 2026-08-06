@@ -116,6 +116,100 @@ final class ResolveHookTest extends TestCase {
 	}
 
 	/**
+	 * A REFUSED call has finished, so it announces - and it announces the row the denial wrote,
+	 * because a denial never resolves a 'started' row, it writes its own.
+	 *
+	 * This was the hook's structural blind spot: aafm_announce_ability_resolved() had exactly one
+	 * call site, the execute closure's tail, which a denied call never reaches. The docblock said
+	 * "whatever the outcome" and the wp.org listing told operators an uptime monitor would see a
+	 * failure through it, while every denial in the plugin was silent.
+	 */
+	public function test_a_denied_call_announces_the_row_the_denial_wrote(): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/resolve-hook-denied',
+					array(
+						'label'               => 'Refuses on purpose',
+						'description'         => 'Test fixture whose permission callback says no.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function (): array {
+							return array( 'never' => 'reached' );
+						},
+						'permission_callback' => '__return_false',
+					)
+				);
+			}
+		);
+
+		wp_get_ability( 'aafm-test/resolve-hook-denied' )->execute( array() );
+
+		$this->assertCount( 1, $this->fired, 'A refusal is an outcome, and it announces exactly once.' );
+		$this->assertSame( 'denied', $this->fired[0]['status'] );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-denied' ) );
+		$this->assertCount( 1, $rows, 'Guard on the guard: one row per denial, so there is a single id to match against.' );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertSame(
+			(int) $rows[0]['id'],
+			$this->fired[0]['row_id'],
+			'The announced row_id must be the row the denial wrote, or a consumer has nothing to join on.'
+		);
+	}
+
+	/**
+	 * The crashed permission check this release added is the single failure an operator most wants
+	 * paged about, and it announced nothing at all.
+	 *
+	 * 1.6.1's other headline fix exists to turn a throwing vendor user_has_cap filter into a denial
+	 * instead of a dead tools/list. Leaving the hook blind to exactly that class of failure would
+	 * have shipped a monitoring feature that cannot see the crash the same release introduced a
+	 * guard for.
+	 */
+	public function test_a_crashed_permission_check_announces_the_denial_it_recorded(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/resolve-hook-perm-crash',
+					array(
+						'label'               => 'Explodes on purpose',
+						'description'         => 'Test fixture whose permission callback throws.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function (): array {
+							return array( 'never' => 'reached' );
+						},
+						'permission_callback' => static function (): bool {
+							throw new \RuntimeException( 'boom from the permission callback' );
+						},
+					)
+				);
+			}
+		);
+
+		wp_get_ability( 'aafm-test/resolve-hook-perm-crash' )->execute( array() );
+
+		$this->assertCount( 1, $this->fired, 'A crashed check resolves the call once, so it announces once.' );
+		$this->assertSame( 'denied', $this->fired[0]['status'] );
+		$this->assertStringStartsWith(
+			'RuntimeException at ',
+			(string) $this->fired[0]['detail'],
+			'A monitor must be told what exploded, not merely that something was refused.'
+		);
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-perm-crash' ) );
+		$this->assertCount( 1, $rows, 'Guard on the guard: the crashed check must really have written its row.' );
+		$this->assertSame( $rows[0]['detail'], $this->fired[0]['detail'], 'The monitor and the admin panel must agree.' );
+		$this->assertSame( (int) $rows[0]['id'], $this->fired[0]['row_id'] );
+	}
+
+	/**
 	 * The re-throw branch resolves nothing - it leaves the row at 'started' on purpose - so it must
 	 * announce nothing either. Reached through the registered ability's decorated closure by
 	 * reflection, so the assertion holds on the WP 6.9 floor as well as on 7.0+, where core's own

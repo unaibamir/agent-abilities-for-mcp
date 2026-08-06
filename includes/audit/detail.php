@@ -441,8 +441,9 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
  * removes neither (a NUL is valid UTF-8, so wp_check_invalid_utf8() passes it through). Cutting at
  * the NUL leaves "Parent@anonymous", which is all the useful part.
  *
- * A class name that lost characters to the filter gets a trailing '~', so a reader can tell a
- * recorded name from a recorded name that is only close.
+ * A class name that arrived here longer or wider than the row can hold gets a trailing '~', so a
+ * reader can tell a recorded name from a recorded name that is only close. That covers characters
+ * the filter removed, a name cut at the 128-character cap, and a name the filter emptied entirely.
  *
  * @param \Throwable $e The caught exception or error.
  * @return string A bounded, value-free detail, e.g. "WC_Data_Exception at abstract-wc-data.php:1001".
@@ -462,10 +463,18 @@ function aafm_build_activity_detail_from_exception( \Throwable $e ): string {
 	// that reached this row is not the name that was thrown. The filter is not widened to \p{L}\p{N}
 	// instead, because /u makes preg_replace() return null on invalid UTF-8 and this is the one
 	// place that cannot afford to.
+	//
+	// One marker for every way the name can be cut, compared against what came in rather than
+	// against the filter alone. The cap cuts too: a 150-character class truncates to exactly 128,
+	// and an unmarked 128 characters can be a real class whose whole name is those 128 characters,
+	// which is the collision the marker exists to prevent. A name the filter empties falls back to
+	// the Throwable sentinel and is marked as well, so total loss never reads quieter than partial
+	// loss. The anonymous-class path is untouched: the NUL cut above has already reduced it to
+	// "Parent@anonymous", which the filter and the cap both leave alone.
+	$raw      = $class;
 	$filtered = (string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', $class );
-	$lossy    = $filtered !== $class;
 	$class    = '' === $filtered ? 'Throwable' : mb_substr( $filtered, 0, 128 );
-	if ( $lossy && '' !== $filtered ) {
+	if ( $class !== $raw ) {
 		$class .= '~';
 	}
 

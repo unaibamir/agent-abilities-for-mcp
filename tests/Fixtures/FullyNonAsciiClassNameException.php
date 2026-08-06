@@ -15,6 +15,6 @@
 
 declare( strict_types=1 );
 
-// phpcs:ignore PEAR.NamingConventions.ValidClassName.StartWithCapital, Squiz.Classes.ValidClassName.NotCamelCaps -- the point of the fixture is a name no convention covers.
+// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound, PEAR.NamingConventions.ValidClassName.StartWithCapital -- a prefix would be ASCII, and an ASCII byte anywhere in the name is the one thing this fixture must not have. The name does begin with a capital, just not one the sniff recognises.
 final class Ééü extends \RuntimeException {
 }

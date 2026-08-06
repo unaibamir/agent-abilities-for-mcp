@@ -95,7 +95,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 		// Shipping methods (sub-slice W4-WC5) - always scoped to a zone.
 		'aafm/wc-list-shipping-methods'  => array(
 			'label'        => __( 'List WooCommerce shipping methods', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists the shipping methods configured in a WooCommerce shipping zone, given its zone id. Each method returns its instance id, type, title, enabled state, order, and per-instance settings. The settings object is the method\'s own configuration, so for a carrier or gateway plugin it can hold account details; field names matching a known secret pattern are removed before the response, but that check is a denylist and cannot cover every third-party naming. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -104,7 +104,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		'aafm/wc-get-shipping-method'    => array(
 			'label'        => __( 'Get WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one shipping method from a WooCommerce shipping zone by zone id and instance id. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads one shipping method from a WooCommerce shipping zone, given the zone id and the method\'s instance id. Returns its type, title, enabled state, order, and per-instance settings. The settings object is the method\'s own configuration, so for a carrier or gateway plugin it can hold account details; field names matching a known secret pattern are removed before the response, but that check is a denylist and cannot cover every third-party naming. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',

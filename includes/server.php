@@ -106,27 +106,58 @@ function aafm_user_can_call_ability( string $ability_name, array $input = array(
 	// that callback delegates into a foreign ability, and this function runs inside
 	// aafm_filter_mcp_tools_list()'s per-tool loop - so one throwing vendor callback would take
 	// down the ENTIRE tools/list response, hiding every healthy tool too, not just its own.
-	//
-	// One residual path this does NOT cover: aafm_user_can_discover_ability() consults
-	// aafm_ability_list_permission() first and calls that closure directly, reaching this function
-	// only when it returns null. Two abilities take that branch, aafm/get-post and aafm/get-page,
-	// both calling current_user_can( 'read' ), which fires map_meta_cap/user_has_cap and so can
-	// throw from third-party code. Bridged wrappers never take that branch, so the threat this
-	// guard exists to stop is fully covered.
+	// aafm_user_can_discover_ability() carries the same guard over the one branch that never
+	// reaches this function, so every path into the listing loop is covered.
 	try {
 		return true === $permission( $input );
 	} catch ( \Throwable $e ) {
-		/** This filter is documented in includes/register.php, at the execute-side catch. */
-		if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
-			throw $e;
-		}
+		return aafm_deny_crashed_permission_check( $ability_name, $e );
+	}
+}
 
-		// Fail closed, consistent with the not-callable branch above. This function deliberately
-		// does not audit ordinary denials (see the docblock) because that would write a row per
-		// tool per listing - but a crash is not an ordinary denial, and staying silent would hide
-		// the tool from discovery with no record anywhere, since the audited tools/call path is
-		// then never reached.
-		$user = wp_get_current_user();
+/**
+ * Fail closed on a permission callback that threw, and leave a record of why.
+ *
+ * Shared by both discovery choke points so one throwing vendor callback is handled identically
+ * whichever branch reached it.
+ *
+ * @param string     $ability_name Ability whose permission check crashed.
+ * @param \Throwable $e            The caught throwable.
+ * @return bool Always false.
+ * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on, so a development site
+ *                    keeps a crashing permission callback loud instead of silently hiding a tool.
+ */
+function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e ): bool {
+	/** This filter is documented in includes/register.php, at the execute-side catch. */
+	if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+		// Worth knowing before turning this on: the callers below are reached from
+		// aafm_build_server_tools() as well as from tools/list, and the adapter builds its server on
+		// init priority 20, so on a WP_DEBUG site a throwing cap filter fatals every logged-in page
+		// load rather than only the MCP endpoint. That was true before this guard existed too - the
+		// bare `$permission( $input )` propagated identically - but the switch is what makes it a
+		// choice, so say so here.
+		throw $e;
+	}
+
+	// Fail closed, consistent with the not-callable branch in aafm_user_can_call_ability(). Ordinary
+	// denials are deliberately not audited (see that function's docblock) because that would write a
+	// row per tool per listing - but a crash is not an ordinary denial, and staying silent would
+	// hide the tool from discovery with no record anywhere, since the audited tools/call path is
+	// then never reached.
+	//
+	// Once per request per distinct failure, though, not once per check. The callers run over every
+	// enabled ability, and aafm_build_server_tools() does that on init for EVERY logged-in page
+	// load, not only on tools/list. A membership plugin whose user_has_cap callback throws would
+	// otherwise insert one row per ability per page view, which on a catalog this size is ~85 rows a
+	// pageview and six figures of rows in an afternoon, with nothing to bound it: the pruner is
+	// retention-day based, not size based. The first crash is the signal; the other eighty-four are
+	// the same crash again.
+	static $seen = array();
+	$detail      = aafm_build_activity_detail_from_exception( $e );
+	$key         = $ability_name . '|' . $detail;
+	if ( ! isset( $seen[ $key ] ) ) {
+		$seen[ $key ] = true;
+		$user         = wp_get_current_user();
 		aafm_log_activity(
 			array(
 				'ability'           => $ability_name,
@@ -134,11 +165,12 @@ function aafm_user_can_call_ability( string $ability_name, array $input = array(
 				'principal_user_id' => (int) $user->ID,
 				'principal_login'   => (string) $user->user_login,
 				'client_id'         => aafm_oauth_current_client_id(),
-				'detail'            => aafm_build_activity_detail_from_exception( $e ),
+				'detail'            => $detail,
 			)
 		);
-		return false;
 	}
+
+	return false;
 }
 
 /**
@@ -382,11 +414,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
  *
  * @param string $ability_name Ability name, e.g. "aafm/update-post".
  * @return bool
+ * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on.
  */
 function aafm_user_can_discover_ability( string $ability_name ): bool {
 	$list_permission = aafm_ability_list_permission( $ability_name );
 	if ( null !== $list_permission ) {
-		return true === $list_permission();
+		// The short-circuit branch needs the same Throwable floor as the fallthrough, and for a
+		// closer reason than it looks: every predicate in aafm_ability_list_permission() is a
+		// current_user_can() call, which fires map_meta_cap and user_has_cap, and any plugin may hook
+		// those. A membership plugin whose user_has_cap callback throws on an unexpected $args shape
+		// would take down the whole tools/list response from here, which is verbatim the failure this
+		// release exists to stop, just arriving through a native ability instead of a bridged one.
+		try {
+			return true === $list_permission();
+		} catch ( \Throwable $e ) {
+			return aafm_deny_crashed_permission_check( $ability_name, $e );
+		}
 	}
 	return aafm_user_can_call_ability( $ability_name, array() );
 }

@@ -444,10 +444,12 @@ function aafm_register_enabled_bridged_abilities(): void {
 					return false;
 				}
 				// check_permissions() runs the FOREIGN plugin's own callback, which can throw.
-				// Deliberately no try/catch here: both callers guard it already - the decorated
+				// Deliberately no try/catch here: every caller guards it already - the decorated
 				// closure in aafm_register_ability_with_log() on the tools/call path, and
 				// aafm_user_can_call_ability() on the tools/list path, which reaches this same
-				// closure raw and undecorated. A third catch here would be the per-site drift the
+				// closure raw and undecorated. aafm_user_can_discover_ability() is the third, and it
+				// carries its own guard over the branch that never reaches
+				// aafm_user_can_call_ability(). A catch here would be the per-site drift the
 				// choke-point design exists to avoid. If a NEW caller ever invokes this closure
 				// directly, it must carry its own guard.
 				return true === $live->check_permissions( is_array( $input ) ? $input : array() );

@@ -639,6 +639,91 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
+	 * Run a callable with a user_has_cap filter that throws on a named capability, then take the
+	 * filter back off whatever happened. Left in place it would throw inside PHPUnit's own teardown.
+	 *
+	 * @param string   $cap      Capability whose check should explode.
+	 * @param callable $callback The act under test.
+	 * @return mixed Whatever $callback returned.
+	 */
+	private function with_a_throwing_cap_filter( string $cap, callable $callback ) {
+		$thrower = static function ( $allcaps, $caps ) use ( $cap ) {
+			if ( in_array( $cap, (array) $caps, true ) ) {
+				throw new \RuntimeException( 'a membership plugin exploded on an unexpected args shape' );
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $thrower, 10, 2 );
+		try {
+			return $callback();
+		} finally {
+			remove_filter( 'user_has_cap', $thrower, 10 );
+		}
+	}
+
+	/**
+	 * The Throwable floor went onto aafm_user_can_call_ability(), but the tools/list loop's actual
+	 * choke point is aafm_user_can_discover_ability(), which consults aafm_ability_list_permission()
+	 * FIRST and calls that closure raw. Only the fallthrough was guarded.
+	 *
+	 * That short-circuit branch is not exotic: every predicate in it is a current_user_can() call,
+	 * which fires map_meta_cap and user_has_cap, and any plugin may hook those. So a throwing
+	 * membership plugin took down the whole listing through a native ability, which is exactly the
+	 * failure the guard was added to stop, just arriving by the other door.
+	 */
+	public function test_a_throwing_cap_filter_on_the_discovery_branch_denies_instead_of_escaping(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->assertNotNull(
+			aafm_ability_list_permission( 'aafm/get-post' ),
+			'Guard on the guard: if this ability stopped taking the short-circuit branch, the test would be measuring the already-guarded fallthrough.'
+		);
+
+		$discoverable = $this->with_a_throwing_cap_filter(
+			'read',
+			static fn(): bool => aafm_user_can_discover_ability( 'aafm/get-post' )
+		);
+
+		$this->assertFalse( $discoverable, 'A crashed discovery check must fail closed, not propagate out of the listing loop.' );
+
+		$rows = $this->read_activity_rows( 'aafm/get-post' );
+		$this->assertCount( 1, $rows, 'And it must leave a record, since the audited tools/call path is never reached.' );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertStringStartsWith( 'RuntimeException at ', (string) $rows[0]['detail'] );
+	}
+
+	/**
+	 * The crash audit is not per-tools/list. aafm_build_server_tools() calls this same predicate for
+	 * every enabled ability, and it runs on init (the adapter hooks its own init at priority 20), so
+	 * on a site whose user_has_cap callback throws, every logged-in page view would insert one row
+	 * per ability. On this catalogue that is ~85 rows a pageview, and aafm_prune_activity_log() is
+	 * retention-day based rather than size based, so nothing bounds it inside the window.
+	 *
+	 * The first crash is the signal. The rest are the same crash again, so they are deduped for the
+	 * life of the request.
+	 */
+	public function test_the_same_crash_is_audited_once_per_request_not_once_per_check(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->with_a_throwing_cap_filter(
+			'read',
+			static function (): void {
+				aafm_user_can_discover_ability( 'aafm/get-page' );
+				aafm_user_can_discover_ability( 'aafm/get-page' );
+				aafm_user_can_discover_ability( 'aafm/get-page' );
+			}
+		);
+
+		$this->assertCount(
+			1,
+			$this->read_activity_rows( 'aafm/get-page' ),
+			'Three identical crashes are one finding, not three rows.'
+		);
+	}
+
+	/**
 	 * The default-on branch of aafm_rethrow_ability_exceptions had no test at all, so nothing
 	 * pinned the behaviour the filter's docblock promises: the Throwable propagates untouched and
 	 * the row is deliberately LEFT stuck at 'started', because that stuck row is development's

@@ -7,7 +7,11 @@
  * the whole of it: an ability logs a detail only if it appears in aafm_activity_detail_map(), and
  * only the fields that map names, each of which must clear a type check that no free-form string
  * can pass. Default deny in both directions. There is deliberately no string or text field type,
- * and adding one is the change a reviewer should refuse. Since 1.6.1 there is one further writer,
+ * and adding one is the change a reviewer should refuse. A failed call also records its WP_Error
+ * code, which is an identifier by construction for a first-party ability - every `new WP_Error(`
+ * under includes/ takes a string literal - but not for a bridged one, whose code a foreign plugin
+ * is free to build out of its own input, so bridged results are excluded from that branch. Since
+ * 1.6.1 there is one further writer,
  * aafm_build_activity_detail_from_exception() below, for the crash detail the choke point in
  * includes/register.php records. It is not map-driven, because a crash is not per-ability, but it
  * obeys the same rule: a fixed template filled from engine-supplied, constrained parts, and it
@@ -385,12 +389,26 @@ function aafm_build_activity_detail( string $ability, array $args ): ?string {
  * @return string|null
  */
 function aafm_build_activity_detail_from_result( string $ability, $result ): ?string {
-	// A failed call records WHY it failed, for every ability rather than only the mapped ones. The
-	// error CODE and never get_error_message(): a code is an identifier by construction, while a
-	// message is free-form prose that routinely interpolates the value that failed (see
+	// A failed call records WHY it failed, for every FIRST-PARTY ability rather than only the mapped
+	// ones. The error CODE and never get_error_message(): a code is an identifier by construction,
+	// while a message is free-form prose that routinely interpolates the value that failed (see
 	// aafm_wc_invalid_coupon_amount, which quotes the rejected amount). This branch sits before the
 	// is_array() return below, which a WP_Error would otherwise fall straight through.
+	//
+	// A bridged ability is excluded, and "a code is an identifier by construction" is exactly why.
+	// That holds for OUR codes: every `new WP_Error(` under includes/ takes a string literal. It
+	// does not hold for a foreign plugin's, which is third-party code free to build a code out of
+	// its input - `new WP_Error( 'duplicate_sku_' . $sku )` passes the key type's own character
+	// check and would land an argument value in this column, on the wire through
+	// aafm/get-activity-log, and in the CSV export. This file's header, the aafm_ability_resolved
+	// docblock and the admin panel all promise that cannot happen, and a promise with a
+	// third-party-shaped hole in it is not one. A bridged crash still records its exception class
+	// and throw site, which the engine supplies and no input can reach, so a bridged row is not
+	// left blind - it just does not carry a string a foreign plugin composed.
 	if ( is_wp_error( $result ) ) {
+		if ( str_starts_with( $ability, AAFM_BRIDGE_NAMESPACE . '/' ) ) {
+			return null;
+		}
 		$code = aafm_activity_detail_field( 'key', $result->get_error_code() );
 		return ( null === $code || '' === $code ) ? null : $code;
 	}

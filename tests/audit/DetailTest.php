@@ -777,6 +777,31 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
+	 * "A code is an identifier by construction" is true of our own codes and only our own: every
+	 * `new WP_Error(` under includes/ takes a string literal. A foreign plugin's is third-party code
+	 * free to build a code out of its input, and `duplicate_sku_ABC-123-CUSTOMER` clears the key
+	 * type's character check with room to spare. That is an argument value in the audit column, on
+	 * the wire through aafm/get-activity-log, and in the CSV export, against a promise this file's
+	 * header, the aafm_ability_resolved docblock and the admin panel all make in so many words.
+	 *
+	 * So bridged results skip the branch. Both halves are asserted here, because a test that only
+	 * pins the exclusion would also pass if the whole branch were deleted.
+	 */
+	public function test_a_bridged_error_code_is_not_recorded_but_a_first_party_one_is(): void {
+		$foreign = new \WP_Error( 'duplicate_sku_ABC-123-CUSTOMER', 'That SKU already exists.' );
+
+		$this->assertNull(
+			aafm_build_activity_detail_from_result( 'aafm-bridge/woocommerce-product-create', $foreign ),
+			'A foreign plugin composes its own error codes, so one cannot be trusted as an identifier.'
+		);
+		$this->assertSame(
+			'duplicate_sku_ABC-123-CUSTOMER',
+			aafm_build_activity_detail_from_result( 'aafm/create-post', $foreign ),
+			'Guard on the guard: this code does clear the key check, so the exclusion above is what dropped it.'
+		);
+	}
+
+	/**
 	 * The argument VALUE must appear in no column of the row, not just in the detail.
 	 *
 	 * @param array<string,mixed> $row An activity row.

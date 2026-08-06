@@ -560,6 +560,30 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
+	 * The boundary itself, which nothing asserted: 100 percent off is a real and common coupon, and
+	 * the guard rejects ABOVE 100 rather than AT it. That matches real WooCommerce, whose own
+	 * set_amount() (class-wc-coupon.php:628) uses the same comparison.
+	 *
+	 * Worth a case of its own because the failure direction is bad and invisible. Turning `> 100`
+	 * into `>= 100` leaves the whole coupon suite green while rejecting every legitimate 100 percent
+	 * coupon with a hard WP_Error, on a money-moving ability.
+	 */
+	public function test_an_exactly_one_hundred_percent_coupon_is_accepted(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_discount_type( 'percent' );
+
+		$this->assertNull(
+			aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '100' ) ),
+			'Exactly 100 percent is a legitimate coupon and must not be rejected.'
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '100.001' ) ),
+			'Guard on the guard: a hair over the limit must still be refused, so the case above is not passing because the check is gone.'
+		);
+	}
+
+	/**
 	 * The regression this guard could easily ship with. get_maximum_amount() returns '' when
 	 * unset, and (float) '' is 0.0, so a naive "minimum greater than maximum" check would reject
 	 * every ordinary minimum-only coupon. Real WooCommerce guards exactly this with `(float)

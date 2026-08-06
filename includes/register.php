@@ -231,7 +231,24 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// Individual abilities still catch specific exceptions where a precise error code and
 			// message help the caller (aafm_wc_duplicate_sku, aafm_wc_invalid_coupon_amount); this
 			// is the floor beneath them, not a replacement for them.
-			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG );
+			/**
+			 * Whether a Throwable escaping an ability should be re-thrown instead of converted to
+			 * a WP_Error.
+			 *
+			 * Defaults to WP_DEBUG, so a development site keeps programming errors loud while a
+			 * production site converts them to an audited error. Since 1.6.1 this governs an
+			 * ability's PERMISSION callback as well as its EXECUTE callback, so one switch covers
+			 * both phases.
+			 *
+			 * Re-throwing deliberately leaves no resolved audit row: on the execute path the row
+			 * stays at 'started', on the permission path no row is written at all. That absence is
+			 * the forensic signal, and it is intentional - do not "fix" it.
+			 *
+			 * @since 1.6.0
+			 * @param bool       $rethrow Whether to re-throw. Default WP_DEBUG.
+			 * @param \Throwable $e       The caught throwable. @since 1.6.1
+			 */
+			$rethrow = apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e );
 			if ( $rethrow ) {
 				// Deliberately skips both the WP_Error below AND aafm_log_ability_exception(): the
 				// row is left stuck at 'started', same as before this catch existed. That stuck row

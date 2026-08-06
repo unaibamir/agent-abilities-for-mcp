@@ -670,18 +670,61 @@ final class DetailTest extends TestCase {
 		$this->assertStringStartsWith( 'RuntimeException@anonymous at ', $detail );
 	}
 
+	/**
+	 * The bound has to be exercised by parts the builder actually copies. The previous version of
+	 * this test fed in a 5000-character MESSAGE, which the builder never reads, so it passed for a
+	 * reason unrelated to its name and stayed green with BOTH mb_substr() caps deleted - it was
+	 * really just a weaker copy of the never-contains-the-message test above.
+	 *
+	 * The fixture supplies a class name over 128 characters and a file name over 64, so each cap is
+	 * the only thing keeping its half short.
+	 */
 	public function test_exception_detail_is_bounded(): void {
-		$e = new \RuntimeException( str_repeat( 'x', 5000 ) );
+		require_once dirname( __DIR__ ) . '/Fixtures/AnOverlongFixtureFileNameThatExercisesTheAuditDetailFileNameCap.php';
+		$e = \AAFM\Tests\Fixtures\ExceptionWithADeliberatelyOverlongClassNameThatExistsOnlyToExerciseTheOneHundredAndTwentyEightCharacterCapOfTheAuditDetailBuilder::raised_here();
 
-		$this->assertLessThanOrEqual( 255, strlen( aafm_build_activity_detail_from_exception( $e ) ) );
+		$this->assertGreaterThan( 128, strlen( get_class( $e ) ), 'Guard on the guard: the fixture class name must exceed the cap.' );
+		$this->assertGreaterThan( 64, strlen( basename( $e->getFile() ) ), 'Guard on the guard: the fixture file name must exceed the cap.' );
+
+		$detail = aafm_build_activity_detail_from_exception( $e );
+
+		$this->assertLessThanOrEqual( 255, strlen( $detail ) );
+
+		$parts = explode( ' at ', $detail );
+		$this->assertCount( 2, $parts );
+		$this->assertSame( 128, strlen( $parts[0] ), 'The class is cut at 128.' );
+		$this->assertSame( 64, strlen( substr( $parts[1], 0, strrpos( $parts[1], ':' ) ) ), 'The file is cut at 64.' );
 	}
 
-	public function test_exception_detail_names_the_throw_site(): void {
-		$e = new \RuntimeException( 'anything' );
+	/**
+	 * The file-name filter's documented job is absorbing the suffix PHP appends to getFile() when a
+	 * throw happens inside runtime-evaluated code: "/abs/path/File.php(91) : eval()'d code". Nothing
+	 * exercised it - the anonymous-class test is already past the filter by the time it runs, since
+	 * the NUL cut has done the work and neither half contains a character the filter would touch.
+	 *
+	 * Asserting the whole shape rather than the absence of one substring, because what has to hold
+	 * is that the file half is a file name, not that one known suffix is missing from it.
+	 */
+	public function test_a_throw_from_evaluated_code_records_a_bare_file_name(): void {
+		$caught = null;
+		try {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged, WordPress.PHP.DiscouragedPHPFunctions.runtime_configuration_eval -- the only way to make PHP produce the getFile() suffix this filter exists to absorb.
+			eval( 'throw new \RuntimeException( "thrown from evaluated code" );' );
+		} catch ( \RuntimeException $e ) {
+			$caught = $e;
+		}
 
-		$this->assertSame(
-			sprintf( 'RuntimeException at %1$s:%2$d', basename( __FILE__ ), $e->getLine() ),
-			aafm_build_activity_detail_from_exception( $e )
+		$this->assertInstanceOf( \RuntimeException::class, $caught );
+		$this->assertStringContainsString(
+			'eval',
+			$caught->getFile(),
+			'Guard on the guard: PHP must actually be appending the suffix, or this test proves nothing.'
+		);
+
+		$this->assertMatchesRegularExpression(
+			'/^[A-Za-z0-9_\\\\@~]+ at [A-Za-z0-9._\-]+:\d+$/',
+			aafm_build_activity_detail_from_exception( $caught ),
+			'The file half must be a bare file name: no path, no parentheses, no quotes, no prose.'
 		);
 	}
 

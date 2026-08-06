@@ -695,4 +695,80 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertNotEmpty( $rows );
 		$this->assertSame( 'error', (string) $rows[0]['status'] );
 	}
+
+	/**
+	 * A bridged call announces its resolve like any other, and a bridged FAILURE announces the null
+	 * detail the exclusion leaves on the column rather than the foreign plugin's own error code.
+	 *
+	 * Both halves were unpinned end to end. aafm_ability_resolved is reached through the real
+	 * wrapper only by ResolveHookTest's native cases, so skipping the announcement for every
+	 * aafm-bridge/* call left the whole suite green, and the bridged exclusion in
+	 * aafm_build_activity_detail_from_result() was asserted only as a unit, never at the layer a
+	 * monitor actually reads.
+	 */
+	public function test_a_bridged_call_announces_its_resolve_and_never_a_foreign_error_code(): void {
+		$fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			static function ( $record ) use ( &$fired ): void {
+				$fired[] = $record;
+			}
+		);
+
+		$this->acting_as( 'administrator' );
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/echo',
+					array(
+						'label'               => 'Echo',
+						'description'         => 'Echoes value.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array( 'v' => array( 'type' => 'string' ) ),
+						),
+						// A foreign plugin composing a code out of its own input, which is the
+						// whole reason bridged codes are excluded from the detail column.
+						'execute_callback'    => static fn( $i ) => new \WP_Error(
+							'duplicate_sku_' . ( $i['v'] ?? '' ),
+							'That SKU already exists.'
+						),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo' ) );
+		$this->register_wrappers();
+
+		wp_get_ability( 'aafm-bridge/demo-echo' )->execute( array( 'v' => 'ABC-123-CUSTOMER' ) );
+
+		$this->assertCount( 1, $fired, 'A bridged resolve is a resolve: it announces exactly once.' );
+		$this->assertSame( 'error', $fired[0]['status'] );
+		$this->assertNull(
+			$fired[0]['detail'],
+			'A foreign error code is not an identifier by construction, so it must reach neither the column nor the hook.'
+		);
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-bridge/demo-echo' ) );
+		$this->assertCount( 1, $rows, 'Guard on the guard: one row per call, so there is a single id to match against.' );
+		$this->assertSame( (int) $rows[0]['id'], $fired[0]['row_id'], 'The announced row_id must be the row the call wrote.' );
+		$this->assertNull( $rows[0]['detail'], 'And the column agrees with the hook.' );
+	}
 }

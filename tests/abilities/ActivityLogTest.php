@@ -172,4 +172,39 @@ final class ActivityLogTest extends TestCase {
 
 		$this->assertStringContainsString( '"detail":null', (string) wp_json_encode( $out['entries'][0] ) );
 	}
+
+	/**
+	 * A field an agent can read has to be named in the two strings a human reads: the tool
+	 * description an MCP client shows the agent, and the disclosure the admin consent panel shows
+	 * the operator. The output schema is not one of those, so a field documented only there is
+	 * undisclosed as far as either reader is concerned.
+	 *
+	 * This ability grew `detail` without either string being touched, and both still enumerated the
+	 * fields and stopped at the timestamp. Pinning the two together so the next field cannot land
+	 * the same way.
+	 */
+	public function test_the_detail_field_is_named_in_the_description_and_the_disclosure(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+				'detail'  => 'Read post #7',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/get-activity-log' )->execute( array( 'ability' => 'aafm/get-post' ) );
+		$this->assertCount( 1, $out['entries'] );
+		$this->assertArrayHasKey(
+			'detail',
+			$out['entries'][0],
+			'Guard on the guard: if the ability stopped returning detail there would be nothing to disclose.'
+		);
+
+		$registry = aafm_get_abilities_registry();
+		$this->assertStringContainsString( 'detail', $registry['aafm/get-activity-log']['description'] );
+
+		$disclosures = aafm_ability_disclosures();
+		$this->assertStringContainsString( 'detail', $disclosures['aafm/get-activity-log'] );
+	}
 }

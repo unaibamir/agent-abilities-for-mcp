@@ -369,7 +369,7 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 }
 
 /**
- * Record a caught ability exception's class and message onto its already-started activity row.
+ * Record a caught ability exception's class and throw site onto its already-started activity row.
  *
  * A crash mid-execute used to leave the row stuck at 'started' forever - that stuck row was
  * itself the only forensic signal a crash had happened (see the comment in
@@ -379,10 +379,16 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
  * does not insert a second row: it updates the one aafm_log_activity() already wrote at
  * 'started', the same "one row per call" contract every other resolve follows.
  *
- * The message written here is for the admin-only activity log ONLY. The caller of
- * aafm_register_ability_with_log() must build the WP_Error returned to the client from a fixed,
- * translatable string, never from $e->getMessage() - a raw vendor exception message can contain
- * internal detail (file paths, object state) that has no business reaching an MCP client.
+ * The exception's MESSAGE is never stored, in this row or anywhere else. A vendor exception
+ * message routinely interpolates the value that caused it, and the log's promise - stated in the
+ * wp.org listing, not only in this codebase - is that argument values are never stored. The class
+ * plus the throw site identifies the defect at least as precisely and cannot carry a value. The
+ * detail itself is built by aafm_build_activity_detail_from_exception() in includes/audit/detail.php,
+ * so the file that documents this column's contract is also the file that produces every string
+ * written to it.
+ *
+ * The same rule governs the WP_Error the caller returns to the client: build it from a fixed,
+ * translatable string, never from $e->getMessage().
  *
  * @param int        $row_id  The 'started' row id returned by aafm_log_activity() for this call.
  * @param \Throwable $e       The caught exception or error.
@@ -393,7 +399,7 @@ function aafm_log_ability_exception( int $row_id, \Throwable $e ): void {
 		$row_id,
 		'error',
 		null,
-		sprintf( '%1$s: %2$s', get_class( $e ), $e->getMessage() )
+		aafm_build_activity_detail_from_exception( $e )
 	);
 }
 

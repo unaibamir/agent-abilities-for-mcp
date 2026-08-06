@@ -642,6 +642,62 @@ final class DetailTest extends TestCase {
 		$this->assertNull( aafm_activity_detail_link_type( 'aafm/wc-update-payment-gateway' ) );
 	}
 
+	// -------------------------------------------------------------------------
+	// The crash detail builder: the one writer that is not map-driven.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * A vendor exception message routinely interpolates the value that caused it, and the wp.org
+	 * listing promises argument values are never stored. The builder must never read it.
+	 */
+	public function test_exception_detail_never_contains_the_message(): void {
+		$e = new \RuntimeException( 'An account is already registered with jane.doe@clientsite.example.' );
+
+		$detail = aafm_build_activity_detail_from_exception( $e );
+
+		$this->assertStringNotContainsString( 'jane.doe@clientsite.example', $detail );
+		$this->assertStringNotContainsString( 'already registered', $detail );
+		$this->assertStringStartsWith( 'RuntimeException at ', $detail );
+	}
+
+	public function test_exception_detail_strips_the_anonymous_class_path_and_nul_byte(): void {
+		$e = new class() extends \RuntimeException {};
+
+		$detail = aafm_build_activity_detail_from_exception( $e );
+
+		$this->assertStringNotContainsString( "\0", $detail, 'A NUL byte is valid UTF-8, so the existing sanitizer will not remove it.' );
+		$this->assertStringNotContainsString( '/', $detail, 'PHP renders an anonymous class as Parent@anonymous\0<absolute path>, which leaks the install path.' );
+		$this->assertStringStartsWith( 'RuntimeException@anonymous at ', $detail );
+	}
+
+	public function test_exception_detail_is_bounded(): void {
+		$e = new \RuntimeException( str_repeat( 'x', 5000 ) );
+
+		$this->assertLessThanOrEqual( 255, strlen( aafm_build_activity_detail_from_exception( $e ) ) );
+	}
+
+	public function test_exception_detail_names_the_throw_site(): void {
+		$e = new \RuntimeException( 'anything' );
+
+		$this->assertSame(
+			sprintf( 'RuntimeException at %1$s:%2$d', basename( __FILE__ ), $e->getLine() ),
+			aafm_build_activity_detail_from_exception( $e )
+		);
+	}
+
+	/**
+	 * An ordinary WP_Error result records its CODE, which is an identifier, and never its message,
+	 * which is free-form prose that can interpolate the value that failed.
+	 */
+	public function test_a_wp_error_result_yields_its_code_not_its_message(): void {
+		$error = new \WP_Error( 'aafm_wc_invalid_coupon_amount', 'A percentage coupon cannot discount more than 100 percent, and this would leave it at "150".' );
+
+		$detail = aafm_build_activity_detail_from_result( 'aafm/get-post', $error );
+
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $detail );
+		$this->assertStringNotContainsString( '150', (string) $detail );
+	}
+
 	/**
 	 * The argument VALUE must appear in no column of the row, not just in the detail.
 	 *

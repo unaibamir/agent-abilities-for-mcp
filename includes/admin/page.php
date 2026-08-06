@@ -2215,9 +2215,11 @@ function aafm_export_activity_csv( ?string $status = null ): void {
  *
  * Every cell is run through esc_html()/esc_attr(); the log holds argument KEYS (never values),
  * a REMOTE_ADDR source IP, and since v5 a short detail string. The detail is identifier-only:
- * includes/audit/detail.php is an allowlist of field types with no string or text type, so a
- * detail can never carry an argument value. Standard escaping is sufficient for all of it. An
- * empty set renders a single "no activity" row so the table never collapses to a bare <tbody>.
+ * includes/audit/detail.php is an allowlist of field types with no string or text type, and its
+ * one non-map writer (aafm_build_activity_detail_from_exception(), for a caught crash) emits only
+ * a class name and a file:line. A detail can never carry an argument value. Standard escaping is
+ * sufficient for all of it. An empty set renders a single "no activity" row so the table never
+ * collapses to a bare <tbody>.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
  * @return string Escaped <tr>…</tr> markup.

@@ -365,7 +365,43 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 	}
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->update( aafm_activity_log_table(), $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	$updated = $wpdb->update( aafm_activity_log_table(), $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+
+	// Only a literal false is a failure. wpdb::update() returns 0 when the row matched and no
+	// column changed, which is a legitimate no-op resolve, and a naive `if ( $updated )` would
+	// suppress the hook on every one of them.
+	if ( false === $updated ) {
+		return;
+	}
+
+	/**
+	 * Fires once an ability call resolves, whatever the outcome.
+	 *
+	 * This is the only way anything outside wp-admin can see a crash. Before it existed a crashed
+	 * call was visible solely to a human reading the activity log, so an external monitor had no
+	 * signal at all.
+	 *
+	 * The record deliberately carries no ability name or principal. This function receives neither,
+	 * and includes/audit/log.php exposes no read-by-id helper, so including them would mean a new
+	 * helper plus an extra SELECT on every single resolve. Join on row_id against the
+	 * aafm_ability_called record instead, which carries both.
+	 *
+	 * $detail is identifier-only and never carries argument values: it is an ability's allowlisted
+	 * detail, a WP_Error code, or a crash's exception class and throw site. See
+	 * includes/audit/detail.php.
+	 *
+	 * @since 1.6.1
+	 * @param array{row_id:int,status:string,result_count:int|null,detail:string|null} $record The resolve.
+	 */
+	do_action(
+		'aafm_ability_resolved',
+		array(
+			'row_id'       => $row_id,
+			'status'       => $status,
+			'result_count' => $result_count,
+			'detail'       => $detail,
+		)
+	);
 }
 
 /**

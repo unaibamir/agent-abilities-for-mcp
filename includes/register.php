@@ -216,6 +216,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			)
 		);
 
+		$crash_detail_written = false;
 		try {
 			$result = $original_execute( $input );
 		} catch ( \Throwable $e ) {
@@ -239,10 +240,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				throw $e; // Keep programming errors loud in development.
 			}
 
-			// Record the exception's class and message onto the row this call already opened, so
+			// Record the exception's class and throw site onto the row this call already opened, so
 			// a crash stays distinguishable from an ordinary validation error in the activity log -
 			// the same signal the stuck 'started' row used to carry before this catch existed.
 			aafm_log_ability_exception( $row_id, $e );
+			$crash_detail_written = true;
 
 			$result = new \WP_Error(
 				'aafm_ability_exception',
@@ -285,11 +287,22 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		// A create's identifier only exists once the call returns, so the resolve carries it. Null
 		// for every other ability, and null leaves whatever the insert wrote in place.
+		//
+		// This is deliberately a SECOND update on a crashed call - aafm_log_ability_exception()
+		// above already resolved the row - and the flag is what keeps that harmless. Collapsing the
+		// two writes would buy one query and put both the one-row-per-call invariant and the crash
+		// detail's survival at risk, so it is not worth doing.
+		//
+		// A crash already wrote the exception's class and throw site. Passing null here leaves it in
+		// place: the throw site names the actual defect, while 'aafm_ability_exception' only names
+		// our own wrapper. Without the flag, the WP_Error branch of
+		// aafm_build_activity_detail_from_result() would overwrite the throw site with that wrapper
+		// code on every crashed call.
 		aafm_update_activity_status(
 			$row_id,
 			is_wp_error( $result ) ? 'error' : 'success',
 			$result_count,
-			aafm_build_activity_detail_from_result( $name, $result )
+			$crash_detail_written ? null : aafm_build_activity_detail_from_result( $name, $result )
 		);
 
 		return $result;

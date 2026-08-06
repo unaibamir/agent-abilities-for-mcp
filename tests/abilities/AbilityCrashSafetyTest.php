@@ -358,13 +358,16 @@ final class AbilityCrashSafetyTest extends TestCase {
 	 * inside a simulated wp_abilities_api_init action - core's wp_register_ability() refuses to
 	 * run outside one (see TestCase::in_action()). Registering directly with wp_register_ability()
 	 * instead would bypass the decorated closure entirely and test nothing.
+	 *
+	 * @param string $name Ability name. The registry is process-wide and is not reset between
+	 *                     cases, so a second case in this class needs its own name.
 	 */
-	private function register_throwing_fixture(): void {
+	private function register_throwing_fixture( string $name = 'aafm-test/throws' ): void {
 		$this->in_action(
 			'wp_abilities_api_init',
-			static function (): void {
+			static function () use ( $name ): void {
 				aafm_register_ability_with_log(
-					'aafm-test/throws',
+					$name,
 					array(
 						'label'               => 'Throws on purpose',
 						'description'         => 'Test fixture that throws from its execute callback.',
@@ -432,7 +435,7 @@ final class AbilityCrashSafetyTest extends TestCase {
 
 		// A crash mid-execute used to leave the row stuck at 'started' - the only forensic signal
 		// a crash happened, per the comment at register.php:202-203. Catching the exception
-		// resolves the row like any ordinary call, so the exception's class and message must be
+		// resolves the row like any ordinary call, so the exception's class and throw site must be
 		// written into detail or that signal is lost outright.
 		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/throws' ) );
 		$this->assertCount( 1, $rows, 'One row per call: the started row is updated in place, never duplicated.' );
@@ -442,10 +445,81 @@ final class AbilityCrashSafetyTest extends TestCase {
 			(string) $rows[0]['detail'],
 			'The activity log detail column is the admin-only forensic trail - it must name the exception class.'
 		);
-		$this->assertStringContainsString(
+		// Until 1.6.1 this asserted the message WAS in the detail, which is the sixth known instance
+		// in this codebase of a test asserting the bug and passing forever. The message is a vendor
+		// string that routinely interpolates the value that caused the throw, the column is exported
+		// to CSV, and the wp.org listing promises argument values are never stored. The class and
+		// throw site carry the same forensic weight and cannot carry a value.
+		$this->assertStringNotContainsString(
 			'boom from the ability',
 			(string) $rows[0]['detail'],
-			'And the exception message, so a crash stays distinguishable from an ordinary validation error in the log.'
+			'The exception MESSAGE must never be stored: it can interpolate the argument value that caused the throw.'
 		);
+		$this->assertStringContainsString(
+			' at ',
+			(string) $rows[0]['detail'],
+			'The detail names the throw site, which identifies the defect more precisely than the message does.'
+		);
+	}
+
+	/**
+	 * Half B of the crash-detail routing: the tail aafm_update_activity_status() in
+	 * aafm_register_ability_with_log() runs unconditionally on the SAME row a crash already
+	 * resolved. Once aafm_build_activity_detail_from_result() grew a WP_Error branch, that tail
+	 * would overwrite the exception's class and throw site with the string 'aafm_ability_exception',
+	 * which names only our own wrapper. The $crash_detail_written flag suppresses it. Without this
+	 * test the flag could be dropped and every other test in this file would still pass.
+	 */
+	public function test_a_crashed_call_keeps_the_exception_detail_not_the_wrapper_code(): void {
+		// A distinct fixture name: the abilities registry is process-wide and is not reset between
+		// cases, so reusing 'aafm-test/throws' here trips core's already-registered notice.
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_throwing_fixture( 'aafm-test/throws-detail' );
+
+		wp_get_ability( 'aafm-test/throws-detail' )->execute( array() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/throws-detail' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertStringStartsWith( 'RuntimeException at ', (string) $rows[0]['detail'] );
+		$this->assertNotSame(
+			'aafm_ability_exception',
+			(string) $rows[0]['detail'],
+			'The tail update must not clobber the throw site with the wrapper error code.'
+		);
+	}
+
+	/**
+	 * Half A of the same change, from the other side: an ordinary WP_Error result - no exception
+	 * anywhere - records its own error code, so a validation failure is as legible in the log as a
+	 * crash now is.
+	 */
+	public function test_an_ordinary_wp_error_result_stores_its_code(): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/errors',
+					array(
+						'label'               => 'Returns a WP_Error',
+						'description'         => 'Test fixture that returns a plain WP_Error.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function () {
+							return new WP_Error( 'aafm_test_rejected', 'Free-form prose naming the value 12345.' );
+						},
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		wp_get_ability( 'aafm-test/errors' )->execute( array() );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/errors' ) );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'error', $rows[0]['status'] );
+		$this->assertSame( 'aafm_test_rejected', (string) $rows[0]['detail'] );
+		$this->assertStringNotContainsString( '12345', (string) $rows[0]['detail'], 'The code, never the message.' );
 	}
 }

@@ -7,7 +7,11 @@
  * the whole of it: an ability logs a detail only if it appears in aafm_activity_detail_map(), and
  * only the fields that map names, each of which must clear a type check that no free-form string
  * can pass. Default deny in both directions. There is deliberately no string or text field type,
- * and adding one is the change a reviewer should refuse.
+ * and adding one is the change a reviewer should refuse. Since 1.6.1 there is one further writer,
+ * aafm_build_activity_detail_from_exception() below, for the crash detail the choke point in
+ * includes/register.php records. It is not map-driven, because a crash is not per-ability, but it
+ * obeys the same rule: a fixed template filled from engine-supplied, constrained parts, and it
+ * never reads the exception's message.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -381,12 +385,64 @@ function aafm_build_activity_detail( string $ability, array $args ): ?string {
  * @return string|null
  */
 function aafm_build_activity_detail_from_result( string $ability, $result ): ?string {
+	// A failed call records WHY it failed, for every ability rather than only the mapped ones. The
+	// error CODE and never get_error_message(): a code is an identifier by construction, while a
+	// message is free-form prose that routinely interpolates the value that failed (see
+	// aafm_wc_invalid_coupon_amount, which quotes the rejected amount). This branch sits before the
+	// is_array() return below, which a WP_Error would otherwise fall straight through.
+	if ( is_wp_error( $result ) ) {
+		$code = aafm_activity_detail_field( 'key', $result->get_error_code() );
+		return ( null === $code || '' === $code ) ? null : $code;
+	}
+
 	$entry = aafm_activity_detail_map()[ $ability ] ?? null;
 	if ( null === $entry || empty( $entry['result_id'] ) || ! is_array( $result ) ) {
 		return null;
 	}
 	$id = aafm_activity_detail_field( 'id', aafm_activity_detail_dig( $result, (string) $entry['result_id'] ) );
 	return ( null === $id ) ? null : sprintf( (string) $entry['template'], $id );
+}
+
+/**
+ * Build a row's detail from a caught throwable: its class and where it was thrown, never its
+ * message.
+ *
+ * Deliberately NOT a new aafm_activity_detail_field() type: the parts here come from the PHP
+ * engine, not from caller input, so they need constraining rather than validating, and adding a
+ * free-form string type is the change this file's header tells a reviewer to refuse.
+ *
+ * $e->getMessage() is never read. A vendor exception message routinely interpolates the value that
+ * caused it - a rejected email address, a duplicated SKU, a download filename - and the log's
+ * central promise, stated in the wp.org listing and not only in this codebase, is that argument
+ * VALUES are never stored. The class and the throw site identify the defect more precisely than the
+ * prose does anyway.
+ *
+ * get_class() needs the guard below, not only the message: PHP renders an anonymous class as
+ * "Parent@anonymous\0<absolute file path>:<line>$<counter>", so the raw class name of an anonymous
+ * throwable carries the site's install path AND a NUL byte, and aafm_sanitize_activity_detail()
+ * removes neither (a NUL is valid UTF-8, so wp_check_invalid_utf8() passes it through). Cutting at
+ * the NUL leaves "Parent@anonymous", which is all the useful part.
+ *
+ * @param \Throwable $e The caught exception or error.
+ * @return string A bounded, value-free detail, e.g. "WC_Data_Exception at abstract-wc-data.php:1001".
+ */
+function aafm_build_activity_detail_from_exception( \Throwable $e ): string {
+	$class = get_class( $e );
+	$nul   = strpos( $class, "\0" );
+	if ( false !== $nul ) {
+		$class = substr( $class, 0, $nul );
+	}
+	// A PHP class name is [A-Za-z0-9_\] plus the '@anonymous' marker kept above; anything else is
+	// not a class name and has no business in an audit row.
+	$class = (string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', $class );
+	$class = '' === $class ? 'Throwable' : mb_substr( $class, 0, 128 );
+
+	// basename() drops the install path; the character filter absorbs the " : evaluated code"
+	// suffix PHP appends to getFile() when the throw happens inside a runtime-evaluated string.
+	$file = (string) preg_replace( '/[^A-Za-z0-9._\-]/', '', basename( $e->getFile() ) );
+	$file = '' === $file ? 'unknown' : mb_substr( $file, 0, 64 );
+
+	return sprintf( '%1$s at %2$s:%3$d', $class, $file, max( 0, $e->getLine() ) );
 }
 
 /**

@@ -692,8 +692,48 @@ final class DetailTest extends TestCase {
 
 		$parts = explode( ' at ', $detail );
 		$this->assertCount( 2, $parts );
-		$this->assertSame( 128, strlen( $parts[0] ), 'The class is cut at 128.' );
+		$this->assertSame( '~', substr( $parts[0], -1 ), 'A name the cap had to cut is marked, same as one the filter had to cut.' );
+		$this->assertSame( 128, strlen( rtrim( $parts[0], '~' ) ), 'The class is cut at 128.' );
 		$this->assertSame( 64, strlen( substr( $parts[1], 0, strrpos( $parts[1], ':' ) ) ), 'The file is cut at 64.' );
+	}
+
+	/**
+	 * The cap is a second way to lose a name, and an unmarked truncation is the worse of the two:
+	 * 128 characters of a 150-character class read as a complete name, and they can be the WHOLE
+	 * name of some other real class, which is precisely the collision the marker exists to stop.
+	 * The filter and the cap therefore share one marker, applied by comparing the recorded name
+	 * against the one that came in.
+	 */
+	public function test_a_class_name_only_the_cap_had_to_cut_is_marked_too(): void {
+		require_once dirname( __DIR__ ) . '/Fixtures/AnOverlongFixtureFileNameThatExercisesTheAuditDetailFileNameCap.php';
+		$e = \AAFM\Tests\Fixtures\ExceptionWithADeliberatelyOverlongClassNameThatExistsOnlyToExerciseTheOneHundredAndTwentyEightCharacterCapOfTheAuditDetailBuilder::raised_here();
+
+		$class = get_class( $e );
+		$this->assertSame(
+			$class,
+			(string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', $class ),
+			'Guard on the guard: every character of this name is legal, so only the cap can cut it.'
+		);
+
+		$this->assertStringStartsWith(
+			mb_substr( $class, 0, 128 ) . '~ at ',
+			aafm_build_activity_detail_from_exception( $e )
+		);
+	}
+
+	/**
+	 * A class whose every byte the filter removes is the MOST lossy case there is, and it was the
+	 * one case the marker missed: it fell back to the bare Throwable sentinel, so total loss read
+	 * quieter than partial loss. Nothing is pointed at a wrong class here (no get_class() can
+	 * return Throwable, it is an interface), but a reader deserves to be told the name is gone.
+	 */
+	public function test_a_class_name_the_filter_emptied_falls_back_to_a_marked_sentinel(): void {
+		require_once dirname( __DIR__ ) . '/Fixtures/FullyNonAsciiClassNameException.php';
+		$class = "\xc3\x89\xc3\xa9\xc3\xbc";
+		$e     = new $class( 'anything' );
+
+		$this->assertSame( '', (string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', get_class( $e ) ), 'Guard on the guard: the filter must really empty this name.' );
+		$this->assertStringStartsWith( 'Throwable~ at ', aafm_build_activity_detail_from_exception( $e ) );
 	}
 
 	/**

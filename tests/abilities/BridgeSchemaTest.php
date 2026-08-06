@@ -88,7 +88,18 @@ final class BridgeSchemaTest extends TestCase {
 	 * the properties position instead, exercising nothing it claims to. 'oneOf branch' declares a
 	 * type for the same reason. And the third column is per-case rather than unconditional because
 	 * WP_UnitTestCase_Base fails a test for an UNMET incorrect-usage expectation as well as an
-	 * unexpected notice, so setting it everywhere would fail the four cases that emit none.
+	 * unexpected notice, so setting it everywhere would fail the cases that emit none.
+	 *
+	 * 'additionalProperties' carries a non-empty properties for the same reason as
+	 * 'patternProperties element'. It belongs here because core recurses into it for every object
+	 * payload with an unlisted key, which makes it the most travelled position the deleted walker
+	 * touched, but its failure mode is NOT the fatal the other cases have. Core reads it behind an
+	 * is_array() guard (rest_validate_object_value_from_schema(), and again in the sanitizer), so a
+	 * coerced stdClass there did not crash - it made core skip validating additional properties
+	 * altogether and say nothing. Measured: restoring the coercion at this one position turns this
+	 * case red on the third column, because the typeless warning that proves core went INTO the
+	 * subschema stops appearing. A silent hole in validation rather than a visible crash, which is
+	 * the harder of the two to notice and the reason to keep it pinned.
 	 *
 	 * @return array<string,array{0:array<string,mixed>,1:mixed,2:bool}>
 	 */
@@ -126,6 +137,15 @@ final class BridgeSchemaTest extends TestCase {
 					'items' => array(),
 				),
 				array( 1, 2 ),
+				true,
+			),
+			'additionalProperties'      => array(
+				array(
+					'type'                 => 'object',
+					'properties'           => array( 'keep' => array( 'type' => 'string' ) ),
+					'additionalProperties' => array(),
+				),
+				array( 'extra' => 1 ),
 				true,
 			),
 			'anyOf branch'              => array(
@@ -171,6 +191,17 @@ final class BridgeSchemaTest extends TestCase {
 		$this->assertSame( 'object', aafm_normalize_json_schema( array() )['type'] );
 		$this->assertSame( 'object', aafm_normalize_json_schema( array( 'description' => 'x' ) )['type'] );
 		$this->assertSame( 'array', aafm_normalize_json_schema( array( 'type' => 'array' ) )['type'] );
+
+		// The ! is_array() half of the same guard, which nothing reached before: this function is
+		// handed whatever a foreign get_input_schema() returned, and that is third-party code free
+		// to return anything at all. It must fall back, never fatal on the array access below it.
+		foreach ( array( null, 'x', 5, true ) as $not_a_schema ) {
+			$this->assertSame(
+				array( 'type' => 'object' ),
+				aafm_normalize_json_schema( $not_a_schema ),
+				'A non-array foreign schema must fall back to a bare object schema.'
+			);
+		}
 	}
 
 	/**

@@ -145,13 +145,29 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// hide the tool from discovery with no record anywhere, since the audited tools/call path is
 	// then never reached.
 	//
-	// Once per request per distinct failure, though, not once per check. The callers run over every
-	// enabled ability, and aafm_build_server_tools() does that on init for EVERY logged-in page
-	// load, not only on tools/list. A membership plugin whose user_has_cap callback throws would
-	// otherwise insert one row per ability per page view, which on a catalog this size is ~85 rows a
-	// pageview and six figures of rows in an afternoon, with nothing to bound it: the pruner is
-	// retention-day based, not size based. The first crash is the signal; the other eighty-four are
-	// the same crash again.
+	// Once per (ability, failure) per request, though, not once per check. Read that bound
+	// literally, because the ability name is half the key: this removes the REPEAT-CHECK
+	// multiplier, not the per-ability row. An MCP request runs the loop twice, once in
+	// aafm_build_server_tools() on init and again in aafm_filter_mcp_tools_list at tools/list, so
+	// the second pass writes nothing; a single pass over the catalog still writes one row per
+	// affected ability. Measured with a throwing user_has_cap filter and the whole native catalog
+	// enabled: 83 abilities checked, 38 rows written (the other 45 fail closed before they reach
+	// the capability check), a second pass in the same request adds zero, and a genuinely
+	// different exception on an already-recorded ability still writes its own row.
+	//
+	// A per-ability row is the deliberate trade. The alternative bound - one row per request,
+	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
+	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
+	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
+	// init for every logged-in page load, so the un-deduped shape was rows-per-ability times
+	// passes-per-request with nothing to bound it (the pruner is retention-day based, not size
+	// based).
+	//
+	// The static is request-scoped on php-fpm and mod_php, which is what WordPress almost always
+	// runs on. Under a persistent worker SAPI (FrankenPHP worker mode, RoadRunner, Swoole) or
+	// inside one long-lived wp CLI process it outlives the request, so a repeat of the byte-identical
+	// crash in a LATER request is not re-recorded. Keying it on something request-unique costs more
+	// than it buys: the suppressed row would be an exact duplicate of one already in the table.
 	static $seen = array();
 	$detail      = aafm_build_activity_detail_from_exception( $e );
 	$key         = $ability_name . '|' . $detail;

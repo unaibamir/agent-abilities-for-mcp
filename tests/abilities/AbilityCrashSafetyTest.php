@@ -694,14 +694,18 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
-	 * The crash audit is not per-tools/list. aafm_build_server_tools() calls this same predicate for
-	 * every enabled ability, and it runs on init (the adapter hooks its own init at priority 20), so
-	 * on a site whose user_has_cap callback throws, every logged-in page view would insert one row
-	 * per ability. On this catalogue that is ~85 rows a pageview, and aafm_prune_activity_log() is
-	 * retention-day based rather than size based, so nothing bounds it inside the window.
+	 * Repeated checks of the SAME ability record one row, not one per check. That is the whole of
+	 * the bound and this test measures exactly it: the key is ability plus failure, so a pass over
+	 * the catalogue still writes a row per affected ability, and only the repeat passes collapse.
+	 * An MCP request makes two passes (aafm_build_server_tools() on init, then tools/list), and
+	 * aafm_build_server_tools() runs on init for every logged-in page view, so without this the
+	 * count multiplies by passes as well as by abilities with nothing to stop it:
+	 * aafm_prune_activity_log() is retention-day based rather than size based.
 	 *
-	 * The first crash is the signal. The rest are the same crash again, so they are deduped for the
-	 * life of the request.
+	 * Beware when adding another crash test here. The dedupe's `static $seen` lives for the whole
+	 * PHPUnit process while the database rolls back per test, so a test that crashes an ability
+	 * another test already crashed at the same throw site sees zero rows and no obvious reason why.
+	 * These cases stay apart only because they use different abilities. Use one of your own.
 	 */
 	public function test_the_same_crash_is_audited_once_per_request_not_once_per_check(): void {
 		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );

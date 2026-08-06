@@ -320,6 +320,34 @@ final class RankMathTest extends TestCase {
 		$this->assertSame( '', $schema['author']['deep']['@id'], 'A javascript: @id at depth must be stripped.' );
 	}
 
+	/**
+	 * The sanitizer's depth bound is the only thing between a hostile JSON-LD graph and an exhausted
+	 * stack, and since the bridge's schema walker was deleted aafm_sanitize_schema_array() is the
+	 * last consumer of AAFM_SCHEMA_MAX_DEPTH. Nothing pinned it: the sanitizer's other tests work at
+	 * depth three, which exercises the walk but never the bound. Deleting the constant would be
+	 * silent too, because includes/integrations.php defines a fallback of 32 when it is missing.
+	 */
+	public function test_sanitize_schema_array_drops_sub_trees_past_the_depth_bound(): void {
+		$leaf = 'deepest-leaf-marker';
+		$node = array( 'name' => $leaf );
+		for ( $i = 0; $i < AAFM_SCHEMA_MAX_DEPTH + 5; $i++ ) {
+			$node = array( 'child' => $node );
+		}
+
+		$clean = aafm_sanitize_schema_array( $node );
+
+		$this->assertStringNotContainsString(
+			$leaf,
+			(string) wp_json_encode( $clean ),
+			'A sub-tree past the depth bound must be dropped rather than recursed into.'
+		);
+		$this->assertStringContainsString(
+			'child',
+			(string) wp_json_encode( $clean ),
+			'Guard on the guard: the levels ABOVE the bound must survive, or this would pass on an empty result.'
+		);
+	}
+
 	public function test_rankmath_update_schema_refuses_a_non_array_payload(): void {
 		$this->acting_as( 'administrator' );
 		$post_id = (int) self::factory()->post->create();

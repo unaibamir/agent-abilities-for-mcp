@@ -14,112 +14,206 @@ use AAFM\Tests\TestCase;
 final class ResolveHookTest extends TestCase {
 
 	/**
-	 * Give every case an installed, empty activity log to resolve rows against.
+	 * Every fire of the hook during one test, in order.
+	 *
+	 * @var array<int,array<string,mixed>>
+	 */
+	private $fired = array();
+
+	/**
+	 * Give every case an installed, empty activity log and a listener on the hook.
 	 */
 	public function set_up(): void {
 		parent::set_up();
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+
+		$this->fired = array();
+		add_action(
+			'aafm_ability_resolved',
+			function ( $record ): void {
+				$this->fired[] = $record;
+			}
+		);
+	}
+
+	/**
+	 * Register a fixture ability whose execute callback throws, through the real logging wrapper.
+	 *
+	 * @param string $name Ability name. Distinct per test: the abilities registry is process-wide
+	 *                     and is not reset between cases, so a reused name trips core's
+	 *                     already-registered notice.
+	 * @return void
+	 */
+	private function register_throwing_fixture( string $name ): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Throws on purpose',
+						'description'         => 'Test fixture that throws from its execute callback.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function () {
+							throw new \RuntimeException( 'boom from the ability' );
+						},
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
 	}
 
 	/**
 	 * The hook is additive and fires on every resolve, not only on a crash.
 	 */
-	public function test_resolving_a_row_fires_the_resolve_action(): void {
-		$fired = array();
-		add_action(
-			'aafm_ability_resolved',
-			static function ( $record ) use ( &$fired ): void {
-				$fired[] = $record;
-			}
+	public function test_announcing_a_resolve_fires_the_action(): void {
+		aafm_announce_ability_resolved( 41, 'error', null, 'RuntimeException at foo.php:12' );
+
+		$this->assertCount( 1, $this->fired );
+		$this->assertSame( 41, $this->fired[0]['row_id'] );
+		$this->assertSame( 'error', $this->fired[0]['status'] );
+		$this->assertSame( 'RuntimeException at foo.php:12', $this->fired[0]['detail'] );
+	}
+
+	/**
+	 * The single most important property of this hook, and the one no test covered until now: a
+	 * CRASHED call announces exactly ONCE, carrying the crash detail rather than the null the tail
+	 * resolve passes to protect the column.
+	 *
+	 * The crash path writes the row twice - aafm_log_ability_exception() then the tail
+	 * aafm_update_activity_status() - so an announcement fired from inside the writer fires twice
+	 * per crash and the LAST thing a monitor sees is `detail: null`, i.e. a crash report with no
+	 * crash information. This test drives the real registration wrapper, which is the only way to
+	 * reach that double write; every direct call to the writer misses it entirely.
+	 *
+	 * The WP_DEBUG rethrow is filter-gated off because WP_DEBUG is true in this project's PHPUnit
+	 * environment - without this the rethrow branch runs, which announces nothing by design.
+	 */
+	public function test_a_crashed_call_announces_once_with_the_surviving_detail(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_throwing_fixture( 'aafm-test/resolve-hook-crash' );
+
+		wp_get_ability( 'aafm-test/resolve-hook-crash' )->execute( array() );
+
+		$this->assertCount( 1, $this->fired, 'A crash resolves once, so it announces once.' );
+		$this->assertSame( 'error', $this->fired[0]['status'] );
+		$this->assertStringStartsWith(
+			'RuntimeException at ',
+			(string) $this->fired[0]['detail'],
+			'The announced detail must be the crash detail that survived on the row, not the null the tail resolve passes.'
 		);
 
-		$row_id = aafm_log_activity(
-			array(
-				'ability' => 'aafm/get-post',
-				'status'  => 'started',
-			)
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-crash' ) );
+		$this->assertSame(
+			$rows[0]['detail'],
+			$this->fired[0]['detail'],
+			'A monitor and the admin panel must never disagree about what a crashed call recorded.'
 		);
-		aafm_update_activity_status( $row_id, 'error', null, 'RuntimeException at foo.php:12' );
+	}
 
-		$this->assertCount( 1, $fired );
-		$this->assertSame( $row_id, $fired[0]['row_id'] );
-		$this->assertSame( 'error', $fired[0]['status'] );
-		$this->assertSame( 'RuntimeException at foo.php:12', $fired[0]['detail'] );
+	/**
+	 * The re-throw branch resolves nothing - it leaves the row at 'started' on purpose - so it must
+	 * announce nothing either. Reached through the registered ability's decorated closure by
+	 * reflection, so the assertion holds on the WP 6.9 floor as well as on 7.0+, where core's own
+	 * WP_Ability::invoke_callback() would absorb the re-throw one layer out.
+	 */
+	public function test_a_rethrown_crash_announces_nothing(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_true' );
+		$this->register_throwing_fixture( 'aafm-test/resolve-hook-rethrow' );
+
+		$ability  = wp_get_ability( 'aafm-test/resolve-hook-rethrow' );
+		$property = new \ReflectionProperty( $ability, 'execute_callback' );
+		$property->setAccessible( true );
+		$decorated = $property->getValue( $ability );
+
+		$caught = null;
+		try {
+			$decorated( array() );
+		} catch ( \RuntimeException $e ) {
+			$caught = $e;
+		}
+
+		$this->assertInstanceOf( \RuntimeException::class, $caught, 'Guard on the guard: the re-throw must actually happen.' );
+		$this->assertCount( 0, $this->fired, 'An unresolved row is not a resolve, and the absent announcement is the signal.' );
 	}
 
 	/**
 	 * A no-op resolve is still a resolve. wpdb::update() returns 0 when the row matched and nothing
-	 * changed, which is a SUCCESS, so a naive `if ( $updated )` would suppress the hook on every
-	 * legitimate one. Only a literal false counts as failure.
+	 * changed, and that is a SUCCESS - a naive `(bool) $updated` would report it as a failed write
+	 * and the caller would then stay silent on every legitimate one. Only a literal false is failure.
 	 */
-	public function test_a_no_op_resolve_still_fires(): void {
-		$fired = 0;
-		add_action(
-			'aafm_ability_resolved',
-			static function () use ( &$fired ): void {
-				++$fired;
-			}
-		);
-
+	public function test_a_no_op_resolve_still_reports_a_successful_write(): void {
 		$row_id = aafm_log_activity(
 			array(
 				'ability' => 'aafm/get-post',
 				'status'  => 'started',
 			)
 		);
-		aafm_update_activity_status( $row_id, 'success' );
-		aafm_update_activity_status( $row_id, 'success' );
 
-		$this->assertSame( 2, $fired, 'The second write changes no column, and that is still a resolve.' );
+		$this->assertTrue( aafm_update_activity_status( $row_id, 'success' ) );
+		$this->assertTrue(
+			aafm_update_activity_status( $row_id, 'success' ),
+			'The second write changes no column, and that is still a resolve.'
+		);
 	}
 
 	/**
-	 * A row id that was never written resolves nothing, so it must fire nothing either.
+	 * A non-positive row id is refused before the query runs (log.php's `$row_id <= 0` guard), so it
+	 * reports no write and the caller announces nothing.
+	 *
+	 * A POSITIVE id that matched no row is NOT refused: wpdb::update() returns 0 for "no match"
+	 * exactly as it does for "matched, unchanged", and the no-op resolve above depends on 0 meaning
+	 * success. So an unknown positive id does report a write, and a consumer must tolerate a row_id
+	 * it cannot join. Both halves are pinned here so neither drifts, and so the earlier version of
+	 * this test - which passed 0 and therefore stayed green under every mutation, including deleting
+	 * the hook outright - cannot come back.
 	 */
-	public function test_an_invalid_row_id_fires_nothing(): void {
-		$fired = 0;
-		add_action(
-			'aafm_ability_resolved',
-			static function () use ( &$fired ): void {
-				++$fired;
-			}
+	public function test_a_non_positive_row_id_writes_nothing_but_an_unknown_positive_one_does(): void {
+		$this->assertFalse(
+			aafm_update_activity_status( 0, 'error' ),
+			'A non-positive id never reaches the query.'
 		);
-
-		aafm_update_activity_status( 0, 'error' );
-
-		$this->assertSame( 0, $fired );
+		$this->assertTrue(
+			aafm_update_activity_status( 999999, 'error' ),
+			'An unknown positive id reports a write: 0 rows matched is not a failure.'
+		);
 	}
 
 	/**
 	 * The record carries no ability name, and that is a design decision rather than an oversight.
-	 * aafm_update_activity_status() receives no ability name and holds no reference to the row's
-	 * other columns, and includes/audit/log.php has no read-by-id helper, so putting `ability` in
-	 * the payload would cost a new helper plus an extra SELECT on every single resolve. A consumer
-	 * joins on row_id against the aafm_ability_called record instead.
+	 * The resolve path receives no ability name and holds no reference to the row's other columns,
+	 * and includes/audit/log.php has no read-by-id helper, so putting `ability` in the payload would
+	 * cost a new helper plus an extra SELECT on every single resolve. A consumer joins on row_id
+	 * against the aafm_ability_called record instead.
 	 */
 	public function test_the_record_carries_only_what_the_resolve_already_knows(): void {
-		$fired = array();
-		add_action(
-			'aafm_ability_resolved',
-			static function ( $record ) use ( &$fired ): void {
-				$fired[] = $record;
-			}
-		);
 
-		$row_id = aafm_log_activity(
-			array(
-				'ability' => 'aafm/get-posts',
-				'status'  => 'started',
-			)
-		);
-		aafm_update_activity_status( $row_id, 'success', 7 );
+		aafm_announce_ability_resolved( 12, 'success', 7 );
 
 		$this->assertSame(
 			array( 'row_id', 'status', 'result_count', 'detail' ),
-			array_keys( $fired[0] )
+			array_keys( $this->fired[0] )
 		);
-		$this->assertSame( 7, $fired[0]['result_count'] );
-		$this->assertNull( $fired[0]['detail'] );
+		$this->assertSame( 7, $this->fired[0]['result_count'] );
+		$this->assertNull( $this->fired[0]['detail'] );
+	}
+
+	/**
+	 * The announced detail is the string the column holds, not the raw argument. The writer
+	 * sanitizes on the way in, so announcing the unsanitized value would hand a consumer text the
+	 * log itself refused to store - and this is a public extension point, so a future caller passing
+	 * something looser must not be able to broadcast it.
+	 */
+	public function test_the_announced_detail_is_sanitized_like_the_column(): void {
+
+		$raw = "RuntimeException  at\tfoo.php:12\n";
+		aafm_announce_ability_resolved( 13, 'error', null, $raw );
+
+		$this->assertSame( aafm_sanitize_activity_detail( $raw ), $this->fired[0]['detail'] );
+		$this->assertNotSame( $raw, $this->fired[0]['detail'], 'Guard on the guard: this fixture must actually need cleaning.' );
 	}
 }

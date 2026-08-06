@@ -338,18 +338,25 @@ function aafm_prune_activity_log(): void {
  * result never gets a fabricated magnitude. $detail follows the same rule: a resolve that has
  * nothing new to say leaves whatever the insert wrote in place rather than blanking it.
  *
+ * This function does NOT announce the resolve. A crashed call writes this row TWICE - once from
+ * aafm_log_ability_exception(), once from the tail resolve - so a hook fired from in here would
+ * fire twice per crash, and the second fire would carry the null that protects the column. The
+ * announcement is aafm_announce_ability_resolved()'s job and the caller's decision; this function
+ * only reports whether the write landed, so the caller can stay silent when it did not.
+ *
  * @param int         $row_id       Row id returned by aafm_log_activity().
  * @param string      $status       One of success|error|denied.
  * @param int|null    $result_count Optional magnitude of a list/read call's result. Null (default)
  *                                  leaves the column untouched.
  * @param string|null $detail       Optional note about what the call touched, known only once it
  *                                  resolved. Null (default) leaves the column untouched.
- * @return void
+ * @return bool Whether the row was written. False means the query failed or the id was unusable;
+ *              a matched row whose columns did not change counts as written.
  */
-function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): void {
+function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): bool {
 	global $wpdb;
 	if ( $row_id <= 0 ) {
-		return;
+		return false;
 	}
 	$status = in_array( $status, aafm_activity_statuses( false ), true ) ? $status : 'error';
 
@@ -369,11 +376,26 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 
 	// Only a literal false is a failure. wpdb::update() returns 0 when the row matched and no
 	// column changed, which is a legitimate no-op resolve, and a naive `if ( $updated )` would
-	// suppress the hook on every one of them.
-	if ( false === $updated ) {
-		return;
-	}
+	// report every one of them as a failed write.
+	return false !== $updated;
+}
 
+/**
+ * Announce that an ability call has resolved.
+ *
+ * Separate from aafm_update_activity_status() on purpose. The writer runs twice on a crashed call
+ * and only the second run knows the final status, while only the first knows the crash detail; a
+ * hook fired from inside it therefore fires twice and the last fire carries a null detail. The
+ * caller in includes/register.php holds both halves, so it announces, once, after the row is
+ * settled.
+ *
+ * @param int         $row_id       The resolved row.
+ * @param string      $status       One of success|error|denied.
+ * @param int|null    $result_count Magnitude of a list/read call's result, or null.
+ * @param string|null $detail       The detail the row now carries, or null when it carries none.
+ * @return void
+ */
+function aafm_announce_ability_resolved( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): void {
 	/**
 	 * Fires once an ability call resolves, whatever the outcome.
 	 *
@@ -381,13 +403,18 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 	 * call was visible solely to a human reading the activity log, so an external monitor had no
 	 * signal at all.
 	 *
-	 * The record deliberately carries no ability name or principal. This function receives neither,
-	 * and includes/audit/log.php exposes no read-by-id helper, so including them would mean a new
-	 * helper plus an extra SELECT on every single resolve. Join on row_id against the
+	 * Exactly one fire per resolved call. A call that re-throws instead of resolving (the
+	 * aafm_rethrow_ability_exceptions filter) fires nothing at all and leaves its row at 'started' -
+	 * that absence is the development-time signal, and it is deliberate.
+	 *
+	 * The record deliberately carries no ability name or principal. The resolve path receives
+	 * neither, and includes/audit/log.php exposes no read-by-id helper, so including them would mean
+	 * a new helper plus an extra SELECT on every single resolve. Join on row_id against the
 	 * aafm_ability_called record instead, which carries both.
 	 *
-	 * $detail is identifier-only and never carries argument values: it is an ability's allowlisted
-	 * detail, a WP_Error code, or a crash's exception class and throw site. See
+	 * $detail is identifier-only and never carries an argument value from any first-party ability:
+	 * it is an ability's allowlisted detail, a first-party WP_Error code, or a crash's exception
+	 * class and throw site. It is byte-identical to what the detail column now holds. See
 	 * includes/audit/detail.php.
 	 *
 	 * @since 1.6.1
@@ -399,7 +426,9 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 			'row_id'       => $row_id,
 			'status'       => $status,
 			'result_count' => $result_count,
-			'detail'       => $detail,
+			// The same string the column got. aafm_update_activity_status() sanitizes on the way in,
+			// so announcing the raw argument would hand a consumer a value the log itself refused.
+			'detail'       => null === $detail ? null : aafm_sanitize_activity_detail( $detail ),
 		)
 	);
 }
@@ -426,17 +455,17 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
  * The same rule governs the WP_Error the caller returns to the client: build it from a fixed,
  * translatable string, never from $e->getMessage().
  *
+ * The detail is returned as well as written, so the caller can announce the resolve carrying the
+ * detail that survived rather than the null it passes to protect this column on its second write.
+ *
  * @param int        $row_id  The 'started' row id returned by aafm_log_activity() for this call.
  * @param \Throwable $e       The caught exception or error.
- * @return void
+ * @return string The detail written to the row.
  */
-function aafm_log_ability_exception( int $row_id, \Throwable $e ): void {
-	aafm_update_activity_status(
-		$row_id,
-		'error',
-		null,
-		aafm_build_activity_detail_from_exception( $e )
-	);
+function aafm_log_ability_exception( int $row_id, \Throwable $e ): string {
+	$detail = aafm_build_activity_detail_from_exception( $e );
+	aafm_update_activity_status( $row_id, 'error', null, $detail );
+	return $detail;
 }
 
 /**

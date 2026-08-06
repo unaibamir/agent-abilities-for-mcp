@@ -729,6 +729,41 @@ final class DetailTest extends TestCase {
 	}
 
 	/**
+	 * PHP allows bytes \x80-\xff in a class name, so the character filter can quietly turn one real
+	 * class into a DIFFERENT real one and point a forensic reader at the wrong code. The filter
+	 * still runs - an audit row is no place for arbitrary bytes - but the result is marked, so a
+	 * reader can tell a recorded name from a recorded name that is only close.
+	 */
+	public function test_a_class_name_the_filter_had_to_cut_is_marked_as_lossy(): void {
+		$e = new \RuntimeException( 'anything' );
+
+		$this->assertStringStartsWith(
+			'RuntimeException at ',
+			aafm_build_activity_detail_from_exception( $e ),
+			'An ordinary ASCII class name loses nothing, so it must NOT be marked.'
+		);
+
+		require_once dirname( __DIR__ ) . '/Fixtures/NonAsciiClassNameException.php';
+		$class   = "AAFM\\Tests\\Fixtures\\Excep\xc3\xa9tion";
+		$unicode = new $class( 'anything' );
+
+		$this->assertStringStartsWith(
+			'AAFM\Tests\Fixtures\Exception~ at ',
+			aafm_build_activity_detail_from_exception( $unicode ),
+			'Without the marker this reads as a plain AAFM\Tests\Fixtures\Exception, which is a different class a reader would go looking for.'
+		);
+	}
+
+	public function test_exception_detail_names_the_throw_site(): void {
+		$e = new \RuntimeException( 'anything' );
+
+		$this->assertSame(
+			sprintf( 'RuntimeException at %1$s:%2$d', basename( __FILE__ ), $e->getLine() ),
+			aafm_build_activity_detail_from_exception( $e )
+		);
+	}
+
+	/**
 	 * An ordinary WP_Error result records its CODE, which is an identifier, and never its message,
 	 * which is free-form prose that can interpolate the value that failed.
 	 */

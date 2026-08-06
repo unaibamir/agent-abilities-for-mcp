@@ -8,9 +8,13 @@
  * only the fields that map names, each of which must clear a type check that no free-form string
  * can pass. Default deny in both directions. There is deliberately no string or text field type,
  * and adding one is the change a reviewer should refuse. A failed call also records its WP_Error
- * code, which is an identifier by construction for a first-party ability - every `new WP_Error(`
- * under includes/ takes a string literal - but not for a bridged one, whose code a foreign plugin
- * is free to build out of its own input, so bridged results are excluded from that branch. Since
+ * code, which is an identifier by construction for an ability THIS PLUGIN ships - every
+ * `new WP_Error(` under includes/ takes a string literal - but not for a bridged one, whose code a
+ * foreign plugin is free to build out of its own input, so bridged results are excluded from that
+ * branch. An ability contributed through the public aafm_abilities_registry filter is on the
+ * trusted side of that line: a site that adds a row to the catalog supplies its own permission
+ * callback and is trusted with far more than an error code already. Read the guarantee as "the
+ * codes this plugin and its host write", not "every code the column can hold". Since
  * 1.6.1 there is one further writer,
  * aafm_build_activity_detail_from_exception() below, for the crash detail the choke point in
  * includes/register.php records. It is not map-driven, because a crash is not per-ability, but it
@@ -396,8 +400,11 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
 	// is_array() return below, which a WP_Error would otherwise fall straight through.
 	//
 	// A bridged ability is excluded, and "a code is an identifier by construction" is exactly why.
-	// That holds for OUR codes: every `new WP_Error(` under includes/ takes a string literal. It
-	// does not hold for a foreign plugin's, which is third-party code free to build a code out of
+	// That holds for the codes this plugin ships: every `new WP_Error(` under includes/ takes a
+	// string literal. It also holds, by trust rather than by inspection, for an ability a site adds
+	// through the aafm_abilities_registry filter, which supplies its own permission callback and so
+	// is trusted with a great deal more than an error code. It does not hold for a foreign plugin's,
+	// which is third-party code the operator merely enabled, free to build a code out of
 	// its input - `new WP_Error( 'duplicate_sku_' . $sku )` passes the key type's own character
 	// check and would land an argument value in this column, on the wire through
 	// aafm/get-activity-log, and in the CSV export. This file's header, the aafm_ability_resolved

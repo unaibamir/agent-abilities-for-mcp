@@ -76,7 +76,25 @@ function aafm_args_get_activity_log(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'entries' => array( 'type' => 'array' ),
+				'entries' => array(
+					'type'  => 'array',
+					'items' => array(
+						'type'       => 'object',
+						'properties' => array(
+							'id'                => array( 'type' => 'integer' ),
+							'ability'           => array( 'type' => 'string' ),
+							'status'            => array( 'type' => 'string' ),
+							'principal_user_id' => array( 'type' => 'integer' ),
+							'principal_login'   => array( 'type' => 'string' ),
+							'arg_keys'          => array( 'type' => 'string' ),
+							'created_at'        => array( 'type' => 'string' ),
+							'detail'            => array(
+								'type'        => array( 'string', 'null' ),
+								'description' => __( 'Identifier-only note about what the call touched or why it failed, or null when the call recorded none. It is one of an allowlisted identifier (an object id or slug), a WP_Error code, or a crash\'s exception class and throw site, for example "WC_Data_Exception at abstract-wc-data.php:1001". It never contains argument values, free text, or file paths.', 'agent-abilities-for-mcp' ),
+							),
+						),
+					),
+				),
 				'total'   => array( 'type' => 'integer' ),
 			),
 		),
@@ -127,6 +145,11 @@ function aafm_exec_get_activity_log( array $input ): array {
 			'principal_login'   => isset( $row['principal_login'] ) ? (string) $row['principal_login'] : '',
 			'arg_keys'          => isset( $row['arg_keys'] ) ? (string) $row['arg_keys'] : '',
 			'created_at'        => isset( $row['created_at'] ) ? (string) $row['created_at'] : '',
+			// Null rather than '' for an unset detail, so the wire carries "detail":null and a
+			// consumer can tell "this call recorded nothing" from "this call recorded an empty
+			// string". Safe to expose only because includes/audit/detail.php constrains every
+			// writer to identifiers.
+			'detail'            => isset( $row['detail'] ) ? (string) $row['detail'] : null,
 			// source_ip is deliberately NOT returned (network PII, not shown in the admin panel).
 		);
 	}

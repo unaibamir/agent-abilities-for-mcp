@@ -423,6 +423,9 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
  * removes neither (a NUL is valid UTF-8, so wp_check_invalid_utf8() passes it through). Cutting at
  * the NUL leaves "Parent@anonymous", which is all the useful part.
  *
+ * A class name that lost characters to the filter gets a trailing '~', so a reader can tell a
+ * recorded name from a recorded name that is only close.
+ *
  * @param \Throwable $e The caught exception or error.
  * @return string A bounded, value-free detail, e.g. "WC_Data_Exception at abstract-wc-data.php:1001".
  */
@@ -434,8 +437,19 @@ function aafm_build_activity_detail_from_exception( \Throwable $e ): string {
 	}
 	// A PHP class name is [A-Za-z0-9_\] plus the '@anonymous' marker kept above; anything else is
 	// not a class name and has no business in an audit row.
-	$class = (string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', $class );
-	$class = '' === $class ? 'Throwable' : mb_substr( $class, 0, 128 );
+	//
+	// PHP does allow bytes \x80-\xff in a class name, though, so the filter can turn a real class
+	// into a DIFFERENT real one: `Exceptiéon` records as `Exception`, which reads as an ordinary
+	// name and points a forensic reader at the wrong class entirely. A trailing '~' says the name
+	// that reached this row is not the name that was thrown. The filter is not widened to \p{L}\p{N}
+	// instead, because /u makes preg_replace() return null on invalid UTF-8 and this is the one
+	// place that cannot afford to.
+	$filtered = (string) preg_replace( '/[^A-Za-z0-9_\\\\@]/', '', $class );
+	$lossy    = $filtered !== $class;
+	$class    = '' === $filtered ? 'Throwable' : mb_substr( $filtered, 0, 128 );
+	if ( $lossy && '' !== $filtered ) {
+		$class .= '~';
+	}
 
 	// basename() drops the install path; the character filter absorbs the " : evaluated code"
 	// suffix PHP appends to getFile() when the throw happens inside a runtime-evaluated string.

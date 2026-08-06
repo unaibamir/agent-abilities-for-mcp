@@ -68,7 +68,12 @@ final class ResolveHookTest extends TestCase {
 	}
 
 	/**
-	 * The hook is additive and fires on every resolve, not only on a crash.
+	 * The announcer fires when it is invoked, and hands the record through unchanged.
+	 *
+	 * That is all this case can say, because it calls the announcer directly with literal
+	 * arguments. Whether every resolve invokes it is a property of the CALLER, and it is pinned by
+	 * the cases below that drive a real registered ability: success, denial, crash, re-throw, a
+	 * failed opening insert.
 	 */
 	public function test_announcing_a_resolve_fires_the_action(): void {
 		aafm_announce_ability_resolved( 41, 'error', null, 'RuntimeException at foo.php:12' );
@@ -112,6 +117,115 @@ final class ResolveHookTest extends TestCase {
 			$rows[0]['detail'],
 			$this->fired[0]['detail'],
 			'A monitor and the admin panel must never disagree about what a crashed call recorded.'
+		);
+	}
+
+	/**
+	 * A SUCCESSFUL call announces too, and the payload's row_id is the only thing a consumer can
+	 * join on, so it has to be the row the call actually wrote.
+	 *
+	 * Neither was pinned. The crash case below is the only one that reached the announcement
+	 * through the real wrapper, so narrowing the caller's guard to
+	 * `if ( $written && is_wp_error( $result ) )` - silencing the hook for every successful call,
+	 * which is most calls - left the whole suite green, and so did announcing a hardcoded row_id of
+	 * 0. A record whose row_id joins to nothing is the same defect as the null detail this hook was
+	 * fixed for: it fires, it looks right, and it carries nothing usable.
+	 */
+	public function test_a_successful_call_announces_once_with_the_row_and_count_it_wrote(): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/resolve-hook-success',
+					array(
+						'label'               => 'Succeeds on purpose',
+						'description'         => 'Test fixture that returns a list cleanly.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function (): array {
+							return array( 'items' => array( 1, 2, 3 ) );
+						},
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		wp_get_ability( 'aafm-test/resolve-hook-success' )->execute( array() );
+
+		$this->assertCount( 1, $this->fired, 'Every resolve announces, not only the failing ones.' );
+		$this->assertSame( 'success', $this->fired[0]['status'] );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-success' ) );
+		$this->assertCount( 1, $rows, 'Guard on the guard: one row per call, so there is a single id to match against.' );
+		$this->assertSame(
+			(int) $rows[0]['id'],
+			$this->fired[0]['row_id'],
+			'The announced row_id must be the row the call wrote, or a consumer has nothing to join on.'
+		);
+		$this->assertNotNull( $rows[0]['result_count'], 'Guard on the guard: a read ability must have recorded a magnitude, or the next assertion is vacuous.' );
+		$this->assertSame(
+			(int) $rows[0]['result_count'],
+			$this->fired[0]['result_count'],
+			'A monitor and the admin panel must not disagree about how much the call returned.'
+		);
+	}
+
+	/**
+	 * A call whose opening insert never landed has no row to resolve, so it must announce nothing:
+	 * row_id would be 0, which joins to nothing, and the record would report a resolve for a call
+	 * the log has no trace of. The caller's `if ( $written )` guard is the whole of that, and
+	 * dropping it left the whole suite green.
+	 *
+	 * The insert is failed by rewriting it to a harmless SELECT through wpdb's own `query` filter,
+	 * so insert_id stays 0 and aafm_log_activity() returns 0 - the same shape a real insert failure
+	 * has, without touching the schema.
+	 */
+	public function test_a_call_whose_row_never_opened_announces_nothing(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/resolve-hook-no-row',
+					array(
+						'label'               => 'Succeeds on purpose',
+						'description'         => 'Test fixture whose audit row never opens.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function (): array {
+							return array( 'ok' => true );
+						},
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+
+		$swallow_insert = static function ( $query ) {
+			if ( is_string( $query ) && 0 === stripos( $query, 'INSERT' ) && false !== stripos( $query, 'aafm_activity_log' ) ) {
+				return 'SELECT 1';
+			}
+			return $query;
+		};
+		add_filter( 'query', $swallow_insert );
+		try {
+			wp_get_ability( 'aafm-test/resolve-hook-no-row' )->execute( array() );
+		} finally {
+			remove_filter( 'query', $swallow_insert );
+		}
+
+		$this->assertCount(
+			0,
+			aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-no-row' ) ),
+			'Guard on the guard: the insert must really have been swallowed, or this proves nothing.'
+		);
+		$this->assertCount(
+			0,
+			$this->fired,
+			'No row means no resolve to announce: a row_id of 0 joins to nothing.'
 		);
 	}
 

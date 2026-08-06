@@ -422,8 +422,13 @@ function aafm_announce_ability_resolved( int $row_id, string $status, ?int $resu
 	 *
 	 * $detail is identifier-only and never carries an argument value from any first-party ability:
 	 * it is an ability's allowlisted detail, a first-party WP_Error code, or a crash's exception
-	 * class and throw site. It is byte-identical to what the detail column now holds. See
-	 * includes/audit/detail.php.
+	 * class and throw site. It is sanitized exactly as the column sanitizes it. It is NOT always
+	 * the whole of what the column holds, though: it is the detail this resolve contributed. An
+	 * ordinary update or read contributes none and announces null while the row keeps the detail
+	 * its opening insert wrote, so a consumer that treats a null detail as "nothing to correlate"
+	 * will throw away most of the log. Join on row_id and read the row's own detail. A denial and
+	 * a crash both announce the string their row carries, because on those paths the resolve is
+	 * what wrote it. See includes/audit/detail.php.
 	 *
 	 * @since 1.6.1
 	 * @param array{row_id:int,status:string,result_count:int|null,detail:string|null} $record The resolve.

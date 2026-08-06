@@ -576,10 +576,17 @@ final class WooCouponsTest extends TestCase {
 			aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '100' ) ),
 			'Exactly 100 percent is a legitimate coupon and must not be rejected.'
 		);
+		// Not a guard on the post-condition, and worth saying so. Measured: disabling the
+		// post-condition entirely leaves this assertion green, because 100.001 is refused one layer
+		// earlier by WC_Coupon::set_amount() throwing into the per-field catch in
+		// aafm_wc_apply_coupon_input(). What it does pin is that a hair over the limit is refused
+		// SOMEWHERE, which is the property a caller sees. The post-condition itself is pinned by
+		// the two cases that reach it through its own door, a stored amount already over 100 with
+		// only discount_type in the input.
 		$this->assertInstanceOf(
 			WP_Error::class,
 			aafm_wc_apply_coupon_input( $coupon, array( 'amount' => '100.001' ) ),
-			'Guard on the guard: a hair over the limit must still be refused, so the case above is not passing because the check is gone.'
+			'A hair over the limit must still be refused, whichever layer does it.'
 		);
 	}
 

@@ -127,4 +127,49 @@ final class ActivityLogTest extends TestCase {
 		$abilities = array_column( $denied, 'ability' );
 		$this->assertContains( 'aafm/get-activity-log', $abilities, 'a denied read must be audited.' );
 	}
+
+	/**
+	 * The crash detail is now reachable by an agent, which is only safe because 1.6.1 made it
+	 * identifier-only first: a class name and a throw site, no message, no argument value, no
+	 * install path. It is the same string the admin already sees in wp-admin.
+	 *
+	 * Filtered by ability on purpose. This ability audits itself - its own decorated closure
+	 * inserts a 'started' row before the read runs - and aafm_query_activity() orders newest
+	 * first, so entries[0] on an unfiltered read is the read's own self-audit row with a null
+	 * detail.
+	 */
+	public function test_activity_log_returns_the_crash_detail(): void {
+		$this->acting_as( 'administrator' );
+		$row_id = aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'started',
+			)
+		);
+		aafm_update_activity_status( $row_id, 'error', null, 'RuntimeException at foo.php:12' );
+
+		$out = wp_get_ability( 'aafm/get-activity-log' )->execute( array( 'ability' => 'aafm/get-post' ) );
+
+		$this->assertSame( 'RuntimeException at foo.php:12', $out['entries'][0]['detail'] );
+	}
+
+	/**
+	 * This release exists because of empty-shape bugs, so a new nullable field gets its encoding
+	 * pinned on the WIRE form. array() and (object) array() are indistinguishable in PHP and
+	 * opposite in JSON, and asserting on the PHP value is how the 22nd instance gets created.
+	 */
+	public function test_a_row_with_no_detail_encodes_as_null_not_an_empty_array(): void {
+		$this->acting_as( 'administrator' );
+		$row_id = aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'started',
+			)
+		);
+		aafm_update_activity_status( $row_id, 'success', null, null );
+
+		$out = wp_get_ability( 'aafm/get-activity-log' )->execute( array( 'ability' => 'aafm/get-post' ) );
+
+		$this->assertStringContainsString( '"detail":null', (string) wp_json_encode( $out['entries'][0] ) );
+	}
 }

@@ -174,7 +174,35 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			return false;
 		}
 
-		$allowed = $original_permission( $input );
+		// The permission phase gets the same floor as the execute phase below, and for the same
+		// reason: $original_permission is third-party code on any bridged wrapper (bridge.php
+		// delegates straight into a foreign ability's own callback), and even a native one runs
+		// current_user_can(), whose map_meta_cap/user_has_cap filters any plugin can hook. Without
+		// this the throw escapes into the adapter, which builds its error from
+		// $throwable->getMessage() (McpTool.php:358-366) and sends that raw vendor text to the
+		// client - the exact thing includes/audit/log.php forbids. Core's own execute() refuses to
+		// leak a permission error (the permission branch of WP_Ability::execute()); the MCP path
+		// never reaches that gate.
+		$crash_detail = null;
+		try {
+			$allowed = $original_permission( $input );
+		} catch ( \Throwable $e ) {
+			// Same operator switch as the execute-side catch, so one setting governs both phases.
+			// Re-throwing here deliberately writes NO row: there is no 'started' row on this path,
+			// so the absent row is this phase's version of the stuck row the execute side leaves.
+			/** This filter is documented in includes/register.php, at the execute-side catch. */
+			if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+				throw $e;
+			}
+
+			// Deny. The Abilities API admits only a strict true, so false is a denial on both the
+			// 6.9 floor and 7.0+; and because it is NOT a WP_Error the adapter substitutes its own
+			// generic 'Permission denied' (ToolsHandler.php:149) instead of echoing any string of
+			// ours - the leak is closed by construction, not by careful wording.
+			$crash_detail = aafm_build_activity_detail_from_exception( $e );
+			$allowed      = false;
+		}
+
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.
@@ -187,7 +215,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 						'status'    => 'denied',
 						'arg_keys'  => array_keys( $call_args ),
 						'client_id' => aafm_oauth_current_client_id(),
-						'detail'    => aafm_build_activity_detail( $name, $call_args ),
+						// A crashed check records the throw site instead of the ability's mapped
+						// argument detail: the defect is what matters on this row, and the mapped
+						// detail is already on the ordinary-denial rows.
+						'detail'    => null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args ),
 					)
 				)
 			);

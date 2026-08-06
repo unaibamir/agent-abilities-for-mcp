@@ -400,6 +400,59 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 			)
 		);
 	}
+
+	// Post-conditions on the RESULTING coupon, not on the incoming keys.
+	//
+	// Every guard above only fires when its own key is present in $input, and that is precisely
+	// what leaves these two invariants reachable by a different door. WooCommerce validates each
+	// pair from ONE side only: set_amount() (class-wc-coupon.php:617-632) rejects an amount over
+	// 100 by reading the coupon's CURRENT discount_type, while set_discount_type() (:588-608)
+	// validates the type and never re-reads amount; set_maximum_amount() (:807-813) rejects a
+	// maximum below the CURRENT minimum, while set_minimum_amount() (:796-798) is a bare set_prop.
+	// So `wc-update-coupon { coupon_id: N, discount_type: 'percent' }` against a coupon whose
+	// stored amount is already 150 entered no guard at all and persisted a 150% coupon, and
+	// `{ minimum_amount: '500' }` against a stored maximum of 50 persisted an unusable coupon.
+	// Both returned success. WC_Coupon::save() re-validates nothing.
+	//
+	// Each invariant is a relationship between two INDEPENDENTLY OPTIONAL fields, so no per-field
+	// guard can see both halves - only a check on the final object can, and being order-independent
+	// it also cannot be reopened by a future key ordering.
+	//
+	// Each check runs only when the input could have moved its own pair. That keeps an operator
+	// able to edit an unrelated field on - or remediate - a coupon another plugin already left
+	// invalid, instead of being locked out of their own data by a guard with nothing to prevent.
+	if ( array_key_exists( 'amount', $input ) || array_key_exists( 'discount_type', $input ) ) {
+		if ( 'percent' === $coupon->get_discount_type() && (float) $coupon->get_amount() > 100 ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_amount',
+				sprintf(
+					/* translators: %s: the resulting discount amount. */
+					__( 'A percentage coupon cannot discount more than 100 percent, and this change would leave it at "%s". Lower the amount to 100 or below, or use the fixed_cart or fixed_product discount type.', 'agent-abilities-for-mcp' ),
+					$coupon->get_amount()
+				)
+			);
+		}
+	}
+
+	if ( array_key_exists( 'minimum_amount', $input ) || array_key_exists( 'maximum_amount', $input ) ) {
+		// A zero/empty maximum means "no maximum" - WooCommerce's own set_maximum_amount()
+		// (class-wc-coupon.php:808) short-circuits on `(float) $amount` for exactly that reason, and
+		// an unset maximum reads back as '' which casts to 0.0. Without the > 0 guard this
+		// post-condition would reject every ordinary minimum-only coupon.
+		$maximum = (float) $coupon->get_maximum_amount();
+		if ( $maximum > 0 && (float) $coupon->get_minimum_amount() > $maximum ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_maximum',
+				sprintf(
+					/* translators: 1: the resulting minimum amount, 2: the resulting maximum amount. */
+					__( 'A coupon\'s minimum spend cannot exceed its maximum spend, and this change would leave it at %1$s minimum against %2$s maximum.', 'agent-abilities-for-mcp' ),
+					$coupon->get_minimum_amount(),
+					$coupon->get_maximum_amount()
+				)
+			);
+		}
+	}
+
 	return null;
 }
 

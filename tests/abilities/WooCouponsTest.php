@@ -497,4 +497,171 @@ final class WooCouponsTest extends TestCase {
 			'update-coupon' => array( 'aafm/wc-update-coupon', array( 'coupon_id' => 5001 ), 'editor' ),
 		);
 	}
+
+	// =========================================================================
+	// Post-conditions on the resulting coupon
+	//
+	// Every per-field guard only fires when its own key is present in $input, and each of these
+	// two invariants is a relationship between two INDEPENDENTLY OPTIONAL fields. So no per-field
+	// guard can ever see both halves, and both invariants stayed reachable through a different
+	// door until a check on the final object closed them.
+	// =========================================================================
+
+	/**
+	 * The open route: flipping a coupon that already stores 150 to percent enters no guard at all,
+	 * because `amount` is not in the input. WooCommerce validates this pair from one side only -
+	 * set_amount() reads the CURRENT discount_type, while set_discount_type() never re-reads
+	 * amount - and WC_Coupon::save() re-validates nothing, so a 150% coupon persisted and the call
+	 * returned success.
+	 */
+	public function test_flipping_an_over_100_fixed_coupon_to_percent_is_rejected(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( '150' );
+
+		$result = aafm_wc_apply_coupon_input( $coupon, array( 'discount_type' => 'percent' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $result->get_error_code() );
+	}
+
+	/**
+	 * The same shape on the min/max pair: set_minimum_amount() is a bare set_prop, so raising the
+	 * minimum past a stored maximum entered no guard either and persisted an unusable coupon.
+	 */
+	public function test_raising_the_minimum_above_the_stored_maximum_is_rejected(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_maximum_amount( '50' );
+
+		$result = aafm_wc_apply_coupon_input( $coupon, array( 'minimum_amount' => '500' ) );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_wc_invalid_coupon_maximum', $result->get_error_code() );
+	}
+
+	/**
+	 * The post-condition must not cost an operator a legitimate edit. Changing the type and the
+	 * amount together in one call lands on a valid coupon, so it passes.
+	 */
+	public function test_a_legitimate_type_and_amount_change_in_one_call_still_passes(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( '150' );
+
+		$this->assertNull(
+			aafm_wc_apply_coupon_input(
+				$coupon,
+				array(
+					'discount_type' => 'percent',
+					'amount'        => '50',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The regression this guard could easily ship with. get_maximum_amount() returns '' when
+	 * unset, and (float) '' is 0.0, so a naive "minimum greater than maximum" check would reject
+	 * every ordinary minimum-only coupon. Real WooCommerce guards exactly this with `(float)
+	 * $amount &&` at class-wc-coupon.php:808. Without this test the guard ships broken and the
+	 * whole coupon suite stays green.
+	 */
+	public function test_a_minimum_only_coupon_is_still_accepted(): void {
+		$coupon = new \WC_Coupon();
+
+		$this->assertNull(
+			aafm_wc_apply_coupon_input(
+				$coupon,
+				array(
+					'code'           => 'MINONLY',
+					'discount_type'  => 'percent',
+					'amount'         => '10',
+					'minimum_amount' => '100',
+				)
+			)
+		);
+	}
+
+	/**
+	 * An unrelated edit to a coupon another plugin already left invalid must still go through.
+	 * Each post-condition runs only when the input could have moved its own pair, so an operator
+	 * is never locked out of their own data by a guard with nothing left to prevent.
+	 */
+	public function test_an_unrelated_edit_to_an_already_invalid_coupon_is_not_blocked(): void {
+		$coupon = new \WC_Coupon();
+		$coupon->set_discount_type( 'fixed_cart' );
+		$coupon->set_amount( '150' );
+		$coupon->set_discount_type( 'percent' );
+
+		$this->assertNull( aafm_wc_apply_coupon_input( $coupon, array( 'description' => 'Just a note.' ) ) );
+	}
+
+	/**
+	 * End to end, through the abilities themselves and re-read from the store: no route may leave
+	 * a percent coupon over 100 persisted. This is the assertion the re-review flagged as missing,
+	 * because the three above all stop at the input applier and never reach save().
+	 *
+	 * @dataProvider provide_over_100_percent_routes
+	 *
+	 * @param array<string,mixed>      $create The create call.
+	 * @param array<string,mixed>|null $update The follow-up update, or null for create-only.
+	 */
+	public function test_no_route_persists_a_percent_coupon_over_one_hundred( array $create, ?array $update ): void {
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-coupon' )->execute( $create );
+
+		if ( null !== $update && ! $created instanceof WP_Error ) {
+			$update['coupon_id'] = $created['id'];
+			wp_get_ability( 'aafm/wc-update-coupon' )->execute( $update );
+		}
+
+		// Re-read from the store rather than trusting the return value: the defect this closes was
+		// a call that returned SUCCESS while persisting the invalid pair. A route that is rejected
+		// outright at create time never reaches the store, and that is an equally valid outcome.
+		if ( $created instanceof WP_Error ) {
+			$this->assertSame( 'aafm_wc_invalid_coupon_amount', $created->get_error_code() );
+			return;
+		}
+
+		$stored = new \WC_Coupon( (int) $created['id'] );
+		$this->assertFalse(
+			'percent' === $stored->get_discount_type() && (float) $stored->get_amount() > 100,
+			'No route may persist a percentage coupon discounting more than 100 percent.'
+		);
+	}
+
+	/**
+	 * Cases: every way the two fields can be combined across create and update.
+	 *
+	 * @return array<string,array{0:array<string,mixed>,1:array<string,mixed>|null}>
+	 */
+	public function provide_over_100_percent_routes(): array {
+		return array(
+			'create with both at once'          => array(
+				array(
+					'code'          => 'ROUTE1',
+					'discount_type' => 'percent',
+					'amount'        => '150',
+				),
+				null,
+			),
+			'create fixed then flip to percent' => array(
+				array(
+					'code'          => 'ROUTE2',
+					'discount_type' => 'fixed_cart',
+					'amount'        => '150',
+				),
+				array( 'discount_type' => 'percent' ),
+			),
+			'create fixed then raise the amount as percent' => array(
+				array(
+					'code'          => 'ROUTE3',
+					'discount_type' => 'percent',
+					'amount'        => '50',
+				),
+				array( 'amount' => '150' ),
+			),
+		);
+	}
 }

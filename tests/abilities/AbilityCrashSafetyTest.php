@@ -463,6 +463,182 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
+	 * A fixture whose PERMISSION callback throws, registered the same decorated way
+	 * register_throwing_fixture() does. Its execute callback is never reached.
+	 *
+	 * @param string $message The message the permission callback throws, so a test can assert it
+	 *                        does not leak.
+	 * @param string $name    Ability name.
+	 */
+	private function register_fixture_ability_whose_permission_throws( string $message, string $name = 'aafm/test-throwing-perm' ): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $message, $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Throws from its permission callback',
+						'description'         => 'Test fixture whose permission callback throws.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn(): array => array(),
+						'permission_callback' => static function () use ( $message ): bool {
+							throw new \RuntimeException( esc_html( $message ) );
+						},
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * Activity rows for one ability. They are ARRAYS, not objects (see the aafm_query_activity()
+	 * docblock), so index with ['status'] / ['detail'].
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function read_activity_rows( string $ability ): array {
+		return aafm_query_activity( array( 'ability' => $ability ) );
+	}
+
+	/**
+	 * Tool DTOs for aafm_filter_mcp_tools_list(), which reads $tool->getName(). Includes the
+	 * throwing fixture alongside a healthy native, so a test can tell "the bad tool was dropped"
+	 * from "the whole catalogue was lost".
+	 *
+	 * @param string $throwing Ability name of the fixture whose permission throws.
+	 * @return array<int,object>
+	 */
+	private function fake_tools_including_healthy_natives( string $throwing = 'aafm/test-throwing-perm' ): array {
+		return array(
+			$this->fake_tool( aafm_mcp_tool_name( 'aafm/get-post' ) ),
+			$this->fake_tool( aafm_mcp_tool_name( $throwing ) ),
+			$this->fake_tool( aafm_mcp_tool_name( 'aafm/get-posts' ) ),
+		);
+	}
+
+	/**
+	 * One stand-in for the adapter's Tool DTO, exposing only the getName() the filter reads.
+	 *
+	 * @param string $name Wire-form tool name.
+	 * @return object
+	 */
+	private function fake_tool( string $name ): object {
+		return new class( $name ) {
+			/**
+			 * Wire-form tool name.
+			 *
+			 * @var string
+			 */
+			private $tool_name;
+
+			/**
+			 * Store the name the filter will read back.
+			 *
+			 * @param string $name Wire-form tool name.
+			 */
+			public function __construct( string $name ) {
+				$this->tool_name = $name;
+			}
+
+			/**
+			 * The adapter's own accessor name, which aafm_filter_mcp_tools_list() calls.
+			 *
+			 * @return string
+			 */
+			public function getName(): string { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Mirrors the adapter's Tool DTO method name.
+				return $this->tool_name;
+			}
+		};
+	}
+
+	/**
+	 * The permission phase had no Throwable floor, so a throw escaped into the adapter, which
+	 * builds its error from $throwable->getMessage() (McpTool::check_permission()) and sends that
+	 * raw vendor text to the client. The Abilities API admits only a strict true, so denying with
+	 * false is a denial on both the 6.9 floor and 7.0+, and because false is not a WP_Error the
+	 * adapter substitutes its own generic "Permission denied" - the leak closes by construction
+	 * rather than by wording someone can regress.
+	 */
+	public function test_a_throwing_permission_callback_denies_instead_of_leaking(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_fixture_ability_whose_permission_throws( 'DB user wp_admin pass hunter2 at /var/www/secret/config.php' );
+
+		$allowed = wp_get_ability( 'aafm/test-throwing-perm' )->check_permissions( array() );
+
+		$this->assertFalse( $allowed, 'The Abilities API admits only a strict true; a crash must deny.' );
+	}
+
+	/**
+	 * Before the guard the throw skipped the `if ( true !== $allowed )` audit block entirely, so a
+	 * crashed permission check wrote ZERO rows and left no record anywhere.
+	 */
+	public function test_a_throwing_permission_callback_writes_one_denied_row_without_the_message(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_fixture_ability_whose_permission_throws( 'secret-value-here', 'aafm/test-throwing-perm-row' );
+
+		wp_get_ability( 'aafm/test-throwing-perm-row' )->check_permissions( array() );
+
+		$rows = $this->read_activity_rows( 'aafm/test-throwing-perm-row' );
+		$this->assertCount( 1, $rows );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+		$this->assertStringNotContainsString( 'secret-value-here', (string) $rows[0]['detail'] );
+		$this->assertStringContainsString( ' at ', (string) $rows[0]['detail'] );
+	}
+
+	/**
+	 * The raw undecorated callback runs inside aafm_filter_mcp_tools_list()'s per-tool loop, by way
+	 * of aafm_user_can_call_ability(). Without its own guard one throwing vendor
+	 * callback propagated out of the loop and took down the entire tools/list response, hiding
+	 * every healthy tool with it.
+	 */
+	public function test_one_throwing_permission_callback_does_not_empty_tools_list(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_fixture_ability_whose_permission_throws( 'boom', 'aafm/test-throwing-perm-list' );
+
+		// Ticking the option is NOT enough on its own. aafm_get_enabled_abilities()
+		// (registry.php:230) intersects the stored option against the live catalog, so a fixture
+		// that is not in the catalog is dropped from aafm_all_server_ability_names(), never lands
+		// in the filter's tool-name map, and sails through ungated - the test would pass with the
+		// guard deleted. Put it in the catalog first.
+		add_filter(
+			'aafm_abilities_registry',
+			static function ( array $registry ): array {
+				$registry['aafm/test-throwing-perm-list'] = array(
+					'label'       => 'Throws from its permission callback',
+					'description' => 'Test fixture whose permission callback throws.',
+					'category'    => 'aafm-reads',
+					'risk'        => 'read',
+				);
+				return $registry;
+			}
+		);
+		aafm_flush_registry_cache();
+
+		$this->register_enabled( array( 'aafm/get-post', 'aafm/get-posts', 'aafm/test-throwing-perm-list' ) );
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+
+		$this->assertContains(
+			'aafm/test-throwing-perm-list',
+			aafm_all_server_ability_names(),
+			'Guard on the guard: if the fixture is not in the advertised set, the filter never gates it.'
+		);
+
+		$visible = aafm_filter_mcp_tools_list( $this->fake_tools_including_healthy_natives( 'aafm/test-throwing-perm-list' ) );
+
+		$this->assertNotEmpty( $visible, 'One throwing vendor callback must not take down the whole catalogue.' );
+		$names = array_map( static fn( $tool ): string => $tool->getName(), $visible );
+		$this->assertContains( aafm_mcp_tool_name( 'aafm/get-post' ), $names, 'Healthy tools stay visible.' );
+		$this->assertNotContains(
+			aafm_mcp_tool_name( 'aafm/test-throwing-perm-list' ),
+			$names,
+			'And the crashing one fails closed rather than being advertised.'
+		);
+	}
+
+	/**
 	 * The default-on branch of aafm_rethrow_ability_exceptions had no test at all, so nothing
 	 * pinned the behaviour the filter's docblock promises: the Throwable propagates untouched and
 	 * the row is deliberately LEFT stuck at 'started', because that stuck row is development's

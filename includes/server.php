@@ -86,18 +86,59 @@ function aafm_all_server_ability_names(): array {
  *
  * Uses the raw callback stashed at registration (aafm_remember_raw_permission) so a
  * list-time visibility check never writes a denied audit row. Unknown abilities (no
- * stashed callback) are treated as not-callable - fail closed.
+ * stashed callback) are treated as not-callable - fail closed. A callback that throws is audited
+ * and denied rather than allowed to escape, except when the operator has asked for re-throws.
  *
  * @param string              $ability_name Ability name, e.g. "aafm/trash-post".
  * @param array<string,mixed> $input        Input to pass to the permission callback.
  * @return bool
+ * @throws \Throwable When the aafm_rethrow_ability_exceptions filter is on, so a development site
+ *                    keeps a crashing permission callback loud instead of silently hiding a tool.
  */
 function aafm_user_can_call_ability( string $ability_name, array $input = array() ): bool {
 	$permission = aafm_remember_raw_permission( $ability_name );
 	if ( ! is_callable( $permission ) ) {
 		return false;
 	}
-	return true === $permission( $input );
+
+	// This is the UNDECORATED callback, so the Throwable guard in the decorated closure
+	// (aafm_register_ability_with_log(), register.php) does not cover it. For a bridged wrapper
+	// that callback delegates into a foreign ability, and this function runs inside
+	// aafm_filter_mcp_tools_list()'s per-tool loop - so one throwing vendor callback would take
+	// down the ENTIRE tools/list response, hiding every healthy tool too, not just its own.
+	//
+	// One residual path this does NOT cover: aafm_user_can_discover_ability() consults
+	// aafm_ability_list_permission() first and calls that closure directly, reaching this function
+	// only when it returns null. Two abilities take that branch, aafm/get-post and aafm/get-page,
+	// both calling current_user_can( 'read' ), which fires map_meta_cap/user_has_cap and so can
+	// throw from third-party code. Bridged wrappers never take that branch, so the threat this
+	// guard exists to stop is fully covered.
+	try {
+		return true === $permission( $input );
+	} catch ( \Throwable $e ) {
+		/** This filter is documented in includes/register.php, at the execute-side catch. */
+		if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+			throw $e;
+		}
+
+		// Fail closed, consistent with the not-callable branch above. This function deliberately
+		// does not audit ordinary denials (see the docblock) because that would write a row per
+		// tool per listing - but a crash is not an ordinary denial, and staying silent would hide
+		// the tool from discovery with no record anywhere, since the audited tools/call path is
+		// then never reached.
+		$user = wp_get_current_user();
+		aafm_log_activity(
+			array(
+				'ability'           => $ability_name,
+				'status'            => 'denied',
+				'principal_user_id' => (int) $user->ID,
+				'principal_login'   => (string) $user->user_login,
+				'client_id'         => aafm_oauth_current_client_id(),
+				'detail'            => aafm_build_activity_detail_from_exception( $e ),
+			)
+		);
+		return false;
+	}
 }
 
 /**

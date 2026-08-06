@@ -259,21 +259,24 @@ final class ResolveHookTest extends TestCase {
 	 * A non-positive row id is refused before the query runs (log.php's `$row_id <= 0` guard), so it
 	 * reports no write and the caller announces nothing.
 	 *
-	 * A POSITIVE id that matched no row is NOT refused: wpdb::update() returns 0 for "no match"
-	 * exactly as it does for "matched, unchanged", and the no-op resolve above depends on 0 meaning
-	 * success. So an unknown positive id does report a write, and a consumer must tolerate a row_id
-	 * it cannot join. Both halves are pinned here so neither drifts, and so the earlier version of
-	 * this test - which passed 0 and therefore stayed green under every mutation, including deleting
-	 * the hook outright - cannot come back.
+	 * A positive id matching no row reports no write either, and telling that apart from the no-op
+	 * above is the whole reason the zero branch exists. wpdb::update() returns 0 for "no match"
+	 * exactly as it does for "matched, unchanged", and the no-op resolve is a real resolve, so the
+	 * two cannot share an answer: a row cleared between the opening insert and the resolve would
+	 * otherwise announce a row_id that joins to nothing.
+	 *
+	 * Both halves are pinned here so neither drifts, and so the earlier version of this test - which
+	 * passed 0 and therefore stayed green under every mutation, including deleting the hook outright
+	 * - cannot come back.
 	 */
-	public function test_a_non_positive_row_id_writes_nothing_but_an_unknown_positive_one_does(): void {
+	public function test_a_row_id_that_matches_no_row_reports_no_write(): void {
 		$this->assertFalse(
 			aafm_update_activity_status( 0, 'error' ),
 			'A non-positive id never reaches the query.'
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			aafm_update_activity_status( 999999, 'error' ),
-			'An unknown positive id reports a write: 0 rows matched is not a failure.'
+			'A row that is not there cannot have been resolved, however positive its id looks.'
 		);
 	}
 

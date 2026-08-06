@@ -350,8 +350,9 @@ function aafm_prune_activity_log(): void {
  *                                  leaves the column untouched.
  * @param string|null $detail       Optional note about what the call touched, known only once it
  *                                  resolved. Null (default) leaves the column untouched.
- * @return bool Whether the row was written. False means the query failed or the id was unusable;
- *              a matched row whose columns did not change counts as written.
+ * @return bool Whether the row was written. False means the query failed, the id was unusable, or
+ *              no such row exists any more; a matched row whose columns did not change counts as
+ *              written.
  */
 function aafm_update_activity_status( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): bool {
 	global $wpdb;
@@ -371,12 +372,26 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
 		$format[]       = '%s';
 	}
 
+	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$updated = $wpdb->update( aafm_activity_log_table(), $data, array( 'id' => $row_id ), $format, array( '%d' ) );
+	$updated = $wpdb->update( $table, $data, array( 'id' => $row_id ), $format, array( '%d' ) );
 
 	// Only a literal false is a failure. wpdb::update() returns 0 when the row matched and no
 	// column changed, which is a legitimate no-op resolve, and a naive `if ( $updated )` would
 	// report every one of them as a failed write.
+	//
+	// But 0 also comes back when NO row matched, and that is not a resolve at all: the row was
+	// pruned or the log was cleared between the opening insert and this call, so reporting success
+	// makes the caller announce a row_id that joins to nothing - the same defect as announcing a
+	// null detail, dressed differently. The two zeroes are indistinguishable from the return value,
+	// so the rare one costs a SELECT to tell them apart. An ordinary resolve changes the status
+	// column and never lands here; a crashed call does, because aafm_log_ability_exception() has
+	// already set the row to 'error'.
+	if ( 0 === $updated ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (bool) $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE id = %d', $table, $row_id ) );
+	}
+
 	return false !== $updated;
 }
 

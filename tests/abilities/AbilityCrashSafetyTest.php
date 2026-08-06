@@ -463,6 +463,68 @@ final class AbilityCrashSafetyTest extends TestCase {
 	}
 
 	/**
+	 * The default-on branch of aafm_rethrow_ability_exceptions had no test at all, so nothing
+	 * pinned the behaviour the filter's docblock promises: the Throwable propagates untouched and
+	 * the row is deliberately LEFT stuck at 'started', because that stuck row is development's
+	 * forensic signal that something crashed uncaught. Resolving it would erase the one thing this
+	 * branch exists to keep loud.
+	 *
+	 * The filter also receives the Throwable now, which is the substantive half of the 1.6.1
+	 * change: a filter deciding whether to re-throw could not previously see what it was deciding
+	 * about.
+	 *
+	 * This calls OUR decorated closure directly rather than going through WP_Ability::execute(),
+	 * and that is not a shortcut. On this project's PHPUnit core (7.0.2)
+	 * WP_Ability::invoke_callback() wraps every callback in its own catch ( Throwable ), so a
+	 * correct re-throw is absorbed one layer out and returned as core's generic
+	 * 'ability_callback_exception' - the assertion would then be measuring core's version, not our
+	 * branch, and would read identically on a build where this branch was deleted. Reaching the
+	 * closure by reflection makes the test say the same thing on the WP 6.9 floor, which has no
+	 * such guard, and on 7.0+, which does.
+	 */
+	public function test_the_rethrow_branch_propagates_and_leaves_the_row_unresolved(): void {
+		$seen = null;
+		add_filter(
+			'aafm_rethrow_ability_exceptions',
+			static function ( $rethrow, $e = null ) use ( &$seen ) {
+				$seen = $e;
+				return true;
+			},
+			10,
+			2
+		);
+		$this->register_throwing_fixture( 'aafm-test/throws-rethrow' );
+
+		$property = new \ReflectionProperty( \WP_Ability::class, 'execute_callback' );
+		$property->setAccessible( true );
+		$decorated = $property->getValue( wp_get_ability( 'aafm-test/throws-rethrow' ) );
+
+		$caught = null;
+		try {
+			$decorated( array() );
+		} catch ( \RuntimeException $e ) {
+			$caught = $e;
+		}
+
+		$this->assertInstanceOf(
+			\RuntimeException::class,
+			$caught,
+			'With the filter on, the Throwable must reach the caller instead of becoming a WP_Error.'
+		);
+		$this->assertSame( 'boom from the ability', $caught->getMessage() );
+		$this->assertSame( $caught, $seen, 'The filter must be handed the Throwable it is deciding about.' );
+
+		$rows = aafm_query_activity( array( 'ability' => 'aafm-test/throws-rethrow' ) );
+		$this->assertCount( 1, $rows, 'The started row is written before the callback runs, so it exists.' );
+		$this->assertSame(
+			'started',
+			$rows[0]['status'],
+			'The rethrow branch must leave the row stuck at started - that is the forensic signal.'
+		);
+		$this->assertNull( $rows[0]['detail'], 'And it must write no crash detail, since it wrote no resolution.' );
+	}
+
+	/**
 	 * Half B of the crash-detail routing: the tail aafm_update_activity_status() in
 	 * aafm_register_ability_with_log() runs unconditionally on the SAME row a crash already
 	 * resolved. Once aafm_build_activity_detail_from_result() grew a WP_Error branch, that tail

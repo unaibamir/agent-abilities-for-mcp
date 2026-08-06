@@ -376,6 +376,14 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// scope that knows both the final status and the detail the row ended up carrying. The
 		// re-throw branch above never reaches this line, so a re-thrown crash announces nothing,
 		// which matches the row it deliberately leaves at 'started'.
+		//
+		// A failed tail write silences the announcement even on a crash, whose detail
+		// aafm_log_ability_exception() already wrote. That is deliberate rather than overlooked.
+		// False from that writer means the query failed or the row is gone, and in the second case
+		// there is no row left for a consumer to join to, so announcing would hand out a dangling
+		// id. The cost is the narrow first case: a connection that drops between the two writes
+		// loses a crash announcement whose row is correct and complete. The two are not
+		// distinguishable here, and a dangling id is the worse of them.
 		if ( $written ) {
 			aafm_announce_ability_resolved( $row_id, $status, $result_count, $resolved_detail );
 		}

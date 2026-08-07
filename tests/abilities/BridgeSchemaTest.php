@@ -73,9 +73,17 @@ final class BridgeSchemaTest extends TestCase {
 		// missing. That warning is core's, fires with or without our normalizer, and is inert - the
 		// null falls through is_array() and validation continues. It is recorded as a known
 		// limitation of bridging a foreign schema with an empty subschema, not as a defect here.
+		//
+		// Both wordings are matched because PHP renamed the diagnostic in 8.0: the floor emits
+		// E_NOTICE "Undefined index: type", 8.0+ emits E_WARNING 'Undefined array key "type"'. The
+		// handler above is registered for both levels, so on 7.4 the notice was captured all along
+		// and only the string comparison missed it. Matching is still full-string equality on a
+		// known pair, so any OTHER diagnostic still fails this assertion.
+		$reached_typeless_branch = in_array( 'Undefined array key "type"', $warnings, true )
+			|| in_array( 'Undefined index: type', $warnings, true );
 		$this->assertSame(
 			$expects_doing_it_wrong,
-			in_array( 'Undefined array key "type"', $warnings, true ),
+			$reached_typeless_branch,
 			'Only the keyless-subschema cases may reach core\'s typeless branch.'
 		);
 	}

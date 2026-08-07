@@ -753,16 +753,24 @@ function aafm_exec_moderate_comment( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// $ok can be true here even when the comment no longer exists at all:
+	// wp_set_comment_status() (used by approve/unapprove) fires its 'wp_set_comment_status'
+	// action AFTER its DB update succeeds and returns true unconditionally once that update ran,
+	// so a hook on that action (an anti-spam or moderation plugin reacting to the status change,
+	// say) that hard-deletes the row leaves $ok === true while get_comment($id) is already null
+	// by the time we read the status back. A 1.6.1-era fix kept that case a "success" reporting
+	// aafm_comment_status_string()'s 'unknown' fallback, which satisfied the schema's
+	// type:string but told the caller nothing usable about whether its moderation took effect.
+	// 1.6.2 reverses that decision: a comment that vanished mid-write is an error, the same
+	// aafm_generic_error() every other miss path in this file returns.
+	if ( ! get_comment( $id ) instanceof WP_Comment ) { // @phpstan-ignore-line instanceof.alwaysTrue (a wp_set_comment_status hook can delete the row after the guard above)
+		return aafm_generic_error();
+	}
+
 	// aafm_comment_status_string(), not wp_get_comment_status() raw: the output schema declares
 	// 'status' => type:string, but wp_get_comment_status() falls through to boolean false whenever
-	// get_comment() can't resolve the id at read time. The 'post-trashed' value is one such case and
-	// already handled by the helper - but $ok can be true here even when the comment no longer
-	// exists at all: wp_set_comment_status() (used by approve/unapprove) fires its
-	// 'wp_set_comment_status' action AFTER its DB update succeeds and returns true unconditionally
-	// once that update ran, so a hook on that action (an anti-spam or moderation plugin reacting to
-	// the status change, say) that hard-deletes the row leaves $ok === true while get_comment($id)
-	// is already null by the time we read the status back. aafm_comment_status_string() reports
-	// 'unknown' for that case instead of the bare false that violates the schema.
+	// get_comment() can't resolve the id at read time - the 'post-trashed' value is one such case
+	// and is mapped by the helper.
 	return array( 'status' => aafm_comment_status_string( $id ) );
 }
 

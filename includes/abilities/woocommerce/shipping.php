@@ -603,8 +603,8 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
  * @param \WC_Shipping_Method $method Shipping method instance from WC_Shipping_Zone::get_shipping_methods().
  * @return array<string,mixed>
  */
-function aafm_wc_instance_settings( $method ): array {
-	if ( method_exists( $method, 'init_instance_settings' ) && empty( $method->instance_settings ) ) {
+function aafm_wc_instance_settings( \WC_Shipping_Method $method ): array {
+	if ( empty( $method->instance_settings ) ) {
 		$method->init_instance_settings();
 	}
 	return is_array( $method->instance_settings ) ? $method->instance_settings : array();

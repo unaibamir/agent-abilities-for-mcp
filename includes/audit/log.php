@@ -404,13 +404,14 @@ function aafm_update_activity_status( int $row_id, string $status, ?int $result_
  * caller in includes/register.php holds both halves, so it announces, once, after the row is
  * settled.
  *
- * @param int         $row_id       The resolved row.
+ * @param int|null    $row_id       The resolved row, or null when the opening insert failed and
+ *                                  there is no row at all (since 1.6.2).
  * @param string      $status       One of success|error|denied.
  * @param int|null    $result_count Magnitude of a list/read call's result, or null.
  * @param string|null $detail       The detail the row now carries, or null when it carries none.
  * @return void
  */
-function aafm_announce_ability_resolved( int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): void {
+function aafm_announce_ability_resolved( ?int $row_id, string $status, ?int $result_count = null, ?string $detail = null ): void {
 	/**
 	 * Fires once an ability call resolves, whatever the outcome.
 	 *
@@ -435,6 +436,14 @@ function aafm_announce_ability_resolved( int $row_id, string $status, ?int $resu
 	 * a new helper plus an extra SELECT on every single resolve. Join on row_id against the
 	 * aafm_ability_called record instead, which carries both.
 	 *
+	 * Since 1.6.2, row_id can be NULL: it is null when the call's opening audit insert failed, so
+	 * there is no row to join to at all - the payload's own status and detail are the whole record
+	 * for that call. That state is exactly when an external monitor matters most (the audit table
+	 * itself is failing), which is why it announces instead of staying silent as 1.6.1 had it. The
+	 * aafm_ability_called record for the same call still fired (aafm_log_activity() runs its
+	 * do_action unconditionally), so the ability name and principal are recoverable from it. A
+	 * consumer must treat row_id as int-or-null: a real id joins as before, null means "no row".
+	 *
 	 * $detail is identifier-only and never carries an argument value from any first-party ability:
 	 * it is an ability's allowlisted detail, a first-party WP_Error code, or a crash's exception
 	 * class and throw site. It is sanitized exactly as the column sanitizes it. It is NOT always
@@ -446,7 +455,8 @@ function aafm_announce_ability_resolved( int $row_id, string $status, ?int $resu
 	 * what wrote it. See includes/audit/detail.php.
 	 *
 	 * @since 1.6.1
-	 * @param array{row_id:int,status:string,result_count:int|null,detail:string|null} $record The resolve.
+	 * @since 1.6.2 row_id can be null (the opening insert failed; nothing to join to).
+	 * @param array{row_id:int|null,status:string,result_count:int|null,detail:string|null} $record The resolve.
 	 */
 	do_action(
 		'aafm_ability_resolved',

@@ -1432,18 +1432,18 @@ class WC_Shipping_Method {
 		if ( is_array( $stored ) ) {
 			$this->id           = (string) ( $stored['id'] ?? 'flat_rate' );
 			$this->method_title = (string) ( $stored['method_title'] ?? '' );
-			$this->settings     = (array) ( $stored['settings'] ?? array() );
-			// The production code persists instance settings as a WP option keyed by
-			// get_instance_option_key() (core update_option()), exactly as WC does. Merge that
-			// option over the seeded settings so a write round-trips on the next read - this is
-			// what WC_Settings_API::init_settings() does on construct.
-			$option = get_option( $this->get_instance_option_key() );
-			if ( is_array( $option ) ) {
-				$this->settings = array_merge( $this->settings, $option );
-			}
-			// WC populates $title from the "title" instance setting; mirror that so a
-			// write through the instance settings option round-trips on the next read.
-			$this->title = (string) ( $this->settings['title'] ?? $this->method_title );
+			// The legacy global bucket stays EXACTLY the seeded value. This constructor used to
+			// merge the per-instance option into it for round-tripping convenience, which meant
+			// most round-trip tests could not detect a wrong-bucket read of $method->settings -
+			// real WC leaves this bucket alone for zone method instances.
+			$this->settings = (array) ( $stored['settings'] ?? array() );
+			// WC populates $title from the "title" INSTANCE setting; read it from the
+			// per-instance option (where production update_shipping_method() writes it), so a
+			// write round-trips on the next read without touching the legacy bucket. The seeded
+			// legacy title stays a fallback for fixtures that seed only the legacy bucket.
+			$option      = get_option( $this->get_instance_option_key() );
+			$option      = is_array( $option ) ? $option : array();
+			$this->title = (string) ( $option['title'] ?? $this->settings['title'] ?? $this->method_title );
 			// is_enabled lives in the woocommerce_shipping_zone_methods table, which the
 			// production toggle writes via $wpdb->update(). Read it back from the table when
 			// a row exists, falling back to the in-memory store flag.
@@ -1461,18 +1461,22 @@ class WC_Shipping_Method {
 	// (the legacy global bucket) empty for zone method instances; a stub that copies one into
 	// the other cannot distinguish the two and will hide a wrong-bucket read.
 	//
-	// This stub deliberately models only the option-PRESENT branch. Real
-	// WC_Settings_API::init_instance_settings() (abstract-wc-shipping-method.php:583-591) falls
-	// back, when the option is absent, to
-	// array_merge( array_fill_keys( array_keys( $this->form_fields ), '' ), wp_list_pluck( $this->form_fields, 'default' ) )
-	// - i.e. every declared form field defaulted to '' and then overwritten by its own 'default'
-	// key where one exists - rather than a bare array(). The direction here is safe (it makes the
-	// empty-instance-settings case testable at all, and the real fallback is a superset of this
-	// stub's array()), but a test asserting the SHAPE of a never-configured method's settings
-	// (as opposed to just that it round-trips correctly) would need the real fallback modeled.
+	// Both vendor branches are modeled (abstract-wc-shipping-method.php:583-591): a stored
+	// option wins verbatim, and an ABSENT option falls back to form-field defaults
+	// (array_merge( array_fill_keys( array_keys( $form_fields ), '' ), wp_list_pluck( $form_fields, 'default' ) )),
+	// never a bare array(). With this stub's zero declared fields the fallback still yields
+	// array() - which truthfully models a field-less third-party method, not the
+	// never-configured-reads-back-empty state the vendor cannot produce. A fixture that wants
+	// the empty shape seeds an explicitly-empty stored option instead.
+	public function get_instance_form_fields() { return array(); }
 	public function init_instance_settings() {
-		$stored = get_option( $this->get_instance_option_key(), array() );
-		$this->instance_settings = is_array( $stored ) ? $stored : array();
+		$stored = get_option( $this->get_instance_option_key(), null );
+		if ( is_array( $stored ) ) {
+			$this->instance_settings = $stored;
+			return;
+		}
+		$form_fields = $this->get_instance_form_fields();
+		$this->instance_settings = array_merge( array_fill_keys( array_keys( $form_fields ), '' ), wp_list_pluck( $form_fields, 'default' ) );
 	}
 	public function get_instance_option_key() { return 'woocommerce_' . $this->id . '_' . $this->instance_id . '_settings'; }
 	// Mirrors WC_Settings_API::update_option(): persist a single instance setting into the WP

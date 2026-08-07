@@ -178,6 +178,15 @@ class WcStubStore {
 	 * vendor-verified contract this models. An empty SKU is never a collision (WC treats '' as
 	 * "no SKU set" and does not enforce uniqueness on it).
 	 *
+	 * Two vendor escapes are deliberately NOT modeled, so this stub is stricter than the real
+	 * check in exactly these two ways (verified against WooCommerce 10.9.4): real
+	 * is_existing_sku() excludes trashed rows (post_status != 'trash',
+	 * class-wc-product-data-store-cpt.php:1279-1300), so a SKU held only by a trashed product is
+	 * free to reuse in production but rejected here; and wc_product_has_unique_sku() is
+	 * short-circuitable by the wc_product_pre_has_unique_sku / wc_product_has_unique_sku filters
+	 * (wc-product-functions.php:1024, :1032), which this store never applies. A test exercising
+	 * either escape must not rely on this stub as-is.
+	 *
 	 * @param string $sku        The SKU being set.
 	 * @param int    $exclude_id The row's own id (0 for a not-yet-saved product), excluded from the scan.
 	 * @return bool

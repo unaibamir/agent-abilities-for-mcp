@@ -921,7 +921,7 @@ function aafm_log_blocked_ability_enables( array $blocked ): int {
  * AJAX: return one page of activity rows for a given page number and status filter.
  *
  * Server-side paging and filtering so the table never has to load tens of thousands of rows
- * into the DOM. The incoming filter is sanitized against the known set (all|success|error|denied)
+ * into the DOM. The incoming filter is sanitized against the known set (all|started|success|error|denied)
  * and mapped to a query status; the page number is clamped to the filtered total. Returns the
  * rendered <tr> HTML (every cell escaped by aafm_activity_rows_html()) plus the paging state the
  * JS needs to update the pager. Read-only - never touches state.
@@ -936,7 +936,7 @@ function aafm_ajax_get_log_page(): void {
 
 	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
 	$filter = isset( $_POST['filter'] ) ? sanitize_key( wp_unslash( (string) $_POST['filter'] ) ) : 'all';
-	if ( ! in_array( $filter, array( 'all', 'success', 'error', 'denied' ), true ) ) {
+	if ( ! in_array( $filter, array( 'all', 'started', 'success', 'error', 'denied' ), true ) ) {
 		$filter = 'all';
 	}
 	$status = aafm_activity_filter_status( $filter );
@@ -993,7 +993,7 @@ function aafm_handle_export_activity_log(): void {
 	// ?filter[]=x arrives here as an array; casting that to string would emit a PHP warning
 	// before the headers below are sent, breaking the download with "headers already sent".
 	$filter = is_string( $raw_filter ) ? sanitize_key( wp_unslash( $raw_filter ) ) : 'all';
-	if ( ! in_array( $filter, array( 'all', 'success', 'error', 'denied' ), true ) ) {
+	if ( ! in_array( $filter, array( 'all', 'started', 'success', 'error', 'denied' ), true ) ) {
 		$filter = 'all';
 	}
 
@@ -2009,6 +2009,7 @@ function aafm_render_activity_tab(): void {
 	echo '<button type="button" class="aafm-seg-btn" data-filter="success" aria-pressed="false">' . esc_html__( 'Success', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '<button type="button" class="aafm-seg-btn" data-filter="error" aria-pressed="false">' . esc_html__( 'Errors', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '<button type="button" class="aafm-seg-btn" data-filter="denied" aria-pressed="false">' . esc_html__( 'Denied', 'agent-abilities-for-mcp' ) . '</button>';
+	echo '<button type="button" class="aafm-seg-btn" data-filter="started" aria-pressed="false">' . esc_html__( 'Started', 'agent-abilities-for-mcp' ) . '</button>';
 	echo '</div>';
 
 	// Live count headline plus a plain clarifier describing the retention window.
@@ -2105,11 +2106,11 @@ function aafm_activity_page_size(): int {
 /**
  * Map a status-filter segment slug to a query status (or null for "all").
  *
- * @param string $filter One of all|success|error|denied (anything else falls back to all).
+ * @param string $filter One of all|started|success|error|denied (anything else falls back to all).
  * @return string|null The status to query on, or null for no status filter.
  */
 function aafm_activity_filter_status( string $filter ): ?string {
-	return in_array( $filter, array( 'success', 'error', 'denied' ), true ) ? $filter : null;
+	return in_array( $filter, array( 'started', 'success', 'error', 'denied' ), true ) ? $filter : null;
 }
 
 /**

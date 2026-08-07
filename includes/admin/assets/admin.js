@@ -1373,7 +1373,7 @@
 		 * status filter, so a click always exports what the operator is looking at rather than
 		 * whatever filter happened to be active on first page load.
 		 *
-		 * @param {string} filter One of all|success|error|denied.
+		 * @param {string} filter One of all|started|success|error|denied.
 		 */
 		#syncExportLinkFilter( filter ) {
 			const link = document.querySelector( '#aafm-export-log' );

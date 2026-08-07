@@ -214,4 +214,74 @@ final class RedactionProofsTest extends TestCase {
 			$site
 		);
 	}
+
+	// =========================================================================
+	// aafm_wc_redact_settings_deep() - the denylist behind every gateway
+	// settings shape and every shipping-method instance-settings row. A pure
+	// array walk: no WooCommerce stub needed. The redactor DROPS a matching
+	// key entirely (it does not mask the value), so the assertions are
+	// assertArrayNotHasKey, never a value comparison.
+	// =========================================================================
+
+	/**
+	 * Every key in the provider must be dropped, at any depth.
+	 *
+	 * @dataProvider sensitive_setting_keys
+	 *
+	 * @param string $key The settings key expected to be redacted.
+	 */
+	public function test_sensitive_settings_keys_are_dropped( string $key ): void {
+		$redacted = aafm_wc_redact_settings_deep(
+			array(
+				$key    => 'super-secret-value',
+				'title' => 'Flat rate',
+			)
+		);
+
+		$this->assertArrayNotHasKey( $key, $redacted, sprintf( 'The key "%s" must be redacted.', $key ) );
+	}
+
+	/**
+	 * The whole contract, not only the keys the widening added: some of these
+	 * (password, license_key via "key") already passed before 1.6.2 and sit
+	 * here as regression pins.
+	 *
+	 * @return array<string,array{string}>
+	 */
+	public function sensitive_setting_keys(): array {
+		return array(
+			'password'       => array( 'password' ),
+			'passwd'         => array( 'passwd' ),
+			'pass'           => array( 'pass' ),
+			'account_number' => array( 'account_number' ),
+			'merchant_id'    => array( 'merchant_id' ),
+			'license'        => array( 'license' ),
+			'license_key'    => array( 'license_key' ),
+			'username'       => array( 'username' ),
+		);
+	}
+
+	public function test_ordinary_settings_survive_redaction(): void {
+		$settings = array(
+			'title'      => 'Flat rate',
+			'cost'       => '5.00',
+			'tax_status' => 'taxable',
+		);
+
+		$this->assertSame( $settings, aafm_wc_redact_settings_deep( $settings ) );
+	}
+
+	public function test_nested_sensitive_keys_are_dropped(): void {
+		$redacted = aafm_wc_redact_settings_deep(
+			array(
+				'carrier' => array(
+					'passwd' => 'x',
+					'label'  => 'DHL',
+				),
+			)
+		);
+
+		$this->assertArrayNotHasKey( 'passwd', $redacted['carrier'] );
+		$this->assertSame( 'DHL', $redacted['carrier']['label'] );
+	}
 }

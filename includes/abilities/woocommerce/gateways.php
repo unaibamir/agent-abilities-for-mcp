@@ -95,12 +95,19 @@ function aafm_wc_gateways_registry_definitions(): array {
  * and the walk recurses into nested arrays so a credential hidden under a benign parent key
  * (or several levels down) can't slip through. The pattern covers the obvious credential
  * tokens (key, secret, token, password/pwd, api, private, auth, credential, signature/sign,
- * client_id) plus a second, boundary-anchored group (passphrase, salt, pin, certificate/cert,
- * pem) added after an audit found the official PayFast gateway storing its IPN-signing secret
- * under the literal field name "passphrase" (which the original pattern misses - it matches
- * "password", not "pass") and PayU-style gateways using "salt". Those two field names are live,
- * not hypothetical: they are reachable today through wc-get-payment-gateway, which is a read
- * and is not in the high-risk locked set.
+ * client_id) plus a second, boundary-anchored group (passphrase, passwd/pass, salt, pin,
+ * certificate/cert, pem, account, merchant, license, username/user, number). The group started
+ * as (passphrase, salt, pin, certificate/cert, pem), added after an audit found the official
+ * PayFast gateway storing its IPN-signing secret under the literal field name "passphrase"
+ * (which the original pattern misses - it matches "password", not "pass") and PayU-style
+ * gateways using "salt". Those two field names are live, not hypothetical: they are reachable
+ * today through wc-get-payment-gateway, which is a read and is not in the high-risk locked set.
+ * The 1.6.2 additions (passwd, pass, account, merchant, license, username, user, number) close
+ * the gaps a security review found: the loose group's "pwd" does not match "passwd" (no
+ * contiguous p-w-d), and nothing caught account_number, merchant_id, license, or username -
+ * names carrier and gateway plugins actually use for credentials. Note the anchoring means the
+ * longer forms are not redundant: anchored "pass" does not match "passwd" (the next character
+ * is "w", not a separator), and anchored "user" does not match "username".
  *
  * The second group is boundary-anchored (start/end of the key, or an underscore/hyphen) rather
  * than a loose substring match, because "pin" as a bare substring also matches "shipping"
@@ -122,7 +129,7 @@ function aafm_wc_gateways_registry_definitions(): array {
  * @return array<int|string,mixed>
  */
 function aafm_wc_redact_settings_deep( array $settings ): array {
-	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)|(?:^|[_-])(?:passphrase|salt|pin|certificate|cert|pem)(?:[_-]|$)/i';
+	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)|(?:^|[_-])(?:passphrase|passwd|pass|salt|pin|certificate|cert|pem|account|merchant|license|username|user|number)(?:[_-]|$)/i';
 	$redacted       = array();
 	foreach ( $settings as $key => $value ) {
 		if ( preg_match( $secret_pattern, (string) $key ) ) {

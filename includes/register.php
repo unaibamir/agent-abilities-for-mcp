@@ -174,10 +174,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			);
 			// A refused call is a call that finished, so it announces like any other resolve. This
 			// row is written rather than resolved - there is no 'started' row on the permission
-			// phase - so the announcement is gated on the INSERT having landed instead of on an
-			// update's return.
+			// phase - so a landed INSERT announces its real id, and a failed one announces null:
+			// same treatment as the execute tail, because a denial a monitor cannot see while the
+			// audit table is failing is the same blind spot.
 			if ( $rate_row_id > 0 ) {
 				aafm_announce_ability_resolved( $rate_row_id, 'denied', null, $rate_detail );
+			} else {
+				aafm_announce_ability_resolved( null, 'denied', null, $rate_detail );
 			}
 			return false;
 		}
@@ -235,9 +238,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// a permission callback that exploded is the failure an operator most wants paged
 			// about - it is the very class of crash the discovery guard in includes/server.php
 			// exists to survive. Exactly one fire per call, because a denial returns false here and
-			// the execute closure never runs.
+			// the execute closure never runs. A failed insert announces with a null row_id rather
+			// than staying silent - $denied_detail carries the throw site on a crashed check, so
+			// the payload is the whole record when there is no row to join to.
 			if ( $denied_row_id > 0 ) {
 				aafm_announce_ability_resolved( $denied_row_id, 'denied', null, $denied_detail );
+			} else {
+				aafm_announce_ability_resolved( null, 'denied', null, $denied_detail );
 			}
 		}
 		return $allowed;
@@ -377,15 +384,20 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// re-throw branch above never reaches this line, so a re-thrown crash announces nothing,
 		// which matches the row it deliberately leaves at 'started'.
 		//
-		// A failed tail write silences the announcement even on a crash, whose detail
-		// aafm_log_ability_exception() already wrote. That is deliberate rather than overlooked.
-		// False from that writer means the query failed or the row is gone, and in the second case
-		// there is no row left for a consumer to join to, so announcing would hand out a dangling
-		// id. The cost is the narrow first case: a connection that drops between the two writes
-		// loses a crash announcement whose row is correct and complete. The two are not
-		// distinguishable here, and a dangling id is the worse of them.
+		// The one silent case left is a POSITIVE row_id whose tail write failed: the row opened
+		// but was pruned or cleared between the two writes (or the query itself failed). There is
+		// no row left for a consumer to join to, so announcing would hand out a dangling id, and
+		// the two sub-cases are not distinguishable here. That silence is deliberate and stays.
 		if ( $written ) {
 			aafm_announce_ability_resolved( $row_id, $status, $result_count, $resolved_detail );
+		} elseif ( $row_id <= 0 ) {
+			// The opening insert never landed, so there is no row to resolve and nothing to join to -
+			// but the call still finished, and silence here is a crash a monitor cannot see, at
+			// exactly the moment the audit table itself is failing. null, not 0: a consumer must be
+			// able to tell "no row" from every real id. On a crash, $resolved_detail is already the
+			// crash detail, so the announcement carries it. This reverses 1.6.1's announce-nothing
+			// decision; the history lives on ResolveHookTest's null-row-id test.
+			aafm_announce_ability_resolved( null, $status, $result_count, $resolved_detail );
 		}
 
 		return $result;

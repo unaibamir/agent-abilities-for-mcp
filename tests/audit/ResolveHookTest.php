@@ -173,16 +173,26 @@ final class ResolveHookTest extends TestCase {
 	}
 
 	/**
-	 * A call whose opening insert never landed has no row to resolve, so it must announce nothing:
-	 * row_id would be 0, which joins to nothing, and the record would report a resolve for a call
-	 * the log has no trace of. The caller's `if ( $written )` guard is the whole of that, and
-	 * dropping it left the whole suite green.
+	 * A call whose opening insert never landed still announces - with row_id NULL, not 0.
+	 *
+	 * This is a documented reversal. 1.6.1 decided the opposite and pinned it here: a failed
+	 * insert leaves row_id at 0, which joins to nothing, so announcing would report a resolve
+	 * for a call the log has no trace of - the caller's `if ( $written )` guard enforced total
+	 * silence. 1.6.2 reverses that judgment because the alternative is worse: silence blinds an
+	 * external monitor to a crash at exactly the moment the audit table itself is failing, which
+	 * is when a monitor is needed most. The dangling-join objection no longer applies because
+	 * the announcement carries null, which a consumer CAN distinguish from every real id - the
+	 * payload's own status and detail are the whole record, and the aafm_ability_called record
+	 * for the same call still fired, so the ability name and principal are recoverable from it.
+	 *
+	 * The middle case - a row that opened but was pruned before the resolve - still announces
+	 * nothing; that IS the dangling-id hazard and it keeps its silence.
 	 *
 	 * The insert is failed by rewriting it to a harmless SELECT through wpdb's own `query` filter,
 	 * so insert_id stays 0 and aafm_log_activity() returns 0 - the same shape a real insert failure
 	 * has, without touching the schema.
 	 */
-	public function test_a_call_whose_row_never_opened_announces_nothing(): void {
+	public function test_a_call_whose_row_never_opened_announces_with_a_null_row_id(): void {
 		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
 		$this->in_action(
 			'wp_abilities_api_init',
@@ -223,9 +233,58 @@ final class ResolveHookTest extends TestCase {
 			'Guard on the guard: the insert must really have been swallowed, or this proves nothing.'
 		);
 		$this->assertCount(
-			0,
+			1,
 			$this->fired,
-			'No row means no resolve to announce: a row_id of 0 joins to nothing.'
+			'A call that finished announces even when its audit row never opened; silence here is a monitor blind spot.'
+		);
+		$this->assertArrayHasKey( 'row_id', $this->fired[0] );
+		$this->assertNull(
+			$this->fired[0]['row_id'],
+			'null, not 0: a consumer must be able to tell "no row" from every real id.'
+		);
+		$this->assertSame( 'success', $this->fired[0]['status'] );
+	}
+
+	/**
+	 * The same failed-insert state on a CRASHED call: the announcement must carry the crash
+	 * detail. This is the scenario the 1.6.2 reversal exists for - the audit table failing AND
+	 * the ability crashing is exactly when an external monitor is the only thing left watching,
+	 * and under 1.6.1's rule that crash was invisible everywhere: no row, no announcement.
+	 *
+	 * $resolved_detail at the execute tail is already the crash detail
+	 * (aafm_log_ability_exception() returns it and the closure keeps it), so the null-row
+	 * announcement carries it with no extra plumbing.
+	 */
+	public function test_a_crash_whose_row_never_opened_announces_with_a_null_row_id_and_the_crash_detail(): void {
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$this->register_throwing_fixture( 'aafm-test/resolve-hook-crash-no-row' );
+
+		$swallow_insert = static function ( $query ) {
+			if ( is_string( $query ) && 0 === stripos( $query, 'INSERT' ) && false !== stripos( $query, 'aafm_activity_log' ) ) {
+				return 'SELECT 1';
+			}
+			return $query;
+		};
+		add_filter( 'query', $swallow_insert );
+		try {
+			wp_get_ability( 'aafm-test/resolve-hook-crash-no-row' )->execute( array() );
+		} finally {
+			remove_filter( 'query', $swallow_insert );
+		}
+
+		$this->assertCount(
+			0,
+			aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-crash-no-row' ) ),
+			'Guard on the guard: the insert must really have been swallowed, or this proves nothing.'
+		);
+		$this->assertCount( 1, $this->fired, 'Exactly one fire: announcing from the callers, never from inside the writer.' );
+		$this->assertArrayHasKey( 'row_id', $this->fired[0] );
+		$this->assertNull( $this->fired[0]['row_id'] );
+		$this->assertSame( 'error', $this->fired[0]['status'] );
+		$this->assertStringStartsWith(
+			'RuntimeException at ',
+			(string) $this->fired[0]['detail'],
+			'With no row to join to, the payload detail is the whole record - it must name the crash.'
 		);
 	}
 

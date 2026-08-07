@@ -41,14 +41,32 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 	}
 
 	/**
-	 * An empty array from a no-schema bridged tool must still be wrapped, matching every other
-	 * bare list this filter handles. A prior revision special-cased array() as "never wrapped" on
-	 * the reasoning that a declared {type:object, additionalProperties:false} schema forbids the
+	 * An empty array from a bridged tool must still be wrapped, matching every other bare list
+	 * this filter handles. A prior revision special-cased array() as "never wrapped" on the
+	 * reasoning that a declared {type:object, additionalProperties:false} schema forbids the
 	 * extra `data` key - but that exclusion ran BEFORE any schema lookup, so it also caught the
-	 * ordinary no-schema case this test exercises: a bridged tool with no output_schema at all
-	 * returning "nothing found" reached the wire as a bare [], which is exactly the top-level-array
-	 * shape this filter exists to prevent (upstream mcp-adapter#253). {"data":[]} is the correct
-	 * wire shape here, matching what 1.6.0 sent and what every other non-empty list gets.
+	 * ordinary no-schema case: a bridged tool with no output_schema at all returning "nothing
+	 * found" reached the wire as a bare [], which is exactly the top-level-array shape this
+	 * filter exists to prevent (upstream mcp-adapter#253). {"data":[]} is the correct wire shape
+	 * here, matching what 1.6.0 sent and what every other non-empty list gets.
+	 *
+	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1 (the schema-fidelity plan's MEDIUM
+	 * finding M2), and a characterization pin, not an aspiration: the wrap is unconditional for
+	 * ANY empty bridged result. A reasoned consequence - not a state this test constructs, since
+	 * the filter never sees a schema - is that a foreign ability declaring {type:object,
+	 * additionalProperties:false} and returning array() gets a {"data":[]} its own schema
+	 * technically forbids. The filter has no way to know at this point whether a declared schema
+	 * exists or what it says (it runs post-execute on the raw PHP value only; see the function's
+	 * own docblock for why a schema-aware gate was removed as unreachable dead code). The
+	 * alternative - leaving array() unwrapped as a bare [] - is strictly worse: a bare top-level
+	 * JSON array in structuredContent violates the MCP spec's object requirement for EVERY
+	 * consumer, not just the one foreign ability whose schema gets contradicted.
+	 *
+	 * IF A FUTURE CHANGE MAKES THIS TEST FAIL, THAT MAY BE AN IMPROVEMENT - read this docblock
+	 * before "fixing" it back. A fix would need some way to know the foreign schema forbids extra
+	 * keys AND leave array() genuinely unwrapped WITHOUT reintroducing the array()===$result
+	 * exclusion this project already tried and reverted (see FIX A of the 1.6.1 final review:
+	 * that exclusion ran before any schema check and broke the ordinary no-schema case instead).
 	 */
 	public function test_bridged_empty_list_result_is_wrapped_like_any_other_list(): void {
 		$result = aafm_filter_bridged_tool_call_result( array(), array(), 'aafm-bridge-vendor-empty' );
@@ -57,43 +75,6 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 			array( 'data' => array() ),
 			$result,
 			'An empty array must be wrapped the same as any other bare list - a bare [] in structuredContent violates the MCP spec regardless of whether the array happens to be empty.'
-		);
-	}
-
-	/**
-	 * KNOWN LIMITATION, deliberately not fixed in 1.6.1 (the schema-fidelity plan's MEDIUM
-	 * finding M2). This is a characterization test, not an aspiration: it pins what this filter
-	 * ACTUALLY does today, not what a perfectly schema-faithful implementation would do.
-	 *
-	 * A foreign ability that declares an output_schema of {type:object,
-	 * additionalProperties:false} and returns array() (an ordinary "nothing found" result) still
-	 * gets wrapped into {"data":[]} by this filter - which technically contradicts that ability's
-	 * own schema, since 'data' is a key additionalProperties:false forbids. This filter has no way
-	 * to know at this point whether a declared schema exists or what it says (it runs post-execute
-	 * on the raw PHP value only, see the function's own docblock for why a schema-aware gate was
-	 * removed as unreachable dead code). The alternative - leaving array() unwrapped as a bare [] -
-	 * is strictly worse: a bare top-level JSON array in structuredContent violates the MCP spec's
-	 * requirement that it be an object, for EVERY consumer, not just the one foreign ability whose
-	 * schema gets contradicted. Trading one ability's schema violation for a universal spec
-	 * violation is the correct call.
-	 *
-	 * IF A FUTURE CHANGE MAKES THIS TEST FAIL, THAT MAY BE AN IMPROVEMENT - read this docblock
-	 * before "fixing" it back. A fix would need some way to know the foreign schema forbids extra
-	 * keys AND leave array() genuinely unwrapped WITHOUT reintroducing the array()===$result
-	 * exclusion this project already tried and reverted (see FIX A of the 1.6.1 final review: that
-	 * exclusion ran before any schema check and broke the ordinary no-schema case instead).
-	 */
-	public function test_an_empty_result_is_wrapped_even_when_the_foreign_schema_forbids_it(): void {
-		$result = aafm_filter_bridged_tool_call_result(
-			array(),
-			array(),
-			'aafm-bridge-vendor-forbids-extra-keys'
-		);
-
-		$this->assertSame(
-			array( 'data' => array() ),
-			$result,
-			'This is the accepted trade-off, not a bug: {"data":[]} technically violates a {additionalProperties:false} schema, but the alternative (a bare []) violates the MCP spec for every client.'
 		);
 	}
 

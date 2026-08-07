@@ -69,7 +69,7 @@ function aafm_wc_variations_registry_definitions(): array {
 
 		'aafm/wc-get-product-variation'    => array(
 			'label'        => __( 'Get WooCommerce product variation', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads one product variation by id, including its parent id, prices, stock, description, image, and its chosen attribute values. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads one product variation by id, including its parent id, prices, stock, description, image, and its chosen attribute values. A variation that inherits its parent\'s stock reports manage_stock false and stock_quantity null, not the parent\'s number. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -196,6 +196,13 @@ function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
 	// what every other non-managing variation already reports.
 	$manage_stock = $variation->get_manage_stock();
 
+	// The same 'parent' state poisons stock_quantity too: real get_stock_quantity()
+	// (class-wc-product-variation.php:339-351) returns the PARENT's number when the stock is
+	// inherited, so passing it through would report a quantity that belongs to a different
+	// object beside a manage_stock of false, with nothing saying so. The variation owns no
+	// stock of its own in that state, and the schema already allows null, so report null.
+	$stock_quantity = 'parent' === $manage_stock ? null : $variation->get_stock_quantity();
+
 	return array_merge(
 		$base,
 		array(
@@ -203,7 +210,7 @@ function aafm_rich_wc_variation( \WC_Product_Variation $variation ): array {
 			'regular_price'  => (string) $variation->get_regular_price(),
 			'sale_price'     => (string) $variation->get_sale_price(),
 			'manage_stock'   => 'parent' === $manage_stock ? false : (bool) $manage_stock,
-			'stock_quantity' => null === $variation->get_stock_quantity() ? null : (int) $variation->get_stock_quantity(),
+			'stock_quantity' => null === $stock_quantity ? null : (int) $stock_quantity,
 			'image_id'       => (int) $variation->get_image_id(),
 			// Cast so an empty attributes map encodes to "{}" (object) per the schema, never "[]".
 			'attributes'     => (object) $attributes,

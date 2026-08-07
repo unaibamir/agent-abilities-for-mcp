@@ -184,12 +184,14 @@ function aafm_wc_gateway_order( string $gateway_id, array $gateways ): int {
  * @return array<string,mixed>
  */
 function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): array {
-	// WC_Payment_Gateway declares $title and $description with no default; a gateway that
-	// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
-	// back as null, which would violate the declared string schema. Cast defensively.
+	// Strip credential fields before the settings ever reach the shape (denylist walk, see
+	// aafm_wc_redact_settings_deep()'s docblock above).
 	$settings = aafm_wc_redact_gateway_settings( $gateway->settings );
 	return array(
 		'id'          => $gateway->id,
+		// WC_Payment_Gateway declares $title and $description with no default; a gateway that
+		// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
+		// back as null, which would violate the declared string schema. Cast defensively.
 		'title'       => (string) $gateway->title,
 		'description' => (string) $gateway->description,
 		'enabled'     => 'yes' === $gateway->enabled,

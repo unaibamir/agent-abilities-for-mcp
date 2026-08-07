@@ -1037,8 +1037,10 @@ function aafm_activity_log_headers(): array {
  * not markup - including for the detail column's link. `detail` is the raw text; `detail_link`
  * is null when the detail carries no linkable identifier, or the before/id/url/after parts a
  * renderer can assemble into an anchor without ever concatenating untrusted text into HTML. Only
- * the columns the table shows are exposed; the log holds argument KEYS (never values) plus a
- * REMOTE_ADDR source IP, so there is no PII to strip beyond shaping.
+ * the columns the table shows are exposed; the log holds argument KEYS (never values), a
+ * REMOTE_ADDR source IP, and since v5 an identifier-only detail string (whose crash writer,
+ * aafm_build_activity_detail_from_exception(), emits only a class name and a file:line), so
+ * there is no PII to strip beyond shaping.
  *
  * @param array<int,array<string,mixed>> $rows Rows from aafm_query_activity().
  * @return array<int,array{time:string,principal:string,ability:string,detail:string,detail_link:array{before:string,id:int,url:string,after:string}|null,status:string,variant:string,arg_keys:string}>
@@ -1986,8 +1988,9 @@ function aafm_render_term_meta_keys_selector(): void {
  * Render the Activity Log tab (includes denials and errors).
  *
  * Every cell renders stored audit data, so each value is escaped on output. The log
- * only ever holds argument KEYS (never values) and a REMOTE_ADDR source IP, so there is
- * no PII to redact here beyond standard escaping.
+ * holds argument KEYS (never values), a REMOTE_ADDR source IP, and since v5 an
+ * identifier-only detail string whose crash writer emits only a class name and a
+ * file:line, so there is no PII to redact here beyond standard escaping.
  *
  * @return void
  */

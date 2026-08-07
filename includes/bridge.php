@@ -74,9 +74,11 @@ const AAFM_BRIDGE_NAMESPACE = 'aafm-bridge';
 /**
  * Whether an array has sequential integer keys starting at 0 (a list / tuple).
  *
- * A stand-in for array_is_list() (8.1+) that also works on this plugin's PHP 7.4 floor,
- * used to tell tuple-form JSON Schema `items` (a list of subschemas) from a single-subschema
- * object.
+ * A stand-in for array_is_list() (8.1+) that also works on this plugin's PHP 7.4 floor. Its one
+ * production caller is aafm_filter_bridged_tool_call_result() below, which uses it to decide
+ * whether a bridged tool's result is a bare list that needs wrapping under `data`. (It used to
+ * also discriminate tuple-form JSON Schema `items` for the schema-coercion layer; that layer was
+ * deleted in 1.6.1.)
  *
  * @param array<int|string,mixed> $arr Array to test.
  * @return bool

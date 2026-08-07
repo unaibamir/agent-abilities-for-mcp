@@ -567,7 +567,7 @@ function aafm_query_activity( array $args ): array {
  * compute its own total and page count. A null or empty status counts every row. Runs as one
  * prepared, index-backed COUNT(*) against this plugin's own audit table.
  *
- * @param string|null $status One of success|error|denied, or null/empty for all rows.
+ * @param string|null $status One of started|success|error|denied, or null/empty for all rows.
  * @return int Non-negative row count for the (optionally filtered) set.
  */
 function aafm_activity_count_filtered( ?string $status = null ): int {

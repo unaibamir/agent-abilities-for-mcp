@@ -109,6 +109,37 @@ final class ActivityLogTest extends TestCase {
 		$this->assertSame( 'aafm/trash-post', $res['entries'][0]['ability'] );
 	}
 
+	/**
+	 * Regression pin for the ability half of the 'started' filter: the input enum has named
+	 * 'started' since the ability shipped, and it must keep returning only the stuck rows a
+	 * crashed call leaves behind. 1.6.2 makes the ADMIN surface filter on it too (page.php);
+	 * this pin exists so the two halves cannot drift apart again.
+	 */
+	public function test_status_filter_started_returns_only_started_rows(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'started',
+			)
+		);
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+
+		// No count assertion: the get-activity-log call itself runs through the logging wrapper,
+		// whose own row is still 'started' while the inner query executes, so it shows up here too.
+		$res      = wp_get_ability( 'aafm/get-activity-log' )->execute( array( 'status' => 'started' ) );
+		$statuses = array_unique( array_column( $res['entries'], 'status' ) );
+		$this->assertSame( array( 'started' ), $statuses, 'Only started rows may come back.' );
+		$abilities = array_column( $res['entries'], 'ability' );
+		$this->assertContains( 'aafm/get-posts', $abilities );
+		$this->assertNotContains( 'aafm/get-post', $abilities, 'The resolved success row must be filtered out.' );
+	}
+
 	public function test_rejects_a_smuggled_field(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/get-activity-log' )->execute( array( 'principal_user_id' => 5 ) );

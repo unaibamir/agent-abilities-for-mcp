@@ -307,6 +307,55 @@ final class ActivityTabTest extends TestCase {
 	}
 
 	/**
+	 * The mapper half of the Started filter: aafm_activity_filter_status() must pass 'started'
+	 * through as a query status, not map it to null (= all rows). This is the innermost of the
+	 * THREE allowlists the value crosses; the AJAX test below covers the outermost, because a
+	 * green here with the AJAX gate still rewriting 'started' to 'all' is a passing test over a
+	 * dead button.
+	 */
+	public function test_the_filter_mapper_passes_started_through(): void {
+		$this->assertSame( 'started', aafm_activity_filter_status( 'started' ) );
+		$this->assertNull( aafm_activity_filter_status( 'all' ) );
+		$this->assertNull( aafm_activity_filter_status( 'bogus' ) );
+	}
+
+	/**
+	 * The end-to-end half: posting filter=started through the real AJAX handler must return only
+	 * the started rows. Without this, the handler's own allowlist coerces the unknown value to
+	 * 'all' and the operator silently gets every row while the mapper unit test above sits green -
+	 * the JS/PHP boundary class that shipped in 1.6.0 past every gate.
+	 */
+	public function test_the_ajax_page_handler_honours_the_started_filter_end_to_end(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-posts',
+				'status'  => 'started',
+			)
+		);
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+		$_POST['filter']   = 'started';
+
+		$json = $this->run_handler( 'aafm_ajax_get_log_page' );
+
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertSame( 'started', $json['data']['filter'] ?? null, 'The handler must echo the filter it honoured, not a coerced all.' );
+		$this->assertSame( 1, $json['data']['total'] ?? null );
+		$this->assertCount( 1, $json['data']['rows'] ?? array() );
+		$this->assertSame( 'started', $json['data']['rows'][0]['status'] ?? null );
+	}
+
+	/**
 	 * Render the activity tab as an administrator and return its markup.
 	 *
 	 * @return string

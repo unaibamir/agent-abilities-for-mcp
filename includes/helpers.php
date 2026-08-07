@@ -1380,7 +1380,9 @@ function aafm_comment_status_string( $comment ): string {
 	// wp_get_comment_status() can also fall through to false for a comment_approved value core
 	// does not recognize at all (not one of 1/0/spam/trash/post-trashed) - e.g. a custom value a
 	// third-party plugin wrote. Report it verbatim rather than fabricating a status string with no
-	// basis, still keeping the wire type a string per the schema.
+	// basis, still keeping the wire type a string per the schema. 'unknown' is the last resort for
+	// a comment that cannot be resolved at all; since 1.6.2, moderate-comment errors before
+	// reaching it when the comment vanished mid-write, so no first-party path surfaces it today.
 	return $comment_object instanceof WP_Comment ? (string) $comment_object->comment_approved : 'unknown';
 }
 

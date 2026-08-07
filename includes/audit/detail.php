@@ -446,7 +446,9 @@ function aafm_build_activity_detail_from_result( string $ability, $result ): ?st
  * "Parent@anonymous\0<absolute file path>:<line>$<counter>", so the raw class name of an anonymous
  * throwable carries the site's install path AND a NUL byte, and aafm_sanitize_activity_detail()
  * removes neither (a NUL is valid UTF-8, so wp_check_invalid_utf8() passes it through). Cutting at
- * the NUL leaves "Parent@anonymous", which is all the useful part.
+ * the NUL leaves "Parent@anonymous", which is all the useful part. PHP 7.4 writes "class" where
+ * 8.0+ writes the parent's name, so on the floor the parent is derived instead - see below - and
+ * a row records the same shape on every supported version.
  *
  * A class name that arrived here longer or wider than the row can hold gets a trailing '~', so a
  * reader can tell a recorded name from a recorded name that is only close. That covers characters
@@ -461,6 +463,27 @@ function aafm_build_activity_detail_from_exception( \Throwable $e ): string {
 	if ( false !== $nul ) {
 		$class = substr( $class, 0, $nul );
 	}
+
+	// PHP 8.0 renders an anonymous class as "Parent@anonymous...", but 7.4 - this plugin's floor -
+	// renders it as the literal "class@anonymous...", so the cut above leaves a name that
+	// identifies nothing. get_parent_class() returns the same parent on both versions, so deriving
+	// it here makes a 7.4 site's row name the thrown class as precisely as an 8.x site's, rather
+	// than leaving the floor with a quietly less useful audit log than the docblock promises.
+	//
+	// Keyed on the string the engine actually produced, not on PHP_VERSION_ID: it fires exactly
+	// when the name is uninformative and is a no-op the moment the engine supplies a parent itself.
+	// A parent that is itself anonymous carries its own NUL, so it gets the same cut. The
+	// is_string() guard is belt and braces - PHP rejects a userland class that implements Throwable
+	// without extending Exception or Error, so an anonymous throwable always has a parent, and
+	// get_parent_class() returns false only when there is none.
+	if ( 'class@anonymous' === $class ) {
+		$parent = get_parent_class( $e );
+		if ( is_string( $parent ) ) {
+			$parent_nul = strpos( $parent, "\0" );
+			$class      = ( false === $parent_nul ? $parent : substr( $parent, 0, $parent_nul ) ) . '@anonymous';
+		}
+	}
+
 	// A PHP class name is [A-Za-z0-9_\] plus the '@anonymous' marker kept above; anything else is
 	// not a class name and has no business in an audit row.
 	//

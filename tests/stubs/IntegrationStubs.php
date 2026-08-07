@@ -805,7 +805,17 @@ class WC_Product_Variation {
 	public function get_regular_price() { return (string) ( $this->data['regular_price'] ?? '' ); }
 	public function get_sale_price() { return (string) ( $this->data['sale_price'] ?? '' ); }
 	public function get_stock_status() { return (string) ( $this->data['stock_status'] ?? 'instock' ); }
-	public function get_stock_quantity() { return $this->data['stock_quantity'] ?? null; }
+	// Mirrors real WC_Product_Variation::get_stock_quantity() (class-wc-product-variation.php:
+	// 339-351): when get_manage_stock() reports the string 'parent', the vendor returns the
+	// PARENT's stock_quantity, not the variation's own. Reuses get_manage_stock() below so the
+	// two getters cannot disagree about whose stock is being reported.
+	public function get_stock_quantity() {
+		if ( 'parent' === $this->get_manage_stock() ) {
+			$parent = \AAFM\Tests\WcStubStore::get( $this->get_parent_id() );
+			return is_array( $parent ) ? ( $parent['stock_quantity'] ?? null ) : null;
+		}
+		return $this->data['stock_quantity'] ?? null;
+	}
 	// Mirrors real WC_Product_Variation::get_manage_stock() (class-wc-product-variation.php:
 	// 323-331): when the variation's OWN manage_stock is false, it inherits and reports the
 	// STRING 'parent' if the parent product manages its own stock. Without this the stub could

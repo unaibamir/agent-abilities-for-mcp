@@ -355,6 +355,50 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
+	 * The other half of the Task 12 pair (1.6.2): when manage_stock correctly reports false
+	 * because the stock is the PARENT's, the stock_quantity beside it must not be the parent's
+	 * number. Real WC_Product_Variation::get_stock_quantity() (class-wc-product-variation.php:
+	 * 339-351) returns the parent's quantity in that state, so an unguarded read reports a
+	 * number that belongs to a different object with nothing saying so - the agent concludes
+	 * the variation has that stock. The schema already allows null (variations.php declares
+	 * type [integer, null]), so the honest shape is null.
+	 */
+	public function test_a_variation_inheriting_stock_does_not_report_the_parents_number_as_its_own(): void {
+		// Same two-object seed as the sibling test above: parent 700 manages stock, variation 701
+		// does not, so get_manage_stock() returns the string 'parent'.
+		$this->stub_woocommerce(
+			array(
+				array(
+					'id'             => 700,
+					'name'           => 'Stock-managed parent',
+					'type'           => 'variable',
+					'manage_stock'   => true,
+					'stock_quantity' => 42,
+				),
+			)
+		);
+		WcStubStore::seed(
+			701,
+			array(
+				'id'        => 701,
+				'parent_id' => 700,
+				'type'      => 'variation',
+				'sku'       => 'INHERITS-701',
+				// manage_stock deliberately absent: the variation does not manage its own stock.
+			)
+		);
+
+		$row = aafm_rich_wc_variation( \wc_get_product( 701 ) );
+
+		$this->assertFalse( $row['manage_stock'] );
+		$this->assertNull(
+			$row['stock_quantity'],
+			'A variation that does not manage its own stock has no stock quantity of its own; reporting the parent number here reads as the variation having it.'
+		);
+		$this->assertSame( 'null', wp_json_encode( $row['stock_quantity'] ) );
+	}
+
+	/**
 	 * WooCommerce is never installed in this test environment - WC_Shipping_Zone,
 	 * WC_Shipping_Method, and WC_Shipping_Zones come from the IntegrationStubs trait (see
 	 * WooShippingTest's class docblock). Define them and reset the process-wide store so each

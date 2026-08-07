@@ -257,10 +257,21 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.6.2 =
+
+* **Fix:** The credential redaction for payment gateway and shipping method settings missed several field names it was meant to catch, among them passwd, pass, account_number, merchant_id, license, and username. All of them are dropped now. The list stays best-effort over field names third-party plugins choose, so an unusual name can still get through.
+* **Fix:** A variation that inherits its parent's stock reported the parent's quantity as its own, right beside a manage_stock of false. It reports null now, because the variation owns no stock of its own and the parent's number belongs to the parent.
+* **Fix:** Moderating a comment that another plugin's hook deleted during the write reported a status of "unknown" and read like a success. It returns an error now.
+* **Fix:** The aafm_ability_resolved action stayed silent when the audit table's opening insert failed, so a crash at exactly the moment the log was failing was invisible to a monitor. It now announces those calls with a null row_id, so treat row_id as nullable: a real id joins to the log as before, null means the call never got a row.
+* **Feature:** The admin activity log can filter on Started, the state a crashed call leaves behind. The activity-log ability could already do this; the screen now matches.
+* **Fix:** The global-styles read could report null where its schema declares an object, if a plugin emptied every theme.json layer. It reports an empty object instead.
+* **Fix:** Registering an ability without an execute callback produced a confusing warning followed by a fatal. It is refused with a clear message now, the same way a missing permission callback already was.
+* **Chore:** Corrected code comments and docblocks that still described behaviour earlier releases removed, cleared dead and duplicated test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
+
 = 1.6.1 =
 
 * **Fix:** Pages and posts with no categories, tags, or custom fields returned an empty array where the schema declares an object, so a strict MCP client rejected the whole response. Reported by an outside user as issue #81; the sweep it prompted found the same defect across the catalog.
-* **Fix:** Shipping method settings read WooCommerce's legacy global bucket, which has been empty for zone methods since WooCommerce 2.6. They now report the real per-instance configuration, so a title or cost you just wrote shows up in the response that follows it.
+* **Fix:** Shipping method settings read WooCommerce's legacy global bucket, which has been empty for zone methods since WooCommerce 2.6. They now report the real per-instance configuration, so a title or cost you just wrote shows up in the response that follows it. This widens what the response carries: per-instance settings are where a carrier plugin may keep account details, and they pass through the same best-effort credential redaction as gateway settings, which cannot be exhaustive.
 * **Fix:** A variation reported that it manages its own stock when it was inheriting the parent's setting, telling an agent it could set a stock level it does not own.
 * **Fix:** Creating a percentage coupon over 100 in one call saved the coupon instead of rejecting it, because the amount was applied while the coupon was still a fixed-cart discount.
 * **Fix:** A duplicate variation SKU, a negative coupon amount, or a coupon maximum below its minimum crashed instead of returning an error.
@@ -270,6 +281,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** Product image galleries and grouped product children encoded as an object rather than a list when the stored ids had gaps.
 * **Fix:** Payment gateway settings, title, and description could come back as an empty array or null against a declared object and string.
 * **Fix:** Site settings returned an empty array when the `aafm_allowed_site_settings` filter removed every entry.
+* **Fix:** User shapes returned an empty array where the schema declares an object when the underlying account could not be resolved.
 * **Fix:** Attachments that are not images returned an empty array for their sizes map.
 * **Fix:** Bridging an ability from another plugin and then calling it with arguments could take the site down with an uncaught error, which affects 1.6.0 as shipped. The bridge was rewriting the source plugin's schema into a shape WordPress core's own validator cannot read. That rewrite never reached an MCP client anyway, because the adapter undoes it before the tool is advertised, so it is gone.
 * **Fix:** A tool bridged from another plugin had the result shape it declares rewritten before WordPress checked a result against it, so an ability returning a single value where its own schema allows one came back as an invalid-output error. The declared shape now goes through untouched. The MCP adapter still stamps a type of its own onto a typeless schema when it advertises the tool, and that shape belongs upstream rather than here.

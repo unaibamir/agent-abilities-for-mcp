@@ -289,6 +289,66 @@ final class ResolveHookTest extends TestCase {
 	}
 
 	/**
+	 * The denial gate under the same failed-insert state: a refused call whose denial row never
+	 * landed still announces, with row_id exactly null. The execute-path tests above cannot
+	 * cover this - a denied call returns false from the permission closure and the execute
+	 * closure never runs - and the two denial gates in register.php carry their own `else`
+	 * branches, so without this pin either branch could be deleted with the suite staying green.
+	 * A denial a monitor cannot see while the audit table is failing is the same blind spot as
+	 * the crashed-call case.
+	 */
+	public function test_a_denial_whose_row_never_landed_announces_with_a_null_row_id(): void {
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				aafm_register_ability_with_log(
+					'aafm-test/resolve-hook-denied-no-row',
+					array(
+						'label'               => 'Refuses on purpose',
+						'description'         => 'Test fixture whose denial row never lands.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static function (): array {
+							return array( 'never' => 'reached' );
+						},
+						'permission_callback' => '__return_false',
+					)
+				);
+			}
+		);
+
+		$swallow_insert = static function ( $query ) {
+			if ( is_string( $query ) && 0 === stripos( $query, 'INSERT' ) && false !== stripos( $query, 'aafm_activity_log' ) ) {
+				return 'SELECT 1';
+			}
+			return $query;
+		};
+		add_filter( 'query', $swallow_insert );
+		try {
+			wp_get_ability( 'aafm-test/resolve-hook-denied-no-row' )->execute( array() );
+		} finally {
+			remove_filter( 'query', $swallow_insert );
+		}
+
+		$this->assertCount(
+			0,
+			aafm_query_activity( array( 'ability' => 'aafm-test/resolve-hook-denied-no-row' ) ),
+			'Guard on the guard: the insert must really have been swallowed, or this proves nothing.'
+		);
+		$this->assertCount( 1, $this->fired, 'A refusal is an outcome even when its row never landed.' );
+		$this->assertArrayHasKey( 'row_id', $this->fired[0] );
+		$this->assertNull(
+			$this->fired[0]['row_id'],
+			'null, not 0: a consumer must be able to tell "no row" from every real id.'
+		);
+		$this->assertSame( 'denied', $this->fired[0]['status'] );
+		// No detail assertion: a fixture ability has no entry in the detail map, so its mapped
+		// denial detail is legitimately null. The crash-detail-on-null-row case is pinned by the
+		// crashed-call test above.
+	}
+
+	/**
 	 * A REFUSED call has finished, so it announces - and it announces the row the denial wrote,
 	 * because a denial never resolves a 'started' row, it writes its own.
 	 *

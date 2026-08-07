@@ -65,6 +65,29 @@ final class RegisterWrapperTest extends TestCase {
 		$this->assertNull( $ability );
 	}
 
+	/**
+	 * Same contract as the permission guard above: a registration missing its execute_callback
+	 * must be refused with a named _doing_it_wrong and a null return, not read unguarded. Before
+	 * the guard, the read at the top of the wrapper emitted an undefined-array-key diagnostic and
+	 * the closure fataled later when it tried to call null - a confusing warning-then-fatal
+	 * instead of a clear error.
+	 */
+	public function test_missing_execute_callback_is_refused(): void {
+		$this->setExpectedIncorrectUsage( 'aafm_register_ability_with_log' );
+		$ability = $this->register(
+			'aafm/no-exec',
+			array(
+				'label'               => 'No Exec',
+				'description'         => 'Should not register.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'permission_callback' => '__return_true',
+				// execute_callback intentionally omitted.
+			)
+		);
+		$this->assertNull( $ability );
+	}
+
 	public function test_successful_call_logs_before_and_after(): void {
 		$this->acting_as( 'administrator' );
 		$this->register(

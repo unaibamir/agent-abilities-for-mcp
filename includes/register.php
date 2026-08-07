@@ -127,6 +127,21 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		return null;
 	}
 
+	if ( empty( $args['execute_callback'] ) || ! is_callable( $args['execute_callback'] ) ) {
+		_doing_it_wrong(
+			__FUNCTION__,
+			esc_html(
+				sprintf(
+					/* translators: %s: ability name */
+					__( 'Ability "%s" was not registered: an execute_callback is required.', 'agent-abilities-for-mcp' ),
+					$name
+				)
+			),
+			'1.6.2'
+		);
+		return null;
+	}
+
 	if ( str_starts_with( $name, 'aafm/' ) && ! isset( $args['meta']['annotations']['openWorldHint'] ) ) {
 		$args['meta']['annotations']['openWorldHint'] = false;
 	}

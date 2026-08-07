@@ -24,87 +24,35 @@ final class OutputSchemaFidelityTest extends TestCase {
 	use IntegrationStubs;
 
 	public function tear_down(): void {
-		// The abilities registry persists across tests; drop the demo fixture and any wrapper it
-		// grew so a bridge fixture from one test never leaks into another (same pattern as
-		// BridgeDiscoveryTest / BridgeWrapperTest).
+		// The abilities registry persists across tests; drop any demo fixture so it never leaks
+		// into another test (same pattern as BridgeDiscoveryTest / BridgeWrapperTest).
 		foreach ( array_keys( wp_get_abilities() ) as $slug ) {
 			$slug = (string) $slug;
-			if ( 0 === strncmp( $slug, 'demo/', 5 ) || 0 === strncmp( $slug, 'aafm-bridge/', 12 ) ) {
+			if ( 0 === strncmp( $slug, 'demo/', 5 ) ) {
 				wp_unregister_ability( $slug );
 			}
 		}
-		delete_option( 'aafm_enabled_bridged_abilities' );
 		$this->reset_integration_stubs();
 		parent::tear_down();
 	}
 
 	/**
-	 * Register a throwaway foreign ability and turn it into a live aafm-bridge/* wrapper, the
-	 * same two-step BridgeWrapperTest/BridgeDiscoveryTest use elsewhere: gated-action
-	 * registration of the foreign ability, then aafm_register_enabled_bridged_abilities() to
-	 * produce the wrapper aafm_filter_bridged_tool_call_result() actually looks up.
-	 *
-	 * @param string     $foreign_slug  Foreign ability slug, e.g. 'demo/list-with-schema'.
-	 * @param array|null $output_schema Output schema to declare, or null to declare none.
-	 * @return void
+	 * The filter wraps a bare list for any bridge-named tool, no registered ability required:
+	 * aafm_filter_bridged_tool_call_result() reads only the tool-name prefix and the list shape,
+	 * doing no ability lookup at all, which is why this test calls it directly with a
+	 * bridge-prefixed name and registers nothing. The wrap is the response to upstream
+	 * mcp-adapter#253 (see the function's docblock). This plugin used to also carry two tests
+	 * asserting the OPPOSITE for a DECLARED schema - that a bare list should NOT be wrapped, on
+	 * the theory that the adapter's {result:<schema>} rewrite for a non-object-root schema would
+	 * make a {"data":[...]} body satisfy neither side. That theory does not hold: for a declared
+	 * non-object-root schema, the adapter's own McpTool::execute() already wraps the value under
+	 * `result` BEFORE this filter ever runs, so a bare list calling the filter directly with such
+	 * a schema - the only way those two tests could construct their fixture - is a shape
+	 * production can never actually produce. They were deleted rather than kept as tests that
+	 * pass but prove nothing about real behaviour; see the fix's report for the reasoning. The
+	 * wrap is unconditional for every bridged bare list, declared schema or not.
 	 */
-	private function register_bridged_fixture( string $foreign_slug, ?array $output_schema ): void {
-		$this->in_action(
-			'wp_abilities_api_categories_init',
-			static function (): void {
-				if ( ! wp_has_ability_category( 'demo-things' ) ) {
-					wp_register_ability_category(
-						'demo-things',
-						array(
-							'label'       => 'Demo things',
-							'description' => 'Demo fixture category.',
-						)
-					);
-				}
-			}
-		);
-		$this->in_action(
-			'wp_abilities_api_init',
-			static function () use ( $foreign_slug, $output_schema ): void {
-				$args = array(
-					'label'               => $foreign_slug,
-					'description'         => 'Fixture foreign ability for the bridge result-filter tests.',
-					'category'            => 'demo-things',
-					'input_schema'        => array(
-						'type'       => 'object',
-						'properties' => array(),
-					),
-					'execute_callback'    => static fn() => array(),
-					'permission_callback' => '__return_true',
-				);
-				if ( null !== $output_schema ) {
-					$args['output_schema'] = $output_schema;
-				}
-				wp_register_ability( $foreign_slug, $args );
-			}
-		);
-		update_option( 'aafm_enabled_bridged_abilities', array( $foreign_slug ) );
-		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_bridged_abilities' );
-	}
-
-	/**
-	 * The one case aafm_filter_bridged_tool_call_result() still special-cases at all: when the
-	 * foreign ability declares NO output_schema, nothing downstream is validating or advertising a
-	 * shape, so the wrap is the only available response to upstream mcp-adapter#253 (see the
-	 * function's docblock). This plugin used to also carry two tests asserting the OPPOSITE for a
-	 * DECLARED schema - that a bare list should NOT be wrapped, on the theory that the adapter's
-	 * {result:<schema>} rewrite for a non-object-root schema would make a {"data":[...]} body
-	 * satisfy neither side. That theory does not hold: for a declared non-object-root schema, the
-	 * adapter's own McpTool::execute() already wraps the value under `result` BEFORE this filter
-	 * ever runs, so a bare list calling the filter directly with such a schema - the only way those
-	 * two tests could construct their fixture - is a shape production can never actually produce.
-	 * They were deleted rather than kept as tests that pass but prove nothing about real behaviour;
-	 * see the fix's report for the reasoning. The wrap is now unconditional for every bridged bare
-	 * list, declared schema or not (see aafm_filter_bridged_tool_call_result()).
-	 */
-	public function test_a_bridged_ability_with_no_declared_output_schema_is_still_wrapped(): void {
-		$this->register_bridged_fixture( 'demo/list-no-schema', null );
-
+	public function test_the_result_filter_wraps_a_bare_list_for_a_bridge_named_tool(): void {
 		$result = aafm_filter_bridged_tool_call_result(
 			array( 'a', 'b', 'c' ),
 			array(),
@@ -167,11 +115,15 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
-	 * A zone shipping method that has never been configured has no per-instance option, so
-	 * instance_settings comes back empty. settings is declared type:object (shipping.php:597);
-	 * an empty PHP array encodes as [], not {}, and the adapter passes the return value verbatim
-	 * into structuredContent - the same class of bug as the terms/meta cases above, one bucket
-	 * deeper in WooCommerce's shipping method API.
+	 * A zone shipping method whose stored per-instance option is explicitly an empty array reads
+	 * back empty - and that stored-empty option is what the fixture below seeds. (A method that
+	 * has never been configured at all is NOT an empty case: real init_instance_settings() falls
+	 * back to form-field defaults when the option is absent, abstract-wc-shipping-method.php:
+	 * 583-591, so "never configured" still reads back populated. The other reachable empty is a
+	 * method declaring zero instance form fields.) settings is declared type:object
+	 * (shipping.php:597); an empty PHP array encodes as [], not {}, and the adapter passes the
+	 * return value verbatim into structuredContent - the same class of bug as the terms/meta
+	 * cases above, one bucket deeper in WooCommerce's shipping method API.
 	 */
 	public function test_a_shipping_method_with_no_instance_settings_encodes_settings_as_an_empty_object(): void {
 		$this->prepare_wc_shipping_stub();

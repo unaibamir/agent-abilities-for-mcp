@@ -18,19 +18,11 @@ use AAFM\Tests\TestCase;
 
 final class IntegrationManifestTest extends TestCase {
 
-	public function test_manifest_reports_woocommerce_totals_without_the_host_active(): void {
-		// WooCommerce is NOT installed on the test site, yet the static manifest still reports
-		// its totals (that is the whole point - the card can show "0 / 52" while inactive).
-		// WooCommerce detection keys on class_exists('WooCommerce'); a prior WC-stub fixture (e.g.
-		// AbilityCrashSafetyTest) defines that marker class process-wide, and a defined class cannot
-		// be undefined, so real detection can legitimately report WC active here once such a fixture
-		// has run earlier in the same process. Pin the aafm_woocommerce_active seam off - the same
-		// seam production detection passes through - to assert the host-absent default
-		// deterministically, mirroring IntegrationDetectionTest::test_host_absent_means_inactive_by_default().
-		add_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-		$this->assertFalse( aafm_integration_active( 'woocommerce' ) );
-		remove_filter( 'aafm_woocommerce_active', '__return_false', 99 );
-
+	public function test_manifest_reports_woocommerce_totals(): void {
+		// The static manifest reports totals independent of whether the host is active (that is
+		// the whole point - the card can show "0 / 52" while WooCommerce is inactive). The
+		// host-absent-means-inactive claim itself is owned by
+		// IntegrationDetectionTest::test_host_absent_means_inactive_by_default().
 		$manifest = aafm_integration_manifest();
 		$this->assertArrayHasKey( 'woocommerce', $manifest );
 

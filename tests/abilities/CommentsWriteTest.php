@@ -207,18 +207,24 @@ final class CommentsWriteTest extends TestCase {
 	}
 
 	/**
-	 * Finding 3 of the final review: aafm_exec_moderate_comment() still called core's
-	 * wp_get_comment_status() raw against an output schema declaring 'status' => type:string.
-	 * wp_get_comment_status() falls through to boolean false whenever get_comment() can't resolve
-	 * the id at read time. wp_set_comment_status() (wp-includes/comment.php) fires its
+	 * The route: wp_set_comment_status() (wp-includes/comment.php) fires its
 	 * 'wp_set_comment_status' action AFTER the DB update has already succeeded, and returns `true`
 	 * unconditionally once that update ran - what any listener on that action does afterward,
 	 * including deleting the row, cannot change the return value. A hook that hard-deletes the
 	 * comment there (an anti-spam or moderation plugin reacting to the status change, say) leaves
 	 * $ok === true in aafm_exec_moderate_comment() while the comment is already gone by the time
-	 * this function reads its status back at the end.
+	 * the status is read back at the end.
+	 *
+	 * This test used to pin the opposite outcome, deliberately: a 1.6.1-era review fix kept the
+	 * call a "success" and reported the string 'unknown' (aafm_comment_status_string()'s
+	 * fallback), because the immediate defect then was wp_get_comment_status() returning boolean
+	 * false against an output schema declaring type:string. 1.6.2 reverses that judgment: a
+	 * status of 'unknown' satisfies the schema but is unusable - the caller cannot tell whether
+	 * its moderation took effect - so the vanish-mid-write case now returns aafm_generic_error()
+	 * like every other miss path in this file, and the schema question is moot because no shape
+	 * is emitted at all.
 	 */
-	public function test_moderate_comment_reports_a_string_status_even_when_a_status_hook_deletes_the_comment(): void {
+	public function test_moderate_comment_errors_when_the_comment_vanishes_mid_write(): void {
 		$this->acting_as( 'editor' );
 		$post    = self::factory()->post->create();
 		$comment = self::factory()->comment->create(
@@ -245,12 +251,8 @@ final class CommentsWriteTest extends TestCase {
 		}
 
 		$this->assertNull( get_comment( $comment ), 'The hook must have actually deleted the comment for this test to prove anything.' );
-		$this->assertIsArray( $out, 'wp_set_comment_status() returns true unconditionally once its DB update has run, regardless of what a later hook does, so this must not surface as a WP_Error.' );
-		$this->assertSame(
-			'"unknown"',
-			wp_json_encode( $out['status'] ),
-			'status is declared type:string; wp_get_comment_status() falls through to boolean false for a comment that no longer exists, which violates the schema. aafm_comment_status_string() must report a string in every case.'
-		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_error', $out->get_error_code() );
 	}
 
 	/**

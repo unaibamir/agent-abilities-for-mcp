@@ -252,7 +252,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 6. An integration only appears once the plugin it belongs to is active. WooCommerce is running here with 52 abilities available and none enabled yet, while the others wait until they are installed.
 7. Abilities that your other plugins register for themselves, grouped by the plugin that declared them, each one off until you turn it on and labelled with the risk that plugin reports.
 8. Your MCP endpoint, the OAuth approval flow that leaves no secret to store, and a dedicated low-privilege agent user. The Application Password fallback carries a plain warning that it reaches further than this plugin can scope.
-9. The activity log records what happened and who did it, including every change to what is enabled, with filters for successes, errors and denials, and a CSV export.
+9. The activity log records what happened and who did it, including every change to what is enabled, with filters for successes, errors, denials and calls that never finished, and a CSV export.
 10. The dashboard tracks setup and shows enabled abilities, recent agents, how much audit history you are keeping, your endpoint, and the versions in play.
 
 == Changelog ==

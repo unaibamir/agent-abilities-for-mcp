@@ -140,12 +140,14 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
-	 * $method->settings is WooCommerce's legacy global bucket. This project's stub constructor
-	 * merges the per-instance option into that legacy bucket for round-tripping convenience,
-	 * which papers over a wrong-bucket read for any key the instance option also sets - so this
-	 * test seeds a key that exists ONLY in the legacy bucket (never written to the instance
-	 * option) to prove the output comes from instance_settings alone. Reading the legacy bucket
-	 * would let that stale key leak into a live agent's view of the method's real configuration.
+	 * $method->settings is WooCommerce's legacy global bucket. The stub constructor used to
+	 * merge the per-instance option into that legacy bucket for round-tripping convenience,
+	 * which papered over a wrong-bucket read for any key the instance option also set; 1.6.2
+	 * removed the merge, so the two buckets now stay distinct in the stub as they do in real WC.
+	 * This test still seeds a key that exists ONLY in the legacy bucket (never written to the
+	 * instance option) to prove the output comes from instance_settings alone. Reading the
+	 * legacy bucket would let that stale key leak into a live agent's view of the method's real
+	 * configuration.
 	 */
 	public function test_shipping_settings_reports_the_instance_configuration_not_the_legacy_bucket(): void {
 		$this->prepare_wc_shipping_stub();

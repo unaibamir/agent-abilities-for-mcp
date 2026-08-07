@@ -523,11 +523,20 @@ function aafm_args_get_global_styles(): array {
  * Returns the active theme's resolved theme.json settings and styles arrays. Both are theme.json
  * data structures (no filesystem path), read-only.
  *
+ * Both values are guarded to the declared object schema. The 13-site `array() === $x` convention
+ * is not enough here because core can hand back NULL, not only an empty array: with every
+ * wp_theme_json_data_* layer emptied, wp_get_global_styles() reads `['styles']` with no fallback
+ * and _wp_array_get() returns its null default (global-styles-and-settings.php:132-133). An empty
+ * settings array was proven unreachable on WP 6.9.4 (core's own theme.json always populates it),
+ * so the null branch of the guard is the one that is live; the guard covers both anyway.
+ *
  * @return array<string,mixed>
  */
 function aafm_exec_get_global_styles(): array {
+	$settings = wp_get_global_settings();
+	$styles   = wp_get_global_styles();
 	return array(
-		'settings' => wp_get_global_settings(),
-		'styles'   => wp_get_global_styles(),
+		'settings' => is_array( $settings ) && array() !== $settings ? $settings : (object) array(),
+		'styles'   => is_array( $styles ) && array() !== $styles ? $styles : (object) array(),
 	);
 }

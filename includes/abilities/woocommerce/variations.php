@@ -60,7 +60,7 @@ function aafm_wc_variations_registry_definitions(): array {
 		// Variations (sub-slice W4-WC1b) - a variable product's child variations, parent_id-scoped.
 		'aafm/wc-list-product-variations'  => array(
 			'label'        => __( 'List WooCommerce product variations', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists a variable product\'s variations by parent product id, each with its id, parent id, SKU, price, stock status, and status, plus a total. A parent that is not a variable product (e.g. simple or grouped) is refused, since only variable products have variations. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -324,6 +324,22 @@ function aafm_exec_wc_list_product_variations( array $input ) {
 		// Deliberately unlike wc-list-products: a missing parent is a genuine error here because
 		// variations require a parent to scope to, whereas a bare product list can legitimately be empty.
 		return aafm_generic_error();
+	}
+
+	// B28: only variable products have variations. get_children() is NOT variation-specific - on a
+	// grouped product it returns the grouped child PRODUCTS, so counting it as `total` while every
+	// row fails the variation check produced {variations:[], total:N}, a total contradicting its own
+	// rows. Refuse a non-variable parent with an actionable error instead.
+	if ( 'variable' !== $parent->get_type() ) {
+		return new \WP_Error(
+			'aafm_wc_not_variable_product',
+			sprintf(
+				/* translators: 1: the product id, 2: the product's actual type (e.g. simple, grouped). */
+				__( 'Product %1$d is a %2$s product, not a variable product, so it has no variations to list.', 'agent-abilities-for-mcp' ),
+				(int) $parent->get_id(),
+				(string) $parent->get_type()
+			)
+		);
 	}
 
 	$child_ids = array_map( 'intval', (array) $parent->get_children() );

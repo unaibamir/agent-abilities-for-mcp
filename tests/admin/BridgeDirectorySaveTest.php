@@ -15,6 +15,9 @@ final class BridgeDirectorySaveTest extends TestCase {
 
 	public function set_up(): void {
 		parent::set_up();
+		// The save handler audits its toggles (B18), so the log table has to exist or the write
+		// surfaces as raw wpdb output mid-test and corrupts the captured JSON body.
+		aafm_install_activity_log();
 		delete_option( 'aafm_enabled_bridged_abilities' );
 		$this->register_foreign();
 	}
@@ -141,6 +144,80 @@ final class BridgeDirectorySaveTest extends TestCase {
 		$this->assertContains( 'demo/echo', $saved );
 		$this->assertContains( 'ghost/gone', $saved, 'An enabled-but-unavailable slug must survive an unrelated save.' );
 		$this->assertNotContains( 'evil/not-real', $saved, 'An unknown submitted slug is still rejected.' );
+	}
+
+	/**
+	 * B18: the bridge tab changes ability exposure outside the main save path and wrote no audit
+	 * rows at all - no ability_enabled when a foreign tool became reachable, no ability_disabled
+	 * when it was turned off. It must route through the same toggle-diff logging the native save
+	 * uses.
+	 */
+	public function test_save_audits_bridged_toggles(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		$_POST['bridged_abilities'] = array( 'demo/echo' );
+		$json                       = $this->run_handler( 'aafm_ajax_save_bridged_abilities' );
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+
+		$rows    = aafm_query_activity( array( 'per_page' => 20 ) );
+		$enabled = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_enabled' === $r['event_type'] ) );
+		$this->assertSame(
+			array( 'demo/echo' ),
+			array_column( $enabled, 'ability' ),
+			'Enabling a bridged ability must write an ability_enabled row like the native save does.'
+		);
+
+		// Turning it off again records the disable.
+		aafm_clear_activity_log();
+		$_POST['bridged_abilities'] = array();
+		$this->run_handler( 'aafm_ajax_save_bridged_abilities' );
+
+		$rows     = aafm_query_activity( array( 'per_page' => 20 ) );
+		$disabled = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_disabled' === $r['event_type'] ) );
+		$this->assertSame( array( 'demo/echo' ), array_column( $disabled, 'ability' ) );
+
+		// A no-change resave writes nothing.
+		aafm_clear_activity_log();
+		$_POST['bridged_abilities'] = array();
+		$this->run_handler( 'aafm_ajax_save_bridged_abilities' );
+		$this->assertSame( array(), aafm_query_activity( array( 'per_page' => 20 ) ), 'A no-op resave must not write audit rows.' );
+	}
+
+	/**
+	 * B18, blocked half: while read-only mode is on, a posted bridged WRITE that is not already
+	 * stored is refused (it cannot have come from the screen, which rendered no switch for it),
+	 * and that refusal previously left no ability_enable_blocked row - the exact forged/stale-POST
+	 * event the row exists to record. The detail names read-only mode, never the high-risk floor.
+	 */
+	public function test_read_only_blocked_bridge_enable_is_audited(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+		update_option( 'aafm_read_only_mode', true );
+		$this->intercept_die();
+		$nonce             = wp_create_nonce( 'aafm_admin' );
+		$_POST['nonce']    = $nonce;
+		$_REQUEST['nonce'] = $nonce;
+
+		// demo/echo declares no readonly annotation, so the bridge classifies it as a write.
+		$_POST['bridged_abilities'] = array( 'demo/echo' );
+		$json                       = $this->run_handler( 'aafm_ajax_save_bridged_abilities' );
+		$this->assertTrue( (bool) ( $json['success'] ?? false ) );
+		$this->assertNotContains( 'demo/echo', (array) get_option( 'aafm_enabled_bridged_abilities', array() ) );
+
+		$rows    = aafm_query_activity( array( 'per_page' => 20 ) );
+		$blocked = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_enable_blocked' === $r['event_type'] ) );
+		$this->assertCount( 1, $blocked, 'A read-only-refused bridge enable must be recorded.' );
+		$this->assertSame( 'demo/echo', $blocked[0]['ability'] );
+		$this->assertSame( 'denied', $blocked[0]['status'] );
+		$this->assertStringContainsString( 'read-only', (string) $blocked[0]['detail'] );
+		$this->assertStringNotContainsString( 'high-risk', (string) $blocked[0]['detail'] );
 	}
 
 	public function test_save_requires_capability(): void {

@@ -164,6 +164,40 @@ final class QuickConnectAbilitiesTest extends TestCase {
 	}
 
 	/**
+	 * B18: the wizard changes ability exposure outside the main save path, and those changes left
+	 * no ability_enabled / ability_disabled rows at all - the audit log's whole point is "when did
+	 * this become reachable, and who made it so", and a wizard run was invisible in it. The apply
+	 * must route through the same toggle-diff logging the main save uses.
+	 */
+	public function test_apply_audits_the_ability_toggles_it_makes(): void {
+		aafm_clear_activity_log();
+		update_option( 'aafm_enabled_abilities', array() );
+
+		aafm_quickconnect_apply_abilities( false );
+
+		$rows    = aafm_query_activity( array( 'per_page' => 100 ) );
+		$enabled = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_enabled' === $r['event_type'] ) );
+		$this->assertContains(
+			'aafm/get-posts',
+			array_column( $enabled, 'ability' ),
+			'Enabling the read bundle must write ability_enabled rows like the main save path does.'
+		);
+
+		// Toggling the write bundle off again must record the disables too.
+		aafm_quickconnect_apply_abilities( true );
+		aafm_clear_activity_log();
+		aafm_quickconnect_apply_abilities( false );
+
+		$rows     = aafm_query_activity( array( 'per_page' => 100 ) );
+		$disabled = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_disabled' === $r['event_type'] ) );
+		$this->assertContains(
+			'aafm/create-post',
+			array_column( $disabled, 'ability' ),
+			'Unticking the write bundle must write ability_disabled rows.'
+		);
+	}
+
+	/**
 	 * The wizard owns its two rows: re-running it with write off removes the write bundle it
 	 * previously turned on, while preserving an unrelated ability the operator enabled elsewhere.
 	 */

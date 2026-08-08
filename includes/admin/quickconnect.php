@@ -182,10 +182,16 @@ function aafm_quickconnect_apply_abilities( bool $write ): void {
 	$enabled = array_values( array_intersect( $enabled, $known ) );
 
 	// aafm_set_enabled_abilities() is the single choke point for this option: it strips any
-	// locked high-risk name before it persists. The wizard's read/write bundles never include one
-	// by construction (content-subject, non-destructive abilities only), so this is a defensive
-	// pass-through rather than something expected to fire here.
-	aafm_set_enabled_abilities( $enabled );
+	// newly-attempted locked name before it persists. The wizard's read/write bundles never
+	// include one by construction (content-subject, non-destructive abilities only), so this is
+	// a defensive pass-through rather than something expected to fire here.
+	//
+	// The toggle diff is logged exactly like the main save path (B18): a wizard run makes
+	// abilities reachable, and "when did this become reachable, and who made it so" is the
+	// question the ability_enabled/ability_disabled rows exist to answer. $current is the raw
+	// stored list read above, before any of this function's writes.
+	$persisted = aafm_set_enabled_abilities( $enabled );
+	aafm_log_ability_toggle_diff( $current, $persisted );
 }
 
 /**

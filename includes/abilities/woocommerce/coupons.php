@@ -317,6 +317,20 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 	}
 	if ( array_key_exists( 'amount', $input ) ) {
 		$amount = sanitize_text_field( (string) $input['amount'] );
+		// B53: a non-numeric amount sails through set_amount() - WC casts it toward 0 on the way
+		// to storage - where the tax sibling (aafm_wc_normalize_tax_rate) refuses. Refuse it here
+		// with the same is_numeric gate; an empty string keeps its long-standing clear-to-zero
+		// meaning.
+		if ( '' !== $amount && ! is_numeric( trim( $amount ) ) ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_amount',
+				sprintf(
+					/* translators: %s: the rejected amount value. */
+					__( 'The discount amount "%s" is not numeric. Send a decimal string like "10" or "12.50".', 'agent-abilities-for-mcp' ),
+					$amount
+				)
+			);
+		}
 		try {
 			// WooCommerce's own set_amount() (class-wc-coupon.php:617-632) uses a throw as
 			// ordinary input validation: it rejects a negative amount outright, and separately
@@ -342,8 +356,22 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 		$coupon->set_description( sanitize_text_field( (string) $input['description'] ) );
 	}
 	if ( array_key_exists( 'date_expires', $input ) ) {
-		$val = $input['date_expires'];
-		$coupon->set_date_expires( null === $val ? null : sanitize_text_field( (string) $val ) );
+		$val = null === $input['date_expires'] ? null : sanitize_text_field( (string) $input['date_expires'] );
+		// B53: WC_Data::set_date_prop() swallows its own parse exception, so an unparseable date
+		// used to be silently stored as null - the caller believed an expiry was set on a coupon
+		// that would never expire. Refuse anything strtotime() cannot parse; null and '' keep
+		// their documented no-expiry meaning.
+		if ( null !== $val && '' !== $val && false === strtotime( $val ) ) {
+			return new \WP_Error(
+				'aafm_wc_invalid_coupon_expiry',
+				sprintf(
+					/* translators: %s: the rejected expiry value. */
+					__( 'The expiry date "%s" could not be parsed. Send a YYYY-MM-DD date, or null/empty for no expiry.', 'agent-abilities-for-mcp' ),
+					$val
+				)
+			);
+		}
+		$coupon->set_date_expires( $val );
 	}
 	if ( array_key_exists( 'usage_limit', $input ) ) {
 		$val = $input['usage_limit'];

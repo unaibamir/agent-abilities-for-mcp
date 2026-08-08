@@ -1124,6 +1124,292 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * Register a flexible-content field whose 'hero' layout carries a url + a wysiwyg sub-field.
+	 * Flex defs nest sub_fields per layout (layouts[*]['sub_fields']), never at the top level -
+	 * exactly the shape the B26 resolver must descend into.
+	 */
+	private function stub_acf_flex_field(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_flex',
+						'title'  => 'Flexible group',
+						'fields' => array(
+							array(
+								'key'     => 'field_flex',
+								'name'    => 'flex',
+								'label'   => 'Sections',
+								'type'    => 'flexible_content',
+								'layouts' => array(
+									array(
+										'key'        => 'layout_hero',
+										'name'       => 'hero',
+										'sub_fields' => array(
+											array(
+												'key'  => 'field_flex_link',
+												'name' => 'link',
+												'type' => 'url',
+											),
+											array(
+												'key'  => 'field_flex_body',
+												'name' => 'body',
+												'type' => 'wysiwyg',
+											),
+										),
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+	}
+
+	/**
+	 * B26: leaves inside a flexible-content layout must be sanitized by their OWN sub-field type.
+	 *
+	 * Flex sub-fields live under layouts[*]['sub_fields'] keyed by the row's acf_fc_layout; the old
+	 * resolver read only the top-level sub_fields (absent on a flex def), so every flex leaf fell
+	 * through to sanitize_text_field: a javascript: URL survived to storage and a wysiwyg value was
+	 * flattened instead of kses'd - contradicting the sanitizer's own contract comment.
+	 */
+	public function test_update_post_fields_flex_leaves_are_sanitized_by_their_layout_sub_field_type(): void {
+		$this->stub_acf_flex_field();
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'link'          => 'javascript:alert(1)',
+							'body'          => '<script>alert(1)</script><strong>bold</strong>',
+						),
+					),
+				),
+			)
+		);
+
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_flex', $post_id );
+		$this->assertIsArray( $stored );
+		$this->assertStringNotContainsString(
+			'javascript:',
+			(string) $stored[0]['link'],
+			'A url sub-field inside a flex layout must have its javascript: scheme stripped.'
+		);
+		$this->assertStringNotContainsString(
+			'<script>',
+			(string) $stored[0]['body'],
+			'A wysiwyg sub-field inside a flex layout must be kses\'d, and a <script> dropped.'
+		);
+		$this->assertStringContainsString(
+			'<strong>',
+			(string) $stored[0]['body'],
+			'A wysiwyg sub-field inside a flex layout must keep benign markup, not be flattened to plain text.'
+		);
+	}
+
+	/**
+	 * B26 (clone): a clone field is a container too - acf_get_field() populates its sub_fields from
+	 * the cloned fields and its value is a flat sub-field map like a group's. The old container list
+	 * omitted clone, so a url leaf inside one was sanitized as plain text and kept a javascript:
+	 * scheme, and a wysiwyg leaf was flattened.
+	 */
+	public function test_update_post_fields_clone_url_subfield_strips_javascript(): void {
+		$this->stub_acf_fields(
+			array(
+				array(
+					'key'        => 'field_card',
+					'name'       => 'card',
+					'label'      => 'Card',
+					'type'       => 'clone',
+					'sub_fields' => array(
+						array(
+							'key'  => 'field_card_link',
+							'name' => 'link',
+							'type' => 'url',
+						),
+						array(
+							'key'  => 'field_card_caption',
+							'name' => 'caption',
+							'type' => 'text',
+						),
+					),
+				),
+			)
+		);
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_card' => array(
+						'link'    => 'javascript:alert(1)',
+						'caption' => 'Plain caption',
+					),
+				),
+			)
+		);
+
+		$stored = \AAFM\Tests\AcfStubStore::value( 'field_card', $post_id );
+		$this->assertIsArray( $stored );
+		$this->assertStringNotContainsString(
+			'javascript:',
+			(string) $stored['link'],
+			'A url sub-field inside a clone must have its javascript: scheme stripped.'
+		);
+		$this->assertSame( 'Plain caption', $stored['caption'], 'A plain-text clone sub-field must round-trip intact.' );
+	}
+
+	/**
+	 * B4 residual: a container nested INSIDE a flexible-content layout must verify as the success
+	 * it is. The pass-1 re-keying fix resolved child defs only from top-level sub_fields, so a
+	 * repeater in a flex layout stayed keyed by sub-field KEY after the re-key, the verify's
+	 * comparison against the name-keyed sent value mismatched, and a write that was live on the
+	 * post reported a generic error. The stub models real ACF's re-keying at every depth here.
+	 */
+	public function test_update_post_fields_repeater_inside_flex_persist_is_reported_as_success(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_flex2',
+						'title'  => 'Nested flexible group',
+						'fields' => array(
+							array(
+								'key'     => 'field_flex2',
+								'name'    => 'flex2',
+								'label'   => 'Sections',
+								'type'    => 'flexible_content',
+								'layouts' => array(
+									array(
+										'key'        => 'layout_section',
+										'name'       => 'section',
+										'sub_fields' => array(
+											array(
+												'key'  => 'field_flex2_heading',
+												'name' => 'heading',
+												'type' => 'text',
+											),
+											array(
+												'key'  => 'field_flex2_items',
+												'name' => 'items',
+												'type' => 'repeater',
+												'sub_fields' => array(
+													array(
+														'key'  => 'field_items_label',
+														'name' => 'label',
+														'type' => 'text',
+													),
+												),
+											),
+										),
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+		// Model the real ACF Pro container re-keying (now depth-recursive) the verbatim stub hides.
+		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex2' => array(
+						array(
+							'acf_fc_layout' => 'section',
+							'heading'       => 'Top',
+							'items'         => array(
+								array( 'label' => 'One' ),
+								array( 'label' => 'Two' ),
+							),
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			$res instanceof WP_Error ? 'update returned ' . $res->get_error_code() : ''
+		);
+
+		// Prove the success is real: the raw store is KEY-keyed at BOTH depths (real ACF), and the
+		// formatted read returns the name-keyed rows.
+		$raw = \AAFM\Tests\AcfStubStore::value( 'field_flex2', $post_id );
+		$this->assertArrayHasKey( 'field_flex2_items', $raw[0], 'The flex row must be stored by sub-field key.' );
+		$this->assertArrayHasKey( 'field_items_label', $raw[0]['field_flex2_items'][0], 'The nested repeater row must be stored by ITS sub-field key.' );
+
+		$formatted = \AAFM\Tests\AcfStubStore::value_formatted( 'field_flex2', $post_id );
+		$this->assertSame( 'Top', $formatted[0]['heading'] );
+		$this->assertSame( 'One', $formatted[0]['items'][0]['label'] );
+		$this->assertSame( 'Two', $formatted[0]['items'][1]['label'] );
+	}
+
+	/**
+	 * B26 sweep: all three update abilities share aafm_acf_write_fields/aafm_acf_sanitize_value, so
+	 * the layout-aware resolver must hold on the term and user paths too - a javascript: URL inside
+	 * a flex layout is stripped before it reaches either selector's storage.
+	 */
+	public function test_update_term_and_user_fields_share_the_flex_aware_sanitizer(): void {
+		$this->stub_acf_flex_field();
+		$this->acting_as( 'administrator' );
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$user_id = (int) self::factory()->user->create( array( 'role' => 'subscriber' ) );
+
+		$row = array(
+			array(
+				'acf_fc_layout' => 'hero',
+				'link'          => 'javascript:alert(1)',
+				'body'          => '<strong>bold</strong>',
+			),
+		);
+
+		wp_get_ability( 'aafm/acf-update-term-fields' )->execute(
+			array(
+				'term_id' => $term_id,
+				'fields'  => array( 'field_flex' => $row ),
+			)
+		);
+		$term_stored = \AAFM\Tests\AcfStubStore::value( 'field_flex', 'term_' . $term_id );
+		$this->assertStringNotContainsString( 'javascript:', (string) $term_stored[0]['link'], 'The term path must strip the scheme.' );
+		$this->assertStringContainsString( '<strong>', (string) $term_stored[0]['body'], 'The term path must keep benign wysiwyg markup.' );
+
+		wp_get_ability( 'aafm/acf-update-user-fields' )->execute(
+			array(
+				'user_id' => $user_id,
+				'fields'  => array( 'field_flex' => $row ),
+			)
+		);
+		$user_stored = \AAFM\Tests\AcfStubStore::value( 'field_flex', 'user_' . $user_id );
+		$this->assertStringNotContainsString( 'javascript:', (string) $user_stored[0]['link'], 'The user path must strip the scheme.' );
+		$this->assertStringContainsString( '<strong>', (string) $user_stored[0]['body'], 'The user path must keep benign wysiwyg markup.' );
+	}
+
+	/**
 	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post - a <script> is dropped while a
 	 * benign <strong> is kept (the policy stated in the build log).
 	 */

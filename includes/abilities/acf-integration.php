@@ -280,29 +280,66 @@ function aafm_acf_url_leaf_keys(): array {
 }
 
 /**
- * The ACF container field types whose value is a list of rows / a group keyed by sub-field name.
+ * The ACF container field types whose value is a list of rows / a map keyed by sub-field name.
+ *
+ * Clone belongs here: acf_get_field() populates a clone def's `sub_fields` from the cloned fields
+ * (class-acf-field-clone.php load_field), and its value is a flat sub-field map exactly like a
+ * group's - leaving it out meant every clone leaf was sanitized blind as plain text.
  *
  * @return string[]
  */
 function aafm_acf_container_field_types(): array {
-	return array( 'repeater', 'group', 'flexible_content' );
+	return array( 'repeater', 'group', 'flexible_content', 'clone' );
+}
+
+/**
+ * The container types whose value is ONE flat sub-field map (no numeric row indices): group and
+ * clone. Repeater and flexible-content values are numeric-indexed lists of such maps instead.
+ *
+ * @return string[]
+ */
+function aafm_acf_flat_container_field_types(): array {
+	return array( 'group', 'clone' );
 }
 
 /**
  * Resolve a sub-field's ACF definition by its name within a parent field definition.
  *
- * ACF repeater/group/flexible-content values are keyed by the sub-field NAME, so a nested leaf's
- * own type is found by matching that key against the parent def's `sub_fields`. Returns null when
- * the parent has no matching sub-field (e.g. a free-form nested array).
+ * ACF repeater/group/clone/flexible-content values are keyed by the sub-field NAME, so a nested
+ * leaf's own type is found by matching that key against the parent def's sub-field definitions.
+ * Where those live depends on the container: repeater/group/clone carry a top-level `sub_fields`,
+ * but a flexible-content def nests them per layout under `layouts[*]['sub_fields']` - each row
+ * names its layout via `acf_fc_layout`, and only THAT layout's sub-fields define the row. Pass the
+ * row's layout name so the lookup descends into the right layout; with no layout name every
+ * layout's sub-fields are searched as a fallback for a row missing its marker. A clone sub-field
+ * also matches on `_name` (its pre-prefix name), which ACF itself accepts on write. Returns null
+ * when nothing matches (e.g. a free-form nested array).
  *
  * @param array<string,mixed> $parent_def The parent field definition.
  * @param string              $name       The nested key (a sub-field name).
+ * @param string              $layout     The row's `acf_fc_layout` layout name, when known.
  * @return array<string,mixed>|null The sub-field definition, or null when not found.
  */
-function aafm_acf_sub_field_def( array $parent_def, string $name ): ?array {
+function aafm_acf_sub_field_def( array $parent_def, string $name, string $layout = '' ): ?array {
 	$sub_fields = isset( $parent_def['sub_fields'] ) && is_array( $parent_def['sub_fields'] ) ? $parent_def['sub_fields'] : array();
+	if ( isset( $parent_def['layouts'] ) && is_array( $parent_def['layouts'] ) ) {
+		foreach ( $parent_def['layouts'] as $candidate ) {
+			if ( ! is_array( $candidate ) || ! isset( $candidate['sub_fields'] ) || ! is_array( $candidate['sub_fields'] ) ) {
+				continue;
+			}
+			if ( '' !== $layout && (string) ( $candidate['name'] ?? '' ) !== $layout ) {
+				continue; // The row names its layout: only that layout's sub-fields apply.
+			}
+			$sub_fields = array_merge( $sub_fields, $candidate['sub_fields'] );
+		}
+	}
 	foreach ( $sub_fields as $sub ) {
-		if ( is_array( $sub ) && isset( $sub['name'] ) && (string) $sub['name'] === $name ) {
+		if ( ! is_array( $sub ) ) {
+			continue;
+		}
+		$sub_name  = isset( $sub['name'] ) ? (string) $sub['name'] : '';
+		$sub_alias = isset( $sub['_name'] ) ? (string) $sub['_name'] : '';
+		if ( $name === $sub_name || ( '' !== $sub_alias && $name === $sub_alias ) ) {
 			return $sub;
 		}
 	}
@@ -355,13 +392,18 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 
 	if ( is_array( $value ) ) {
 		$clean = array();
+		// A flexible-content ROW names its layout via acf_fc_layout, and only THAT layout's
+		// sub_fields define the row's leaves - the def resolver descends into it. At the flex
+		// container level (a numeric-indexed list of rows) no marker exists and none is needed.
+		$row_layout = isset( $value['acf_fc_layout'] ) && is_scalar( $value['acf_fc_layout'] ) ? (string) $value['acf_fc_layout'] : '';
 		foreach ( $value as $sub_key => $sub ) {
 			$safe_key = is_string( $sub_key ) ? sanitize_text_field( $sub_key ) : $sub_key;
 			if ( $is_cont && $def ) {
-				// A repeater/group/flexible-content level. Numeric keys are row indices that
+				// A repeater/group/clone/flexible-content level. Numeric keys are row indices that
 				// keep the same container def; string keys are sub-field names whose own def
-				// drives their sanitizing - so a URL sub-field is esc_url_raw'd at depth.
-				$child_def          = is_string( $sub_key ) ? aafm_acf_sub_field_def( $def, (string) $sub_key ) : $def;
+				// drives their sanitizing - so a URL sub-field is esc_url_raw'd at depth, and a
+				// wysiwyg leaf inside a flex layout keeps wp_kses_post instead of being flattened.
+				$child_def          = is_string( $sub_key ) ? aafm_acf_sub_field_def( $def, (string) $sub_key, $row_layout ) : $def;
 				$clean[ $safe_key ] = aafm_acf_sanitize_leaf( $sub, $child_def, false, (string) $sub_key );
 			} else {
 				// A URL-typed field whose value is a structured array (link/image/file): recurse
@@ -512,9 +554,9 @@ function aafm_acf_rekey_stored_to_names( $stored, ?array $def ) {
 		return $stored;
 	}
 
-	// A group stores one flat map of sub-field keys; a repeater or flexible-content field stores a
-	// numeric-indexed list of such maps (one per row).
-	if ( 'group' === $type ) {
+	// A group or clone stores one flat map of sub-field keys; a repeater or flexible-content field
+	// stores a numeric-indexed list of such maps (one per row).
+	if ( in_array( $type, aafm_acf_flat_container_field_types(), true ) ) {
 		return aafm_acf_rekey_row_to_names( $stored, $def );
 	}
 
@@ -528,12 +570,18 @@ function aafm_acf_rekey_stored_to_names( $stored, ?array $def ) {
 /**
  * Re-key one container row's sub-field keys to names, recursing into nested containers.
  *
- * @param array<int|string,mixed> $row One stored row (or a group's flat map).
+ * A flexible-content row's stored shape keeps its acf_fc_layout marker, and that layout name is
+ * what routes the child-def lookup into the right layouts[*]['sub_fields'] - so a container
+ * (repeater/group) nested INSIDE a flex layout re-keys its own rows too, instead of being left
+ * key-keyed and false-failing the verify.
+ *
+ * @param array<int|string,mixed> $row One stored row (or a group's/clone's flat map).
  * @param array<string,mixed>     $def The parent container field definition.
  * @return array<int|string,mixed> The row keyed by sub-field name.
  */
 function aafm_acf_rekey_row_to_names( array $row, array $def ) {
 	$key_to_name = aafm_acf_sub_field_key_map( $def );
+	$row_layout  = isset( $row['acf_fc_layout'] ) && is_scalar( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
 	$out         = array();
 	foreach ( $row as $sub_key => $sub_val ) {
 		$sub_key = (string) $sub_key;
@@ -542,7 +590,7 @@ function aafm_acf_rekey_row_to_names( array $row, array $def ) {
 			continue;
 		}
 		$name         = isset( $key_to_name[ $sub_key ] ) ? $key_to_name[ $sub_key ] : $sub_key;
-		$child_def    = aafm_acf_sub_field_def( $def, $name );
+		$child_def    = aafm_acf_sub_field_def( $def, $name, $row_layout );
 		$out[ $name ] = aafm_acf_rekey_stored_to_names( $sub_val, $child_def );
 	}
 	return $out;

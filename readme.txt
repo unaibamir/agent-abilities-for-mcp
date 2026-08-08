@@ -266,6 +266,21 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Feature:** The admin activity log can filter on Started, the state a crashed call leaves behind. The activity-log ability could already do this; the screen now matches.
 * **Fix:** The global-styles read could report null where its schema declares an object, if a plugin emptied every theme.json layer. It reports an empty object instead.
 * **Fix:** Registering an ability without an execute callback produced a confusing warning followed by a fatal. It is refused with a clear message now, the same way a missing permission callback already was.
+* **Fix:** Bridged abilities that declare no input parameters, including two of WordPress's own, failed on every call. They work now.
+* **Fix:** Editing a WooCommerce customer over the bridge needed only the manage-WooCommerce capability, which let it read and overwrite any user's billing details. It now requires a real user-editing capability on the specific account and sits behind the high-risk lock like the other money and identity writes. The same gap in the user-meta and ACF user-field writes was closed at the same time.
+* **Fix:** On a site with no persistent object cache, which covers most shared hosting, the rate limit on the OAuth endpoints never actually took effect. It does now.
+* **Fix:** Writing a repeater, group, or flexible-content ACF field saved the rows but reported a failure, so an agent would retry over content it had already published. The write reports the success it is now.
+* **Fix:** Reading a page's rendered SEO head could return it for a post type the operator had not exposed to agents, even though every other SEO read on the same post was refused. It honours the exposure list now.
+* **Fix:** A backslash in a Rank Math or Yoast title or description, or in an image's alt text, was dropped on save. It is kept now.
+* **Fix:** Deleting a WooCommerce product or variation, or a post, term, or user meta key, reported success even when nothing was removed. The delete is confirmed before it reports success now.
+* **Fix:** An invalid billing email address was quietly turned into an empty one, erasing the stored address while reporting success. An invalid address is refused now; an empty one still clears the field on purpose.
+* **Fix:** The sales report accepted an unparseable date and answered with an all-time or empty total as if it were right. It refuses the bad date now.
+* **Fix:** Setting a stock status while stock management was on was silently ignored, because WooCommerce works the status out from the quantity. That combination is refused now, on both products and variations.
+* **Fix:** Re-submitting the current site title could fail the whole settings write with a false "not valid" message, because WordPress stores the title with its punctuation escaped. A no-op like that is accepted now.
+* **Fix:** A negative usage limit on a coupon, or a negative priority or order on a tax rate, was quietly flipped to its positive twin. A negative value is refused now.
+* **Fix:** The per-user rate limit counted each call twice, so a limit of sixty only allowed thirty. Each call counts once now.
+* **Fix:** An unauthenticated request whose body was a bare JSON value such as "x" or true crashed the MCP endpoint with a server error. It is refused with a clear 400 now.
+* **Fix:** A site that renamed a tool through the adapter's filter could leak an enabled admin-only tool into the tool list a lower-privileged connection sees, though it still could not call it. The list hides it as intended now.
 * **Chore:** Corrected code comments and docblocks that still described behaviour earlier releases removed, cleared dead and duplicated test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
 
 = 1.6.1 =

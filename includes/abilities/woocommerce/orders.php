@@ -315,7 +315,7 @@ function aafm_args_wc_list_orders(): array {
 				'status'   => array(
 					'type'        => 'string',
 					'enum'        => array( 'any', 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft' ),
-					'description' => "Order status to filter by; 'any' (the default) returns all states. Uses the short form without the wc- prefix.",
+					'description' => "Order status to filter by; 'any' (the default) covers every registered order status - including custom ones - but never the internal checkout-draft status, which must be requested explicitly. Uses the short form without the wc- prefix.",
 				),
 			),
 			'additionalProperties' => false,
@@ -377,6 +377,20 @@ function aafm_exec_wc_list_orders( array $input ): array {
 	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
+
+	// B57: 'any' passed through to wc_get_orders() is backend-dependent - HPOS resolves it to a
+	// status set that INCLUDES the internal checkout-draft status while legacy CPT storage
+	// excludes it, so the same call answered differently per backend. Expand 'any' to the
+	// registered statuses from wc_get_order_statuses() explicitly (custom statuses included);
+	// that map never carries the ephemeral checkout-draft, which stays reachable by requesting
+	// it explicitly.
+	if ( 'any' === $status && function_exists( 'wc_get_order_statuses' ) ) {
+		$status = array();
+		foreach ( array_keys( wc_get_order_statuses() ) as $status_key ) {
+			$status_key = (string) $status_key;
+			$status[]   = str_starts_with( $status_key, 'wc-' ) ? substr( $status_key, 3 ) : $status_key;
+		}
+	}
 
 	$query = wc_get_orders(
 		array(

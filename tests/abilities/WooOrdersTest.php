@@ -368,6 +368,43 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
+	/**
+	 * B57: status "any" used to trust the storage backend's default status set, which includes
+	 * the internal checkout-draft status on HPOS and excludes it on legacy CPT storage - the same
+	 * call gave a backend-dependent answer. "any" now expands to the registered statuses from
+	 * wc_get_order_statuses() explicitly, which never include the ephemeral checkout-draft.
+	 */
+	public function test_list_orders_any_excludes_checkout_draft_explicitly(): void {
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed( 5090, array( 'status' => 'checkout-draft' ) );
+
+		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array( 'status' => 'any' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$ids = wp_list_pluck( $res['orders'], 'id' );
+		$this->assertNotContains( 5090, $ids, 'the internal checkout-draft status must be excluded from "any" on every backend.' );
+		$this->assertContains( 5001, $ids );
+		$this->assertSame( 1, $res['total'], 'total must agree with the explicit status expansion.' );
+
+		// The query must have received an explicit status list, not the backend-default "any".
+		$pushed = WcOrderStubStore::$last_query_args['status'] ?? null;
+		$this->assertIsArray( $pushed, '"any" must be expanded to an explicit status list, not passed through to the backend.' );
+		$this->assertNotContains( 'checkout-draft', $pushed );
+	}
+
+	/**
+	 * B57 control: an explicit checkout-draft request still returns the draft orders.
+	 */
+	public function test_list_orders_explicit_checkout_draft_still_works(): void {
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::seed( 5091, array( 'status' => 'checkout-draft' ) );
+
+		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array( 'status' => 'checkout-draft' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( array( 5091 ), wp_list_pluck( $res['orders'], 'id' ) );
+	}
+
 	public function test_get_order_line_items_shape(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );

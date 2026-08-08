@@ -152,6 +152,15 @@ final class OutputSchemaFidelityTest extends TestCase {
 	public function test_shipping_settings_reports_the_instance_configuration_not_the_legacy_bucket(): void {
 		$this->prepare_wc_shipping_stub();
 
+		// The zone must exist before its method: since B33 the zone stub mirrors the vendor
+		// constructor, which throws for a missing non-zero zone id.
+		WcShippingStubStore::seed(
+			1,
+			array(
+				'zone_name'  => 'Europe',
+				'zone_order' => 1,
+			)
+		);
 		WcShippingStubStore::seed_method(
 			1,
 			1,
@@ -234,10 +243,12 @@ final class OutputSchemaFidelityTest extends TestCase {
 	}
 
 	/**
-	 * Task 10 / L3: variation_ids has the identical key-gap risk via get_children() on a grouped
-	 * product, but it never self-heals - the grouped data store persists the array verbatim on
-	 * save rather than imploding it back to a clean sequence the way the gallery meta does. Same
-	 * seed-the-gap-directly approach as the images test above.
+	 * Task 10 / L3: variation_ids has the identical key-gap risk via get_children(), and it never
+	 * self-heals - the data store persists the array verbatim on save rather than imploding it
+	 * back to a clean sequence the way the gallery meta does. Same seed-the-gap-directly approach
+	 * as the images test above. Seeded as a VARIABLE product: since B56, variation_ids is
+	 * populated only for variable products (grouped children are separate products, not
+	 * variations, and report an empty list).
 	 */
 	public function test_product_variation_ids_with_a_key_gap_still_encodes_as_a_json_array(): void {
 		$this->stub_woocommerce();
@@ -245,8 +256,8 @@ final class OutputSchemaFidelityTest extends TestCase {
 			302,
 			array(
 				'id'       => 302,
-				'name'     => 'Grouped Gap',
-				'type'     => 'grouped',
+				'name'     => 'Variable Gap',
+				'type'     => 'variable',
 				'children' => array(
 					0 => 401,
 					2 => 402,

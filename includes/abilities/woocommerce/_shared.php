@@ -29,6 +29,32 @@ function aafm_wc_perm(): bool {
 }
 
 /**
+ * Reject a non-empty billing email that is not a valid address, before any write happens.
+ *
+ * sanitize_email() turns an invalid address ("not-an-email") into '', which silently ERASES the
+ * stored billing email through set_billing_email(''), reports success, and returns the field as an
+ * empty string on the wire. An explicitly empty string is an intentional clear and is allowed; a
+ * non-empty value that is not a valid email is refused so it cannot erase stored PII by accident.
+ * Callers run this before touching the order/customer so nothing partial is saved.
+ *
+ * @param array<string,mixed> $input The ability input (billing under $input['billing']['email']).
+ * @return \WP_Error|null WP_Error when the billing email is present, non-empty, and invalid.
+ */
+function aafm_wc_billing_email_error( array $input ): ?\WP_Error {
+	if ( ! isset( $input['billing'] ) || ! is_array( $input['billing'] ) || ! array_key_exists( 'email', $input['billing'] ) ) {
+		return null;
+	}
+	$raw = (string) $input['billing']['email'];
+	if ( '' !== $raw && ! is_email( $raw ) ) {
+		return new \WP_Error(
+			'aafm_invalid_billing_email',
+			__( 'The billing email is not a valid email address.', 'agent-abilities-for-mcp' )
+		);
+	}
+	return null;
+}
+
+/**
  * Sanitize a price-like string to a bare decimal: strips every character except digits and the
  * decimal point (currency symbols, spaces, thousands separators, and any minus sign all go).
  *

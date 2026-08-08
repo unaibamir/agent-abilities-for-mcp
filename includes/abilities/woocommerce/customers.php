@@ -767,6 +767,13 @@ function aafm_exec_wc_create_customer( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Refuse an invalid billing email before minting the account, so a bad address neither erases
+	// nothing-yet nor leaves an orphaned user behind.
+	$email_error = aafm_wc_billing_email_error( $input );
+	if ( $email_error instanceof \WP_Error ) {
+		return $email_error;
+	}
+
 	$email    = sanitize_email( (string) ( $input['email'] ?? '' ) );
 	$username = sanitize_user( (string) ( $input['username'] ?? $email ) );
 
@@ -854,6 +861,11 @@ function aafm_exec_wc_update_customer( array $input ) {
 	$customer = aafm_wc_get_customer_object( $id );
 	if ( null === $customer ) {
 		return aafm_generic_error();
+	}
+
+	$email_error = aafm_wc_billing_email_error( $input );
+	if ( $email_error instanceof \WP_Error ) {
+		return $email_error;
 	}
 
 	aafm_wc_apply_customer_input( $customer, $input );

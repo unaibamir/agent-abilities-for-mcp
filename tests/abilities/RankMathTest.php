@@ -394,6 +394,47 @@ final class RankMathTest extends TestCase {
 	}
 
 	/**
+	 * B16: get-head must honour the operator's post-type exposure allowlist, not a bare edit_post.
+	 *
+	 * A public CPT the operator has NOT exposed is editable by an admin through core (edit_post is
+	 * true), but every per-object SEO ability refuses it via aafm_can_edit_post_object(), which
+	 * enforces the exposure allowlist. get-head used a bare edit_post and would leak the rendered SEO
+	 * head of a non-allowlisted type; it must now return a WP_Error like its -get-meta sibling.
+	 */
+	public function test_rankmath_get_head_refuses_a_non_exposed_post_type(): void {
+		register_post_type(
+			'aafm_secret_cpt',
+			array(
+				'public'       => true,
+				'show_in_rest' => true,
+				'capability_type' => 'post',
+				'map_meta_cap' => true,
+			)
+		);
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'aafm_secret_cpt',
+				'post_author' => $admin_id,
+			)
+		);
+
+		// Sanity: the admin CAN edit this post through core (the trap the bare edit_post fell into).
+		$this->assertTrue( current_user_can( 'edit_post', $post_id ) );
+
+		$res = wp_get_ability( 'aafm/rankmath-get-head' )->execute( array( 'post_id' => $post_id ) );
+
+		unregister_post_type( 'aafm_secret_cpt' );
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'get-head must refuse a post type the operator has not exposed.'
+		);
+	}
+
+	/**
 	 * When the renderer produces nothing - the real state on a Rank Math install whose setup wizard was
 	 * never completed or skipped, so rank_math()->frontend/head never initialise - the ability must
 	 * report that honestly rather than returning an empty head with success. Dropping every

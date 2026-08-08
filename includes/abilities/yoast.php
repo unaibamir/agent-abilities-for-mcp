@@ -485,8 +485,12 @@ function aafm_args_yoast_get_head(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_yoast_get_head( array $input ) {
-	$id = absint( $input['post_id'] ?? 0 );
-	if ( ! get_post( $id ) instanceof WP_Post || ! current_user_can( 'edit_post', $id ) ) {
+	$id   = absint( $input['post_id'] ?? 0 );
+	$post = $id > 0 ? get_post( $id ) : null;
+	// Use the shared content-edit gate, not a bare edit_post: it enforces the operator's post-type
+	// exposure allowlist, so a get-head read is refused on a non-exposed post type exactly as the
+	// -get-meta sibling is. A bare edit_post would leak a non-allowlisted CPT's rendered SEO head.
+	if ( ! $post instanceof WP_Post || ! aafm_can_edit_post_object( $post ) ) {
 		return aafm_generic_error();
 	}
 

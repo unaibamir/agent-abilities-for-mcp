@@ -240,6 +240,26 @@ final class WooOrderNotesRefundsTest extends TestCase {
 		$this->assertSame( 'This is a test note.', $res['note'] );
 	}
 
+	/**
+	 * B58: the note text went through sanitize_text_field(), which collapses newlines, flattening
+	 * a multi-line note into one line - while the sibling customer_note field on the order writes
+	 * uses sanitize_textarea_field(). Notes are free-form text; line breaks must survive.
+	 */
+	public function test_create_order_note_preserves_multi_line_text(): void {
+		$this->register_group_b();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-note' )->execute(
+			array(
+				'order_id' => 5001,
+				'note'     => "Line one.\nLine two.",
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( "Line one.\nLine two.", $res['note'], 'newlines in a note must survive sanitization, matching the customer_note sibling.' );
+	}
+
 	public function test_create_order_note_unknown_order_returns_error(): void {
 		$this->register_group_b();
 		$this->acting_as( 'administrator' );

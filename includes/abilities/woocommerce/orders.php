@@ -1560,8 +1560,10 @@ function aafm_args_wc_create_order_note(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_create_order_note( array $input ) {
-	$order_id      = (int) ( $input['order_id'] ?? 0 );
-	$note_text     = sanitize_text_field( (string) ( $input['note'] ?? '' ) );
+	$order_id = (int) ( $input['order_id'] ?? 0 );
+	// B58: textarea sanitizer, matching the customer_note sibling - sanitize_text_field() would
+	// collapse the newlines out of a multi-line note.
+	$note_text     = sanitize_textarea_field( (string) ( $input['note'] ?? '' ) );
 	$customer_note = ! empty( $input['customer_note'] );
 
 	$order = aafm_wc_get_order_object( $order_id );
@@ -1846,7 +1848,9 @@ function aafm_args_wc_create_order_refund(): array {
 function aafm_exec_wc_create_order_refund( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
 	$amount   = sanitize_text_field( (string) ( $input['amount'] ?? '0.00' ) );
-	$reason   = sanitize_text_field( (string) ( $input['reason'] ?? '' ) );
+	// B58 sweep: the refund reason is the same class of free-form text as an order note, so it
+	// gets the textarea sanitizer too - line breaks survive.
+	$reason = sanitize_textarea_field( (string) ( $input['reason'] ?? '' ) );
 
 	$order = aafm_wc_get_order_object( $order_id );
 	if ( null === $order ) {

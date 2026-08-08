@@ -107,6 +107,49 @@ function aafm_result_magnitude( $result ): ?int {
  * for, so this never touches those; an absent key there still reads as "unknown, assume open"
  * per the MCP schema default, which is the honest state for a foreign ability.
  *
+ * The per-call rate-limit memo. The MCP adapter calls check_permission() and then execute(), and
+ * core's WP_Ability::execute() re-runs check_permissions(), so the decorated permission closure
+ * fires TWICE for a single tools/call. Consuming a token on each fire halved every configured limit
+ * (a limit of 60 delivered 30). The memo records the consume decision per ability for the span of
+ * one call so the second fire reuses it; aafm_rate_limit_call_reset() clears it when the call
+ * resolves or is denied, so the next call consumes fresh.
+ *
+ * @return array<string,bool> Reference to the request-scoped memo, keyed by ability name.
+ */
+function &aafm_rate_limit_call_memo(): array {
+	static $memo = array();
+	return $memo;
+}
+
+/**
+ * Consume a rate-limit token at most once per tools/call (see aafm_rate_limit_call_memo()).
+ *
+ * @param int    $user_id Authenticated principal id.
+ * @param string $name    Ability name (the memo key: a distinct tool consumes independently).
+ * @return bool True when the call is within the limit.
+ */
+function aafm_rate_limit_consume_once( int $user_id, string $name ): bool {
+	$memo = &aafm_rate_limit_call_memo();
+	if ( array_key_exists( $name, $memo ) ) {
+		return $memo[ $name ];
+	}
+	$allowed        = aafm_rate_limit_consume( $user_id );
+	$memo[ $name ]  = $allowed;
+	return $allowed;
+}
+
+/**
+ * Forget the per-call rate memo for one ability, so its next tools/call consumes a fresh token.
+ *
+ * @param string $name Ability name.
+ * @return void
+ */
+function aafm_rate_limit_call_reset( string $name ): void {
+	$memo = &aafm_rate_limit_call_memo();
+	unset( $memo[ $name ] );
+}
+
+/**
  * @param string              $name Ability name.
  * @param array<string,mixed> $args Ability args (per the Abilities API).
  * @return WP_Ability|null
@@ -173,7 +216,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// returns true, making this block a no-op - the path stays identical to today.
 		$p         = $principal();
 		$call_args = is_array( $input ) ? $input : array();
-		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume( $p['principal_user_id'] ) ) {
+		if ( $p['principal_user_id'] > 0 && ! aafm_rate_limit_consume_once( $p['principal_user_id'], $name ) ) {
+			// The call is refused, so start the next one on a fresh token rather than leaving this
+			// denial memoized for the rest of the request.
+			aafm_rate_limit_call_reset( $name );
 			$rate_detail = aafm_build_activity_detail( $name, $call_args );
 			$rate_row_id = aafm_log_activity(
 				array_merge(
@@ -233,6 +279,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// null, 0, '') is a denial. Audit any non-true result so a malformed or future permission
 		// callback's denial is never silently unlogged.
 		if ( true !== $allowed ) {
+			// The call is refused at the capability check, so release the per-call rate memo: this
+			// call consumed a token but will not reach execute (which is where a proceeding call's
+			// memo is cleared), so clear it here or the ability would stop consuming for the request.
+			aafm_rate_limit_call_reset( $name );
 			// A crashed check records the throw site instead of the ability's mapped argument
 			// detail: the defect is what matters on this row, and the mapped detail is already on
 			// the ordinary-denial rows.
@@ -268,6 +318,11 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	$args['execute_callback'] = static function ( $input = null ) use ( $original_execute, $name, $principal, $is_read_ability ) {
 		$call_args = is_array( $input ) ? $input : array();
 		$arg_keys  = array_keys( $call_args );
+
+		// This call passed both permission fires (the adapter's check_permission and core's re-check
+		// inside execute) and is now proceeding, so release its per-call rate memo. The next
+		// tools/call for this ability then consumes a fresh token instead of reusing this one's.
+		aafm_rate_limit_call_reset( $name );
 
 		// One row at 'started' (intent), then updated in place with the real outcome -
 		// one row per call, not two. A crash mid-execute leaves a visible 'started' row.

@@ -75,7 +75,7 @@ function aafm_register_users_definitions( array $registry ): array {
 	);
 	$registry['aafm/delete-user'] = array(
 		'label'        => __( 'Delete user', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Permanently delete a user and reassign their content to another user. Never deletes you or the last administrator. Requires the delete-users capability. Off by default. On multisite this removes the user from the current site only; the network account and its logins remain.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'destructive',
 		'subject'      => 'users',
@@ -687,7 +687,14 @@ function aafm_args_delete_user(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'deleted' => array( 'type' => 'boolean' ),
+				'deleted'           => array(
+					'type'        => 'boolean',
+					'description' => __( 'True when the account was permanently deleted (single-site). False on multisite, where core only removes the user from the current site.', 'agent-abilities-for-mcp' ),
+				),
+				'removed_from_site' => array(
+					'type'        => 'boolean',
+					'description' => __( 'Present on multisite: the user was removed from the current site, but the network account and its logins still exist.', 'agent-abilities-for-mcp' ),
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_delete_user',
@@ -722,7 +729,9 @@ function aafm_perm_delete_user( array $input ): bool {
  * another existing user. Three guards: a reassign target is mandatory and must exist and
  * differ from the victim; the current user can never delete themselves; the last
  * administrator can never be deleted (a lockout guard). Uses wp_delete_user() - never raw
- * SQL - which lives in wp-admin/includes/user.php.
+ * SQL - which lives in wp-admin/includes/user.php. On multisite that core function only
+ * removes the user from the current site, so the return says removed_from_site instead
+ * of claiming a deletion.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -760,6 +769,18 @@ function aafm_exec_delete_user( array $input ) {
 		$ok = wp_delete_user( $id, $reassign );
 		if ( ! $ok ) {
 			return aafm_generic_error();
+		}
+
+		// On multisite, core's wp_delete_user() only calls remove_user_from_blog() for the
+		// current site: the network account, its other-site memberships, and its application
+		// passwords all survive and keep authenticating. Report exactly that instead of a
+		// deletion that never happened. Escalating to wpmu_delete_user() is deliberately NOT
+		// done here - a per-site ability must never erase a network account.
+		if ( is_multisite() ) {
+			return array(
+				'deleted'           => false,
+				'removed_from_site' => true,
+			);
 		}
 
 		return array( 'deleted' => true );

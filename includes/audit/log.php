@@ -167,6 +167,38 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
 }
 
 /**
+ * Whether one more bounded denial row fits inside the per-IP, per-window cap.
+ *
+ * Shared by the failed-Application-Password logger below and the IP-block denial row in
+ * aafm_transport_permission_callback() (includes/server.php), so every transport-level denial
+ * class is bounded the same way: AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW rows per source IP per
+ * AAFM_FAILED_AUTH_LOG_WINDOW. Consuming a slot and reporting true are one operation - a true
+ * return has already counted the row the caller is about to write.
+ *
+ * The counter is a plain get/set transient, not an atomic increment. Two concurrent requests can
+ * both read the same count and one increment can be lost, so the cap is approximate under
+ * concurrency - it leaks by at most the number of simultaneous requests, and only while the
+ * window is warm. That is a deliberate trade kept from the original failed-auth cap: the row it
+ * bounds is advisory observability, and an atomic counter would need its own table or a
+ * cache-specific add() dance for a bound nobody reads precisely.
+ *
+ * @param string $bucket Short key namespace so each denial class gets its own counter:
+ *                       'fa' (failed Application Password auth) or 'ipb' (IP-blocked transport).
+ * @return bool True when the caller may write its row (the slot is consumed), false when this
+ *              IP has used up its cap for the current window.
+ */
+function aafm_denial_log_within_cap( string $bucket ): bool {
+	$ip    = aafm_source_ip();
+	$key   = 'aafm_' . $bucket . '_' . ( '' !== $ip ? md5( $ip ) : 'unknown' );
+	$count = (int) get_transient( $key );
+	if ( $count >= AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW ) {
+		return false; // Bounded: this IP already used its cap for the current window.
+	}
+	set_transient( $key, $count + 1, AAFM_FAILED_AUTH_LOG_WINDOW );
+	return true;
+}
+
+/**
  * Log a failed Application Password authentication attempt against the MCP endpoint.
  *
  * Hooked on WordPress core's `application_password_failed_authentication` action. Core fires it
@@ -213,13 +245,9 @@ function aafm_log_failed_application_password_auth( $error ): void {
 		return;
 	}
 
-	$ip    = aafm_source_ip();
-	$key   = 'aafm_fa_' . ( '' !== $ip ? md5( $ip ) : 'unknown' );
-	$count = (int) get_transient( $key );
-	if ( $count >= AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW ) {
+	if ( ! aafm_denial_log_within_cap( 'fa' ) ) {
 		return; // Bounded: this IP already used its cap for the current window.
 	}
-	set_transient( $key, $count + 1, AAFM_FAILED_AUTH_LOG_WINDOW );
 
 	aafm_log_activity(
 		array(

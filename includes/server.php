@@ -539,15 +539,21 @@ function aafm_transport_permission_callback( $request ) {
 	}
 
 	if ( ! aafm_ip_is_allowed( aafm_source_ip() ) ) {
-		$user = wp_get_current_user();
-		aafm_log_activity(
-			array(
-				'ability'           => '(transport)',
-				'status'            => 'denied',
-				'principal_user_id' => (int) $user->ID,
-				'principal_login'   => (string) $user->user_login,
-			)
-		);
+		// Bounded per source IP (B38), reusing the failed-app-password cap: a caller holding a
+		// VALID credential from a blocked address hits this branch on every request, so an
+		// uncapped row per denial lets one address flood the 30-day activity table. Only the
+		// row is capped - the denial below is returned every time regardless.
+		if ( aafm_denial_log_within_cap( 'ipb' ) ) {
+			$user = wp_get_current_user();
+			aafm_log_activity(
+				array(
+					'ability'           => '(transport)',
+					'status'            => 'denied',
+					'principal_user_id' => (int) $user->ID,
+					'principal_login'   => (string) $user->user_login,
+				)
+			);
+		}
 		return new WP_Error( 'aafm_ip_blocked', __( 'Your network address is not allowed to use this endpoint.', 'agent-abilities-for-mcp' ), array( 'status' => 403 ) );
 	}
 

@@ -111,6 +111,59 @@ final class WpmlLanguageTest extends TestCase {
 		$this->fail( 'exception should have propagated' );
 	}
 
+	/**
+	 * B47: get-post pinned the WPML element type to 'post' for every id, while WPML's
+	 * wpml_object_id filter resolves per the element's REAL type - so a lang request on a
+	 * CPT item never matched a translation and silently served the untranslated item.
+	 * The element type must be derived from the actual post type.
+	 */
+	public function test_get_post_lang_resolution_uses_the_actual_post_type(): void {
+		$this->fake_wpml();
+		register_post_type(
+			'aafm_book',
+			array(
+				'public'       => true,
+				'map_meta_cap' => true,
+			)
+		);
+		$original   = (int) self::factory()->post->create(
+			array(
+				'post_type'  => 'aafm_book',
+				'post_title' => 'Icelandic Book',
+			)
+		);
+		$translated = (int) self::factory()->post->create(
+			array(
+				'post_type'  => 'aafm_book',
+				'post_title' => 'English Book',
+			)
+		);
+
+		// Faithful to WPML: the translation only resolves when the caller passes the
+		// element's real type. A wrong type falls through to the original id.
+		add_filter(
+			'wpml_object_id',
+			static function ( $id, $type ) use ( $original, $translated ) {
+				return ( 'aafm_book' === $type && $original === (int) $id ) ? $translated : $id;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_get_post(
+			array(
+				'post_id' => $original,
+				'lang'    => 'en',
+			)
+		);
+
+		remove_all_filters( 'wpml_object_id' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $translated, $out['post']['id'], 'the CPT lang request must resolve through the real element type.' );
+	}
+
 	public function test_redact_post_surfaces_language_when_wpml_on(): void {
 		$this->fake_wpml();
 		// phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- signature must match the fake WPML filter's arity.

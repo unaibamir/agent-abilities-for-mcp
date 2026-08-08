@@ -98,16 +98,20 @@ final class HighRiskSaveGuardTest extends TestCase {
 	}
 
 	/**
-	 * Stale legacy data - a locked ability already sitting in the option from before this fix
-	 * shipped - is cleaned up the first time any save touches the option, but that cleanup is not
-	 * a "blocked attempt": nobody tried to enable it in this request. aafm_resolve_scoped_enabled_input()
-	 * carries it forward through its preserve branch exactly the way it carries an inactive-host
-	 * ability, and the setter must strip it without logging a refusal that never happened.
+	 * B10 (flipped from the 1.6.1 pin, deliberately): a locked ability already sitting in the
+	 * option is the operator's preserved choice, not stale data to clean up. The registration
+	 * floor (aafm_get_enabled_abilities()) keeps it out of tools/list while locked, so carrying
+	 * it in the option is inert - and stripping it, as 1.6.1 did, meant re-locking the category
+	 * wiped the stored selection on the very next save, so unlocking later handed back a blank
+	 * slate instead of what was ticked. The read-only floor has always had this carve-out; the
+	 * high-risk floor now behaves the same way. Nobody tried to enable anything here, so there is
+	 * still no ability_enable_blocked row, and no ability_disabled row either - the carry is not
+	 * a toggle.
 	 */
-	public function test_stale_pre_fix_data_is_stripped_silently_not_logged_as_a_new_attempt(): void {
+	public function test_a_stored_locked_ability_is_carried_forward_inert_not_stripped(): void {
 		$this->register_woocommerce_fixture( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders' );
-		// Simulate data left over from before this fix: already persisted, its checkbox no
-		// longer rendered, so nothing in this request is asking to turn it on.
+		// Already persisted (enabled while the category was unlocked); its checkbox no longer
+		// renders, so nothing in this request restates it.
 		update_option( 'aafm_enabled_abilities', array( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders' ) );
 
 		$resolved = aafm_resolve_scoped_enabled_input(
@@ -116,15 +120,47 @@ final class HighRiskSaveGuardTest extends TestCase {
 				'aafm_abilities' => array( 'aafm/wc-list-orders' ), // the locked name has no checkbox to post.
 			)
 		);
-		$this->assertContains( 'aafm/wc-create-order-refund', $resolved, 'The preserve branch should still carry it forward pre-strip.' );
+		$this->assertContains( 'aafm/wc-create-order-refund', $resolved, 'The preserve branch should still carry it forward.' );
 
 		$persisted = aafm_set_enabled_abilities( $resolved );
 
-		$this->assertNotContains( 'aafm/wc-create-order-refund', $persisted, 'Stale locked data must be stripped on the next save.' );
+		$this->assertContains( 'aafm/wc-create-order-refund', $persisted, 'A stored locked selection must survive the save.' );
+		$this->assertContains( 'aafm/wc-create-order-refund', get_option( 'aafm_enabled_abilities' ) );
 
-		$rows    = aafm_query_activity( array( 'per_page' => 10 ) );
-		$blocked = array_filter( $rows, static fn( array $r ): bool => 'ability_enable_blocked' === $r['event_type'] );
-		$this->assertEmpty( $blocked, 'Cleaning up stale data already in the option is not a new blocked attempt.' );
+		$rows = aafm_query_activity( array( 'per_page' => 10 ) );
+		$this->assertEmpty(
+			array_filter( $rows, static fn( array $r ): bool => 'ability_enable_blocked' === $r['event_type'] ),
+			'A carried-forward stored selection is not a new blocked attempt.'
+		);
+	}
+
+	/**
+	 * B10 end to end: unlock, enable, re-lock, save, unlock again - the operator's selection has
+	 * to come back, because that is the exact promise the floor's own docs make ("unlocking the
+	 * category restores exactly what was ticked before"). While locked, the stored name stays
+	 * inert: the floored reader refuses to register it.
+	 */
+	public function test_relocking_then_saving_does_not_wipe_the_selection_unlocking_restores_it(): void {
+		$this->register_woocommerce_fixture( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders' );
+
+		// Enabled while unlocked, then the category is re-locked.
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/wc-create-order-refund', 'aafm/wc-list-orders' ) );
+		delete_option( 'aafm_high_risk_abilities_unlocked' );
+
+		// The next FULL-REPLACE save (the Abilities tab posts no scope): the locked row rendered
+		// no checkbox, so only the read is posted.
+		$resolved  = aafm_resolve_scoped_enabled_input( array( 'aafm_abilities' => array( 'aafm/wc-list-orders' ) ) );
+		$persisted = aafm_set_enabled_abilities( $resolved );
+
+		$this->assertContains( 'aafm/wc-create-order-refund', $persisted, 'Re-locking must not wipe the stored selection on the next save.' );
+
+		// Inert while locked: the registration floor still keeps it out.
+		$this->assertNotContains( 'aafm/wc-create-order-refund', aafm_get_enabled_abilities() );
+
+		// Unlocking restores the operator's prior selection, as the floor promises.
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
+		$this->assertContains( 'aafm/wc-create-order-refund', aafm_get_enabled_abilities() );
 	}
 
 	/**

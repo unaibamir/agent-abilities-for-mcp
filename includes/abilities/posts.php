@@ -492,9 +492,17 @@ function aafm_perm_get_post( array $input ): bool {
  */
 function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	$lang = aafm_resolve_lang( $input );
-	return ( null !== $lang && 'all' !== $lang )
-		? aafm_wpml_translated_id( $id, 'post', $lang )
-		: $id;
+	if ( null === $lang || 'all' === $lang ) {
+		return $id;
+	}
+	// WPML's wpml_object_id filter resolves per the element's REAL type (the post type slug).
+	// Pinning 'post' here made a lang request on any CPT resolve against the wrong element
+	// type, so WPML fell back to the original id and the untranslated item was served
+	// silently (B47). pages.php pins 'page' because its ids are type-pinned to pages; this
+	// getter serves every allowlisted type, so the type comes from the post itself.
+	$post = get_post( $id );
+	$type = $post instanceof WP_Post ? (string) $post->post_type : 'post';
+	return aafm_wpml_translated_id( $id, $type, $lang );
 }
 
 /**

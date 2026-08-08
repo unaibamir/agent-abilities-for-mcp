@@ -95,6 +95,9 @@ final class HighRiskSaveGuardTest extends TestCase {
 		$this->assertSame( 'aafm/wc-create-order-refund', $blocked[0]['ability'] );
 		$this->assertSame( 'denied', $blocked[0]['status'] );
 		$this->assertStringContainsString( 'aafm/wc-create-order-refund', $blocked[0]['detail'] );
+		// B37: with read-only mode off, the cause really is the high-risk lock, and the detail
+		// says so (the read-only counterpart is pinned in ReadOnlyModeTest).
+		$this->assertStringContainsString( 'high-risk', $blocked[0]['detail'] );
 	}
 
 	/**

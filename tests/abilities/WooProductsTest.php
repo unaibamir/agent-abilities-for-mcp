@@ -198,6 +198,53 @@ final class WooProductsTest extends TestCase {
 		$this->assertArrayHasKey( 'categories', $res );
 	}
 
+	/**
+	 * B56: get_children() is not variation-specific - on a grouped product it returns the grouped
+	 * child PRODUCT ids, which used to be reported as variation_ids. Only a variable product's
+	 * children are variations, so a grouped product must report an empty variation_ids.
+	 */
+	public function test_get_product_grouped_children_are_not_variation_ids(): void {
+		$this->acting_as( 'administrator' );
+		\AAFM\Tests\WcStubStore::seed(
+			910,
+			array(
+				'id'       => 910,
+				'name'     => 'Grouped Bundle',
+				'type'     => 'grouped',
+				'status'   => 'publish',
+				'children' => array( 911, 912 ),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 910 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$json = wp_json_encode( array( 'variation_ids' => $res['variation_ids'] ) );
+		$this->assertSame( '{"variation_ids":[]}', (string) $json, 'grouped child product ids are not variations and must not be reported as variation_ids.' );
+	}
+
+	/**
+	 * B56 control: a variable product's children are real variations and must keep appearing.
+	 */
+	public function test_get_product_variable_children_still_reported_as_variation_ids(): void {
+		$this->acting_as( 'administrator' );
+		\AAFM\Tests\WcStubStore::seed(
+			920,
+			array(
+				'id'       => 920,
+				'name'     => 'Variable Tee',
+				'type'     => 'variable',
+				'status'   => 'publish',
+				'children' => array( 921, 922 ),
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 920 ) );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( array( 921, 922 ), $res['variation_ids'] );
+	}
+
 	public function test_get_product_nonexistent_id_is_graceful_error(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => 999999 ) );

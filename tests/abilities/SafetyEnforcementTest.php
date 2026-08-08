@@ -62,6 +62,40 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertSame( '(transport)', $denied[0]['ability'] );
 	}
 
+	/**
+	 * B38: IP-blocked transport denials must be bounded per source IP, the same way the sibling
+	 * failed-app-password logger already is (AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW rows per window).
+	 * Without the cap, an attacker holding a VALID credential from a blocked address can flood the
+	 * 30-day activity-log table without limit, since every request writes its own denied row. The
+	 * denial itself is never capped, only its log rows; a different source IP keeps its own cap.
+	 */
+	public function test_ip_blocked_denial_rows_are_capped_per_ip(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $uid );
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.77';
+		update_option( 'aafm_ip_allowlist', array( '10.0.0.0/8' ) );
+
+		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			$result = aafm_transport_permission_callback( null );
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'aafm_ip_blocked', $result->get_error_code(), 'The denial itself must never be capped, only its audit rows.' );
+		}
+
+		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
+		$this->assertCount(
+			AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW,
+			$rows,
+			'A single blocked IP must not be able to grow the log past the shared per-window cap.'
+		);
+
+		// A different source IP writes its own row: one attacker's flood must not crowd out a
+		// genuine signal from a different address.
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.78';
+		$this->assertInstanceOf( \WP_Error::class, aafm_transport_permission_callback( null ) );
+		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
+		$this->assertCount( AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 1, $rows );
+	}
+
 	public function test_transport_allows_listed_ip(): void {
 		$uid = self::factory()->user->create();
 		wp_set_current_user( $uid );

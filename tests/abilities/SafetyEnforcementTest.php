@@ -116,6 +116,41 @@ final class SafetyEnforcementTest extends TestCase {
 		return $result;
 	}
 
+	/**
+	 * B35: a top-level scalar JSON body on the MCP route must be rejected cleanly, not crash.
+	 *
+	 * The bundled transport builds an HttpRequestContext whose $body is typed ?array from
+	 * get_json_params(); a scalar body ("x", true) makes that assignment throw an uncaught TypeError
+	 * BEFORE the auth check, so an unauthenticated scalar body was a 500 plus a PHP fatal. The
+	 * pre-dispatch guard turns it into a clean 400. A null body (the corrected note: 0 decodes to
+	 * null, not a crash) and an object body are left alone.
+	 */
+	public function test_scalar_json_body_on_mcp_route_is_rejected_not_crashed(): void {
+		$scalar = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$scalar->set_header( 'Content-Type', 'application/json' );
+		$scalar->set_body( '"x"' );
+		$result = aafm_reject_scalar_mcp_body( null, null, $scalar );
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A scalar string body must be rejected before the transport sees it.' );
+		$this->assertSame( 400, $result->get_error_data()['status'] ?? 0 );
+
+		$boolean = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$boolean->set_header( 'Content-Type', 'application/json' );
+		$boolean->set_body( 'true' );
+		$this->assertInstanceOf( \WP_Error::class, aafm_reject_scalar_mcp_body( null, null, $boolean ), 'A boolean body is the same crash class and must be rejected.' );
+
+		// A JSON object body is a legitimate MCP request and must pass through (null = continue).
+		$object = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$object->set_header( 'Content-Type', 'application/json' );
+		$object->set_body( '{"jsonrpc":"2.0","method":"initialize","id":1}' );
+		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $object ), 'A JSON object body must pass through untouched.' );
+
+		// A scalar body on a different REST route is not ours to guard.
+		$other = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
+		$other->set_header( 'Content-Type', 'application/json' );
+		$other->set_body( '"x"' );
+		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $other ), 'A scalar body on another route must not be touched.' );
+	}
+
 	public function test_decorated_permission_rate_limits_and_audits(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );

@@ -285,7 +285,12 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 	// audience-bound aafm_oat_ MCP token into a general credential for that unrelated REST route.
 	if ( isset( $_GET['rest_route'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only routing check, no state change.
 		$rest_route = sanitize_text_field( wp_unslash( $_GET['rest_route'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		return rtrim( $rest_route, '/' ) === $mcp_route;
+		// Case-insensitive, matching how core itself matches REST routes (the route regex in
+		// class-wp-rest-server.php is built with the `i` modifier) and the same comparison the
+		// swept siblings use (aafm_mcp_filter_governed_error_status(),
+		// aafm_oauth_filter_malformed_json()). A case-sensitive compare fails closed - the bearer
+		// never resolves - but it disagrees with where WordPress actually dispatches the request.
+		return 0 === strcasecmp( rtrim( $rest_route, '/' ), $mcp_route );
 	}
 
 	// Pretty-permalink form: compare the request path against the MCP endpoint's path. Derive the
@@ -328,7 +333,9 @@ function aafm_oauth_request_targets_mcp_route(): bool {
 		$mcp_rest_path = '/' . implode( '/', $segments ) . $mcp_route;
 	}
 
-	return rtrim( $path, '/' ) === rtrim( $mcp_rest_path, '/' );
+	// Case-insensitive for the same reason as the rest_route branch above: core dispatches the
+	// odd-cased path to the MCP endpoint anyway.
+	return 0 === strcasecmp( rtrim( $path, '/' ), rtrim( $mcp_rest_path, '/' ) );
 }
 
 /**

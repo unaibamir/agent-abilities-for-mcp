@@ -93,7 +93,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/create-draft'                => __( 'Creates a new draft post. The agent drafts, a human publishes. It never goes live on its own.', 'agent-abilities-for-mcp' ),
 		'aafm/create-post'                 => __( 'Creates and publishes a post. Requires the publish capability, and respects force-draft if you turned it on.', 'agent-abilities-for-mcp' ),
 		'aafm/update-post'                 => __( "Updates an existing post's fields by id. Publishing is gated separately.", 'agent-abilities-for-mcp' ),
-		'aafm/replace-in-post'             => __( 'Finds and replaces literal text in a post\'s body and sanitizes the result. It edits only the content, never the status, and the change is reversible from the revision history.', 'agent-abilities-for-mcp' ),
+		'aafm/replace-in-post'             => __( 'Finds and replaces literal text in a post\'s body, sanitizing the inserted text. It edits only the replaced spans, leaves the rest of the content untouched, never changes the status, and the change is reversible from the revision history.', 'agent-abilities-for-mcp' ),
 		'aafm/create-page'                 => __( 'Creates and publishes a page. Requires the publish_pages capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-page'                 => __( 'Updates an existing page by id. Publishing is gated separately.', 'agent-abilities-for-mcp' ),
 		'aafm/create-cpt-item'             => __( 'Creates an item of a custom content type you have allowlisted. It stays a draft unless the agent holds that type\'s publish capability, and force-draft still applies.', 'agent-abilities-for-mcp' ),

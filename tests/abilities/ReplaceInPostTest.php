@@ -85,6 +85,42 @@ final class ReplaceInPostTest extends TestCase {
 		);
 	}
 
+	/**
+	 * B8: a replace must never mutate bytes OUTSIDE the replaced spans. The old code ran
+	 * wp_kses_post() over the whole rewritten body, so a one-word edit by an
+	 * unfiltered_html-capable user silently stripped their script/iframe markup elsewhere
+	 * in the post and reported success. Only the inserted replacement text is sanitized by
+	 * this ability now; a user who lacks unfiltered_html still gets the full-body kses from
+	 * core's own save path, exactly like a normal editor save.
+	 */
+	public function test_replace_does_not_mutate_unfiltered_html_outside_the_replaced_span(): void {
+		$admin = self::factory()->user->create( array( 'role' => 'administrator' ) );
+		wp_set_current_user( $admin ); // Single-site admin holds unfiltered_html.
+		$this->assertTrue( current_user_can( 'unfiltered_html' ), 'Precondition: the acting user may store unfiltered HTML.' );
+
+		$id = (int) self::factory()->post->create(
+			array(
+				'post_author'  => $admin,
+				'post_content' => '<script>track();</script><p>Hello world</p>',
+			)
+		);
+		$this->assertStringContainsString( '<script>', (string) get_post( $id )->post_content, 'Precondition: the script markup is stored.' );
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'Hello',
+				'replace' => 'Goodbye',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 1, $out['replacements'] );
+		$content = (string) get_post( $id )->post_content;
+		$this->assertStringContainsString( 'Goodbye world', $content, 'the replacement applied.' );
+		$this->assertStringContainsString( '<script>track();</script>', $content, 'markup outside the replaced span must survive byte-for-byte.' );
+	}
+
 	public function test_result_is_kses_stripped(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );

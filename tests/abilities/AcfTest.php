@@ -1410,6 +1410,29 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * B60: the three acf-get-* descriptions must say what the code does. get_fields() returns the
+	 * value map keyed by field NAME (ACF api-template.php get_field_objects: "Associative array
+	 * where field name => field"), so a description claiming the map is hydrated "by field key"
+	 * misleads the agent reading the tool listing.
+	 */
+	public function test_get_fields_descriptions_say_the_map_is_keyed_by_field_name(): void {
+		$abilities = array( 'aafm/acf-get-post-fields', 'aafm/acf-get-term-fields', 'aafm/acf-get-user-fields' );
+		foreach ( $abilities as $ability ) {
+			$description = aafm_ability_description( $ability );
+			$this->assertStringContainsString(
+				'field name',
+				$description,
+				$ability . ' must say the returned map is keyed by field name.'
+			);
+			$this->assertStringNotContainsString(
+				'by field key',
+				$description,
+				$ability . ' must not claim the map is keyed by field key.'
+			);
+		}
+	}
+
+	/**
 	 * B41: update_field() persists through update_metadata(), which wp_unslash()es the value, so a
 	 * backslash written unslashed loses one level on store. The write path must wp_slash() before
 	 * update_field() (matching the meta.php/terms.php/user-meta.php writers) - without it a value

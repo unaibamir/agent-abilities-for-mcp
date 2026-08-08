@@ -70,7 +70,7 @@ function aafm_acf_registry_definitions(): array {
 		),
 		'aafm/acf-get-post-fields'    => array(
 			'label'        => __( 'Get post ACF fields', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads all of a post's ACF field values, hydrated by field key. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads all of a post's ACF field values as a hydrated map keyed by field name. Requires edit access to that post.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
@@ -86,7 +86,7 @@ function aafm_acf_registry_definitions(): array {
 		),
 		'aafm/acf-get-term-fields'    => array(
 			'label'        => __( 'Get term ACF fields', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads all of a term's ACF field values, hydrated by field key. Requires edit access to that term.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads all of a term's ACF field values as a hydrated map keyed by field name. Requires edit access to that term.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',
@@ -102,7 +102,7 @@ function aafm_acf_registry_definitions(): array {
 		),
 		'aafm/acf-get-user-fields'    => array(
 			'label'        => __( 'Get user ACF fields', 'agent-abilities-for-mcp' ),
-			'description'  => __( "Reads all of a user's ACF field values, hydrated by field key. A field of the user_email type returns the real email address under the integration disclaimer. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
+			'description'  => __( "Reads all of a user's ACF field values as a hydrated map keyed by field name. A field of the user_email type returns the real email address under the integration disclaimer. Requires edit access to that user.", 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'acf',

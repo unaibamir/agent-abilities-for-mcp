@@ -74,6 +74,40 @@ class WcOrderStubStore {
 	public static int $next_refund_id = 2000;
 
 	/**
+	 * The next id handed out to an order item created through the WC_Order stub's add_product().
+	 *
+	 * Starts high so it never collides with the low, hand-picked item ids test fixtures seed.
+	 *
+	 * @var int
+	 */
+	public static int $next_item_id = 9000;
+
+	/**
+	 * When > 0, the Nth call to WC_Order::add_product() (counting from 1 via $add_product_calls)
+	 * throws instead of adding - models the real add_product() throwing mid-loop (its item save
+	 * path can throw) so the no-partial-write promise is exercisable.
+	 *
+	 * @var int
+	 */
+	public static int $add_product_throw_on_call = 0;
+
+	/**
+	 * Running count of add_product() calls since the last reset (drives $add_product_throw_on_call).
+	 *
+	 * @var int
+	 */
+	public static int $add_product_calls = 0;
+
+	/**
+	 * Order items persisted with order_id 0 - the orphan rows real WooCommerce leaves behind when
+	 * add_product() runs on a not-yet-saved order (its $item->save() writes the row immediately
+	 * with order_id 0). Keyed by item id.
+	 *
+	 * @var array<int,array<string,mixed>>
+	 */
+	public static array $orphan_items = array();
+
+	/**
 	 * When true, WC_Order::delete() returns false so the "don't lie success" guard is exercised.
 	 *
 	 * @var bool
@@ -125,6 +159,10 @@ class WcOrderStubStore {
 	public static function reset(): void {
 		self::$orders                    = array();
 		self::$next_id                   = 5000;
+		self::$next_item_id              = 9000;
+		self::$add_product_throw_on_call = 0;
+		self::$add_product_calls         = 0;
+		self::$orphan_items              = array();
 		self::$notes                     = array();
 		self::$next_note_id              = 1000;
 		self::$refunds                   = array();
@@ -187,6 +225,53 @@ class WcOrderStubStore {
 		}
 		self::$orders[ $id ] = self::with_defaults( $data );
 		return $id;
+	}
+
+	/**
+	 * Persist one order-item row immediately, the way real WC_Abstract_Order::add_product() does
+	 * ($item->save() runs before, and regardless of, $order->save()). An item for a saved order is
+	 * appended to that order's stored items; an item for an unsaved order (id 0) becomes an
+	 * order_id-0 orphan row.
+	 *
+	 * @param int                 $order_id Order id the item belongs to (0 = unsaved order).
+	 * @param array<string,mixed> $item     Item row including its 'id'.
+	 * @return void
+	 */
+	public static function persist_item( int $order_id, array $item ): void {
+		$item_id = (int) ( $item['id'] ?? 0 );
+		if ( $order_id > 0 && isset( self::$orders[ $order_id ] ) ) {
+			$items   = (array) ( self::$orders[ $order_id ]['items'] ?? array() );
+			$items[] = $item;
+
+			self::$orders[ $order_id ]['items'] = $items;
+			return;
+		}
+		self::$orphan_items[ $item_id ] = $item;
+	}
+
+	/**
+	 * Delete a persisted order-item row by item id, wherever it lives (an order's items or the
+	 * orphan rows). Mirrors real wc_delete_order_item(). Returns true when a row was removed.
+	 *
+	 * @param int $item_id Item id.
+	 * @return bool
+	 */
+	public static function delete_item( int $item_id ): bool {
+		if ( isset( self::$orphan_items[ $item_id ] ) ) {
+			unset( self::$orphan_items[ $item_id ] );
+			return true;
+		}
+		foreach ( self::$orders as $order_id => $order ) {
+			$items = (array) ( $order['items'] ?? array() );
+			foreach ( $items as $key => $item ) {
+				if ( (int) ( $item['id'] ?? 0 ) === $item_id ) {
+					unset( $items[ $key ] );
+					self::$orders[ $order_id ]['items'] = array_values( $items );
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**

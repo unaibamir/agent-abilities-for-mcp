@@ -730,9 +730,11 @@ function aafm_wc_order_status_valid( string $status ): bool {
  *
  * @param \WC_Order           $order The order to mutate.
  * @param array<string,mixed> $input Validated input (already schema-checked).
- * @return array<int,int> Requested product IDs that could not be resolved to a product (empty when all resolved).
+ * @return array<int,int>|\WP_Error Requested product IDs that could not be resolved to a product
+ *                                  (empty when all resolved), or a WP_Error when adding threw
+ *                                  mid-loop (already-written items rolled back; see B27 note below).
  */
-function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
+function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -865,11 +867,64 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ): array {
 		return $unresolved;
 	}
 
-	foreach ( $resolved as $to_add ) {
-		$order->add_product( $to_add['product'], $to_add['qty'] );
+	// B27: resolution up front only covers unresolvable ids - add_product() itself can still throw
+	// mid-loop, and because it persists each item row IMMEDIATELY ($item->save() runs inside it,
+	// before $order->save()), a bare loop would leave every earlier item written (attached on
+	// update; orphaned at order_id 0 on create) while the caller is told the request failed. Track
+	// each new item id and, on a throw, delete the already-written rows so the "whole request
+	// fails with no partial write" promise the schema documents stays true.
+	$added_item_ids = array();
+	try {
+		foreach ( $resolved as $to_add ) {
+			$added_item_ids[] = (int) $order->add_product( $to_add['product'], $to_add['qty'] );
+		}
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return aafm_wc_rollback_added_order_items( $added_item_ids );
 	}
 
 	return $unresolved;
+}
+
+/**
+ * Delete order-item rows that were written before a mid-loop add_product() failure, and report
+ * the outcome honestly.
+ *
+ * When every already-written row is removed, the returned error states the order is unchanged.
+ * When a row cannot be removed (or wc_delete_order_item() is unavailable), the error instead
+ * states exactly which order-item ids persisted, so the caller is never told "failed" about
+ * state that actually changed (B27).
+ *
+ * @param array<int,int> $item_ids Order-item ids written before the failure.
+ * @return \WP_Error
+ */
+function aafm_wc_rollback_added_order_items( array $item_ids ): \WP_Error {
+	$kept = array();
+	foreach ( $item_ids as $item_id ) {
+		$item_id = absint( $item_id );
+		if ( $item_id < 1 ) {
+			continue;
+		}
+		$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+		if ( ! $deleted ) {
+			$kept[] = $item_id;
+		}
+	}
+
+	if ( array() !== $kept ) {
+		return new \WP_Error(
+			'aafm_wc_line_items_partially_applied',
+			sprintf(
+				/* translators: %s: comma-separated list of order item ids that could not be removed. */
+				__( 'Adding the line items failed partway, and the items already written could not all be removed. Order item ids still persisted: %s. Read the order to see its current line items.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $kept )
+			)
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_line_items_not_applied',
+		__( 'Adding the line items failed. No line items from this request were kept and the order is unchanged.', 'agent-abilities-for-mcp' )
+	);
 }
 
 /**
@@ -1030,6 +1085,9 @@ function aafm_exec_wc_create_order( array $input ) {
 
 	$order      = new \WC_Order();
 	$unresolved = aafm_wc_apply_order_input( $order, $input );
+	if ( is_wp_error( $unresolved ) ) {
+		return $unresolved;
+	}
 	if ( array() !== $unresolved ) {
 		return aafm_wc_unresolved_line_items_error( $unresolved );
 	}
@@ -1131,6 +1189,9 @@ function aafm_exec_wc_update_order( array $input ) {
 	unset( $fields['order_id'] );
 
 	$unresolved = aafm_wc_apply_order_input( $order, $fields );
+	if ( is_wp_error( $unresolved ) ) {
+		return $unresolved;
+	}
 	if ( array() !== $unresolved ) {
 		return aafm_wc_unresolved_line_items_error( $unresolved );
 	}

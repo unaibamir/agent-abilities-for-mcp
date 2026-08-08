@@ -667,6 +667,75 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
+	/**
+	 * B27: the add-items promise is "the entire request fails with no partial write". Real
+	 * add_product() persists each item row immediately, so a throw mid-loop used to leave the
+	 * earlier items attached to the order while the caller was told the request failed. A
+	 * mid-loop throw must now roll the already-written items back and return a specific error.
+	 */
+	public function test_update_order_mid_loop_add_failure_leaves_no_partial_write(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		// Order 5001 seeds exactly one line item. Throw on the SECOND add of this request.
+		WcOrderStubStore::$add_product_throw_on_call = 2;
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => 101,
+						'quantity'   => 2,
+					),
+				),
+			)
+		);
+		WcOrderStubStore::$add_product_throw_on_call = 0;
+
+		$this->assertInstanceOf( \WP_Error::class, $res, 'a mid-loop add failure must fail the request.' );
+		$this->assertSame( 'aafm_wc_line_items_not_applied', $res->get_error_code() );
+
+		// The store must hold ONLY the original seeded item - the first added item was rolled back.
+		$stored_items = WcOrderStubStore::get( 5001 )['items'] ?? array();
+		$this->assertCount( 1, $stored_items, 'the item added before the throw must be rolled back, keeping the promise of no partial write.' );
+	}
+
+	/**
+	 * B27 (create side): a mid-loop throw on wc-create-order used to leave the already-added
+	 * items persisted as order_id-0 orphan rows. They must be cleaned up on failure.
+	 */
+	public function test_create_order_mid_loop_add_failure_leaves_no_orphan_items(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$add_product_throw_on_call = 2;
+
+		$res = wp_get_ability( 'aafm/wc-create-order' )->execute(
+			array(
+				'line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => 101,
+						'quantity'   => 2,
+					),
+				),
+			)
+		);
+		WcOrderStubStore::$add_product_throw_on_call = 0;
+
+		$this->assertInstanceOf( \WP_Error::class, $res, 'a mid-loop add failure must fail the create.' );
+		$this->assertSame( 'aafm_wc_line_items_not_applied', $res->get_error_code() );
+		$this->assertSame( array(), WcOrderStubStore::$orphan_items, 'no order_id-0 orphan item rows may survive a failed create.' );
+	}
+
 	public function test_update_order_empty_billing_shipping_encode_as_objects(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );

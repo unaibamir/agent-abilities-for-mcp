@@ -412,6 +412,47 @@ function aafm_args_wc_update_payment_gateway(): array {
 }
 
 /**
+ * Build the error for a gateway update whose read-back verification found unpersisted fields.
+ *
+ * B32: the caller must never be told a bare "error" about a request that partially changed state.
+ * Two branches (the third, full success, never reaches here): nothing persisted, or a partial
+ * write naming both sides. The machine-readable split rides in the error data.
+ *
+ * @param array<int,string> $persisted Field names whose values were confirmed persisted.
+ * @param array<int,string> $failed    Field names whose values did not persist.
+ * @return \WP_Error
+ */
+function aafm_wc_gateway_write_failed_error( array $persisted, array $failed ): \WP_Error {
+	$data = array(
+		'persisted' => $persisted,
+		'failed'    => $failed,
+	);
+
+	if ( array() === $persisted ) {
+		return new \WP_Error(
+			'aafm_wc_gateway_write_failed',
+			sprintf(
+				/* translators: %s: comma-separated list of gateway fields that failed to save. */
+				__( 'The gateway settings could not be saved (%s failed to persist). Nothing was changed.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $failed )
+			),
+			$data
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_gateway_write_failed',
+		sprintf(
+			/* translators: 1: comma-separated gateway fields that saved, 2: comma-separated gateway fields that failed. */
+			__( 'Only part of the gateway update persisted: %1$s saved, but %2$s failed. Read the gateway to see its current state.', 'agent-abilities-for-mcp' ),
+			implode( ', ', $persisted ),
+			implode( ', ', $failed )
+		),
+		$data
+	);
+}
+
+/**
  * Execute aafm/wc-update-payment-gateway.
  *
  * Updates only the fields provided: enabled, title, description, order. Each field is persisted
@@ -439,27 +480,36 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 	// Each setting persists immediately through WC_Payment_Gateway::update_option(). That method
 	// returns WordPress's update_option() result, which is false when the new value already equals
 	// the stored value (no write needed) - NOT only on failure. So a return-value gate would falsely
-	// error on unchanged values. Instead, apply each write and verify the desired end-state by
-	// reading the value back; only a genuine read-back mismatch is a failure.
+	// error on unchanged values. Instead, apply every write, then verify the desired end-state by
+	// reading each value back; only a genuine read-back mismatch is a failure.
+	//
+	// B32: verification runs ONCE, after the whole batch, and a mismatch reports exactly which
+	// fields persisted and which did not. The old sequence verified the order write mid-batch and
+	// bailed with a bare generic error on the first settings mismatch, so a caller could be told
+	// "error" after the title (or more) had already landed, with nothing saying so.
 	$desired = array();
 	if ( isset( $input['enabled'] ) ) {
-		$enabled_val      = $input['enabled'] ? 'yes' : 'no';
-		$gateway->enabled = $enabled_val;
-		$gateway->update_option( 'enabled', $enabled_val );
-		$desired['enabled'] = $enabled_val;
+		$desired['enabled'] = $input['enabled'] ? 'yes' : 'no';
 	}
 	if ( isset( $input['title'] ) ) {
-		$title_val      = sanitize_text_field( (string) $input['title'] );
-		$gateway->title = $title_val;
-		$gateway->update_option( 'title', $title_val );
-		$desired['title'] = $title_val;
+		$desired['title'] = sanitize_text_field( (string) $input['title'] );
 	}
 	if ( isset( $input['description'] ) ) {
-		$desc_val             = sanitize_textarea_field( (string) $input['description'] );
-		$gateway->description = $desc_val;
-		$gateway->update_option( 'description', $desc_val );
-		$desired['description'] = $desc_val;
+		$desired['description'] = sanitize_textarea_field( (string) $input['description'] );
 	}
+
+	foreach ( $desired as $key => $value ) {
+		if ( 'enabled' === $key ) {
+			$gateway->enabled = $value;
+		} elseif ( 'title' === $key ) {
+			$gateway->title = $value;
+		} else {
+			$gateway->description = $value;
+		}
+		$gateway->update_option( $key, $value );
+	}
+
+	$order_val = null;
 	if ( isset( $input['order'] ) ) {
 		// Display order is not a per-gateway setting, and WC_Payment_Gateway has no `order` property
 		// to set (M13) - WooCommerce keeps order in the woocommerce_gateway_order option (a
@@ -469,27 +519,38 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$ordering                = is_array( $ordering ) ? $ordering : array();
 		$ordering[ $gateway_id ] = $order_val;
 		update_option( 'woocommerce_gateway_order', $ordering );
-
-		$saved_order = get_option( 'woocommerce_gateway_order', array() );
-		if ( ! is_array( $saved_order ) || (int) ( $saved_order[ $gateway_id ] ?? -1 ) !== $order_val ) {
-			return aafm_generic_error();
-		}
 	}
-	// Verify the persisted state matches what we asked for, reading the value WooCommerce actually
+
+	// Verify the persisted state matches what we asked for, reading the values WooCommerce actually
 	// wrote to the database - NOT the gateway's in-memory copy. WC_Settings_API::update_option() sets
 	// $this->settings[$key] in memory BEFORE the DB write, and get_option() reads that in-memory copy,
 	// so a failed write (or a sanitize filter that altered the value on the way to disk) would still
 	// read back as a match through $gateway->get_option() and report a false success. Re-read the
 	// persisted settings row (get_option_key()) so only a genuinely persisted value counts as success.
+	$persisted_keys = array();
+	$failed_keys    = array();
 	if ( ! empty( $desired ) ) {
 		$persisted = get_option( $gateway->get_option_key(), array() );
 		$persisted = is_array( $persisted ) ? $persisted : array();
 		foreach ( $desired as $key => $value ) {
 			$stored = array_key_exists( $key, $persisted ) ? (string) $persisted[ $key ] : '';
-			if ( $stored !== (string) $value ) {
-				return aafm_generic_error();
+			if ( $stored === (string) $value ) {
+				$persisted_keys[] = $key;
+			} else {
+				$failed_keys[] = $key;
 			}
 		}
+	}
+	if ( null !== $order_val ) {
+		$saved_order = get_option( 'woocommerce_gateway_order', array() );
+		if ( is_array( $saved_order ) && (int) ( $saved_order[ $gateway_id ] ?? -1 ) === $order_val ) {
+			$persisted_keys[] = 'order';
+		} else {
+			$failed_keys[] = 'order';
+		}
+	}
+	if ( array() !== $failed_keys ) {
+		return aafm_wc_gateway_write_failed_error( $persisted_keys, $failed_keys );
 	}
 	// The response order reflects what was just requested when the request set one (the
 	// woocommerce_gateway_order write above is confirmed, but WC only re-sorts payment_gateways() on

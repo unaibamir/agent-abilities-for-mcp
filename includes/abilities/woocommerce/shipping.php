@@ -919,6 +919,43 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Persist the enabled flag FIRST. For a zone method this is NOT an instance setting - it
+	// lives in the is_enabled column of the woocommerce_shipping_zone_methods table, keyed
+	// by instance_id. WC core toggles it with a direct $wpdb->update() and then bumps the
+	// shipping transient version; there is no higher-level API for this column.
+	//
+	// B32 ordering: this is the only write in this executor whose failure is DETECTABLE
+	// ($wpdb->update() returns false on a genuine DB error; update_option() cannot distinguish
+	// failure from an unchanged value). Running it before the title write means its error path
+	// returns while nothing has been changed yet - the old sequence persisted the title first and
+	// then reported a bare error after part of the request had already landed.
+	if ( array_key_exists( 'enabled', $input ) ) {
+		global $wpdb;
+
+		$is_enabled = ( 'no' === $input['enabled'] ) ? 0 : 1;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API exists for the is_enabled column; this mirrors WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
+		$updated_rows = $wpdb->update(
+			$wpdb->prefix . 'woocommerce_shipping_zone_methods',
+			array( 'is_enabled' => $is_enabled ),
+			array( 'instance_id' => $instance_id ),
+			array( '%d' ),
+			array( '%d' )
+		);
+
+		if ( false === $updated_rows ) {
+			return new \WP_Error(
+				'aafm_wc_enabled_write_failed',
+				__( 'The enabled state could not be saved. Nothing on the shipping method was changed.', 'agent-abilities-for-mcp' )
+			);
+		}
+
+		// Invalidate the shipping cache so the toggle is reflected on the next read.
+		if ( class_exists( '\WC_Cache_Helper' ) ) {
+			\WC_Cache_Helper::get_transient_version( 'shipping', true );
+		}
+	}
+
 	// Persist the per-instance display title ("method_title" in this ability) into the
 	// method's "title" instance setting. WC_Shipping_Method has no per-object save();
 	// instance settings are written by update_option() on the method's instance option
@@ -937,38 +974,15 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 		update_option( $method->get_instance_option_key(), $instance_settings );
 	}
 
-	// Persist the enabled flag. For a zone method this is NOT an instance setting - it
-	// lives in the is_enabled column of the woocommerce_shipping_zone_methods table, keyed
-	// by instance_id. WC core toggles it with a direct $wpdb->update() and then bumps the
-	// shipping transient version; there is no higher-level API for this column.
-	if ( array_key_exists( 'enabled', $input ) ) {
-		global $wpdb;
-
-		$is_enabled = ( 'no' === $input['enabled'] ) ? 0 : 1;
-
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- No core API exists for the is_enabled column; this mirrors WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
-		$updated_rows = $wpdb->update(
-			$wpdb->prefix . 'woocommerce_shipping_zone_methods',
-			array( 'is_enabled' => $is_enabled ),
-			array( 'instance_id' => $instance_id ),
-			array( '%d' ),
-			array( '%d' )
-		);
-
-		if ( false === $updated_rows ) {
-			return aafm_generic_error();
-		}
-
-		// Invalidate the shipping cache so the toggle is reflected on the next read.
-		if ( class_exists( '\WC_Cache_Helper' ) ) {
-			\WC_Cache_Helper::get_transient_version( 'shipping', true );
-		}
-	}
-
-	// Re-resolve from the zone so the returned shape reflects what was just persisted.
+	// Re-resolve from the zone so the returned shape reflects what was just persisted. Every write
+	// above has already succeeded by this point, so a failed re-read must say the changes were
+	// saved rather than pretend the request failed outright (B32).
 	$updated = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $updated ) {
-		return aafm_generic_error();
+		return new \WP_Error(
+			'aafm_wc_update_not_confirmed',
+			__( 'The requested changes were saved, but the shipping method could not be re-read to confirm them. Call wc-get-shipping-method to verify its current state.', 'agent-abilities-for-mcp' )
+		);
 	}
 
 	return aafm_rich_wc_shipping_method( $updated );

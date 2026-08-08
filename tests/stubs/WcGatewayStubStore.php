@@ -35,6 +35,15 @@ class WcGatewayStubStore {
 	public static bool $force_save_failure = false;
 
 	/**
+	 * Setting keys whose writes are rejected (value NOT persisted) while other keys keep working.
+	 * Models a PARTIAL persistence failure - e.g. the title landing while the enabled write dies -
+	 * so the executor's what-actually-persisted reporting is exercisable (B32).
+	 *
+	 * @var array<int,string>
+	 */
+	public static array $fail_keys = array();
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
@@ -42,6 +51,7 @@ class WcGatewayStubStore {
 	public static function reset(): void {
 		self::$gateways           = array();
 		self::$force_save_failure = false;
+		self::$fail_keys          = array();
 	}
 
 	/**
@@ -124,7 +134,7 @@ class WcGatewayStubStore {
 		if ( ! isset( self::$gateways[ $gateway_id ] ) ) {
 			return false;
 		}
-		if ( self::$force_save_failure ) {
+		if ( self::$force_save_failure || in_array( $key, self::$fail_keys, true ) ) {
 			// Reject the write: nothing persists to the store OR the WP option, so a read-back of the
 			// DB-persisted option row sees the old value and the executor's mismatch path is exercised.
 			return false;

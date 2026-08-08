@@ -34,7 +34,7 @@ Model Context Protocol (MCP) is an open specification originally developed by An
 * **Off by default.** Nothing is exposed until you enable it, and updates never silently widen access.
 * **Read-only mode.** One switch stops every ability that writes from being registered at all, whatever is ticked, including abilities brought in from your other plugins. It turns nothing on or off by itself, so your selections are still there when you switch it back off.
 * **Two-layer capability gating.** A connection only sees the tools its user can call, and every call re-checks that capability before it runs.
-* **Honest audit log.** Every call is recorded, denied attempts included, with the principal and the argument keys (never the values). It lives in your own database and clears from the admin.
+* **Honest audit log.** Every call is recorded, denied attempts included, with the principal, the argument keys, and a short identifier-only note of what it touched. Free-text argument content is never stored. It lives in your own database and clears from the admin.
 * **Bounded by construction.** No arbitrary option or meta access, no remote URL fetch, no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list, never fetched from a URL. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * **No data leaves your site.** The plugin contacts no AI provider and no external service. Your AI client connects in; the plugin never reaches out.
@@ -74,7 +74,7 @@ More integrations are planned.
 
 ### 🔗 Abilities from your other plugins (new in 1.1.0)
 
-WordPress 6.9 lets any plugin register its own abilities, not just this one. Agent Abilities for MCP can now bring those in too. When another active plugin declares abilities through the Abilities API, they appear on a dedicated **Other plugins** screen, grouped by the plugin that registered them, every one off until you turn it on. Enable one and it becomes a governed MCP tool under the same rules as the built-in catalog: scoped to the bound user, capability-checked on every call, rate-limited, and written to the same audit log. Argument values are still never stored.
+WordPress 6.9 lets any plugin register its own abilities, not just this one. Agent Abilities for MCP can now bring those in too. When another active plugin declares abilities through the Abilities API, they appear on a dedicated **Other plugins** screen, grouped by the plugin that registered them, every one off until you turn it on. Enable one and it becomes a governed MCP tool under the same rules as the built-in catalog: scoped to the bound user, capability-checked on every call, rate-limited, and written to the same audit log. The log still keeps to identifiers, never free-text argument content.
 
 One limit worth knowing, because it is the other plugin's code doing the work and not ours. When a bridged ability publishes a description of what it returns, WordPress checks its answers against that description and refuses one that does not match. When it publishes no such description, there is nothing to check against, so its answer is passed through as given. The governance above still applies in full either way: permissions, scoping, rate limiting and the audit log do not depend on the other plugin declaring anything.
 
@@ -107,7 +107,7 @@ Agent Abilities for MCP gives you three layers. Every ability is off until you e
 
 ### Is there an audit log of what the agent did?
 
-Yes. Agent Abilities for MCP writes every ability call to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, and the argument keys. Argument values are never stored. You can clear the log from the admin screen.
+Yes. Agent Abilities for MCP writes every ability call to an audit log in your own database, denied attempts included. Each entry records the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. Free-text argument content, a post body or an email address, is never stored. You can clear the log from the admin screen.
 
 ### Is it safe to connect an AI agent to my WordPress site?
 
@@ -179,7 +179,7 @@ No. The plugin contacts no external service and has no telemetry. Your agent tal
 
 ### What does the audit log record?
 
-Every ability call, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, and the argument keys. Argument values are never stored. The activity log lives in your own database and can be cleared from the admin screen.
+Every ability call, whether it started, succeeded, errored, or was denied, with the acting user, the ability name, the argument keys, and a short note of what the call touched: small identifying values only, such as ids, meta key names, slugs, and status values. Free-text argument content, a post body or an email address, is never stored. The activity log lives in your own database and can be cleared from the admin screen.
 
 ### Does uninstalling the plugin revoke my agent's access?
 
@@ -240,7 +240,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** Attachments that are not images returned an empty array for their sizes map.
 * **Fix:** Bridging an ability from another plugin and then calling it with arguments could take the site down with an uncaught error, which affects 1.6.0 as shipped. The bridge was rewriting the source plugin's schema into a shape WordPress core's own validator cannot read. That rewrite never reached an MCP client anyway, because the adapter undoes it before the tool is advertised, so it is gone.
 * **Fix:** A tool bridged from another plugin had the result shape it declares rewritten before WordPress checked a result against it, so an ability returning a single value where its own schema allows one came back as an invalid-output error. The declared shape now goes through untouched. The MCP adapter still stamps a type of its own onto a typeless schema when it advertises the tool, and that shape belongs upstream rather than here.
-* **Fix:** The activity log stored the raw text of an unexpected error. For a plugin like WooCommerce that text often quotes the value that caused the failure, such as an email address or a SKU, which broke this plugin's promise that argument values are never stored. It now records the error's type and where it happened, which names the fault at least as precisely and cannot carry your data.
+* **Fix:** The activity log stored the raw text of an unexpected error. For a plugin like WooCommerce that text often quotes the value that caused the failure, such as an email address or a SKU, which broke this plugin's promise that free-text argument content is never stored. It now records the error's type and where it happened, which names the fault at least as precisely and cannot carry your data.
 * **Fix:** A permission check that failed unexpectedly returned the underlying error text to the connected agent and left no trace in the activity log. It now denies the call and records it. The same failure while a client was listing tools could empty the entire list, hiding every healthy tool along with the broken one.
 * **Fix:** Changing an existing coupon's discount type to percentage, without touching its amount, could save a coupon discounting more than 100 percent and report success. Raising a minimum spend past the coupon's stored maximum did the same. Both are now checked against the resulting coupon rather than the fields you happened to send.
 * **Feature:** A new `aafm_ability_resolved` action fires whenever a call finishes, so an uptime monitor or a logging plugin can react to a failure instead of waiting for someone to open wp-admin.

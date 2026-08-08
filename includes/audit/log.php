@@ -277,7 +277,9 @@ function aafm_sanitize_activity_detail( string $detail ): string {
 }
 
 /**
- * Write one activity row. Records argument KEYS only - never values.
+ * Write one activity row. Records argument KEYS, never their free-text content; the detail
+ * column carries identifier-only notes (ids, key names, slugs, enum members - see
+ * includes/audit/detail.php for the allowlist that guarantees it).
  *
  * @param array<string,mixed> $record {
  *     Activity record.
@@ -519,7 +521,7 @@ function aafm_announce_ability_resolved( ?int $row_id, string $status, ?int $res
  *
  * The exception's MESSAGE is never stored, in this row or anywhere else. A vendor exception
  * message routinely interpolates the value that caused it, and the log's promise - stated in the
- * wp.org listing, not only in this codebase - is that argument values are never stored. The class
+ * wp.org listing, not only in this codebase - is that free-text argument content is never stored. The class
  * plus the throw site identifies the defect at least as precisely and cannot carry a value. The
  * detail itself is built by aafm_build_activity_detail_from_exception() in includes/audit/detail.php,
  * so the file that documents this column's contract is also the file that produces every string

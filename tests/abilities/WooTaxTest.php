@@ -282,6 +282,71 @@ final class WooTaxTest extends TestCase {
 	}
 
 	// =========================================================================
+	// B30: unknown tax-class slugs on rate writes
+	// =========================================================================
+
+	/**
+	 * B30: WooCommerce's format_tax_rate_class() maps any unknown class slug to '' (Standard), so
+	 * a rate meant for "reduced-rate" with a typo silently landed in Standard, changed checkout
+	 * tax, and reported success. The slug must be validated against the existing classes first.
+	 */
+	public function test_create_tax_rate_unknown_class_is_refused(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'  => '5.0000',
+				'class' => 'no-such-class',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'an unknown tax class must be refused, never silently refiled into Standard.' );
+		$this->assertSame( 'aafm_wc_unknown_tax_class', $res->get_error_code() );
+		$this->assertStringContainsString( 'reduced-rate', $res->get_error_message(), 'the error must list the class slugs that do exist.' );
+	}
+
+	/**
+	 * B30: the same guard applies on update - the stored class must survive a bad request.
+	 */
+	public function test_update_tax_rate_unknown_class_is_refused_and_nothing_changes(): void {
+		$this->acting_as( 'administrator' );
+
+		// Rate id 2 is seeded in the reduced-rate class.
+		$before = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => 2 ) );
+		$this->assertSame( 'reduced-rate', $before['class'] );
+
+		$res = wp_get_ability( 'aafm/wc-update-tax-rate' )->execute(
+			array(
+				'rate_id' => 2,
+				'class'   => 'typo-rate',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_unknown_tax_class', $res->get_error_code() );
+
+		$after = wp_get_ability( 'aafm/wc-get-tax-rate' )->execute( array( 'rate_id' => 2 ) );
+		$this->assertSame( 'reduced-rate', $after['class'], 'a refused class change must leave the stored class untouched.' );
+	}
+
+	/**
+	 * B30 control: a class slug that really exists is accepted and stored as sent.
+	 */
+	public function test_create_tax_rate_known_class_is_stored(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'  => '5.0000',
+				'class' => 'reduced-rate',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'reduced-rate', $res['class'] );
+	}
+
+	// =========================================================================
 	// aafm/wc-create-tax-class
 	// =========================================================================
 

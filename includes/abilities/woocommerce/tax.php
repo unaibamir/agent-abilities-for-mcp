@@ -396,7 +396,7 @@ function aafm_args_wc_create_tax_rate(): array {
 				),
 				'class'    => array(
 					'type'        => 'string',
-					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string (the default) is the Standard class.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string (the default) is the Standard class. The slug must match an existing tax class; an unknown slug is refused rather than silently filed under Standard.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -449,6 +449,36 @@ function aafm_wc_normalize_tax_rate( $raw ) {
 }
 
 /**
+ * Validate a requested tax-class slug against the classes that actually exist.
+ *
+ * B30: both rate write paths run WC_Tax::format_tax_rate_class(), which maps ANY unknown slug to
+ * '' - so a rate meant for "reduced-rate" (typo, or a class not yet created) silently lands in the
+ * Standard class, changes checkout tax, and reports success. An empty string and 'standard' are
+ * the Standard class by convention; anything else must match an existing class slug.
+ *
+ * @param string $slug Sanitized requested class slug.
+ * @return \WP_Error|null WP_Error naming the unknown slug and listing the real ones, or null when valid.
+ */
+function aafm_wc_tax_class_slug_error( string $slug ): ?\WP_Error {
+	if ( '' === $slug || 'standard' === $slug ) {
+		return null;
+	}
+	$known = class_exists( '\WC_Tax' ) ? array_map( 'strval', \WC_Tax::get_tax_class_slugs() ) : array();
+	if ( in_array( $slug, $known, true ) ) {
+		return null;
+	}
+	return new \WP_Error(
+		'aafm_wc_unknown_tax_class',
+		sprintf(
+			/* translators: 1: the unknown tax class slug, 2: comma-separated list of existing class slugs. */
+			__( 'Unknown tax class "%1$s" - WooCommerce would silently file this rate under the Standard class. Existing class slugs: %2$s. Create the class first with wc-create-tax-class if it should exist.', 'agent-abilities-for-mcp' ),
+			$slug,
+			implode( ', ', array_merge( array( 'standard' ), $known ) )
+		)
+	);
+}
+
+/**
  * Execute aafm/wc-create-tax-rate.
  *
  * @param array<string,mixed> $input Validated input.
@@ -464,6 +494,12 @@ function aafm_exec_wc_create_tax_rate( array $input ) {
 		return $rate;
 	}
 
+	$class_slug  = isset( $input['class'] ) ? sanitize_title( (string) $input['class'] ) : '';
+	$class_error = aafm_wc_tax_class_slug_error( $class_slug );
+	if ( $class_error instanceof \WP_Error ) {
+		return $class_error;
+	}
+
 	$data = array(
 		'tax_rate_country'  => isset( $input['country'] ) ? sanitize_text_field( (string) $input['country'] ) : '',
 		'tax_rate_state'    => isset( $input['state'] ) ? sanitize_text_field( (string) $input['state'] ) : '',
@@ -473,7 +509,7 @@ function aafm_exec_wc_create_tax_rate( array $input ) {
 		'tax_rate_compound' => isset( $input['compound'] ) ? ( (bool) $input['compound'] ? 1 : 0 ) : 0,
 		'tax_rate_shipping' => isset( $input['shipping'] ) ? ( (bool) $input['shipping'] ? 1 : 0 ) : 1,
 		'tax_rate_order'    => isset( $input['order'] ) ? absint( $input['order'] ) : 0,
-		'tax_rate_class'    => isset( $input['class'] ) ? sanitize_title( (string) $input['class'] ) : '',
+		'tax_rate_class'    => $class_slug,
 	);
 
 	// Route through WC_Tax rather than a raw $wpdb->insert: _insert_tax_rate() writes the same
@@ -553,7 +589,7 @@ function aafm_args_wc_update_tax_rate(): array {
 				),
 				'class'    => array(
 					'type'        => 'string',
-					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string is the Standard class.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Tax class slug this rate belongs to (e.g. "reduced-rate"). An empty string is the Standard class. The slug must match an existing tax class; an unknown slug is refused rather than silently filed under Standard.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -631,7 +667,12 @@ function aafm_exec_wc_update_tax_rate( array $input ) {
 		$fields['tax_rate_order'] = absint( $input['order'] );
 	}
 	if ( array_key_exists( 'class', $input ) ) {
-		$fields['tax_rate_class'] = sanitize_title( (string) $input['class'] );
+		$class_slug  = sanitize_title( (string) $input['class'] );
+		$class_error = aafm_wc_tax_class_slug_error( $class_slug );
+		if ( $class_error instanceof \WP_Error ) {
+			return $class_error;
+		}
+		$fields['tax_rate_class'] = $class_slug;
 	}
 
 	if ( ! empty( $fields ) ) {

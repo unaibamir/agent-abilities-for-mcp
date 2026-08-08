@@ -73,17 +73,93 @@ class AcfStubStore {
 	public static array $fail_keys = array();
 
 	/**
+	 * When true, container fields (repeater/group/flexible_content) model real ACF Pro storage:
+	 * a value written keyed by sub-field NAME is stored (and read back RAW) keyed by sub-field KEY,
+	 * while the FORMATTED read re-keys back to names. The default (false) keeps the plain verbatim
+	 * KV behaviour every other ACF test relies on. This flag is what lets a test reproduce the
+	 * container re-keying that only real ACF Pro performs, which the verbatim stub hid.
+	 *
+	 * @var bool
+	 */
+	public static bool $model_container_rekeying = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		self::$groups             = array();
-		self::$field_defs         = array();
-		self::$seed_values        = array();
-		self::$written            = array();
-		self::$update_should_fail = false;
-		self::$fail_keys          = array();
+		self::$groups                   = array();
+		self::$field_defs               = array();
+		self::$seed_values              = array();
+		self::$written                  = array();
+		self::$update_should_fail       = false;
+		self::$fail_keys                = array();
+		self::$model_container_rekeying = false;
+	}
+
+	/**
+	 * A container definition's sub-field NAME => KEY map (repeater/group sub_fields and every
+	 * flexible-content layout's sub_fields).
+	 *
+	 * @param array<string,mixed> $def Field definition.
+	 * @return array<string,string> name => key.
+	 */
+	private static function name_to_key_map( array $def ): array {
+		$map     = array();
+		$collect = static function ( $sub_fields ) use ( &$map ): void {
+			foreach ( (array) $sub_fields as $sub ) {
+				if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
+					$map[ (string) $sub['name'] ] = (string) $sub['key'];
+				}
+			}
+		};
+		if ( isset( $def['sub_fields'] ) ) {
+			$collect( $def['sub_fields'] );
+		}
+		if ( isset( $def['layouts'] ) && is_array( $def['layouts'] ) ) {
+			foreach ( $def['layouts'] as $layout ) {
+				if ( is_array( $layout ) && isset( $layout['sub_fields'] ) ) {
+					$collect( $layout['sub_fields'] );
+				}
+			}
+		}
+		return $map;
+	}
+
+	/**
+	 * Rewrite one container value's sub-field keys, mapping via $map (name=>key or key=>name).
+	 * Groups are a flat map; repeaters/flex are a list of rows. The acf_fc_layout marker is kept.
+	 *
+	 * @param mixed                 $value The container value.
+	 * @param array<string,mixed>   $def   The field definition.
+	 * @param array<string,string>  $map   name=>key or key=>name.
+	 * @return mixed
+	 */
+	private static function rekey_container( $value, array $def, array $map ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		$rekey_row = static function ( $row ) use ( $map ) {
+			if ( ! is_array( $row ) ) {
+				return $row;
+			}
+			$out = array();
+			foreach ( $row as $sub_key => $sub_val ) {
+				$sub_key         = (string) $sub_key;
+				$new             = 'acf_fc_layout' === $sub_key ? $sub_key : ( $map[ $sub_key ] ?? $sub_key );
+				$out[ $new ]     = $sub_val;
+			}
+			return $out;
+		};
+		if ( 'group' === (string) ( $def['type'] ?? '' ) ) {
+			return $rekey_row( $value );
+		}
+		$out = array();
+		foreach ( $value as $i => $row ) {
+			$out[ $i ] = $rekey_row( $row );
+		}
+		return $out;
 	}
 
 	/**
@@ -189,7 +265,18 @@ class AcfStubStore {
 		}
 		// Store the value AS ACF's metadata storage reads it back (numeric/boolean scalars become
 		// strings), not the raw PHP type written, so the verify path sees real ACF typing.
-		self::$written[ $bucket ][ (string) $field_key ] = self::coerce_stored( $value );
+		$stored = self::coerce_stored( $value );
+
+		// Optionally model real ACF Pro's container re-keying: a value written by sub-field NAME is
+		// stored (and read back RAW) by sub-field KEY. Only when a test opts in via the flag.
+		if ( self::$model_container_rekeying ) {
+			$def = self::$field_defs[ (string) $field_key ] ?? null;
+			if ( is_array( $def ) && in_array( (string) ( $def['type'] ?? '' ), array( 'repeater', 'group', 'flexible_content' ), true ) ) {
+				$stored = self::rekey_container( $stored, $def, self::name_to_key_map( $def ) );
+			}
+		}
+
+		self::$written[ $bucket ][ (string) $field_key ] = $stored;
 		return true;
 	}
 
@@ -223,6 +310,16 @@ class AcfStubStore {
 	public static function value_formatted( $field_key, $selector ) {
 		$raw  = self::value( $field_key, $selector );
 		$type = (string) ( self::$field_defs[ (string) $field_key ]['type'] ?? '' );
+
+		// Real ACF returns a container FORMATTED value keyed by sub-field NAME, even though the raw
+		// value is stored by key. When modelling that, re-key the raw value back to names here.
+		if ( self::$model_container_rekeying && in_array( $type, array( 'repeater', 'group', 'flexible_content' ), true ) ) {
+			$def = self::$field_defs[ (string) $field_key ] ?? null;
+			if ( is_array( $def ) ) {
+				$name_to_key = self::name_to_key_map( $def );
+				return self::rekey_container( $raw, $def, array_flip( $name_to_key ) );
+			}
+		}
 
 		switch ( $type ) {
 			case 'image':

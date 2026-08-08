@@ -88,7 +88,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/replace-in-post'] = array(
 		'label'        => __( 'Replace in post', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the result and edits only the body; status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Literal find-and-replace inside a post\'s content. Sanitizes the replacement text and edits only the replaced spans of the body; untouched content is left byte-for-byte as it was, and status is never touched. Reversible via revisions.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -1217,11 +1217,16 @@ function aafm_perm_replace_in_post( array $input ): bool {
  * Execute aafm/replace-in-post.
  *
  * Literal str_replace (no regex - avoids ReDoS/injection). Counts occurrences of the
- * search term BEFORE replacing. The replaced body is run through wp_kses_post so an agent
- * cannot inject script even via the replacement string, then written with
- * wp_update_post( wp_slash(...) ). Only post_content is written - status is never touched,
- * so this inherits nothing status-related and can never publish/unpublish. A search term
- * that does not occur is a no-op (replacements:0) returning the unchanged post, not an error.
+ * search term BEFORE replacing. Only the INSERTED replacement text is run through
+ * wp_kses_post (so an agent cannot inject script via the replacement string) - never the
+ * whole body: full-body kses silently stripped an unfiltered_html user's markup everywhere
+ * else in the post on a one-word edit and reported success (B8). The invariant: no byte
+ * outside the replaced spans is changed by this ability. The write goes through
+ * wp_update_post( wp_slash(...) ), so when the acting user lacks unfiltered_html, core's
+ * own kses save filters sanitize the full body exactly as a normal editor save would.
+ * Only post_content is written - status is never touched, so this inherits nothing
+ * status-related and can never publish/unpublish. A search term that does not occur is a
+ * no-op (replacements:0) returning the unchanged post, not an error.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -1248,7 +1253,7 @@ function aafm_exec_replace_in_post( array $input ) {
 		);
 	}
 
-	$new = wp_kses_post( str_replace( $search, $replace, $content ) );
+	$new = str_replace( $search, wp_kses_post( $replace ), $content );
 
 	// Guard the rewritten markup so a replacement cannot silently introduce editor-invalid blocks.
 	$guard = aafm_block_guard_evaluate( $new );

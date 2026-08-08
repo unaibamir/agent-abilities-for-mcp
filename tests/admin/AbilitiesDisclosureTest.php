@@ -49,6 +49,20 @@ final class AbilitiesDisclosureTest extends TestCase {
 		$this->assertStringContainsString( 'body', $disclosures['aafm/get-page'] );
 	}
 
+	/**
+	 * B9: the list-read disclosures claimed "never the full body", but include_content=true
+	 * on get-posts (and get-pages via delegation, and search-content) returns exactly that.
+	 * The parameter is a shipped, useful feature - the disclosure must disclose it honestly:
+	 * metadata by default, full body only when the agent asks for it.
+	 */
+	public function test_list_read_disclosures_admit_the_include_content_body(): void {
+		$disclosures = aafm_ability_disclosures();
+
+		$this->assertStringNotContainsString( 'never the full body', $disclosures['aafm/get-posts'], 'get-posts must not deny a body include_content=true returns.' );
+		$this->assertStringContainsString( 'include_content', $disclosures['aafm/get-posts'], 'get-posts must name the parameter that returns the body.' );
+		$this->assertStringContainsString( 'include_content', $disclosures['aafm/search-content'], 'search-content supports include_content too and must say so.' );
+	}
+
 	public function test_no_orphan_disclosure_keys(): void {
 		$disclosures = array_keys( aafm_ability_disclosures() );
 		$registry    = array_keys( aafm_get_abilities_registry() );

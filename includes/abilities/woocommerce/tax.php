@@ -378,6 +378,7 @@ function aafm_args_wc_create_tax_rate(): array {
 				),
 				'priority' => array(
 					'type'        => 'integer',
+					'minimum'     => 0,
 					'description' => __( 'Priority group the rate is evaluated in. Rates that share a priority are summed; rates in different priorities are compounded in order. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'compound' => array(
@@ -390,6 +391,7 @@ function aafm_args_wc_create_tax_rate(): array {
 				),
 				'order'    => array(
 					'type'        => 'integer',
+					'minimum'     => 0,
 					'description' => __( 'Sort position among rates that share the same country, state, and class, lowest first. Defaults to 0.', 'agent-abilities-for-mcp' ),
 				),
 				'class'    => array(
@@ -533,6 +535,7 @@ function aafm_args_wc_update_tax_rate(): array {
 				),
 				'priority' => array(
 					'type'        => 'integer',
+					'minimum'     => 0,
 					'description' => __( 'Priority group the rate is evaluated in. Rates that share a priority are summed; rates in different priorities are compounded in order.', 'agent-abilities-for-mcp' ),
 				),
 				'compound' => array(
@@ -545,6 +548,7 @@ function aafm_args_wc_update_tax_rate(): array {
 				),
 				'order'    => array(
 					'type'        => 'integer',
+					'minimum'     => 0,
 					'description' => __( 'Sort position among rates that share the same country, state, and class, lowest first.', 'agent-abilities-for-mcp' ),
 				),
 				'class'    => array(

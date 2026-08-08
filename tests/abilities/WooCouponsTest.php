@@ -252,6 +252,29 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
+	 * B51: a negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
+	 *
+	 * absint(-5) is 5, so a negative usage_limit was silently persisted as its positive twin and the
+	 * write reported success. The integer schema now carries minimum:0, so a negative is refused at
+	 * input validation.
+	 */
+	public function test_create_coupon_rejects_a_negative_usage_limit(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'        => 'NEGLIMIT',
+				'amount'      => '10.00',
+				'usage_limit' => -5,
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A negative usage_limit must be refused, not stored as its absolute value.'
+		);
+	}
+
+	/**
 	 * Create with optional config fields stores them correctly.
 	 */
 	public function test_create_coupon_with_optional_fields(): void {

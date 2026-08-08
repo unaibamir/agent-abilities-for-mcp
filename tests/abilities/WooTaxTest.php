@@ -187,6 +187,27 @@ final class WooTaxTest extends TestCase {
 		$this->assertSame( 'Test Rate', $fetched['name'] );
 	}
 
+	/**
+	 * B51: a negative priority must be rejected, not sign-flipped by absint.
+	 *
+	 * absint(-1) is 1, so a negative priority (or order) was silently persisted as its positive twin.
+	 * The integer schema now carries minimum:0, so a negative is refused at input validation.
+	 */
+	public function test_create_tax_rate_rejects_a_negative_priority(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-tax-rate' )->execute(
+			array(
+				'rate'     => '10.0000',
+				'priority' => -1,
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A negative priority must be refused, not stored as its absolute value.'
+		);
+	}
+
 	// =========================================================================
 	// aafm/wc-update-tax-rate
 	// =========================================================================

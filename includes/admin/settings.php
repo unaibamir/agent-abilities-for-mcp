@@ -538,8 +538,8 @@ function aafm_render_settings_tab(): void {
 		array(
 			'label'   => __( 'Force draft on create', 'agent-abilities-for-mcp' ),
 			'control' => '<label class="aafm-switch"><input type="checkbox" id="aafm-force-draft" name="aafm_force_draft" value="1" ' . checked( aafm_force_draft(), true, false ) . '><span class="aafm-switch-track"></span></label> '
-				. '<label for="aafm-force-draft">' . esc_html__( 'Save everything an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
-			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live.', 'agent-abilities-for-mcp' ),
+				. '<label for="aafm-force-draft">' . esc_html__( 'Save the content an agent creates as a draft, no matter what status the request asked for.', 'agent-abilities-for-mcp' ) . '</label>',
+			'help'    => __( 'Turn this on if you want to look over agent-created content before it goes live. Covers posts, pages, custom content items, reusable blocks, and WooCommerce products. Things without a draft state (media, menus, terms, comments, users, coupons, orders) and product variations are not affected.', 'agent-abilities-for-mcp' ),
 		)
 	);
 

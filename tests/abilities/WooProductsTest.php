@@ -353,6 +353,52 @@ final class WooProductsTest extends TestCase {
 	}
 
 	/**
+	 * B7: the force-draft setting promises to cover "everything an agent creates", but
+	 * wc-create-product saved with WooCommerce's default publish status (or any explicitly
+	 * requested one) untouched. With the setting on, a new product must land as a draft,
+	 * and an explicit publish request on create or update must be coerced to draft too.
+	 */
+	public function test_create_product_respects_the_force_draft_setting(): void {
+		update_option( 'aafm_force_draft', true );
+		$this->acting_as( 'administrator' );
+
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array( 'name' => 'Held Gadget' )
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+		$this->assertSame( 'draft', $created['status'], 'force-draft must hold an agent-created product back from publishing.' );
+
+		$explicit = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'   => 'Held Gadget Two',
+				'status' => 'publish',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $explicit );
+		$this->assertSame( 'draft', $explicit['status'], 'an explicit publish request must be coerced to draft.' );
+
+		$updated = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id' => (int) $created['id'],
+				'status'     => 'publish',
+			)
+		);
+		delete_option( 'aafm_force_draft' );
+		$this->assertNotInstanceOf( WP_Error::class, $updated );
+		$this->assertSame( 'draft', $updated['status'], 'force-draft must also coerce an explicit publish on update, matching update-post.' );
+	}
+
+	/**
+	 * B7 companion: with force-draft off, nothing changes - the default stays publish.
+	 */
+	public function test_create_product_defaults_to_publish_without_force_draft(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute( array( 'name' => 'Live Gadget' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'publish', $res['status'] );
+	}
+
+	/**
 	 * B22: stock_status alongside manage_stock:true must be refused, not silently discarded.
 	 *
 	 * When stock is managed, WooCommerce derives stock_status from stock_quantity in

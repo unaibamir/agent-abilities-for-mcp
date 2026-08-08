@@ -23,6 +23,11 @@ namespace AAFM\Tests\Admin;
 
 use AAFM\Tests\TestCase;
 
+/**
+ * Pins the create_users gate on the admin create-agent-user path.
+ *
+ * @group ms-required
+ */
 final class MsCreateAgentUserTest extends TestCase {
 
 	public function set_up(): void {

@@ -25,6 +25,11 @@ namespace AAFM\Tests\Abilities;
 use AAFM\Tests\TestCase;
 use WP_User;
 
+/**
+ * Pins the honest multisite delete-user wire contract.
+ *
+ * @group ms-required
+ */
 final class MsDeleteUserContractTest extends TestCase {
 
 	public function set_up(): void {

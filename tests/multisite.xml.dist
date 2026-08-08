@@ -6,7 +6,11 @@
   call skipWithoutMultisite() in set_up, so the single-site config runs them as skipped;
   this config is where they actually execute:
 
-      vendor/bin/phpunit -c tests/multisite.xml.dist [paths]
+      vendor/bin/phpunit -c tests/multisite.xml.dist
+
+  This config runs ONLY the ms-required group. The rest of the suite asserts single-site
+  capability semantics (create_users, edit_users, and unfiltered_html all map differently
+  under multisite), so a full-suite run here fails for fixture reasons, not product ones.
 
   Relative paths below resolve against this file's directory (tests/).
 -->
@@ -37,10 +41,13 @@
 		</testsuite>
 	</testsuites>
 	<!--
-	  Same contract-suite exclusion as the single-site config; ms-excluded additionally keeps
-	  single-site-only tests out of the multisite run (mirrors core's own multisite.xml).
+	  The ms-required include is what scopes this config; the excludes mirror the single-site
+	  config in case a future ms-required test also carries one of those groups.
 	-->
 	<groups>
+		<include>
+			<group>ms-required</group>
+		</include>
 		<exclude>
 			<group>contract</group>
 			<group>ms-excluded</group>

@@ -448,7 +448,7 @@ final class AbilityCrashSafetyTest extends TestCase {
 		// Until 1.6.1 this asserted the message WAS in the detail, which is the sixth known instance
 		// in this codebase of a test asserting the bug and passing forever. The message is a vendor
 		// string that routinely interpolates the value that caused the throw, the column is exported
-		// to CSV, and the wp.org listing promises argument values are never stored. The class and
+		// to CSV, and the wp.org listing promises free-text argument content is never stored. The class and
 		// throw site carry the same forensic weight and cannot carry a value.
 		$this->assertStringNotContainsString(
 			'boom from the ability',

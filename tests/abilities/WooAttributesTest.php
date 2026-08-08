@@ -184,17 +184,49 @@ final class WooAttributesTest extends TestCase {
 	}
 
 	public function test_update_attribute_field_isolation(): void {
-		// Changing 'type' must leave 'name' intact.
+		// Changing 'order_by' must leave 'name' intact. This test used to patch type to 'text',
+		// but B31 removed 'text' from the enum - wc_get_attribute_types() only offers 'select' and
+		// wc_create_attribute() silently coerced anything else - so the isolation check now rides
+		// on order_by, another enum field.
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-update-product-attribute' )->execute(
 			array(
 				'attribute_id' => 2,
-				'type'         => 'text',
+				'order_by'     => 'name',
 			)
 		);
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertSame( 'text', $res['type'] );
+		$this->assertSame( 'name', $res['order_by'] );
 		$this->assertSame( 'Size', $res['name'], 'name is untouched.' );
+	}
+
+	/**
+	 * B31: the type enum advertised 'text', but wc_get_attribute_types() returns only 'select'
+	 * and wc_create_attribute() silently coerces anything else to select - schema-enum vs
+	 * code-enum drift plus a silent coercion. The enum is now sourced from the vendor's own list
+	 * (falling back to select when WooCommerce is unavailable), so 'text' is gone.
+	 */
+	public function test_attribute_type_enum_matches_what_woocommerce_accepts(): void {
+		$create_enum = aafm_args_wc_create_product_attribute()['input_schema']['properties']['type']['enum'];
+		$update_enum = aafm_args_wc_update_product_attribute()['input_schema']['properties']['type']['enum'];
+
+		$this->assertSame( array( 'select' ), $create_enum, 'without a vendor wc_get_attribute_types(), the enum must pin to select - never advertise the coerced text type.' );
+		$this->assertSame( $create_enum, $update_enum, 'create and update must advertise the identical type enum.' );
+	}
+
+	/**
+	 * B31 wire check: a create naming the old phantom 'text' type is refused by the schema
+	 * instead of being silently stored as select.
+	 */
+	public function test_create_attribute_type_text_is_rejected(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-attribute' )->execute(
+			array(
+				'name' => 'Engraving',
+				'type' => 'text',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'type "text" is not a real WooCommerce attribute type and must be refused, not coerced.' );
 	}
 
 	public function test_update_attribute_field_isolation_preserves_archives_and_order(): void {

@@ -166,8 +166,19 @@ function aafm_exec_wc_get_sales_report( array $input ) {
 	// join that only ever sees the legacy tables (B3). The date window is pushed into the query
 	// and results are paged so a large order history never loads in one unbounded fetch (mirrors
 	// the top-sellers path).
-	$start_ts = (int) strtotime( $start . ' 00:00:00' );
-	$end_ts   = (int) strtotime( $end . ' 23:59:59' );
+	// strtotime() returns false for an unparseable date, which cast to 0 would silently widen the
+	// window to all-time (bad start) or empty it (bad end) and return a confidently wrong money
+	// figure as success. Reject an unparseable date instead.
+	$start_ts = strtotime( $start . ' 00:00:00' );
+	$end_ts   = strtotime( $end . ' 23:59:59' );
+	if ( false === $start_ts || false === $end_ts ) {
+		return new \WP_Error(
+			'aafm_invalid_date',
+			__( 'start_date or end_date is not a valid date.', 'agent-abilities-for-mcp' )
+		);
+	}
+	$start_ts = (int) $start_ts;
+	$end_ts   = (int) $end_ts;
 
 	$page        = 1;
 	$per_page    = 200;

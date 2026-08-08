@@ -770,6 +770,38 @@ class ValidatorTest extends TestCase {
 	}
 
 	/**
+	 * B40: the route guard must match the MCP route case-insensitively, like core routing does.
+	 *
+	 * Core compiles its REST route regexes with the `i` modifier (class-wp-rest-server.php), so
+	 * WordPress dispatches /wp-json/Agent-Abilities-For-MCP/MCP to the MCP endpoint. The swept
+	 * siblings (aafm_mcp_filter_governed_error_status(), aafm_oauth_filter_malformed_json())
+	 * already compare with strcasecmp() for exactly that reason. A case-sensitive comparison here
+	 * fails closed - the bearer never resolves, so OAuth breaks on an odd-cased request that core
+	 * still dispatches to the endpoint - but it must agree with its siblings and with core.
+	 */
+	public function test_route_match_is_case_insensitive_like_core_routing(): void {
+		// Pretty-permalink branch: an odd-cased request path still targets the MCP route.
+		$_SERVER['REQUEST_URI'] = '/' . trim( rest_get_url_prefix(), '/' ) . '/Agent-Abilities-For-MCP/MCP';
+		unset( $_GET['rest_route'] );
+		$this->assertTrue(
+			aafm_oauth_request_targets_mcp_route(),
+			'An odd-cased MCP request path must still classify as MCP-targeted.'
+		);
+
+		// Plain-permalink branch: the authoritative rest_route query var is matched the same way.
+		$_SERVER['REQUEST_URI'] = '/index.php';
+		$_GET['rest_route']     = '/Agent-Abilities-For-MCP/MCP';
+		$this->assertTrue(
+			aafm_oauth_request_targets_mcp_route(),
+			'An odd-cased rest_route query var must still classify as MCP-targeted.'
+		);
+
+		// A genuinely different route stays false in both branches, whatever the case.
+		$_GET['rest_route'] = '/WP/v2/Posts';
+		$this->assertFalse( aafm_oauth_request_targets_mcp_route() );
+	}
+
+	/**
 	 * The resolver's re-entrancy guard. Steps 5-9 build site URLs, firing the home_url/rest_url
 	 * filter chain DURING user resolution. A third-party filter there that resolves the current user
 	 * would re-enter this callback; without the guard that recurses until memory is exhausted. Prove

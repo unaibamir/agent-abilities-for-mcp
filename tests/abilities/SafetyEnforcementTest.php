@@ -149,6 +149,14 @@ final class SafetyEnforcementTest extends TestCase {
 		$other->set_header( 'Content-Type', 'application/json' );
 		$other->set_body( '"x"' );
 		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $other ), 'A scalar body on another route must not be touched.' );
+
+		// B40 sweep: core routes case-insensitively, so an odd-cased MCP route reaches the
+		// transport too - the guard must catch it, or the crash it closes comes back through
+		// nothing but a capital letter.
+		$odd_case = new \WP_REST_Request( 'POST', strtoupper( aafm_mcp_rest_route() ) );
+		$odd_case->set_header( 'Content-Type', 'application/json' );
+		$odd_case->set_body( '"x"' );
+		$this->assertInstanceOf( \WP_Error::class, aafm_reject_scalar_mcp_body( null, null, $odd_case ), 'An odd-cased MCP route must not bypass the guard.' );
 	}
 
 	public function test_decorated_permission_rate_limits_and_audits(): void {

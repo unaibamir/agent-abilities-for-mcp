@@ -581,7 +581,12 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
 	if ( 'POST' !== $request->get_method() ) {
 		return $result;
 	}
-	if ( rtrim( (string) $request->get_route(), '/' ) !== rtrim( aafm_mcp_rest_route(), '/' ) ) {
+	// Case-insensitive, like core's own route matching (the regex in class-wp-rest-server.php is
+	// compiled with the `i` modifier) and the sibling checks in aafm_mcp_filter_governed_error_status()
+	// and aafm_oauth_request_targets_mcp_route(). Unlike those, a miss here fails OPEN: an odd-cased
+	// route that core still dispatches to the MCP endpoint would skip this guard and reach the
+	// transport's ?array-typed context, which is the exact crash the guard exists to close.
+	if ( 0 !== strcasecmp( rtrim( (string) $request->get_route(), '/' ), rtrim( aafm_mcp_rest_route(), '/' ) ) ) {
 		return $result;
 	}
 

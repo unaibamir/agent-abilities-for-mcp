@@ -201,16 +201,23 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * A zone id that is not in the store is treated as empty by the stub validator
-	 * (the WC_Shipping_Zone constructor fills defaults using the requested id, so the
-	 * id-match check in aafm_wc_get_shipping_zone_object passes). Verify the store
-	 * truly has no such zone so this test documents the stub's boundary behaviour.
+	 * B33: the real WC_Shipping_Zone CONSTRUCTOR throws for a missing non-zero id (the zone data
+	 * store's read_multiple() raises "Invalid data store."), so the resolver's null branch was
+	 * dead and a routine bad id was crash-classified by the catalog-wide Throwable catch. The
+	 * stub now models the vendor throw, the resolver catches it, and an unknown zone id returns
+	 * the same clean not-found the tax sibling uses.
 	 */
-	public function test_get_shipping_zone_unknown_id_not_in_store(): void {
+	public function test_get_shipping_zone_unknown_id_is_a_clean_not_found(): void {
 		$this->assertFalse(
 			WcShippingStubStore::exists( 99999 ),
 			'Zone 99999 must not be in the stub store after seeding.'
 		);
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-get-shipping-zone' )->execute( array( 'zone_id' => 99999 ) );
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_not_found', $res->get_error_code(), 'an unknown zone id is a routine not-found, never a crash-classified error.' );
 	}
 
 	// =========================================================================
@@ -285,15 +292,25 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
-	 * Zone id not present in the store is not in the seeded fixture set.
-	 * The stub validator passes because WC_Shipping_Zone fills a default with the requested id;
-	 * this test documents that boundary and confirms the store has no such entry.
+	 * B33 (update side): an unknown zone id is refused with the clean not-found before anything
+	 * is written, instead of the vendor constructor throw escaping into a crash classification.
 	 */
-	public function test_update_shipping_zone_unknown_id_not_in_store(): void {
+	public function test_update_shipping_zone_unknown_id_is_a_clean_not_found(): void {
 		$this->assertFalse(
 			WcShippingStubStore::exists( 99999 ),
 			'Zone 99999 must not be in the stub store after seeding.'
 		);
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-shipping-zone' )->execute(
+			array(
+				'zone_id'   => 99999,
+				'zone_name' => 'Ghost Zone',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_not_found', $res->get_error_code() );
 	}
 
 	/**

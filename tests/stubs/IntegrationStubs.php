@@ -1376,6 +1376,14 @@ class WC_Shipping_Zone {
 	public function __construct( $zone_id = 0 ) {
 		$zone_id = (int) $zone_id;
 		$stored = \AAFM\Tests\WcShippingStubStore::get( $zone_id );
+		// Mirrors the real vendor: WC_Shipping_Zone_Data_Store::read_multiple() THROWS for any
+		// missing non-zero id, inside the constructor (class-wc-shipping-zone-data-store.php:96),
+		// while zone 0 (Rest of World) always exists. The earlier stub fabricated a phantom zone
+		// carrying the requested id, which is exactly what hid the dead null branch in
+		// aafm_wc_get_shipping_zone_object() (B33).
+		if ( ! is_array( $stored ) && $zone_id > 0 ) {
+			throw new \Exception( 'Invalid data store.' );
+		}
 		$this->data = is_array( $stored ) ? $stored : array( 'zone_id' => $zone_id, 'zone_name' => '', 'zone_order' => 0, 'zone_locations' => array() );
 	}
 	public function get_id() { return (int) ( $this->data['zone_id'] ?? 0 ); }

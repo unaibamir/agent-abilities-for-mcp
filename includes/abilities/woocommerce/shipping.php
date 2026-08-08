@@ -146,11 +146,29 @@ function aafm_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
 	if ( $zone_id < 0 || ! class_exists( 'WC_Shipping_Zone' ) ) {
 		return null;
 	}
-	$zone = new \WC_Shipping_Zone( $zone_id );
+	// B33: WooCommerce's zone data store THROWS for a missing non-zero id, inside the constructor
+	// (WC_Shipping_Zone_Data_Store::read_multiple(), "Invalid data store."), so without this catch
+	// the null branch below is dead on a real site and a routine unknown-zone request escapes to
+	// the catalog-wide Throwable catch as a crash-classified error plus a crash audit row.
+	try {
+		$zone = new \WC_Shipping_Zone( $zone_id );
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return null;
+	}
 	// A zone is valid when its data() id matches what we requested, OR for zone 0 (Rest of World)
 	// which always exists in WooCommerce. We check via get_data() to avoid an extra store read.
 	$data = $zone->get_data();
 	return ( (int) ( $data['id'] ?? -1 ) === $zone_id ) ? $zone : null;
+}
+
+/**
+ * The clean not-found error for an unknown shipping zone id - same contract as the tax sibling's
+ * aafm_not_found (B33).
+ *
+ * @return \WP_Error
+ */
+function aafm_wc_shipping_zone_not_found(): \WP_Error {
+	return new \WP_Error( 'aafm_not_found', __( 'Shipping zone not found.', 'agent-abilities-for-mcp' ) );
 }
 
 /**
@@ -394,7 +412,7 @@ function aafm_exec_wc_get_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return aafm_wc_shipping_zone_not_found();
 	}
 	return aafm_rich_wc_shipping_zone( $zone );
 }
@@ -513,7 +531,7 @@ function aafm_exec_wc_update_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return aafm_wc_shipping_zone_not_found();
 	}
 
 	$fields = $input;
@@ -690,7 +708,7 @@ function aafm_exec_wc_list_shipping_methods( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
 	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return aafm_wc_shipping_zone_not_found();
 	}
 
 	$methods = $zone->get_shipping_methods();
@@ -765,7 +783,7 @@ function aafm_exec_wc_get_shipping_method( array $input ) {
 	$instance_id = isset( $input['instance_id'] ) ? (int) $input['instance_id'] : 0;
 	$method      = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return new \WP_Error( 'aafm_not_found', __( 'Shipping method not found in this zone.', 'agent-abilities-for-mcp' ) );
 	}
 	return aafm_rich_wc_shipping_method( $method );
 }
@@ -828,7 +846,7 @@ function aafm_exec_wc_create_shipping_method( array $input ) {
 
 	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return aafm_wc_shipping_zone_not_found();
 	}
 
 	$instance_id = (int) $zone->add_shipping_method( $method_type );
@@ -838,7 +856,7 @@ function aafm_exec_wc_create_shipping_method( array $input ) {
 
 	$method = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return new \WP_Error( 'aafm_not_found', __( 'Shipping method not found in this zone.', 'agent-abilities-for-mcp' ) );
 	}
 
 	return aafm_rich_wc_shipping_method( $method );
@@ -912,11 +930,11 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	// Verify the zone exists and the method exists within it.
 	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
-		return aafm_generic_error();
+		return aafm_wc_shipping_zone_not_found();
 	}
 	$method = aafm_wc_get_shipping_method_object( $zone_id, $instance_id );
 	if ( null === $method ) {
-		return aafm_generic_error();
+		return new \WP_Error( 'aafm_not_found', __( 'Shipping method not found in this zone.', 'agent-abilities-for-mcp' ) );
 	}
 
 	// Persist the enabled flag FIRST. For a zone method this is NOT an instance setting - it

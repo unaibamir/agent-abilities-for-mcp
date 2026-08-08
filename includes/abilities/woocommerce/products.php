@@ -597,7 +597,15 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		$product->set_name( sanitize_text_field( (string) $input['name'] ) );
 	}
 	if ( array_key_exists( 'status', $input ) ) {
-		$product->set_status( sanitize_key( (string) $input['status'] ) );
+		$status = sanitize_key( (string) $input['status'] );
+		// The operator's force-draft setting covers products too (B7): an explicit request
+		// for a publish-equivalent status is coerced to draft, mirroring the update-post
+		// behaviour. An update that sends no status field never reaches here, so force-draft
+		// can never retro-unpublish an already-published product.
+		if ( aafm_force_draft() && aafm_status_requires_publish_cap( $status ) ) {
+			$status = 'draft';
+		}
+		$product->set_status( $status );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
 		$sku = sanitize_text_field( (string) $input['sku'] );
@@ -865,6 +873,12 @@ function aafm_exec_wc_create_product( array $input ) {
 	$error = aafm_wc_apply_product_input( $product, $input );
 	if ( null !== $error ) {
 		return $error;
+	}
+	// WooCommerce defaults an unset status to publish on save, so with the operator's
+	// force-draft setting on, an omitted status must land as draft (B7). An explicit
+	// publish-equivalent request was already coerced inside aafm_wc_apply_product_input().
+	if ( aafm_force_draft() && ! array_key_exists( 'status', $input ) ) {
+		$product->set_status( 'draft' );
 	}
 	$id = (int) $product->save();
 

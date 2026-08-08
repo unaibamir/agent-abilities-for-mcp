@@ -127,6 +127,30 @@ final class BlocksTest extends TestCase {
 		$this->assertSame( 3, $res['total'], 'total must count every matching block, not just this page.' );
 	}
 
+	/**
+	 * B7: the force-draft setting promises to cover "everything an agent creates", but
+	 * create-block hardcoded post_status=publish. With the setting on, a new block must be
+	 * saved as a draft for a human to publish.
+	 */
+	public function test_create_block_respects_the_force_draft_setting(): void {
+		$this->register_blocks();
+		update_option( 'aafm_force_draft', true );
+		$this->acting_as( 'editor' );
+
+		$res = wp_get_ability( 'aafm/create-block' )->execute(
+			array(
+				'title'   => 'Held back',
+				'content' => '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		delete_option( 'aafm_force_draft' );
+
+		$this->assertIsArray( $res );
+		$this->assertSame( 'draft', $res['status'], 'force-draft must hold an agent-created block back from publishing.' );
+		$this->assertSame( 'draft', get_post( $res['id'] )->post_status );
+	}
+
 	public function test_get_block_returns_markup_and_rejects_a_non_block(): void {
 		$this->register_blocks();
 		$id = $this->make_block( 'Beta', '<!-- wp:heading --><h2>Hi</h2><!-- /wp:heading -->' );

@@ -46,7 +46,7 @@ function aafm_register_blocks_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-block'] = array(
 		'label'        => __( 'Create block', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Creates a reusable block (published immediately). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Creates a reusable block (published immediately, unless the operator\'s force-draft setting holds it as a draft). Its markup is sanitized, and the author is always the agent. Requires the publish-posts capability. Put any block styling in the block delimiter attributes, not inline style, or the editor marks the content invalid.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'site',
@@ -333,7 +333,9 @@ function aafm_exec_create_block( array $input ) {
 		wp_slash(
 			array(
 				'post_type'    => 'wp_block',
-				'post_status'  => 'publish',
+				// The operator's force-draft setting covers every content object an agent
+				// creates (B7): with it on, the block lands as a draft for a human to publish.
+				'post_status'  => aafm_force_draft() ? 'draft' : 'publish',
 				'post_title'   => $title,
 				'post_content' => $content,
 			)

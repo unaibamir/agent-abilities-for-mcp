@@ -30,6 +30,7 @@ function aafm_high_risk_abilities_builtin(): array {
 		'aafm/wc-create-order-refund',
 		'aafm/wc-update-order-status',
 		'aafm/wc-update-order',
+		'aafm/wc-update-customer',
 		'aafm/wc-update-payment-gateway',
 		'aafm/wc-create-coupon',
 		'aafm/wc-update-coupon',

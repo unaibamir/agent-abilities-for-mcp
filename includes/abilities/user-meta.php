@@ -61,7 +61,11 @@ function aafm_register_user_meta_definitions( array $registry ): array {
  */
 function aafm_can_access_user_meta( array $input ): bool {
 	$id = isset( $input['user_id'] ) ? absint( $input['user_id'] ) : 0;
-	if ( $id < 1 || ! current_user_can( 'edit_user', $id ) ) {
+	// The object-independent edit_users floor comes first: edit_user($id) alone is true for every
+	// user against their own id (map_meta_cap self short-circuit), so without the floor a subscriber
+	// could read or write its own user meta. Mirrors aafm_perm_update_user(); matches the edit_users
+	// discovery floor these abilities already use in server.php.
+	if ( $id < 1 || ! current_user_can( 'edit_users' ) || ! current_user_can( 'edit_user', $id ) ) {
 		return false;
 	}
 	$key = isset( $input['key'] ) ? (string) $input['key'] : '';

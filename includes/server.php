@@ -284,6 +284,12 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/acf-get-user-fields':
 		case 'aafm/acf-update-user-fields':
 			return static fn(): bool => current_user_can( 'edit_users' );
+		// wc-update-customer writes a user's PII and gates per-object on edit_user($customer_id),
+		// which is false with empty input, so discovery uses the object-independent floor
+		// (the WooCommerce cap plus edit_users). The per-object permission_callback still
+		// re-checks the specific account at execute time.
+		case 'aafm/wc-update-customer':
+			return static fn(): bool => aafm_wc_perm() && current_user_can( 'edit_users' );
 		// WooCommerce integration: every product, product-variation, global product-attribute,
 		// order, order-note, order-refund, and customer ability (wc-list-products, wc-get-product,
 		// wc-create-product, wc-update-product, wc-delete-product, wc-list-product-variations,
@@ -294,7 +300,7 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// wc-list-order-notes, wc-create-order-note,
 		// wc-list-order-refunds, wc-get-order-refund, wc-create-order-refund,
 		// wc-list-customers, wc-get-customer, wc-create-customer,
-		// wc-update-customer, wc-list-coupons, wc-get-coupon,
+		// wc-list-coupons, wc-get-coupon,
 		// wc-create-coupon, wc-update-coupon, wc-list-shipping-zones,
 		// wc-get-shipping-zone, wc-create-shipping-zone, wc-update-shipping-zone,
 		// wc-list-shipping-methods, wc-get-shipping-method,

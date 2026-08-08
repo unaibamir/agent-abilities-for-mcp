@@ -892,7 +892,11 @@ function aafm_perm_acf_user( array $input ): bool {
 	if ( $id < 1 || ! get_userdata( $id ) instanceof WP_User ) {
 		return false;
 	}
-	return current_user_can( 'edit_user', $id );
+	// The object-independent edit_users floor comes first: edit_user($id) alone is true for every
+	// user against their own id (map_meta_cap self short-circuit), so without the floor a subscriber
+	// could read or write its own ACF user fields. Mirrors aafm_perm_update_user() and the
+	// user-meta family; matches the edit_users discovery floor in server.php.
+	return current_user_can( 'edit_users' ) && current_user_can( 'edit_user', $id );
 }
 
 /**

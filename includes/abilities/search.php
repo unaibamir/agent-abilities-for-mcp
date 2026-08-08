@@ -126,7 +126,10 @@ function aafm_args_search_content(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_search_content( array $input ) {
-	$lang   = aafm_resolve_lang( $input );
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$search = sanitize_text_field( (string) ( $input['search'] ?? '' ) );
 	if ( '' === $search ) {
 		return aafm_generic_error();

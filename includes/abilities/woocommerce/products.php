@@ -355,11 +355,14 @@ function aafm_args_wc_list_products(): array {
  * Execute aafm/wc-list-products.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_products( array $input ): array {
+function aafm_exec_wc_list_products( array $input ) {
 	$lang = aafm_resolve_lang( $input );
-	$out  = array(
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
+	$out = array(
 		'products' => array(),
 		'total'    => 0,
 		'language' => $lang,

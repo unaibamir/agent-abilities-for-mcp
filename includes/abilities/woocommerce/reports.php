@@ -602,6 +602,9 @@ function aafm_exec_wc_count_products( array $input ) {
 		return aafm_generic_error();
 	}
 	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	// Pass an empty perm so the WPML-off branch delegates to wp_count_posts('product') with NO
 	// perm argument, matching this ability's original (pre-WPML) behavior byte-for-byte - unlike
 	// aafm/count-posts, wc-count-products never applied the 'readable' capability gate to its counts.

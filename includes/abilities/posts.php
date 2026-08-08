@@ -248,7 +248,10 @@ function aafm_exec_get_posts( array $input ) {
 
 	$paging = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 
-	$lang  = aafm_resolve_lang( $input );
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$query = aafm_with_language(
 		$lang,
 		static function () use ( $type, $status, $input, $paging ): WP_Query {
@@ -366,7 +369,10 @@ function aafm_exec_count_posts( array $input ) {
 	// to any reader, leaking how many unpublished items exist under this read-only gate. So
 	// layer a capability check on top of it. Under WPML the counts are language-scoped so they
 	// agree with aafm/get-posts instead of the language-blind wp_count_posts() total.
-	$lang   = aafm_resolve_lang( $input );
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$counts = aafm_wpml_count_posts_by_status( $type, $lang );
 
 	// Editors of this post type get the full breakdown; everyone else is limited to counts
@@ -492,7 +498,9 @@ function aafm_perm_get_post( array $input ): bool {
  */
 function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
 	$lang = aafm_resolve_lang( $input );
-	if ( null === $lang || 'all' === $lang ) {
+	// A WP_Error (invalid code, B48) resolves nothing here; the executor refuses it
+	// before serving data, and the permission callback just checks the original id.
+	if ( ! is_string( $lang ) || 'all' === $lang ) {
 		return $id;
 	}
 	// WPML's wpml_object_id filter resolves per the element's REAL type (the post type slug).
@@ -512,6 +520,10 @@ function aafm_get_post_lang_resolved_id( int $id, array $input ): int {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_post( array $input ) {
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$id   = aafm_get_post_lang_resolved_id( absint( $input['post_id'] ), $input );
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post ) {

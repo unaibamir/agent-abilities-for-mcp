@@ -177,13 +177,16 @@ function aafm_media_scope_author_id(): ?int {
  * aafm_media_scope_author_id().
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_get_media( array $input ): array {
+function aafm_exec_get_media( array $input ) {
 	$paging    = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
 	$author_id = aafm_media_scope_author_id();
 
-	$lang  = aafm_resolve_lang( $input );
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$query = aafm_with_language(
 		$lang,
 		static function () use ( $input, $paging, $author_id ): WP_Query {
@@ -272,8 +275,11 @@ function aafm_args_get_media_item(): array {
 function aafm_exec_get_media_item( array $input ) {
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
 	if ( $att_id ) {
-		$lang   = aafm_resolve_lang( $input );
-		$att_id = ( null !== $lang && 'all' !== $lang )
+		$lang = aafm_resolve_lang( $input );
+		if ( is_wp_error( $lang ) ) {
+			return $lang;
+		}
+		$att_id = ( is_string( $lang ) && 'all' !== $lang )
 			? aafm_wpml_translated_id( $att_id, 'attachment', $lang )
 			: $att_id;
 	}
@@ -351,11 +357,14 @@ function aafm_args_count_media(): array {
  * byte-for-byte unchanged.
  *
  * @param array<string,mixed> $input Validated input.
- * @return array<string,mixed>
+ * @return array<string,mixed>|WP_Error
  */
-function aafm_exec_count_media( array $input ): array {
-	$filter    = isset( $input['mime_type'] ) ? sanitize_text_field( (string) $input['mime_type'] ) : '';
-	$lang      = aafm_resolve_lang( $input );
+function aafm_exec_count_media( array $input ) {
+	$filter = isset( $input['mime_type'] ) ? sanitize_text_field( (string) $input['mime_type'] ) : '';
+	$lang   = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$author_id = aafm_media_scope_author_id();
 
 	if ( aafm_wpml_active() ) {

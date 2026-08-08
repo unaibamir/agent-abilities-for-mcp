@@ -1643,10 +1643,32 @@ class WC_Tax {
 	 */
 	public static function _insert_tax_rate( array $tax_rate ): int {
 		global $wpdb;
+		$tax_rate = self::aafm_stub_format_rate_class( $tax_rate );
 		$table = $wpdb->prefix . 'woocommerce_tax_rates';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->insert( $table, $tax_rate );
 		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Mirror WC_Tax::format_tax_rate_class() (class-wc-tax.php:1059-1066), which both real write
+	 * paths run: an unknown class slug is refiled to '' (Standard), and 'standard' maps to ''.
+	 * Without this the stub stored unknown slugs verbatim and could never exercise the
+	 * silently-refiled-into-Standard defect (B30).
+	 *
+	 * @param array<string,mixed> $tax_rate Tax rate row fields.
+	 * @return array<string,mixed>
+	 */
+	private static function aafm_stub_format_rate_class( array $tax_rate ): array {
+		if ( ! array_key_exists( 'tax_rate_class', $tax_rate ) ) {
+			return $tax_rate;
+		}
+		$class = sanitize_title( (string) $tax_rate['tax_rate_class'] );
+		if ( ! in_array( $class, array_keys( \AAFM\Tests\WcTaxStubStore::$classes ), true ) ) {
+			$class = '';
+		}
+		$tax_rate['tax_rate_class'] = ( 'standard' === $class ) ? '' : $class;
+		return $tax_rate;
 	}
 
 	/**
@@ -1661,6 +1683,7 @@ class WC_Tax {
 	 */
 	public static function _update_tax_rate( int $tax_rate_id, array $tax_rate ): void {
 		global $wpdb;
+		$tax_rate = self::aafm_stub_format_rate_class( $tax_rate );
 		$table = $wpdb->prefix . 'woocommerce_tax_rates';
 		if ( empty( $tax_rate ) ) {
 			return;

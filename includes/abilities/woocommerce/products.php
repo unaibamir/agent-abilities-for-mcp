@@ -616,6 +616,18 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	if ( array_key_exists( 'sale_price', $input ) ) {
 		$product->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
 	}
+	// stock_status is derived by WooCommerce from stock_quantity whenever stock is managed, so
+	// validate_props() overwrites a caller-supplied stock_status on save. Refuse the contradictory
+	// pair rather than report a success that never applied.
+	$manage_after = array_key_exists( 'manage_stock', $input )
+		? (bool) $input['manage_stock']
+		: (bool) $product->get_manage_stock();
+	if ( array_key_exists( 'stock_status', $input ) && $manage_after ) {
+		return new \WP_Error(
+			'aafm_stock_status_derived',
+			__( 'stock_status cannot be set while manage_stock is true: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false.', 'agent-abilities-for-mcp' )
+		);
+	}
 	if ( array_key_exists( 'stock_status', $input ) ) {
 		$product->set_stock_status( sanitize_key( (string) $input['stock_status'] ) );
 	}

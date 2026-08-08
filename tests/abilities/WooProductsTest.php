@@ -305,6 +305,31 @@ final class WooProductsTest extends TestCase {
 		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( (int) $res['id'] ) );
 	}
 
+	/**
+	 * B22: stock_status alongside manage_stock:true must be refused, not silently discarded.
+	 *
+	 * When stock is managed, WooCommerce derives stock_status from stock_quantity in
+	 * validate_props() on save, so a caller-supplied stock_status was silently overwritten and the
+	 * write reported success anyway. The contradictory pair is now refused. stock_status on its own
+	 * (manage_stock absent or false) still applies, so the existing create test above keeps passing.
+	 */
+	public function test_create_product_refuses_stock_status_when_managing_stock(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Managed Gadget',
+				'manage_stock'  => true,
+				'stock_quantity' => 0,
+				'stock_status'  => 'onbackorder',
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'stock_status with manage_stock:true must be refused, not silently discarded.'
+		);
+	}
+
 	public function test_create_product_sanitizes_description_and_name(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(

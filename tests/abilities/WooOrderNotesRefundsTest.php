@@ -525,6 +525,61 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
+	 * B24: a line_item_id that does not resolve to an item on the order must be refused with an
+	 * actionable error BEFORE wc_create_refund() runs. wc_create_refund() silently skips unknown
+	 * item ids, which turned a documented per-line refund into a full-amount refund with no
+	 * per-line record and no download-permission revocation.
+	 */
+	public function test_create_order_refund_unknown_line_item_id_is_refused(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 999,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'an unknown line_item_id must fail the whole request.' );
+		$this->assertSame( 'aafm_wc_unknown_refund_line_item', $res->get_error_code() );
+		$this->assertStringContainsString( '999', $res->get_error_message(), 'the error must name the unresolvable line item id.' );
+		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must never run with a line id it would silently skip.' );
+	}
+
+	/**
+	 * B24: a known line_item_id still refunds normally, proving the new guard only bites bad ids.
+	 */
+	public function test_create_order_refund_known_line_item_id_still_succeeds(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 1,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertArrayHasKey( 1, WcOrderStubStore::$last_refund_args['line_items'] ?? array() );
+	}
+
+	/**
 	 * A non-numeric per-line refund amount must likewise be rejected before wc_create_refund().
 	 */
 	public function test_create_order_refund_rejects_non_numeric_line_amount(): void {

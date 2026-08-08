@@ -22,7 +22,7 @@ defined( 'ABSPATH' ) || exit;
 function aafm_ability_disclosures(): array {
 	return array(
 		// Reads.
-		'aafm/get-posts'                   => __( 'Lists posts by type, status, or search. Returns the title, status, excerpt, link, dates, and author id, never the full body or private fields.', 'agent-abilities-for-mcp' ),
+		'aafm/get-posts'                   => __( 'Lists posts by type, status, or search. Returns the title, status, excerpt, link, dates, and author id by default; the full body only when the agent passes include_content, and never private fields.', 'agent-abilities-for-mcp' ),
 		'aafm/get-post'                    => __( 'Reads one post by id: title, status, excerpt, link, dates, author id, and the full body (rendered by default, raw on request). A password-protected post never exposes its body.', 'agent-abilities-for-mcp' ),
 		'aafm/get-pages'                   => __( 'Lists pages by status or search, with the same fields as posts.', 'agent-abilities-for-mcp' ),
 		'aafm/get-page'                    => __( 'Reads one page by id, with the same fields as a post, including the full body.', 'agent-abilities-for-mcp' ),
@@ -47,7 +47,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-site-settings'           => __( 'Reads a small allowlist of site settings (name, tagline, timezone, date and time formats, posts per page). Requires the manage-options capability. Never the site URL or admin email.', 'agent-abilities-for-mcp' ),
 		'aafm/list-revisions'              => __( "Lists a post's revisions by id, author, and date. No body content.", 'agent-abilities-for-mcp' ),
 		'aafm/get-revision'                => __( "Reads one revision's id, author, date, and body content (rendered by default, raw on request), plus an optional diff against the current post. Gated by edit access to the parent post.", 'agent-abilities-for-mcp' ),
-		'aafm/search-content'              => __( 'Searches the content types you have exposed in a single query, returning the same curated fields.', 'agent-abilities-for-mcp' ),
+		'aafm/search-content'              => __( 'Searches the content types you have exposed in a single query, returning the same curated fields as the list reads: metadata by default, the full body only when the agent passes include_content.', 'agent-abilities-for-mcp' ),
 		'aafm/list-plugins'                => __( 'Lists installed plugins with their name, version, and active state. Read-only - it can never activate, deactivate, or change a plugin. Requires the activate-plugins capability.', 'agent-abilities-for-mcp' ),
 		'aafm/get-activity-log'            => __( "Reads this plugin's own audit log (ability, status, acting user, argument keys, timestamp, and a short identifier-only detail such as an object id, a WP_Error code, or a crashed call's exception class and throw site), most recent first. Never argument values or network addresses. Requires the manage-options capability.", 'agent-abilities-for-mcp' ),
 		'aafm/list-blocks'                 => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and last-modified time. No block markup in the list. Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),

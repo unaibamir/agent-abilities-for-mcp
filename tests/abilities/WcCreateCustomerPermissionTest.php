@@ -97,13 +97,27 @@ final class WcCreateCustomerPermissionTest extends TestCase {
 	}
 
 	public function test_no_other_woocommerce_ability_was_changed(): void {
-		foreach ( array( 'aafm/wc-list-orders', 'aafm/wc-update-customer' ) as $name ) {
+		foreach ( array( 'aafm/wc-list-orders' ) as $name ) {
 			$this->assertSame(
 				'aafm_wc_perm',
 				$this->permission_callback_for( $name ),
 				"{$name} must keep the shared WooCommerce permission floor."
 			);
 		}
+	}
+
+	/**
+	 * wc-update-customer deliberately no longer uses the bare floor: it reads and overwrites any
+	 * user's PII, so it now requires edit_users plus a per-object edit_user check on the target
+	 * (aafm_perm_wc_update_customer), and it sits behind the high-risk floor. Pinned here because it
+	 * changed, not in the "unchanged" list above.
+	 */
+	public function test_update_customer_uses_the_user_capability_gate(): void {
+		$this->assertSame(
+			'aafm_perm_wc_update_customer',
+			$this->permission_callback_for( 'aafm/wc-update-customer' ),
+			'wc-update-customer must gate on edit_users + per-object edit_user, not the bare floor.'
+		);
 	}
 
 	/**

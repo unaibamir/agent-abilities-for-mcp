@@ -128,9 +128,9 @@ final class HighRiskSaveGuardTest extends TestCase {
 	}
 
 	/**
-	 * The bulk "Enable all" scenario: all eight built-in locked abilities posted at once - the
-	 * shape a forged POST, or the pre-fix Integrations-tab bulk toggle, would send. None persist;
-	 * every one is logged as its own distinct refusal.
+	 * The bulk "Enable all" scenario: every built-in locked ability posted at once - the shape a
+	 * forged POST, or the pre-fix Integrations-tab bulk toggle, would send. None persist; every one
+	 * is logged as its own distinct refusal.
 	 */
 	public function test_a_bulk_post_of_every_locked_ability_persists_none_and_logs_all(): void {
 		$builtins = aafm_high_risk_abilities_builtin();
@@ -139,12 +139,12 @@ final class HighRiskSaveGuardTest extends TestCase {
 
 		$persisted = aafm_set_enabled_abilities( $builtins );
 
-		$this->assertSame( array(), $persisted, 'None of the eight locked abilities may persist.' );
+		$this->assertSame( array(), $persisted, 'None of the locked abilities may persist.' );
 		$this->assertSame( array(), get_option( 'aafm_enabled_abilities' ) );
 
 		$rows    = aafm_query_activity( array( 'per_page' => 20 ) );
 		$blocked = array_values( array_filter( $rows, static fn( array $r ): bool => 'ability_enable_blocked' === $r['event_type'] ) );
-		$this->assertCount( 8, $blocked );
+		$this->assertCount( count( $builtins ), $blocked );
 		$this->assertEmpty( array_filter( $rows, static fn( array $r ): bool => 'ability_enabled' === $r['event_type'] ) );
 
 		$logged_names = array_column( $blocked, 'ability' );

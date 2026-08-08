@@ -504,7 +504,10 @@ function aafm_exec_rankmath_update_post( array $input ) {
 		}
 		$raw   = (string) $input[ $field ];
 		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
-		update_post_meta( $id, $key, $clean );
+		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
+		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
+		// user-meta.php) slashes; these SEO writers must too.
+		update_post_meta( $id, $key, wp_slash( $clean ) );
 	}
 
 	// Persist the attachment-id companion meta the frontend actually renders from. A cleared image (0)
@@ -531,7 +534,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 				static fn( string $t ): bool => in_array( $t, $allowed, true )
 			)
 		);
-		update_post_meta( $id, 'rank_math_robots', $kept );
+		update_post_meta( $id, 'rank_math_robots', wp_slash( $kept ) );
 	}
 
 	return aafm_rankmath_read_fields( $id );
@@ -695,7 +698,9 @@ function aafm_exec_rankmath_update_schema( array $input ) {
 		return aafm_generic_error();
 	}
 	$clean = aafm_sanitize_schema_array( $schema );
-	update_post_meta( $id, 'rank_math_schema_' . $type, $clean );
+	// update_post_meta() unslashes the value, so a backslash inside the schema is stripped unless
+	// it is slashed first (see the field writer above and the sibling meta writers).
+	update_post_meta( $id, 'rank_math_schema_' . $type, wp_slash( $clean ) );
 	return array(
 		'post_id' => $id,
 		'type'    => $type,

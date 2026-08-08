@@ -718,7 +718,9 @@ function aafm_exec_upload_media( array $input ) {
 	wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $upload['file'] ) );
 
 	if ( isset( $input['alt'] ) ) {
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', sanitize_text_field( (string) $input['alt'] ) );
+		// update_post_meta() unslashes the value, so a backslash in the alt text is stripped unless
+		// it is slashed first, exactly like the sibling meta writers.
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
 	}
 
 	$attachment = get_post( $attachment_id );

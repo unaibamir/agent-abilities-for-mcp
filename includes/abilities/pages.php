@@ -250,9 +250,12 @@ function aafm_perm_get_page( array $input ): bool {
  */
 function aafm_get_page_lang_resolved_id( int $id, array $input ): int {
 	$lang = aafm_resolve_lang( $input );
-	return ( null !== $lang && 'all' !== $lang )
-		? aafm_wpml_translated_id( $id, 'page', $lang )
-		: $id;
+	// A WP_Error (invalid code, B48) resolves nothing here; the executor refuses it
+	// before serving data, and the permission callback just checks the original id.
+	if ( ! is_string( $lang ) || 'all' === $lang ) {
+		return $id;
+	}
+	return aafm_wpml_translated_id( $id, 'page', $lang );
 }
 
 /**
@@ -262,6 +265,10 @@ function aafm_get_page_lang_resolved_id( int $id, array $input ): int {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_page( array $input ) {
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$id   = aafm_get_page_lang_resolved_id( absint( $input['page_id'] ), $input );
 	$post = get_post( $id );
 	if ( ! $post instanceof WP_Post || 'page' !== $post->post_type ) {

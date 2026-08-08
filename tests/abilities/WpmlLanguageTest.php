@@ -75,8 +75,43 @@ final class WpmlLanguageTest extends TestCase {
 		$this->fake_wpml();
 		$this->assertSame( 'en', aafm_resolve_lang( array( 'lang' => 'en' ) ) );
 		$this->assertSame( 'all', aafm_resolve_lang( array( 'lang' => 'all' ) ) );
-		$this->assertNull( aafm_resolve_lang( array( 'lang' => 'zz' ) ) ); // Not active.
 		$this->assertNull( aafm_resolve_lang( array() ) ); // None requested.
+
+		// B48 contract change: an unknown code used to coerce to null, which both served the
+		// default language silently AND reported `language: null` - documented as "WPML
+		// inactive". Two false statements; now it is an actionable refusal naming the codes.
+		$invalid = aafm_resolve_lang( array( 'lang' => 'zz' ) );
+		$this->assertInstanceOf( \WP_Error::class, $invalid );
+		$this->assertSame( 'aafm_invalid_lang', $invalid->get_error_code() );
+		$this->assertStringContainsString( 'is, en', $invalid->get_error_message(), 'the refusal must list the valid codes.' );
+	}
+
+	/**
+	 * B48 at the wire layer: a list read with an invalid lang refuses instead of silently
+	 * answering in the default language with language:null.
+	 */
+	public function test_get_posts_refuses_an_invalid_lang_instead_of_coercing(): void {
+		$this->fake_wpml();
+		$this->acting_as( 'administrator' );
+		self::factory()->post->create( array( 'post_title' => 'Hello' ) );
+
+		$out = aafm_exec_get_posts( array( 'lang' => 'zz' ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_invalid_lang', $out->get_error_code() );
+	}
+
+	/**
+	 * B48: without WPML the lang input stays documented as ignored - no refusal.
+	 */
+	public function test_get_posts_ignores_lang_when_wpml_is_off(): void {
+		$this->acting_as( 'administrator' );
+		self::factory()->post->create( array( 'post_title' => 'Hello' ) );
+
+		$out = aafm_exec_get_posts( array( 'lang' => 'zz' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertNull( $out['language'], 'language:null keeps meaning "WPML inactive".' );
 	}
 
 	public function test_with_language_switches_and_restores(): void {

@@ -172,7 +172,10 @@ function aafm_exec_get_terms( array $input ) {
 	// WPML filters get_terms() (and wp_count_terms()) by the ambient language, so the list
 	// and its total must run inside the SAME language scope or they'd disagree - one call
 	// switched, the other not. A single aafm_with_language() wrap keeps them consistent.
-	$lang   = aafm_resolve_lang( $input );
+	$lang = aafm_resolve_lang( $input );
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
 	$result = aafm_with_language(
 		$lang,
 		static function () use ( $taxonomy, $search, $paging ): array {
@@ -283,7 +286,10 @@ function aafm_exec_get_term( array $input ) {
 
 	$term_id = absint( $input['term_id'] );
 	$lang    = aafm_resolve_lang( $input );
-	$term_id = ( null !== $lang && 'all' !== $lang )
+	if ( is_wp_error( $lang ) ) {
+		return $lang;
+	}
+	$term_id = ( is_string( $lang ) && 'all' !== $lang )
 		? aafm_wpml_translated_id( $term_id, $taxonomy, $lang )
 		: $term_id;
 

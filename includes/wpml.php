@@ -65,7 +65,7 @@ function aafm_lang_schema_fragment(): array {
 	return array(
 		'lang' => array(
 			'type'        => 'string',
-			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. A code that is not an active WPML language is rejected with an error naming the valid codes. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }
@@ -73,11 +73,17 @@ function aafm_lang_schema_fragment(): array {
 /**
  * Resolve a requested language from validated input.
  *
+ * An unknown code under active WPML is REFUSED, not coerced: the old null-coercion both
+ * served the default language silently and reported `language: null`, which the output
+ * schema documents as "WPML inactive" - two false statements in one response (B48). With
+ * WPML off, `lang` stays documented as ignored, so null is returned without inspection.
+ *
  * @param array<string,mixed> $input Ability input.
- * @return string|null A valid active language code, the literal 'all', or null
- *                     (no scoping: WPML off, none requested, or invalid code).
+ * @return string|null|WP_Error A valid active language code, the literal 'all', null
+ *                              (no scoping: WPML off or none requested), or a WP_Error
+ *                              naming the valid codes for an unknown code.
  */
-function aafm_resolve_lang( array $input ): ?string {
+function aafm_resolve_lang( array $input ) {
 	if ( ! aafm_wpml_active() || ! isset( $input['lang'] ) ) {
 		return null;
 	}
@@ -85,7 +91,19 @@ function aafm_resolve_lang( array $input ): ?string {
 	if ( 'all' === $lang ) {
 		return 'all';
 	}
-	return in_array( $lang, aafm_wpml_active_language_codes(), true ) ? $lang : null;
+	$codes = aafm_wpml_active_language_codes();
+	if ( in_array( $lang, $codes, true ) ) {
+		return $lang;
+	}
+	return new WP_Error(
+		'aafm_invalid_lang',
+		sprintf(
+			/* translators: 1: the requested language code, 2: comma-separated list of active WPML language codes. */
+			__( '"%1$s" is not an active WPML language code on this site. Valid codes: %2$s, or "all" to span every language.', 'agent-abilities-for-mcp' ),
+			$lang,
+			implode( ', ', $codes )
+		)
+	);
 }
 
 /**

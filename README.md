@@ -264,6 +264,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** On multisite, the admin screen's create-agent-user action only checked for site admin, sidestepping the network's add-new-users setting. It requires the real user-creation capability now, as the ability already did.
 * **Fix:** Deleting a user on multisite reported deleted: true when WordPress only removes them from the current site; the account and its application passwords live on. The response now says the user was removed from the site and keeps the deleted flag honest.
 * **Fix:** On a multisite network, activation created the audit-log and OAuth tables for the main site only, and new subsites never got them. Every site gets them now, including sites created later.
+* **Fix:** The Rank Math head read claimed it returns an empty string when Rank Math cannot render a head; it actually refuses with an error naming the likely cause. The description and the operator disclosure say so now.
 * **Chore:** Corrected code comments and docblocks that still described behaviour earlier releases removed, cleared dead and duplicated test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
 
 ### 1.6.1

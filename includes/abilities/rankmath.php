@@ -209,7 +209,7 @@ function aafm_rankmath_registry_definitions(): array {
 		),
 		'aafm/rankmath-get-head'      => array(
 			'label'        => __( 'Get post SEO head (Rank Math)', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Reads the rendered SEO head markup for a post from Rank Math, best-effort (empty when no head API is available). Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Reads the rendered SEO head markup for a post from Rank Math. When Rank Math cannot render a head, usually because its setup wizard was never completed, the call is refused with an error naming the cause instead of returning an empty string. Requires the edit-posts capability and edit access to that post.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'rankmath',

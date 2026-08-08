@@ -613,6 +613,35 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * B32: the title used to persist via update_option() BEFORE the enabled toggle ran its
+	 * $wpdb->update(), so a failed enabled write returned an error AFTER the title had already
+	 * landed - the caller was told "error" while state changed. The enabled write (the only
+	 * detectably fallible write) now runs first, so an error means nothing changed.
+	 */
+	public function test_update_shipping_method_failed_enabled_write_means_nothing_changed(): void {
+		global $wpdb;
+		WcShippingStubStore::drop_methods_table();
+		$this->acting_as( 'administrator' );
+
+		$suppressed = $wpdb->suppress_errors( true );
+		$res        = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'      => 1,
+				'instance_id'  => 1,
+				'method_title' => 'Should Not Land',
+				'enabled'      => 'no',
+			)
+		);
+		$wpdb->suppress_errors( $suppressed );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a failed enabled write must fail the request.' );
+
+		$option = get_option( 'woocommerce_flat_rate_1_settings', array() );
+		$title  = is_array( $option ) ? ( $option['title'] ?? null ) : null;
+		$this->assertNotSame( 'Should Not Land', $title, 'the title must not persist on an errored request - an error has to mean nothing changed.' );
+	}
+
+	/**
 	 * Audit: a successful execute is recorded under the calling ability.
 	 *
 	 * @dataProvider provide_success_audit_cases

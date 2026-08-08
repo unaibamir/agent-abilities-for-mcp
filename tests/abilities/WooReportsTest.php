@@ -1098,6 +1098,35 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * B32: with the old sequence, a mid-batch persistence failure returned a bare generic error
+	 * after earlier fields had already landed - "error" with changed state. The executor now
+	 * verifies the whole batch at the end and, when anything failed, names exactly which fields
+	 * persisted and which did not, in both the message and the error data.
+	 */
+	public function test_update_payment_gateway_partial_persist_failure_names_what_landed(): void {
+		$this->acting_as( 'administrator' );
+		WcGatewayStubStore::$fail_keys = array( 'enabled' );
+
+		$res                           = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'paypal',
+				'title'      => 'New PayPal Title',
+				'enabled'    => false,
+			)
+		);
+		WcGatewayStubStore::$fail_keys = array();
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_gateway_write_failed', $res->get_error_code() );
+
+		$data = (array) $res->get_error_data();
+		$this->assertSame( array( 'title' ), $data['persisted'] ?? null, 'the error must state which fields actually landed.' );
+		$this->assertSame( array( 'enabled' ), $data['failed'] ?? null, 'the error must state which fields did not persist.' );
+		$this->assertStringContainsString( 'enabled', $res->get_error_message() );
+		$this->assertStringContainsString( 'title', $res->get_error_message() );
+	}
+
+	/**
 	 * Update gateway succeeds when the requested value already equals the stored value.
 	 *
 	 * Regression: WC_Settings_API::update_option() returns false when the value is unchanged (no write

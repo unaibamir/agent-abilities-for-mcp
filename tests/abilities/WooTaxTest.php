@@ -304,6 +304,51 @@ final class WooTaxTest extends TestCase {
 	}
 
 	/**
+	 * B29: the old description promised a colliding slug "de-duplicates", but
+	 * WC_Tax::create_tax_class() actually returns a WP_Error on collision. The true contract is
+	 * a refusal, so a collision must surface as a clean, actionable error naming the slug.
+	 */
+	public function test_create_tax_class_colliding_slug_is_refused_with_actionable_error(): void {
+		$this->acting_as( 'administrator' );
+
+		// 'Reduced Rate' derives the slug 'reduced-rate', which seed_wc_tax() already stores.
+		$res = wp_get_ability( 'aafm/wc-create-tax-class' )->execute(
+			array( 'name' => 'Reduced Rate' )
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_tax_class_exists', $res->get_error_code() );
+		$this->assertStringContainsString( 'reduced-rate', $res->get_error_message(), 'the error must name the colliding slug.' );
+	}
+
+	/**
+	 * B29: an explicitly requested colliding slug is refused the same way.
+	 */
+	public function test_create_tax_class_explicit_colliding_slug_is_refused(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-tax-class' )->execute(
+			array(
+				'name' => 'Something Else',
+				'slug' => 'zero-rate',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_tax_class_exists', $res->get_error_code() );
+	}
+
+	/**
+	 * B29: the slug description must no longer promise the de-duplication WooCommerce never does.
+	 */
+	public function test_create_tax_class_description_matches_the_real_collision_contract(): void {
+		$args        = aafm_args_wc_create_tax_class();
+		$description = (string) $args['input_schema']['properties']['slug']['description'];
+		$this->assertStringNotContainsString( 'reduced-rate-1', $description, 'the false de-duplication example must be gone.' );
+		$this->assertStringContainsString( 'refused', $description, 'the description must state that a collision is refused.' );
+	}
+
+	/**
 	 * Store failure returns WP_Error.
 	 */
 	public function test_create_tax_class_failure_returns_wp_error(): void {

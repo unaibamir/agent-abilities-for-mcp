@@ -776,7 +776,7 @@ function aafm_args_wc_create_tax_class(): array {
 				),
 				'slug' => array(
 					'type'        => 'string',
-					'description' => __( 'Optional slug for the class. When omitted, WooCommerce derives one from name; when the derived or requested slug collides with an existing class, WooCommerce de-duplicates it (e.g. "reduced-rate-1") and the response reports the actual stored slug.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Optional slug for the class. When omitted, WooCommerce derives one from name. A derived or requested slug that already belongs to an existing class (including Standard) is refused with an error naming the collision; WooCommerce never de-duplicates it.', 'agent-abilities-for-mcp' ),
 				),
 			),
 		),
@@ -815,6 +815,25 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 
 	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
 	$slug = isset( $input['slug'] ) ? sanitize_title( (string) $input['slug'] ) : '';
+
+	// B29: WC_Tax::create_tax_class() does NOT de-duplicate a colliding slug (the old description
+	// claimed it did) - it returns a tax_class_slug_exists / tax_class_exists WP_Error. Surface the
+	// collision as one clean, actionable error before calling WC, checking the same effective slug
+	// WC would derive ('' slug falls back to the sanitized name) against Standard plus every
+	// existing class slug and name.
+	$effective_slug = '' !== $slug ? $slug : sanitize_title( $name );
+	$existing_slugs = array_merge( array( 'standard' ), array_map( 'strval', \WC_Tax::get_tax_class_slugs() ) );
+	$existing_names = array_map( 'strval', \WC_Tax::get_tax_classes() );
+	if ( in_array( $effective_slug, $existing_slugs, true ) || in_array( $name, $existing_names, true ) ) {
+		return new \WP_Error(
+			'aafm_wc_tax_class_exists',
+			sprintf(
+				/* translators: %s: the colliding tax class slug. */
+				__( 'A tax class with the slug "%s" already exists. Choose a different name or slug; WooCommerce does not de-duplicate colliding tax classes.', 'agent-abilities-for-mcp' ),
+				$effective_slug
+			)
+		);
+	}
 
 	$result = \WC_Tax::create_tax_class( $name, $slug );
 	if ( is_wp_error( $result ) ) {

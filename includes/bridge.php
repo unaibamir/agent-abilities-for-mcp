@@ -165,6 +165,43 @@ function aafm_bridge_input_schema( $ability ): array {
 }
 
 /**
+ * Decide what input to forward to a bridged foreign ability.
+ *
+ * Our wrapper advertises a NORMALIZED schema (aafm_bridge_input_schema stamps type:object onto a
+ * foreign ability that declares none), so the adapter always hands our wrapper an array - even when
+ * the foreign ability itself declares no schema, or a non-object schema. Forwarding that array
+ * verbatim to the foreign ability breaks two shapes:
+ *
+ *  - No input schema: core's WP_Ability::validate_input() accepts ONLY null for an empty schema
+ *    (returns ability_missing_input_schema for anything else), so passing array() fails 100% of
+ *    calls. Two of WordPress core's own abilities (core/get-user-info, core/get-environment-info)
+ *    declare no schema, so this needs no third-party plugin to hit.
+ *  - Non-object schema (e.g. {type:string}): the caller's scalar argument must reach the foreign
+ *    validator unchanged; substituting array() silently discards it.
+ *
+ * @param mixed $live  The resolved foreign ability (WP_Ability, loosely typed for PHP 7.4).
+ * @param mixed $input Input handed to our wrapper.
+ * @return mixed The value to pass to the foreign ability's execute()/check_permissions().
+ */
+function aafm_bridge_forward_input( $live, $input ) {
+	$schema = ( $live instanceof WP_Ability && method_exists( $live, 'get_input_schema' ) )
+		? $live->get_input_schema()
+		: array();
+
+	if ( ! is_array( $schema ) || array() === $schema ) {
+		return null; // Empty foreign schema: core's validate_input() accepts only null.
+	}
+
+	$type = isset( $schema['type'] ) ? $schema['type'] : '';
+	if ( 'object' === $type || '' === $type || isset( $schema['properties'] ) ) {
+		return is_array( $input ) ? $input : array();
+	}
+
+	// Non-object foreign schema: forward the caller's value unchanged.
+	return $input;
+}
+
+/**
  * The foreign ability's output schema exactly as it declared it - or null when it exposes none.
  *
  * Deliberately NOT routed through aafm_normalize_json_schema(). That function is INPUT-oriented:
@@ -454,7 +491,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// aafm_user_can_call_ability(). A catch here would be the per-site drift the
 				// choke-point design exists to avoid. If a NEW caller ever invokes this closure
 				// directly, it must carry its own guard.
-				return true === $live->check_permissions( is_array( $input ) ? $input : array() );
+				return true === $live->check_permissions( aafm_bridge_forward_input( $live, $input ) );
 			},
 			'execute_callback'    => static function ( $input = null ) use ( $foreign_slug ) {
 				$live = wp_get_ability( $foreign_slug );
@@ -474,7 +511,7 @@ function aafm_register_enabled_bridged_abilities(): void {
 				// the wrapped array against that schema, turning a real success into a spurious
 				// ability_invalid_output error. Returning the foreign result unchanged avoids
 				// that collision; the guard downstream is scoped to skip bridged names instead.
-				return $live->execute( is_array( $input ) ? $input : array() );
+				return $live->execute( aafm_bridge_forward_input( $live, $input ) );
 			},
 		);
 

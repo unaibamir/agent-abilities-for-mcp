@@ -539,6 +539,7 @@ PHP;
 				'customer_note'  => 'Please deliver before noon.',
 				'items'          => array(
 					array(
+						'id'         => 1,
 						'name'       => 'Test Widget',
 						'product_id' => 101,
 						'quantity'   => 2,

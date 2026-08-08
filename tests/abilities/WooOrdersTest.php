@@ -384,6 +384,23 @@ final class WooOrdersTest extends TestCase {
 		}
 	}
 
+	/**
+	 * B24: the order read must expose each line item's own order-item id, because
+	 * wc-create-order-refund's line_items contract documents "the order's own line item id, as
+	 * returned by reading the order" - and until this fix the read returned no id at all, making
+	 * the documented per-line refund unusable.
+	 */
+	public function test_get_order_exposes_line_item_ids(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertNotEmpty( $res['line_items'] );
+
+		// Wire-level assertion: the encoded row carries the seeded order-item id.
+		$json = wp_json_encode( $res['line_items'][0] );
+		$this->assertStringContainsString( '"id":1', (string) $json, 'line_items rows must carry the order-item id the refund contract documents.' );
+	}
+
 	// =========================================================================
 	// Host-inactive gate
 	// =========================================================================

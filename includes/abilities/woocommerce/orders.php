@@ -204,12 +204,16 @@ function aafm_redact_wc_order( \WC_Order $order ): array {
  * @return array<string,mixed>
  */
 function aafm_rich_wc_order( \WC_Order $order ): array {
-	// Line items: each raw item from get_items() is mapped to a clean scalar shape.
+	// Line items: each raw item from get_items() is mapped to a clean scalar shape. The `id` is the
+	// ORDER-ITEM id (not a product id) - it is the exact value wc-create-order-refund's
+	// line_items[].line_item_id contract documents ("as returned by reading the order"), so the
+	// read has to expose it or the documented per-line refund is unusable (B24).
 	$line_items = array();
 	foreach ( (array) $order->get_items() as $item ) {
 		if ( is_array( $item ) ) {
 			// Stub path: items are plain arrays seeded in WcOrderStubStore.
 			$line_items[] = array(
+				'id'         => (int) ( $item['id'] ?? 0 ),
 				'name'       => (string) ( $item['name'] ?? '' ),
 				'product_id' => (int) ( $item['product_id'] ?? 0 ),
 				'quantity'   => (int) ( $item['quantity'] ?? 1 ),
@@ -219,6 +223,7 @@ function aafm_rich_wc_order( \WC_Order $order ): array {
 		} elseif ( is_object( $item ) && method_exists( $item, 'get_name' ) ) {
 			// Real WC_Order_Item_Product path.
 			$line_items[] = array(
+				'id'         => method_exists( $item, 'get_id' ) ? (int) $item->get_id() : 0,
 				'name'       => (string) $item->get_name(),
 				'product_id' => method_exists( $item, 'get_product_id' ) ? (int) $item->get_product_id() : 0,
 				'quantity'   => method_exists( $item, 'get_quantity' ) ? (int) $item->get_quantity() : 1,
@@ -440,6 +445,10 @@ function aafm_args_wc_get_order(): array {
 					'items' => array(
 						'type'                 => 'object',
 						'properties'           => array(
+							'id'         => array(
+								'type'        => 'integer',
+								'description' => __( "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
+							),
 							'name'       => array( 'type' => 'string' ),
 							'product_id' => array( 'type' => 'integer' ),
 							'quantity'   => array( 'type' => 'integer' ),
@@ -904,6 +913,10 @@ function aafm_wc_order_output_properties(): array {
 			'items' => array(
 				'type'                 => 'object',
 				'properties'           => array(
+					'id'         => array(
+						'type'        => 'integer',
+						'description' => __( "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id.", 'agent-abilities-for-mcp' ),
+					),
 					'name'       => array( 'type' => 'string' ),
 					'product_id' => array( 'type' => 'integer' ),
 					'quantity'   => array( 'type' => 'integer' ),
@@ -1681,13 +1694,13 @@ function aafm_args_wc_create_order_refund(): array {
 				),
 				'line_items' => array(
 					'type'        => 'array',
-					'description' => __( 'Optional per-line-item refund breakdown, each with line_item_id (the order\'s own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line fails the entire request.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Optional per-line-item refund breakdown, each with line_item_id (the order\'s own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line, or a line_item_id that does not exist on the order, fails the entire request.', 'agent-abilities-for-mcp' ),
 					'items'       => array(
 						'type'                 => 'object',
 						'properties'           => array(
 							'line_item_id' => array(
 								'type'        => 'integer',
-								'description' => __( "The order's own line item id, as returned by reading the order. This is not a product id.", 'agent-abilities-for-mcp' ),
+								'description' => __( "The order's own line item id, from the id field of the line_items returned by wc-get-order. This is not a product id. An id that does not exist on the order fails the entire request.", 'agent-abilities-for-mcp' ),
 							),
 							'refund_total' => array(
 								'type'        => 'string',
@@ -1756,6 +1769,22 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 			$refund_total = isset( $item['refund_total'] ) ? trim( (string) $item['refund_total'], " \t\n\r\0\x0B\f" ) : '0.00';
 			$refund_tax   = isset( $item['refund_tax'] ) ? trim( (string) $item['refund_tax'], " \t\n\r\0\x0B\f" ) : '0.00';
 
+			// B24: wc_create_refund() silently SKIPS any line_items key that does not match an item
+			// on the order (it iterates the order's own items and ignores unmatched ids), which would
+			// turn this documented per-line refund into a full-amount refund with no per-line record
+			// and no download-permission revocation. Refuse an unresolvable id before any refund runs.
+			$order_item = $order->get_item( $line_item_id );
+			if ( ! ( $order_item instanceof \WC_Order_Item ) ) {
+				return new \WP_Error(
+					'aafm_wc_unknown_refund_line_item',
+					sprintf(
+						/* translators: %d: the line item id that does not exist on the order. */
+						__( 'Line item %d does not exist on this order. Use an id from the line_items returned by reading the order.', 'agent-abilities-for-mcp' ),
+						$line_item_id
+					)
+				);
+			}
+
 			// MONEY SAFETY: the input schema constrains the per-line refund_total/refund_tax only to
 			// `type: string`, not to a non-negative number (unlike the top-level `amount`, which has a
 			// `^\d+(\.\d{1,2})?$` pattern). Reject a non-numeric or negative value here, before
@@ -1783,9 +1812,9 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 			// get_taxes() lives on WC_Order_Item_Product (and the other line-item subtypes with tax),
 			// NOT on the base WC_Order_Item - a coupon or base-shaped line id would fatal without this
 			// guard (Info: refund crash risk, pinned by
-			// WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()).
-			$order_item = $order->get_item( $line_item_id );
-			if ( $order_item instanceof \WC_Order_Item && method_exists( $order_item, 'get_taxes' ) ) {
+			// WooCommerceContractTest::test_get_taxes_is_not_on_base_order_item()). The item itself
+			// was already resolved (and its existence enforced) above.
+			if ( method_exists( $order_item, 'get_taxes' ) ) {
 				$item_taxes = $order_item->get_taxes();
 				if ( isset( $item_taxes['total'] ) && is_array( $item_taxes['total'] ) && array() !== $item_taxes['total'] ) {
 					$line_taxes       = array_map( 'floatval', $item_taxes['total'] );

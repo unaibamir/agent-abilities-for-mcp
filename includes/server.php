@@ -538,6 +538,49 @@ function aafm_transport_permission_callback( $request ) {
 }
 
 /**
+ * Reject a top-level scalar JSON body on the MCP route before the adapter can crash on it.
+ *
+ * The bundled adapter builds an HttpRequestContext whose $body property is typed ?array from
+ * WP_REST_Request::get_json_params(). A top-level scalar JSON body (`"x"`, `true`, `1.5`) makes
+ * get_json_params() return a scalar, and assigning that to the ?array property throws an uncaught
+ * TypeError. The context is built inside the transport's REST permission_callback, BEFORE the auth
+ * check, and WP 6.9 has no Throwable guard around a permission_callback, so an UNAUTHENTICATED scalar
+ * body is an HTTP 500 plus a PHP fatal on every request. A null body (falsy JSON, or no body) does
+ * not trigger it and stays a clean 401. rest_pre_dispatch runs before route matching and the
+ * permission callback, so returning a WP_Error here closes the crash before the transport sees the
+ * request. Scoped to our MCP route only; every other REST route is left untouched.
+ *
+ * @param mixed            $result  Short-circuit result (WP_Error/response) or null to continue.
+ * @param mixed            $server  The REST server (unused).
+ * @param \WP_REST_Request $request The request being dispatched.
+ * @return mixed A 400 WP_Error for a scalar body on the MCP route, otherwise $result unchanged.
+ */
+function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
+	unset( $server );
+
+	if ( null !== $result || ! $request instanceof \WP_REST_Request ) {
+		return $result;
+	}
+	if ( 'POST' !== $request->get_method() ) {
+		return $result;
+	}
+	if ( rtrim( (string) $request->get_route(), '/' ) !== rtrim( aafm_mcp_rest_route(), '/' ) ) {
+		return $result;
+	}
+
+	$body = $request->get_json_params();
+	if ( null !== $body && ! is_array( $body ) ) {
+		return new WP_Error(
+			'aafm_invalid_request_body',
+			__( 'The MCP request body must be a JSON object.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	return $result;
+}
+
+/**
  * Drop the unimplemented `resources` and `prompts` capabilities from the initialize response.
  *
  * The adapter advertises prompts/resources/tools capabilities by default, but this plugin only
@@ -600,6 +643,11 @@ function aafm_register_mcp_server( $adapter ): void {
 	// Wrap a bridged ability's bare top-level list result under a `data` key (see
 	// aafm_filter_bridged_tool_call_result() in bridge.php for the full rationale).
 	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 3 );
+
+	// Reject a top-level scalar JSON body before the transport builds its ?array-typed context
+	// (which would otherwise fatal, unauthenticated, before the auth check). Runs before route
+	// matching and the permission callback, so it fires early enough to close the crash.
+	add_filter( 'rest_pre_dispatch', 'aafm_reject_scalar_mcp_body', 10, 3 );
 
 	$adapter->create_server(
 		'aafm-server',

@@ -294,6 +294,11 @@ class AcfStubStore {
 		if ( self::$update_should_fail || in_array( (string) $field_key, self::$fail_keys, true ) ) {
 			return false; // Model an update_field() failure: nothing is stored.
 		}
+		// Real ACF persists through update_metadata()/update_option(), both of which wp_unslash()
+		// the value before storing (acf-meta-functions.php acf_update_metadata). Model that here so
+		// an unslashed backslash loses a level exactly like production - the trap the write path
+		// must compensate for by slashing before update_field().
+		$value  = wp_unslash( $value );
 		$bucket = self::bucket( $selector );
 		if ( ! isset( self::$written[ $bucket ] ) ) {
 			self::$written[ $bucket ] = array();

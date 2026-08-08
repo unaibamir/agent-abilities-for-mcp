@@ -110,6 +110,117 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( 'x', $ability->execute( array( 'v' => 'x' ) )['echoed'] );
 	}
 
+	/**
+	 * Register a foreign ability with NO input schema (like core/get-user-info).
+	 *
+	 * @return void
+	 */
+	private function register_foreign_no_schema(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/noschema',
+					array(
+						'label'               => 'No schema',
+						'description'         => 'Declares no input schema, like core/get-user-info.',
+						'category'            => 'demo-things',
+						'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * B1: a bridged foreign ability that declares no input schema must EXECUTE, not fail.
+	 *
+	 * Core's WP_Ability::validate_input() accepts only null for an empty schema. The wrapper used
+	 * to forward array(), so every call returned ability_missing_input_schema. The forwarder now
+	 * passes null for an empty foreign schema. Asserted at the returned-shape layer (a WP_Error vs
+	 * the real result object), which is what a strict MCP client actually receives.
+	 */
+	public function test_bridged_no_input_schema_ability_executes(): void {
+		$this->register_foreign_no_schema();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/noschema' ) );
+		$this->register_wrappers();
+
+		$ability = wp_get_ability( 'aafm-bridge/demo-noschema' );
+		$this->assertInstanceOf( \WP_Ability::class, $ability );
+		$this->assertTrue( true === $ability->check_permissions( array() ) );
+
+		$result = $ability->execute( array() );
+		$this->assertFalse(
+			is_wp_error( $result ),
+			is_wp_error( $result ) ? $result->get_error_code() . ': ' . $result->get_error_message() : ''
+		);
+		$this->assertSame( array( 'ok' => true ), $result );
+	}
+
+	/**
+	 * B1 second class: a foreign ability with a non-object (scalar) input schema must receive the
+	 * caller's scalar argument, not have it discarded and replaced with array().
+	 */
+	public function test_bridged_scalar_input_schema_forwards_the_argument(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/scalar',
+					array(
+						'label'               => 'Scalar in',
+						'description'         => 'Declares a non-object input schema.',
+						'category'            => 'demo-things',
+						'input_schema'        => array( 'type' => 'string' ),
+						'execute_callback'    => static fn( $i ) => array( 'got' => $i ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/scalar' ) );
+		$this->register_wrappers();
+
+		$ability = wp_get_ability( 'aafm-bridge/demo-scalar' );
+		$this->assertInstanceOf( \WP_Ability::class, $ability );
+
+		$result = $ability->execute( 'hello' );
+		$this->assertFalse(
+			is_wp_error( $result ),
+			is_wp_error( $result ) ? $result->get_error_code() . ': ' . $result->get_error_message() : ''
+		);
+		$this->assertSame( array( 'got' => 'hello' ), $result );
+	}
+
 	public function test_disabled_foreign_ability_not_registered(): void {
 		$this->register_foreign( true );
 		update_option( 'aafm_enabled_bridged_abilities', array() );

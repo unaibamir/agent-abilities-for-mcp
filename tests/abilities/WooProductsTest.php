@@ -898,4 +898,101 @@ final class WooProductsTest extends TestCase {
 			'delete-product' => array( 'aafm/wc-delete-product', array( 'product_id' => 101 ), 'editor' ),
 		);
 	}
+
+	/**
+	 * 1.4.3 regression pin: deleting a product is gated on the caller's own relationship to that
+	 * specific product (the post type's delete_post meta capability), not the manage_woocommerce
+	 * floor alone.
+	 *
+	 * Every other test in this file resolves a product with no real backing WP_Post (WcStubStore ids
+	 * are pure data, never inserted via wp_insert_post), so aafm_perm_wc_delete_product() takes its
+	 * "nothing more specific to authorize against" floor fallback and the per-object branch never
+	 * runs - which is exactly the pre-1.4.3 behaviour. This test builds real backing posts,
+	 * registered as WooCommerce itself registers 'product' (capability_type 'product',
+	 * map_meta_cap true), so aafm_wc_can_delete_product_object() actually executes.
+	 *
+	 * A caller who manages the store and may delete their own products must still be denied on a
+	 * product they do not own (no delete_others_products), and allowed on their own - proving the
+	 * check is a real ownership test, not a hardcoded verdict either way.
+	 */
+	public function test_delete_product_requires_ownership_on_real_backing_post(): void {
+		if ( ! post_type_exists( 'product' ) ) {
+			register_post_type(
+				'product',
+				array(
+					'public'          => false,
+					'capability_type' => 'product',
+					'map_meta_cap'    => true,
+				)
+			);
+		}
+
+		add_role(
+			'aafm_test_wc_product_scoped',
+			'AAFM Test WC Product Scoped',
+			array(
+				'read'                      => true,
+				'manage_woocommerce'        => true,
+				'delete_products'           => true,
+				'delete_published_products' => true,
+			)
+		);
+		$caller_id = self::factory()->user->create( array( 'role' => 'aafm_test_wc_product_scoped' ) );
+		$other_id  = self::factory()->user->create( array( 'role' => 'administrator' ) );
+
+		$foreign_id = wp_insert_post(
+			array(
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+				'post_title'  => 'Another author\'s product',
+				'post_author' => $other_id,
+			),
+			true
+		);
+		$own_id     = wp_insert_post(
+			array(
+				'post_type'   => 'product',
+				'post_status' => 'publish',
+				'post_title'  => 'The caller\'s own product',
+				'post_author' => $caller_id,
+			),
+			true
+		);
+		$this->assertIsInt( $foreign_id, 'wp_insert_post must succeed for the foreign backing post.' );
+		$this->assertIsInt( $own_id, 'wp_insert_post must succeed for the own backing post.' );
+
+		\AAFM\Tests\WcStubStore::seed(
+			$foreign_id,
+			array(
+				'id'     => $foreign_id,
+				'name'   => 'Another author\'s product',
+				'type'   => 'simple',
+				'status' => 'publish',
+			)
+		);
+		\AAFM\Tests\WcStubStore::seed(
+			$own_id,
+			array(
+				'id'     => $own_id,
+				'name'   => 'The caller\'s own product',
+				'type'   => 'simple',
+				'status' => 'publish',
+			)
+		);
+
+		wp_set_current_user( $caller_id );
+
+		$this->assertNotTrue(
+			wp_get_ability( 'aafm/wc-delete-product' )->check_permissions( array( 'product_id' => $foreign_id ) ),
+			'manage_woocommerce plus delete_products must not be enough against another author\'s product.'
+		);
+		$this->assertTrue(
+			wp_get_ability( 'aafm/wc-delete-product' )->check_permissions( array( 'product_id' => $own_id ) ),
+			'The same caller must be allowed to delete their own product.'
+		);
+
+		remove_role( 'aafm_test_wc_product_scoped' );
+		wp_delete_post( $foreign_id, true );
+		wp_delete_post( $own_id, true );
+	}
 }

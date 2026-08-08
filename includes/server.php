@@ -561,7 +561,8 @@ function aafm_transport_permission_callback( $request ) {
 }
 
 /**
- * Reject a top-level scalar JSON body on the MCP route before the adapter can crash on it.
+ * Reject a malformed JSON body on the MCP route before the adapter can crash on it: a top-level
+ * scalar, or a batch containing non-object elements.
  *
  * The bundled adapter builds an HttpRequestContext whose $body property is typed ?array from
  * WP_REST_Request::get_json_params(). A top-level scalar JSON body (`"x"`, `true`, `1.5`) makes
@@ -576,7 +577,8 @@ function aafm_transport_permission_callback( $request ) {
  * @param mixed            $result  Short-circuit result (WP_Error/response) or null to continue.
  * @param mixed            $server  The REST server (unused).
  * @param \WP_REST_Request $request The request being dispatched.
- * @return mixed A 400 WP_Error for a scalar body on the MCP route, otherwise $result unchanged.
+ * @return mixed A 400 WP_Error for a scalar body, a JSON-RPC response for a batch with non-object
+ *               elements, otherwise $result unchanged.
  */
 function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
 	unset( $server );
@@ -603,6 +605,48 @@ function aafm_reject_scalar_mcp_body( $result, $server, $request ) {
 			__( 'The MCP request body must be a JSON object.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
+	}
+
+	// B39: the second crash of the same class, one level down. The vendor treats any array with a
+	// 0 key as a batch (JsonRpcResponseBuilder::is_batch_request) and feeds each element into
+	// process_single_message(array $message), so a non-array element ([1,2,3]) is a TypeError that
+	// the transport's blanket Throwable catch converts into a blanket 500 internal_error. JSON-RPC
+	// 2.0 ("rpc call with invalid Batch", jsonrpc.org/specification) answers each invalid element
+	// with its own {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}
+	// object instead. The messages are protocol strings, not UI copy, so they are deliberately not
+	// translated - the vendor's own error factory does not translate them either.
+	if ( is_array( $body ) && isset( $body[0] ) ) {
+		$invalid = 0;
+		foreach ( $body as $element ) {
+			if ( ! is_array( $element ) ) {
+				++$invalid;
+			}
+		}
+		if ( 0 === $invalid ) {
+			return $result; // Every element is at least array-shaped; the vendor can take it.
+		}
+
+		$error = array(
+			'jsonrpc' => '2.0',
+			'error'   => array(
+				'code'    => -32600,
+				'message' => 'Invalid Request',
+			),
+			'id'      => null,
+		);
+
+		// All-invalid batch: the spec's own [1,2,3] example - one error object per element,
+		// returned as a batch response (HTTP 200, the status the vendor gives every batch).
+		if ( count( $body ) === $invalid ) {
+			return new WP_REST_Response( array_fill( 0, $invalid, $error ), 200 );
+		}
+
+		// Mixed batch: the spec wants the valid elements processed alongside per-element errors,
+		// but rest_pre_dispatch cannot half-dispatch a request, so refuse the whole batch with one
+		// clean invalid-request error (400, the vendor's status for -32600) rather than let the
+		// vendor crash on the invalid element.
+		$error['error']['message'] = 'Invalid Request: every batch element must be a JSON object';
+		return new WP_REST_Response( $error, 400 );
 	}
 
 	return $result;

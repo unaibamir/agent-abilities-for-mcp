@@ -184,11 +184,9 @@ function aafm_bridge_input_schema( $ability ): array {
  * @return mixed The value to pass to the foreign ability's execute()/check_permissions().
  */
 function aafm_bridge_forward_input( $live, $input ) {
-	$schema = ( $live instanceof WP_Ability && method_exists( $live, 'get_input_schema' ) )
-		? $live->get_input_schema()
-		: array();
+	$schema = $live instanceof WP_Ability ? $live->get_input_schema() : array();
 
-	if ( ! is_array( $schema ) || array() === $schema ) {
+	if ( array() === $schema ) {
 		return null; // Empty foreign schema: core's validate_input() accepts only null.
 	}
 

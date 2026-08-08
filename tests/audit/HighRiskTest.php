@@ -19,7 +19,7 @@ final class HighRiskTest extends TestCase {
 	 * entry, renames one, or folds in an ability that was deliberately left out has to change this
 	 * assertion to pass, which is the point at which someone has to justify it.
 	 *
-	 * aafm/wc-update-customer was added on 2026-08-08: it reads and overwrites any user's billing
+	 * The aafm/wc-update-customer ability was added on 2026-08-08: it reads and overwrites any user's billing
 	 * and shipping PII, so it grants authority over a user record and belongs behind the floor. Its
 	 * permission callback was tightened in the same change to require edit_users plus per-object
 	 * edit_user, but the floor is the second, deliberate gate.

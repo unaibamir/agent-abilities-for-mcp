@@ -254,7 +254,7 @@ final class WooCouponsTest extends TestCase {
 	/**
 	 * B51: a negative usage_limit must be rejected, not sign-flipped by absint into a live limit.
 	 *
-	 * absint(-5) is 5, so a negative usage_limit was silently persisted as its positive twin and the
+	 * The absint(-5) call returns 5, so a negative usage_limit was silently persisted as its positive twin and the
 	 * write reported success. The integer schema now carries minimum:0, so a negative is refused at
 	 * input validation.
 	 */

@@ -139,7 +139,7 @@ final class BridgeWrapperTest extends TestCase {
 						'label'               => 'No schema',
 						'description'         => 'Declares no input schema, like core/get-user-info.',
 						'category'            => 'demo-things',
-						'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
 						'permission_callback' => '__return_true',
 					)
 				);

@@ -107,7 +107,7 @@ final class WcCreateCustomerPermissionTest extends TestCase {
 	}
 
 	/**
-	 * wc-update-customer deliberately no longer uses the bare floor: it reads and overwrites any
+	 * The wc-update-customer ability deliberately no longer uses the bare floor: it reads and overwrites any
 	 * user's PII, so it now requires edit_users plus a per-object edit_user check on the target
 	 * (aafm_perm_wc_update_customer), and it sits behind the high-risk floor. Pinned here because it
 	 * changed, not in the "unchanged" list above.

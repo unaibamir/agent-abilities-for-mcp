@@ -133,8 +133,8 @@ function aafm_rate_limit_consume_once( int $user_id, string $name ): bool {
 	if ( array_key_exists( $name, $memo ) ) {
 		return $memo[ $name ];
 	}
-	$allowed        = aafm_rate_limit_consume( $user_id );
-	$memo[ $name ]  = $allowed;
+	$allowed       = aafm_rate_limit_consume( $user_id );
+	$memo[ $name ] = $allowed;
 	return $allowed;
 }
 
@@ -150,6 +150,8 @@ function aafm_rate_limit_call_reset( string $name ): void {
 }
 
 /**
+ * Register one ability through the audited, guarded, rate-limited choke point.
+ *
  * @param string              $name Ability name.
  * @param array<string,mixed> $args Ability args (per the Abilities API).
  * @return WP_Ability|null

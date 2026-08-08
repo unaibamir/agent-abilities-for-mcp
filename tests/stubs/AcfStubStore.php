@@ -131,9 +131,9 @@ class AcfStubStore {
 	 * Rewrite one container value's sub-field keys, mapping via $map (name=>key or key=>name).
 	 * Groups are a flat map; repeaters/flex are a list of rows. The acf_fc_layout marker is kept.
 	 *
-	 * @param mixed                 $value The container value.
-	 * @param array<string,mixed>   $def   The field definition.
-	 * @param array<string,string>  $map   name=>key or key=>name.
+	 * @param mixed                $value The container value.
+	 * @param array<string,mixed>  $def   The field definition.
+	 * @param array<string,string> $map   name=>key or key=>name.
 	 * @return mixed
 	 */
 	private static function rekey_container( $value, array $def, array $map ) {
@@ -146,9 +146,9 @@ class AcfStubStore {
 			}
 			$out = array();
 			foreach ( $row as $sub_key => $sub_val ) {
-				$sub_key         = (string) $sub_key;
-				$new             = 'acf_fc_layout' === $sub_key ? $sub_key : ( $map[ $sub_key ] ?? $sub_key );
-				$out[ $new ]     = $sub_val;
+				$sub_key     = (string) $sub_key;
+				$new         = 'acf_fc_layout' === $sub_key ? $sub_key : ( $map[ $sub_key ] ?? $sub_key );
+				$out[ $new ] = $sub_val;
 			}
 			return $out;
 		};

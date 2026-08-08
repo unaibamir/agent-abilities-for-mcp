@@ -317,10 +317,10 @@ final class WooProductsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-create-product' )->execute(
 			array(
-				'name'          => 'Managed Gadget',
-				'manage_stock'  => true,
+				'name'           => 'Managed Gadget',
+				'manage_stock'   => true,
 				'stock_quantity' => 0,
-				'stock_status'  => 'onbackorder',
+				'stock_status'   => 'onbackorder',
 			)
 		);
 		$this->assertInstanceOf(

@@ -166,7 +166,7 @@ final class ServerDiscoveryTest extends TestCase {
 			$sanitized = aafm_mcp_tool_name( $ability_name );
 			$ability   = wp_get_ability( $ability_name );
 			$dto_name  = ( $ability instanceof \WP_Ability )
-				? (string) apply_filters( 'mcp_adapter_tool_name', $sanitized, $ability )
+				? (string) apply_filters( 'mcp_adapter_tool_name', $sanitized, $ability ) // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook; mirrored here to reproduce the DTO name.
 				: $sanitized;
 			$tools[]   = $this->tool_dto( $dto_name );
 		}

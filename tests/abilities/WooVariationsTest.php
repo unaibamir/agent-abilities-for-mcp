@@ -141,6 +141,47 @@ final class WooVariationsTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $res );
 	}
 
+	/**
+	 * B28: a grouped parent used to return {variations:[], total:N} - total counted the grouped
+	 * CHILD PRODUCTS from get_children() while every row failed the variation check and was
+	 * dropped, so total never agreed with the rows. Only variable products have variations, so a
+	 * non-variable parent is refused with an actionable error instead.
+	 */
+	public function test_list_variations_refuses_a_grouped_parent(): void {
+		$this->acting_as( 'administrator' );
+		WcStubStore::seed(
+			900,
+			array(
+				'id'       => 900,
+				'name'     => 'Grouped Bundle',
+				'type'     => 'grouped',
+				'children' => array( 901, 902 ),
+			)
+		);
+		WcStubStore::seed(
+			901,
+			array(
+				'id'   => 901,
+				'name' => 'Bundle Part A',
+				'type' => 'simple',
+			)
+		);
+		WcStubStore::seed(
+			902,
+			array(
+				'id'   => 902,
+				'name' => 'Bundle Part B',
+				'type' => 'simple',
+			)
+		);
+
+		$res = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 900 ) );
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a grouped parent has no variations and must be refused, not answered with a total that contradicts its empty rows.' );
+		$this->assertSame( 'aafm_wc_not_variable_product', $res->get_error_code() );
+		$this->assertStringContainsString( 'grouped', $res->get_error_message(), 'the error must name the actual product type.' );
+	}
+
 	public function test_get_variation_returns_rich_shape(): void {
 		$this->acting_as( 'administrator' );
 		$res = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );

@@ -130,6 +130,23 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * B25: an unparseable date must return an error, not a confidently wrong money figure.
+	 *
+	 * strtotime('garbage') is false, which cast to 0 silently widened the window to all-time on a bad
+	 * start date and emptied it on a bad end date, returning success either way. The report now
+	 * refuses an unparseable date.
+	 */
+	public function test_get_sales_report_rejects_an_unparseable_date(): void {
+		$this->acting_as( 'administrator' );
+
+		$bad_start = aafm_exec_wc_get_sales_report( array( 'start_date' => 'not-a-date' ) );
+		$this->assertInstanceOf( WP_Error::class, $bad_start, 'A garbage start_date must be refused.' );
+
+		$bad_end = aafm_exec_wc_get_sales_report( array( 'end_date' => 'also-garbage' ) );
+		$this->assertInstanceOf( WP_Error::class, $bad_end, 'A garbage end_date must be refused.' );
+	}
+
+	/**
 	 * The net_sales figure must be the product revenue actually KEPT: gross total minus tax and
 	 * shipping, minus the product-only portion of any refund (refund total minus its tax/shipping).
 	 * Every other sales-report test runs with zero orders, so the net_sales arithmetic (only

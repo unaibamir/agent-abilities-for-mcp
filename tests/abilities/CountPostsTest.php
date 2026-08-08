@@ -29,6 +29,19 @@ final class CountPostsTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 	}
 
+	/**
+	 * B45: the least-privilege zeroing of non-public status counts is correct behaviour,
+	 * but it must be DISCLOSED - an agent reading "draft: 0" with no caveat concludes the
+	 * site has no drafts. Pin the disclosure in both agent-facing texts.
+	 */
+	public function test_description_and_disclosure_state_the_non_editor_zeroing(): void {
+		$description = aafm_ability_description( 'aafm/count-posts' );
+		$this->assertStringContainsString( 'reported as zero', $description, 'the tool description must disclose the non-editor zeroing.' );
+
+		$disclosure = aafm_ability_disclosures()['aafm/count-posts'];
+		$this->assertStringContainsString( 'zero', $disclosure, 'the operator disclosure must disclose the non-editor zeroing.' );
+	}
+
 	public function test_in_registry_as_a_read(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/count-posts', $registry );

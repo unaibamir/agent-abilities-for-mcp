@@ -34,7 +34,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/get-media'                   => __( 'Lists media library items: URL, alt text, mime type, and dimensions.', 'agent-abilities-for-mcp' ),
 		'aafm/get-media-item'              => __( 'Reads one media item by id: caption, description, date, byte size, parent post, and every image size URL. Never the server file path.', 'agent-abilities-for-mcp' ),
 		'aafm/count-media'                 => __( 'Counts media library items, total and by mime type. An optional mime filter narrows the breakdown.', 'agent-abilities-for-mcp' ),
-		'aafm/count-posts'                 => __( 'Counts posts of an allowlisted type, total and by status (publish, draft, pending, and so on). No post content is returned.', 'agent-abilities-for-mcp' ),
+		'aafm/count-posts'                 => __( 'Counts posts of an allowlisted type, total and by status (publish, draft, pending, and so on). No post content is returned. Agents that cannot edit the type see zero for non-public statuses instead of the real counts.', 'agent-abilities-for-mcp' ),
 		'aafm/get-users'                   => __( 'Lists users with their id, display name, email, roles, and post count. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
 		'aafm/get-user'                    => __( 'Reads one user by id: display name, email, roles, post count, registration date, and bio. Gated by the list-users capability. Never login or password.', 'agent-abilities-for-mcp' ),
 		'aafm/get-user-meta'               => __( 'Reads one allowlisted user meta value from a user the agent can edit. Session tokens, passwords, capabilities, and 2FA keys are never readable.', 'agent-abilities-for-mcp' ),

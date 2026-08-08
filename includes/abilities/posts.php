@@ -48,7 +48,7 @@ function aafm_register_posts_definitions( array $registry ): array {
 	);
 	$registry['aafm/count-posts']     = array(
 		'label'        => __( 'Count posts', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Count posts of an allowlisted post type: a total of active (non-trashed) items, plus a breakdown by status (publish, draft, pending, private, future, trash). Trash and auto-draft are shown in the breakdown but excluded from total. When the caller cannot edit this post type, non-public status counts (draft, pending, private, future, trash) are reported as zero and only public statuses are counted.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'content',

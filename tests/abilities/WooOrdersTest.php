@@ -1097,6 +1097,32 @@ final class WooOrdersTest extends TestCase {
 		);
 	}
 
+	/**
+	 * B55: WC_Order::update_status() swallows its own exceptions and returns false on a failed
+	 * transition, and the executor ignored that return - a failed transition came back as a
+	 * success payload showing the OLD status. The return is now checked and the resulting status
+	 * verified, erroring honestly.
+	 */
+	public function test_update_order_status_failed_transition_is_an_error_not_a_success_payload(): void {
+		$this->register_wc_order_status_write();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$update_status_should_fail = true;
+		$res = wp_get_ability( 'aafm/wc-update-order-status' )->execute(
+			array(
+				'order_id' => 5001,
+				'status'   => 'completed',
+			)
+		);
+		WcOrderStubStore::$update_status_should_fail = false;
+
+		$this->assertInstanceOf( \WP_Error::class, $res, 'a failed transition must be an error, never a payload carrying the old status as success.' );
+		$this->assertSame( 'aafm_wc_status_update_failed', $res->get_error_code() );
+
+		// The stored status must be untouched.
+		$this->assertSame( 'processing', (string) ( WcOrderStubStore::get( 5001 )['status'] ?? '' ) );
+	}
+
 	public function test_update_order_status_top_level_smuggle_rejected(): void {
 		$this->register_wc_order_status_write();
 		$this->acting_as( 'administrator' );

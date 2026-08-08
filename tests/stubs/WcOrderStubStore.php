@@ -125,6 +125,14 @@ class WcOrderStubStore {
 	public static array $orphan_items = array();
 
 	/**
+	 * When true, WC_Order::update_status() returns false without changing anything - the real
+	 * method swallows its own exceptions and returns false on a failed transition (B55).
+	 *
+	 * @var bool
+	 */
+	public static bool $update_status_should_fail = false;
+
+	/**
 	 * When true, WC_Order::delete() returns false so the "don't lie success" guard is exercised.
 	 *
 	 * @var bool
@@ -194,6 +202,7 @@ class WcOrderStubStore {
 		self::$refunds                   = array();
 		self::$refund_order_map          = array();
 		self::$next_refund_id            = 2000;
+		self::$update_status_should_fail = false;
 		self::$delete_should_fail        = false;
 		self::$delete_note_should_fail   = false;
 		self::$delete_refund_should_fail = false;

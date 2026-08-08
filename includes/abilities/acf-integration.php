@@ -686,7 +686,13 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 	$failed = array();
 	foreach ( $fields as $field_key => $raw ) {
 		$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
-		update_field( (string) $field_key, $clean, $selector );
+		// update_field() persists through update_metadata()/update_option(), both of which unslash
+		// the value, so a backslash in a value (C:\Users) is stripped one level unless it is slashed
+		// first. Every sibling meta writer (meta.php, terms.php, user-meta.php, the SEO writers)
+		// slashes; this ACF writer must too - without it the read-back verify below then reports the
+		// mangled persist as a failed write. The verify keeps comparing against the unslashed $clean,
+		// which is exactly what storage holds after the round trip.
+		update_field( (string) $field_key, wp_slash( $clean ), $selector );
 
 		// Verify the write persisted. A failed update_field() stores nothing, so the read-back
 		// will not equal the value we intended. Read the RAW (unformatted) value - get_field()'s

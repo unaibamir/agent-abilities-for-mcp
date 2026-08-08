@@ -1410,6 +1410,36 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * B41: update_field() persists through update_metadata(), which wp_unslash()es the value, so a
+	 * backslash written unslashed loses one level on store. The write path must wp_slash() before
+	 * update_field() (matching the meta.php/terms.php/user-meta.php writers) - without it a value
+	 * like C:\Users corrupts in storage AND the read-back verify reports the mangled persist as a
+	 * failed write. The stub models the real unslash-on-store.
+	 */
+	public function test_update_post_fields_backslash_survives_the_store(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_1' => 'C:\\Users\\unaib' ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A backslash value that persisted must not be reported as a failed write.'
+		);
+		$this->assertSame(
+			'C:\\Users\\unaib',
+			\AAFM\Tests\AcfStubStore::value( 'field_1', $post_id ),
+			'The stored value must keep its backslashes.'
+		);
+	}
+
+	/**
 	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post - a <script> is dropped while a
 	 * benign <strong> is kept (the policy stated in the build log).
 	 */

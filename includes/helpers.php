@@ -1576,6 +1576,10 @@ function aafm_validate_revision( int $revision_id, int $post_id ) {
 /**
  * Bound page/per_page arguments.
  *
+ * The page is clamped to AAFM_LIST_PAGE_MAX server-side, matching the `maximum` every list
+ * tool's `page` arg declares - so the bound holds even for a caller that reaches this helper
+ * without schema validation (B44).
+ *
  * @param array<string,mixed> $input Raw input.
  * @param int                 $max   Maximum allowed per_page.
  * @return array{per_page:int,page:int}
@@ -1585,7 +1589,7 @@ function aafm_paginate_args( array $input, int $max = 50 ): array {
 	$page     = isset( $input['page'] ) ? (int) $input['page'] : 1;
 	return array(
 		'per_page' => min( $max, max( 1, $per_page ) ),
-		'page'     => max( 1, $page ),
+		'page'     => min( AAFM_LIST_PAGE_MAX, max( 1, $page ) ),
 	);
 }
 

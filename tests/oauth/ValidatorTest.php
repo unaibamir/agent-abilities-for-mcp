@@ -879,4 +879,72 @@ class ValidatorTest extends TestCase {
 		$this->assertFalse( aafm_oauth_resolve_current_user( false ) );
 		$this->assertSame( '', aafm_oauth_current_client_id() );
 	}
+
+	/**
+	 * 1.2.0 regression pin: the resolver bails before touching any helper that only exists after
+	 * aafm_bootstrap() has run.
+	 *
+	 * The determine_current_user filter is registered at plugin-include time, so another active
+	 * plugin resolving the current user during plugins_loaded (The Events Calendar calls
+	 * wp_create_nonce() there) fires this callback BEFORE our bootstrap defines
+	 * aafm_mcp_rest_route() and aafm_endpoint_url(). Pre-1.2.0 that was a fatal inside a
+	 * determine_current_user callback, which white-screened every logged-out page view.
+	 *
+	 * The guard cannot be exercised in-process: both helpers are defined for the whole suite and
+	 * PHP cannot undefine a function. So this pins the structure instead (the same layer
+	 * ActivationHookLoadingTest uses for its load-order guarantee): both function_exists() guards
+	 * must be present in the resolver, must fail closed by returning the incoming user, and must
+	 * appear before the resolver's first real call to either helper.
+	 */
+	public function test_resolver_guards_pre_bootstrap_helpers_before_calling_them(): void {
+		$fn   = new \ReflectionFunction( 'aafm_oauth_resolve_current_user' );
+		$file = (string) $fn->getFileName();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file -- reading the plugin's own source from disk in a test.
+		$lines = file( $file );
+		$this->assertIsArray( $lines, 'The resolver source file must be readable.' );
+		$body = array_slice( $lines, $fn->getStartLine() - 1, $fn->getEndLine() - $fn->getStartLine() + 1 );
+
+		// Strip comment lines: the step comments name both helpers ahead of the guard, and a
+		// comment must never be able to satisfy (or spoil) a positional check on real code.
+		$code = implode(
+			'',
+			array_filter(
+				$body,
+				static function ( $line ) {
+					$trimmed = ltrim( $line );
+					return 0 !== strpos( $trimmed, '//' )
+						&& 0 !== strpos( $trimmed, '*' )
+						&& 0 !== strpos( $trimmed, '/*' );
+				}
+			)
+		);
+
+		// The guard exists and fails closed by passing the incoming user through unchanged.
+		$this->assertMatchesRegularExpression(
+			"/if \\( ! function_exists\\( 'aafm_mcp_rest_route' \\) \\|\\| ! function_exists\\( 'aafm_endpoint_url' \\) \\) \\{\\s*return \\\$user_id;/",
+			$code,
+			'The resolver must bail with the incoming user when the bootstrap-defined helpers are '
+			. 'not loaded yet; without this, an early determine_current_user call fatals and '
+			. 'white-screens every logged-out page view.'
+		);
+
+		// And it runs before the first real call to either helper. The open paren excludes the
+		// quoted names inside the guard itself.
+		$guard      = (int) strpos( $code, "function_exists( 'aafm_mcp_rest_route' )" );
+		$route_call = strpos( $code, 'aafm_oauth_request_targets_mcp_route(' );
+		$url_call   = strpos( $code, 'aafm_endpoint_url(' );
+
+		$this->assertNotFalse( $route_call, 'The resolver is expected to match the MCP route.' );
+		$this->assertNotFalse( $url_call, 'The resolver is expected to bind the token audience.' );
+		$this->assertLessThan(
+			(int) $route_call,
+			$guard,
+			'The pre-bootstrap guard must run before the route match that needs aafm_mcp_rest_route().'
+		);
+		$this->assertLessThan(
+			(int) $url_call,
+			$guard,
+			'The pre-bootstrap guard must run before the audience binding that needs aafm_endpoint_url().'
+		);
+	}
 }

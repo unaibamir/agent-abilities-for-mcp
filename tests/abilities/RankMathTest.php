@@ -106,6 +106,36 @@ final class RankMathTest extends TestCase {
 		}
 	}
 
+	/**
+	 * B20: a backslash in a written value must survive the update_post_meta unslash.
+	 *
+	 * update_post_meta() unslashes the value it stores, so a title/description carrying a backslash
+	 * (a Windows path, a regex) lost one level unless the writer slashed first. The write reported
+	 * the pre-store value while storage was mangled, so the response did not equal the persisted
+	 * state. Assert the read-back (the wire value a client receives) preserves the backslash.
+	 */
+	public function test_rankmath_update_post_preserves_a_backslash() {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$description = 'Path C:\\Users\\test and a regex \\d+';
+
+		$res = wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'     => $post_id,
+				'description' => $description,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+
+		$read = wp_get_ability( 'aafm/rankmath-get-post' )->execute( array( 'post_id' => $post_id ) );
+		$this->assertSame(
+			$description,
+			$read['description'],
+			'A backslash in a Rank Math value must survive the update_post_meta unslash.'
+		);
+	}
+
 	public function test_rankmath_social_images_render_via_id_meta_and_disable_twitter_fallback(): void {
 		/*
 		 * The frontend OpenGraph resolver renders the image from rank_math_{facebook,twitter}_image_id

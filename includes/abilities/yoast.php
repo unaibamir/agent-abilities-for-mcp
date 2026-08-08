@@ -404,7 +404,9 @@ function aafm_exec_yoast_update_post( array $input ) {
 		}
 		$raw   = (string) $input[ $field ];
 		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
-		update_post_meta( $id, $key, $clean );
+		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
+		// is stripped unless it is slashed first, exactly like the sibling meta writers.
+		update_post_meta( $id, $key, wp_slash( $clean ) );
 	}
 
 	foreach ( aafm_yoast_robots_keys() as $field => $spec ) {
@@ -415,7 +417,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 		if ( isset( $spec['enum'] ) ) {
 			// An out-of-enum value is dropped (not written), so a bad directive cannot persist.
 			if ( in_array( $raw, $spec['enum'], true ) ) {
-				update_post_meta( $id, $spec['key'], $raw );
+				update_post_meta( $id, $spec['key'], wp_slash( $raw ) );
 			}
 			continue;
 		}
@@ -427,7 +429,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 				static fn( string $t ): bool => in_array( $t, $spec['allow'], true )
 			)
 		);
-		update_post_meta( $id, $spec['key'], implode( ',', $kept ) );
+		update_post_meta( $id, $spec['key'], wp_slash( implode( ',', $kept ) ) );
 	}
 
 	return aafm_yoast_read_fields( $id );

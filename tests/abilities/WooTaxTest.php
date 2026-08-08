@@ -281,6 +281,35 @@ final class WooTaxTest extends TestCase {
 		}
 	}
 
+	/**
+	 * B54: wc-list-tax-rates was the only unbounded list - every sibling pages. It now accepts
+	 * the standard page/per_page pair, slices the rows, and keeps total as the grand total.
+	 */
+	public function test_list_tax_rates_pages_like_every_other_list(): void {
+		$this->acting_as( 'administrator' );
+
+		$page1 = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute(
+			array(
+				'per_page' => 1,
+				'page'     => 1,
+			)
+		);
+		$page2 = wp_get_ability( 'aafm/wc-list-tax-rates' )->execute(
+			array(
+				'per_page' => 1,
+				'page'     => 2,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $page1, 'the list must accept the standard paging params.' );
+		$this->assertNotInstanceOf( WP_Error::class, $page2 );
+		$this->assertCount( 1, $page1['rates'] );
+		$this->assertCount( 1, $page2['rates'] );
+		$this->assertNotSame( $page1['rates'][0]['id'], $page2['rates'][0]['id'], 'pages must advance through the rate list.' );
+		$this->assertSame( 2, $page1['total'], 'total is the grand total on every page.' );
+		$this->assertSame( 2, $page2['total'] );
+	}
+
 	// =========================================================================
 	// B30: unknown tax-class slugs on rate writes
 	// =========================================================================

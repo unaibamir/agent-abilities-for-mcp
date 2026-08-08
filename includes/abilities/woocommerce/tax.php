@@ -58,7 +58,7 @@ function aafm_wc_tax_registry_definitions(): array {
 		// Tax rates (W4-WC6).
 		'aafm/wc-list-tax-rates'   => array(
 			'label'        => __( 'List WooCommerce tax rates', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Lists all WooCommerce tax rates across every tax class, returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Lists WooCommerce tax rates across every tax class, paged (20 per page by default, up to 100), returning id, country, state, rate, name, priority, compound flag, shipping flag, order, and class slug for each, plus the grand total. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -212,7 +212,21 @@ function aafm_args_wc_list_tax_rates(): array {
 		'input_schema'        => array(
 			'type'                 => 'object',
 			'additionalProperties' => false,
-			'properties'           => array(),
+			// B54: this was the one unbounded list while every sibling pages; it now takes the
+			// standard page/per_page pair (same shapes as wc-list-orders).
+			'properties'           => array(
+				'page'     => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'description' => __( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' ),
+				),
+				'per_page' => array(
+					'type'        => 'integer',
+					'minimum'     => 1,
+					'maximum'     => 100,
+					'description' => __( 'Number of tax rates to return per page, from 1 to 100. Defaults to 20.', 'agent-abilities-for-mcp' ),
+				),
+			),
 		),
 		'output_schema'       => array(
 			'type'       => 'object',
@@ -256,15 +270,22 @@ function aafm_args_wc_list_tax_rates(): array {
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
  */
-function aafm_exec_wc_list_tax_rates( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
+function aafm_exec_wc_list_tax_rates( array $input ) {
 	if ( ! aafm_integration_active( 'woocommerce' ) ) {
 		return aafm_generic_error();
 	}
 
 	$rates = aafm_wc_get_all_tax_rates();
+	$total = count( $rates );
+
+	// B54: page over the full rate list; total stays the grand total, like every sibling list.
+	$per_page = isset( $input['per_page'] ) ? min( 100, max( 1, (int) $input['per_page'] ) ) : 20;
+	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
+	$rates    = array_slice( $rates, ( $page - 1 ) * $per_page, $per_page );
+
 	return array(
-		'rates' => $rates,
-		'total' => count( $rates ),
+		'rates' => array_values( $rates ),
+		'total' => $total,
 	);
 }
 

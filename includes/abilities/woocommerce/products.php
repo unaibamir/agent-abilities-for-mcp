@@ -178,7 +178,12 @@ function aafm_rich_wc_product( \WC_Product $product ): array {
 			// grouped product reads its child list from the grouped data store, which persists the
 			// array verbatim on save (class-wc-product-grouped-data-store-cpt.php:35) rather than
 			// imploding it back to a clean sequence the way the gallery meta does.
-			'variation_ids'     => array_values( array_map( 'intval', (array) $product->get_children() ) ),
+			// B56: get_children() is not variation-specific - on a grouped product it returns the
+			// grouped child PRODUCT ids, which are not variations. Only a variable product's
+			// children are variations, so every other type reports an empty list.
+			'variation_ids'     => 'variable' === $product->get_type()
+				? array_values( array_map( 'intval', (array) $product->get_children() ) )
+				: array(),
 		)
 	);
 }
@@ -261,8 +266,9 @@ function aafm_wc_product_output_properties(): array {
 			),
 		),
 		'variation_ids'     => array(
-			'type'  => 'array',
-			'items' => array( 'type' => 'integer' ),
+			'type'        => 'array',
+			'items'       => array( 'type' => 'integer' ),
+			'description' => __( 'Ids of this product\'s variations. Populated only for variable products; every other type (including grouped, whose children are separate products, not variations) reports an empty list.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }

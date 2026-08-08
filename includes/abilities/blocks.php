@@ -30,7 +30,7 @@ add_filter( 'aafm_abilities_registry', 'aafm_register_blocks_definitions' );
 function aafm_register_blocks_definitions( array $registry ): array {
 	$registry['aafm/list-blocks']  = array(
 		'label'        => __( 'List blocks', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Lists reusable blocks (synced patterns) by id, title, slug, status, and modified date. No block markup in the list. Response includes total (the query-wide count of matching blocks; each page omits blocks you lack edit access to, so total can exceed the rows returned). Requires the edit-posts capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'reads',
 		'risk'         => 'read',
 		'subject'      => 'site',
@@ -205,12 +205,12 @@ function aafm_exec_list_blocks( array $input ): array {
 	}
 	return array(
 		'blocks' => $blocks,
-		// total reflects the visible (capability-filtered) rows on this page, not the query-wide
-		// found_posts. Because blocks are filtered by per-object edit_post AFTER the query, a
-		// query-wide count would over-report blocks the caller can never see (e.g. another
-		// author's drafts) and mislead the agent. On a typical block-editing role (editor/admin)
-		// the unfiltered and filtered sets are identical anyway.
-		'total'  => count( $blocks ),
+		// total is the query-wide found_posts, as the description promises - the page-slice
+		// count made total <= per_page always, so an agent paginating by ceil(total/per_page)
+		// never fetched past page 1 (B34). The per-object edit_post row filter above still
+		// applies per page, so on a role that cannot edit every block (e.g. a contributor)
+		// total can exceed the rows returned; the description discloses that.
+		'total'  => (int) $query->found_posts,
 	);
 }
 

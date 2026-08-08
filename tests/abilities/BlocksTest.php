@@ -103,7 +103,28 @@ final class BlocksTest extends TestCase {
 		$ids = wp_list_pluck( $res['blocks'], 'id' );
 		$this->assertContains( $mine, $ids, 'the contributor must see a block they own and can edit.' );
 		$this->assertNotContains( $theirs, $ids, "the contributor must NOT enumerate another author's draft block they cannot edit." );
-		$this->assertSame( count( $res['blocks'] ), $res['total'], 'total must match the visible (filtered) rows.' );
+		// B34 contract change: total is the query-wide count (found_posts), so here it counts
+		// both drafts even though only one row is visible to the contributor. The row filter
+		// still hides the other author's block; only the count is query-wide.
+		$this->assertSame( 2, $res['total'], 'total must be the query-wide count, not the visible-row count.' );
+	}
+
+	/**
+	 * B34: `total` must be the query-wide count of matching blocks (what the description
+	 * promises), not the size of the current page slice. With the slice count, total is never
+	 * greater than per_page, so an agent paginating by ceil(total/per_page) never fetches
+	 * page 2 and silently misses blocks.
+	 */
+	public function test_list_blocks_total_is_query_wide_not_the_page_slice(): void {
+		$this->register_blocks();
+		$this->make_block( 'One' );
+		$this->make_block( 'Two' );
+		$this->make_block( 'Three' );
+		$this->acting_as( 'editor' );
+
+		$res = wp_get_ability( 'aafm/list-blocks' )->execute( array( 'per_page' => 2 ) );
+		$this->assertCount( 2, $res['blocks'], 'the page slice honours per_page.' );
+		$this->assertSame( 3, $res['total'], 'total must count every matching block, not just this page.' );
 	}
 
 	public function test_get_block_returns_markup_and_rejects_a_non_block(): void {

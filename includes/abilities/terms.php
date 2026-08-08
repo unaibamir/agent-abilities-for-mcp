@@ -702,7 +702,14 @@ function aafm_exec_delete_term_meta( array $input ) {
 	if ( is_wp_error( $taxonomy ) ) {
 		return $taxonomy;
 	}
-	delete_term_meta( absint( $input['term_id'] ), (string) $input['meta_key'] );
+	$term_id = absint( $input['term_id'] );
+	$key     = (string) $input['meta_key'];
+	delete_term_meta( $term_id, $key );
+	// Report the real end state, not a hardcoded true: if the key is still present the delete did
+	// not take. Deleting an already-absent key is an idempotent success.
+	if ( metadata_exists( 'term', $term_id, $key ) ) {
+		return aafm_generic_error();
+	}
 	return array( 'deleted' => true );
 }
 

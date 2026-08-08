@@ -47,14 +47,25 @@ class WcStubStore {
 	public static bool $delete_should_fail = false;
 
 	/**
+	 * When true, delete() returns TRUE but does NOT remove the row, modelling the real
+	 * WC_Data::delete() contract: it returns true whenever a data store exists even if the store
+	 * did not actually remove the row. This is what makes a guard on delete()'s return dead, and
+	 * what a re-read after delete catches.
+	 *
+	 * @var bool
+	 */
+	public static bool $delete_returns_true_but_keeps = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
-		self::$products           = array();
-		self::$next_id            = 1000;
-		self::$delete_should_fail = false;
+		self::$products                      = array();
+		self::$next_id                       = 1000;
+		self::$delete_should_fail            = false;
+		self::$delete_returns_true_but_keeps = false;
 	}
 
 	/**
@@ -124,6 +135,9 @@ class WcStubStore {
 	public static function delete( int $id ): bool {
 		if ( self::$delete_should_fail ) {
 			return false; // Model a WC data-store delete failure: nothing removed.
+		}
+		if ( self::$delete_returns_true_but_keeps ) {
+			return true; // Model real WC_Data::delete(): true even though the row is still present.
 		}
 		$parent_id = (int) ( self::$products[ $id ]['parent_id'] ?? 0 );
 		unset( self::$products[ $id ] );

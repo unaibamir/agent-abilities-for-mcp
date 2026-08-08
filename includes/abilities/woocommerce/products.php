@@ -1070,9 +1070,11 @@ function aafm_exec_wc_delete_product( array $input ) {
 	if ( null === $product ) {
 		return aafm_generic_error();
 	}
-	// WC_Data::delete( true ) returns false when the data store could not remove the row.
-	// Honor it rather than reporting deleted:true on a failed delete.
-	if ( false === $product->delete( true ) ) {
+	$product->delete( true );
+	// WC_Data::delete() returns true whenever a data store exists, and a loaded product always has
+	// one, so its return never signals a store-level failure. Verify the row is actually gone by
+	// re-reading rather than trusting the return.
+	if ( null !== aafm_wc_get_product( $id ) ) {
 		return aafm_generic_error();
 	}
 

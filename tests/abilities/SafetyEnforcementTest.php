@@ -164,7 +164,7 @@ final class SafetyEnforcementTest extends TestCase {
 				'category'            => 'aafm-reads',
 				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -202,7 +202,7 @@ final class SafetyEnforcementTest extends TestCase {
 				'category'            => 'aafm-reads',
 				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -229,7 +229,7 @@ final class SafetyEnforcementTest extends TestCase {
 				'category'            => 'aafm-reads',
 				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);

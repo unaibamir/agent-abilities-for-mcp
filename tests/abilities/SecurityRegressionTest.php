@@ -131,7 +131,7 @@ final class SecurityRegressionTest extends TestCase {
 	/**
 	 * CVE class: SELF-ACCOUNT PRIVILEGE via the map_meta_cap edit_user short-circuit.
 	 *
-	 * current_user_can('edit_user', $self) is true for every logged-in user against their own id,
+	 * The current_user_can('edit_user', $self) check is true for every logged-in user against their own id,
 	 * so a gate that checks ONLY the per-object edit_user does not deny a subscriber on its own
 	 * account. aafm_perm_update_user carried the object-independent edit_users floor; the user-meta
 	 * and ACF-user gates did not until this sweep. Both must now deny a bare subscriber on itself.

@@ -31,7 +31,7 @@ function aafm_wc_perm(): bool {
 /**
  * Reject a non-empty billing email that is not a valid address, before any write happens.
  *
- * sanitize_email() turns an invalid address ("not-an-email") into '', which silently ERASES the
+ * The sanitize_email() call turns an invalid address ("not-an-email") into '', which silently ERASES the
  * stored billing email through set_billing_email(''), reports success, and returns the field as an
  * empty string on the wire. An explicitly empty string is an intentional clear and is allowed; a
  * non-empty value that is not a valid email is refused so it cannot erase stored PII by accident.

@@ -109,7 +109,7 @@ final class RankMathTest extends TestCase {
 	/**
 	 * B20: a backslash in a written value must survive the update_post_meta unslash.
 	 *
-	 * update_post_meta() unslashes the value it stores, so a title/description carrying a backslash
+	 * The update_post_meta() call unslashes the value it stores, so a title/description carrying a backslash
 	 * (a Windows path, a regex) lost one level unless the writer slashed first. The write reported
 	 * the pre-store value while storage was mangled, so the response did not equal the persisted
 	 * state. Assert the read-back (the wire value a client receives) preserves the backslash.
@@ -435,10 +435,10 @@ final class RankMathTest extends TestCase {
 		register_post_type(
 			'aafm_secret_cpt',
 			array(
-				'public'       => true,
-				'show_in_rest' => true,
+				'public'          => true,
+				'show_in_rest'    => true,
 				'capability_type' => 'post',
-				'map_meta_cap' => true,
+				'map_meta_cap'    => true,
 			)
 		);
 

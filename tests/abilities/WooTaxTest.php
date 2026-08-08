@@ -190,7 +190,7 @@ final class WooTaxTest extends TestCase {
 	/**
 	 * B51: a negative priority must be rejected, not sign-flipped by absint.
 	 *
-	 * absint(-1) is 1, so a negative priority (or order) was silently persisted as its positive twin.
+	 * The absint(-1) call returns 1, so a negative priority (or order) was silently persisted as its positive twin.
 	 * The integer schema now carries minimum:0, so a negative is refused at input validation.
 	 */
 	public function test_create_tax_rate_rejects_a_negative_priority(): void {

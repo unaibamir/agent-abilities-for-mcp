@@ -132,7 +132,7 @@ final class WooReportsTest extends TestCase {
 	/**
 	 * B25: an unparseable date must return an error, not a confidently wrong money figure.
 	 *
-	 * strtotime('garbage') is false, which cast to 0 silently widened the window to all-time on a bad
+	 * The strtotime('garbage') call returns false, which cast to 0 silently widened the window to all-time on a bad
 	 * start date and emptied it on a bad end date, returning success either way. The report now
 	 * refuses an unparseable date.
 	 */

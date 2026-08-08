@@ -496,7 +496,7 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 		$ability   = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
 		if ( $ability instanceof WP_Ability ) {
 			/** This filter is defined by the MCP adapter (RegisterAbilityAsMcpTool::resolve_tool_name). */
-			$filtered = apply_filters( 'mcp_adapter_tool_name', $tool_name, $ability );
+			$filtered = apply_filters( 'mcp_adapter_tool_name', $tool_name, $ability ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- the adapter owns this hook; we apply it to match its tool-name derivation.
 			if ( is_string( $filtered ) && '' !== $filtered ) {
 				$tool_name = $filtered;
 			}

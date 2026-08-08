@@ -224,10 +224,12 @@ function aafm_wc_coupon_write_properties(): array {
 		),
 		'usage_limit'          => array(
 			'type'        => array( 'integer', 'null' ),
+			'minimum'     => 0,
 			'description' => __( 'Maximum number of times this coupon can be used in total, across all customers. Pass null for unlimited.', 'agent-abilities-for-mcp' ),
 		),
 		'usage_limit_per_user' => array(
 			'type'        => array( 'integer', 'null' ),
+			'minimum'     => 0,
 			'description' => __( 'Maximum number of times a single customer can use this coupon. Pass null for unlimited.', 'agent-abilities-for-mcp' ),
 		),
 		'minimum_amount'       => array(

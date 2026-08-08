@@ -56,7 +56,6 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/high-risk.php';
 // Read-only mode, the second floor. Same reasoning as the line above: the admin screens, the
 // native registration walk, and the bridge walk all read it.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
-register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_activity_log' );
 
 /**
  * Schedule the daily activity-log prune event, if not already scheduled.
@@ -90,7 +89,74 @@ add_action( 'aafm_prune_activity_log_daily', 'aafm_prune_activity_log' );
 
 // OAuth storage schema is required early so the activation hook can install its tables.
 require_once AAFM_PLUGIN_DIR . 'includes/oauth/schema.php';
-register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_install_oauth_tables' );
+
+/**
+ * Activation: create the activity-log and OAuth tables.
+ *
+ * Honors the $network_wide flag: a network activation loops every site with
+ * switch_to_blog() and installs both schemas per site, matching the get_sites()
+ * loop uninstall.php already runs on removal. Without this only the main site got
+ * tables, so a subsite serving MCP lost every audit row and OAuth had nowhere to
+ * store clients or tokens. The rest_api_init/admin_init self-heals in
+ * includes/audit/log.php and includes/oauth/schema.php remain the backstop for
+ * sites this loop never saw; this installs eagerly so no site ever serves its
+ * first requests against missing tables.
+ *
+ * @param bool $network_wide True when the plugin is being activated network-wide.
+ * @return void
+ */
+function aafm_activate( $network_wide = false ): void {
+	if ( is_multisite() && $network_wide ) {
+		$site_ids = get_sites(
+			array(
+				'fields' => 'ids',
+				'number' => 0,
+			)
+		);
+		foreach ( $site_ids as $site_id ) {
+			switch_to_blog( (int) $site_id );
+			aafm_install_activity_log();
+			aafm_install_oauth_tables();
+			restore_current_blog();
+		}
+		return;
+	}
+
+	aafm_install_activity_log();
+	aafm_install_oauth_tables();
+}
+register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_activate' );
+
+/**
+ * Create the plugin tables for a site added after a network activation.
+ *
+ * The activation loop above only covers sites that exist when the plugin is
+ * activated; core fires wp_initialize_site for every site created later. Gated on
+ * the plugin being network-active, and hooked at priority 100 - after core's own
+ * wp_initialize_site() initializer at 10 has built the new site's base tables and
+ * options, which the installers need.
+ *
+ * @param WP_Site|mixed $new_site The site object core just created.
+ * @return void
+ */
+function aafm_initialize_new_site_tables( $new_site ): void {
+	if ( ! $new_site instanceof WP_Site ) {
+		return;
+	}
+
+	if ( ! function_exists( 'is_plugin_active_for_network' ) ) {
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+	}
+	if ( ! is_plugin_active_for_network( AAFM_PLUGIN_BASENAME ) ) {
+		return;
+	}
+
+	switch_to_blog( (int) $new_site->blog_id );
+	aafm_install_activity_log();
+	aafm_install_oauth_tables();
+	restore_current_blog();
+}
+add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
 
 /**
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.

@@ -243,29 +243,32 @@ function aafm_get_stored_enabled_abilities_raw(): array {
  * only at the one call site that happened to notice, so neither gap can come back through a
  * caller that has not been written yet.
  *
- * A name already present in the option before this call is treated as stale carried-forward
- * data, not a new attempt: aafm_resolve_scoped_enabled_input() preserves a previously-stored
- * locked name through its preserve branch (its absence from a scoped POST is the lock hiding the
- * control, not intent to disable it), and that carry-forward must not read as a fresh blocked
- * attempt on every later resave.
+ * A name already present in the option before this call is the operator's preserved choice, not
+ * a new attempt: aafm_resolve_scoped_enabled_input() and aafm_sanitize_enabled_input() both carry
+ * a previously-stored locked name forward (its absence from a POST is the lock hiding the
+ * control, not intent to disable it), and this function keeps it stored. The registration floor
+ * (aafm_get_enabled_abilities()) is what keeps a locked name out of tools/list, so a stored
+ * locked name is inert while locked - and unlocking the category restores exactly the selection
+ * that was ticked before, which is the floor's stated promise. Stripping stored names here was
+ * B10: re-locking the category wiped the operator's selection on the very next save. Only a
+ * locked name that was NOT already stored is stripped (and logged): it cannot have come from the
+ * screen, since the screen rendered no control for it.
  *
  * @param array<int,string> $enabled Ability names to persist.
- * @return array<int,string> The names actually written (locked names removed).
+ * @return array<int,string> The names actually written (newly attempted locked names removed).
  */
 function aafm_set_enabled_abilities( array $enabled ): array {
 	$before = aafm_get_stored_enabled_abilities_raw();
 
 	$locked  = array_values( array_filter( $enabled, 'aafm_ability_is_locked' ) );
-	$blocked = array_diff( $locked, $before );
+	$blocked = array_values( array_diff( $locked, $before ) );
 
-	$clean = array_values( array_diff( $enabled, $locked ) );
+	$clean = array_values( array_diff( $enabled, $blocked ) );
 
-	// Read-only mode is handled differently from the high-risk floor, deliberately. It hides the
-	// checkbox on EVERY write on the site, so stripping the way the line above does would empty the
-	// operator's whole selection on the next save and leave nothing to restore when the mode goes
-	// off - the opposite of what the mode promises. So an already-stored write is carried forward
-	// untouched, and only a name that was NOT already stored is refused: it cannot have come from
-	// the screen, since the screen rendered no control for it.
+	// The read-only floor applies the same preserve-stored rule by risk class rather than by
+	// name: an already-stored write is carried forward untouched (there would be nothing to
+	// restore when the mode goes off otherwise), and only a write that was NOT already stored is
+	// refused, since the screen rendered no control it could have come from.
 	if ( aafm_read_only_mode() ) {
 		$refused = array();
 		foreach ( $clean as $name ) {
@@ -331,10 +334,12 @@ function aafm_sanitize_enabled_input( array $posted ): array {
 		// the first save made while the mode is on, and turning the mode back off would hand back a
 		// blank slate instead of the selection it promised to restore.
 		//
-		// Only the read-only reason is carried here. A high-risk lock is left exactly as it was:
-		// aafm_set_enabled_abilities() strips those names before writing either way, so unioning
-		// them back would change nothing except the shape of this function's return value.
-		if ( isset( $registry_full[ $name ] ) && 'read_only' === aafm_ability_lock_reason( $name ) ) {
+		// Both lock reasons are carried (B10). A high-risk-locked name renders no checkbox
+		// either, so its absence from a full-replace POST is the lock speaking, not the operator
+		// turning it off - and aafm_set_enabled_abilities() keeps a previously-stored locked name
+		// on purpose, so dropping it here would wipe the selection the unlock is supposed to
+		// restore.
+		if ( isset( $registry_full[ $name ] ) && null !== aafm_ability_lock_reason( $name ) ) {
 			$carried[] = $name;
 		}
 	}

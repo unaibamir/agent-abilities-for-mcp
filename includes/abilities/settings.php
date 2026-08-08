@@ -235,6 +235,17 @@ function aafm_exec_update_site_settings( array $input ) {
 			continue; // No-op write; nothing for core to silently revert.
 		}
 		if ( sanitize_option( $key, $intended ) === $current ) {
+			// sanitize_option() landing on the current stored value means one of two things, and they
+			// need opposite handling. Core may have ESCAPED a valid value into its stored form (core
+			// stores blogname "Bob's Store" as "Bob&#039;s Store"), which is a genuine no-op, or core
+			// may have REJECTED an invalid value and reverted to current. Decode the stored value: if
+			// it matches the intended value the caller sent, it was a valid escape, so skip it as a
+			// no-op. Only a real revert, where the decoded current still differs from intended, is an
+			// error.
+			if ( is_string( $current ) && is_string( $intended )
+				&& wp_specialchars_decode( $current, ENT_QUOTES ) === $intended ) {
+				continue;
+			}
 			return new WP_Error(
 				'aafm_setting_rejected',
 				sprintf(

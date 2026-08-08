@@ -431,6 +431,55 @@ final class WooCustomersTest extends TestCase {
 	}
 
 	/**
+	 * B23: an invalid billing email must be refused, not sanitized to '' and used to erase stored PII.
+	 *
+	 * sanitize_email('not-an-email') is '', so set_billing_email('') silently wiped the stored email
+	 * and reported success, returning the field as an empty string. The write now refuses a non-empty
+	 * invalid email before touching the customer, so the stored PII survives.
+	 */
+	public function test_update_customer_invalid_billing_email_does_not_erase_stored_pii(): void {
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
+		$this->assertSame( 'jane@example.com', $before['billing']['email'], 'Precondition: a stored billing email.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
+			array(
+				'customer_id' => $this->customer_id,
+				'billing'     => array( 'email' => 'not-an-email' ),
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'An invalid billing email must be refused, not silently erase stored PII.'
+		);
+
+		$after = wp_get_ability( 'aafm/wc-get-customer' )->execute( array( 'customer_id' => $this->customer_id ) );
+		$this->assertSame(
+			'jane@example.com',
+			$after['billing']['email'],
+			'The stored billing email must survive a rejected update, not read back as an empty string.'
+		);
+	}
+
+	/**
+	 * An explicitly empty billing email is an intentional clear and is allowed.
+	 */
+	public function test_update_customer_empty_billing_email_is_an_allowed_clear(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-customer' )->execute(
+			array(
+				'customer_id' => $this->customer_id,
+				'billing'     => array( 'email' => '' ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An explicit empty billing email must be allowed as a clear.' );
+		$this->assertSame( '', $res['billing']['email'] );
+	}
+
+	/**
 	 * Nested-smuggle via billing.role must be rejected by the closed billing schema before the
 	 * executor runs - the billing sub-object carries additionalProperties:false.
 	 */

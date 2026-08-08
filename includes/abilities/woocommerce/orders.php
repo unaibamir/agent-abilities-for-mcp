@@ -1010,6 +1010,11 @@ function aafm_exec_wc_create_order( array $input ) {
 		}
 	}
 
+	$email_error = aafm_wc_billing_email_error( $input );
+	if ( $email_error instanceof \WP_Error ) {
+		return $email_error;
+	}
+
 	$order      = new \WC_Order();
 	$unresolved = aafm_wc_apply_order_input( $order, $input );
 	if ( array() !== $unresolved ) {
@@ -1101,6 +1106,11 @@ function aafm_exec_wc_update_order( array $input ) {
 		if ( ! aafm_wc_order_status_valid( (string) $input['status'] ) ) {
 			return aafm_generic_error();
 		}
+	}
+
+	$email_error = aafm_wc_billing_email_error( $input );
+	if ( $email_error instanceof \WP_Error ) {
+		return $email_error;
 	}
 
 	// Remove order_id from the input map before passing to apply (it is not a field setter).

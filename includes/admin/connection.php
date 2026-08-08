@@ -517,11 +517,18 @@ function aafm_oauth_client_note( string $client ): string {
 /**
  * AJAX: create the dedicated agent user.
  *
+ * Gated on create_users as well as manage_options, mirroring the aafm/create-user
+ * ability. create_users is the check core itself maps correctly on multisite
+ * (map_meta_cap sends non-super-admins to do_not_allow unless the network's
+ * add_new_users setting is on), so a subsite admin cannot use this handler to mint
+ * network-wide accounts the Users screen would refuse them. manage_options alone
+ * misses that: it is a per-site cap every subsite admin holds.
+ *
  * @return void
  */
 function aafm_ajax_create_agent_user(): void {
 	check_ajax_referer( 'aafm_admin', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
+	if ( ! current_user_can( 'manage_options' ) || ! current_user_can( 'create_users' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to create users.', 'agent-abilities-for-mcp' ) ), 403 );
 	}
 	$login  = isset( $_POST['login'] ) ? sanitize_user( wp_unslash( (string) $_POST['login'] ), true ) : '';

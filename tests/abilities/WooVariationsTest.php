@@ -210,6 +210,56 @@ final class WooVariationsTest extends TestCase {
 		$this->assertTrue( WcStubStore::exists( 500 ), 'The parent must survive a rejected delete.' );
 	}
 
+	/**
+	 * B22 (variation): stock_status on a variation that INHERITS the parent's stock management must
+	 * be refused, not silently discarded.
+	 *
+	 * When the variation's own manage_stock is false but the parent manages stock,
+	 * WC_Product_Variation::get_manage_stock() returns the string 'parent', which validate_props()
+	 * treats as managed and derives stock_status from the inherited quantity, overwriting the
+	 * caller's value. The guard must refuse the pair for the inherit case, not only for a
+	 * self-managing variation.
+	 */
+	public function test_update_variation_refuses_stock_status_when_inheriting_stock_management(): void {
+		// Parent (500) manages stock; variation 800 leaves its own manage_stock false, so it inherits.
+		WcStubStore::seed(
+			500,
+			array(
+				'id'           => 500,
+				'name'         => 'Variable Parent',
+				'type'         => 'variable',
+				'status'       => 'publish',
+				'manage_stock' => true,
+			)
+		);
+		WcStubStore::seed(
+			800,
+			array(
+				'id'        => 800,
+				'parent_id' => 500,
+				'type'      => 'variation',
+				'status'    => 'publish',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+
+		// Sanity: the stub reports the inherit state as the string 'parent'.
+		$this->assertSame( 'parent', ( new \WC_Product_Variation( 800 ) )->get_manage_stock() );
+
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 800,
+				'stock_status' => 'outofstock',
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'stock_status on an inherit-managed variation must be refused, not silently discarded.'
+		);
+	}
+
 	public function test_get_variation_empty_attributes_encodes_as_object_not_array(): void {
 		// A variation with no chosen attributes: the map must JSON-encode to "{}" (object), never "[]".
 		WcStubStore::seed(

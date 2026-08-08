@@ -511,18 +511,21 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 	if ( array_key_exists( 'sale_price', $input ) ) {
 		$variation->set_sale_price( aafm_wc_sanitize_price( $input['sale_price'] ) );
 	}
-	// stock_status is derived by WooCommerce from stock_quantity whenever the variation manages its
-	// own stock, so validate_props() overwrites a caller-supplied stock_status on save. A variation
-	// only manages stock at its own level when manage_stock is literally true (false or the string
-	// 'parent' both mean it inherits and stock_status is directly settable). Refuse the contradictory
-	// pair rather than report a success that never applied.
-	$manage_after = array_key_exists( 'manage_stock', $input )
-		? (bool) $input['manage_stock']
-		: ( true === $variation->get_manage_stock() );
-	if ( array_key_exists( 'stock_status', $input ) && $manage_after ) {
+	// Apply manage_stock first so the stock_status guard below can read the EFFECTIVE state.
+	// WC_Product_Variation::get_manage_stock() returns true (self-managed), false (standalone,
+	// unmanaged), or the string 'parent' (inherits the parent's management). validate_props()
+	// derives stock_status from quantity whenever get_manage_stock() is truthy, and 'parent' is
+	// truthy, so a variation that manages OR inherits management has its stock_status overwritten on
+	// save. Only a variation whose effective get_manage_stock() is literally false can set
+	// stock_status directly. Refuse the contradictory pair rather than report a success that never
+	// applied.
+	if ( array_key_exists( 'manage_stock', $input ) ) {
+		$variation->set_manage_stock( (bool) $input['manage_stock'] );
+	}
+	if ( array_key_exists( 'stock_status', $input ) && false !== $variation->get_manage_stock() ) {
 		return new \WP_Error(
 			'aafm_stock_status_derived',
-			__( 'stock_status cannot be set while manage_stock is true: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false.', 'agent-abilities-for-mcp' )
+			__( 'stock_status cannot be set while this variation manages or inherits stock management: WooCommerce derives it from stock_quantity. Set stock_quantity instead, or set manage_stock to false on a variation whose parent does not manage stock.', 'agent-abilities-for-mcp' )
 		);
 	}
 	if ( array_key_exists( 'stock_status', $input ) ) {
@@ -530,9 +533,6 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 	}
 	if ( array_key_exists( 'stock_quantity', $input ) ) {
 		$variation->set_stock_quantity( (int) $input['stock_quantity'] );
-	}
-	if ( array_key_exists( 'manage_stock', $input ) ) {
-		$variation->set_manage_stock( (bool) $input['manage_stock'] );
 	}
 	if ( array_key_exists( 'image_id', $input ) ) {
 		$variation->set_image_id( absint( $input['image_id'] ) );

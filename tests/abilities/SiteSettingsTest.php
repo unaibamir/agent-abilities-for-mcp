@@ -95,6 +95,58 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertSame( 7, (int) get_option( 'posts_per_page' ) );
 	}
 
+	/**
+	 * B11: re-submitting the current blogname as its human-readable form must be a no-op success,
+	 * not a false rejection that also kills every co-submitted setting.
+	 *
+	 * Core stores blogname escaped ("Bob's Store" -> "Bob&#039;s Store"), so our unescaped sanitize
+	 * of the same value differs from the stored value, yet sanitize_option() escapes it back to the
+	 * stored value. The old code read that as core rejecting an invalid value and errored out,
+	 * blocking the co-submitted posts_per_page too. The write must now succeed.
+	 */
+	public function test_update_site_settings_accepts_a_valid_no_op_on_an_escaped_name(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+
+		// Establish the escaped stored form the way core does.
+		update_option( 'blogname', "Bob's Store" );
+		$stored = get_option( 'blogname' );
+		$this->assertSame( 'Bob&#039;s Store', $stored, 'Precondition: core stores blogname escaped.' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => "Bob's Store", // The human-readable form the caller would send.
+					'posts_per_page' => 12,
+				),
+			)
+		);
+
+		$this->assertIsArray( $res, 'A valid no-op on blogname must not fail the whole write.' );
+		$this->assertSame( 12, (int) get_option( 'posts_per_page' ), 'The co-submitted setting must apply.' );
+		$this->assertSame( 'Bob&#039;s Store', get_option( 'blogname' ), 'The name is unchanged.' );
+	}
+
+	/**
+	 * The B11 fix must not swallow the guard's real purpose: an invalid value core silently reverts
+	 * to the current one still has to be an error, not a no-op success.
+	 */
+	public function test_update_site_settings_still_rejects_an_invalid_timezone_revert(): void {
+		$this->register_all();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array( 'timezone_string' => 'Not/AZone' ),
+			)
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'An invalid timezone core reverts must still be reported as an error.'
+		);
+	}
+
 	public function test_update_site_settings_rejects_a_non_allowlisted_key(): void {
 		$this->register_all();
 		$this->acting_as( 'administrator' );

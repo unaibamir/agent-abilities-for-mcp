@@ -221,6 +221,49 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 * **Fix:** The per-user rate limit counted each call twice, so a limit of sixty only allowed thirty. Each call counts once now.
 * **Fix:** An unauthenticated request whose body was a bare JSON value such as "x" or true crashed the MCP endpoint with a server error. It is refused with a clear 400 now.
 * **Fix:** A site that renamed a tool through the adapter's filter could leak an enabled admin-only tool into the tool list a lower-privileged connection sees, though it still could not call it. The list hides it as intended now.
+* **Fix:** Refunding specific order lines never worked: the order read did not expose the line item ids the refund asks for, so a per-line refund quietly became a full-amount refund with no per-line record. Orders now include each line's id, and a refund naming an id that is not on the order is refused.
+* **Fix:** A failure partway through adding order items could leave the earlier items attached while the response claimed nothing was written. The items are rolled back now, and if a row cannot be removed the error names exactly what stuck.
+* **Fix:** Listing variations on a grouped product returned an empty list next to a nonzero total. A product that cannot have variations is refused with an error naming its real type.
+* **Fix:** Creating a tax class whose slug already exists promised to de-duplicate but failed with a cryptic error. The collision is reported plainly now, and the description stops promising a de-dup WooCommerce never does.
+* **Fix:** A tax rate created or updated with an unknown tax-class slug was silently filed under Standard, which changes checkout tax. An unknown class is refused now, with the real class list in the error.
+* **Fix:** The product attribute type advertised a "text" option WooCommerce does not have; anything but "select" was silently converted. The schema lists only the types WooCommerce actually offers.
+* **Fix:** Updating a shipping method or payment gateway could save the title, fail on a later field, and report an error as if nothing had changed. An error now means nothing changed, or it names exactly which fields did.
+* **Fix:** Asking for a shipping zone by an id that does not exist was recorded as a crash and answered with a generic error. It returns a plain not-found now, like the tax lookups.
+* **Fix:** Turning a shipping method on or off skipped the WooCommerce action the admin screens fire, so extensions listening for the change never heard it. The action fires now.
+* **Fix:** The order count's total was a fixed sum of the seven built-in statuses, so orders in custom statuses went missing from it. The total covers every registered status now.
+* **Fix:** A coupon amount that was not a number, or an expiry date that could not be parsed, was silently saved as zero or nothing. Both are refused now.
+* **Fix:** The tax-rate list returned every rate at once. It pages like every other list now.
+* **Fix:** An order status change WooCommerce failed to apply still came back as a success. The new status is verified before the response says so.
+* **Fix:** A grouped product listed its child products under variation_ids, and they are not variations. Only variable products report variation ids now.
+* **Fix:** Listing orders with status "any" gave a different answer depending on the site's order storage backend. The statuses are spelled out explicitly now, so the answer is the same everywhere, includes custom statuses, and never counts checkout drafts.
+* **Fix:** A multi-line order note was flattened onto one line. Line breaks survive now, as they already did in customer notes.
+* **Fix:** The block list's total counted the current page instead of everything that matched, so paging through blocks stopped after page one. It reports the full count now.
+* **Fix:** Deleting a block on a site with trash disabled returned a generic error where posts and pages explain the problem. It gets the same clear error now.
+* **Fix:** The pages list was missing the page-number cap every other list declares, and no list enforced the cap server side. The cap is declared and enforced everywhere now.
+* **Fix:** Counting posts reports zero for non-public statuses when the caller cannot edit that type. That was always the behaviour, but nothing said so; the description and the operator disclosure now do.
+* **Fix:** The get-posts disclosure claimed the full post body is never returned, but the include_content parameter returns exactly that. The disclosure admits it now, for search too.
+* **Fix:** The post-type listing's writable flag claimed create and update, but some custom types only allow create. Update permission is reported as its own flag now.
+* **Fix:** Requesting a custom post type in a specific language on a WPML site quietly returned the untranslated item, because the translation lookup was pinned to the plain post type. It uses the item's real type now.
+* **Fix:** An unknown language code was silently ignored, and the response then read as if WPML were not installed. An unknown code is refused now, with the valid codes listed.
+* **Fix:** Restoring a revision claimed to be reversible even where revisions are switched off and no return snapshot exists. A restore that cannot be undone is refused with an explanation now.
+* **Fix:** A filter meant to narrow the readable site-settings list could also widen it. It can only narrow now.
+* **Fix:** Replacing one word in a post ran the whole body through the HTML filter, so an edit in one paragraph could strip markup the author was allowed to use elsewhere. Only the inserted text is sanitized now; the rest of the post is left byte for byte.
+* **Fix:** The force-draft setting only applied to posts and pages; blocks were published outright and WooCommerce products could go live regardless. It now covers everything an agent creates that has a draft state, and the setting text names what has none.
+* **Fix:** The audit log repaired its own schema only when someone opened wp-admin, so a headless site that auto-updates could silently drop audit rows. The repair runs on the traffic path too now.
+* **Fix:** Both readmes claimed the activity log never stores argument values, but it has stored ids, key names, slugs, and status values by design since 1.5.0. The claim now says exactly that, and that free-text content is never stored.
+* **Fix:** Turning the high-risk lock back on wiped the saved ability selections on the next settings save, so unlocking later brought nothing back. Selections survive the lock now and return when it lifts.
+* **Fix:** Term writes were hidden from the tool list for anyone without manage_categories yet callable with any taxonomy's own manage capability. What you can see now matches what you can call, and the description names the real requirement.
+* **Fix:** Enabling or disabling abilities through Quick Connect or the bridge tab left no audit rows, unlike the main settings save. Every path writes them now, including a blocked enable under read-only mode.
+* **Fix:** A call blocked by read-only mode was logged as "high-risk locked", the wrong cause in the one row meant to record it. The log names the real cause now.
+* **Fix:** A caller with valid credentials on a blocked IP could flood the activity log with denial rows. Those rows are capped per source now, like failed logins already were.
+* **Fix:** A batch request holding bare values instead of request objects got a blanket server error. It gets the per-request error JSON-RPC defines now.
+* **Fix:** One OAuth route check matched case-sensitively while its siblings did not, and an odd-cased route could slip past the malformed-body guard. Both match case-insensitively now.
+* **Fix:** ACF fields inside flexible-content layouts, and clone fields, were sanitized as unknown plain text: rich text was flattened and a javascript: link could get through. The sanitizer resolves layout and clone sub-fields now, at any nesting depth, and a repeater inside a layout no longer reports a false failure after a successful save.
+* **Fix:** A backslash in an ACF field value was stripped on save, and the read-back check then reported the write as a failure. It is kept now.
+* **Fix:** The ACF read abilities said the returned map is keyed by field key; it is keyed by field name. The descriptions say so now.
+* **Fix:** On multisite, the admin screen's create-agent-user action only checked for site admin, sidestepping the network's add-new-users setting. It requires the real user-creation capability now, as the ability already did.
+* **Fix:** Deleting a user on multisite reported deleted: true when WordPress only removes them from the current site; the account and its application passwords live on. The response now says the user was removed from the site and keeps the deleted flag honest.
+* **Fix:** On a multisite network, activation created the audit-log and OAuth tables for the main site only, and new subsites never got them. Every site gets them now, including sites created later.
 * **Chore:** Corrected code comments and docblocks that still described behaviour earlier releases removed, cleared dead and duplicated test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
 
 ### 1.6.1

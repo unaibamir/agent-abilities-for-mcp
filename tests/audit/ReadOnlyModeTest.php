@@ -202,6 +202,13 @@ final class ReadOnlyModeTest extends TestCase {
 		$this->assertCount( 1, $rows );
 		$this->assertSame( 'ability_enable_blocked', $rows[0]['event_type'] );
 		$this->assertSame( 'aafm/create-post', $rows[0]['ability'] );
+
+		// B37: the row must name its ACTUAL cause. create-post is not high-risk; the reason this
+		// forged/stale POST was refused is read-only mode, and the audit trail exists to record
+		// exactly that event, so a hardcoded "(high-risk locked)" detail is a false statement in
+		// the one row written to describe it.
+		$this->assertStringContainsString( 'read-only', (string) $rows[0]['detail'], 'The refusal detail must name read-only mode as the cause.' );
+		$this->assertStringNotContainsString( 'high-risk', (string) $rows[0]['detail'], 'The refusal detail must not blame the high-risk floor.' );
 	}
 
 	/**

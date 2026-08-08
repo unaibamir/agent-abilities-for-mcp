@@ -883,7 +883,7 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
 }
 
 /**
- * Write one audit row per locked high-risk ability a save attempted to enable.
+ * Write one audit row per locked ability a save attempted to enable.
  *
  * Called by aafm_set_enabled_abilities() with the locked names it just stripped and that were
  * genuinely new (not already sitting in the option). A locked ability has no rendered checkbox
@@ -893,10 +893,20 @@ function aafm_log_ability_toggle_diff( array $before, array $after ): int {
  * as a real "Enabled" event even though it was never actually reachable. A refused attempt is
  * still security signal, so it is recorded explicitly rather than left silent.
  *
+ * The detail names the ACTUAL cause per name (B37). This row exists to record the forged/stale
+ * POST event, so a hardcoded "(high-risk locked)" was a false statement whenever the real refusal
+ * came from read-only mode. When no reason is supplied it is resolved per name through
+ * aafm_ability_lock_reason(), whose read-only-first precedence already answers "which switch is
+ * actually holding this down". Native aafm/* names only on that path - a bridged caller passes
+ * its own reason explicitly, because aafm_ability_lock_reason() must never see a bridged slug
+ * (see its docblock).
+ *
  * @param array<int,string> $blocked Locked ability names a save just attempted to enable.
+ * @param string|null       $reason  Lock reason for every name ('read_only' or 'high_risk'), or
+ *                                   null to resolve per name via aafm_ability_lock_reason().
  * @return int Number of rows written.
  */
-function aafm_log_blocked_ability_enables( array $blocked ): int {
+function aafm_log_blocked_ability_enables( array $blocked, ?string $reason = null ): int {
 	if ( empty( $blocked ) ) {
 		return 0;
 	}
@@ -905,6 +915,20 @@ function aafm_log_blocked_ability_enables( array $blocked ): int {
 	$written = 0;
 
 	foreach ( $blocked as $name ) {
+		$cause = null === $reason ? aafm_ability_lock_reason( (string) $name ) : $reason;
+		if ( 'read_only' === $cause ) {
+			/* translators: %s: ability name. */
+			$detail = sprintf( __( 'Blocked %s (read-only mode)', 'agent-abilities-for-mcp' ), (string) $name );
+		} elseif ( 'high_risk' === $cause ) {
+			/* translators: %s: ability name. */
+			$detail = sprintf( __( 'Blocked %s (high-risk locked)', 'agent-abilities-for-mcp' ), (string) $name );
+		} else {
+			// The lock lifted between the strip and this log call, or an unknown reason string:
+			// still record the refusal, just without asserting a cause that no longer holds.
+			/* translators: %s: ability name. */
+			$detail = sprintf( __( 'Blocked %s (locked)', 'agent-abilities-for-mcp' ), (string) $name );
+		}
+
 		aafm_log_activity(
 			array(
 				'ability'           => (string) $name,
@@ -912,8 +936,7 @@ function aafm_log_blocked_ability_enables( array $blocked ): int {
 				'principal_login'   => $user->user_login ? (string) $user->user_login : '',
 				'status'            => 'denied',
 				'event_type'        => 'ability_enable_blocked',
-				/* translators: %s: ability name. */
-				'detail'            => sprintf( __( 'Blocked %s (high-risk locked)', 'agent-abilities-for-mcp' ), (string) $name ),
+				'detail'            => $detail,
 			)
 		);
 		++$written;

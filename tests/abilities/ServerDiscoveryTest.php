@@ -136,6 +136,53 @@ final class ServerDiscoveryTest extends TestCase {
 		$this->assertContains( aafm_mcp_tool_name( 'aafm/delete-post-meta' ), $names );
 	}
 
+	/**
+	 * B15: a site that renames a tool via mcp_adapter_tool_name must not thereby leak an admin-only
+	 * tool into a subscriber's tools/list.
+	 *
+	 * The adapter names the tool DTO by running the sanitized name through mcp_adapter_tool_name. If
+	 * the visibility map is keyed only by our sanitized name, a renamed tool misses the map and is
+	 * shown ungated. The map now applies the same filter, so the renamed admin-only aafm/update-user
+	 * is still filtered out for a subscriber (execution was always denied; this closes the catalog
+	 * leak).
+	 */
+	public function test_renamed_admin_tool_stays_gated_in_tools_list(): void {
+		add_filter(
+			'mcp_adapter_tool_name',
+			static function ( $name, $ability ) {
+				return ( $ability instanceof \WP_Ability && 'aafm/update-user' === $ability->get_name() )
+					? 'site_renamed_update_user'
+					: $name;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'subscriber' );
+
+		// Build the tools list the way the adapter would: the renamed DTO name for update-user.
+		$tools = array();
+		foreach ( aafm_get_enabled_abilities() as $ability_name ) {
+			$sanitized = aafm_mcp_tool_name( $ability_name );
+			$ability   = wp_get_ability( $ability_name );
+			$dto_name  = ( $ability instanceof \WP_Ability )
+				? (string) apply_filters( 'mcp_adapter_tool_name', $sanitized, $ability )
+				: $sanitized;
+			$tools[]   = $this->tool_dto( $dto_name );
+		}
+
+		$names = array();
+		foreach ( (array) aafm_filter_mcp_tools_list( $tools ) as $tool ) {
+			$names[] = $tool->getName();
+		}
+
+		$this->assertNotContains(
+			'site_renamed_update_user',
+			$names,
+			'A renamed admin-only tool must still be gated out of a subscriber tools/list.'
+		);
+	}
+
 	public function test_author_discovers_update_and_trash_and_get_post(): void {
 		// An author has edit_posts + delete_posts + read, so the post-side per-object tools
 		// surface for them too. Authors lack moderate_comments and the page caps, which are

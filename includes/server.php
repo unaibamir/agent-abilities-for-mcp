@@ -482,9 +482,26 @@ function aafm_filter_mcp_tools_list( $tools, $server = null ) {
 	// to the foreign ability) was stashed at registration, so aafm_user_can_discover_ability()
 	// resolves the wrapper name and fails closed for an incapable connection. Building the map
 	// from natives only would let a wrapper bypass this request-time capability check.
+	//
+	// Key the map by the name the adapter ACTUALLY gives the tool, not just our sanitized form. The
+	// adapter derives a tool's name as McpNameSanitizer::sanitize_name() (which aafm_mcp_tool_name
+	// mirrors) and THEN runs it through the mcp_adapter_tool_name filter
+	// (RegisterAbilityAsMcpTool::resolve_tool_name). A site that hooks that filter to rename, say,
+	// aafm/update-user renames the tool DTO too, so a map built from our sanitized name alone would
+	// miss it and leave an enabled admin-only tool ungated in tools/list for an incapable connection.
+	// Apply the same filter here so the key matches the DTO's getName().
 	$enabled_by_tool_name = array();
 	foreach ( aafm_all_server_ability_names() as $ability_name ) {
-		$enabled_by_tool_name[ aafm_mcp_tool_name( $ability_name ) ] = $ability_name;
+		$tool_name = aafm_mcp_tool_name( $ability_name );
+		$ability   = function_exists( 'wp_get_ability' ) ? wp_get_ability( $ability_name ) : null;
+		if ( $ability instanceof WP_Ability ) {
+			/** This filter is defined by the MCP adapter (RegisterAbilityAsMcpTool::resolve_tool_name). */
+			$filtered = apply_filters( 'mcp_adapter_tool_name', $tool_name, $ability );
+			if ( is_string( $filtered ) && '' !== $filtered ) {
+				$tool_name = $filtered;
+			}
+		}
+		$enabled_by_tool_name[ $tool_name ] = $ability_name;
 	}
 
 	$visible = array();

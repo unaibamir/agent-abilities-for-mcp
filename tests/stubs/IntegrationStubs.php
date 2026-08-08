@@ -461,6 +461,11 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_delete_order_note( $note_id ) { return \AAFM\Tests\WcOrderStubStore::delete_note( (int) $note_id ); }' );
 		}
+		if ( ! function_exists( 'wc_delete_order_item' ) ) {
+			// Mirrors real wc_delete_order_item(): removes one persisted order-item row by item id.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_delete_order_item( $item_id ) { return \AAFM\Tests\WcOrderStubStore::delete_item( (int) $item_id ); }' );
+		}
 		if ( ! function_exists( 'wc_create_refund' ) ) {
 			// Captures the full $args (including the per-line refund_tax map the executor builds) into
 			// WcOrderStubStore::$last_refund_args so a test can assert how a line item's refund_tax was
@@ -660,13 +665,23 @@ class WC_Order {
 	public function set_shipping_postcode( $v ) { $this->data['shipping']['postcode'] = (string) $v; }
 	public function set_shipping_country( $v ) { $this->data['shipping']['country'] = (string) $v; }
 	public function add_product( $product, $qty = 1 ) {
+		// Models real WC_Abstract_Order::add_product(): the item row is saved IMMEDIATELY (before,
+		// and regardless of, $order->save()), the new item id is returned, and the save path can
+		// throw mid-loop (opt-in via WcOrderStubStore::$add_product_throw_on_call).
+		++\AAFM\Tests\WcOrderStubStore::$add_product_calls;
+		if ( \AAFM\Tests\WcOrderStubStore::$add_product_throw_on_call > 0
+			&& \AAFM\Tests\WcOrderStubStore::$add_product_calls === \AAFM\Tests\WcOrderStubStore::$add_product_throw_on_call ) {
+			throw new \RuntimeException( 'Simulated add_product failure.' );
+		}
 		$pid = is_object( $product ) && method_exists( $product, 'get_id' ) ? (int) $product->get_id() : (int) $product;
 		$qty = (int) $qty;
 		$price = is_object( $product ) && method_exists( $product, 'get_price' ) ? (float) $product->get_price() : 0.0;
 		$name = is_object( $product ) && method_exists( $product, 'get_name' ) ? (string) $product->get_name() : '';
 		$line = number_format( $price * $qty, 2, '.', '' );
-		$this->data['items'][] = array( 'name' => $name, 'product_id' => $pid, 'quantity' => $qty, 'subtotal' => $line, 'total' => $line );
-		return count( $this->data['items'] ) - 1;
+		$item = array( 'id' => \AAFM\Tests\WcOrderStubStore::$next_item_id++, 'name' => $name, 'product_id' => $pid, 'quantity' => $qty, 'subtotal' => $line, 'total' => $line );
+		$this->data['items'][] = $item;
+		\AAFM\Tests\WcOrderStubStore::persist_item( (int) ( $this->data['id'] ?? 0 ), $item );
+		return $item['id'];
 	}
 	public function calculate_totals( $and_taxes = true ) {
 		$subtotal = 0.0;

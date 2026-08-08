@@ -219,6 +219,29 @@ class SchemaTest extends TestCase {
 	}
 
 	/**
+	 * B5 sibling: the OAuth schema self-heal is hooked on admin_init only in 1.6.1, so a
+	 * headless site whose plugin auto-updates over cron never upgrades its OAuth tables while
+	 * bearer traffic keeps hitting them. Same cheap option-version gate, hooked on the REST
+	 * path too.
+	 */
+	public function test_oauth_schema_self_heals_on_rest_traffic_not_only_admin(): void {
+		$this->assertNotFalse(
+			has_action( 'rest_api_init', 'aafm_maybe_upgrade_oauth_tables' ),
+			'A REST-only site must self-heal the OAuth schema without an admin page load.'
+		);
+
+		aafm_install_oauth_tables();
+		update_option( 'aafm_oauth_schema_version', '1' );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- deliberately fire core's own REST init to prove the heal rides it.
+		do_action( 'rest_api_init' );
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' ),
+			'Firing rest_api_init must bring a stale OAuth schema current.'
+		);
+	}
+
+	/**
 	 * The upgrade is a no-op when the recorded version already matches.
 	 */
 	public function test_upgrade_is_noop_when_current(): void {

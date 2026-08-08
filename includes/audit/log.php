@@ -124,11 +124,18 @@ function aafm_maybe_upgrade_activity_log(): void {
 	aafm_install_activity_log();
 }
 
-// Keep the activity-log schema current on real upgrades. admin_init only fires on admin
-// requests, and the guard above early-returns once the version matches, so this is cheap.
-// Registered here at include time (this file is required at plugin load) to mirror the OAuth
-// upgrade wiring without touching the main plugin bootstrap.
+// Keep the activity-log schema current on real upgrades. The guard above early-returns once
+// the version matches (one autoloaded option compare), so both hooks are cheap. Registered
+// here at include time (this file is required at plugin load) to mirror the OAuth upgrade
+// wiring without touching the main plugin bootstrap.
+//
+// rest_api_init as well as admin_init, deliberately: a headless site that auto-updates over
+// cron and takes MCP traffic over REST may never see an admin request, and without the REST
+// hook every audit insert after a schema bump silently fails (a missing column rejects the
+// row) while the calls themselves keep succeeding. The audit log is a security control, so it
+// heals on the path that actually carries the traffic it records.
 add_action( 'admin_init', 'aafm_maybe_upgrade_activity_log' );
+add_action( 'rest_api_init', 'aafm_maybe_upgrade_activity_log' );
 
 /**
  * Resolve the request source IP from REMOTE_ADDR only (never a spoofable header).

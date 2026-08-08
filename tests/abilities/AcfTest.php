@@ -1039,6 +1039,91 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * B4 regression: a repeater write that ACF stores by sub-field KEY must report SUCCESS.
+	 *
+	 * The caller writes repeater rows keyed by sub-field NAME (the documented shape). Real ACF Pro
+	 * reads the raw value back keyed by sub-field KEY, so the write-verify's byte comparison of the
+	 * raw stored value against the sent value always mismatched and returned a generic error over
+	 * rows that were in fact live on the post. The verbatim stub never re-keyed, so every gate stayed
+	 * green; this test opts the stub into modelling the real re-keying and asserts the executor
+	 * returns the read-back shape, NOT a WP_Error.
+	 */
+	public function test_update_post_fields_repeater_persist_is_reported_as_success(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_links',
+						'title'  => 'Links group',
+						'fields' => array(
+							array(
+								'key'        => 'field_links',
+								'name'       => 'links',
+								'label'      => 'Links',
+								'type'       => 'repeater',
+								'sub_fields' => array(
+									array(
+										'key'  => 'field_links_title',
+										'name' => 'title',
+										'type' => 'text',
+									),
+									array(
+										'key'  => 'field_links_note',
+										'name' => 'note',
+										'type' => 'text',
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+		// Model the real ACF Pro container re-keying the verbatim stub otherwise hides.
+		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_links' => array(
+						array(
+							'title' => 'Row A',
+							'note'  => 'first',
+						),
+						array(
+							'title' => 'Row B',
+							'note'  => 'second',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			$res instanceof WP_Error ? 'update returned ' . $res->get_error_code() : ''
+		);
+
+		// Prove it is a real success, not a false one: the raw store is key-keyed (real ACF), and the
+		// rows are actually present when read back formatted (name-keyed).
+		$raw = \AAFM\Tests\AcfStubStore::value( 'field_links', $post_id );
+		$this->assertArrayHasKey( 'field_links_title', $raw[0], 'The stub must have stored the row by sub-field key.' );
+
+		$formatted = \AAFM\Tests\AcfStubStore::value_formatted( 'field_links', $post_id );
+		$this->assertSame( 'Row A', $formatted[0]['title'] );
+		$this->assertSame( 'Row B', $formatted[1]['title'] );
+	}
+
+	/**
 	 * SecOps Low: a wysiwyg field is sanitized with wp_kses_post - a <script> is dropped while a
 	 * benign <strong> is kept (the policy stated in the build log).
 	 */

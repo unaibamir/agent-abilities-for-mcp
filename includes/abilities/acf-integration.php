@@ -458,6 +458,121 @@ function aafm_acf_normalize_stored( $value ) {
 }
 
 /**
+ * A field definition's sub-field KEY => NAME map, spanning repeater/group sub_fields and every
+ * flexible-content layout's sub_fields.
+ *
+ * ACF reads a container's raw value back keyed by sub-field key (field_abc123), while the write API
+ * and this plugin's documented shape key rows by sub-field name. This map lets the verify translate
+ * one into the other.
+ *
+ * @param array<string,mixed> $def The container field definition (from acf_get_field()).
+ * @return array<string,string> key => name.
+ */
+function aafm_acf_sub_field_key_map( array $def ): array {
+	$map     = array();
+	$collect = static function ( $sub_fields ) use ( &$map ): void {
+		foreach ( (array) $sub_fields as $sub ) {
+			if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
+				$map[ (string) $sub['key'] ] = (string) $sub['name'];
+			}
+		}
+	};
+	if ( isset( $def['sub_fields'] ) ) {
+		$collect( $def['sub_fields'] );
+	}
+	if ( isset( $def['layouts'] ) && is_array( $def['layouts'] ) ) {
+		foreach ( $def['layouts'] as $layout ) {
+			if ( is_array( $layout ) && isset( $layout['sub_fields'] ) ) {
+				$collect( $layout['sub_fields'] );
+			}
+		}
+	}
+	return $map;
+}
+
+/**
+ * Re-key a container field's raw stored value from sub-field keys to sub-field names.
+ *
+ * ACF returns a repeater/group/flexible-content raw value keyed by sub-field KEY, but the write
+ * side (and aafm_acf_write_fields' verify) works in sub-field NAMES. Translating the stored value
+ * back to names is what lets the verify compare like with like. A non-container definition, or a
+ * non-array value, is returned untouched, so scalar fields are unaffected. Nested containers recurse
+ * through the child definition resolved by name.
+ *
+ * @param mixed                    $stored The raw stored value from get_field(..., false).
+ * @param array<string,mixed>|null $def    The field definition, or null when it cannot be resolved.
+ * @return mixed The value with container sub-field keys rewritten to names.
+ */
+function aafm_acf_rekey_stored_to_names( $stored, ?array $def ) {
+	if ( ! is_array( $stored ) || ! is_array( $def ) ) {
+		return $stored;
+	}
+	$type = (string) ( $def['type'] ?? '' );
+	if ( ! in_array( $type, aafm_acf_container_field_types(), true ) ) {
+		return $stored;
+	}
+
+	// A group stores one flat map of sub-field keys; a repeater or flexible-content field stores a
+	// numeric-indexed list of such maps (one per row).
+	if ( 'group' === $type ) {
+		return aafm_acf_rekey_row_to_names( $stored, $def );
+	}
+
+	$out = array();
+	foreach ( $stored as $row_index => $row ) {
+		$out[ $row_index ] = is_array( $row ) ? aafm_acf_rekey_row_to_names( $row, $def ) : $row;
+	}
+	return $out;
+}
+
+/**
+ * Re-key one container row's sub-field keys to names, recursing into nested containers.
+ *
+ * @param array<int|string,mixed> $row One stored row (or a group's flat map).
+ * @param array<string,mixed>     $def The parent container field definition.
+ * @return array<int|string,mixed> The row keyed by sub-field name.
+ */
+function aafm_acf_rekey_row_to_names( array $row, array $def ) {
+	$key_to_name = aafm_acf_sub_field_key_map( $def );
+	$out         = array();
+	foreach ( $row as $sub_key => $sub_val ) {
+		$sub_key = (string) $sub_key;
+		if ( 'acf_fc_layout' === $sub_key ) {
+			$out[ $sub_key ] = $sub_val; // Flexible-content layout marker: preserve as-is.
+			continue;
+		}
+		$name         = isset( $key_to_name[ $sub_key ] ) ? $key_to_name[ $sub_key ] : $sub_key;
+		$child_def    = aafm_acf_sub_field_def( $def, $name );
+		$out[ $name ] = aafm_acf_rekey_stored_to_names( $sub_val, $child_def );
+	}
+	return $out;
+}
+
+/**
+ * Canonicalise a value for the write-verify comparison: normalise scalar typing (via
+ * aafm_acf_normalize_stored) and sort string-keyed maps by key so a container write the caller sent
+ * in a different sub-field order still compares equal, while preserving numeric-indexed (row) order,
+ * which is meaningful in a repeater.
+ *
+ * @param mixed $value The value to canonicalise.
+ * @return mixed A value whose wp_json_encode() is stable under sub-field reordering.
+ */
+function aafm_acf_canonicalize_for_compare( $value ) {
+	if ( ! is_array( $value ) ) {
+		return aafm_acf_normalize_stored( $value );
+	}
+	$is_list = array() === $value || array_keys( $value ) === range( 0, count( $value ) - 1 );
+	$out     = array();
+	foreach ( $value as $key => $sub ) {
+		$out[ $key ] = aafm_acf_canonicalize_for_compare( $sub );
+	}
+	if ( ! $is_list ) {
+		ksort( $out );
+	}
+	return $out;
+}
+
+/**
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
@@ -537,7 +652,17 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// mismatch, so a field that fails to persist never skips the fields still queued after it.
 		if ( function_exists( 'get_field' ) ) {
 			$stored = get_field( (string) $field_key, $selector, false );
-			if ( wp_json_encode( aafm_acf_normalize_stored( $stored ) ) !== wp_json_encode( aafm_acf_normalize_stored( $clean ) ) ) {
+			// A container field (repeater/group/flexible-content) is written keyed by sub-field NAME,
+			// but ACF stores and reads the raw value back keyed by sub-field KEY, and it persists rows
+			// in field-definition order regardless of the order the caller sent them. Re-key the stored
+			// value back to names and compare order-insensitively for string-keyed maps, so a container
+			// write that actually persisted is recognised as the success it is instead of always
+			// mismatching. Scalars and non-container values pass straight through both helpers.
+			$def     = function_exists( 'acf_get_field' ) ? acf_get_field( (string) $field_key ) : false;
+			$stored  = aafm_acf_rekey_stored_to_names( $stored, is_array( $def ) ? $def : null );
+			$as_read = wp_json_encode( aafm_acf_canonicalize_for_compare( $stored ) );
+			$as_sent = wp_json_encode( aafm_acf_canonicalize_for_compare( $clean ) );
+			if ( $as_read !== $as_sent ) {
 				$failed[] = (string) $field_key;
 			}
 		}

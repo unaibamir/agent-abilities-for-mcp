@@ -79,6 +79,40 @@ final class StructureReadTest extends TestCase {
 		delete_option( 'aafm_allowed_post_types' );
 	}
 
+	/**
+	 * B46: `writable` used to claim "create/update", but the update/delete gates refuse any
+	 * map_meta_cap:false type (aafm_can_edit_post_object degrades fail-closed) while create
+	 * is allowed - so a non-mapped allowlisted CPT is create-only in reality. The shape now
+	 * splits the claim: `writable` = agents may create, `updatable` = agents may also
+	 * update/delete existing items, false for a non-mapped type.
+	 */
+	public function test_get_post_types_reports_updatable_separately_for_non_mapped_types(): void {
+		register_post_type(
+			'aafm_unmapped',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => false,
+				'capability_type' => 'post',
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'aafm_unmapped' ) );
+
+		$out = wp_get_ability( 'aafm/get-post-types' )->execute( array() );
+		$by  = array_column( $out['post_types'], null, 'slug' );
+
+		// A mapped, always-on type may be created AND updated.
+		$this->assertTrue( $by['post']['writable'] );
+		$this->assertTrue( $by['post']['updatable'] );
+
+		// The allowlisted non-mapped type may be created, but its per-object update/delete
+		// gates fail closed - the shape must not claim update authority it refuses.
+		$this->assertTrue( $by['aafm_unmapped']['writable'], 'an allowlisted type is createable.' );
+		$this->assertFalse( $by['aafm_unmapped']['updatable'], 'a map_meta_cap:false type is create-only and must say so.' );
+
+		unregister_post_type( 'aafm_unmapped' );
+		delete_option( 'aafm_allowed_post_types' );
+	}
+
 	public function test_get_site_info_is_redacted(): void {
 		update_option( 'admin_email', 'admin@example.com' );
 		$out  = wp_get_ability( 'aafm/get-site-info' )->execute( array() );

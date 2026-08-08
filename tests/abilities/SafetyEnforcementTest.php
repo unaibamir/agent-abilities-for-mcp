@@ -127,15 +127,21 @@ final class SafetyEnforcementTest extends TestCase {
 				'label'               => 'RL Probe',
 				'description'         => 'Throwaway ability for rate-limit testing.',
 				'category'            => 'aafm-reads',
+				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => '__return_empty_array',
+				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);
 		$ability = wp_get_ability( 'aafm/rl-probe' );
 
-		$this->assertTrue( $ability->check_permissions( array() ) );  // 1st: under limit.
-		$this->assertFalse( $ability->check_permissions( array() ) ); // 2nd: over limit -> false.
+		// B12: one tools/call fires the decorated permission TWICE (the adapter's check_permission,
+		// then core's re-check inside execute), but it must consume ONE token, not two. Model a full
+		// call: check_permissions then execute (which releases the per-call memo). A limit of 1 must
+		// therefore allow the whole first call and only deny the second call.
+		$this->assertTrue( $ability->check_permissions( array() ) );                 // call 1, phase A.
+		$this->assertNotInstanceOf( \WP_Error::class, $ability->execute( array() ) ); // call 1 proceeds.
+		$this->assertFalse( $ability->check_permissions( array() ) );                // call 2: over limit.
 
 		$denied = aafm_query_activity(
 			array(
@@ -159,8 +165,9 @@ final class SafetyEnforcementTest extends TestCase {
 				'label'               => 'RL Off Probe',
 				'description'         => 'Throwaway.',
 				'category'            => 'aafm-reads',
+				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => '__return_empty_array',
+				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -185,8 +192,9 @@ final class SafetyEnforcementTest extends TestCase {
 				'label'               => 'RL Disc Probe',
 				'description'         => 'Throwaway.',
 				'category'            => 'aafm-reads',
+				'input_schema'        => array( 'type' => 'object' ),
 				'output_schema'       => array( 'type' => 'object' ),
-				'execute_callback'    => '__return_empty_array',
+				'execute_callback'    => static fn( $i = null ) => array( 'ok' => true ),
 				'permission_callback' => '__return_true',
 			)
 		);
@@ -196,10 +204,13 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertTrue( (bool) $raw( array() ) ); // discovery visibility check - must NOT consume a token.
 		$this->assertTrue( (bool) $raw( array() ) ); // again - still no token.
 
-		// Now the FIRST real (decorated) call still has its full allowance of 1.
+		// Now the FIRST real (decorated) call still has its full allowance of 1. Model a full call
+		// (check_permissions then execute, which releases the per-call rate memo) so the second real
+		// call is the one that trips the limit.
 		$ability = wp_get_ability( 'aafm/rl-disc-probe' );
-		$this->assertTrue( $ability->check_permissions( array() ) );  // 1st real call allowed.
-		$this->assertFalse( $ability->check_permissions( array() ) ); // 2nd real call over limit.
+		$this->assertTrue( $ability->check_permissions( array() ) );                 // 1st real call allowed.
+		$this->assertNotInstanceOf( \WP_Error::class, $ability->execute( array() ) ); // 1st real call proceeds.
+		$this->assertFalse( $ability->check_permissions( array() ) );                // 2nd real call over limit.
 	}
 
 	public function test_force_draft_overrides_create_post(): void {

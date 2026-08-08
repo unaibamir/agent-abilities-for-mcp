@@ -968,6 +968,17 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 			);
 		}
 
+		// B42: WooCommerce fires this action from all three of its own toggle write paths (AJAX
+		// shipping_zone_methods_save_changes, REST v2 shipping-zone-methods, and the v4
+		// ShippingZoneMethodService), each gated on the $wpdb->update() rows-affected count - a
+		// no-change toggle affects zero rows and fires nothing. Mirror the signature exactly:
+		// (int $instance_id, string $method_id, int $zone_id, bool $is_enabled).
+		if ( $updated_rows > 0 ) {
+			// This action is documented in WooCommerce: src/Internal/RestApi/Routes/V4/ShippingZoneMethod/ShippingZoneMethodService.php.
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce-core action; fired with WC's own signature so extensions hooking the toggle stay in sync.
+			do_action( 'woocommerce_shipping_zone_method_status_toggled', $instance_id, (string) $method->id, $zone_id, (bool) $is_enabled );
+		}
+
 		// Invalidate the shipping cache so the toggle is reflected on the next read.
 		if ( class_exists( '\WC_Cache_Helper' ) ) {
 			\WC_Cache_Helper::get_transient_version( 'shipping', true );

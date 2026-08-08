@@ -1279,7 +1279,20 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	// real WC_Order::update_status() both accept the short form.
 	$short = str_starts_with( $status, 'wc-' ) ? substr( $status, 3 ) : $status;
 
-	$order->update_status( $short );
+	// B55: WC_Order::update_status() catches its own exceptions internally and returns FALSE on a
+	// failed transition (class-wc-order.php:402-426), so ignoring the return turned a failed
+	// transition into a success payload carrying the old status. Check it, and verify the
+	// re-read order actually carries the requested status before reporting success.
+	if ( true !== $order->update_status( $short ) ) {
+		return new \WP_Error(
+			'aafm_wc_status_update_failed',
+			sprintf(
+				/* translators: %s: the requested order status. */
+				__( 'The order status could not be changed to "%s". The order keeps its previous status.', 'agent-abilities-for-mcp' ),
+				$short
+			)
+		);
+	}
 	// save() is technically redundant on real WC (update_status() persists internally), but
 	// is required here so the stub's save() flushes the in-memory data back to WcOrderStubStore.
 	$order->save();
@@ -1287,6 +1300,17 @@ function aafm_exec_wc_update_order_status( array $input ) {
 	$saved = aafm_wc_get_order_object( $order->get_id() );
 	if ( null === $saved ) {
 		return aafm_generic_error();
+	}
+	if ( (string) $saved->get_status() !== $short ) {
+		return new \WP_Error(
+			'aafm_wc_status_update_failed',
+			sprintf(
+				/* translators: 1: the requested order status, 2: the status the order actually holds. */
+				__( 'The order status did not persist as "%1$s"; it currently reads "%2$s".', 'agent-abilities-for-mcp' ),
+				$short,
+				(string) $saved->get_status()
+			)
+		);
 	}
 	return aafm_rich_wc_order( $saved );
 }

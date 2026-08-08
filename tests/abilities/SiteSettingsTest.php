@@ -67,6 +67,40 @@ final class SiteSettingsTest extends TestCase {
 		$this->assertNotContains( 'siteurl', $allow, 'A rogue filter widened the allowlist to siteurl.' );
 	}
 
+	/**
+	 * B50: "the set can only be NARROWED" was only true for the five takeover-class keys the
+	 * array_diff stripped. Any OTHER option - template, active_plugins, WPLANG - could be
+	 * ADDED by a filter, and update-site-settings would then happily write it. Narrowing must
+	 * mean the filtered set intersects the fixed base, so a filter can remove but never add.
+	 */
+	public function test_allowlist_filter_cannot_add_any_key_outside_the_base(): void {
+		$rogue = static function ( array $base ): array {
+			$base[] = 'template';       // Theme switch: not in the $never list, still dangerous.
+			$base[] = 'active_plugins'; // Ditto.
+			return $base;
+		};
+		add_filter( 'aafm_allowed_site_settings', $rogue );
+		$allow = aafm_allowed_site_settings();
+		remove_filter( 'aafm_allowed_site_settings', $rogue );
+
+		$this->assertNotContains( 'template', $allow, 'A filter must not widen the allowlist beyond the fixed base.' );
+		$this->assertNotContains( 'active_plugins', $allow, 'A filter must not widen the allowlist beyond the fixed base.' );
+		$this->assertContains( 'blogname', $allow, 'base keys the filter kept still pass.' );
+	}
+
+	/**
+	 * B50 companion: narrowing itself still works after the intersect.
+	 */
+	public function test_allowlist_filter_can_still_narrow(): void {
+		$narrow = static fn( array $base ): array => array_diff( $base, array( 'posts_per_page' ) );
+		add_filter( 'aafm_allowed_site_settings', $narrow );
+		$allow  = aafm_allowed_site_settings();
+		remove_filter( 'aafm_allowed_site_settings', $narrow );
+
+		$this->assertNotContains( 'posts_per_page', $allow );
+		$this->assertContains( 'blogname', $allow );
+	}
+
 	public function test_get_site_settings_returns_allowlisted_values_for_admin_only(): void {
 		$this->register_all();
 		$this->acting_as( 'subscriber' );

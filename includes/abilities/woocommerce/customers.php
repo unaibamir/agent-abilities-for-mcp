@@ -477,6 +477,33 @@ function aafm_perm_wc_customer_pii_read(): bool {
 	return aafm_wc_perm() && current_user_can( 'list_users' );
 }
 
+/**
+ * Write gate for aafm/wc-update-customer: the WooCommerce floor PLUS a real user-management
+ * capability on the target account.
+ *
+ * The read siblings require list_users on top of aafm_wc_perm(); the update path both reads and
+ * writes a user's billing/shipping PII, so it must be gated at least as strongly. Mirrors
+ * aafm_perm_update_user(): the object-independent edit_users floor comes first (edit_user($id) alone
+ * is true for every user against their own id via map_meta_cap's self short-circuit, so without the
+ * floor a manage_woocommerce holder could reach this on any account and read or overwrite its PII),
+ * then the per-object edit_user check gates the specific target. A stock WooCommerce Shop Manager
+ * holds edit_users and is unaffected; only a custom role built with manage_woocommerce but no
+ * user-editing capability loses access, which is exactly the gap this closes.
+ *
+ * Returns false with empty input (no customer_id), so discovery falls back to the object-independent
+ * floor in server.php; this per-object check still runs at execute time.
+ *
+ * @param array<string,mixed> $input Validated input.
+ * @return bool
+ */
+function aafm_perm_wc_update_customer( array $input ): bool {
+	$id = isset( $input['customer_id'] ) ? absint( $input['customer_id'] ) : 0;
+	return $id > 0
+		&& aafm_wc_perm()
+		&& current_user_can( 'edit_users' )
+		&& current_user_can( 'edit_user', $id );
+}
+
 // aafm/wc-list-customers (R).
 
 /**
@@ -803,7 +830,7 @@ function aafm_args_wc_update_customer(): array {
 			'properties' => aafm_wc_customer_output_properties(),
 		),
 		'execute_callback'    => 'aafm_exec_wc_update_customer',
-		'permission_callback' => 'aafm_wc_perm',
+		'permission_callback' => 'aafm_perm_wc_update_customer',
 		'meta'                => array(
 			'annotations' => array(
 				'readonly'    => false,

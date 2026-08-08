@@ -85,6 +85,9 @@ final class WooCustomersTest extends TestCase {
 	 */
 	private function register_wc_customers(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		// wc-update-customer is on the high-risk floor (it reads and overwrites user PII), so the
+		// floor must be unlocked for it to register at all in this suite.
+		update_option( 'aafm_high_risk_abilities_unlocked', true );
 		update_option(
 			'aafm_enabled_abilities',
 			array(

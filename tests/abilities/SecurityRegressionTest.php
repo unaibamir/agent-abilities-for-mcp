@@ -129,6 +129,39 @@ final class SecurityRegressionTest extends TestCase {
 	}
 
 	/**
+	 * CVE class: SELF-ACCOUNT PRIVILEGE via the map_meta_cap edit_user short-circuit.
+	 *
+	 * current_user_can('edit_user', $self) is true for every logged-in user against their own id,
+	 * so a gate that checks ONLY the per-object edit_user does not deny a subscriber on its own
+	 * account. aafm_perm_update_user carried the object-independent edit_users floor; the user-meta
+	 * and ACF-user gates did not until this sweep. Both must now deny a bare subscriber on itself.
+	 */
+	public function test_edit_user_self_shortcircuit_is_closed_for_user_meta_and_acf(): void {
+		add_filter( 'aafm_allowed_user_meta_keys', static fn(): array => array( 'twitter' ) );
+
+		$self = $this->factory->user->create( array( 'role' => 'subscriber' ) );
+		wp_set_current_user( $self );
+
+		// Sanity: the caller CAN edit_user on its own id (the trap), yet the gate must still deny.
+		$this->assertTrue( current_user_can( 'edit_user', $self ) );
+
+		$this->assertFalse(
+			aafm_can_access_user_meta(
+				array(
+					'user_id' => $self,
+					'key'     => 'twitter',
+				)
+			),
+			'A subscriber must not reach its own user meta through the edit_user(self) short-circuit.'
+		);
+
+		$this->assertFalse(
+			aafm_perm_acf_user( array( 'user_id' => $self ) ),
+			'A subscriber must not reach its own ACF user fields through the edit_user(self) short-circuit.'
+		);
+	}
+
+	/**
 	 * CVE class: AUTHOR / TYPE SPOOFING.
 	 *
 	 * Caller-supplied post_author/post_type cannot escalate - the closed schema rejects
@@ -284,7 +317,7 @@ final class SecurityRegressionTest extends TestCase {
 		// The governed user-meta abilities are sanctioned on a COMBINED basis: each trips BOTH
 		// the generic 'meta' needle AND a user-write needle (update-user-meta contains
 		// 'update-user', delete-user-meta contains 'delete-user'). They are allowed because
-		// each is capability-gated on per-object edit_user($id) (reads gated like writes, since
+		// each is capability-gated on the edit_users floor plus per-object edit_user($id) (reads gated like writes, since
 		// user meta can hold private data), scalar-only through a default-deny allowlist, and
 		// floored by an auth/capability/2FA hard-block denylist (session tokens, application
 		// passwords, wp_capabilities/wp_user_level incl. multisite per-blog forms, password
@@ -330,7 +363,7 @@ final class SecurityRegressionTest extends TestCase {
 		// trip no needle, so they need no sanction.
 		$sanctioned = array_merge( $sanctioned, array( 'aafm/get-active-theme', 'aafm/list-themes' ) );
 		// acf-update-user-fields trips the update-user needle but is an ACF custom-field write
-		// gated per-object on edit_user($id), default-OFF, audited, closed-schema - it never
+		// gated on the edit_users floor plus per-object edit_user($id), default-OFF, audited, closed-schema - it never
 		// touches the role/account surface the needle bans. The closed top-level schema accepts
 		// only user_id + a fields object, so a smuggled role/login/capabilities key is rejected
 		// before execute, and the field map values are type-sanitized. A generic user-write surface

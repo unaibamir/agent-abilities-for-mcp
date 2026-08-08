@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!--
+  Multisite twin of ../phpunit.xml.dist. WP_TESTS_MULTISITE=1 makes the WP test library
+  install its own multisite tables in the TEST database (never the live site DB) and boot
+  the suite with is_multisite() true. Multisite-only tests carry @group ms-required and
+  call skipWithoutMultisite() in set_up, so the single-site config runs them as skipped;
+  this config is where they actually execute:
+
+      vendor/bin/phpunit -c tests/multisite.xml.dist [paths]
+
+  Relative paths below resolve against this file's directory (tests/).
+-->
+<phpunit
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="../vendor/phpunit/phpunit/phpunit.xsd"
+	bootstrap="bootstrap.php"
+	colors="true"
+	beStrictAboutOutputDuringTests="true"
+	failOnWarning="true"
+	failOnRisky="true"
+	cacheResultFile="../.phpunit.cache/ms-test-results"
+	convertDeprecationsToExceptions="true">
+	<php>
+		<const name="WP_TESTS_MULTISITE" value="1" />
+	</php>
+	<testsuites>
+		<testsuite name="unit">
+			<directory>unit</directory>
+		</testsuite>
+		<testsuite name="integration">
+			<directory>abilities</directory>
+			<directory>audit</directory>
+			<directory>admin</directory>
+			<directory>oauth</directory>
+			<directory>coexistence</directory>
+			<file>WireShapeTest.php</file>
+		</testsuite>
+	</testsuites>
+	<!--
+	  Same contract-suite exclusion as the single-site config; ms-excluded additionally keeps
+	  single-site-only tests out of the multisite run (mirrors core's own multisite.xml).
+	-->
+	<groups>
+		<exclude>
+			<group>contract</group>
+			<group>ms-excluded</group>
+		</exclude>
+	</groups>
+	<coverage>
+		<include>
+			<directory suffix=".php">../includes</directory>
+		</include>
+	</coverage>
+</phpunit>

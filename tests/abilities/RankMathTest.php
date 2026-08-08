@@ -483,6 +483,21 @@ final class RankMathTest extends TestCase {
 		$this->assertSame( 'aafm_rankmath_head_unavailable', $res->get_error_code() );
 	}
 
+	/**
+	 * B59: the description and disclosure must not promise the empty-string fallback the Yoast and
+	 * AIOSEO siblings really have; an unrenderable Rank Math head is refused with a 409 instead.
+	 */
+	public function test_rankmath_get_head_copy_matches_the_refusal_contract(): void {
+		$definitions = aafm_register_rankmath_full_definitions( array() );
+		$description = (string) $definitions['aafm/rankmath-get-head']['description'];
+		$this->assertStringNotContainsString( 'empty when', $description, 'the false empty-string promise must be gone.' );
+		$this->assertStringContainsString( 'refused', $description, 'the description must state the refusal.' );
+
+		$disclosure = (string) aafm_ability_disclosures()['aafm/rankmath-get-head'];
+		$this->assertStringNotContainsString( 'empty string', $disclosure, 'the disclosure must not promise an empty string.' );
+		$this->assertStringContainsString( 'refused', $disclosure, 'the disclosure must state the refusal.' );
+	}
+
 	public function test_rankmath_get_post_reads_a_legacy_string_robots_value(): void {
 		// Defensive: a legacy/imported row may hold rank_math_robots as a raw CSV string rather than
 		// the current serialized array. The read must pass that string through, not floor it to ''.

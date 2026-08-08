@@ -330,8 +330,6 @@ function aafm_redact_wc_customer( \WC_Customer $customer ): array {
  * @return array<string,mixed>
  */
 function aafm_rich_wc_customer( \WC_Customer $customer ): array {
-	$date_created = $customer->get_date_created();
-
 	$billing          = array(
 		'first_name' => $customer->get_billing_first_name(),
 		'last_name'  => $customer->get_billing_last_name(),

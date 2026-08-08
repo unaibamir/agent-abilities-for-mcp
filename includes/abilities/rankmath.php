@@ -473,7 +473,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 	// write behind - rather than silently persisting a confident-empty URL.
 	$image_id_fields = aafm_rankmath_image_id_fields();
 	$resolved_ids    = array();
-	foreach ( $image_id_fields as $field => $id_key ) {
+	foreach ( array_keys( $image_id_fields ) as $field ) {
 		if ( ! array_key_exists( $field, $input ) ) {
 			continue;
 		}

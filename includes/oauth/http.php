@@ -43,8 +43,8 @@ function aafm_oauth_https_required(): bool {
  *
  * Two counters share a 60-second window: one scoped to the caller's source IP and
  * the bucket, one scoped to the bucket alone (a global ceiling across all callers).
- * Counters live in the object cache for speed and are mirrored to a transient so the
- * limit still holds without a persistent object cache. The request is allowed only
+ * Each counter lives in a transient, so the limit holds on the default in-memory
+ * object cache where every request is a fresh process. The request is allowed only
  * while both counters remain at or below their limits.
  *
  * @param string $bucket  Logical action name, e.g. 'register' or 'token'.
@@ -71,36 +71,27 @@ function aafm_oauth_rate_ok( string $bucket, int $per_ip, int $global ): bool {
 /**
  * Increment a fixed-window counter and return its new value.
  *
- * Seeds the counter at 1 with wp_cache_add() (which only writes when the key is
- * absent, so it naturally starts a fresh window), then increments on subsequent
- * hits. The value is mirrored into a transient with the same TTL so the limit
- * survives on sites without a persistent object cache.
+ * The transient is the single source of truth: read it, add one, write it back. On the default
+ * in-memory object cache (most installs, all shared hosting) every request is a fresh process, so
+ * the transient in the options table is the only store that survives between requests. An earlier
+ * version seeded the counter with wp_cache_add() first and only read the transient on a
+ * wp_cache_incr() miss that never fires on a fresh process, so the counter reset to 1 every request
+ * and the limit never tripped. Sibling counters aafm_rate_limit_consume() (includes/safety.php) and
+ * the failed-auth logger (includes/audit/log.php) use this same transient-authoritative read.
  *
- * @param string $key    Cache/transient key (already namespaced to a bucket).
+ * The read-modify-write is non-atomic, so under heavy concurrency the window may slightly
+ * undercount. That is acceptable: this is a coarse defensive throttle on public endpoints, not a
+ * hard quota, and it is the same tradeoff the sibling counters accept.
+ *
+ * @param string $key    Transient key (already namespaced to a bucket).
  * @param int    $window Window length in seconds.
  * @return int The counter value after this hit.
  */
 function aafm_oauth_bump_counter( string $key, int $window ): int {
-	$group         = 'aafm_oauth';
 	$transient_key = 'aafm_oauth_' . $key;
 
-	// First hit in a window: seed both stores at 1 and return.
-	if ( wp_cache_add( $key, 1, $group, $window ) ) {
-		set_transient( $transient_key, 1, $window );
-		return 1;
-	}
-
-	// Subsequent hits: bump the cache counter.
-	$count = wp_cache_incr( $key, 1, $group );
-
-	// Without a persistent object cache, wp_cache_incr() can miss the seeded value;
-	// fall back to the transient mirror as the source of truth.
-	if ( false === $count ) {
-		$count = (int) get_transient( $transient_key ) + 1;
-		wp_cache_set( $key, $count, $group, $window );
-	}
-
+	$count = (int) get_transient( $transient_key ) + 1;
 	set_transient( $transient_key, $count, $window );
 
-	return (int) $count;
+	return $count;
 }

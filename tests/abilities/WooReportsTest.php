@@ -519,6 +519,26 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * B52: `total` used to be a hardcoded seven-status sum, so orders in a custom status (which
+	 * plugins register through the wc_order_statuses filter) were silently excluded while the
+	 * shape claimed a complete total. The total now derives from wc_get_order_statuses().
+	 */
+	public function test_count_orders_total_includes_custom_statuses(): void {
+		$this->acting_as( 'administrator' );
+
+		// A plugin-registered custom status plus one order in it and one in a built-in status.
+		\AAFM\Tests\WcOrderStubStore::$order_statuses['wc-shipped'] = 'Shipped';
+		\AAFM\Tests\WcOrderStubStore::seed( 9310, array( 'status' => 'shipped' ) );
+		\AAFM\Tests\WcOrderStubStore::seed( 9311, array( 'status' => 'completed' ) );
+
+		$res = aafm_exec_wc_count_orders( array() );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $res['completed'] );
+		$this->assertSame( 2, $res['total'], 'total must count every registered status, including custom ones - not just the built-in seven.' );
+	}
+
+	/**
 	 * Count orders returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_count_orders_inactive_wc(): void {

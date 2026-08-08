@@ -74,6 +74,23 @@ class WcOrderStubStore {
 	public static int $next_refund_id = 2000;
 
 	/**
+	 * The map wc_get_order_statuses() serves, mirroring the real function's default seven plus
+	 * whatever a test adds - real WooCommerce passes its map through the wc_order_statuses filter,
+	 * so plugins can register custom statuses (B52). reset() restores the default seven.
+	 *
+	 * @var array<string,string>
+	 */
+	public static array $order_statuses = array(
+		'wc-pending'    => 'Pending',
+		'wc-processing' => 'Processing',
+		'wc-on-hold'    => 'On hold',
+		'wc-completed'  => 'Completed',
+		'wc-cancelled'  => 'Cancelled',
+		'wc-refunded'   => 'Refunded',
+		'wc-failed'     => 'Failed',
+	);
+
+	/**
 	 * The next id handed out to an order item created through the WC_Order stub's add_product().
 	 *
 	 * Starts high so it never collides with the low, hand-picked item ids test fixtures seed.
@@ -159,6 +176,15 @@ class WcOrderStubStore {
 	public static function reset(): void {
 		self::$orders                    = array();
 		self::$next_id                   = 5000;
+		self::$order_statuses            = array(
+			'wc-pending'    => 'Pending',
+			'wc-processing' => 'Processing',
+			'wc-on-hold'    => 'On hold',
+			'wc-completed'  => 'Completed',
+			'wc-cancelled'  => 'Cancelled',
+			'wc-refunded'   => 'Refunded',
+			'wc-failed'     => 'Failed',
+		);
 		self::$next_item_id              = 9000;
 		self::$add_product_throw_on_call = 0;
 		self::$add_product_calls         = 0;

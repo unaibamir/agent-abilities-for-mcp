@@ -288,8 +288,10 @@ PHP;
 	 */
 	protected function stub_wc_order_statuses(): void {
 		if ( ! function_exists( 'wc_get_order_statuses' ) ) {
+			// Serves WcOrderStubStore::$order_statuses (the default seven; a test can add custom
+			// statuses the way real WC's wc_order_statuses filter lets plugins do - B52).
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order_statuses() { return array( "wc-pending" => "Pending", "wc-processing" => "Processing", "wc-on-hold" => "On hold", "wc-completed" => "Completed", "wc-cancelled" => "Cancelled", "wc-refunded" => "Refunded", "wc-failed" => "Failed" ); }' );
+			eval( 'function wc_get_order_statuses() { return \AAFM\Tests\WcOrderStubStore::$order_statuses; }' );
 		}
 	}
 

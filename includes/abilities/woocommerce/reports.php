@@ -76,7 +76,7 @@ function aafm_wc_reports_registry_definitions(): array {
 
 		'aafm/wc-count-orders'           => array(
 			'label'        => __( 'Count WooCommerce orders', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Returns order counts broken down by WooCommerce status (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders. HPOS-aware. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Returns order counts broken down by the built-in WooCommerce statuses (pending, processing, on-hold, completed, cancelled, refunded, failed) plus a total of active (non-trashed) orders across every registered status, including custom ones plugins add. HPOS-aware. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'reads',
 			'risk'         => 'read',
 			'subject'      => 'woocommerce',
@@ -483,7 +483,7 @@ function aafm_args_wc_count_orders(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- no input params used; signature required by abilities API.
-	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) ) {
+	if ( ! aafm_integration_active( 'woocommerce' ) || ! function_exists( 'wc_get_orders' ) || ! function_exists( 'wc_get_order_statuses' ) ) {
 		return aafm_generic_error();
 	}
 
@@ -491,23 +491,34 @@ function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.Cod
 	// when HPOS is on, and the legacy posts otherwise) rather than wp_count_posts('shop_order'),
 	// which never sees the HPOS tables and would under-report on an HPOS site (B3). Each status is
 	// a paginated 1-row probe so only the storage-side total is read, not the order rows.
+	//
+	// B52: the status list comes from wc_get_order_statuses() - whose map plugins extend through
+	// the wc_order_statuses filter - not a hardcoded seven-status list. The old hardcoded sum
+	// excluded every custom status from `total` while the shape claimed completeness. The named
+	// breakdown below still reports the built-in seven; anything beyond them is counted into
+	// `total` only. Trashed orders stay excluded either way, matching the non-trash "active"
+	// total convention shared by count-products and count-coupons (B4).
+	$statuses = array();
+	foreach ( array_keys( wc_get_order_statuses() ) as $status_key ) {
+		$status_key = (string) $status_key;
+		$statuses[] = str_starts_with( $status_key, 'wc-' ) ? substr( $status_key, 3 ) : $status_key;
+	}
+
 	$by_status = array();
-	foreach ( array( 'pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed' ) as $status ) {
+	foreach ( $statuses as $status ) {
 		$by_status[ $status ] = aafm_wc_count_orders_by_status( $status );
 	}
 
-	// total sums these active order statuses; trashed orders are deliberately excluded, matching
-	// the non-trash "active" total convention shared by count-products and count-coupons (B4).
 	$total = array_sum( $by_status );
 
 	return array(
-		'pending'    => $by_status['pending'],
-		'processing' => $by_status['processing'],
-		'on_hold'    => $by_status['on-hold'],
-		'completed'  => $by_status['completed'],
-		'cancelled'  => $by_status['cancelled'],
-		'refunded'   => $by_status['refunded'],
-		'failed'     => $by_status['failed'],
+		'pending'    => (int) ( $by_status['pending'] ?? 0 ),
+		'processing' => (int) ( $by_status['processing'] ?? 0 ),
+		'on_hold'    => (int) ( $by_status['on-hold'] ?? 0 ),
+		'completed'  => (int) ( $by_status['completed'] ?? 0 ),
+		'cancelled'  => (int) ( $by_status['cancelled'] ?? 0 ),
+		'refunded'   => (int) ( $by_status['refunded'] ?? 0 ),
+		'failed'     => (int) ( $by_status['failed'] ?? 0 ),
 		'total'      => $total,
 	);
 }

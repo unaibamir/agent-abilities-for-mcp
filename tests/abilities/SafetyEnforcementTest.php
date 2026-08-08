@@ -193,6 +193,53 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, aafm_reject_scalar_mcp_body( null, null, $odd_case ), 'An odd-cased MCP route must not bypass the guard.' );
 	}
 
+	/**
+	 * B39: a batch with non-object elements must get the JSON-RPC 2.0 answer, not a 500.
+	 *
+	 * The vendor's JsonRpcResponseBuilder treats any array with a 0 key as a batch and feeds each
+	 * element into process_single_message(array $message); a non-array element ([1,2,3]) is a
+	 * TypeError that the transport's blanket Throwable catch turns into a 500 internal_error. The
+	 * spec (jsonrpc.org/specification, "rpc call with invalid Batch") says each invalid element
+	 * gets its own {"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}
+	 * response object. The pre-dispatch guard answers the all-invalid batch exactly that way; a
+	 * mixed batch cannot be half-processed at this layer, so it is refused whole with one clean
+	 * invalid-request error instead of crashing the vendor.
+	 */
+	public function test_batch_with_non_object_elements_is_answered_per_spec_not_crashed(): void {
+		// The spec's own example: [1,2,3] -> three per-element invalid-request errors, HTTP 200
+		// (the same status the vendor uses for every batch response).
+		$batch = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$batch->set_header( 'Content-Type', 'application/json' );
+		$batch->set_body( '[1,2,3]' );
+		$result = aafm_reject_scalar_mcp_body( null, null, $batch );
+		$this->assertInstanceOf( \WP_REST_Response::class, $result, 'An all-invalid batch must be answered, not passed to the vendor to crash on.' );
+		$this->assertSame( 200, $result->get_status() );
+		$element = '{"jsonrpc":"2.0","error":{"code":-32600,"message":"Invalid Request"},"id":null}';
+		$this->assertSame(
+			'[' . $element . ',' . $element . ',' . $element . ']',
+			wp_json_encode( $result->get_data() ),
+			'Each invalid batch element must get its own spec-shaped invalid-request response object.'
+		);
+
+		// A mixed batch cannot be half-processed from rest_pre_dispatch, so it is refused whole
+		// with a single clean invalid-request error (400, the vendor status for -32600) rather
+		// than reaching the vendor TypeError.
+		$mixed = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$mixed->set_header( 'Content-Type', 'application/json' );
+		$mixed->set_body( '[{"jsonrpc":"2.0","method":"ping","id":1},2]' );
+		$result = aafm_reject_scalar_mcp_body( null, null, $mixed );
+		$this->assertInstanceOf( \WP_REST_Response::class, $result, 'A mixed batch must be refused cleanly, not crash the vendor.' );
+		$this->assertSame( 400, $result->get_status() );
+		$data = $result->get_data();
+		$this->assertSame( -32600, $data['error']['code'] ?? null );
+
+		// A well-formed batch of objects is not ours to answer: it must reach the vendor.
+		$valid = new \WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$valid->set_header( 'Content-Type', 'application/json' );
+		$valid->set_body( '[{"jsonrpc":"2.0","method":"ping","id":1},{"jsonrpc":"2.0","method":"ping","id":2}]' );
+		$this->assertNull( aafm_reject_scalar_mcp_body( null, null, $valid ), 'A valid batch must pass through untouched.' );
+	}
+
 	public function test_decorated_permission_rate_limits_and_audits(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );

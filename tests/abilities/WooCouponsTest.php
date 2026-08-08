@@ -275,6 +275,67 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
+	 * B53: a non-numeric amount used to be silently swallowed (WC casts it toward 0 on the way to
+	 * storage) while the tax sibling validates its rate. It must be refused with an actionable
+	 * error before any write.
+	 */
+	public function test_create_coupon_rejects_a_non_numeric_amount(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-coupon' )->execute(
+			array(
+				'code'   => 'BADAMOUNT',
+				'amount' => 'ten-percent',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_invalid_coupon_amount', $res->get_error_code() );
+		$this->assertStringContainsString( 'ten-percent', $res->get_error_message(), 'the error must name the rejected value.' );
+	}
+
+	/**
+	 * B53: an unparseable date_expires was silently swallowed to null (WC_Data::set_date_prop
+	 * catches its own parse exception), so the caller believed an expiry was set when the coupon
+	 * would never expire. It must be refused, and on update the stored expiry must survive.
+	 */
+	public function test_update_coupon_rejects_an_unparseable_expiry_and_keeps_the_stored_one(): void {
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
+		$this->assertSame( '2025-12-31T23:59:59', $before['date_expires'], 'guard: the fixture stores an expiry.' );
+
+		$res = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id'    => 5001,
+				'date_expires' => 'next-ish tuesday-ish',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_invalid_coupon_expiry', $res->get_error_code() );
+
+		$after = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
+		$this->assertSame( '2025-12-31T23:59:59', $after['date_expires'], 'a refused expiry must leave the stored one untouched.' );
+	}
+
+	/**
+	 * B53 control: null and empty string stay valid ways to clear the expiry.
+	 */
+	public function test_update_coupon_null_expiry_still_clears(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-coupon' )->execute(
+			array(
+				'coupon_id'    => 5001,
+				'date_expires' => null,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertNull( $res['date_expires'] );
+	}
+
+	/**
 	 * Create with optional config fields stores them correctly.
 	 */
 	public function test_create_coupon_with_optional_fields(): void {

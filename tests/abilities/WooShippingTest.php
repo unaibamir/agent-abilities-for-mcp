@@ -630,6 +630,52 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * B42: WooCommerce fires woocommerce_shipping_zone_method_status_toggled whenever the enabled
+	 * toggle actually changes the row (its AJAX, REST v2, and v4 write paths all do), so
+	 * extensions hooking it went stale when the toggle came through this ability. The executor
+	 * must fire it with WC's exact signature - (instance_id, method_id, zone_id, is_enabled) -
+	 * and only when a row really changed, mirroring core's own rows-affected gate.
+	 */
+	public function test_update_shipping_method_enabled_toggle_fires_wc_status_action(): void {
+		$this->acting_as( 'administrator' );
+
+		$captured = array();
+		$listener = static function ( $instance_id, $method_id, $zone_id, $is_enabled ) use ( &$captured ): void {
+			$captured[] = array( $instance_id, $method_id, $zone_id, $is_enabled );
+		};
+		add_action( 'woocommerce_shipping_zone_method_status_toggled', $listener, 10, 4 );
+
+		// Instance 1 in zone 1 is seeded enabled; toggling to 'no' changes the row.
+		$res = wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+				'enabled'     => 'no',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame(
+			array( array( 1, 'flat_rate', 1, false ) ),
+			$captured,
+			'the toggle must fire the WooCommerce status action once, with the vendor signature.'
+		);
+
+		// Setting the same value again changes no row; WC core gates the action on rows affected,
+		// so it must not fire here either.
+		$captured = array();
+		wp_get_ability( 'aafm/wc-update-shipping-method' )->execute(
+			array(
+				'zone_id'     => 1,
+				'instance_id' => 1,
+				'enabled'     => 'no',
+			)
+		);
+		$this->assertSame( array(), $captured, 'a no-change toggle affects no row, so the action must not fire - matching WC core.' );
+
+		remove_action( 'woocommerce_shipping_zone_method_status_toggled', $listener, 10 );
+	}
+
+	/**
 	 * B32: the title used to persist via update_option() BEFORE the enabled toggle ran its
 	 * $wpdb->update(), so a failed enabled write returned an error AFTER the title had already
 	 * landed - the caller was told "error" while state changed. The enabled write (the only

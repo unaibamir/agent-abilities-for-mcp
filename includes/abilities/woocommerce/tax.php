@@ -218,6 +218,7 @@ function aafm_args_wc_list_tax_rates(): array {
 				'page'     => array(
 					'type'        => 'integer',
 					'minimum'     => 1,
+					'maximum'     => AAFM_LIST_PAGE_MAX,
 					'description' => __( 'Page number of results to return, starting at 1. Defaults to 1.', 'agent-abilities-for-mcp' ),
 				),
 				'per_page' => array(

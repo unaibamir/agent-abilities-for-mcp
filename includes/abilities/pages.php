@@ -95,6 +95,7 @@ function aafm_args_get_pages(): array {
 					'page'            => array(
 						'type'        => 'integer',
 						'minimum'     => 1,
+						'maximum'     => AAFM_LIST_PAGE_MAX,
 						'description' => __( '1-based page number for pagination. Defaults to 1.', 'agent-abilities-for-mcp' ),
 					),
 					'per_page'        => array(

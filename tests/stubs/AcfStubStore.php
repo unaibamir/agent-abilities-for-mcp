@@ -99,65 +99,100 @@ class AcfStubStore {
 	}
 
 	/**
-	 * A container definition's sub-field NAME => KEY map (repeater/group sub_fields and every
-	 * flexible-content layout's sub_fields).
+	 * The container field types (mirrors aafm_acf_container_field_types, including clone - a clone
+	 * def carries `sub_fields` and a flat sub-field-map value exactly like a group).
 	 *
-	 * @param array<string,mixed> $def Field definition.
-	 * @return array<string,string> name => key.
+	 * @var string[]
 	 */
-	private static function name_to_key_map( array $def ): array {
-		$map     = array();
-		$collect = static function ( $sub_fields ) use ( &$map ): void {
-			foreach ( (array) $sub_fields as $sub ) {
-				if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
-					$map[ (string) $sub['name'] ] = (string) $sub['key'];
-				}
-			}
-		};
-		if ( isset( $def['sub_fields'] ) ) {
-			$collect( $def['sub_fields'] );
-		}
+	private const CONTAINER_TYPES = array( 'repeater', 'group', 'flexible_content', 'clone' );
+
+	/**
+	 * A container definition's sub-field defs at one level: its own `sub_fields`, plus a
+	 * flexible-content layout's `sub_fields` selected by the row's layout name (all layouts when
+	 * no name is given - a malformed row without its acf_fc_layout marker).
+	 *
+	 * @param array<string,mixed> $def    Field definition.
+	 * @param string              $layout The row's acf_fc_layout layout name, when known.
+	 * @return array<int,array<string,mixed>> Sub-field definitions.
+	 */
+	private static function sub_defs( array $def, string $layout ): array {
+		$subs = isset( $def['sub_fields'] ) && is_array( $def['sub_fields'] ) ? $def['sub_fields'] : array();
 		if ( isset( $def['layouts'] ) && is_array( $def['layouts'] ) ) {
-			foreach ( $def['layouts'] as $layout ) {
-				if ( is_array( $layout ) && isset( $layout['sub_fields'] ) ) {
-					$collect( $layout['sub_fields'] );
+			foreach ( $def['layouts'] as $candidate ) {
+				if ( ! is_array( $candidate ) || ! isset( $candidate['sub_fields'] ) || ! is_array( $candidate['sub_fields'] ) ) {
+					continue;
 				}
+				if ( '' !== $layout && (string) ( $candidate['name'] ?? '' ) !== $layout ) {
+					continue;
+				}
+				$subs = array_merge( $subs, $candidate['sub_fields'] );
 			}
 		}
-		return $map;
+		return $subs;
 	}
 
 	/**
-	 * Rewrite one container value's sub-field keys, mapping via $map (name=>key or key=>name).
-	 * Groups are a flat map; repeaters/flex are a list of rows. The acf_fc_layout marker is kept.
+	 * Rewrite one container value between sub-field NAMES and KEYS, the way real ACF Pro does at
+	 * EVERY depth: a nested container (repeater in a flex layout, group in a repeater, ...) re-keys
+	 * its own rows through its own embedded definition, because real ACF loads each nested value
+	 * through the nested field's load_value. Groups/clones are one flat map; repeaters/flex are a
+	 * list of rows, and a flex row's acf_fc_layout marker (kept as-is) selects which layout's
+	 * sub_fields apply to that row.
 	 *
-	 * @param mixed                $value The container value.
-	 * @param array<string,mixed>  $def   The field definition.
-	 * @param array<string,string> $map   name=>key or key=>name.
+	 * @param mixed               $value  The container value.
+	 * @param array<string,mixed> $def    The container field definition.
+	 * @param bool                $to_key True rewrites name=>key (store); false key=>name (format).
 	 * @return mixed
 	 */
-	private static function rekey_container( $value, array $def, array $map ) {
+	private static function rekey_container( $value, array $def, bool $to_key ) {
 		if ( ! is_array( $value ) ) {
 			return $value;
 		}
-		$rekey_row = static function ( $row ) use ( $map ) {
-			if ( ! is_array( $row ) ) {
-				return $row;
-			}
-			$out = array();
-			foreach ( $row as $sub_key => $sub_val ) {
-				$sub_key     = (string) $sub_key;
-				$new         = 'acf_fc_layout' === $sub_key ? $sub_key : ( $map[ $sub_key ] ?? $sub_key );
-				$out[ $new ] = $sub_val;
-			}
-			return $out;
-		};
-		if ( 'group' === (string) ( $def['type'] ?? '' ) ) {
-			return $rekey_row( $value );
+		if ( in_array( (string) ( $def['type'] ?? '' ), array( 'group', 'clone' ), true ) ) {
+			return self::rekey_row( $value, $def, '', $to_key );
 		}
 		$out = array();
 		foreach ( $value as $i => $row ) {
-			$out[ $i ] = $rekey_row( $row );
+			$layout    = is_array( $row ) && isset( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+			$out[ $i ] = is_array( $row ) ? self::rekey_row( $row, $def, $layout, $to_key ) : $row;
+		}
+		return $out;
+	}
+
+	/**
+	 * Re-key one row (or flat group/clone map), recursing into nested container sub-fields.
+	 *
+	 * @param array<int|string,mixed> $row    The row map.
+	 * @param array<string,mixed>     $def    The parent container definition.
+	 * @param string                  $layout The row's acf_fc_layout name ('' outside flex).
+	 * @param bool                    $to_key True rewrites name=>key; false key=>name.
+	 * @return array<int|string,mixed>
+	 */
+	private static function rekey_row( array $row, array $def, string $layout, bool $to_key ): array {
+		$by_name = array();
+		$by_key  = array();
+		foreach ( self::sub_defs( $def, $layout ) as $sub ) {
+			if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
+				$by_name[ (string) $sub['name'] ] = $sub;
+				$by_key[ (string) $sub['key'] ]   = $sub;
+			}
+		}
+		$out = array();
+		foreach ( $row as $sub_key => $sub_val ) {
+			$sub_key = (string) $sub_key;
+			if ( 'acf_fc_layout' === $sub_key ) {
+				$out[ $sub_key ] = $sub_val;
+				continue;
+			}
+			$sub = $by_name[ $sub_key ] ?? ( $by_key[ $sub_key ] ?? null );
+			if ( null === $sub ) {
+				$out[ $sub_key ] = $sub_val;
+				continue;
+			}
+			if ( in_array( (string) ( $sub['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
+				$sub_val = self::rekey_container( $sub_val, $sub, $to_key );
+			}
+			$out[ $to_key ? (string) $sub['key'] : (string) $sub['name'] ] = $sub_val;
 		}
 		return $out;
 	}
@@ -268,11 +303,12 @@ class AcfStubStore {
 		$stored = self::coerce_stored( $value );
 
 		// Optionally model real ACF Pro's container re-keying: a value written by sub-field NAME is
-		// stored (and read back RAW) by sub-field KEY. Only when a test opts in via the flag.
+		// stored (and read back RAW) by sub-field KEY, at every nesting depth. Only when a test
+		// opts in via the flag.
 		if ( self::$model_container_rekeying ) {
 			$def = self::$field_defs[ (string) $field_key ] ?? null;
-			if ( is_array( $def ) && in_array( (string) ( $def['type'] ?? '' ), array( 'repeater', 'group', 'flexible_content' ), true ) ) {
-				$stored = self::rekey_container( $stored, $def, self::name_to_key_map( $def ) );
+			if ( is_array( $def ) && in_array( (string) ( $def['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
+				$stored = self::rekey_container( $stored, $def, true );
 			}
 		}
 
@@ -313,11 +349,10 @@ class AcfStubStore {
 
 		// Real ACF returns a container FORMATTED value keyed by sub-field NAME, even though the raw
 		// value is stored by key. When modelling that, re-key the raw value back to names here.
-		if ( self::$model_container_rekeying && in_array( $type, array( 'repeater', 'group', 'flexible_content' ), true ) ) {
+		if ( self::$model_container_rekeying && in_array( $type, self::CONTAINER_TYPES, true ) ) {
 			$def = self::$field_defs[ (string) $field_key ] ?? null;
 			if ( is_array( $def ) ) {
-				$name_to_key = self::name_to_key_map( $def );
-				return self::rekey_container( $raw, $def, array_flip( $name_to_key ) );
+				return self::rekey_container( $raw, $def, false );
 			}
 		}
 

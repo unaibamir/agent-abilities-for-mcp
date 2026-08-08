@@ -615,9 +615,11 @@ function aafm_ajax_save_bridged_abilities(): void {
 	// While read-only mode is on, a bridged write has no checkbox, so a posted one did not come
 	// from the screen. Refuse a slug that is not already stored, the same rule
 	// aafm_set_enabled_abilities() applies to native names: an existing choice is carried forward,
-	// a fresh one is not accepted from a form that never offered it.
+	// a fresh one is not accepted from a form that never offered it. The refused slugs are kept
+	// so the refusal can be audited below (B18), exactly as the native path audits its own.
+	$refused = array();
 	if ( aafm_read_only_mode() ) {
-		$allowed = array_values(
+		$kept = array_values(
 			array_filter(
 				$allowed,
 				static function ( string $slug ) use ( $stored ): bool {
@@ -625,6 +627,9 @@ function aafm_ajax_save_bridged_abilities(): void {
 				}
 			)
 		);
+
+		$refused = array_values( array_diff( $allowed, $kept ) );
+		$allowed = $kept;
 	}
 
 	// Enabled slugs whose host plugin is currently inactive are not in $available and their
@@ -647,6 +652,16 @@ function aafm_ajax_save_bridged_abilities(): void {
 	}
 	$enabled = array_values( array_unique( array_merge( $allowed, $orphans, $lock_kept ) ) );
 	update_option( 'aafm_enabled_bridged_abilities', $enabled );
+
+	// B18: the bridge tab changes ability exposure outside the main save path, so it carries the
+	// same audit contract - one ability_enabled/ability_disabled row per changed slug, and one
+	// ability_enable_blocked row per refused fresh write. The reason is passed explicitly:
+	// aafm_ability_lock_reason() is native-only and must never see a bridged slug, and the only
+	// floor that refuses a bridged enable is read-only mode.
+	aafm_log_ability_toggle_diff( $stored, $enabled );
+	if ( ! empty( $refused ) ) {
+		aafm_log_blocked_ability_enables( $refused, 'read_only' );
+	}
 
 	wp_send_json_success(
 		array(

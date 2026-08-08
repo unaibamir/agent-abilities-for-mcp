@@ -41,7 +41,7 @@ function aafm_register_revisions_definitions( array $registry ): array {
 	);
 	$registry['aafm/restore-revision'] = array(
 		'label'        => __( 'Restore revision', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Restore a post to one of its revisions. The current state is first saved as a fresh revision, so the restore is reversible. Refused when revisions are disabled for the post, since the current state could not be preserved and the restore would be irreversible.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'content',
@@ -339,6 +339,20 @@ function aafm_exec_restore_revision( array $input ) {
 	$revision_id = absint( $input['revision_id'] ?? 0 );
 	if ( is_wp_error( aafm_validate_revision( $revision_id, $post_id ) ) ) {
 		return aafm_generic_error();
+	}
+	// Reversibility guard (B49): the fresh pre-restore snapshot is taken by core's
+	// wp_save_post_revision() hook, which bails when revisions are disabled for this post
+	// (WP_POST_REVISIONS false / the wp_revisions_to_keep filter returning 0) or the type
+	// dropped 'revisions' support. Restoring in that state would silently destroy the
+	// current state under a "reversible" promise, so refuse with an actionable error.
+	$parent = get_post( $post_id );
+	if ( ! $parent instanceof WP_Post
+		|| ! post_type_supports( $parent->post_type, 'revisions' )
+		|| ! wp_revisions_enabled( $parent ) ) {
+		return new WP_Error(
+			'aafm_restore_irreversible',
+			__( 'Revisions are disabled for this post, so the current state cannot be saved before restoring and the restore would be irreversible. Refusing. Enable revisions for this post type to restore.', 'agent-abilities-for-mcp' )
+		);
 	}
 	$restored = wp_restore_post_revision( $revision_id );
 	if ( is_wp_error( $restored ) || (int) $restored < 1 ) {

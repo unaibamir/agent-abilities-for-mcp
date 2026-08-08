@@ -153,6 +153,49 @@ final class RevisionsTest extends TestCase {
 	 * one. We force the restore write to fail (via wp_insert_post_empty_content, which makes
 	 * wp_update_post bail), then assert the guard returns a WP_Error.
 	 */
+	/**
+	 * B49: the description claims "the current state is first saved as a fresh revision, so
+	 * the restore is reversible". When revisions are disabled for the post (WP_POST_REVISIONS
+	 * false, or the wp_revisions_to_keep filter returning 0), core takes NO fresh snapshot
+	 * and the pre-restore state is lost forever. The ability must refuse rather than perform
+	 * an irreversible restore under a reversibility promise.
+	 */
+	public function test_restore_refuses_when_revisions_are_disabled_for_the_post(): void {
+		$author = self::factory()->user->create( array( 'role' => 'author' ) );
+		wp_set_current_user( $author );
+		$pid = self::factory()->post->create(
+			array(
+				'post_author'  => $author,
+				'post_content' => 'v1',
+			)
+		);
+		wp_update_post(
+			array(
+				'ID'           => $pid,
+				'post_content' => 'v2',
+			)
+		);
+		$revs   = wp_get_post_revisions( $pid );
+		$oldest = end( $revs );
+		$this->assertInstanceOf( \WP_Post::class, $oldest, 'a genuine revision must exist before revisions are disabled.' );
+
+		// Disable revisions AFTER the history exists - the WP_POST_REVISIONS=false site shape.
+		add_filter( 'wp_revisions_to_keep', '__return_zero' );
+
+		$out = aafm_exec_restore_revision(
+			array(
+				'post_id'     => $pid,
+				'revision_id' => (int) $oldest->ID,
+			)
+		);
+
+		remove_filter( 'wp_revisions_to_keep', '__return_zero' );
+
+		$this->assertInstanceOf( \WP_Error::class, $out );
+		$this->assertSame( 'aafm_restore_irreversible', $out->get_error_code(), 'an irreversible restore must be refused with the named error.' );
+		$this->assertSame( 'v2', get_post( $pid )->post_content, 'the post must be left untouched by the refusal.' );
+	}
+
 	public function test_restore_failure_returns_error_not_false_success(): void {
 		$author = self::factory()->user->create( array( 'role' => 'author' ) );
 		wp_set_current_user( $author );

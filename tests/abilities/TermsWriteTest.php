@@ -83,6 +83,71 @@ final class TermsWriteTest extends TestCase {
 		unregister_taxonomy( 'aafm_genre' );
 	}
 
+	/**
+	 * B13: discovery must match executability. The test above proves a principal holding only a
+	 * custom taxonomy's own manage_terms cap CAN call create-term on that taxonomy - but the
+	 * empty-input discovery probe defaulted the taxonomy to 'category' and checked
+	 * manage_categories, hiding both term writes from the one user who could actually use them.
+	 * The discovery floor must reflect what the permission callback accepts: manage_terms on ANY
+	 * public taxonomy.
+	 */
+	public function test_term_writes_are_discoverable_with_any_public_taxonomy_manage_cap(): void {
+		register_taxonomy(
+			'aafm_genre',
+			'post',
+			array(
+				'public'       => true,
+				'show_in_rest' => true,
+				'capabilities' => array( 'manage_terms' => 'manage_aafm_genres' ),
+			)
+		);
+
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		$user    = get_userdata( $user_id );
+		$user->add_cap( 'manage_aafm_genres' );
+		wp_set_current_user( $user_id );
+
+		// Executable on the custom taxonomy...
+		$this->assertTrue( wp_get_ability( 'aafm/create-term' )->check_permissions( array( 'taxonomy' => 'aafm_genre' ) ) );
+		// ...so it must be visible in tools/list too.
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/create-term' ),
+			'A user who can execute create-term on a public taxonomy must be able to discover it.'
+		);
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/update-term' ),
+			'A user who can execute update-term on a public taxonomy must be able to discover it.'
+		);
+
+		// A user with no manage_terms cap anywhere still discovers nothing.
+		$this->acting_as( 'subscriber' );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/create-term' ) );
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/update-term' ) );
+
+		// An editor (manage_categories) keeps discovering, unchanged.
+		$this->acting_as( 'editor' );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-term' ) );
+
+		unregister_taxonomy( 'aafm_genre' );
+	}
+
+	/**
+	 * B13 (docs half): the description claimed manage_categories unconditionally while the gate
+	 * is the target taxonomy's own manage-terms cap. Pin the corrected claim in both the registry
+	 * description and the operator disclosure.
+	 */
+	public function test_create_term_copy_names_the_taxonomy_own_cap_not_manage_categories(): void {
+		$registry    = aafm_get_abilities_registry();
+		$description = (string) $registry['aafm/create-term']['description'];
+		$this->assertStringNotContainsString( 'manage_categories', $description, 'The description must not claim a fixed manage_categories gate.' );
+		$this->assertStringContainsString( 'manage-terms', $description, 'The description must name the taxonomy\'s own manage-terms capability.' );
+
+		$disclosures = aafm_ability_disclosures();
+		$disclosure  = (string) ( $disclosures['aafm/create-term'] ?? '' );
+		$this->assertStringNotContainsString( 'manage_categories', $disclosure );
+		$this->assertStringContainsString( 'manage-terms', $disclosure );
+	}
+
 	public function test_low_priv_create_term_denial_is_audited(): void {
 		// A subscriber lacks manage_categories: denied, and the denial is audited.
 		$this->acting_as( 'subscriber' );

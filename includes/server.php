@@ -408,6 +408,25 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/add-post-terms':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
+		// Term writes gate on the TARGET taxonomy's own manage_terms cap (aafm_perm_manage_terms),
+		// and the taxonomy is unknown at discovery: with empty input the callback defaults to
+		// 'category' and checks manage_categories, which hides both tools from a principal whose
+		// only grant is a custom taxonomy's decoupled cap - the one user who can actually call
+		// them. Discovery therefore mirrors what the callback accepts across its whole input
+		// space: manage_terms on ANY public taxonomy (the same allow-list
+		// aafm_validate_taxonomy() enforces). The per-taxonomy callback still runs unchanged as
+		// the execute-time gate.
+		case 'aafm/create-term':
+		case 'aafm/update-term':
+			return static function (): bool {
+				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
+					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->manage_terms ) ) {
+						return true;
+					}
+				}
+				return false;
+			};
+
 		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
 		// included, since term meta can hold private data) - the term id is unknown at
 		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.

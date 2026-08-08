@@ -28,7 +28,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/create-term']      = array(
 		'label'        => __( 'Create term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Create a term in a public taxonomy (requires manage_categories).', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Create a term in a public taxonomy. Requires that taxonomy\'s own manage-terms capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',

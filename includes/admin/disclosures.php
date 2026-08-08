@@ -106,7 +106,7 @@ function aafm_ability_disclosures(): array {
 		'aafm/moderate-comment'            => __( 'Approves, unapproves, spams, or trashes a comment. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
 		'aafm/create-comment'              => __( 'Adds a comment to a post as the agent user. It is held for moderation, never auto-published, and the author is always the agent, not free-form input. Requires the moderate_comments capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-comment'              => __( "Edits a comment's text only. It cannot change the post, author, email, or IP. Requires edit access to that comment.", 'agent-abilities-for-mcp' ),
-		'aafm/create-term'                 => __( 'Creates a term in a public taxonomy. Requires the manage_categories capability.', 'agent-abilities-for-mcp' ),
+		'aafm/create-term'                 => __( 'Creates a term in a public taxonomy. Requires that taxonomy\'s own manage-terms capability.', 'agent-abilities-for-mcp' ),
 		'aafm/update-term'                 => __( 'Updates a term. Reparenting is guarded against hierarchy loops.', 'agent-abilities-for-mcp' ),
 		'aafm/add-post-terms'              => __( 'Adds terms to a post without removing its existing terms. Requires edit access to the post and the taxonomy\'s assign capability; only existing terms in that taxonomy can be added.', 'agent-abilities-for-mcp' ),
 		'aafm/update-term-meta'            => __( 'Writes one allowlisted scalar meta value to a term you can edit. Only allowlisted keys; protected keys are blocked.', 'agent-abilities-for-mcp' ),

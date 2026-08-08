@@ -23,6 +23,11 @@ namespace AAFM\Tests\Audit;
 
 use AAFM\Tests\TestCase;
 
+/**
+ * Pins the network activation table install and the new-site hook.
+ *
+ * @group ms-required
+ */
 final class MsActivationTablesTest extends TestCase {
 
 	public function set_up(): void {

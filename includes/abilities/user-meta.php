@@ -310,5 +310,10 @@ function aafm_exec_delete_user_meta( array $input ) {
 		return aafm_generic_error();
 	}
 	delete_user_meta( $id, $key );
+	// Report the real end state, not a hardcoded true: if the key is still present the delete did
+	// not take. Deleting an already-absent key is an idempotent success.
+	if ( metadata_exists( 'user', $id, $key ) ) {
+		return aafm_generic_error();
+	}
 	return array( 'deleted' => true );
 }

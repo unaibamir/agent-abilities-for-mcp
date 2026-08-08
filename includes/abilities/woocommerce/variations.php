@@ -812,8 +812,11 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 	if ( null === $variation ) {
 		return aafm_generic_error();
 	}
-	// WC_Data::delete( true ) returns false when the data store could not remove the row.
-	if ( false === $variation->delete( true ) ) {
+	$variation->delete( true );
+	// WC_Data::delete() returns true whenever a data store exists, and a loaded variation always has
+	// one, so its return never signals a store-level failure. Verify the row is actually gone by
+	// re-reading rather than trusting the return.
+	if ( null !== aafm_wc_get_variation( $id ) ) {
 		return aafm_generic_error();
 	}
 

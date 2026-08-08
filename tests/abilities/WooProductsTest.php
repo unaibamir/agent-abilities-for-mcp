@@ -693,6 +693,28 @@ final class WooProductsTest extends TestCase {
 		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ), 'The product must still exist after a failed delete.' );
 	}
 
+	/**
+	 * B21: when the store keeps the row but WC_Data::delete() still returns true (its real contract),
+	 * the ability must verify by re-reading and report failure, not deleted:true.
+	 *
+	 * A guard on delete()'s return is dead here because delete() returns true whenever a data store
+	 * exists, so the old code reported deleted:true over a product that was never removed.
+	 */
+	public function test_delete_product_reports_failure_when_row_survives_a_true_return(): void {
+		$this->acting_as( 'administrator' );
+
+		\AAFM\Tests\WcStubStore::$delete_returns_true_but_keeps = true;
+		$res = wp_get_ability( 'aafm/wc-delete-product' )->execute( array( 'product_id' => 101 ) );
+		\AAFM\Tests\WcStubStore::$delete_returns_true_but_keeps = false;
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'A delete that left the product present must not report deleted:true.'
+		);
+		$this->assertTrue( \AAFM\Tests\WcStubStore::exists( 101 ), 'The product is still present.' );
+	}
+
 	public function test_delete_product_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product must be destructive.' );

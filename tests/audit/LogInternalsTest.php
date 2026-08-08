@@ -22,6 +22,32 @@ final class LogInternalsTest extends TestCase {
 		aafm_clear_activity_log();
 	}
 
+	/**
+	 * B5: the schema self-heal must ride the paths that actually take traffic. admin_init only
+	 * fires on admin requests, so a headless site that auto-updates over cron and serves MCP over
+	 * REST would keep failing every audit insert against a stale schema while calls keep
+	 * succeeding, and nobody would ever open wp-admin to trigger the heal. The audit log is a
+	 * security control, so the same option-version gate (one autoloaded option compare per
+	 * request before any dbDelta) is hooked on rest_api_init too.
+	 */
+	public function test_schema_self_heals_on_rest_traffic_not_only_admin(): void {
+		$this->assertNotFalse(
+			has_action( 'rest_api_init', 'aafm_maybe_upgrade_activity_log' ),
+			'A REST-only site must self-heal the audit schema without an admin page load.'
+		);
+
+		// And the heal actually runs from that hook: simulate a stale recorded version, fire the
+		// init the MCP transport rides in on, and the recorded version must be current again.
+		update_option( 'aafm_activity_log_schema_version', '1' );
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- deliberately fire core's own REST init to prove the heal rides it.
+		do_action( 'rest_api_init' );
+		$this->assertSame(
+			AAFM_ACTIVITY_LOG_SCHEMA_VERSION,
+			get_option( 'aafm_activity_log_schema_version' ),
+			'Firing rest_api_init must bring a stale audit-log schema current.'
+		);
+	}
+
 	public function test_source_ip_validates_remote_addr(): void {
 		// Stashing the real value to restore after the test; no sanitization needed.
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash

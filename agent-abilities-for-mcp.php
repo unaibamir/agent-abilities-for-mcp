@@ -278,8 +278,13 @@ function aafm_bootstrap() {
 	add_action( 'admin_init', 'aafm_register_privacy_policy_content' );
 
 	// Same admin_init rationale: keeps the OAuth schema current on real upgrades
-	// (the installer runs only when the recorded version is behind).
+	// (the installer runs only when the recorded version is behind). Hooked on
+	// rest_api_init as well, mirroring the activity-log wiring in includes/audit/log.php:
+	// a headless site that auto-updates over cron and serves bearer traffic over REST may
+	// never see an admin request, and its OAuth tables would stay on the old schema
+	// forever. The version guard makes both hooks one option compare per request.
 	add_action( 'admin_init', 'aafm_maybe_upgrade_oauth_tables' );
+	add_action( 'rest_api_init', 'aafm_maybe_upgrade_oauth_tables' );
 
 	// One-time backfill so a pre-marker install's agent user is recognised by the onboarding
 	// checklist. Self-guarded by a stored flag; runs at most once. Defined in admin/connection.php.

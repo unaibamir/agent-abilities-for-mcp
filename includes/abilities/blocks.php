@@ -515,7 +515,9 @@ function aafm_exec_delete_block( array $input ) {
 		return aafm_generic_error();
 	}
 	if ( ! aafm_trash_is_enabled() ) {
-		return aafm_generic_error();
+		// The same actionable refusal trash-post/trash-page return, so the agent learns WHY
+		// the delete was refused instead of getting the generic error (B43).
+		return aafm_trash_disabled_error();
 	}
 	$result = wp_trash_post( $id );
 	if ( ! $result instanceof WP_Post ) {

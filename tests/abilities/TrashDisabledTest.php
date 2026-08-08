@@ -32,6 +32,7 @@ final class TrashDisabledTest extends TestCase {
 				'aafm/trash-post',
 				'aafm/trash-page',
 				'aafm/moderate-comment',
+				'aafm/delete-block',
 			)
 		);
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
@@ -66,6 +67,33 @@ final class TrashDisabledTest extends TestCase {
 		$post = get_post( $post_id );
 		$this->assertNotNull( $post, 'trash-post permanently deleted the post when Trash was disabled.' );
 		$this->assertSame( 'publish', $post->post_status );
+	}
+
+	/**
+	 * B43: delete-block must return the same actionable trash-disabled error as its
+	 * trash-post/trash-page siblings, not the generic error that tells the agent nothing.
+	 */
+	public function test_delete_block_refuses_with_the_trash_disabled_error(): void {
+		$this->disable_trash();
+		$this->acting_as( 'administrator' );
+		$block_id = (int) self::factory()->post->create(
+			array(
+				'post_type'    => 'wp_block',
+				'post_status'  => 'publish',
+				'post_title'   => 'Doomed',
+				'post_content' => '<!-- wp:paragraph --><p>Hi</p><!-- /wp:paragraph -->',
+			)
+		);
+
+		$out = wp_get_ability( 'aafm/delete-block' )->execute( array( 'block_id' => $block_id ) );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_trash_disabled', $out->get_error_code(), 'delete-block must match the sibling trash-disabled refusal.' );
+
+		// The block must still exist (NOT force-deleted).
+		$block = get_post( $block_id );
+		$this->assertNotNull( $block, 'delete-block permanently deleted the block when Trash was disabled.' );
+		$this->assertSame( 'publish', $block->post_status );
 	}
 
 	public function test_trash_page_refuses_and_keeps_page_when_trash_disabled(): void {

@@ -1370,6 +1370,150 @@ final class AcfTest extends TestCase {
 	}
 
 	/**
+	 * B4 sweep: the flat-container sibling of the repeater-inside-flex case. A GROUP nested inside
+	 * a flexible-content layout stores the flex row AND the nested group map by sub-field KEY, so
+	 * the verify must re-key both depths back to names - including resolving the group's own def
+	 * through layouts[*]['sub_fields'] - before comparing against the name-keyed sent value.
+	 */
+	public function test_update_post_fields_group_inside_flex_persist_is_reported_as_success(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf_group_inside_flex();
+		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex3' => array(
+						array(
+							'acf_fc_layout' => 'section',
+							'heading'       => 'Top',
+							'meta'          => array(
+								'label' => 'Docs',
+								'url'   => 'https://example.test/docs',
+							),
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			$res instanceof WP_Error ? 'update returned ' . $res->get_error_code() : ''
+		);
+
+		// Prove the success is real: the raw store is KEY-keyed at BOTH depths (real ACF), and the
+		// formatted read returns the name-keyed shape with the nested url still typed at depth.
+		$raw = \AAFM\Tests\AcfStubStore::value( 'field_flex3', $post_id );
+		$this->assertArrayHasKey( 'field_flex3_meta', $raw[0], 'The flex row must be stored by sub-field key.' );
+		$this->assertArrayHasKey( 'field_meta_label', $raw[0]['field_flex3_meta'], 'The nested group map must be stored by ITS sub-field key.' );
+
+		$formatted = \AAFM\Tests\AcfStubStore::value_formatted( 'field_flex3', $post_id );
+		$this->assertSame( 'Top', $formatted[0]['heading'] );
+		$this->assertSame( 'Docs', $formatted[0]['meta']['label'] );
+		$this->assertSame( 'https://example.test/docs', $formatted[0]['meta']['url'] );
+	}
+
+	/**
+	 * The other half of truthful reporting for the same nested shape: a group-inside-flex write
+	 * whose update_field() dies (stores nothing) must come back as the failure it is, never a
+	 * false success.
+	 */
+	public function test_update_post_fields_group_inside_flex_failed_persist_is_reported_as_failure(): void {
+		$this->reset_integration_stubs();
+		$this->force_integration( 'acf' );
+		$this->stub_acf_group_inside_flex();
+		\AAFM\Tests\AcfStubStore::$model_container_rekeying = true;
+		\AAFM\Tests\AcfStubStore::$fail_keys                = array( 'field_flex3' );
+		aafm_registry_cache_should_flush( true );
+		$this->register_acf();
+
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex3' => array(
+						array(
+							'acf_fc_layout' => 'section',
+							'heading'       => 'Top',
+							'meta'          => array( 'label' => 'Docs' ),
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A write that stored nothing must be reported as a failure.' );
+		$this->assertNull( \AAFM\Tests\AcfStubStore::value( 'field_flex3', $post_id ), 'The failed write must have stored nothing.' );
+	}
+
+	/**
+	 * Register a flexible-content field whose 'section' layout nests a GROUP ('meta') beside a text
+	 * sub-field, for the two group-inside-flex round-trip tests above.
+	 */
+	private function stub_acf_group_inside_flex(): void {
+		$this->stub_acf(
+			array(
+				'groups' => array(
+					array(
+						'key'    => 'group_flex3',
+						'title'  => 'Group-in-flex group',
+						'fields' => array(
+							array(
+								'key'     => 'field_flex3',
+								'name'    => 'flex3',
+								'label'   => 'Sections',
+								'type'    => 'flexible_content',
+								'layouts' => array(
+									array(
+										'key'        => 'layout_section3',
+										'name'       => 'section',
+										'sub_fields' => array(
+											array(
+												'key'  => 'field_flex3_heading',
+												'name' => 'heading',
+												'type' => 'text',
+											),
+											array(
+												'key'  => 'field_flex3_meta',
+												'name' => 'meta',
+												'type' => 'group',
+												'sub_fields' => array(
+													array(
+														'key'  => 'field_meta_label',
+														'name' => 'label',
+														'type' => 'text',
+													),
+													array(
+														'key'  => 'field_meta_url',
+														'name' => 'url',
+														'type' => 'url',
+													),
+												),
+											),
+										),
+									),
+								),
+							),
+						),
+					),
+				),
+			)
+		);
+	}
+
+	/**
 	 * B26 sweep: all three update abilities share aafm_acf_write_fields/aafm_acf_sanitize_value, so
 	 * the layout-aware resolver must hold on the term and user paths too - a javascript: URL inside
 	 * a flex layout is stripped before it reaches either selector's storage.

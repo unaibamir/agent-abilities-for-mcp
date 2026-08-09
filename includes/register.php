@@ -118,7 +118,11 @@ function aafm_result_magnitude( $result ): ?int {
  * decorated execute callback - resets via AAFM_Rate_Limited_Ability::execute()'s finally; a
  * consumer WP_Error on mcp_adapter_pre_tool_call resets via
  * aafm_release_rate_memo_on_aborted_tool_call(); and a rethrown permission crash resets before it
- * throws.
+ * throws. Known residual, accepted: a third-party pre_tool_call filter that THROWS (rather than
+ * returning WP_Error) propagates out of apply_filters() before the release hook runs, leaving the
+ * memo stale for the rest of that request. That needs another server-side plugin hooking the
+ * adapter's filter and crashing; an MCP client cannot reach it alone, and filter-land offers no
+ * clean way to catch someone else's throw.
  *
  * @return array<string,bool> Reference to the request-scoped memo, keyed by ability name.
  */

@@ -278,6 +278,164 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertSame( 'aafm/rl-probe', $denied[0]['ability'] );
 	}
 
+	/**
+	 * B12 residual (Codex, doc 167): a call whose adapter-phase permission fire passes but whose
+	 * input then fails core's schema validation dies INSIDE WP_Ability::execute(), before the
+	 * decorated execute wrapper that used to be the only in-call release of the per-call rate memo.
+	 * The stale allowed memo then let the NEXT tools/call for the same ability in the same request
+	 * skip its consume, slipping past a rate limit of 1. AAFM_Rate_Limited_Ability::execute() now
+	 * releases the memo however core resolves the call.
+	 */
+	public function test_schema_invalid_call_does_not_carry_its_rate_memo_into_the_next_call(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+
+		$executed = 0;
+		$this->register(
+			'aafm/rl-leak-probe',
+			array(
+				'label'               => 'RL Leak Probe',
+				'description'         => 'Throwaway ability for the B12 stale-memo regression.',
+				'category'            => 'aafm-reads',
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'required'             => array( 'ok' ),
+					'properties'           => array( 'ok' => array( 'type' => 'boolean' ) ),
+					'additionalProperties' => false,
+				),
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static function () use ( &$executed ) {
+					++$executed;
+					return array( 'ok' => true );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+		$ability = wp_get_ability( 'aafm/rl-leak-probe' );
+
+		// Call 1, malformed: the adapter-phase permission fire passes and consumes the only token...
+		$this->assertTrue( $ability->check_permissions( array( 'extra' => true ) ) );
+		// ...then core refuses the input on schema grounds before the execute wrapper ever runs.
+		$this->assertInstanceOf( \WP_Error::class, $ability->execute( array( 'extra' => true ) ) );
+		$this->assertSame( 0, $executed, 'The malformed call must die at input validation, never reaching the execute callback.' );
+
+		// Call 2, valid, same ability, same request: the only token is already spent, so this must
+		// be denied. A stale memo from the dead call must not pay for it.
+		$this->assertFalse(
+			$ability->check_permissions( array( 'ok' => true ) ),
+			'A schema-invalid call must not gift its rate token to the next same-ability call in the batch.'
+		);
+		$this->assertSame( 0, $executed );
+	}
+
+	/**
+	 * B12 sweep: mcp_adapter_pre_tool_call may short-circuit a call with a WP_Error AFTER the
+	 * adapter's permission fire consumed a token but BEFORE execute() runs - the one dead-call path
+	 * core's execute() cannot see. The abort hook must release the stale memo so the next
+	 * same-ability call consumes fresh, and a pass-through (non-error) filter result must leave the
+	 * in-flight call's memo alone or core's re-check would consume a second token per call.
+	 */
+	public function test_aborted_pre_tool_call_releases_the_rate_memo(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+
+		$probe = static function (): array {
+			return array(
+				'label'               => 'RL Abort Probe',
+				'description'         => 'Throwaway ability for the pre_tool_call abort sweep.',
+				'category'            => 'aafm-reads',
+				'input_schema'        => array( 'type' => 'object' ),
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
+				'permission_callback' => '__return_true',
+			);
+		};
+		// Control first: a pass-through filter result must NOT touch the in-flight memo. The
+		// second permission fire (core's re-check) must reuse the memoized allow instead of
+		// consuming the empty bucket.
+		$this->register( 'aafm/rl-pass-probe', $probe() );
+		$pass      = wp_get_ability( 'aafm/rl-pass-probe' );
+		$pass_tool = \WP\MCP\Domain\Tools\McpTool::fromAbility( $pass );
+		$this->assertTrue( $pass->check_permissions( array() ) );
+		$args = aafm_release_rate_memo_on_aborted_tool_call( array( 'a' => 1 ), 'aafm-rl-pass-probe', $pass_tool );
+		$this->assertSame( array( 'a' => 1 ), $args, 'A pass-through result must come back unchanged.' );
+		$this->assertTrue( $pass->check_permissions( array() ), 'The in-flight call memo must survive a pass-through filter.' );
+
+		// The abort: a fresh principal gets a fresh bucket. The permission fire consumes the only
+		// token, the filter short-circuits the call, and the released memo means the next call
+		// consumes fresh - and finds the bucket empty.
+		$uid2 = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $uid2 );
+		$this->register( 'aafm/rl-abort-probe', $probe() );
+		$abort      = wp_get_ability( 'aafm/rl-abort-probe' );
+		$abort_tool = \WP\MCP\Domain\Tools\McpTool::fromAbility( $abort );
+		$this->assertTrue( $abort->check_permissions( array() ) );
+		$error = new \WP_Error( 'blocked', 'Blocked by a consumer filter.' );
+		$this->assertSame( $error, aafm_release_rate_memo_on_aborted_tool_call( $error, 'aafm-rl-abort-probe', $abort_tool ) );
+		$this->assertFalse(
+			$abort->check_permissions( array() ),
+			'An aborted call must not leave its allowed memo behind for the next same-ability call.'
+		);
+
+		// A malformed hook payload (no tool object) must pass through without a fatal.
+		$this->assertSame( array(), aafm_release_rate_memo_on_aborted_tool_call( array(), 'aafm-rl-abort-probe', null ) );
+	}
+
+	/**
+	 * B12 sweep: a permission callback that crashes while the rethrow switch is on escapes the
+	 * decorated closure AFTER the consume memoized an allow. The catch must release the memo before
+	 * rethrowing, or the next same-ability fire reuses the dead call's allow instead of consuming.
+	 */
+	public function test_rethrown_permission_crash_releases_the_rate_memo(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_true' );
+
+		$throws = 0;
+		$this->register(
+			'aafm/rl-throw-probe',
+			array(
+				'label'               => 'RL Throw Probe',
+				'description'         => 'Throwaway ability whose permission crashes once.',
+				'category'            => 'aafm-reads',
+				'input_schema'        => array( 'type' => 'object' ),
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array( 'ok' => true ),
+				'permission_callback' => static function () use ( &$throws ) {
+					if ( 0 === $throws ) {
+						++$throws;
+						throw new \RuntimeException( 'permission boom' );
+					}
+					return true;
+				},
+			)
+		);
+		$ability = wp_get_ability( 'aafm/rl-throw-probe' );
+
+		// On the 6.9 floor the rethrow escapes check_permissions(); 7.0's invoke_callback() catches
+		// it and converts to a WP_Error. Either way the crashed fire must not answer an allow - and
+		// either way it skipped the closure's non-true reset, which is the leak under test.
+		$first = null;
+		try {
+			$first = $ability->check_permissions( array() );
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'permission boom', $e->getMessage() );
+		}
+		if ( null !== $first ) {
+			$this->assertNotTrue( $first, 'The crashed fire must not answer an allow.' );
+		}
+
+		// The crashed fire consumed the only token. With the memo released, this fire consumes
+		// fresh and finds the bucket empty; with a stale memo it would wrongly answer true.
+		$this->assertFalse(
+			$ability->check_permissions( array() ),
+			'A rethrown permission crash must not leave its allowed memo behind.'
+		);
+	}
+
 	public function test_rate_limit_off_decorator_is_no_op(): void {
 		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $uid );

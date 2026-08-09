@@ -735,6 +735,12 @@ function aafm_register_mcp_server( $adapter ): void {
 	// aafm_filter_bridged_tool_call_result() in bridge.php for the full rationale).
 	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 3 );
 
+	// A consumer WP_Error on this filter aborts a call AFTER the adapter's permission fire consumed
+	// a rate token but BEFORE execute(); release the aborted call's memo so the next same-ability
+	// call consumes fresh instead of reusing the dead call's allow (B12). Last priority so any
+	// consumer's short-circuit is visible.
+	add_filter( 'mcp_adapter_pre_tool_call', 'aafm_release_rate_memo_on_aborted_tool_call', PHP_INT_MAX, 3 );
+
 	// Reject a top-level scalar JSON body before the transport builds its ?array-typed context
 	// (which would otherwise fatal, unauthenticated, before the auth check). Runs before route
 	// matching and the permission callback, so it fires early enough to close the crash.

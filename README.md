@@ -9,7 +9,7 @@ WordPress MCP server for Claude and ChatGPT. Per-capability permission controls,
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.0 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.6.1 |
+| **Stable tag** | 1.6.2 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description

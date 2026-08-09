@@ -382,15 +382,19 @@ final class OutputSchemaFidelityTest extends TestCase {
 		\WP_Theme_JSON_Resolver::clean_cached_data();
 
 		// Core's own read is `get_raw_data()['styles']` with no isset (global-styles-and-settings
-		// .php:129 on both 6.9.4 and 7.0.2): in production that is an E_WARNING and execution
-		// continues with null, which is exactly the value the guard exists for. The test suite
-		// converts warnings to errors, so silence this one to reproduce what production does.
+		// .php:129 on both 6.9.4 and 7.0.2): in production that diagnostic-then-continue-with-null
+		// is exactly the value the guard exists for. The level depends on the PHP line: E_WARNING
+		// "Undefined array key" on PHP 8, E_NOTICE "Undefined index" on the PHP 7.4 floor, so the
+		// mask must cover both or the 7.4 notice prints and fails PHPUnit's strict-output check.
+		// The output buffer pins that: anything the handler misses lands in $leaked.
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_set_error_handler -- reproduces production's warning-then-continue in a test env that converts warnings to errors.
-		set_error_handler( static fn() => true, E_WARNING );
+		set_error_handler( static fn() => true, E_WARNING | E_NOTICE );
+		ob_start();
 		try {
 			$out  = aafm_exec_get_global_styles();
 			$json = (string) wp_json_encode( $out );
 		} finally {
+			$leaked = ob_get_clean();
 			restore_error_handler();
 			foreach ( array( 'default', 'blocks', 'theme', 'user' ) as $layer ) {
 				remove_filter( "wp_theme_json_data_{$layer}", $empty_layer );
@@ -398,6 +402,7 @@ final class OutputSchemaFidelityTest extends TestCase {
 			\WP_Theme_JSON_Resolver::clean_cached_data();
 		}
 
+		$this->assertSame( '', $leaked, 'The empty-layers path emitted a diagnostic the scoped handler did not cover; on the PHP 7.4 floor that prints and fails strict-output in CI.' );
 		$this->assertStringContainsString( '"styles":{}', $json, 'null or [] here violates the declared object schema.' );
 		$this->assertStringNotContainsString( '"styles":null', $json );
 		$this->assertStringNotContainsString( '"settings":null', $json );

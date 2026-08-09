@@ -166,9 +166,12 @@ function aafm_rate_limit_call_reset( string $name ): void {
  * memoized the allow) and BEFORE execute(); a WP_Error short-circuit there kills the call without
  * ever entering execute(), so it is the one dead-call path AAFM_Rate_Limited_Ability's finally
  * cannot see. Without this release the stale allow paid for the next same-ability call in the same
- * request (finding B12, doc 167). Wired at PHP_INT_MAX in aafm_register_mcp_server() so any
- * consumer's WP_Error is visible here; a pass-through (array) result leaves the in-flight call's
- * memo alone, since core's re-check inside execute() still needs it.
+ * request (finding B12, doc 167). Wired at PHP_INT_MAX in aafm_register_mcp_server() so it runs after
+ * the adapter's own permission fire and sees a WP_Error short-circuit from any consumer whose filter
+ * registered before this one; a same-priority consumer that registers later runs after this hook (core
+ * runs equal-priority filters in registration order), so its short-circuit is not visible here. A
+ * pass-through (array) result leaves the in-flight call's memo alone, since core's re-check inside
+ * execute() still needs it.
  *
  * @param mixed       $args      The filtered tool arguments, or a WP_Error short-circuit.
  * @param string      $tool_name The MCP tool name (unused: the memo is keyed by ability name, which

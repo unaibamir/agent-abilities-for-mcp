@@ -4,7 +4,7 @@ Tags: chatgpt, claude, mcp, mcp-server, woocommerce
 Requires at least: 6.9
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.6.2
+Stable tag: 1.6.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -257,253 +257,116 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Changelog ==
 
+= 1.6.3 =
+
+* **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.
+* **Chore:** Corrected a code comment that slightly overstated when a consumer plugin's short-circuit is visible to the rate-limit release hook.
+
 = 1.6.2 =
 
-* **Fix:** The credential redaction for payment gateway and shipping method settings missed several field names it was meant to catch, among them passwd, pass, account_number, merchant_id, license, and username. All of them are dropped now. The list stays best-effort over field names third-party plugins choose, so an unusual name can still get through.
-* **Fix:** A variation that inherits its parent's stock reported the parent's quantity as its own, right beside a manage_stock of false. It reports null now, because the variation owns no stock of its own and the parent's number belongs to the parent.
-* **Fix:** Moderating a comment that another plugin's hook deleted during the write reported a status of "unknown" and read like a success. It returns an error now.
-* **Fix:** The aafm_ability_resolved action stayed silent when the audit table's opening insert failed, so a crash at exactly the moment the log was failing was invisible to a monitor. It now announces those calls with a null row_id, so treat row_id as nullable: a real id joins to the log as before, null means the call never got a row.
-* **Feature:** The admin activity log can filter on Started, the state a crashed call leaves behind. The activity-log ability could already do this; the screen now matches.
-* **Fix:** The global-styles read could report null where its schema declares an object, if a plugin emptied every theme.json layer. It reports an empty object instead.
-* **Fix:** Registering an ability without an execute callback produced a confusing warning followed by a fatal. It is refused with a clear message now, the same way a missing permission callback already was.
-* **Fix:** A call refused for bad arguments had already claimed its rate-limit token, and the claim stuck around, so the next call to the same tool in the same request got through without being counted. A refused call now releases its claim, and the call after it counts against the limit like any other.
-* **Fix:** Bridged abilities that declare no input parameters, including two of WordPress's own, failed on every call. They work now.
-* **Fix:** Editing a WooCommerce customer over the bridge needed only the manage-WooCommerce capability, which let it read and overwrite any user's billing details. It now requires a real user-editing capability on the specific account and sits behind the high-risk lock like the other money and identity writes. The same gap in the user-meta and ACF user-field writes was closed at the same time.
-* **Fix:** On a site with no persistent object cache, which covers most shared hosting, the rate limit on the OAuth endpoints never actually took effect. It does now.
-* **Fix:** Writing a repeater, group, or flexible-content ACF field saved the rows but reported a failure, so an agent would retry over content it had already published. The write reports the success it is now.
-* **Fix:** Reading a page's rendered SEO head could return it for a post type the operator had not exposed to agents, even though every other SEO read on the same post was refused. It honours the exposure list now.
-* **Fix:** A backslash in a Rank Math or Yoast title or description, or in an image's alt text, was dropped on save. It is kept now.
-* **Fix:** Deleting a WooCommerce product or variation, or a post, term, or user meta key, reported success even when nothing was removed. The delete is confirmed before it reports success now.
-* **Fix:** An invalid billing email address was quietly turned into an empty one, erasing the stored address while reporting success. An invalid address is refused now; an empty one still clears the field on purpose.
-* **Fix:** The sales report accepted an unparseable date and answered with an all-time or empty total as if it were right. It refuses the bad date now.
-* **Fix:** Setting a stock status while stock management was on was silently ignored, because WooCommerce works the status out from the quantity. That combination is refused now, on both products and variations.
-* **Fix:** Re-submitting the current site title could fail the whole settings write with a false "not valid" message, because WordPress stores the title with its punctuation escaped. A no-op like that is accepted now.
-* **Fix:** A negative usage limit on a coupon, or a negative priority or order on a tax rate, was quietly flipped to its positive twin. A negative value is refused now.
-* **Fix:** The per-user rate limit counted each call twice, so a limit of sixty only allowed thirty. Each call counts once now.
-* **Fix:** An unauthenticated request whose body was a bare JSON value such as "x" or true crashed the MCP endpoint with a server error. It is refused with a clear 400 now.
-* **Fix:** A site that renamed a tool through the adapter's filter could leak an enabled admin-only tool into the tool list a lower-privileged connection sees, though it still could not call it. The list hides it as intended now.
-* **Fix:** Refunding specific order lines never worked: the order read did not expose the line item ids the refund asks for, so a per-line refund quietly became a full-amount refund with no per-line record. Orders now include each line's id, and a refund naming an id that is not on the order is refused.
-* **Fix:** A failure partway through adding order items could leave the earlier items attached while the response claimed nothing was written. The items are rolled back now, and if a row cannot be removed the error names exactly what stuck.
-* **Fix:** Listing variations on a grouped product returned an empty list next to a nonzero total. A product that cannot have variations is refused with an error naming its real type.
-* **Fix:** Creating a tax class whose slug already exists promised to de-duplicate but failed with a cryptic error. The collision is reported plainly now, and the description stops promising a de-dup WooCommerce never does.
-* **Fix:** A tax rate created or updated with an unknown tax-class slug was silently filed under Standard, which changes checkout tax. An unknown class is refused now, with the real class list in the error.
-* **Fix:** The product attribute type advertised a "text" option WooCommerce does not have; anything but "select" was silently converted. The schema lists only the types WooCommerce actually offers.
-* **Fix:** Updating a shipping method or payment gateway could save the title, fail on a later field, and report an error as if nothing had changed. An error now means nothing changed, or it names exactly which fields did.
-* **Fix:** Asking for a shipping zone by an id that does not exist was recorded as a crash and answered with a generic error. It returns a plain not-found now, like the tax lookups.
-* **Fix:** Turning a shipping method on or off skipped the WooCommerce action the admin screens fire, so extensions listening for the change never heard it. The action fires now.
-* **Fix:** The order count's total was a fixed sum of the seven built-in statuses, so orders in custom statuses went missing from it. The total covers every registered status now.
-* **Fix:** A coupon amount that was not a number, or an expiry date that could not be parsed, was silently saved as zero or nothing. Both are refused now.
-* **Fix:** The tax-rate list returned every rate at once. It pages like every other list now.
-* **Fix:** An order status change WooCommerce failed to apply still came back as a success. The new status is verified before the response says so.
-* **Fix:** A grouped product listed its child products under variation_ids, and they are not variations. Only variable products report variation ids now.
-* **Fix:** Listing orders with status "any" gave a different answer depending on the site's order storage backend. The statuses are spelled out explicitly now, so the answer is the same everywhere, includes custom statuses, and never counts checkout drafts.
-* **Fix:** A multi-line order note was flattened onto one line. Line breaks survive now, as they already did in customer notes.
-* **Fix:** The block list's total counted the current page instead of everything that matched, so paging through blocks stopped after page one. It reports the full count now.
-* **Fix:** Deleting a block on a site with trash disabled returned a generic error where posts and pages explain the problem. It gets the same clear error now.
-* **Fix:** The pages list was missing the page-number cap every other list declares, and no list enforced the cap server side. The cap is declared and enforced everywhere now.
-* **Fix:** Counting posts reports zero for non-public statuses when the caller cannot edit that type. That was always the behaviour, but nothing said so; the description and the operator disclosure now do.
-* **Fix:** The get-posts disclosure claimed the full post body is never returned, but the include_content parameter returns exactly that. The disclosure admits it now, for search too.
-* **Fix:** The post-type listing's writable flag claimed create and update, but some custom types only allow create. Update permission is reported as its own flag now.
-* **Fix:** Requesting a custom post type in a specific language on a WPML site quietly returned the untranslated item, because the translation lookup was pinned to the plain post type. It uses the item's real type now.
-* **Fix:** An unknown language code was silently ignored, and the response then read as if WPML were not installed. An unknown code is refused now, with the valid codes listed.
-* **Fix:** Restoring a revision claimed to be reversible even where revisions are switched off and no return snapshot exists. A restore that cannot be undone is refused with an explanation now.
-* **Fix:** A filter meant to narrow the readable site-settings list could also widen it. It can only narrow now.
-* **Fix:** Replacing one word in a post ran the whole body through the HTML filter, so an edit in one paragraph could strip markup the author was allowed to use elsewhere. Only the inserted text is sanitized now; the rest of the post is left byte for byte.
-* **Fix:** The force-draft setting only applied to posts and pages; blocks were published outright and WooCommerce products could go live regardless. It now covers everything an agent creates that has a draft state, and the setting text names what has none.
-* **Fix:** The audit log repaired its own schema only when someone opened wp-admin, so a headless site that auto-updates could silently drop audit rows. The repair runs on the traffic path too now.
-* **Fix:** Both readmes claimed the activity log never stores argument values, but it has stored ids, key names, slugs, and status values by design since 1.5.0. The claim now says exactly that, and that free-text content is never stored.
-* **Fix:** Turning the high-risk lock back on wiped the saved ability selections on the next settings save, so unlocking later brought nothing back. Selections survive the lock now and return when it lifts.
-* **Fix:** Term writes were hidden from the tool list for anyone without manage_categories yet callable with any taxonomy's own manage capability. What you can see now matches what you can call, and the description names the real requirement.
-* **Fix:** Enabling or disabling abilities through Quick Connect or the bridge tab left no audit rows, unlike the main settings save. Every path writes them now, including a blocked enable under read-only mode.
-* **Fix:** A call blocked by read-only mode was logged as "high-risk locked", the wrong cause in the one row meant to record it. The log names the real cause now.
-* **Fix:** A caller with valid credentials on a blocked IP could flood the activity log with denial rows. Those rows are capped per source now, like failed logins already were.
-* **Fix:** A batch request holding bare values instead of request objects got a blanket server error. It gets the per-request error JSON-RPC defines now.
-* **Fix:** One OAuth route check matched case-sensitively while its siblings did not, and an odd-cased route could slip past the malformed-body guard. Both match case-insensitively now.
-* **Fix:** ACF fields inside flexible-content layouts, and clone fields, were sanitized as unknown plain text: rich text was flattened and a javascript: link could get through. The sanitizer resolves layout and clone sub-fields now, at any nesting depth, and a repeater inside a layout no longer reports a false failure after a successful save.
-* **Fix:** A backslash in an ACF field value was stripped on save, and the read-back check then reported the write as a failure. It is kept now.
-* **Fix:** The ACF read abilities said the returned map is keyed by field key; it is keyed by field name. The descriptions say so now.
-* **Fix:** On multisite, the admin screen's create-agent-user action only checked for site admin, sidestepping the network's add-new-users setting. It requires the real user-creation capability now, as the ability already did.
-* **Fix:** Deleting a user on multisite reported deleted: true when WordPress only removes them from the current site; the account and its application passwords live on. The response now says the user was removed from the site and keeps the deleted flag honest.
-* **Fix:** On a multisite network, activation created the audit-log and OAuth tables for the main site only, and new subsites never got them. Every site gets them now, including sites created later.
-* **Fix:** The Rank Math head read claimed it returns an empty string when Rank Math cannot render a head; it actually refuses with an error naming the likely cause. The description and the operator disclosure say so now.
-* **Chore:** Corrected code comments and docblocks that still described behaviour earlier releases removed, cleared dead and duplicated test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
+* **Feature:** The admin activity log can filter on "Started", the state a crashed call leaves behind, matching what the activity-log ability already exposed.
+* **Fix:** Closed a privilege gap where editing a WooCommerce customer, or writing user meta or ACF user fields, needed only the manage-WooCommerce capability and could read or overwrite any account's details. These require a real user-editing capability now and sit behind the high-risk lock.
+* **Fix:** The rate limit on the OAuth endpoints never took effect on sites with no persistent object cache, which covers most shared hosting. It does now, and the per-user limit no longer counts each call twice.
+* **Fix:** Several WooCommerce writes reported success when nothing happened: deletes that removed nothing, order-status changes that failed to apply, and per-line refunds that quietly became full refunds. Each is confirmed or refused before it reports success now, and an invalid billing email no longer erases the stored address.
+* **Fix:** Bad values that used to be coerced silently are refused now: unparseable sales-report and coupon dates, non-numeric coupon amounts, negative limits, unknown tax classes (which had been filed under Standard and changed checkout tax), and a stock status set while stock management is on.
+* **Fix:** ACF repeater, group, and flexible-content writes saved their rows but reported a failure, so an agent would retry over content it had already published; and fields nested in flexible-content or clone layouts were sanitized as plain text, flattening rich text and letting a javascript: link through. Both are fixed, at any nesting depth.
+* **Fix:** Tightened what an agent can see and reach: an enabled admin-only tool could leak into a lower-privileged connection's tool list, an SEO head read could return for a post type the operator had not exposed, and a caller on a blocked IP could flood the activity log with denial rows.
+* **Fix:** Multisite activation creates the plugin's tables on every site now, including sites added later; deleting a user reports that they were only removed from the current site rather than fully deleted; and creating an agent user honours the network's add-new-users setting.
+* **Fix:** Corrected a run of tool descriptions and operator disclosures that overstated behaviour (what the activity log stores, how the ACF maps are keyed, count semantics, revision reversibility), and fixed a batch of smaller crash and response-shape defects across posts, blocks, comments, WPML, and SEO reads.
+* **Chore:** Cleared stale comments and dead test scaffolding, and brought the WooCommerce test stubs in line with what the real plugin does.
 
 = 1.6.1 =
 
-* **Fix:** Pages and posts with no categories, tags, or custom fields returned an empty array where the schema declares an object, so a strict MCP client rejected the whole response. Reported by an outside user as issue #81; the sweep it prompted found the same defect across the catalog.
-* **Fix:** Shipping method settings read WooCommerce's legacy global bucket, which has been empty for zone methods since WooCommerce 2.6. They now report the real per-instance configuration, so a title or cost you just wrote shows up in the response that follows it. This widens what the response carries: per-instance settings are where a carrier plugin may keep account details, and they pass through the same best-effort credential redaction as gateway settings, which cannot be exhaustive.
-* **Fix:** A variation reported that it manages its own stock when it was inheriting the parent's setting, telling an agent it could set a stock level it does not own.
-* **Fix:** Creating a percentage coupon over 100 in one call saved the coupon instead of rejecting it, because the amount was applied while the coupon was still a fixed-cart discount.
-* **Fix:** A duplicate variation SKU, a negative coupon amount, or a coupon maximum below its minimum crashed instead of returning an error.
-* **Fix:** An unexpected failure inside any ability now comes back as an error with the cause recorded in the activity log. The `aafm_rethrow_ability_exceptions` filter controls this, and it already follows `WP_DEBUG`, so a development site lets exceptions through by default. Set it to false if you would rather a debug site kept converting them to logged errors.
-* **Fix:** A comment whose parent post is in the trash reported a boolean where every other path reports a string. It now reports `post-trashed`, which is WordPress's own name for that state.
-* **Fix:** Block and comment writes returned an empty shape when the saved record could not be read back. They return an error instead.
-* **Fix:** Product image galleries and grouped product children encoded as an object rather than a list when the stored ids had gaps.
-* **Fix:** Payment gateway settings, title, and description could come back as an empty array or null against a declared object and string.
-* **Fix:** Site settings returned an empty array when the `aafm_allowed_site_settings` filter removed every entry.
-* **Fix:** User shapes returned an empty array where the schema declares an object when the underlying account could not be resolved.
-* **Fix:** Attachments that are not images returned an empty array for their sizes map.
-* **Fix:** Bridging an ability from another plugin and then calling it with arguments could take the site down with an uncaught error, which affects 1.6.0 as shipped. The bridge was rewriting the source plugin's schema into a shape WordPress core's own validator cannot read. That rewrite never reached an MCP client anyway, because the adapter undoes it before the tool is advertised, so it is gone.
-* **Fix:** A tool bridged from another plugin had the result shape it declares rewritten before WordPress checked a result against it, so an ability returning a single value where its own schema allows one came back as an invalid-output error. The declared shape now goes through untouched. The MCP adapter still stamps a type of its own onto a typeless schema when it advertises the tool, and that shape belongs upstream rather than here.
-* **Fix:** The activity log stored the raw text of an unexpected error. For a plugin like WooCommerce that text often quotes the value that caused the failure, such as an email address or a SKU, which broke this plugin's promise that free-text argument content is never stored. It now records the error's type and where it happened, which names the fault at least as precisely and cannot carry your data.
-* **Fix:** A permission check that failed unexpectedly returned the underlying error text to the connected agent and left no trace in the activity log. It now denies the call and records it. The same failure while a client was listing tools could empty the entire list, hiding every healthy tool along with the broken one.
-* **Fix:** Changing an existing coupon's discount type to percentage, without touching its amount, could save a coupon discounting more than 100 percent and report success. Raising a minimum spend past the coupon's stored maximum did the same. Both are now checked against the resulting coupon rather than the fields you happened to send.
-* **Feature:** A new `aafm_ability_resolved` action fires whenever a call finishes, so an uptime monitor or a logging plugin can react to a failure instead of waiting for someone to open wp-admin.
-* **Feature:** The activity-log ability returns each entry's detail, so an agent can read why a call failed rather than only that it did. A tool bridged from another plugin is the one exception: its own error codes are left out, because a third-party plugin is free to build a code out of the values you passed it.
-* **Chore:** The consent screen and the two shipping method reads now say that a method carries its own per-instance settings, which is where a carrier or gateway plugin may keep account details.
-* **Chore:** Corrected code comments that called the settings redactor deny-by-default. It is a best-effort denylist over field names and cannot be exhaustive, so a carrier plugin storing a credential under an unusual field name can still reach the wire.
+* **Feature:** A new aafm_ability_resolved action fires when a call finishes, so an uptime monitor or a logging plugin can react to a failure instead of waiting for someone to open wp-admin.
+* **Feature:** The activity-log ability returns each entry's detail, so an agent can read why a call failed, not only that it did.
+* **Fix:** Empty category, tag, custom-field, gallery, settings, and user maps returned an array where the schema declares an object, so a strict MCP client rejected the whole response. Reported by an outside user as issue #81; the sweep it prompted fixed the same defect across the catalog.
+* **Fix:** Calling a bridged ability from another plugin with arguments could take the site down on 1.6.0, because the bridge rewrote the source plugin's schema into a shape WordPress core's validator cannot read. That rewrite is gone.
+* **Fix:** The activity log stored the raw text of an unexpected error, which for a plugin like WooCommerce often quotes the value that caused the failure, such as an email or a SKU. It records the error's type and location now, which cannot carry your data.
+* **Fix:** A permission check that failed unexpectedly returned the underlying error to the connected agent and could empty the entire tool list; it denies the call and records it now.
+* **Fix:** Shipping method reads returned WooCommerce's legacy global settings, empty for zone methods since WooCommerce 2.6, so a title or cost you just wrote did not show up; they report the real per-instance configuration now. A variation no longer claims it manages stock it inherits from its parent.
+* **Fix:** Coupon and product validation that used to crash or save a bad record returns a clean error now: a percentage coupon over 100 (including one raised past 100 by a later type change), a duplicate variation SKU, a negative amount, and a maximum below the minimum.
+* **Chore:** Corrected copy and a code comment: the two shipping-method reads and the consent screen note that a method carries its own per-instance settings, and the settings redactor is described as the best-effort denylist it is, not deny-by-default.
 
 = 1.6.0 =
 
-* **Feature:** Read-only mode, a switch on the Settings tab that stops any ability that writes from being registered as an MCP tool, whatever is ticked. It covers abilities from other plugins as well, each classified by its own annotation.
-* **Feature:** Turning read-only mode on or off enables and disables nothing by itself. Your selections are left as they are, so switching the mode back off gives you exactly what you had chosen before.
-* **Feature:** An "Enable all reads" button on the Abilities, Integrations and Bridge tabs, which ticks every read ability in a section and leaves the writes alone.
-* **Feature:** The page header now states the site's posture on every tab: read-only, read plus write, or read plus write with high-risk unlocked. It is worked out from what would actually register, not from the stored setting.
-* **Feature:** Finishing the Quick Connect wizard without choosing write access now turns read-only mode on rather than ticking a set of boxes, so it still holds months later once you have enabled other things.
-* **Feature:** Turning read-only mode on or off is recorded in the activity log.
-* **Chore:** The minimum PHP version is now 7.4, down from 8.0. WordPress core itself requires 7.2, and about half the sites running a plugin in this category are still on 7.4.
-* **Chore:** The Settings tab is reorganised. OAuth leads, read-only mode and the high-risk switch are the first two rows of Safety controls, the longest descriptions fold behind a "See more", and Save settings now follows you down the page instead of sitting at the bottom.
-* **Chore:** The tab that lists abilities registered by your other plugins is now called "Other plugins", and it has its own icon rather than sharing the one Integrations uses.
-* **Chore:** The plugin's own listing now leads with what it actually gives you, permission controls and an audit log, rather than the generic "for AI agents" framing.
-* **Fix:** A refund amount sent with surrounding whitespace is now trimmed before the numeric check, so it is accepted or rejected the same way on every supported PHP version.
-* **Fix:** Several lists could come back in a different order on PHP 7.4 than on 8.x. They now sort the same way everywhere.
-* **Fix:** An ability from another plugin that returns a result in an unexpected shape is now caught and reported instead of failing further down with a less useful error.
+* **Feature:** Read-only mode, a switch on the Settings tab that stops any ability that writes from registering as an MCP tool, whatever is ticked, and it covers abilities from other plugins too. Turning it on or off enables and disables nothing by itself, so your selections survive, and finishing Quick Connect without choosing write access turns it on rather than ticking boxes.
+* **Feature:** An "Enable all reads" button on the Abilities, Integrations, and Bridge tabs ticks every read ability in a section and leaves the writes alone.
+* **Feature:** The page header states the site's posture on every tab (read-only, read plus write, or read plus write with high-risk unlocked), worked out from what would actually register rather than the stored setting. Turning read-only mode on or off is recorded in the activity log.
+* **Fix:** A refund amount with surrounding whitespace is trimmed before the numeric check now, several lists that could sort differently on PHP 7.4 than on 8.x sort the same everywhere, and an ability from another plugin that returns an unexpected shape is caught and reported rather than failing further down.
+* **Chore:** The minimum PHP version is now 7.4, down from 8.0. The Settings tab is reorganised with Safety controls up front, the "Other plugins" tab has its own name and icon, and the listing leads with what the plugin gives you rather than the generic "for AI agents" framing.
 
 = 1.5.0 =
 
-* **Feature:** Eight WooCommerce abilities that move money or grant authority (refunds, order status, order updates, payment gateway settings, coupon creation and updates, and tax rate creation and updates) are now locked by default behind a single audited master switch on the Settings tab.
-* **Feature:** The activity log now records ability toggles and setting changes, not only ability calls, using a new event-type vocabulary and a detail column that names what changed.
-* **Feature:** Every ability you enable or disable is now recorded in the activity log. Before this release, that option was written with no audit trail at all.
-* **Feature:** Identifiers in the activity log's detail column now link to the object's edit screen.
-* **Feature:** The activity log can now be exported as a CSV, carrying whatever filter is currently applied.
-* **Feature:** A failed Application Password attempt against the MCP endpoint is now logged, and rate limited per source IP so a credential-stuffing run cannot flood the log.
-* **Fix:** Creating a WooCommerce customer used to require only the capability to manage WooCommerce. It now also requires the capability to create users, since the ability creates a real WordPress account.
-* **Fix:** Listing or reading a WooCommerce customer's details used to require only the capability to manage WooCommerce, which let a caller with just that one capability read any WordPress user's email, address, and phone, administrators included. Both abilities now also require the capability to list users, the same one WordPress itself requires to browse Users in wp-admin. A stock WooCommerce Shop Manager does not hold that capability, and is now denied both abilities where it was not before.
-* **Fix:** A high-risk ability could still be switched on and saved as an ordinary toggle from the Integrations tab, and the activity log recorded an enable that never actually took effect.
-* **Fix:** Payment gateway and shipping settings could return secrets under field names the redaction list did not match, such as passphrase and salt.
-* **Fix:** Deleting a WooCommerce product variation did not check the caller's capability on that specific product the way deleting a product does.
-* **Fix:** An identifier in the activity log could link to the wrong object when the detail text ahead of it contained an apostrophe.
-* **Fix:** The activity log's Event and Detail columns could misalign after filtering or paging.
-* **Fix:** Exporting a large activity log could produce a truncated file that still looked complete, and exporting while the log was being written could duplicate rows.
-* **Fix:** Integration and ability counts on the admin screens did not refresh after a save until the page was reloaded.
-* **Fix:** Bridge group headers counted destructive abilities as ordinary writes, and showed a plugin's raw slug instead of its name.
-* **Fix:** Turning the high-risk switch off left a stored value behind instead of clearing the setting.
-* **Chore:** Copy now says an Application Password is a whole-site credential bounded by the WordPress role it belongs to, and that this plugin's allowlist, high-risk floor, and audit log only govern calls made through its own MCP endpoint.
-* **Chore:** Copy now says uninstalling does not revoke an agent's access on its own, and names what survives.
-* **Chore:** Copy now says an OAuth grant's requested scope does not limit what the resulting token can do.
-* **Chore:** The rate limit setting now says it ships off by default, and suggests a starting value.
-* **Chore:** The listing description now leads with what the plugin is rather than how it works, and the tags swap seo for woocommerce.
-* **Chore:** Regenerated the translation template.
+* **Feature:** Eight WooCommerce abilities that move money or grant authority (refunds, order status and updates, payment gateway settings, coupon and tax-rate creation and updates) are locked by default now behind a single audited master switch on the Settings tab.
+* **Feature:** The activity log records ability toggles and setting changes, not only calls, with a detail column that names what changed and links each identifier to its edit screen, and it can be exported as a CSV carrying the current filter.
+* **Feature:** A failed Application Password attempt against the MCP endpoint is logged now, and rate limited per source IP so a credential-stuffing run cannot flood the log.
+* **Fix:** Creating a WooCommerce customer requires the create-users capability now, and listing or reading one requires list-users, closing a gap that let a caller with only manage-WooCommerce read any user's email, address, and phone, administrators included. A stock Shop Manager is denied both where it was not before.
+* **Fix:** Payment gateway and shipping settings could return secrets under field names the redaction list missed, such as passphrase and salt, and deleting a product variation did not check the caller's capability on that specific product. Both are fixed.
+* **Fix:** A run of admin-log defects: an identifier could link to the wrong object, the Event and Detail columns could misalign after filtering, a large export could truncate while looking complete, and counts did not refresh until reload.
+* **Chore:** Clarified copy on what an Application Password grants, that uninstalling does not revoke access on its own, and that an OAuth grant's requested scope does not limit the token; the rate-limit setting notes it ships off with a suggested starting value.
 
 = 1.4.3 =
 
-* **Fix:** Media reads handed back the whole library to anyone who could upload a file or edit a post. An agent connected as an author now sees only what it uploaded, and the full library still goes to users who can edit other people's posts. The media count follows the same rule, so it can no longer report a total that disagrees with the list beside it.
-* **Fix:** Deleting a WooCommerce product only checked that you manage the store, not whether that particular product was yours to delete.
-* **Fix:** A duplicate product SKU or coupon code came back as an uncaught error rather than a message naming what it collided with.
-* **Fix:** An ability bridged from another plugin could answer with a bare list where the protocol asks for an object, and some strict clients reject that outright. Bridged results are now always shaped as an object before they reach the wire.
-* **Fix:** The OAuth pointer sent on a 401 compared the request path case-sensitively, so a request that differed only in casing got no pointer at all and the client had nowhere to start.
-* **Fix:** The OAuth authorization response left out the issuer that RFC 9207 requires, which is how a client confirms which server actually answered it. Error redirects carry it now as well.
+* **Fix:** Media reads handed the whole library to anyone who could upload a file or edit a post; an agent connected as an author sees only what it uploaded now, and the media count follows the same rule. Deleting a WooCommerce product checks whether that particular product was yours to delete.
+* **Fix:** A duplicate product SKU or coupon code returns a message naming the collision now instead of an uncaught error, and a bridged ability that answered with a bare list where the protocol asks for an object is always shaped as an object before it reaches the wire.
+* **Fix:** The OAuth 401 pointer compared the request path case-sensitively, so a differently-cased request got no pointer, and the authorization response left out the issuer RFC 9207 requires. Both are fixed, on error redirects too.
 * **Chore:** Tightened the build checks that guard these tools, including one that quietly passed any ability whose code it could not read.
 
 = 1.4.2 =
 
-* **Fix:** Asking for a post status when creating content did nothing. "Create a post as a draft" published it live instead, and reported success. Create post, page and draft now honour the status you ask for, and refuse it when your user lacks the capability to publish.
-* **Fix:** Scheduling was not treated as publishing, so a contributor who asked for a future status could put a post live without the capability to publish one. Scheduled and private now require the same permission as publishing.
-* **Fix:** Editing a post's status was checked against the wrong permission, which both let some users set a status they should not have and stopped a contributor changing their own draft. It now checks the capability that actually governs publishing, using the post type's own capability names.
-* **Fix:** Custom post types ignored every status except publish, so a request for pending or private silently became a draft.
-* **Fix:** Updating a WooCommerce order with `line_items` added new items rather than changing the existing ones, which quietly raised the order total. There is now an `add_line_items` field that says what it does. The old field keeps working exactly as before so nothing breaks.
-* **Fix:** The product type sent when updating a WooCommerce product was discarded without a word. Sending one that does not match the product now returns an error instead of pretending it worked.
-* **Fix:** A WooCommerce order request that mixed valid and invalid product ids reported failure after it had already written the valid items, leaving an order with items you were told had not been added. Every id is now checked before anything is written, so a bad one fails the whole request and changes nothing.
-* **Feature:** Every input on every tool now explains itself. All 505 of them, where only three abilities were fully documented before. Agents were guessing at things like which fields replace rather than merge, that prices are plain decimal strings, that country and state want two-letter codes, and that a meta key outside your allowlist is refused rather than returned empty.
+* **Feature:** Every input on every tool explains itself now, all 505 of them, where only three abilities were fully documented before.
+* **Fix:** Post status was ignored on create: "create a post as a draft" published it live and reported success. Create honours the status you ask for now, treats scheduling and private as publishing, and refuses a status your user cannot publish, on custom post types too.
+* **Fix:** Updating a WooCommerce order with line_items added items rather than changing them, quietly raising the total; there is a clear add_line_items field now, and a request mixing valid and invalid product ids is fully validated before anything is written. A product type that does not match the product returns an error instead of being discarded.
 * **Chore:** Added a build check that fails when any tool input goes undocumented, so this cannot drift back.
 
 = 1.4.1 =
 
-* **Fix:** OAuth errors came back in WordPress's own `{code, message, data}` shape instead of the `{error, error_description}` shape RFC 6749 requires, so no standard OAuth client could read what went wrong. Reported by an external user as issue #68, and wrong since the first release.
-* **Fix:** A malformed JSON body sent to an OAuth route was rejected by WordPress before the plugin ever saw it, so it escaped with the same wrong shape and no cache headers at all.
-* **Fix:** Responses that carry a credential were missing `Pragma: no-cache` next to `Cache-Control: no-store`, including the response that hands out the token.
-* **Fix:** Calling a tool that does not exist, or one you have switched off, returned HTTP 404. The MCP spec reserves that status for "this session is dead, start over", so clients were being told to reconnect after an ordinary mistake. A session that really has expired still returns 404.
-* **Fix:** The OAuth discovery document advertised a client-registration endpoint even when dynamic client registration was off, which is the default. A fresh install was pointing connectors at a URL that does not answer.
-* **Fix:** No tool declared `openWorldHint`, and the MCP schema reads an absent value as "this tool may reach the open internet". Every ability this plugin provides now declares it false, which is what the plugin has always actually done.
-* **Chore:** Rate-limited OAuth responses now send `Retry-After`.
+* **Fix:** OAuth errors came back in WordPress's {code, message, data} shape instead of the {error, error_description} shape RFC 6749 requires, so no standard OAuth client could read them; reported as issue #68, and wrong since the first release. A malformed JSON body to an OAuth route escaped with the same wrong shape and no cache headers.
+* **Fix:** Responses that carry a credential were missing Pragma: no-cache next to Cache-Control: no-store, including the token response.
+* **Fix:** Calling a tool that does not exist or is switched off returned HTTP 404, which the MCP spec reserves for a dead session, so an ordinary mistake told the client to reconnect; it returns the right error now. The OAuth discovery document no longer advertises a client-registration endpoint when dynamic registration is off.
+* **Fix:** Every ability declares openWorldHint false now, which the MCP schema otherwise reads as "may reach the open internet", the opposite of what the plugin actually does.
+* **Chore:** Rate-limited OAuth responses send Retry-After now.
 
 = 1.4.0 =
 
-* **Feature:** A first-run Quick Connect wizard gets a new admin connected on one screen. Turn on OAuth and copy the endpoint, or create a dedicated agent user and generate an application password, then switch on content reads and, if you want, content writes.
-* **Feature:** A pointer on the admin menu greets a brand-new install and points to the plugin page so setup is easy to find.
-* **Fix:** The onboarding "Connect your agent" step and the "Agent users" count no longer read any application password as a connected agent. They now track the agent users this plugin created, or an approved OAuth connection, so an unrelated application password stops showing a false "done" or padding the count.
+* **Feature:** A first-run Quick Connect wizard gets a new admin connected on one screen: turn on OAuth and copy the endpoint, or create a dedicated agent user and generate an application password, then switch on content reads and, if you want, writes. A menu pointer greets a brand-new install and points to the plugin page.
+* **Fix:** The onboarding "Connect your agent" step and the "Agent users" count no longer read any application password as a connected agent; they track the agent users this plugin created or an approved OAuth connection, so an unrelated password stops showing a false "done" or padding the count.
 
 = 1.3.2 =
 
-* **Feature:** Content reads (posts, pages, search, terms, media, and products) now take an optional language argument and report which language they returned, and a single-item read can fetch a specific translation. Sites without WPML are unaffected.
-* **Fix:** On a WPML site the content lists returned only the default language while the counters reported every language, so an agent was told more items existed than it could actually read. The counts now match the language the list returns.
-* **Fix:** The menu-item tools reported failure on a multilingual site even when the item was created, because WPML's language filter hid it from the re-read. They now resolve the item by id and work correctly.
-* **Chore:** Added a real-WPML contract test and a guard that fails the build if a read-only ability ever starts writing, and kept tooling directories out of the deployed package.
+* **Feature:** Content reads (posts, pages, search, terms, media, products) take an optional language argument now and report which language they returned, and a single-item read can fetch a specific translation. Sites without WPML are unaffected.
+* **Fix:** On a WPML site the content lists returned only the default language while the counters reported every language; the counts match the returned language now, and the menu-item tools no longer report a false failure when WPML's language filter hides the new item from the re-read.
+* **Chore:** Added a real-WPML contract test and a guard that fails the build if a read-only ability ever starts writing.
 
 = 1.3.1 =
 
-* **Fix:** wc-list-customers can now filter by role, so a customer using a role other than "customer" (for example a subscriber on an LMS or membership store) is no longer invisible to the list.
-* **Fix:** wc-list-order-notes now correctly detects which notes were written by a person versus WooCommerce itself.
-* **Fix:** A payment gateway's display order now reflects its real position in WooCommerce's own list instead of always reporting zero.
-* **Fix:** Saving a payment gateway is now verified against the value WooCommerce actually stored, instead of assuming the write took effect.
-* **Fix:** The refund executor no longer crashes on a gateway that has no tax method.
-* **Fix:** Updating a WooCommerce product attribute now works the same way across WooCommerce versions instead of assuming a single schema.
-* **Feature:** WooCommerce abilities now require WooCommerce 9.1 or newer. Below that, the WooCommerce tools simply do not register, with a clear reason shown on the Integrations screen, never a fatal error.
-* **Fix:** rankmath-get-head now returns a clear error instead of an empty success when Rank Math's own head renderer is not available.
-* **Fix:** AIOSEO write verification no longer reports failure when AIOSEO makes its own benign normalization to a saved value.
-* **Fix:** A term's parent must now belong to the same hierarchical taxonomy as the term itself.
-* **Fix:** Force-deleting a page no longer reports success when another plugin vetoed the delete.
-* **Fix:** count-media no longer counts items sitting in the trash.
-* **Fix:** upload-media now fails with a clear error instead of a fatal one when the server is missing the fileinfo PHP extension.
-* **Fix:** update-site-settings now reports failure when WordPress silently reverts a value it considers invalid, instead of reporting success on a change that never took effect.
-* **Fix:** Abilities from an inactive integration are no longer wiped out when the abilities form is saved.
-* **Fix:** The agent-user picker now finds every user with an application password, not just the first page of users.
-* **Fix:** A filtered-out ability row is now actually hidden instead of staying on screen.
-* **Fix:** Corrected the reset dialog, the rate-limit help, and the privacy disclosures to match what the plugin actually does.
-* **Feature:** The activity log now attributes each call to its OAuth client, shows a result count for list and read calls, and leaves a marker behind when the log is cleared.
-* **Fix:** Denied OAuth bearer authentication attempts are now logged, and only when they match a real, if invalid, token.
-* **Fix:** The OAuth consent screen and the authorization code redirect are never cached.
-* **Chore:** The release zip no longer ships the mcp-adapter's Node package metadata, making it smaller.
-* **Chore:** Added a real-vendor contract test suite that runs against pinned WooCommerce, Rank Math, AIOSEO, and ACF plugin code, to catch API-shape regressions like several of the fixes above before release instead of after.
+* **Feature:** WooCommerce abilities require WooCommerce 9.1 or newer now; below that they simply do not register, with a clear reason on the Integrations screen rather than a fatal error.
+* **Feature:** The activity log attributes each call to its OAuth client, shows a result count for list and read calls, and leaves a marker when the log is cleared.
+* **Fix:** A run of WooCommerce fixes: list-customers can filter by role so a customer on another role stays visible, order-note authorship is detected correctly, a payment gateway's real display order and saved values are reported, the refund executor no longer crashes on a gateway with no tax method, and product-attribute updates work across WooCommerce versions.
+* **Fix:** SEO and content fixes: the Rank Math and AIOSEO head and write-verification paths return a clear error or accept a benign normalization instead of a false failure, a term's parent must belong to the same taxonomy, count-media ignores the trash, upload-media fails clearly without the fileinfo extension, and update-site-settings reports failure when WordPress silently reverts a value.
+* **Fix:** Admin and OAuth fixes: abilities from an inactive integration survive a form save, the agent-user picker finds users past the first page, a filtered-out row is actually hidden, denied OAuth bearer attempts are logged, and the consent screen and code redirect are never cached.
+* **Chore:** Added a real-vendor contract test suite that runs against pinned WooCommerce, Rank Math, AIOSEO, and ACF code to catch API-shape regressions before release, and stopped shipping the mcp-adapter's Node package metadata in the zip.
 
 = 1.3.0 =
 
-* **Fix:** New installs now ship with OAuth off by default instead of on. Sites that already had OAuth on keep it on after updating, so existing connections keep working.
-* **Fix:** The OAuth consent grant could be phished into getting an administrator to approve a malicious client.
-* **Feature:** The OAuth consent screen now warns when the account approving a connection is an administrator.
-* **Feature:** The settings screen now warns you before a REST API lockdown would cut off your OAuth connections.
-* **Fix:** The MCP capability gate could quietly stop enforcing when another adapter copy loaded first. The plugin now checks that the running adapter still applies the filter, and matches it as a real call rather than a text match.
-* **Fix:** The update-user ability did not require edit_users, so an agent could change its own account beyond its own capabilities.
-* **Fix:** A bridged ability from another plugin with no destructive annotation is now treated as destructive rather than assumed safe.
-* **Feature:** The Abilities Bridge directory now shows each bridged ability's effective permission, not just its name.
-* **Fix:** WooCommerce customer listing returned zero customers on every real store, because it called a function WooCommerce does not have.
-* **Fix:** WooCommerce shipping zones came back empty on every real store.
-* **Fix:** WooCommerce order paging was ignored on stores using legacy (non-HPOS) order storage.
-* **Fix:** WooCommerce product attributes were dropped when creating a product and wiped when updating one.
-* **Fix:** Yoast's robots_noindex setting was inverted in the tool contract, so an agent wrote the opposite of what it asked for.
-* **Fix:** Rank Math social and Twitter images set by an agent now render, because the plugin writes the attachment ID instead of a URL.
-* **Fix:** AIOSEO social and Twitter images set by an agent now render. This corrects the image type, the Open Graph fallback, and a reset that was clearing a valid image.
-* **Fix:** ACF field writes reported failure on numeric and boolean values even when the value saved.
-* **Fix:** Partially updating a menu item wiped any field you did not pass instead of leaving it alone.
-* **Fix:** The page-publish permission check did not recognize custom public statuses from other plugins, blocking valid publishes.
+* **Feature:** The OAuth consent screen warns when the account approving a connection is an administrator, the settings screen warns before a REST API lockdown would cut off your OAuth connections, and the Abilities Bridge directory shows each bridged ability's effective permission.
+* **Fix:** New installs ship with OAuth off by default now, while sites that already had it on keep it, and a consent-grant phishing path that could get an administrator to approve a malicious client is closed.
+* **Fix:** Hardened governance: the MCP capability gate verifies the running adapter still applies its filter rather than trusting a text match, update-user requires edit_users, and a bridged ability with no destructive annotation is treated as destructive rather than assumed safe.
+* **Fix:** WooCommerce reads that failed on every real store are fixed: customer listing (it called a function WooCommerce does not have), empty shipping zones, ignored order paging on legacy storage, and product attributes dropped on create and wiped on update.
+* **Fix:** SEO and content fixes: Yoast's robots_noindex was inverted so an agent wrote the opposite of what it asked, Rank Math and AIOSEO social images render now because the plugin writes the attachment id, ACF numeric and boolean writes stopped reporting a false failure, a partial menu-item update no longer wipes untouched fields, and the page-publish check recognises custom public statuses.
 
 = 1.2.1 =
 
-* **Chore:** The plugin's website link now points to agentabilitieswp.com instead of the GitHub repository.
-* **Chore:** Refreshed the documentation so the supported-client list matches what actually works: ChatGPT, Claude (the claude.ai web app and Claude Desktop), and Manus all connect by URL over OAuth, while Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect from your own machine.
+* **Chore:** The plugin's website link points to agentabilitieswp.com now instead of the GitHub repository.
+* **Chore:** Refreshed the documentation so the supported-client list matches what works: ChatGPT, Claude (the claude.ai web app and Claude Desktop), and Manus connect by URL over OAuth, while Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI connect from your own machine.
 
 = 1.2.0 =
 
-* **Fix:** Logged-out visitors could see "There has been a critical error" on every page. It happened when another active plugin checked the current user very early in the WordPress load (The Events Calendar is one example). The plugin now waits until it has finished loading before doing that work.
-* **Feature:** Added ChatGPT as a connection option, plus a single Claude entry that covers both the Claude web app and Claude Desktop. Hosted apps like these connect by URL over OAuth, so they no longer show the application-password steps.
-* **Fix:** Manus now connects the same way, by URL over OAuth, instead of the local-bridge config it could never run as a cloud agent.
-* **Fix:** The Settings screen now saves the Enable OAuth, Dynamic Client Registration, and strict block-validation switches correctly. They were being switched off on save.
-* **Fix:** No more white screen when the standalone MCP Adapter plugin is active alongside this one.
-* **Fix:** The operating-system tabs in the connection guide now show the right instructions when you switch between them.
-* **Chore:** Tightened up the connection snippet helpers.
-* **Fix:** Tightened OAuth token scoping so an MCP access token can only authenticate the MCP endpoint and never another REST route, and closed a rare condition that could exhaust memory during connection setup.
-* **Fix:** Publishing through the write abilities now always requires publish permission, including for custom public post statuses added by other plugins.
-* **Fix:** Valid Cover and Media & Text blocks are no longer flagged as invalid by the block-safety check.
+* **Feature:** Added ChatGPT as a connection option and a single Claude entry that covers both the web app and Claude Desktop; hosted apps connect by URL over OAuth, so they no longer show the application-password steps, and Manus connects the same way.
+* **Fix:** Logged-out visitors could see "There has been a critical error" on every page when another active plugin checked the current user very early in the load (The Events Calendar is one example); the plugin waits until it has finished loading now.
+* **Fix:** The Settings screen saves the Enable OAuth, Dynamic Client Registration, and strict block-validation switches correctly now (they were being switched off on save), and there is no more white screen when the standalone MCP Adapter plugin is active alongside this one.
+* **Fix:** Tightened OAuth token scoping so an MCP access token can only authenticate the MCP endpoint and never another REST route, closed a rare condition that could exhaust memory during connection setup, and made publishing always require publish permission, including for custom public post statuses. Valid Cover and Media & Text blocks are no longer flagged as invalid.
+* **Chore:** Tightened the connection-snippet helpers.
 
 = 1.1.1 =
 

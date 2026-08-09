@@ -112,7 +112,13 @@ function aafm_result_magnitude( $result ): ?int {
  * fires TWICE for a single tools/call. Consuming a token on each fire halved every configured limit
  * (a limit of 60 delivered 30). The memo records the consume decision per ability for the span of
  * one call so the second fire reuses it; aafm_rate_limit_call_reset() clears it when the call
- * resolves or is denied, so the next call consumes fresh.
+ * resolves or is denied, so the next call consumes fresh. The release sites, covering every way a
+ * call can end (B12): a rate denial and a non-true permission result reset inline below; every
+ * resolution of core's execute() - including the input-schema refusal that returns before the
+ * decorated execute callback - resets via AAFM_Rate_Limited_Ability::execute()'s finally; a
+ * consumer WP_Error on mcp_adapter_pre_tool_call resets via
+ * aafm_release_rate_memo_on_aborted_tool_call(); and a rethrown permission crash resets before it
+ * throws.
  *
  * @return array<string,bool> Reference to the request-scoped memo, keyed by ability name.
  */
@@ -147,6 +153,35 @@ function aafm_rate_limit_consume_once( int $user_id, string $name ): bool {
 function aafm_rate_limit_call_reset( string $name ): void {
 	$memo = &aafm_rate_limit_call_memo();
 	unset( $memo[ $name ] );
+}
+
+/**
+ * Release a tool's rate memo when a consumer filter aborts its call.
+ *
+ * The adapter fires mcp_adapter_pre_tool_call AFTER its permission fire (which consumed a token and
+ * memoized the allow) and BEFORE execute(); a WP_Error short-circuit there kills the call without
+ * ever entering execute(), so it is the one dead-call path AAFM_Rate_Limited_Ability's finally
+ * cannot see. Without this release the stale allow paid for the next same-ability call in the same
+ * request (finding B12, doc 167). Wired at PHP_INT_MAX in aafm_register_mcp_server() so any
+ * consumer's WP_Error is visible here; a pass-through (array) result leaves the in-flight call's
+ * memo alone, since core's re-check inside execute() still needs it.
+ *
+ * @param mixed       $args      The filtered tool arguments, or a WP_Error short-circuit.
+ * @param string      $tool_name The MCP tool name (unused: the memo is keyed by ability name, which
+ *                               the adapter records in the tool's observability context).
+ * @param object|null $mcp_tool  The adapter's tool instance for this call.
+ * @return mixed The $args value, untouched.
+ */
+function aafm_release_rate_memo_on_aborted_tool_call( $args, $tool_name = '', $mcp_tool = null ) {
+	unset( $tool_name );
+	if ( is_wp_error( $args ) && $mcp_tool instanceof \WP\MCP\Domain\Tools\McpTool ) {
+		$context = $mcp_tool->get_observability_context();
+		$ability = isset( $context['ability_name'] ) ? (string) $context['ability_name'] : '';
+		if ( '' !== $ability ) {
+			aafm_rate_limit_call_reset( $ability );
+		}
+	}
+	return $args;
 }
 
 /**
@@ -266,6 +301,10 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// so the absent row is this phase's version of the stuck row the execute side leaves.
 			/** This filter is documented in includes/register.php, at the execute-side catch. */
 			if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+				// The consume above may have memoized an allow before the callback crashed, and this
+				// throw skips the non-true reset below - release the memo here or the dead call's
+				// allow pays for the next same-ability fire (the B12 leak, on its crash path).
+				aafm_rate_limit_call_reset( $name );
 				throw $e;
 			}
 
@@ -474,6 +513,14 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 
 		return $result;
 	};
+
+	// The registry instantiates this subclass instead of WP_Ability so the per-call rate memo is
+	// released however core's execute() resolves - including the input-schema refusal that returns
+	// BEFORE the decorated execute callback ever runs (the B12 batch leak; see the subclass for the
+	// full path list). A caller's own ability_class is honored; nothing in this plugin passes one.
+	if ( ! isset( $args['ability_class'] ) && class_exists( 'AAFM_Rate_Limited_Ability' ) ) {
+		$args['ability_class'] = AAFM_Rate_Limited_Ability::class;
+	}
 
 	return wp_register_ability( $name, $args );
 }

@@ -251,15 +251,15 @@ function aafm_review_request_screen_allowed(): bool {
 /**
  * Render the review-request notice on admin_notices.
  *
- * Gated by the admin-screen check (any wp-admin screen qualifies since the ask went site
- * wide; the network-admin and capability exclusions sit in the eligibility check), the
- * Quick Connect suppression (the wizard modal owns the
- * plugin page until the operator finishes or opts out, and the first-run flow must never be
- * interrupted by an ask), and the full eligibility check. The heading reads the count at
- * render time from the SAME success-narrowed helper as the trigger, and describes it as what
- * the activity log shows, which is the only claim the data supports: any other counter could
- * credit the agent with calls it never made, and even this one is bounded by retention
- * pruning and the operator's own "Clear log" button.
+ * Gated by the admin-screen check (any wp-admin screen qualifies now the ask is site wide;
+ * the network-admin and capability exclusions sit in the eligibility check), the Quick
+ * Connect suppression (the wizard modal owns the plugin page until the operator finishes or
+ * opts out, and the first-run flow must never be interrupted by an ask), and the full
+ * eligibility check. The heading reads the count at render time from the SAME
+ * success-narrowed helper as the trigger, and describes it as what the activity log shows,
+ * which is the only claim the data supports: any other counter could credit the agent with
+ * calls it never made, and even this one is bounded by retention pruning and the operator's
+ * own "Clear log" button.
  *
  * @return void
  */

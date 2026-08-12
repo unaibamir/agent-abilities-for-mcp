@@ -643,23 +643,39 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  * agent authenticated, spoke MCP, and invoked a real tool by name - the refusal is the
  * governance layer doing its job, and the connection demonstrably works end to end.
  *
+ * The optional $status arg narrows the same exclusion set to a single row status. It exists
+ * so callers that need a stricter reading - the review-request notice counts success-only,
+ * because a pile of denied calls proves connectivity but not value - share this one WHERE
+ * clause instead of hand-copying it. A second copy of the exclusion list would silently
+ * drift the moment a fourth default-event_type writer appears, which is exactly the bug
+ * class the exclusions above were built to close.
+ *
+ * @param string|null $status One of started|success|error|denied to narrow to that status,
+ *                            or null/empty to count every tool-call row (the default).
  * @return int Non-negative count of agent tool-call rows.
  */
-function aafm_agent_call_count(): int {
+function aafm_agent_call_count( ?string $status = null ): int {
 	global $wpdb;
 	$table = aafm_activity_log_table();
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$count = $wpdb->get_var(
-		$wpdb->prepare(
-			'SELECT COUNT(*) FROM %i WHERE event_type = %s AND ability <> %s AND ability <> %s AND ability NOT LIKE %s',
-			$table,
-			'ability_call',
-			'(transport)',
-			'aafm/activity-log-cleared',
-			$wpdb->esc_like( 'oauth:' ) . '%'
-		)
+	// One WHERE clause for every caller: the base exclusion set, plus an optional bound
+	// status narrowing. All %-placeholders are bound via $params; nothing user-supplied is
+	// ever interpolated into the SQL string itself.
+	$sql    = 'SELECT COUNT(*) FROM %i WHERE event_type = %s AND ability <> %s AND ability <> %s AND ability NOT LIKE %s';
+	$params = array(
+		$table,
+		'ability_call',
+		'(transport)',
+		'aafm/activity-log-cleared',
+		$wpdb->esc_like( 'oauth:' ) . '%',
 	);
+	if ( null !== $status && '' !== $status ) {
+		$sql     .= ' AND status = %s';
+		$params[] = $status;
+	}
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+	$count = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
 	return max( 0, (int) $count );
 }
 

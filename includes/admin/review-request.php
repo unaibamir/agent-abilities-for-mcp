@@ -239,16 +239,28 @@ function aafm_render_review_request_notice(): void {
 	);
 	$body    = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
-	<div class="notice notice-info is-dismissible aafm-review-request" data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>">
+	<div class="notice notice-info is-dismissible aafm-review-request"
+		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>"
+		data-msg-review="<?php echo esc_attr__( 'Thanks. The review page is open in a new tab.', 'agent-abilities-for-mcp' ); ?>"
+		data-msg-later="<?php echo esc_attr__( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ); ?>"
+		data-msg-dismiss="<?php echo esc_attr__( 'Thanks. The review request is closed and will not come back.', 'agent-abilities-for-mcp' ); ?>">
 		<p><strong><?php echo esc_html( $heading ); ?></strong></p>
 		<p><?php echo esc_html( $body ); ?></p>
 		<?php // Flex with a gap so the two link-buttons are not left touching on a single word space. The plugin's admin CSS is not loaded on the Plugins list, so the rule rides inline, as the onboarding pointer's button spacing already does. ?>
 		<p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-			<a class="button button-primary" href="<?php echo esc_url( aafm_review_request_url() ); ?>" target="_blank" rel="noopener noreferrer" data-aafm-review="review"><?php esc_html_e( 'Sure, I\'ll review', 'agent-abilities-for-mcp' ); ?></a>
+			<a class="button button-primary" href="<?php echo esc_url( aafm_review_request_url() ); ?>" target="_blank" rel="noopener noreferrer" data-aafm-review="review"><?php esc_html_e( 'Sure, I\'ll review', 'agent-abilities-for-mcp' ); ?><span class="screen-reader-text"><?php esc_html_e( '(opens in a new tab)', 'agent-abilities-for-mcp' ); ?></span></a>
 			<button type="button" class="button-link" data-aafm-review="later"><?php esc_html_e( 'Maybe later', 'agent-abilities-for-mcp' ); ?></button>
 			<button type="button" class="button-link" data-aafm-review="dismiss"><?php esc_html_e( 'Already did', 'agent-abilities-for-mcp' ); ?></button>
 		</p>
 	</div>
+	<?php
+	// Two empty siblings that outlive the notice, because every answer destroys the element the
+	// focused control lives in. The anchor catches focus so it cannot fall to <body> (which
+	// restarts tabbing at the top of the page), and the status region speaks the outcome. They
+	// are separate on purpose: focusing a live region makes some screen readers read it twice.
+	?>
+	<div class="aafm-review-request-anchor" tabindex="-1"></div>
+	<p class="screen-reader-text aafm-review-request-status" role="status" aria-live="polite"></p>
 	<?php
 	// The behaviour script is only needed when the notice actually rendered, and the Plugins
 	// list does not load the plugin's admin.js handle, so it goes out as a footer inline
@@ -260,10 +272,21 @@ function aafm_render_review_request_notice(): void {
  * Print the notice's behaviour script in the admin footer.
  *
  * Vanilla JS, no handle dependency: posts the clicked verdict to the aafm_review_request
- * AJAX action and removes the notice. The native X that core's common.js injects into
- * .is-dismissible notices is caught by delegation on the notice element and posted as
- * "later", so a reflexive dismiss snoozes instead of burning the ask. Nothing user-supplied
- * ever reaches the DOM; the script only reads the server-rendered nonce attribute.
+ * AJAX action, hands focus and an announcement to the two siblings the notice leaves behind,
+ * then removes the notice. The native X that core's common.js injects into .is-dismissible
+ * notices is caught by delegation on the notice element and posted as "later", so a reflexive
+ * dismiss snoozes instead of burning the ask; core removes that element itself, so the script
+ * only does the focus and announcement half for it.
+ *
+ * Nothing user-supplied ever reaches the DOM. The script reads the server-rendered nonce and
+ * the three server-rendered, translated outcome messages off the notice's data attributes,
+ * and writes a message with textContent, never innerHTML.
+ *
+ * The POST is deliberately not awaited. The verdict write is idempotent, the notice is gone
+ * either way, and re-rendering the ask to report a failed dismiss would be a worse answer
+ * than staying quiet: if the write really did fail, the next admin page load simply shows the
+ * ask again, which is the honest outcome. keepalive keeps the request alive past the
+ * navigation the primary action starts.
  *
  * @return void
  */
@@ -283,6 +306,8 @@ function aafm_review_request_footer_js(): string {
 	if ( ! notice ) {
 		return;
 	}
+	const anchor = document.querySelector( '.aafm-review-request-anchor' );
+	const status = document.querySelector( '.aafm-review-request-status' );
 	let sent = false;
 	const send = ( verdict ) => {
 		if ( sent ) {
@@ -293,7 +318,19 @@ function aafm_review_request_footer_js(): string {
 		body.append( 'action', 'aafm_review_request' );
 		body.append( 'nonce', notice.dataset.nonce || '' );
 		body.append( 'verdict', verdict );
-		fetch( window.ajaxurl, { method: 'POST', credentials: 'same-origin', body } );
+		fetch( window.ajaxurl, { method: 'POST', credentials: 'same-origin', keepalive: true, body } );
+	};
+	// Park focus on the anchor and speak the outcome, before the element holding the focused
+	// control disappears. Without this, focus lands on <body>: the next Tab restarts at the
+	// top of the page and a screen reader is told nothing at all.
+	const handOff = ( verdict ) => {
+		const message = notice.getAttribute( 'data-msg-' + verdict ) || '';
+		if ( anchor ) {
+			anchor.focus();
+		}
+		if ( status && message ) {
+			status.textContent = message;
+		}
 	};
 	notice.addEventListener( 'click', ( event ) => {
 		const control = event.target.closest( '[data-aafm-review]' );
@@ -302,9 +339,13 @@ function aafm_review_request_footer_js(): string {
 			send( verdict );
 			if ( 'review' === verdict ) {
 				// Let the link open its new tab first, then clear the notice on the next tick.
-				window.setTimeout( () => notice.remove(), 0 );
+				window.setTimeout( () => {
+					handOff( verdict );
+					notice.remove();
+				}, 0 );
 			} else {
 				event.preventDefault();
+				handOff( verdict );
 				notice.remove();
 			}
 			return;
@@ -312,6 +353,7 @@ function aafm_review_request_footer_js(): string {
 		// Core's injected X: treat it as "Maybe later" (core removes the element itself).
 		if ( event.target.closest( '.notice-dismiss' ) ) {
 			send( 'later' );
+			handOff( 'later' );
 		}
 	} );
 }() );

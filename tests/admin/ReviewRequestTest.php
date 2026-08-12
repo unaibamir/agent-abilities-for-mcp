@@ -481,6 +481,68 @@ final class ReviewRequestTest extends TestCase {
 
 
 	/**
+	 * Every answer removes the element the focused control sits in, so the notice ships two
+	 * empty siblings that outlive it: an anchor to catch focus and a status region to speak the
+	 * outcome. Both must render alongside the notice or the JS has nothing to hand off to.
+	 */
+	public function test_notice_renders_a_focus_anchor_and_a_status_region(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		$this->assertStringContainsString( '<div class="aafm-review-request-anchor" tabindex="-1"></div>', $html );
+		$this->assertStringContainsString( 'class="screen-reader-text aafm-review-request-status" role="status" aria-live="polite"', $html );
+	}
+
+	/**
+	 * Each verdict announces its own outcome, so a screen reader user learns which of the three
+	 * answers was recorded rather than watching the notice vanish in silence. The strings are
+	 * server-rendered (and translated) onto the notice; the script only reads them back.
+	 */
+	public function test_each_verdict_carries_its_own_announcement(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		$this->assertStringContainsString( 'data-msg-review="Thanks. The review page is open in a new tab."', $html );
+		$this->assertStringContainsString( 'data-msg-later="Okay. The review request is hidden for now."', $html );
+		$this->assertStringContainsString( 'data-msg-dismiss="Thanks. The review request is closed and will not come back."', $html );
+
+		// The script moves focus before removal and reads the matching message back out.
+		$js = aafm_review_request_footer_js();
+		$this->assertStringContainsString( "notice.getAttribute( 'data-msg-' + verdict )", $js );
+		$this->assertStringContainsString( 'anchor.focus();', $js );
+		$this->assertStringContainsString( 'status.textContent = message;', $js );
+	}
+
+	/**
+	 * The primary action opens wordpress.org in a new tab, so it carries the same warning the
+	 * plugin's own nav links use (page.php). Unannounced new tabs are disorienting for screen
+	 * reader users, who otherwise get no signal that the context changed.
+	 */
+	public function test_the_review_link_warns_that_it_opens_a_new_tab(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		$this->assertStringContainsString( '<span class="screen-reader-text">(opens in a new tab)</span>', $html );
+	}
+
+	/**
+	 * The verdict POST has to survive the navigation the primary action starts, otherwise a
+	 * click on "Sure, I'll review" can be dropped mid-flight and the ask comes back.
+	 */
+	public function test_the_verdict_post_is_sent_with_keepalive(): void {
+		$this->assertStringContainsString( 'keepalive: true', aafm_review_request_footer_js() );
+	}
+
+	/**
 	 * The option rides the canonical config list, so reset clears it (re-arming only after a
 	 * fresh 7 days + 10 new successes, because reset also empties the log) and the delete-data
 	 * uninstall path removes it (pinned functionally by UninstallTest's loop over the list).

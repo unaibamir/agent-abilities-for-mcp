@@ -1800,10 +1800,9 @@
 					// user tabbing through step 1 could reach - and fire - "Finish setup".
 					// inert takes the whole subtree out of both. Browsers without it behave
 					// as the wizard did before, so this can only improve matters.
-					const body = job.querySelector( '.aafm-qc-job-body' );
-					if ( body ) {
-						body.inert = i !== state.step;
-					}
+					// Driven as an attribute, not the property, so the markup and the focus
+					// trap's [inert] filter agree even on an engine that does not implement it.
+					job.querySelector( '.aafm-qc-job-body' )?.toggleAttribute( 'inert', i !== state.step );
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );
@@ -1905,9 +1904,7 @@
 				// Same collapse trick as the steps, same fix: the closed panel's Create-user
 				// button, profile link, and copy control must not be tabbable while the
 				// trigger reports aria-expanded="false".
-				if ( altPanel ) {
-					altPanel.inert = ! open;
-				}
+				altPanel?.toggleAttribute( 'inert', ! open );
 			} );
 
 			// Create the dedicated agent user (reuses the real aafm_create_agent_user action,

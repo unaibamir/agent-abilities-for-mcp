@@ -93,6 +93,47 @@ Connect any MCP client that can reach your endpoint. Hosted cloud apps (ChatGPT,
 5. Prefer not to use OAuth, or on a client that can't? Create the dedicated low-privilege agent user the Connection tab offers, generate an Application Password for it, and connect with that instead.
 6. Use the connection check on the Connection tab to confirm the endpoint is reachable from your server.
 
+## Configuration
+
+Your site's MCP endpoint lives at a fixed path under your REST API (replace `example.com` with your own domain):
+
+```
+https://example.com/wp-json/agent-abilities-for-mcp/mcp
+```
+
+Hosted apps (ChatGPT, Claude, and Manus) take that URL directly: add it as a custom connector and approve the connection once over OAuth. Editors and command-line clients use a config file instead. The standard block runs the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge on your own machine, which walks you through the same one-time OAuth approval in the browser, so no secret is stored:
+
+```json
+{
+  "mcpServers": {
+    "agent-abilities": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://example.com/wp-json/agent-abilities-for-mcp/mcp"]
+    }
+  }
+}
+```
+
+VS Code keys the same block as `servers` in `.vscode/mcp.json` rather than `mcpServers`. Prefer an Application Password over OAuth? Create the dedicated low-privilege agent user the Connection tab offers, then connect through the [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote) bridge with the credentials in its `env` block:
+
+```json
+{
+  "mcpServers": {
+    "agent-abilities": {
+      "command": "npx",
+      "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
+      "env": {
+        "WP_API_URL": "https://example.com/wp-json/agent-abilities-for-mcp/mcp",
+        "WP_API_USERNAME": "your-agent-user",
+        "WP_API_PASSWORD": "PASTE-APPLICATION-PASSWORD-HERE"
+      }
+    }
+  }
+}
+```
+
+You do not have to write either block by hand: the Connection tab generates both, filled in with your real endpoint, with a Windows variant and a reachability check.
+
 ## Frequently Asked Questions
 
 **More help:** [Documentation](https://agentabilitieswp.com/docs/) | [Connecting a client](https://agentabilitieswp.com/docs/connecting-a-client/) | [Security and disclosure](https://agentabilitieswp.com/security/) | [Support forum](https://wordpress.org/support/plugin/agent-abilities-for-mcp/)

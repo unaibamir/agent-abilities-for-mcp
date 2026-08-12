@@ -235,7 +235,7 @@ function aafm_render_review_request_notice(): void {
 		<p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 			<a class="button button-primary" href="<?php echo esc_url( aafm_review_request_url() ); ?>" target="_blank" rel="noopener noreferrer" data-aafm-review="review"><?php esc_html_e( 'Sure, I\'ll review', 'agent-abilities-for-mcp' ); ?></a>
 			<button type="button" class="button-link" data-aafm-review="later"><?php esc_html_e( 'Maybe later', 'agent-abilities-for-mcp' ); ?></button>
-			<button type="button" class="button-link" data-aafm-review="dismiss"><?php esc_html_e( 'Already did, don\'t show again', 'agent-abilities-for-mcp' ); ?></button>
+			<button type="button" class="button-link" data-aafm-review="dismiss"><?php esc_html_e( 'Already did', 'agent-abilities-for-mcp' ); ?></button>
 		</p>
 	</div>
 	<?php

@@ -343,9 +343,9 @@ final class DashboardTest extends TestCase {
 	 * Every non-call writer of the activity log, exercised through its real logging function
 	 * where one exists: none of them may count as an agent call. Covers both exclusion layers
 	 * in aafm_agent_call_count() - the event_type filter (toggles, blocked enables, setting
-	 * changes, the modern cleared marker) and the synthetic-name filter for rows that land
-	 * under the default 'ability_call' type (OAuth ceremony, transport refusals, a pre-v5
-	 * cleared marker).
+	 * changes, the modern cleared marker, crashed discovery checks) and the synthetic-name
+	 * filter for rows that land under the default 'ability_call' type (OAuth ceremony,
+	 * transport refusals, a pre-v5 cleared marker).
 	 */
 	public function test_agent_call_count_ignores_every_non_call_writer(): void {
 		$this->acting_as( 'administrator' );
@@ -355,6 +355,41 @@ final class DashboardTest extends TestCase {
 		aafm_log_blocked_ability_enables( array( 'aafm/wc-create-order-refund' ), 'high_risk' );
 		aafm_log_read_only_switch_change( false, true );
 		aafm_log_activity_cleared_marker();
+
+		// A permission callback that crashes during a discovery check. This was the writer this
+		// test claimed to enumerate but never exercised: aafm_deny_crashed_permission_check()
+		// logs a REAL ability name with status 'denied', its callers run on init for every
+		// logged-in page load with zero MCP traffic, and under the default event_type the row
+		// passed every synthetic-name exclusion and flipped step [2]. Exercised through the real
+		// path - a throwing user_has_cap filter under aafm_user_can_discover_ability()'s
+		// short-circuit branch. aafm/get-block is deliberately an ability no other crash test
+		// uses: the guard's dedupe (`static $seen`) lives for the whole PHPUnit process while
+		// the database rolls back per test (see AbilityCrashSafetyTest), so reusing one would
+		// record nothing here.
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$thrower = static function ( $allcaps, $caps ) {
+			if ( in_array( 'edit_posts', (array) $caps, true ) ) {
+				throw new \RuntimeException( 'a membership plugin exploded during discovery' );
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $thrower, 10, 2 );
+		try {
+			$this->assertFalse(
+				aafm_user_can_discover_ability( 'aafm/get-block' ),
+				'A crashed discovery check fails closed.'
+			);
+		} finally {
+			remove_filter( 'user_has_cap', $thrower, 10 );
+		}
+		$crash_rows = aafm_query_activity( array( 'ability' => 'aafm/get-block' ) );
+		$this->assertCount( 1, $crash_rows, 'Guard on the guard: the crash must really have written its row.' );
+		$this->assertSame( 'denied', $crash_rows[0]['status'] );
+		$this->assertSame(
+			'permission_check_crashed',
+			$crash_rows[0]['event_type'],
+			'The row carries its own type, so exclusion never depends on enumerating ability-name shapes.'
+		);
 
 		// Rows that default to event_type 'ability_call' but are not tool calls.
 		aafm_oauth_log_event( 'authorize', 'success', array( 'user_id' => get_current_user_id() ) );
@@ -373,8 +408,8 @@ final class DashboardTest extends TestCase {
 			)
 		);
 
-		// All seven rows landed in the log...
-		$this->assertSame( 7, aafm_activity_count() );
+		// All eight rows landed in the log...
+		$this->assertSame( 8, aafm_activity_count() );
 		// ...and none of them reads as an agent call, so step [2] stays "To do".
 		$this->assertSame( 0, aafm_agent_call_count() );
 		$steps = aafm_setup_steps();

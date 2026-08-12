@@ -181,6 +181,12 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 				'principal_user_id' => (int) $user->ID,
 				'principal_login'   => (string) $user->user_login,
 				'client_id'         => aafm_oauth_current_client_id(),
+				// Its own type, never the 'ability_call' default. This row names a REAL ability,
+				// so aafm_agent_call_count()'s synthetic-name exclusions cannot see it - and the
+				// callers run on init with zero MCP traffic, so under the default type a throwing
+				// vendor cap filter flipped the dashboard's "Make your first call" step and every
+				// other consumer of that count with no agent involved.
+				'event_type'        => 'permission_check_crashed',
 				'detail'            => $detail,
 			)
 		);

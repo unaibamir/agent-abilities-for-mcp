@@ -691,6 +691,11 @@ final class AbilityCrashSafetyTest extends TestCase {
 		$this->assertCount( 1, $rows, 'And it must leave a record, since the audited tools/call path is never reached.' );
 		$this->assertSame( 'denied', $rows[0]['status'] );
 		$this->assertStringStartsWith( 'RuntimeException at ', (string) $rows[0]['detail'] );
+		$this->assertSame(
+			'permission_check_crashed',
+			$rows[0]['event_type'],
+			'The record carries its own event_type: it names a real ability, so under the ability_call default it read as an agent call.'
+		);
 	}
 
 	/**

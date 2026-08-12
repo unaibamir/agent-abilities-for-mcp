@@ -48,15 +48,17 @@ function aafm_activity_statuses( bool $include_started = true ): array {
  * The single source of truth for the activity-log event_type values.
  *
  * 'ability_call' is the column's SQL default, so every row written before schema v5 and every
- * caller that never supplies one means exactly this. The other five are events that are not
+ * caller that never supplies one means exactly this. The other six are events that are not
  * ability calls: the two ability-toggle events, a blocked attempt to enable a locked high-risk
- * ability, a security-relevant setting change, and the tamper-evident log-cleared marker. Mirrors
- * aafm_activity_statuses().
+ * ability, a security-relevant setting change, the tamper-evident log-cleared marker, and a
+ * permission callback that crashed during a discovery check (aafm_deny_crashed_permission_check()
+ * in includes/server.php - those rows carry a real ability name, so only the type can say they
+ * are not agent calls). Mirrors aafm_activity_statuses().
  *
  * @return string[] The allowed event_type values.
  */
 function aafm_activity_event_types(): array {
-	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared' );
+	return array( 'ability_call', 'ability_enabled', 'ability_disabled', 'ability_enable_blocked', 'setting_changed', 'log_cleared', 'permission_check_crashed' );
 }
 
 /**
@@ -625,11 +627,15 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 /**
  * Count rows recording a genuine agent tool call - the "made your first call" signal.
  *
- * The event_type = 'ability_call' filter narrows out the admin-side events schema v5 gave
- * their own types (ability toggles, blocked enables, setting changes, the log-cleared
- * marker), but is not sufficient on its own: three writers land rows under the DEFAULT
- * 'ability_call' type that are not tool calls, so each is excluded by the synthetic ability
- * name it carries.
+ * The event_type = 'ability_call' filter narrows out every event that carries its own type:
+ * the admin-side events schema v5 introduced (ability toggles, blocked enables, setting
+ * changes, the log-cleared marker) and the crashed discovery checks 1.7.0 typed as
+ * 'permission_check_crashed' (aafm_deny_crashed_permission_check() logs a REAL ability name
+ * with status 'denied', and its callers run on init for every logged-in page load, so a
+ * third-party plugin with a throwing cap filter used to flip this count with no agent
+ * involved). The filter is still not sufficient on its own: three writers land rows under
+ * the DEFAULT 'ability_call' type that are not tool calls, so each is excluded by the
+ * synthetic ability name it carries.
  *
  * - 'oauth:%' rows (includes/oauth/audit.php passes no event_type) record the browser-side
  *   OAuth ceremony (register/authorize/token/...) - that is the connect step's territory,
@@ -638,6 +644,11 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  *   a blocked source IP - before any tool was addressed, so no tool call happened.
  * - 'aafm/activity-log-cleared' is the log-cleared marker's synthetic name; markers written
  *   before schema v5 predate event_type and so carry the 'ability_call' default.
+ *
+ * One class of historical row stays counted on purpose: crashed discovery checks recorded
+ * before 'permission_check_crashed' existed carry the column default under a real ability
+ * name, which makes them genuinely indistinguishable by shape from an agent's denied call.
+ * No backfill guesses at them; only rows written since the type shipped are excluded.
  *
  * Denied and rate-limited tool calls DO count. Those rows (includes/register.php) mean an
  * agent authenticated, spoke MCP, and invoked a real tool by name - the refusal is the

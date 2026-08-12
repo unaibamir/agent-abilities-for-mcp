@@ -306,14 +306,22 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertStringContainsString( 'is-dismissible', $html );
 	}
 
-	public function test_notice_never_renders_on_the_wp_dashboard(): void {
-		// Guideline 11 scope: the main wp-admin Dashboard is not contextual to this plugin,
-		// so it is deliberately outside the two-screen allowlist.
+	public function test_notice_renders_site_wide_across_admin_screens(): void {
+		// Operator decision: the ask is site wide, which guideline 11 permits for a dismissible
+		// notice. "Used sparingly" is carried by the trigger and the snooze cap, not by a screen
+		// allowlist, so any admin screen may render it. This pins that intent: a screen the old
+		// two-item allowlist excluded must now show it.
 		$this->acting_as( 'administrator' );
 		$this->log_success_calls( 10 );
 		$this->backdate_first_success();
 
-		$this->assertSame( '', $this->render_on( 'dashboard' ) );
+		foreach ( array( 'dashboard', 'edit-post', 'options-general', 'users' ) as $screen_id ) {
+			$this->assertStringContainsString(
+				'aafm-review-request',
+				$this->render_on( $screen_id ),
+				"The notice should render on the {$screen_id} screen."
+			);
+		}
 	}
 
 	public function test_notice_never_renders_for_a_non_admin(): void {

@@ -175,11 +175,17 @@ function aafm_review_request_eligible(): bool {
 /**
  * Whether the current admin screen is one the notice may render on.
  *
- * Exactly two screens: the plugin's own page and the Plugins list. Guideline 11 requires
- * notices to be "limited in scope and used sparingly, be that contextually or only on the
- * plugin's setting page" - the main wp-admin Dashboard is not contextual to this plugin,
- * so it is deliberately NOT in this list. The Plugins list is, because that is where an
- * operator manages this plugin without ever opening its page.
+ * Site wide across wp-admin, by operator decision. Guideline 11 contemplates this directly:
+ * "Site wide notices or embedded dashboard widgets must be dismissible or self-dismiss when
+ * resolved." This notice is dismissible four ways (the primary action, the two link actions,
+ * and core's injected X) and self-limits to three appearances ever before it stops for good,
+ * so the "used sparingly" half of the same guideline is carried by the trigger and the snooze
+ * cap rather than by a screen allowlist.
+ *
+ * Two exclusions survive. Network admin is out because the state option is per site, so an
+ * ask rendered there would read the wrong site's counts. The single-site check lives in
+ * aafm_review_request_eligible(); this function only has to answer the screen question, and
+ * returns true whenever there is an admin screen at all.
  *
  * @return bool
  */
@@ -187,11 +193,7 @@ function aafm_review_request_screen_allowed(): bool {
 	if ( ! function_exists( 'get_current_screen' ) ) {
 		return false;
 	}
-	$screen = get_current_screen();
-	if ( ! $screen ) {
-		return false;
-	}
-	return in_array( $screen->id, array( 'toplevel_page_agent-abilities-for-mcp', 'plugins' ), true );
+	return (bool) get_current_screen();
 }
 
 /**

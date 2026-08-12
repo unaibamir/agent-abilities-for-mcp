@@ -101,7 +101,7 @@ Your site's MCP endpoint lives at a fixed path under your REST API (replace `exa
 https://example.com/wp-json/agent-abilities-for-mcp/mcp
 ```
 
-Hosted apps (ChatGPT, Claude, and Manus) take that URL directly: add it as a custom connector and approve the connection once over OAuth. Editors and command-line clients use a config file instead. The standard block runs the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge on your own machine, which walks you through the same one-time OAuth approval in the browser, so no secret is stored:
+Hosted apps (ChatGPT, Claude, and Manus) take that URL directly: add it as a custom connector and approve the connection once over OAuth. Editors and command-line clients use a config file instead. The standard block runs the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge on your own machine, which walks you through the same one-time OAuth approval in the browser, so the config file holds no secret. The bridge keeps the tokens it is issued on your own machine, under `~/.mcp-auth`:
 
 ```json
 {

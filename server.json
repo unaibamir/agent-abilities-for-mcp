@@ -15,7 +15,7 @@
       "url": "https://{hostname}/wp-json/agent-abilities-for-mcp/mcp",
       "variables": {
         "hostname": {
-          "description": "Your WordPress site host, e.g. example.com. The plugin exposes its MCP endpoint at /wp-json/agent-abilities-for-mcp/mcp. Authenticate over OAuth (approve once in the browser, no stored secret) or an Application Password. Nothing is exposed until you enable abilities in wp-admin.",
+          "description": "Your WordPress site host, e.g. example.com. The plugin exposes its MCP endpoint at /wp-json/agent-abilities-for-mcp/mcp. Authenticate over OAuth (approve once in the browser, no secret in your config file) or an Application Password. Nothing is exposed until you enable abilities in wp-admin.",
           "isRequired": true
         }
       }

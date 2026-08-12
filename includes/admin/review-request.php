@@ -230,10 +230,14 @@ function aafm_review_request_eligible(): bool {
  * so the "used sparingly" half of the same guideline is carried by the trigger and the snooze
  * cap rather than by a screen allowlist.
  *
- * Two exclusions survive. Network admin is out because the state option is per site, so an
- * ask rendered there would read the wrong site's counts. The single-site check lives in
- * aafm_review_request_eligible(); this function only has to answer the screen question, and
- * returns true whenever there is an admin screen at all.
+ * One exclusion is left, and it is the only thing this function does: outside wp-admin there
+ * is no screen at all (get_current_screen() is not even defined on a front-end or cron
+ * request), so a false here keeps the notice off every non-admin context. Any real admin
+ * screen answers true.
+ *
+ * The other exclusion moved out rather than away. Network admin is still out, because the
+ * state option is per site and an ask rendered there would read the wrong site's counts, but
+ * that check lives in aafm_review_request_eligible() next to the capability gate.
  *
  * @return bool
  */
@@ -247,7 +251,9 @@ function aafm_review_request_screen_allowed(): bool {
 /**
  * Render the review-request notice on admin_notices.
  *
- * Gated by the screen allowlist, the Quick Connect suppression (the wizard modal owns the
+ * Gated by the admin-screen check (any wp-admin screen qualifies since the ask went site
+ * wide; the network-admin and capability exclusions sit in the eligibility check), the
+ * Quick Connect suppression (the wizard modal owns the
  * plugin page until the operator finishes or opts out, and the first-run flow must never be
  * interrupted by an ask), and the full eligibility check. The heading reads the count at
  * render time from the SAME success-narrowed helper as the trigger, and describes it as what

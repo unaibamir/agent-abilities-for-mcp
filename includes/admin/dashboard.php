@@ -195,7 +195,11 @@ function aafm_has_oauth_grant(): bool {
  *
  * Step [2] gets the same discipline: it counts only rows recording an agent tool call, never
  * the log's other traffic - ability toggles, setting changes, OAuth ceremony rows, transport
- * refusals, the log-cleared marker, crashed discovery-time permission checks. The raw total (aafm_activity_count()) flipped this step
+ * refusals, the log-cleared marker, crashed discovery-time permission checks. That last one
+ * holds for rows written from 1.7.0 onward, which is when crashed checks got their own event
+ * type; earlier rows carry the column default under a real ability name, are indistinguishable
+ * by shape from a denied agent call, and are still counted (aafm_agent_call_count() says the
+ * same, and no backfill guesses at them). The raw total (aafm_activity_count()) flipped this step
  * to done the moment step [0] wrote its ability_enabled row, before any call existed. A
  * denied or rate-limited call still counts: the agent reached the endpoint and invoked a
  * real tool, which is exactly what this step exists to prove (see aafm_agent_call_count()).

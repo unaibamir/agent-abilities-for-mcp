@@ -267,6 +267,85 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 
+	/**
+	 * Two tabs, one notice. Answering "Already did" in the first settles the state for good;
+	 * the second tab still shows the answered notice, and its "Maybe later" used to fall
+	 * through to the snooze branch and bring a permanently declined ask back in fourteen days.
+	 */
+	public function test_a_stale_later_cannot_downgrade_a_terminal_state(): void {
+		$this->acting_as( 'administrator' );
+		$this->run_ajax( array( 'verdict' => 'dismiss' ) );
+		$this->assertSame( 'dismissed', aafm_review_request_state()['status'] );
+
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+
+		$after = aafm_review_request_state();
+		$this->assertSame( 'dismissed', $after['status'] );
+		$this->assertSame( 0, $after['snooze_count'] );
+		$this->assertSame( 0, $after['snooze_until'] );
+	}
+
+	public function test_a_stale_later_cannot_downgrade_a_reviewed_state(): void {
+		$this->acting_as( 'administrator' );
+		$this->run_ajax( array( 'verdict' => 'review' ) );
+
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+
+		$this->assertSame( 'reviewed', aafm_review_request_state()['status'] );
+	}
+
+	/**
+	 * One appearance may only ever spend one snooze. A second "later" from another tab showing
+	 * the same (already answered) notice must not burn a second slot off the three-appearance
+	 * cap, nor push the horizon another fourteen days out.
+	 */
+	public function test_a_repeat_later_during_a_live_snooze_does_not_double_spend(): void {
+		$this->acting_as( 'administrator' );
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+		$first = aafm_review_request_state();
+
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+
+		$after = aafm_review_request_state();
+		$this->assertSame( 1, $after['snooze_count'] );
+		$this->assertSame( $first['snooze_until'], $after['snooze_until'] );
+	}
+
+	/**
+	 * The guard only blocks downgrades. A stale tab whose operator clicks the primary action
+	 * (or "Already did") is giving a stronger answer than the snooze already stored, and that
+	 * answer has to stick - otherwise someone who reviewed the plugin gets asked again.
+	 */
+	public function test_review_still_applies_over_a_live_snooze(): void {
+		$this->acting_as( 'administrator' );
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+		$this->assertSame( 'snoozed', aafm_review_request_state()['status'] );
+
+		$this->run_ajax( array( 'verdict' => 'review' ) );
+
+		$this->assertSame( 'reviewed', aafm_review_request_state()['status'] );
+	}
+
+	/**
+	 * An expired snooze is a genuine new appearance, so its "later" spends the next slot.
+	 */
+	public function test_a_later_after_the_snooze_expires_spends_the_next_snooze(): void {
+		$this->acting_as( 'administrator' );
+		$state                 = aafm_review_request_state();
+		$state['status']       = 'snoozed';
+		$state['snooze_count'] = 1;
+		$state['snooze_until'] = time() - 10;
+		aafm_review_request_save_state( $state );
+
+		$this->run_ajax( array( 'verdict' => 'later' ) );
+
+		$after = aafm_review_request_state();
+		$this->assertSame( 'snoozed', $after['status'] );
+		$this->assertSame( 2, $after['snooze_count'] );
+		$this->assertEqualsWithDelta( time() + 14 * DAY_IN_SECONDS, $after['snooze_until'], 5 );
+	}
+
+
 	public function test_ajax_rejects_a_bad_nonce_without_touching_state(): void {
 		$this->acting_as( 'administrator' );
 		$died = $this->run_ajax( array( 'verdict' => 'dismiss' ), false );

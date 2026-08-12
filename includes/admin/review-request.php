@@ -317,6 +317,15 @@ JS;
  * notice keeps its at-most-three-appearances promise no matter which dismissal path the
  * operator uses.
  *
+ * State only ever moves forward. Now that the notice is site wide, two admin tabs both
+ * showing it is the ordinary case, and the second tab's click arrives against a state the
+ * first tab already settled. So a stored terminal answer wins over anything a stale tab
+ * sends, and a "later" that lands while a snooze is still running is dropped rather than
+ * spending a second snooze off one appearance - otherwise a permanently declined ask would
+ * come back in fourteen days, or the three-appearance cap would burn down without the
+ * operator ever seeing three notices. A stale "review" or "already did" still applies over a
+ * live snooze: those are stronger answers, and honouring them is the point.
+ *
  * @return void
  */
 function aafm_ajax_review_request(): void {
@@ -332,6 +341,17 @@ function aafm_ajax_review_request(): void {
 	}
 
 	$state = aafm_review_request_state();
+
+	// Already answered for good: report the stored state and change nothing.
+	if ( in_array( $state['status'], array( 'reviewed', 'dismissed' ), true ) ) {
+		wp_send_json_success( array( 'status' => $state['status'] ) );
+	}
+	// Already snoozed and the snooze has not run out: a repeat "later" is a stale tab, not a
+	// second appearance, so it must not spend another snooze.
+	if ( 'later' === $verdict && 'snoozed' === $state['status'] && time() < $state['snooze_until'] ) {
+		wp_send_json_success( array( 'status' => $state['status'] ) );
+	}
+
 	if ( 'review' === $verdict ) {
 		$state['status'] = 'reviewed';
 	} elseif ( 'dismiss' === $verdict ) {

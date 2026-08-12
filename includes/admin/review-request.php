@@ -84,7 +84,7 @@ function aafm_review_request_url(): string {
  * normalized to its expected type here so downstream code never branches on a malformed
  * stored shape.
  *
- * @return array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int}
+ * @return array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int}
  */
 function aafm_review_request_state(): array {
 	$defaults = array(
@@ -92,6 +92,7 @@ function aafm_review_request_state(): array {
 		'first_success_seen_at' => 0,
 		'snooze_until'          => 0,
 		'snooze_count'          => 0,
+		'threshold_met'         => 0,
 	);
 	$stored   = get_option( 'aafm_review_request', array() );
 	if ( ! is_array( $stored ) ) {
@@ -107,7 +108,33 @@ function aafm_review_request_state(): array {
 		'first_success_seen_at' => max( 0, (int) $state['first_success_seen_at'] ),
 		'snooze_until'          => max( 0, (int) $state['snooze_until'] ),
 		'snooze_count'          => max( 0, (int) $state['snooze_count'] ),
+		'threshold_met'         => $state['threshold_met'] ? 1 : 0,
 	);
+}
+
+/**
+ * The success-narrowed tool-call count, computed at most once per request.
+ *
+ * Two callers want the same number on the same page load: the eligibility check reads it to
+ * decide whether to show the ask, and the heading reads it to quote it. That is one COUNT
+ * over the activity log, not two. Cheap on a small log (a fraction of a millisecond at a few
+ * hundred rows) but not free on a busy one, and it sits on the admin page-load path.
+ *
+ * The memo is per request, which is the whole scope that matters: a new page load recomputes
+ * it, so the notice can never quote a number from an earlier request. Only the test suite
+ * runs several logical "requests" in one PHP process, which is what $refresh is for.
+ *
+ * @param bool $refresh Recompute instead of returning the memoized value.
+ * @return int Non-negative count of successful agent tool calls in the log.
+ */
+function aafm_review_request_success_count( bool $refresh = false ): int {
+	static $count = null;
+
+	if ( $refresh || null === $count ) {
+		$count = aafm_agent_call_count( 'success' );
+	}
+
+	return $count;
 }
 
 /**
@@ -133,6 +160,13 @@ function aafm_review_request_save_state( array $state ): void {
  * or clearing the activity log can only delay the ask (the count has to rebuild), never
  * restart or shorten the clock.
  *
+ * The COUNT only runs while the threshold is still unproven. Once the site clears it, that
+ * fact is latched into the option and every later page load skips the query outright, which
+ * matters because "pending" has no time limit: an operator who never answers, or a site that
+ * never reaches ten successes, would otherwise pay for the query on every admin page load
+ * forever. The latch records only that the bar WAS cleared. It never stores the number, so
+ * the heading still reads a live count when it renders.
+ *
  * The success-only count is a deliberate divergence from aafm_agent_call_count()'s default
  * contract: denied calls prove the connection works, but the review ask needs evidence of
  * value, and an operator whose agent racks up denials has a configuration problem, not a
@@ -156,18 +190,30 @@ function aafm_review_request_eligible(): bool {
 		return false;
 	}
 
-	// The success-narrowed count from the shared helper - never a hand-copied WHERE clause.
-	$successes = aafm_agent_call_count( 'success' );
+	if ( ! $state['threshold_met'] ) {
+		// The success-narrowed count from the shared helper - never a hand-copied WHERE clause.
+		$successes = aafm_review_request_success_count();
+		$changed   = false;
 
-	// Stamp the seven-day clock exactly once, on the first success ever observed.
-	if ( $successes > 0 && 0 === $state['first_success_seen_at'] ) {
-		$state['first_success_seen_at'] = time();
-		aafm_review_request_save_state( $state );
+		// Stamp the seven-day clock exactly once, on the first success ever observed.
+		if ( $successes > 0 && 0 === $state['first_success_seen_at'] ) {
+			$state['first_success_seen_at'] = time();
+			$changed                        = true;
+		}
+		if ( $successes >= aafm_review_request_call_threshold() ) {
+			$state['threshold_met'] = 1;
+			$changed                = true;
+		}
+		// One write for both, so the page that first sees ten successes does not save twice.
+		if ( $changed ) {
+			aafm_review_request_save_state( $state );
+		}
+
+		if ( ! $state['threshold_met'] ) {
+			return false;
+		}
 	}
 
-	if ( $successes < aafm_review_request_call_threshold() ) {
-		return false;
-	}
 	if ( 0 === $state['first_success_seen_at'] ) {
 		return false;
 	}
@@ -226,7 +272,16 @@ function aafm_render_review_request_notice(): void {
 		return;
 	}
 
-	$count   = aafm_agent_call_count( 'success' );
+	// Memoized, so this is the same COUNT the eligibility check already ran on this request,
+	// or the only one it runs when the latch let that check skip the query.
+	$count = aafm_review_request_success_count();
+	// The latch survives a log clear (deliberately: a clear must never re-arm or shorten the
+	// ask). The heading must not, so an ask that would now quote fewer calls than the bar it
+	// claims to have cleared simply waits for the log to rebuild.
+	if ( $count < aafm_review_request_call_threshold() ) {
+		return;
+	}
+
 	$heading = sprintf(
 		/* translators: %s: number of successful agent tool calls currently held in the site's activity log. */
 		_n(

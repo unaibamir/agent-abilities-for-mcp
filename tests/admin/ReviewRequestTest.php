@@ -27,6 +27,9 @@ final class ReviewRequestTest extends TestCase {
 		delete_option( 'aafm_quickconnect_dismissed' );
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
+		// The success count is memoized per request. A test process is many logical requests in
+		// one PHP process, so it is recomputed here and after every batch this file logs.
+		aafm_review_request_success_count( true );
 	}
 
 	public function tear_down(): void {
@@ -48,6 +51,7 @@ final class ReviewRequestTest extends TestCase {
 				)
 			);
 		}
+		aafm_review_request_success_count( true );
 	}
 
 	/**
@@ -175,6 +179,7 @@ final class ReviewRequestTest extends TestCase {
 		// Clearing the log resets the count but must never touch the stamp: pruning or a
 		// clear can only DELAY the ask (the count rebuilds), never re-arm or shorten it.
 		aafm_clear_activity_log();
+		aafm_review_request_success_count( true );
 		$this->assertFalse( aafm_review_request_eligible() );
 		$this->assertSame( $stamp, aafm_review_request_state()['first_success_seen_at'] );
 	}
@@ -188,6 +193,93 @@ final class ReviewRequestTest extends TestCase {
 		// Later checks with more successes in the log must keep the original stamp.
 		$this->assertTrue( aafm_review_request_eligible() );
 		$this->assertSame( $stamp, aafm_review_request_state()['first_success_seen_at'] );
+	}
+
+
+	/**
+	 * Two callers want the same number on one page load, and the COUNT only has to run once.
+	 * The memo is the mechanism, so a count taken after the log changed but before the memo was
+	 * dropped still reads the earlier value - the guarantee is "once per request", not "live at
+	 * every call site within a request".
+	 */
+	public function test_the_success_count_is_computed_once_per_request(): void {
+		$this->log_success_calls( 4 );
+		$this->assertSame( 4, aafm_review_request_success_count() );
+
+		$this->log_success_calls( 3 );
+		aafm_review_request_success_count( true );
+		$this->assertSame( 7, aafm_review_request_success_count() );
+
+		// A write the memo has not been told about does not move the memoized answer.
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+		$this->assertSame( 8, aafm_agent_call_count( 'success' ) );
+		$this->assertSame( 7, aafm_review_request_success_count() );
+	}
+
+	/**
+	 * "pending" has no time limit, so an operator who ignores the notice would pay for the
+	 * eligibility COUNT on every admin page load forever. Clearing the bar is latched into the
+	 * option instead, and later loads answer from the option alone.
+	 */
+	public function test_meeting_the_threshold_is_latched_into_the_option(): void {
+		$this->acting_as( 'administrator' );
+		$this->assertSame( 0, aafm_review_request_state()['threshold_met'] );
+
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+		$this->assertTrue( aafm_review_request_eligible() );
+
+		$this->assertSame( 1, aafm_review_request_state()['threshold_met'] );
+
+		// Proof that the later loads no longer count: with the log emptied and the memo
+		// dropped, a re-count would drop back under the bar and return false.
+		aafm_clear_activity_log();
+		aafm_review_request_success_count( true );
+		$this->assertSame( 0, aafm_agent_call_count( 'success' ) );
+		$this->assertTrue( aafm_review_request_eligible() );
+	}
+
+	/**
+	 * The latch records only that the bar was cleared, never the number. The heading has to
+	 * quote what the log holds when it renders, so a site that keeps working sees its real,
+	 * current count and not the ten it happened to have on the day the notice armed.
+	 */
+	public function test_the_latch_does_not_freeze_the_heading_count(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+		$this->assertTrue( aafm_review_request_eligible() );
+
+		$this->log_success_calls( 2 );
+
+		$this->assertStringContainsString(
+			'Your activity log shows 12 successful agent calls on this site',
+			$this->render_on( 'plugins' )
+		);
+	}
+
+	/**
+	 * The latch deliberately survives a log clear, because a clear must never re-arm or shorten
+	 * the ask. The heading must not survive it: quoting "0 successful agent calls" while asking
+	 * for a review off the back of them is the misleading-claim line this feature stays behind.
+	 * The ask waits for the log to rebuild instead.
+	 */
+	public function test_the_notice_stays_quiet_when_the_log_can_no_longer_back_its_claim(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+		$this->assertStringContainsString( 'aafm-review-request', $this->render_on( 'plugins' ) );
+
+		aafm_clear_activity_log();
+		aafm_review_request_success_count( true );
+
+		$this->assertTrue( aafm_review_request_eligible() );
+		$this->assertSame( '', $this->render_on( 'plugins' ) );
 	}
 
 

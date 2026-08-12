@@ -1797,10 +1797,10 @@ function aafm_render_post_types_selector(): void {
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
-	echo '<th>' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Writes', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'REST', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Writes', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'REST', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '</tr></thead><tbody>';
 
 	foreach ( $eligible as $type ) {
@@ -2091,7 +2091,7 @@ function aafm_render_activity_tab(): void {
 	);
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	foreach ( aafm_activity_log_headers() as $header_label ) {
-		echo '<th>' . esc_html( $header_label ) . '</th>';
+		echo '<th scope="col">' . esc_html( $header_label ) . '</th>';
 	}
 	echo '</tr></thead><tbody>';
 

@@ -128,9 +128,9 @@ final class ActivityTabTest extends TestCase {
 	public function test_the_header_row_is_the_v5_six(): void {
 		$html = $this->render_activity_tab();
 		foreach ( array( 'Time (UTC)', 'Principal', 'Event', 'Detail', 'Status', 'Arg keys' ) as $header ) {
-			$this->assertStringContainsString( '<th>' . $header, $html );
+			$this->assertStringContainsString( '<th scope="col">' . $header, $html );
 		}
-		$this->assertStringNotContainsString( '<th>Ability', $html );
+		$this->assertStringNotContainsString( '<th scope="col">Ability', $html );
 	}
 
 	/**

@@ -298,7 +298,7 @@ function aafm_render_review_request_notice(): void {
 		),
 		number_format_i18n( $count )
 	);
-	$body    = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
+	$body = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
 	<div class="notice notice-info is-dismissible aafm-review-request"
 		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>"

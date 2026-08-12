@@ -24,6 +24,12 @@ name: Release
 # workflow_dispatch is a typed escape hatch for the FIRST launch (1.0.0 is already
 # tagged, so the push path would skip it) or a re-deploy: run it and type the
 # already-tagged version to ship it by hand.
+#
+# After the release publishes, a separate mcp-registry job pushes the root
+# server.json to the official MCP registry (registry.modelcontextprotocol.io)
+# over GitHub OIDC - no stored secret. It is deliberately isolated and allowed
+# to fail: a registry outage must never make a shipped wordpress.org release
+# look broken.
 
 on:
   push:
@@ -51,6 +57,9 @@ jobs:
     env:
       SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
       SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    outputs:
+      version: ${{ steps.rel.outputs.version }}
+      skip: ${{ steps.rel.outputs.skip }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,3 +158,51 @@ jobs:
           files: build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Push server.json to the official MCP registry so the listing tracks every
+  # release instead of drifting until someone republishes by hand. Runs only
+  # after the release job has fully published (tag, zip, SVN, GitHub Release),
+  # so nothing here can affect the wordpress.org deploy. continue-on-error
+  # keeps the run green if the registry rejects or is down; the failed job and
+  # its annotations stay visible in the run summary. Recovery is re-running
+  # this job, or `mcp-publisher login github` + `mcp-publisher publish` locally.
+  # Note: re-dispatching an already-published version will be refused by the
+  # registry as a duplicate - that is expected, not a defect.
+  mcp-registry:
+    name: Publish to the MCP registry
+    needs: publish
+    if: needs.publish.outputs.skip != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      id-token: write   # OIDC login to the registry; no stored secret or PAT
+      contents: read
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.version }}
+          persist-credentials: false
+
+      - name: Sync server.json to the released version
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.publish.outputs.version }}"
+          MANIFEST="$(jq -r '.version' server.json)"
+          if [ "$MANIFEST" != "$VERSION" ]; then
+            echo "::warning::server.json says $MANIFEST but the release is $VERSION; publishing as $VERSION. Bump server.json alongside the other version pins."
+          fi
+          jq --arg v "$VERSION" '.version = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Publish to registry.modelcontextprotocol.io
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

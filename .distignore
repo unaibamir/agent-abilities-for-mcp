@@ -33,6 +33,7 @@
 /.editorconfig
 /README.md
 /glama.json
+/server.json
 /composer.lock
 /phpcs.xml.dist
 /phpstan.neon.dist

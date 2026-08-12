@@ -187,11 +187,18 @@ function aafm_has_oauth_grant(): bool {
  *
  *   [0] abilities are enabled - aafm_enabled_ability_count() > 0
  *   [1] agent is connected    - aafm_has_oauth_grant() || aafm_has_created_agent_user()
- *   [2] a call has been made  - aafm_activity_count() > 0 (logged for real)
+ *   [2] a call has been made  - aafm_agent_call_count() > 0 (a logged agent tool call)
  *
  * Step [1] keys off a live OAuth grant or a user THIS plugin created as a dedicated agent
  * (the marker meta), never a bare application-password holder - app passwords are minted for
  * many unrelated reasons, so counting them here flagged "connected" before any agent had.
+ *
+ * Step [2] gets the same discipline: it counts only rows recording an agent tool call, never
+ * the log's other traffic - ability toggles, setting changes, OAuth ceremony rows, transport
+ * refusals, the log-cleared marker. The raw total (aafm_activity_count()) flipped this step
+ * to done the moment step [0] wrote its ability_enabled row, before any call existed. A
+ * denied or rate-limited call still counts: the agent reached the endpoint and invoked a
+ * real tool, which is exactly what this step exists to prove (see aafm_agent_call_count()).
  *
  * The zero-based index is the contract callers rely on: $steps[0] is always the
  * abilities step, $steps[1] is always the connect step.
@@ -225,7 +232,7 @@ function aafm_setup_steps(): array {
 		array(
 			'title' => __( 'Make your first call', 'agent-abilities-for-mcp' ),
 			'desc'  => __( 'Point your MCP client at the endpoint and run one request. It shows up here once the activity log records it.', 'agent-abilities-for-mcp' ),
-			'done'  => aafm_activity_count() > 0,
+			'done'  => aafm_agent_call_count() > 0,
 			'href'  => $tab_url( 'connection' ),
 		),
 	);

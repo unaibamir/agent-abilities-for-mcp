@@ -623,6 +623,47 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
 }
 
 /**
+ * Count rows recording a genuine agent tool call - the "made your first call" signal.
+ *
+ * The event_type = 'ability_call' filter narrows out the admin-side events schema v5 gave
+ * their own types (ability toggles, blocked enables, setting changes, the log-cleared
+ * marker), but is not sufficient on its own: three writers land rows under the DEFAULT
+ * 'ability_call' type that are not tool calls, so each is excluded by the synthetic ability
+ * name it carries.
+ *
+ * - 'oauth:%' rows (includes/oauth/audit.php passes no event_type) record the browser-side
+ *   OAuth ceremony (register/authorize/token/...) - that is the connect step's territory,
+ *   not a call.
+ * - '(transport)' rows record refusals at the front door - a wrong Application Password or
+ *   a blocked source IP - before any tool was addressed, so no tool call happened.
+ * - 'aafm/activity-log-cleared' is the log-cleared marker's synthetic name; markers written
+ *   before schema v5 predate event_type and so carry the 'ability_call' default.
+ *
+ * Denied and rate-limited tool calls DO count. Those rows (includes/register.php) mean an
+ * agent authenticated, spoke MCP, and invoked a real tool by name - the refusal is the
+ * governance layer doing its job, and the connection demonstrably works end to end.
+ *
+ * @return int Non-negative count of agent tool-call rows.
+ */
+function aafm_agent_call_count(): int {
+	global $wpdb;
+	$table = aafm_activity_log_table();
+
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$count = $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT COUNT(*) FROM %i WHERE event_type = %s AND ability <> %s AND ability <> %s AND ability NOT LIKE %s',
+			$table,
+			'ability_call',
+			'(transport)',
+			'aafm/activity-log-cleared',
+			$wpdb->esc_like( 'oauth:' ) . '%'
+		)
+	);
+	return max( 0, (int) $count );
+}
+
+/**
  * The highest activity row id currently in the table, or 0 when empty.
  *
  * A caller paginating with aafm_query_activity() across several calls (the CSV exporter) snapshots

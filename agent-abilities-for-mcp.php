@@ -396,6 +396,9 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
+		// The success count is memoized for the request. Under a persistent worker SAPI the
+		// static would otherwise outlive it, so it is dropped on the way out.
+		add_action( 'shutdown', 'aafm_review_request_reset_success_count' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 

@@ -652,4 +652,28 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertFalse( get_option( 'aafm_review_request', false ) );
 		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
 	}
+
+	public function test_the_shutdown_reset_forgets_the_memo_without_spending_a_query(): void {
+		global $wpdb;
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 3 );
+
+		// Prime the memo, then confirm a second read costs nothing.
+		$this->assertSame( 3, aafm_review_request_success_count() );
+		$before = $wpdb->num_queries;
+		$this->assertSame( 3, aafm_review_request_success_count() );
+		$this->assertSame( $before, $wpdb->num_queries, 'A memoized read must not query.' );
+
+		// The shutdown reset discards the value. It must not recompute on its way out, or it
+		// would spend the query the memo exists to save.
+		$before = $wpdb->num_queries;
+		aafm_review_request_reset_success_count();
+		$this->assertSame( $before, $wpdb->num_queries, 'The reset must not query.' );
+
+		// The next read is cold, so it sees rows written after the memo was primed. Without the
+		// reset a persistent worker would keep quoting the stale 3 forever.
+		$this->log_success_calls( 2 );
+		aafm_review_request_reset_success_count();
+		$this->assertSame( 5, aafm_review_request_success_count() );
+	}
 }

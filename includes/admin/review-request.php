@@ -120,21 +120,50 @@ function aafm_review_request_state(): array {
  * over the activity log, not two. Cheap on a small log (a fraction of a millisecond at a few
  * hundred rows) but not free on a busy one, and it sits on the admin page-load path.
  *
- * The memo is per request, which is the whole scope that matters: a new page load recomputes
- * it, so the notice can never quote a number from an earlier request. Only the test suite
- * runs several logical "requests" in one PHP process, which is what $refresh is for.
+ * The memo has to be per request, and a bare function static is not that on its own. On
+ * php-fpm and mod_php, which is what WordPress almost always runs on, the process ends with
+ * the request and the two are the same thing. Under a persistent worker SAPI (FrankenPHP
+ * worker mode, RoadRunner, Swoole) the static outlives the request, and the same reasoning
+ * is spelled out for the sibling static in includes/server.php. Here the consequences are
+ * worse than a duplicate log row, because production never passes $refresh: a worker that
+ * cached a below-threshold count would never see the site cross the bar, and one that cached
+ * a passing count would keep quoting it after the log was cleared, defeating the render
+ * guard that exists to stop exactly that. So the memo is cleared on `shutdown` rather than
+ * trusted to die with the process, which makes "per request" true on every SAPI. $refresh is
+ * for the test suite, which runs many logical requests without a shutdown between them.
  *
  * @param bool $refresh Recompute instead of returning the memoized value.
+ * @param bool $forget  Discard the memoized value without recomputing it, and return 0. Used
+ *                      by the shutdown reset, which must not spend a query on its way out.
  * @return int Non-negative count of successful agent tool calls in the log.
  */
-function aafm_review_request_success_count( bool $refresh = false ): int {
+function aafm_review_request_success_count( bool $refresh = false, bool $forget = false ): int {
 	static $count = null;
+
+	if ( $forget ) {
+		$count = null;
+		return 0;
+	}
 
 	if ( $refresh || null === $count ) {
 		$count = aafm_agent_call_count( 'success' );
 	}
 
 	return $count;
+}
+
+/**
+ * Drop the memoized success count at the end of the request.
+ *
+ * Hooked on `shutdown` so a persistent worker starts each request with a cold memo. On
+ * php-fpm and mod_php the process was ending anyway, so this costs one function call and
+ * changes nothing. It discards rather than recomputes: spending a query on the way out
+ * would give back the saving the memo exists to make.
+ *
+ * @return void
+ */
+function aafm_review_request_reset_success_count(): void {
+	aafm_review_request_success_count( false, true );
 }
 
 /**

@@ -132,7 +132,13 @@
 			}
 			cards.forEach( ( card ) => {
 				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => c.classList.toggle( 'on', c === card ) );
+					cards.forEach( ( c ) => {
+						const on = c === card;
+						c.classList.toggle( 'on', on );
+						// The cards are toggle buttons; aria-pressed carries the same
+						// selected state to assistive tech that .on carries visually.
+						c.setAttribute( 'aria-pressed', String( on ) );
+					} );
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
@@ -185,7 +191,11 @@
 			}
 			cards.forEach( ( card ) => {
 				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => c.classList.toggle( 'on', c === card ) );
+					cards.forEach( ( c ) => {
+						const on = c === card;
+						c.classList.toggle( 'on', on );
+						c.setAttribute( 'aria-pressed', String( on ) );
+					} );
 
 					const client = card.dataset.client ?? '';
 					document

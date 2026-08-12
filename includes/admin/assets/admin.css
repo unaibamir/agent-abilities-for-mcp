@@ -1610,20 +1610,37 @@
 		gap: 10px;
 	}
 
+	/* Each card is a <button>, so the browser defaults it would otherwise inherit
+	   (centred text, Arial, its own margin box) are reset back to the card design. */
 	.aafm-client {
+		appearance: none;
 		display: flex;
 		align-items: center;
 		gap: 9px;
+		inline-size: 100%;
+		margin: 0;
 		padding-block: 11px;
 		padding-inline: 13px;
 		cursor: pointer;
 		background: var(--aafm-surface);
 		border: 1px solid var(--aafm-border-strong);
 		border-radius: var(--aafm-radius-sm);
+		font-family: inherit;
 		font-size: 13px;
 		font-weight: 600;
+		line-height: 1.4;
+		text-align: start;
 		color: var(--aafm-text);
 		transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+		&:focus-visible {
+			outline: none;
+			box-shadow: var(--aafm-ring);
+		}
+
+		&.on:focus-visible {
+			box-shadow: inset 0 0 0 1px var(--aafm-accent), var(--aafm-ring);
+		}
 
 		&:hover {
 			border-color: var(--aafm-accent);

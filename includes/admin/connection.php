@@ -950,13 +950,17 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-client-grid" id="aafm-oauth-clients">';
 		$first = true;
 		foreach ( aafm_quickstart_clients() as $slug => $label ) {
+			// A real <button> with aria-pressed, not a click-only div: this picker is the
+			// only route to the OAuth instructions, so it has to be reachable by keyboard
+			// and announce its selected state. admin.js keeps aria-pressed and .on in step.
 			echo wp_kses(
 				sprintf(
-					'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
+					'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
 					$first ? ' on' : '',
 					esc_attr( $slug ),
 					aafm_icon( 'client-' . $slug ),
-					esc_html( $label )
+					esc_html( $label ),
+					$first ? 'true' : 'false'
 				),
 				aafm_admin_allowed_html()
 			);
@@ -1207,13 +1211,16 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-client-grid" id="aafm-clients">';
 	$first = true;
 	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
+		// Same contract as the OAuth picker above: a focusable <button> carrying its own
+		// pressed state, so the card is operable without a mouse.
 		echo wp_kses(
 			sprintf(
-				'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
+				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
 				$first ? ' on' : '',
 				esc_attr( $slug ),
 				aafm_icon( 'client-' . $slug ),
-				esc_html( $label )
+				esc_html( $label ),
+				$first ? 'true' : 'false'
 			),
 			aafm_admin_allowed_html()
 		);

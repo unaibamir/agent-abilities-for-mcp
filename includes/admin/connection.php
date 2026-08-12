@@ -1173,7 +1173,9 @@ function aafm_render_connection_tab(): void {
 		}
 		echo '</p>';
 	} else {
-		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+		// The field has no visible label, so it carries its own accessible name; the
+		// wizard's equivalent input (quickconnect.php) is labelled the same way.
+		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text" aria-label="' . esc_attr__( 'Agent username', 'agent-abilities-for-mcp' ) . '"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	}
 	echo '</div></div>';
 	echo '</div>';

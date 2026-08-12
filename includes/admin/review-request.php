@@ -229,7 +229,8 @@ function aafm_render_review_request_notice(): void {
 	<div class="notice notice-info is-dismissible aafm-review-request" data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>">
 		<p><strong><?php echo esc_html( $heading ); ?></strong></p>
 		<p><?php echo esc_html( $body ); ?></p>
-		<p>
+		<?php // Flex with a gap so the two link-buttons are not left touching on a single word space. The plugin's admin CSS is not loaded on the Plugins list, so the rule rides inline, as the onboarding pointer's button spacing already does. ?>
+		<p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 			<a class="button button-primary" href="<?php echo esc_url( aafm_review_request_url() ); ?>" target="_blank" rel="noopener noreferrer" data-aafm-review="review"><?php esc_html_e( 'Sure, I\'ll review', 'agent-abilities-for-mcp' ); ?></a>
 			<button type="button" class="button-link" data-aafm-review="later"><?php esc_html_e( 'Maybe later', 'agent-abilities-for-mcp' ); ?></button>
 			<button type="button" class="button-link" data-aafm-review="dismiss"><?php esc_html_e( 'Already did, don\'t show again', 'agent-abilities-for-mcp' ); ?></button>

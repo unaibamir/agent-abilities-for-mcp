@@ -257,6 +257,10 @@ function aafm_config_option_names(): array {
 		'aafm_quickconnect_finished',
 		'aafm_quickconnect_dismissed',
 		'aafm_menu_pointer_active',
+		// The review-request notice's whole state (status, first-success stamp, snooze bookkeeping).
+		// Clearing it on reset re-arms the ask, but only after a fresh 7 days plus 10 new successful
+		// calls, because reset also empties the activity log; uninstall-with-delete-data removes it.
+		'aafm_review_request',
 		// The one-time agent-user marker backfill guard. Listed so a reset clears it (letting the
 		// backfill re-run against a legacy install) and uninstall-with-delete-data removes the row
 		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall

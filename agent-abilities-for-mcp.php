@@ -364,6 +364,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-request.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
@@ -393,6 +394,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
+		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
+		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 

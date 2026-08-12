@@ -131,11 +131,14 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	/** This filter is documented in includes/register.php, at the execute-side catch. */
 	if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
 		// Worth knowing before turning this on: the callers below are reached from
-		// aafm_build_server_tools() as well as from tools/list, and the adapter builds its server on
-		// init priority 20, so on a WP_DEBUG site a throwing cap filter fatals every logged-in page
-		// load rather than only the MCP endpoint. That was true before this guard existed too - the
-		// bare `$permission( $input )` propagated identically - but the switch is what makes it a
-		// choice, so say so here.
+		// aafm_build_server_tools() as well as from tools/list, and the adapter builds its server
+		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15
+		// (McpAdapter::instance(), vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:59-64;
+		// the init priority 20 branch is WP-CLI only). So on a WP_DEBUG site a throwing cap filter
+		// fatals every REST request, block editor traffic included, rather than only the MCP
+		// endpoint. Ordinary admin and front-end page loads never reach it. That was true before
+		// this guard existed too - the bare `$permission( $input )` propagated identically - but the
+		// switch is what makes it a choice, so say so here.
 		throw $e;
 	}
 
@@ -147,10 +150,11 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	//
 	// Once per (ability, failure) per request, though, not once per check. Read that bound
 	// literally, because the ability name is half the key: this removes the REPEAT-CHECK
-	// multiplier, not the per-ability row. An MCP request runs the loop twice, once in
-	// aafm_build_server_tools() on init and again in aafm_filter_mcp_tools_list at tools/list, so
-	// the second pass writes nothing; a single pass over the catalog still writes one row per
-	// affected ability. Measured with a throwing user_has_cap filter and the whole native catalog
+	// multiplier, not the per-ability row. An MCP request runs the loop twice, once when
+	// aafm_build_server_tools() builds the server on rest_api_init and again in
+	// aafm_filter_mcp_tools_list at tools/list, so the second pass writes nothing; a single pass
+	// over the catalog still writes one row per affected ability.
+	// Measured with a throwing user_has_cap filter and the whole native catalog
 	// enabled: 83 abilities checked, 38 rows written (the other 45 fail closed before they reach
 	// the capability check), a second pass in the same request adds zero, and a genuinely
 	// different exception on an already-recorded ability still writes its own row.
@@ -159,9 +163,9 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
 	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
 	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
-	// init for every logged-in page load, so the un-deduped shape was rows-per-ability times
-	// passes-per-request with nothing to bound it (the pruner is retention-day based, not size
-	// based).
+	// every REST request, block editor traffic included, so the un-deduped shape was
+	// rows-per-ability times passes-per-request with nothing to bound it (the pruner is
+	// retention-day based, not size based).
 	//
 	// The static is request-scoped on php-fpm and mod_php, which is what WordPress almost always
 	// runs on. Under a persistent worker SAPI (FrankenPHP worker mode, RoadRunner, Swoole) or
@@ -183,9 +187,9 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 				'client_id'         => aafm_oauth_current_client_id(),
 				// Its own type, never the 'ability_call' default. This row names a REAL ability,
 				// so aafm_agent_call_count()'s synthetic-name exclusions cannot see it - and the
-				// callers run on init with zero MCP traffic, so under the default type a throwing
-				// vendor cap filter flipped the dashboard's "Make your first call" step and every
-				// other consumer of that count with no agent involved.
+				// callers run on every REST request, with zero MCP traffic needed, so under the
+				// default type a throwing vendor cap filter flipped the dashboard's "Make your
+				// first call" step and every other consumer of that count with no agent involved.
 				'event_type'        => 'permission_check_crashed',
 				'detail'            => $detail,
 			)

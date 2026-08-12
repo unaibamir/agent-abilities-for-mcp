@@ -306,7 +306,8 @@ function aafm_quickconnect_render(): void {
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>
 					</button>
 				</div>
-				<h1 id="aafm-qc-title"><?php esc_html_e( 'Connect an AI agent to this site', 'agent-abilities-for-mcp' ); ?></h1>
+				<?php // tabindex="-1" so admin.js can put the opening focus on the dialog's own title. ?>
+				<h1 id="aafm-qc-title" tabindex="-1"><?php esc_html_e( 'Connect an AI agent to this site', 'agent-abilities-for-mcp' ); ?></h1>
 				<p class="aafm-qc-lede"><?php esc_html_e( 'Give an AI agent a governed way in. Turn the connection on, choose what it can touch, and you are done. Everything else lives in Settings.', 'agent-abilities-for-mcp' ); ?></p>
 				<div class="aafm-qc-meter" aria-hidden="true">
 					<div class="aafm-qc-meter-top">
@@ -370,7 +371,8 @@ function aafm_quickconnect_render(): void {
 								<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
 								<span><?php echo wp_kses( __( 'Not using ChatGPT or Claude? <b>Connect with a username and application password instead</b>', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
 							</button>
-							<div class="aafm-qc-altpanel"><div><div class="aafm-qc-altbody">
+							<?php // Collapsed panels stay in the layout at zero height, so they ship inert: without it every control inside is still tabbable. admin.js flips it with the disclosure. ?>
+							<div class="aafm-qc-altpanel" inert><div><div class="aafm-qc-altbody">
 
 								<div class="aafm-qc-substep" data-qc-substep="a">
 									<span class="sn">1</span>
@@ -452,7 +454,8 @@ function aafm_quickconnect_render(): void {
 						</div>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
 					</div>
-					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
+					<?php // Steps that are not the current one ship inert; admin.js moves it as the wizard advances. ?>
+					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 
 						<div class="aafm-qc-control">
 							<label class="aafm-qc-toggle">
@@ -521,7 +524,7 @@ function aafm_quickconnect_render(): void {
 						</div>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
 					</div>
-					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
+					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 						<p class="aafm-qc-finishcopy"><?php esc_html_e( 'You are set. Approve the connection in the agent when it asks, and it will see exactly what you allowed here, nothing more.', 'agent-abilities-for-mcp' ); ?></p>
 						<div class="aafm-qc-btnrow">
 							<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-qc-finish">

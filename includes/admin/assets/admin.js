@@ -1771,6 +1771,10 @@
 			const reduce = window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 			const state = { step: 1, oauth: true, write: false, method: 'oauth' };
 
+			const modal = root.querySelector( '.aafm-qc-modal' );
+			const qcTitle = root.querySelector( '#aafm-qc-title' );
+			const { isOpen, landFocus } = this.#quickConnectFocus( root, modal );
+
 			const jobs = {
 				1: root.querySelector( '[data-qc-job="1"]' ),
 				2: root.querySelector( '[data-qc-job="2"]' ),
@@ -1791,6 +1795,15 @@
 			const render = () => {
 				[ 1, 2, 3 ].forEach( ( i ) => {
 					const job = jobs[ i ];
+					// A collapsed step is zero-height but still laid out, so without inert
+					// its controls stay tabbable and in the accessibility tree: a keyboard
+					// user tabbing through step 1 could reach - and fire - "Finish setup".
+					// inert takes the whole subtree out of both. Browsers without it behave
+					// as the wizard did before, so this can only improve matters.
+					const body = job.querySelector( '.aafm-qc-job-body' );
+					if ( body ) {
+						body.inert = i !== state.step;
+					}
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );
@@ -1824,9 +1837,22 @@
 				}
 			};
 
+			// Advancing collapses the step the user was standing in, and the control they just
+			// pressed goes inert with it, which would drop focus on <body> and strand the
+			// keyboard outside the dialog. Move focus to the new step's title instead: it
+			// names where they have landed, and there is nothing there to fire by accident.
+			const focusStep = () => {
+				const heading = jobs[ state.step ]?.querySelector( '.aafm-qc-job-titles .jt' );
+				if ( heading ) {
+					heading.setAttribute( 'tabindex', '-1' );
+					heading.focus();
+				}
+			};
+
 			const goStep = ( n ) => {
 				state.step = Math.max( 1, Math.min( 3, n ) );
 				render();
+				focusStep();
 			};
 
 			// Re-open a completed step by clicking its header.
@@ -1872,9 +1898,16 @@
 			// ---- Job 1: app-password disclosure ----
 			const alt = root.querySelector( '[data-qc-altauth]' );
 			const altTrigger = root.querySelector( '[data-qc-alttrigger]' );
+			const altPanel = alt.querySelector( '.aafm-qc-altpanel' );
 			altTrigger.addEventListener( 'click', () => {
 				const open = alt.classList.toggle( 'is-open' );
 				altTrigger.setAttribute( 'aria-expanded', String( open ) );
+				// Same collapse trick as the steps, same fix: the closed panel's Create-user
+				// button, profile link, and copy control must not be tabbable while the
+				// trigger reports aria-expanded="false".
+				if ( altPanel ) {
+					altPanel.inert = ! open;
+				}
 			} );
 
 			// Create the dedicated agent user (reuses the real aafm_create_agent_user action,
@@ -1954,6 +1987,7 @@
 			root.querySelector( '#aafm-qc-dismiss' ).addEventListener( 'click', async () => {
 				await this.#post( 'aafm_quickconnect_dismiss' );
 				root.classList.add( 'is-closed' );
+				landFocus();
 			} );
 
 			// ---- Go to dashboard from the success screen ----
@@ -1965,18 +1999,104 @@
 			}
 
 			// ---- Temporary close: X, scrim, Esc. Sets no flag, so it reopens next visit. ----
-			const closeTemp = () => root.classList.add( 'is-closed' );
+			const closeTemp = () => {
+				root.classList.add( 'is-closed' );
+				landFocus();
+			};
 			root.querySelectorAll( '[data-qc-close]' ).forEach( ( el ) => {
 				el.addEventListener( 'click', closeTemp );
 			} );
 			document.addEventListener( 'keydown', ( e ) => {
-				if ( 'Escape' === e.key && ! root.classList.contains( 'is-closed' ) ) {
+				if ( 'Escape' === e.key && isOpen() ) {
 					closeTemp();
 				}
 			} );
 
 			render();
 			applyOauth();
+
+			// Opening focus goes to the dialog's own title, so a screen reader starts by
+			// announcing what this thing is rather than reading from wherever the page
+			// happened to leave focus.
+			qcTitle?.focus();
+		}
+
+		/**
+		 * Keep keyboard focus inside the Quick Connect dialog while it is open, and hand it
+		 * somewhere sensible when it closes.
+		 *
+		 * The overlay is aria-modal="true", which tells assistive tech the rest of the page
+		 * does not exist, so focus has to honour that claim. The trap is scoped to the modal
+		 * rather than applying `inert` to the page behind it because the overlay is rendered
+		 * inside .aafm-wrap: inerting an ancestor would inert the dialog with it.
+		 *
+		 * @param {HTMLElement} root  The wizard root (.aafm-qc-overlay).
+		 * @param {HTMLElement} modal The dialog itself (.aafm-qc-modal).
+		 * @return {{isOpen: () => boolean, landFocus: () => void}} Open test + close-time focus handoff.
+		 */
+		#quickConnectFocus( root, modal ) {
+			const FOCUSABLE = [
+				'a[href]',
+				'button:not([disabled])',
+				'input:not([disabled])',
+				'select:not([disabled])',
+				'textarea:not([disabled])',
+				'[tabindex]:not([tabindex="-1"])',
+			].join( ',' );
+
+			const isOpen = () => ! root.classList.contains( 'is-closed' );
+
+			// What can actually be tabbed to right now: rendered, and not sitting inside a
+			// collapsed step or a closed disclosure (both of which are marked inert).
+			const tabbables = () =>
+				Array.from( modal.querySelectorAll( FOCUSABLE ) ).filter(
+					( el ) => ! el.closest( '[inert]' ) && el.getClientRects().length > 0
+				);
+
+			modal.addEventListener( 'keydown', ( e ) => {
+				if ( 'Tab' !== e.key ) {
+					return;
+				}
+				const list = tabbables();
+				if ( ! list.length ) {
+					return;
+				}
+				const first = list[ 0 ];
+				const last = list[ list.length - 1 ];
+				const inside = modal.contains( document.activeElement );
+				if ( e.shiftKey && ( ! inside || document.activeElement === first ) ) {
+					e.preventDefault();
+					last.focus();
+				} else if ( ! e.shiftKey && ( ! inside || document.activeElement === last ) ) {
+					e.preventDefault();
+					first.focus();
+				}
+			} );
+
+			// Tab is not the only way out: find-in-page, a browser extension, or a control
+			// disappearing under focus can all land it on the page behind. Pull it back.
+			document.addEventListener( 'focusin', ( e ) => {
+				if ( ! isOpen() || modal.contains( e.target ) ) {
+					return;
+				}
+				const list = tabbables();
+				if ( list.length ) {
+					list[ 0 ].focus();
+				}
+			} );
+
+			// On close, focus the plugin page's own heading rather than dropping it on <body>,
+			// which would restart tabbing from the top of the admin chrome.
+			const landFocus = () => {
+				const heading = document.querySelector( '.aafm-wrap > h1' );
+				if ( ! heading ) {
+					return;
+				}
+				heading.setAttribute( 'tabindex', '-1' );
+				heading.focus();
+			};
+
+			return { isOpen, landFocus };
 		}
 
 		/**
@@ -2007,6 +2127,9 @@
 				meter.style.display = 'none';
 			}
 			root.querySelector( '[data-qc-success]' ).classList.add( 'is-shown' );
+			// The button that was focused just went display:none with the step list, so put
+			// focus on the receipt's only control instead of letting it fall to <body>.
+			root.querySelector( '#aafm-qc-godash' )?.focus();
 			if ( ! reduce ) {
 				this.#quickConnectConfetti( root );
 			}

@@ -379,7 +379,7 @@ final class ReviewRequestTest extends TestCase {
 		$html = $this->render_on( 'plugins' );
 
 		$this->assertStringContainsString( 'aafm-review-request', $html );
-		$this->assertStringContainsString( 'Your agent has made 10 successful calls on this site', $html );
+		$this->assertStringContainsString( 'Your activity log shows 10 successful agent calls on this site', $html );
 		$this->assertStringContainsString( 'wordpress.org/support/plugin/agent-abilities-for-mcp/reviews/#new-post', $html );
 		$this->assertStringContainsString( 'Maybe later', $html );
 		$this->assertStringContainsString( 'is-dismissible', $html );
@@ -428,6 +428,23 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The heading may only claim what the log can back. Retention pruning (default 30 days,
+	 * operator-configurable, 0 meaning keep forever) and the "Clear log" button both mean the
+	 * count is the log's current contents, never an all-time total, so the sentence is worded
+	 * as what the log shows rather than what the agent has ever done.
+	 */
+	public function test_heading_claims_the_log_contents_not_an_all_time_total(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		$this->assertStringContainsString( 'Your activity log shows 10 successful agent calls on this site', $html );
+		$this->assertStringNotContainsString( 'has made', $html );
+	}
+
+	/**
 	 * The heading's number must come from the success-narrowed shared helper: OAuth ceremony
 	 * rows (which can carry status success), transport refusals, and denied tool calls are
 	 * all in the log, and none of them may inflate the count the notice asserts.
@@ -459,7 +476,7 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertSame( 10, aafm_agent_call_count( 'success' ) );
 
 		$html = $this->render_on( 'plugins' );
-		$this->assertStringContainsString( 'Your agent has made 10 successful calls on this site', $html );
+		$this->assertStringContainsString( 'Your activity log shows 10 successful agent calls on this site', $html );
 	}
 
 

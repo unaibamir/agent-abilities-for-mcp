@@ -4,9 +4,11 @@
  *
  * Shows a dismissible admin notice asking the operator to review the plugin, but only once the
  * site has demonstrable value from it: at least ten successful agent tool calls in the activity
- * log AND at least seven days since the first such call was observed. The heading quotes the live
- * success count read at render time from the same source as the trigger, so the sentence is
- * provably true whenever it renders. All state lives in one per-site option
+ * log AND at least seven days since the first such call was observed. The heading quotes what the
+ * activity log holds at render time, read from the same success-narrowed source as the trigger,
+ * and says so in those words: the log is pruned on aafm_log_retention_days() and the operator can
+ * clear it by hand, so no in-plugin counter can honestly claim an all-time total. All state lives
+ * in one per-site option
  * (aafm_review_request, autoload off) registered in aafm_config_option_names(), so a plugin
  * reset and a delete-data uninstall both clean it up without extra code.
  *
@@ -201,10 +203,11 @@ function aafm_review_request_screen_allowed(): bool {
  *
  * Gated by the screen allowlist, the Quick Connect suppression (the wizard modal owns the
  * plugin page until the operator finishes or opts out, and the first-run flow must never be
- * interrupted by an ask), and the full eligibility check. The heading reads the live
- * success count at render time from the SAME success-narrowed helper as the trigger, so the
- * number it asserts is true whenever the notice renders - any other counter could claim
- * successful calls the agent never made.
+ * interrupted by an ask), and the full eligibility check. The heading reads the count at
+ * render time from the SAME success-narrowed helper as the trigger, and describes it as what
+ * the activity log shows, which is the only claim the data supports: any other counter could
+ * credit the agent with calls it never made, and even this one is bounded by retention
+ * pruning and the operator's own "Clear log" button.
  *
  * @return void
  */
@@ -223,9 +226,17 @@ function aafm_render_review_request_notice(): void {
 		return;
 	}
 
-	$count = aafm_agent_call_count( 'success' );
-	/* translators: %s: number of successful agent tool calls recorded on this site. */
-	$heading = sprintf( __( 'Your agent has made %s successful calls on this site', 'agent-abilities-for-mcp' ), number_format_i18n( $count ) );
+	$count   = aafm_agent_call_count( 'success' );
+	$heading = sprintf(
+		/* translators: %s: number of successful agent tool calls currently held in the site's activity log. */
+		_n(
+			'Your activity log shows %s successful agent call on this site',
+			'Your activity log shows %s successful agent calls on this site',
+			$count,
+			'agent-abilities-for-mcp'
+		),
+		number_format_i18n( $count )
+	);
 	$body    = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
 	<div class="notice notice-info is-dismissible aafm-review-request" data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>">

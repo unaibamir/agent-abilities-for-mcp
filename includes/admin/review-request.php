@@ -181,6 +181,35 @@ function aafm_review_request_reset_success_count(): void {
 add_action( 'shutdown', 'aafm_review_request_reset_success_count' );
 
 /**
+ * The count the heading quotes, memoized across requests for five minutes.
+ *
+ * The eligibility check stops paying for the COUNT once the threshold is latched. The render
+ * path does not: while the ask sits unanswered it runs the query on EVERY admin page load, and
+ * that is the window in which the log is largest, because it is by definition a site whose
+ * agent is working. The query is a confirmed full table scan (neither predicate is selective
+ * enough for any index the table carries), and aafm_log_retention_days() can be set to 0,
+ * which means keep forever and takes away the only bound there was.
+ *
+ * Five minutes of staleness costs nothing here. The heading quotes a rounded human number to
+ * make a case for leaving a review, not a live meter, and the bar it stands on was latched
+ * from an exact count. The render guard below still has to stay honest, so
+ * aafm_clear_activity_log() drops this memo: an operator who clears the log is told the ask is
+ * unbacked immediately, not in five minutes. Retention pruning is left to the expiry, since it
+ * can only ever move the number gradually.
+ *
+ * @return int Non-negative count of successful agent tool calls in the log.
+ */
+function aafm_review_request_display_count(): int {
+	$cached = get_transient( 'aafm_review_request_count' );
+	if ( false !== $cached ) {
+		return max( 0, (int) $cached );
+	}
+	$count = aafm_review_request_success_count();
+	set_transient( 'aafm_review_request_count', $count, 5 * MINUTE_IN_SECONDS );
+	return $count;
+}
+
+/**
  * Persist the review-request state.
  *
  * Autoload stays off: the option is only ever read on a handful of admin screens, so it has
@@ -337,9 +366,10 @@ function aafm_render_review_request_notice(): void {
 		return;
 	}
 
-	// Memoized, so this is the same COUNT the eligibility check already ran on this request,
-	// or the only one it runs when the latch let that check skip the query.
-	$count = aafm_review_request_success_count();
+	// Memoized for five minutes across requests, because the latch means the eligibility check
+	// above has usually already skipped the query, leaving this path to run the scan on every
+	// admin page load until the ask is answered.
+	$count = aafm_review_request_display_count();
 	// The latch survives a log clear (deliberately: a clear must never re-arm or shorten the
 	// ask). The heading must not, so an ask that would now quote fewer calls than the bar it
 	// claims to have cleared simply waits for the log to rebuild.

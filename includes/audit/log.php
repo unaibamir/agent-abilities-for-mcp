@@ -719,6 +719,10 @@ function aafm_clear_activity_log(): void {
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
+	// The review notice quotes a five-minute memo of the success count. A clear has to silence
+	// it now rather than at the expiry, or the ask goes on claiming a total the log can no
+	// longer back, which is the one thing its render guard exists to stop.
+	delete_transient( 'aafm_review_request_count' );
 }
 
 /**
@@ -745,6 +749,8 @@ function aafm_uninstall_site(): void {
 	}
 	// Cosmetic detected-keys cache (option-list sibling of the same data class).
 	delete_transient( 'aafm_detected_meta_keys' );
+	// The review notice's five-minute count memo, same data class.
+	delete_transient( 'aafm_review_request_count' );
 	$table = aafm_activity_log_table();
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
 	$wpdb->query( $wpdb->prepare( 'DROP TABLE IF EXISTS %i', $table ) );

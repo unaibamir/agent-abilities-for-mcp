@@ -247,7 +247,10 @@ final class ReviewRequestTest extends TestCase {
 	/**
 	 * The latch records only that the bar was cleared, never the number. The heading has to
 	 * quote what the log holds when it renders, so a site that keeps working sees its real,
-	 * current count and not the ten it happened to have on the day the notice armed.
+	 * current count and not the ten it happened to have on the day the notice armed. "When it
+	 * renders" is within the render count's five-minute memo, which is why this renders once.
+	 * The point being pinned is that the latch does not freeze the number, not that the heading
+	 * is live to the row.
 	 */
 	public function test_the_latch_does_not_freeze_the_heading_count(): void {
 		$this->acting_as( 'administrator' );
@@ -261,6 +264,33 @@ final class ReviewRequestTest extends TestCase {
 			'Your activity log shows 12 successful agent calls on this site',
 			$this->render_on( 'plugins' )
 		);
+	}
+
+	/**
+	 * Once the threshold is latched the eligibility check stops running the COUNT, which leaves
+	 * the render path running a full table scan on every admin page load for as long as the ask
+	 * goes unanswered. So the number it quotes is memoized for five minutes. A clear has to drop
+	 * that memo on the spot, because stopping the ask claiming a total the log can no longer
+	 * back is the render guard's whole job.
+	 */
+	public function test_the_heading_count_is_memoized_and_a_clear_drops_the_memo(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$this->assertStringContainsString( 'shows 10 successful agent calls', $this->render_on( 'plugins' ) );
+		$this->assertSame( 10, (int) get_transient( 'aafm_review_request_count' ) );
+
+		// Two more calls inside the window: the heading keeps the memoized number rather than
+		// paying for a second scan on the next admin page load.
+		$this->log_success_calls( 2 );
+		$this->assertStringContainsString( 'shows 10 successful agent calls', $this->render_on( 'plugins' ) );
+
+		// A clear is the case that cannot wait for the expiry.
+		aafm_clear_activity_log();
+		aafm_review_request_success_count( true );
+		$this->assertFalse( get_transient( 'aafm_review_request_count' ) );
+		$this->assertSame( '', $this->render_on( 'plugins' ) );
 	}
 
 	/**

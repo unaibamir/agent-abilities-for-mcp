@@ -45,6 +45,32 @@ final class MetadataTest extends TestCase {
 	}
 
 	/**
+	 * README.md's Stable tag row is the GitHub-facing half of the same fact readme.txt carries,
+	 * and README.md is the file that has actually drifted before: it was still calling ChatGPT
+	 * unsupported two releases after that shipped, which is what forced 1.2.1.
+	 */
+	public function test_readme_md_stable_tag_matches_version(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/^\|\s*\*\*Stable tag\*\*\s*\|\s*(.+?)\s*\|$/m', $readme, $matches ) );
+		$this->assertSame( AAFM_VERSION, trim( $matches[1] ) );
+	}
+
+	/**
+	 * server.json is the MCP registry manifest. The release workflow rewrites the published
+	 * value with jq at publish time, so the registry itself is never wrong, but the repo literal
+	 * only earns a non-failing ::warning:: when it drifts, which means it can sit stale for a
+	 * whole release cycle with nothing stopping it.
+	 */
+	public function test_server_json_version_matches_version(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$manifest = json_decode( (string) file_get_contents( AAFM_PLUGIN_DIR . 'server.json' ), true );
+		$this->assertIsArray( $manifest );
+		$this->assertArrayHasKey( 'version', $manifest );
+		$this->assertSame( AAFM_VERSION, $manifest['version'] );
+	}
+
+	/**
 	 * B6: the blanket "argument values are never stored" claim is false and has been since
 	 * activity-log v5 (1.5.0): aafm_activity_detail_field() stores ids, meta key names, slugs,
 	 * and enum members in the detail column by design, and several of those arrive as argument

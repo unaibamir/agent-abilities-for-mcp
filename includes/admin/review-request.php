@@ -234,8 +234,22 @@ function aafm_review_request_eligible(): bool {
 			$changed                = true;
 		}
 		// One write for both, so the page that first sees ten successes does not save twice.
+		//
+		// The COUNT above is the slowest thing on the page, and the notice is site wide, so an
+		// answer can land in another tab while it runs. Saving the whole array read before the
+		// COUNT would write the pre-answer status back over it and resurrect a dismissed ask.
+		// So the option is re-read past the cache and only the two monotonic fields are carried
+		// onto the fresh copy, and a settled answer is left exactly as it stands. Both fields
+		// only ever move one way, so merging them forward loses nothing: the stamp still cannot
+		// be restarted or shortened by a log clear.
 		if ( $changed ) {
-			aafm_review_request_save_state( $state );
+			wp_cache_delete( 'aafm_review_request', 'options' );
+			$fresh = aafm_review_request_state();
+			if ( ! in_array( $fresh['status'], array( 'reviewed', 'dismissed' ), true ) ) {
+				$fresh['threshold_met']         = $state['threshold_met'];
+				$fresh['first_success_seen_at'] = $state['first_success_seen_at'];
+				aafm_review_request_save_state( $fresh );
+			}
 		}
 
 		if ( ! $state['threshold_met'] ) {

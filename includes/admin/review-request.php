@@ -399,8 +399,9 @@ function aafm_render_review_request_notice(): void {
  * The POST is deliberately not awaited. The verdict write is idempotent, the notice is gone
  * either way, and re-rendering the ask to report a failed dismiss would be a worse answer
  * than staying quiet: if the write really did fail, the next admin page load simply shows the
- * ask again, which is the honest outcome. keepalive keeps the request alive past the
- * navigation the primary action starts.
+ * ask again, which is the honest outcome. keepalive is there for the case where the review
+ * page opens in this tab rather than a new one - a user setting or an extension can force
+ * that - which would otherwise cancel the POST on its way out.
  *
  * @return void
  */

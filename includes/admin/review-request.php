@@ -430,6 +430,14 @@ function aafm_review_request_footer_js(): string {
 	// top of the page and a screen reader is told nothing at all.
 	const handOff = ( verdict ) => {
 		const message = notice.getAttribute( 'data-msg-' + verdict ) || '';
+		// Core's common.js moves div.notice to just after .wp-header-end on ready, and leaves
+		// these two siblings where admin_notices printed them, above .wrap entirely. Focus
+		// would then land outside the main content, above the page heading the operator had
+		// already tabbed past. Re-uniting them here runs after the relocation whenever it
+		// happened, so it works either way round.
+		if ( anchor && status ) {
+			notice.after( anchor, status );
+		}
 		if ( anchor ) {
 			anchor.focus();
 		}

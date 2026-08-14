@@ -173,6 +173,13 @@ function aafm_review_request_reset_success_count(): void {
 	aafm_review_request_success_count( false, true );
 }
 
+// Registered here at include time, beside the memo whose contract it enforces, rather than in
+// the bootstrap's is_admin() block. The memo function carries no such gate, so a future CLI
+// command, REST route, or cron callback that calls it would otherwise run in a context where
+// the reset was never registered and quietly get the process-lifetime cache this exists to
+// prevent. includes/audit/log.php wires its own hooks the same way and for the same reason.
+add_action( 'shutdown', 'aafm_review_request_reset_success_count' );
+
 /**
  * Persist the review-request state.
  *

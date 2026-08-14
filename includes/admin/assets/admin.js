@@ -2085,7 +2085,10 @@
 			// On close, focus the plugin page's own heading rather than dropping it on <body>,
 			// which would restart tabbing from the top of the admin chrome.
 			const landFocus = () => {
-				const heading = document.querySelector( '.aafm-wrap > h1' );
+				// The h1 sits inside .aafm-page-head > .title-wrap, so a child combinator off
+				// .aafm-wrap misses it. Descendant match, with the wrap itself as the fallback.
+				const heading = document.querySelector( '.aafm-wrap .aafm-page-head h1' )
+					|| document.querySelector( '.aafm-wrap h1' );
 				if ( ! heading ) {
 					return;
 				}

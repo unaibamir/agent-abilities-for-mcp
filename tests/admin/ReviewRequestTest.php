@@ -620,7 +620,7 @@ final class ReviewRequestTest extends TestCase {
 
 		$this->assertStringContainsString( 'data-msg-review="Thanks. The review page is open in a new tab."', $html );
 		$this->assertStringContainsString( 'data-msg-later="Okay. The review request is hidden for now."', $html );
-		$this->assertStringContainsString( 'data-msg-dismiss="Thanks. The review request is closed and will not come back."', $html );
+		$this->assertStringContainsString( 'data-msg-dismiss="Thanks. The review request is closed."', $html );
 
 		// The script moves focus before removal and reads the matching message back out.
 		$js = aafm_review_request_footer_js();

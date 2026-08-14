@@ -357,7 +357,8 @@ function aafm_render_review_request_notice(): void {
 		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_review_request' ) ); ?>"
 		data-msg-review="<?php echo esc_attr__( 'Thanks. The review page is open in a new tab.', 'agent-abilities-for-mcp' ); ?>"
 		data-msg-later="<?php echo esc_attr__( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ); ?>"
-		data-msg-dismiss="<?php echo esc_attr__( 'Thanks. The review request is closed and will not come back.', 'agent-abilities-for-mcp' ); ?>">
+		<?php // "Closed", not "will not come back": the POST is fire and forget, so the stronger promise is one a failed write turns into a lie the operator hears and cannot check. This describes what they can see instead. ?>
+		data-msg-dismiss="<?php echo esc_attr__( 'Thanks. The review request is closed.', 'agent-abilities-for-mcp' ); ?>">
 		<p><strong><?php echo esc_html( $heading ); ?></strong></p>
 		<p><?php echo esc_html( $body ); ?></p>
 		<?php // Flex with a gap so the two link-buttons are not left touching on a single word space. The plugin's admin CSS is not loaded on the Plugins list, so the rule rides inline, as the onboarding pointer's button spacing already does. ?>
@@ -433,7 +434,9 @@ function aafm_review_request_footer_js(): string {
 		body.append( 'action', 'aafm_review_request' );
 		body.append( 'nonce', notice.dataset.nonce || '' );
 		body.append( 'verdict', verdict );
-		fetch( window.ajaxurl, { method: 'POST', credentials: 'same-origin', keepalive: true, body } );
+		// Not awaited, by design (see the docblock), but the rejection still has to land
+		// somewhere or a failed dismiss logs an unhandled promise error in the console.
+		fetch( window.ajaxurl, { method: 'POST', credentials: 'same-origin', keepalive: true, body } ).catch( () => {} );
 	};
 	// Park focus on the anchor and speak the outcome, before the element holding the focused
 	// control disappears. Without this, focus lands on <body>: the next Tab restarts at the

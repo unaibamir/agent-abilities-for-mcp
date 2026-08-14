@@ -122,6 +122,54 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 
+	/**
+	 * Invoke the no-JS admin-post handler in-process. Both of its exits are routed through
+	 * exceptions - wp_die through the die handler, the redirect through the `wp_redirect`
+	 * filter - so option side effects applied before the exit are already in place on return.
+	 *
+	 * @param array $query      $_GET fields to set (verdict).
+	 * @param bool  $with_nonce Whether to supply a valid aafm_review_request nonce.
+	 * @return string The captured redirect target, or '' when the handler died instead.
+	 */
+	private function run_admin_post( array $query, bool $with_nonce = true ): string {
+		$die = static function (): void {
+			throw new \WPDieException( 'aafm-die' );
+		};
+		add_filter( 'wp_die_handler', static fn() => $die );
+
+		$captured = '';
+		$catch    = static function ( $location ) use ( &$captured ) {
+			$captured = (string) $location;
+			throw new \RuntimeException( 'aafm_test_redirect' );
+		};
+		add_filter( 'wp_redirect', $catch, 1 );
+
+		$query['_wpnonce'] = $with_nonce ? wp_create_nonce( 'aafm_review_request' ) : 'not-a-valid-nonce';
+		foreach ( $query as $key => $value ) {
+			$_GET[ $key ]     = $value;
+			$_REQUEST[ $key ] = $value;
+		}
+
+		ob_start();
+		try {
+			aafm_handle_review_request_post();
+		} catch ( \WPDieException $e ) {
+			unset( $e );
+		} catch ( \RuntimeException $e ) {
+			unset( $e );
+		} finally {
+			ob_end_clean();
+		}
+
+		remove_filter( 'wp_redirect', $catch, 1 );
+		remove_all_filters( 'wp_die_handler' );
+		foreach ( array_keys( $query ) as $key ) {
+			unset( $_GET[ $key ], $_REQUEST[ $key ] );
+		}
+		return $captured;
+	}
+
+
 	public function test_not_eligible_below_the_call_threshold(): void {
 		$this->acting_as( 'administrator' );
 		$this->log_success_calls( 9 );
@@ -723,5 +771,103 @@ final class ReviewRequestTest extends TestCase {
 		$this->log_success_calls( 2 );
 		aafm_review_request_reset_success_count();
 		$this->assertSame( 5, aafm_review_request_success_count() );
+	}
+
+	/**
+	 * Every verdict is posted by the notice's footer script, so a site where that script never
+	 * runs - a strict CSP with no nonce filter installed, or another plugin throwing earlier in
+	 * the admin footer - used to be left with two dead buttons and an ask that came back on
+	 * every page load with nothing able to stop it. The two dismissal controls are real nonced
+	 * links to admin-post.php now, and the script preventDefault()s them, so the JS path is
+	 * unchanged and the no-JS path exists.
+	 */
+	public function test_the_dismissal_controls_are_nonced_admin_post_links(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		foreach ( array( 'later', 'dismiss' ) as $verdict ) {
+			$this->assertSame(
+				1,
+				preg_match( '/<a class="button-link" href="([^"]+)" data-aafm-review="' . $verdict . '"/', $html, $matches ),
+				"The {$verdict} control must render as a link."
+			);
+			$url = html_entity_decode( $matches[1] );
+			$this->assertStringContainsString( 'admin-post.php', $url );
+			$this->assertStringContainsString( 'action=aafm_review_request', $url );
+			$this->assertStringContainsString( 'verdict=' . $verdict, $url );
+
+			$query = array();
+			parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+			$this->assertNotFalse( wp_verify_nonce( $query['_wpnonce'] ?? '', 'aafm_review_request' ) );
+		}
+
+		// The script still intercepts them, so nothing changes when JS is running.
+		$this->assertStringContainsString( 'event.preventDefault();', aafm_review_request_footer_js() );
+	}
+
+	public function test_admin_post_dismiss_is_permanent_and_redirects_back(): void {
+		$this->acting_as( 'administrator' );
+		$_SERVER['HTTP_REFERER'] = admin_url( 'plugins.php' );
+
+		$target = $this->run_admin_post( array( 'verdict' => 'dismiss' ) );
+
+		$this->assertSame( 'dismissed', aafm_review_request_state()['status'] );
+		$this->assertSame( admin_url( 'plugins.php' ), $target );
+		unset( $_SERVER['HTTP_REFERER'] );
+	}
+
+	public function test_admin_post_later_snoozes_like_the_ajax_path(): void {
+		$this->acting_as( 'administrator' );
+
+		$this->run_admin_post( array( 'verdict' => 'later' ) );
+
+		$state = aafm_review_request_state();
+		$this->assertSame( 'snoozed', $state['status'] );
+		$this->assertSame( 1, $state['snooze_count'] );
+		$this->assertGreaterThan( time() + ( 13 * DAY_IN_SECONDS ), $state['snooze_until'] );
+	}
+
+	/**
+	 * The link path spends the snooze cap on the same schedule the AJAX path does, because both
+	 * run the one shared transition. Two snoozes, then the third answer is permanent.
+	 */
+	public function test_admin_post_honours_the_snooze_cap(): void {
+		$this->acting_as( 'administrator' );
+
+		for ( $i = 0; $i < 3; $i++ ) {
+			$state                 = aafm_review_request_state();
+			$state['snooze_until'] = 0;
+			aafm_review_request_save_state( $state );
+			$this->run_admin_post( array( 'verdict' => 'later' ) );
+		}
+
+		$this->assertSame( 'dismissed', aafm_review_request_state()['status'] );
+	}
+
+	public function test_admin_post_rejects_a_bad_nonce_without_touching_state(): void {
+		$this->acting_as( 'administrator' );
+
+		$this->run_admin_post( array( 'verdict' => 'dismiss' ), false );
+
+		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
+	}
+
+	public function test_admin_post_rejects_a_non_admin_without_touching_state(): void {
+		$this->acting_as( 'editor' );
+
+		$this->run_admin_post( array( 'verdict' => 'dismiss' ) );
+
+		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
+	}
+
+	public function test_admin_post_rejects_an_unknown_verdict_without_touching_state(): void {
+		$this->acting_as( 'administrator' );
+
+		$this->run_admin_post( array( 'verdict' => 'nope' ) );
+
+		$this->assertSame( 'pending', aafm_review_request_state()['status'] );
 	}
 }

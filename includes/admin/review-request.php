@@ -337,6 +337,28 @@ function aafm_review_request_screen_allowed(): bool {
 }
 
 /**
+ * The admin-post URL that records one verdict without JavaScript.
+ *
+ * Nonced on the notice's own action, the same one the AJAX handler and the notice's data-nonce
+ * use, so the fallback opens exactly the one door the script path does.
+ *
+ * @param string $verdict One of 'review', 'later', 'dismiss'.
+ * @return string
+ */
+function aafm_review_request_action_url( string $verdict ): string {
+	return wp_nonce_url(
+		add_query_arg(
+			array(
+				'action'  => 'aafm_review_request',
+				'verdict' => $verdict,
+			),
+			admin_url( 'admin-post.php' )
+		),
+		'aafm_review_request'
+	);
+}
+
+/**
  * Render the review-request notice on admin_notices.
  *
  * Gated by the admin-screen check (any wp-admin screen qualifies now the ask is site wide;
@@ -401,8 +423,9 @@ function aafm_render_review_request_notice(): void {
 		<?php // Flex with a gap so the two link-buttons are not left touching on a single word space. The plugin's admin CSS is not loaded on the Plugins list, so the rule rides inline, as the onboarding pointer's button spacing already does. ?>
 		<p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
 			<a class="button button-primary" href="<?php echo esc_url( aafm_review_request_url() ); ?>" target="_blank" rel="noopener noreferrer" data-aafm-review="review"><?php esc_html_e( 'Sure, I\'ll review', 'agent-abilities-for-mcp' ); ?><span class="screen-reader-text"><?php esc_html_e( '(opens in a new tab)', 'agent-abilities-for-mcp' ); ?></span></a>
-			<button type="button" class="button-link" data-aafm-review="later"><?php esc_html_e( 'Maybe later', 'agent-abilities-for-mcp' ); ?></button>
-			<button type="button" class="button-link" data-aafm-review="dismiss"><?php esc_html_e( 'Already did', 'agent-abilities-for-mcp' ); ?></button>
+			<?php // Real links, not buttons. The footer script preventDefault()s both, so with JS running nothing about them changes, but if that script never runs (a strict CSP with no nonce filter, or another plugin throwing in the admin footer) they still work and the ask is still dismissible. ?>
+			<a class="button-link" href="<?php echo esc_url( aafm_review_request_action_url( 'later' ) ); ?>" data-aafm-review="later"><?php esc_html_e( 'Maybe later', 'agent-abilities-for-mcp' ); ?></a>
+			<a class="button-link" href="<?php echo esc_url( aafm_review_request_action_url( 'dismiss' ) ); ?>" data-aafm-review="dismiss"><?php esc_html_e( 'Already did', 'agent-abilities-for-mcp' ); ?></a>
 		</p>
 	</div>
 	<?php
@@ -425,7 +448,9 @@ function aafm_render_review_request_notice(): void {
  *
  * Vanilla JS, no handle dependency: posts the clicked verdict to the aafm_review_request
  * AJAX action, hands focus and an announcement to the two siblings the notice leaves behind,
- * then removes the notice. The native X that core's common.js injects into .is-dismissible
+ * then removes the notice. The two dismissal controls are links to admin-post.php, so the
+ * handler preventDefault()s them and answers over AJAX instead; if this script never runs they
+ * are followed as ordinary links and the same verdict is recorded server side. The native X that core's common.js injects into .is-dismissible
  * notices is caught by delegation on the notice element and posted as "later", so a reflexive
  * dismiss snoozes instead of burning the ask; core removes that element itself, so the script
  * only does the focus and announcement half for it.
@@ -524,45 +549,37 @@ JS;
 }
 
 /**
- * AJAX: record the operator's answer to the review ask.
+ * Apply the operator's answer to the stored state and return the state it left behind.
  *
- * Nonce plus manage_options gated like every other aafm_* admin action. The verdict is
- * limited server-side to the three known answers; timestamps are computed here, never
- * accepted from the client. "review" and "dismiss" are permanent. "later" spends a snooze,
- * and once the cap is spent the same click stores the permanent state instead, so the
- * notice keeps its at-most-three-appearances promise no matter which dismissal path the
- * operator uses.
+ * The single place the three verdicts turn into a status, shared by the AJAX handler and the
+ * admin-post fallback so the two cannot drift apart. The verdict is trusted here: both callers
+ * check the nonce, the capability, and the verdict against the known three before calling in.
+ *
+ * "review" and "dismiss" are permanent. "later" spends a snooze, and once the cap is spent the
+ * same click stores the permanent state instead, so the ask keeps its promise about how many
+ * times the operator has to answer no matter which dismissal path they use. Timestamps are
+ * computed here, never accepted from the caller.
  *
  * State moves forward against a sequentially stale tab. Now that the notice is site wide, two
- * admin tabs both showing it is the ordinary case, and the second tab's click arrives against
- * a state the first tab already settled. The state is read from the database as late as the
- * handler allows, so a stored terminal answer wins over anything a stale tab sends, and a
- * "later" that lands while a snooze is still running is dropped rather than spending a second
- * snooze off one appearance - otherwise a permanently declined ask would come back in fourteen
- * days, or the answer cap would burn down without the operator ever answering that many times.
- * A stale "review" or "already did" still applies over a live snooze: those are stronger
- * answers, and honouring them is the point.
+ * admin tabs both showing it is the ordinary case, and the second tab's click arrives against a
+ * state the first tab already settled. The state is read from the database as late as possible,
+ * so a stored terminal answer wins over anything a stale tab sends, and a "later" that lands
+ * while a snooze is still running is dropped rather than spending a second snooze off one
+ * appearance - otherwise a permanently declined ask would come back in fourteen days, or the
+ * answer cap would burn down without the operator ever answering that many times. A stale
+ * "review" or "already did" still applies over a live snooze: those are stronger answers, and
+ * honouring them is the point.
  *
  * Two answers issued inside one request round trip remain last-write-wins. The option is not
  * compare-and-set and WordPress has no primitive that would make it one, so the honest
- * description of the guarantee is the one above: the re-read shrinks the window to the gap
- * between the SELECT and the UPDATE. Adding a lock for a two-click race an operator has to
- * work at would cost more machinery than the preference row is worth.
+ * description of the guarantee is the one above: the late read shrinks the window to the gap
+ * between the SELECT and the UPDATE. Adding a lock for a two-click race an operator has to work
+ * at would cost more machinery than the preference row is worth.
  *
- * @return void
+ * @param string $verdict One of 'review', 'later', 'dismiss'.
+ * @return array{status:string,first_success_seen_at:int,snooze_until:int,snooze_count:int,threshold_met:int}
  */
-function aafm_ajax_review_request(): void {
-	check_ajax_referer( 'aafm_review_request', 'nonce' );
-	if ( ! current_user_can( 'manage_options' ) ) {
-		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
-	}
-
-	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
-	$verdict = isset( $_POST['verdict'] ) ? sanitize_key( wp_unslash( (string) $_POST['verdict'] ) ) : '';
-	if ( ! in_array( $verdict, array( 'review', 'later', 'dismiss' ), true ) ) {
-		wp_send_json_error( array( 'message' => __( 'Unknown action.', 'agent-abilities-for-mcp' ) ), 400 );
-	}
-
+function aafm_review_request_record_verdict( string $verdict ): array {
 	// Read immediately before the write, and past the request's own object cache, so the two
 	// precedence checks below run against what another tab has actually stored rather than
 	// against a copy this request took earlier. Without the cache drop a second get_option()
@@ -573,12 +590,12 @@ function aafm_ajax_review_request(): void {
 
 	// Already answered for good: report the stored state and change nothing.
 	if ( in_array( $state['status'], array( 'reviewed', 'dismissed' ), true ) ) {
-		wp_send_json_success( array( 'status' => $state['status'] ) );
+		return $state;
 	}
 	// Already snoozed and the snooze has not run out: a repeat "later" is a stale tab, not a
 	// second appearance, so it must not spend another snooze.
 	if ( 'later' === $verdict && 'snoozed' === $state['status'] && time() < $state['snooze_until'] ) {
-		wp_send_json_success( array( 'status' => $state['status'] ) );
+		return $state;
 	}
 
 	if ( 'review' === $verdict ) {
@@ -595,5 +612,65 @@ function aafm_ajax_review_request(): void {
 	}
 	aafm_review_request_save_state( $state );
 
+	return $state;
+}
+
+/**
+ * AJAX: record the operator's answer to the review ask.
+ *
+ * Nonce plus manage_options gated like every other aafm_* admin action, on the notice's own
+ * nonce action rather than the shared one. The verdict is limited to the three known answers
+ * here; what each of them means to the stored state lives in
+ * aafm_review_request_record_verdict(), shared with the no-JS fallback.
+ *
+ * @return void
+ */
+function aafm_ajax_review_request(): void {
+	check_ajax_referer( 'aafm_review_request', 'nonce' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
+	}
+
+	// phpcs:ignore WordPress.Security.NonceVerification.Missing -- nonce verified above.
+	$verdict = isset( $_POST['verdict'] ) ? sanitize_key( wp_unslash( (string) $_POST['verdict'] ) ) : '';
+	if ( ! in_array( $verdict, array( 'review', 'later', 'dismiss' ), true ) ) {
+		wp_send_json_error( array( 'message' => __( 'Unknown action.', 'agent-abilities-for-mcp' ) ), 400 );
+	}
+
+	$state = aafm_review_request_record_verdict( $verdict );
+
 	wp_send_json_success( array( 'status' => $state['status'] ) );
+}
+
+/**
+ * admin-post: record the answer when the notice's links are followed instead of intercepted.
+ *
+ * The two dismissal controls are real links to admin-post.php, so the ask is dismissible with
+ * no JavaScript at all - a strict Content-Security-Policy with no nonce filter installed, or an
+ * error thrown earlier in the admin footer by another plugin, used to leave the operator with
+ * two dead buttons and an ask that returned on every page load with no way to stop it. With the
+ * script running, the click handler preventDefault()s these and nothing reaches this handler.
+ *
+ * Same three checks as the AJAX path, in the same order, and the same shared transition. It
+ * redirects back to where the notice was rather than leaving the operator on a blank
+ * admin-post.php response.
+ *
+ * @return void
+ */
+function aafm_handle_review_request_post(): void {
+	check_admin_referer( 'aafm_review_request' );
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( esc_html__( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ), '', array( 'response' => 403 ) );
+	}
+
+	$verdict = isset( $_GET['verdict'] ) ? sanitize_key( wp_unslash( (string) $_GET['verdict'] ) ) : '';
+	if ( ! in_array( $verdict, array( 'review', 'later', 'dismiss' ), true ) ) {
+		wp_die( esc_html__( 'Unknown action.', 'agent-abilities-for-mcp' ), '', array( 'response' => 400 ) );
+	}
+
+	aafm_review_request_record_verdict( $verdict );
+
+	$back = wp_get_referer();
+	wp_safe_redirect( $back ? $back : admin_url() );
+	exit;
 }

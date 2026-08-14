@@ -395,6 +395,8 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
 		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
+		// The same answer, arriving as a plain link when the notice's footer script never ran.
+		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
 		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}

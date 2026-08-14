@@ -250,6 +250,11 @@ function aafm_review_request_eligible(): bool {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return false;
 	}
+	// Belt and braces rather than the thing doing the work: core fires admin_notices from
+	// wp-admin/admin-header.php and never from the network admin header, so this cannot be
+	// true on the render path. It is kept because the reason still holds - the state option is
+	// per site, so an ask rendered there would read the wrong site's counts - and because
+	// eligibility is a public predicate that a future caller could reach from anywhere.
 	if ( is_network_admin() ) {
 		return false;
 	}
@@ -322,6 +327,12 @@ function aafm_review_request_eligible(): bool {
  * is no screen at all (get_current_screen() is not even defined on a front-end or cron
  * request), so a false here keeps the notice off every non-admin context. Any real admin
  * screen answers true.
+ *
+ * Which means it never actually excludes anything at its one call site. admin_notices fires
+ * from wp-admin/admin-header.php, after the screen is set, so both halves are already true by
+ * the time the render path asks. It stays as the cheap guard against a future caller running
+ * the render function outside an admin request, but nothing is currently kept out by it, and a
+ * reader looking for what keeps the notice off the front end should read the hook, not this.
  *
  * The other exclusion moved out rather than away. Network admin is still out, because the
  * state option is per site and an ask rendered there would read the wrong site's counts, but

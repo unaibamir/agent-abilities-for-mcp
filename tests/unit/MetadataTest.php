@@ -57,10 +57,10 @@ final class MetadataTest extends TestCase {
 	}
 
 	/**
-	 * server.json is the MCP registry manifest. The release workflow rewrites the published
-	 * value with jq at publish time, so the registry itself is never wrong, but the repo literal
-	 * only earns a non-failing ::warning:: when it drifts, which means it can sit stale for a
-	 * whole release cycle with nothing stopping it.
+	 * The MCP registry manifest, server.json, is the other unguarded pin. The release workflow
+	 * rewrites the published value with jq at publish time, so the registry itself is never
+	 * wrong, but the repo literal only earns a non-failing ::warning:: when it drifts, which
+	 * means it can sit stale for a whole release cycle with nothing stopping it.
 	 */
 	public function test_server_json_version_matches_version(): void {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents

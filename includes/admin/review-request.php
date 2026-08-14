@@ -654,7 +654,8 @@ function aafm_ajax_review_request(): void {
 }
 
 /**
- * admin-post: record the answer when the notice's links are followed instead of intercepted.
+ * Record the answer over admin-post, for when the notice's links are followed rather than
+ * intercepted.
  *
  * The two dismissal controls are real links to admin-post.php, so the ask is dismissible with
  * no JavaScript at all - a strict Content-Security-Policy with no nonce filter installed, or an

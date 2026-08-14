@@ -82,7 +82,7 @@ final class ReviewRequestTest extends TestCase {
 	 * place when this returns. The nonce is caller-controlled so the referer gate is testable.
 	 *
 	 * @param array $post       $_POST fields to set.
-	 * @param bool  $with_nonce Whether to supply a valid aafm_admin nonce.
+	 * @param bool  $with_nonce Whether to supply a valid aafm_review_request nonce.
 	 * @return bool True if the handler called wp_die (denied or completed).
 	 */
 	private function run_ajax( array $post, bool $with_nonce = true ): bool {
@@ -93,7 +93,7 @@ final class ReviewRequestTest extends TestCase {
 		add_filter( 'wp_die_ajax_handler', static fn() => $die );
 		add_filter( 'wp_die_handler', static fn() => $die );
 
-		$nonce             = $with_nonce ? wp_create_nonce( 'aafm_admin' ) : 'not-a-valid-nonce';
+		$nonce             = $with_nonce ? wp_create_nonce( 'aafm_review_request' ) : 'not-a-valid-nonce';
 		$_POST['nonce']    = $nonce;
 		$_REQUEST['nonce'] = $nonce;
 		foreach ( $post as $key => $value ) {
@@ -586,6 +586,24 @@ final class ReviewRequestTest extends TestCase {
 
 		$this->assertStringContainsString( '<div class="aafm-review-request-anchor" tabindex="-1"></div>', $html );
 		$this->assertStringContainsString( 'class="screen-reader-text aafm-review-request-status" role="status" aria-live="polite"', $html );
+	}
+
+	/**
+	 * The notice renders on every admin screen, so the nonce it prints has to open one door and
+	 * not nineteen. It must verify against its own action and must not be a usable aafm_admin
+	 * token, which any other plugin's admin-page XSS could otherwise lift and spend.
+	 */
+	public function test_the_notice_prints_its_own_nonce_and_not_the_shared_one(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+
+		$html = $this->render_on( 'plugins' );
+
+		$this->assertSame( 1, preg_match( '/data-nonce="([^"]+)"/', $html, $matches ) );
+		$nonce = $matches[1];
+		$this->assertNotFalse( wp_verify_nonce( $nonce, 'aafm_review_request' ) );
+		$this->assertFalse( wp_verify_nonce( $nonce, 'aafm_admin' ) );
 	}
 
 	/**

@@ -344,7 +344,8 @@ function aafm_render_review_request_notice(): void {
 	$body = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
 	<div class="notice notice-info is-dismissible aafm-review-request"
-		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_admin' ) ); ?>"
+		<?php // Its own action, not the shared aafm_admin one. This notice renders on every admin screen, so printing the shared nonce would hand every page in wp-admin a token good for all nineteen of the plugin's AJAX actions. This one opens exactly one door. ?>
+		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_review_request' ) ); ?>"
 		data-msg-review="<?php echo esc_attr__( 'Thanks. The review page is open in a new tab.', 'agent-abilities-for-mcp' ); ?>"
 		data-msg-later="<?php echo esc_attr__( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ); ?>"
 		data-msg-dismiss="<?php echo esc_attr__( 'Thanks. The review request is closed and will not come back.', 'agent-abilities-for-mcp' ); ?>">
@@ -493,7 +494,7 @@ JS;
  * @return void
  */
 function aafm_ajax_review_request(): void {
-	check_ajax_referer( 'aafm_admin', 'nonce' );
+	check_ajax_referer( 'aafm_review_request', 'nonce' );
 	if ( ! current_user_can( 'manage_options' ) ) {
 		wp_send_json_error( array( 'message' => __( 'You are not allowed to do this.', 'agent-abilities-for-mcp' ) ), 403 );
 	}

@@ -912,7 +912,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
 		// client has any credential, so a security or membership plugin that restricts the whole

@@ -460,14 +460,21 @@ JS;
  * notice keeps its at-most-three-appearances promise no matter which dismissal path the
  * operator uses.
  *
- * State only ever moves forward. Now that the notice is site wide, two admin tabs both
- * showing it is the ordinary case, and the second tab's click arrives against a state the
- * first tab already settled. So a stored terminal answer wins over anything a stale tab
- * sends, and a "later" that lands while a snooze is still running is dropped rather than
- * spending a second snooze off one appearance - otherwise a permanently declined ask would
- * come back in fourteen days, or the three-appearance cap would burn down without the
- * operator ever seeing three notices. A stale "review" or "already did" still applies over a
- * live snooze: those are stronger answers, and honouring them is the point.
+ * State moves forward against a sequentially stale tab. Now that the notice is site wide, two
+ * admin tabs both showing it is the ordinary case, and the second tab's click arrives against
+ * a state the first tab already settled. The state is read from the database as late as the
+ * handler allows, so a stored terminal answer wins over anything a stale tab sends, and a
+ * "later" that lands while a snooze is still running is dropped rather than spending a second
+ * snooze off one appearance - otherwise a permanently declined ask would come back in fourteen
+ * days, or the answer cap would burn down without the operator ever answering that many times.
+ * A stale "review" or "already did" still applies over a live snooze: those are stronger
+ * answers, and honouring them is the point.
+ *
+ * Two answers issued inside one request round trip remain last-write-wins. The option is not
+ * compare-and-set and WordPress has no primitive that would make it one, so the honest
+ * description of the guarantee is the one above: the re-read shrinks the window to the gap
+ * between the SELECT and the UPDATE. Adding a lock for a two-click race an operator has to
+ * work at would cost more machinery than the preference row is worth.
  *
  * @return void
  */
@@ -483,6 +490,12 @@ function aafm_ajax_review_request(): void {
 		wp_send_json_error( array( 'message' => __( 'Unknown action.', 'agent-abilities-for-mcp' ) ), 400 );
 	}
 
+	// Read immediately before the write, and past the request's own object cache, so the two
+	// precedence checks below run against what another tab has actually stored rather than
+	// against a copy this request took earlier. Without the cache drop a second get_option()
+	// answers from memory and the re-read decides nothing. Nothing is merged from an earlier
+	// copy either: every field the transition touches lives in this one option.
+	wp_cache_delete( 'aafm_review_request', 'options' );
 	$state = aafm_review_request_state();
 
 	// Already answered for good: report the stored state and change nothing.

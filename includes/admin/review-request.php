@@ -13,9 +13,10 @@
  * reset and a delete-data uninstall both clean it up without extra code.
  *
  * The dismissal contract: "Sure, I'll review" and "Already did" are permanent; "Maybe later"
- * (and the native X, wired to behave the same) snoozes 14 days, capped at two snoozes so the
- * notice can appear at most three times ever and then stops for good. A plugin update never
- * re-arms it.
+ * (and the native X, wired to behave the same) snoozes 14 days, capped at two snoozes, so the
+ * operator is asked to answer at most three times and the third answer is final whichever
+ * button it arrives on. The cap counts answers, not renders: an ask nobody ever answers keeps
+ * rendering until somebody does. A plugin update never re-arms it.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -54,9 +55,15 @@ function aafm_review_request_snooze_seconds(): int {
 /**
  * Maximum number of snoozes before any further dismissal becomes permanent.
  *
- * With the cap at 2, the notice can appear at most three times: the first ask plus one
- * reappearance per spent snooze. On the third appearance every dismissal path stores the
- * permanent state.
+ * With the cap at 2, the operator answers at most three times: the first ask plus one
+ * reappearance per spent snooze. The third answer stores the permanent state whichever
+ * dismissal path it arrives on.
+ *
+ * It bounds answers, not renders. Nothing on the render path counts appearances, so an ask
+ * that is never answered - never clicked, never dismissed, never X'd - goes on rendering on
+ * every admin page load. That is deliberate, since an ignored ask is not a declined one, and
+ * it is why the guideline 11 argument rests on the trigger and on being genuinely dismissible
+ * rather than on a render bound.
  *
  * @return int
  */
@@ -269,9 +276,11 @@ function aafm_review_request_eligible(): bool {
  * Site wide across wp-admin, by operator decision. Guideline 11 contemplates this directly:
  * "Site wide notices or embedded dashboard widgets must be dismissible or self-dismiss when
  * resolved." This notice is dismissible four ways (the primary action, the two link actions,
- * and core's injected X) and self-limits to three appearances ever before it stops for good,
- * so the "used sparingly" half of the same guideline is carried by the trigger and the snooze
- * cap rather than by a screen allowlist.
+ * and core's injected X), and any of them can end it for good, so the "used sparingly" half of
+ * the same guideline is carried by the trigger (ten successful calls plus seven days) and by
+ * that dismissibility rather than by a screen allowlist. It is not carried by an appearance
+ * bound: the snooze cap limits how many times the operator is asked to ANSWER, and an ask
+ * nobody answers keeps rendering.
  *
  * One exclusion is left, and it is the only thing this function does: outside wp-admin there
  * is no screen at all (get_current_screen() is not even defined on a front-end or cron

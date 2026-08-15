@@ -343,6 +343,40 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The same race with a terminal answer on the other side. Honouring it has to reach the
+	 * render side too: skipping the save alone would leave this request finishing its checks on
+	 * the copy it read before the answer landed, and showing the ask once more after the operator
+	 * had already closed it for good.
+	 */
+	public function test_an_answer_that_lands_during_the_count_ends_the_check(): void {
+		$this->acting_as( 'administrator' );
+		$reads = 0;
+
+		// The other tab clicks "Already did" while this request counts: the opening read still sees
+		// a pending ask well past the seven-day clock, the re-read before the write sees the answer.
+		$other_tab = static function ( $pre ) use ( &$reads ) {
+			++$reads;
+			$state = array(
+				'status'                => 1 === $reads ? 'pending' : 'dismissed',
+				'first_success_seen_at' => time() - ( 8 * DAY_IN_SECONDS ),
+				'snooze_until'          => 0,
+				'snooze_count'          => 0,
+				'threshold_met'         => 0,
+			);
+			return $reads <= 2 ? $state : $pre;
+		};
+
+		$this->log_success_calls( 10 );
+		add_filter( 'pre_option_aafm_review_request', $other_tab );
+		$eligible = aafm_review_request_eligible();
+		remove_filter( 'pre_option_aafm_review_request', $other_tab );
+
+		$this->assertFalse( $eligible );
+		// And the answer is still the only thing stored: no latch written over the top of it.
+		$this->assertSame( array(), get_option( 'aafm_review_request', array() ) );
+	}
+
+	/**
 	 * The latch records only that the bar was cleared, never the number. The heading has to
 	 * quote what the log holds when it renders, so a site that keeps working sees its real,
 	 * current count and not the ten it happened to have on the day the notice armed. "When it

@@ -721,8 +721,11 @@ function aafm_clear_activity_log(): void {
 	$wpdb->query( $wpdb->prepare( 'TRUNCATE TABLE %i', $table ) );
 	// The review notice quotes a five-minute memo of the success count. A clear has to silence
 	// it now rather than at the expiry, or the ask goes on claiming a total the log can no
-	// longer back, which is the one thing its render guard exists to stop.
-	delete_transient( 'aafm_review_request_count' );
+	// longer back, which is the one thing its render guard exists to stop. Through the owner
+	// file's accessor rather than the raw key, so the notice keeps its own cache detail.
+	if ( function_exists( 'aafm_review_request_flush_display_count' ) ) {
+		aafm_review_request_flush_display_count();
+	}
 }
 
 /**

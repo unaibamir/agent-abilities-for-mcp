@@ -210,6 +210,23 @@ function aafm_review_request_display_count(): int {
 }
 
 /**
+ * Drop the memo, so the next read pays for a fresh count.
+ *
+ * The memo's key belongs to this file, but the code that has to invalidate it lives in the
+ * activity log: deleting rows is what makes a stored count wrong. Spelling the key out over
+ * there points the dependency the wrong way and hides a rename from whoever does it, and a
+ * missed copy is not loud - the notice simply goes on quoting a number the log can no longer
+ * back until the memo expires. So the audit layer asks for this instead. Callers there guard
+ * with function_exists(), because uninstall.php loads includes/audit/log.php on its own with no
+ * admin layer behind it.
+ *
+ * @return void
+ */
+function aafm_review_request_flush_display_count(): void {
+	delete_transient( 'aafm_review_request_count' );
+}
+
+/**
  * Persist the review-request state.
  *
  * Autoload stays off: the option is only ever read on a handful of admin screens, so it has

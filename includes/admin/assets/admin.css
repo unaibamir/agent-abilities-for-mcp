@@ -2905,7 +2905,8 @@
    over inside .aafm-wrap. Forced colors throws author box-shadows away and would normally substitute its own
    outline, except `outline: none` already removed the thing it substitutes into, so those
    controls focus invisibly. This restores an outline in the system Highlight colour for every
-   focusable element in the plugin's admin UI, wherever it is.
+   focusable element in the plugin's admin UI, wherever it is, except the two toggles whose
+   real input is hidden; those are handled separately at the end of the block.
 
    !important is deliberate rather than lazy: the rules being corrected are scoped selectors
    like `.aafm-client-grid button:focus-visible`, which outrank a bare `:focus-visible` on
@@ -2924,5 +2925,16 @@
 	.aafm-wrap .aafm-client.on,
 	.aafm-qc-overlay .aafm-client.on {
 		border-style: dashed;
+	}
+
+	/* The ability switches and the wizard's write-access toggle hide their real input
+	   (opacity 0, and 0x0 for the wizard's) and paint focus as a box-shadow on the track
+	   beside it. The rule above lands its outline on the input, which is exactly the element
+	   nobody can see, so the toggle would still focus invisibly. Put the outline on the
+	   track, which is the thing being looked at. */
+	.aafm-wrap .aafm-switch input:focus-visible + .aafm-switch-track,
+	.aafm-qc-toggle input:focus-visible + .aafm-qc-track {
+		outline: 2px solid Highlight;
+		outline-offset: 2px;
 	}
 }

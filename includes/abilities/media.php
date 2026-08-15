@@ -422,11 +422,18 @@ function aafm_exec_count_media( array $input ) {
  */
 function aafm_query_attachment_counts_by_mime( ?int $author_id = null ): array {
 	$args = array(
-		'post_type'        => 'attachment',
-		'post_status'      => 'inherit',
-		'posts_per_page'   => -1,
-		'no_found_rows'    => true,
-		'suppress_filters' => false,
+		'post_type'              => 'attachment',
+		'post_status'            => 'inherit',
+		'posts_per_page'         => -1,
+		'no_found_rows'          => true,
+		'suppress_filters'       => false,
+		// The loop reads only post_mime_type, a wp_posts column already on the hydrated
+		// WP_Post. Leaving these at WP_Query's defaults (both true) would fire a large
+		// postmeta and term IN-scan per invocation that nothing here ever reads, which on a
+		// big library is the dominant cost. suppress_filters stays false so WPML's language
+		// filter still applies and the tally is byte-identical.
+		'update_post_meta_cache' => false,
+		'update_post_term_cache' => false,
 	);
 	if ( null !== $author_id ) {
 		$args['author'] = $author_id;

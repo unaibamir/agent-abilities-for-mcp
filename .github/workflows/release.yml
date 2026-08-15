@@ -139,6 +139,23 @@ jobs:
             git push origin "$VERSION"
           fi
 
+      # Pin the working tree to the exact released tag before anything reads it.
+      # The GitHub Release zip is already built from `git archive <tag>` (immutable),
+      # but the SVN deploy below runs 10up/action-wordpress-plugin-deploy with
+      # generate-zip:false, which publishes the CHECKED-OUT tree, not the tag. On the
+      # push path the workspace is already the tag commit (the tag is cut from this
+      # same HEAD), so this is a no-op. On a workflow_dispatch re-deploy the workspace
+      # is whatever branch was selected at launch (default main), which may have moved
+      # past the tag while still carrying the same header version - checking out the
+      # tag here guarantees the SVN tree, the zip, and the tag are provably one tree.
+      - name: Pin the working tree to the released tag
+        if: steps.rel.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.rel.outputs.version }}"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git checkout -f "refs/tags/$VERSION"
+
       - name: Build versioned zip
         if: steps.rel.outputs.skip != 'true'
         run: |

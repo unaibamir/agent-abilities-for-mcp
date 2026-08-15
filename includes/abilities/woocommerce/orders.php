@@ -906,6 +906,32 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 }
 
 /**
+ * Whether an order write request actually asks for at least one line item to be added.
+ *
+ * Mirrors the collection aafm_wc_apply_order_input() does -- both accepted fields, and the same
+ * "skip anything that is not an item map" rule -- so the two can never disagree about whether a
+ * request touched the order's items. Used by aafm_exec_wc_update_order() to decide whether the
+ * order's totals have to be recalculated; see the comment at that call site for why the answer is
+ * not simply "always".
+ *
+ * @param array<string,mixed> $input Validated input (order_id already removed).
+ * @return bool
+ */
+function aafm_wc_input_adds_line_items( array $input ): bool {
+	foreach ( array( 'line_items', 'add_line_items' ) as $field ) {
+		if ( ! array_key_exists( $field, $input ) || ! is_array( $input[ $field ] ) ) {
+			continue;
+		}
+		foreach ( $input[ $field ] as $item ) {
+			if ( is_array( $item ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/**
  * Delete order-item rows that were written before a mid-loop add_product() failure, and report
  * the outcome honestly.
  *
@@ -1208,12 +1234,33 @@ function aafm_exec_wc_update_order( array $input ) {
 	$fields = $input;
 	unset( $fields['order_id'] );
 
+	// Whether this request adds line items has to be read from the input BEFORE it is applied,
+	// because add_product() writes each item row immediately and leaves nothing to compare against
+	// afterwards.
+	$adds_line_items = aafm_wc_input_adds_line_items( $fields );
+
 	$unresolved = aafm_wc_apply_order_input( $order, $fields );
 	if ( is_wp_error( $unresolved ) ) {
 		return $unresolved;
 	}
 	if ( array() !== $unresolved ) {
 		return aafm_wc_unresolved_line_items_error( $unresolved );
+	}
+
+	// Recalculate ONLY when the request actually added line items. add_product() writes the item
+	// rows but never touches the order's own total, so without this an order that gained 14.99 of
+	// goods still bills the old figure -- the store ships the item and never charges for it, every
+	// report that sums order totals is understated, and WooCommerce caps any later refund at the
+	// stale total. Create has the same need and does the same thing (see aafm_exec_wc_create_order).
+	//
+	// Deliberately NOT unconditional. WooCommerce lets a shop owner override an order's total by
+	// hand, and calculate_totals() throws that away and recomputes from the line items. A request
+	// that only corrects a postcode or a customer note must not silently rewrite a figure someone
+	// set on purpose; WooCommerce's own order screen takes the same position, offering Recalculate
+	// as an explicit action rather than running it on every save. Line items are the only thing
+	// aafm_wc_apply_order_input() can change that moves the money, so they are the only trigger.
+	if ( $adds_line_items ) {
+		$order->calculate_totals();
 	}
 	$order->save();
 

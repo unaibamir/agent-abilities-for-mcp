@@ -941,6 +941,97 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
+	 * Adding a line item must move the order's TOTAL, not just its items and subtotal.
+	 *
+	 * WC_Abstract_Order::add_product() writes the item row and leaves the order total alone, so
+	 * before the fix an order that gained 19.99 of goods still billed the figure it had before.
+	 * Order 5001 seeds one item at
+	 * 39.98 with tax 4.00 and shipping 5.99 against a stored total of 49.99; adding product 101
+	 * (19.99) once takes the goods to 59.97 and the order to 69.96.
+	 */
+	public function test_update_order_add_line_items_recalculates_the_order_total(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $before );
+		$this->assertSame( '49.99', $before['totals']['total'] );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame(
+			'69.96',
+			$res['totals']['total'],
+			'The order total must follow the line items it now holds, not stay at the pre-update figure.'
+		);
+		$this->assertSame( '59.97', $res['totals']['subtotal'], 'The goods subtotal covers both items.' );
+
+		// Persisted, not just shaped into the response: a fresh read sees the same total.
+		$after = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertSame( '69.96', $after['totals']['total'] );
+	}
+
+	/**
+	 * The other half of the same fix: an update that does not touch the line items must leave the
+	 * total exactly as it was. WooCommerce lets a shop owner set an order total by hand, and a
+	 * postcode or customer-note correction is no reason to recompute it out from under them. Order
+	 * 5001's seeded total (49.99) deliberately does not equal its own items plus tax and shipping
+	 * (49.97), so a stray recalculation would be visible here.
+	 */
+	public function test_update_order_without_line_items_leaves_the_total_untouched(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'      => 5001,
+				'customer_note' => 'Leave with the neighbour.',
+				'billing'       => array( 'postcode' => '62702' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'Leave with the neighbour.', $res['customer_note'] );
+		$this->assertSame( '62702', $res['billing']['postcode'] );
+		$this->assertSame(
+			'49.99',
+			$res['totals']['total'],
+			'An update that adds no line items must not rewrite a total someone set by hand.'
+		);
+	}
+
+	/**
+	 * An empty add_line_items array asks for nothing to be added, so it is not a line-item change
+	 * and must not trigger a recalculation either.
+	 */
+	public function test_update_order_with_an_empty_line_items_array_leaves_the_total_untouched(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount( 1, $res['line_items'], 'Nothing was added.' );
+		$this->assertSame( '49.99', $res['totals']['total'] );
+	}
+
+	/**
 	 * Line_items is kept as a deprecated alias with IDENTICAL additive behaviour to
 	 * add_line_items -- an existing caller that already sends line_items on update must keep
 	 * getting the same (additive) result after this fix, never a silent switch to replace.

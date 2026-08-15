@@ -46,12 +46,22 @@ final class WooVariationsTest extends TestCase {
 	 * @param int $variation_count How many variations to attach to the parent.
 	 */
 	private function seed_variable_parent_with_variations( int $variation_count = 2 ): void {
+		// The parent declares pa_color and pa_size. A real variable product always declares the
+		// attributes its variations choose from, and the variation write abilities now validate
+		// every sent attribute key against this map, so the fixture has to carry it. Only the KEYS
+		// matter to that check, which is why plain values stand in for the WC_Product_Attribute
+		// objects a live parent holds: those classes are eval'd by stub_woocommerce() itself, after
+		// this seed array is built.
 		$products = array(
 			array(
-				'id'     => 500,
-				'name'   => 'Variable Parent',
-				'type'   => 'variable',
-				'status' => 'publish',
+				'id'         => 500,
+				'name'       => 'Variable Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'pa_color' => 'red | blue',
+					'pa_size'  => 'small | large',
+				),
 			),
 		);
 		for ( $i = 1; $i <= $variation_count; $i++ ) {
@@ -477,6 +487,93 @@ final class WooVariationsTest extends TestCase {
 		$attributes = (array) $res['attributes'];
 		$this->assertSame( 'blue', $attributes['pa_color'] ?? null );
 		$this->assertSame( 'small', $attributes['pa_size'] ?? null );
+	}
+
+	/**
+	 * An attribute key the parent does not declare must be refused, not accepted and dropped.
+	 *
+	 * WC_Product_Variation::set_attributes() takes whatever map it is given, so `size` (the key a
+	 * human writes) instead of `pa_size` (the key the parent actually declares) used to come back
+	 * isError:false with a variation whose real attributes all read empty, plus an orphan
+	 * attribute_size postmeta row WooCommerce never looks at. The agent has no reason to re-inspect
+	 * a variation it was just told it had configured, so the store owner finds out at checkout.
+	 */
+	public function test_create_variation_rejects_an_attribute_key_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+		$before = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '24.99',
+				'attributes'    => array( 'size' => 'Large' ),
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'An attribute key the parent does not declare must be an error, not a success that applied nothing.'
+		);
+		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $res->get_error_code() );
+
+		// The error names the rejected key AND the keys that would have worked, so an agent can
+		// correct itself from the response alone.
+		$message = $res->get_error_message();
+		$this->assertStringContainsString( 'size', $message );
+		$this->assertStringContainsString( 'pa_color', $message );
+		$this->assertStringContainsString( 'pa_size', $message );
+
+		// Nothing was written.
+		$after = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$this->assertSame( $before['total'], $after['total'], 'A rejected create must not leave a variation behind.' );
+	}
+
+	/**
+	 * The same key check on update, where the replace semantics make an unknown key worse: the sent
+	 * key applies nothing AND clears every attribute the variation already had.
+	 */
+	public function test_update_variation_rejects_an_attribute_key_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array( 'colour' => 'blue' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'An undeclared key must be refused on update too.' );
+		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $res->get_error_code() );
+
+		// The variation's real attributes survive the rejected write untouched.
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame(
+			'red',
+			( (array) $read['attributes'] )['pa_color'] ?? null,
+			'A rejected update must not clear the attributes it refused to replace.'
+		);
+	}
+
+	/**
+	 * An empty value is WooCommerce's "Any" and stays legitimate -- only unknown KEYS are refused.
+	 */
+	public function test_create_variation_accepts_a_declared_key_with_an_empty_value(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array(
+					'pa_color' => 'blue',
+					'pa_size'  => '',
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty value on a declared key means "Any" and is valid.' );
+		$attributes = (array) $res['attributes'];
+		$this->assertSame( 'blue', $attributes['pa_color'] ?? null );
+		$this->assertSame( '', $attributes['pa_size'] ?? null );
 	}
 
 	public function test_create_variation_denies_an_editor(): void {

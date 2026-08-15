@@ -474,7 +474,7 @@ function aafm_wc_variation_write_properties(): array {
 		),
 		'attributes'     => array(
 			'type'                 => 'object',
-			'description'          => 'A flat map of attribute name to the chosen value (strings only).',
+			'description'          => __( 'A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent\'s own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. An empty value means "Any".', 'agent-abilities-for-mcp' ),
 			// MEDIUM-4: close the free-key map to string values so a smuggled nested structure is
 			// rejected. A fixed additionalProperties:false is impossible on a free-key map, so the
 			// string sub-schema is the equivalent closure.
@@ -561,9 +561,71 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 }
 
 /**
+ * Reject variation attribute keys the parent product does not declare, naming the keys that would
+ * have worked.
+ *
+ * WC_Product_Variation::set_attributes() writes whatever map it is handed straight to postmeta.
+ * A key the parent never declared is stored as an `attribute_<key>` row that WooCommerce reads
+ * back for nothing, so a create sent with the key a human would write (`size`) instead of the
+ * parent's taxonomy slug (`pa_size`) reports success, applies none of the requested values, and
+ * leaves the variation reading "Any" on every real attribute. Refusing the key up front turns a
+ * silent no-op into an error the caller can act on -- which matters most for an agent, since the
+ * response gives it no reason to re-inspect the variation it was just told it had configured.
+ *
+ * The parent's own attribute map is the authority: its keys are exactly the form a variation's
+ * attribute map has to use (`pa_color` for a global/taxonomy attribute, the sanitized name for a
+ * custom one), and both sides run through sanitize_title(), so the comparison is like for like.
+ * An empty VALUE is untouched by this -- that is WooCommerce's "Any" and a legitimate thing to
+ * send; only unknown KEYS are refused.
+ *
+ * @param \WC_Product             $parent_product The variation's parent product.
+ * @param array<int|string,mixed> $attributes     The requested attribute map.
+ * @return \WP_Error|null Null when every key is declared by the parent.
+ */
+function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product, array $attributes ): ?\WP_Error {
+	$declared = array_map( 'strval', array_keys( $parent_product->get_attributes() ) );
+	$unknown  = array();
+	foreach ( array_keys( $attributes ) as $key ) {
+		$key = sanitize_title( (string) $key );
+		if ( '' === $key || in_array( $key, $declared, true ) ) {
+			continue;
+		}
+		$unknown[] = $key;
+	}
+
+	if ( array() === $unknown ) {
+		return null;
+	}
+
+	if ( array() === $declared ) {
+		return new \WP_Error(
+			'aafm_wc_unknown_variation_attribute',
+			sprintf(
+				/* translators: %s: comma-separated list of the rejected attribute keys. */
+				__( 'The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $unknown )
+			)
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_unknown_variation_attribute',
+		sprintf(
+			/* translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's declared attribute keys. */
+			__( 'The parent product does not declare these attributes: %1$s. Its attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_).', 'agent-abilities-for-mcp' ),
+			implode( ', ', $unknown ),
+			implode( ', ', $declared )
+		)
+	);
+}
+
+/**
  * Sanitize a variation's flat attribute map: each key is a taxonomy-like slug (sanitize_title) and
  * each value a plain string (sanitize_text_field). Non-scalar values are dropped (the closed schema
  * already rejects them before execute; this is defence in depth).
+ *
+ * Keys are checked against the parent product's declared attributes BEFORE this runs -- see
+ * aafm_wc_unknown_variation_attributes_error(), called from both variation write executors.
  *
  * @param array<int|string,mixed> $attributes Raw attribute map.
  * @return array<string,string>
@@ -638,6 +700,14 @@ function aafm_exec_wc_create_product_variation( array $input ) {
 	}
 
 	unset( $input['product_id'] );
+
+	if ( array_key_exists( 'attributes', $input ) ) {
+		$attributes_error = aafm_wc_unknown_variation_attributes_error( $parent, (array) $input['attributes'] );
+		if ( null !== $attributes_error ) {
+			return $attributes_error;
+		}
+	}
+
 	$variation = new \WC_Product_Variation();
 	$variation->set_parent_id( (int) $parent->get_id() );
 	$error = aafm_wc_apply_variation_input( $variation, $input );
@@ -670,7 +740,7 @@ function aafm_args_wc_update_product_variation(): array {
 	// attributes (contrast aafm_wc_build_product_attributes() for the parent product, which does
 	// merge). Override the shared description for this ability only, so the PATCH-style wording
 	// on every other field does not silently imply the same semantics here.
-	$properties['attributes']['description'] = __( 'A flat map of attribute name to the chosen value (strings only). Unlike every other field on this ability, this replaces the variation\'s entire attribute map: any attribute not included here is cleared, not preserved.', 'agent-abilities-for-mcp' );
+	$properties['attributes']['description'] = __( 'A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent\'s own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. Unlike every other field on this ability, this replaces the variation\'s entire attribute map: any attribute not included here is cleared, not preserved.', 'agent-abilities-for-mcp' );
 
 	return array(
 		'label'               => aafm_ability_label( 'aafm/wc-update-product-variation' ),
@@ -709,6 +779,23 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 		return aafm_generic_error();
 	}
 	unset( $input['variation_id'] );
+
+	// Same key check as create. The replace semantics of `attributes` on update (documented on the
+	// field itself) make an unknown key worse here, not better: the sent key applies nothing AND
+	// every real attribute the variation had is cleared, so the variation ends up reading "Any" on
+	// everything while the response reports success.
+	if ( array_key_exists( 'attributes', $input ) ) {
+		$parent = aafm_wc_get_product( (int) $variation->get_parent_id() );
+		// A variation whose parent cannot be resolved has nothing to validate against; leave it to
+		// the setters rather than refuse a write on the strength of a missing parent.
+		if ( null !== $parent ) {
+			$attributes_error = aafm_wc_unknown_variation_attributes_error( $parent, (array) $input['attributes'] );
+			if ( null !== $attributes_error ) {
+				return $attributes_error;
+			}
+		}
+	}
+
 	$error = aafm_wc_apply_variation_input( $variation, $input );
 	if ( null !== $error ) {
 		return $error;

@@ -19,7 +19,9 @@ name: Release
 #                  wordpress.org login password. Set/retrieve it at
 #                  https://profiles.wordpress.org/me/profile/edit/group/3/?screen=svn-password
 # Without SVN_PASSWORD the SVN step is skipped (the tag, zip, and GitHub Release
-# still happen), so nothing breaks before the secret is added.
+# still happen), so nothing breaks before the secret is added. The run says so in
+# a warning annotation, and the MCP registry publish is held back until a deploy
+# actually succeeds, because a registry version cannot be unpublished.
 #
 # workflow_dispatch is a typed escape hatch for the FIRST launch (1.0.0 is already
 # tagged, so the push path would skip it) or a re-deploy: run it and type the
@@ -60,6 +62,7 @@ jobs:
     outputs:
       version: ${{ steps.rel.outputs.version }}
       skip: ${{ steps.rel.outputs.skip }}
+      svn: ${{ steps.svn.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,6 +142,7 @@ jobs:
             -o "build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip"
 
       - name: Deploy to WordPress.org SVN
+        id: svn
         if: ${{ steps.rel.outputs.skip != 'true' && env.SVN_PASSWORD != '' }}
         uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
         env:
@@ -147,6 +151,14 @@ jobs:
           ASSETS_DIR: .wordpress-org
         with:
           generate-zip: false
+
+      # The SVN step skips silently when the secret is absent, which is the right behaviour
+      # for the tag and the GitHub Release but not something to leave quiet: wordpress.org
+      # has not received this version, and the registry publish downstream is irreversible.
+      - name: Warn when the SVN deploy did not run
+        if: ${{ steps.rel.outputs.skip != 'true' && steps.svn.outcome != 'success' }}
+        run: |
+          echo "::warning::The wordpress.org SVN deploy did not run (outcome: ${{ steps.svn.outcome }}). Check that SVN_USERNAME and SVN_PASSWORD are still set. The MCP registry publish is held back until wordpress.org actually has this version."
 
       - name: Create the GitHub Release
         if: steps.rel.outputs.skip != 'true'
@@ -162,7 +174,11 @@ jobs:
   # Push server.json to the official MCP registry so the listing tracks every
   # release instead of drifting until someone republishes by hand. Runs only
   # after the release job has fully published (tag, zip, SVN, GitHub Release),
-  # so nothing here can affect the wordpress.org deploy. continue-on-error
+  # so nothing here can affect the wordpress.org deploy. The SVN deploy really
+  # has to have run: it skips itself when SVN_PASSWORD is missing, and a
+  # registry entry cannot be taken back once published, so publishing off a
+  # skipped deploy would leave the registry permanently claiming a version
+  # wordpress.org never received. continue-on-error
   # keeps the run green if the registry rejects or is down; the failed job and
   # its annotations stay visible in the run summary. Recovery is re-running
   # this job, or `mcp-publisher login github` + `mcp-publisher publish` locally.
@@ -171,7 +187,7 @@ jobs:
   mcp-registry:
     name: Publish to the MCP registry
     needs: publish
-    if: needs.publish.outputs.skip != 'true'
+    if: ${{ needs.publish.outputs.skip != 'true' && needs.publish.outputs.svn == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     continue-on-error: true

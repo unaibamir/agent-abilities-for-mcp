@@ -586,6 +586,17 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 		return $invalid_grant;
 	}
 
+	// Re-check that the user still consents to this client at REDEMPTION, not only at authorize
+	// time. An admin can revoke the grant in the window between the authorize GET (which minted
+	// this code after passing the consent check) and this token call, and the revoke handler can
+	// only delete codes that already exist - a code minted just after its aafm_oauth_delete_consent()
+	// step slips through. Without this, that orphaned code would redeem into a usable token after
+	// the UI reported the revoke landed. The code is already consumed above (a legitimate one-time
+	// use), so a revoked grant simply yields invalid_grant.
+	if ( ! aafm_oauth_has_consent( (int) $row['wp_user_id'], (string) $row['client_id'] ) ) {
+		return $invalid_grant;
+	}
+
 	// PKCE: a failed verifier burns the (already-consumed) code, which is safe.
 	if ( ! aafm_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
 		return $invalid_grant;

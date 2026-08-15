@@ -20,6 +20,13 @@ use WP_REST_Request;
 class RestEndpointsTest extends TestCase {
 
 	/**
+	 * The WordPress user id the most recent mint_code() call bound its code to.
+	 *
+	 * @var int
+	 */
+	private int $last_code_user_id = 0;
+
+	/**
 	 * Ensure the OAuth tables exist and the REST routes are registered.
 	 */
 	public function set_up(): void {
@@ -95,7 +102,13 @@ class RestEndpointsTest extends TestCase {
 	 * @return string The raw authorization code.
 	 */
 	private function mint_code( string $client_id, string $redirect, string $challenge ): string {
-		$user_id = self::factory()->user->create();
+		$user_id                 = self::factory()->user->create();
+		$this->last_code_user_id = $user_id;
+
+		// The real authorize flow always records consent before it issues a code (approve path)
+		// or only issues when a prior consent exists, so every minted code has a consent row.
+		// Model that here, since the token endpoint now re-checks consent at redemption.
+		aafm_oauth_record_consent( $user_id, $client_id );
 
 		return aafm_oauth_mint_code(
 			array(
@@ -213,6 +226,27 @@ class RestEndpointsTest extends TestCase {
 
 		$replay = $this->token_code_request( $client_id, $code, $redirect, $verifier );
 		$this->assertSame( 400, $replay->get_status() );
+	}
+
+	/**
+	 * A code whose grant was revoked between mint and redemption fails with 400. This closes the
+	 * TOCTOU where an admin revokes a user+client grant while an authorize is in flight: the
+	 * authorize GET already minted a code, but the token endpoint now re-checks consent, so the
+	 * orphaned code cannot redeem into a live token after the revoke landed.
+	 */
+	public function test_authorization_code_rejected_after_consent_revoked(): void {
+		$redirect  = 'https://app.example/cb';
+		$verifier  = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+		$challenge = $this->challenge_for( $verifier );
+
+		$client_id = $this->register_client( $redirect );
+		$code      = $this->mint_code( $client_id, $redirect, $challenge );
+
+		// The admin revokes this user+client grant after the code was minted.
+		aafm_oauth_delete_consent( $this->last_code_user_id, $client_id );
+
+		$response = $this->token_code_request( $client_id, $code, $redirect, $verifier );
+		$this->assertSame( 400, $response->get_status(), 'A code whose consent was revoked must not redeem.' );
 	}
 
 	/**

@@ -217,6 +217,10 @@ class HandshakeTest extends TestCase {
 	 * @return string The raw authorization code.
 	 */
 	private function mint_code( string $client_id, int $user_id, string $redirect, string $challenge ): string {
+		// The approved authorize POST persists consent before it issues the code, and the token
+		// endpoint re-checks that consent at redemption, so record it here to match the real flow.
+		aafm_oauth_record_consent( $user_id, $client_id );
+
 		return aafm_oauth_mint_code(
 			array(
 				'client_id'      => $client_id,

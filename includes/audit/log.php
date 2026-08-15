@@ -366,15 +366,33 @@ function aafm_prune_activity_log(): void {
 	$table  = aafm_activity_log_table();
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$deleted = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE created_at < %s', $table, $cutoff ) );
+	// Delete in bounded batches rather than one statement. The usual daily prune removes only a
+	// day of rows, but if the operator kept retention at 0 (keep forever) for a long time and then
+	// shortens it, a single DELETE would be one multi-million-row InnoDB transaction: long lock
+	// waits against the concurrent audit-INSERT path, and if it overruns the cron worker's time
+	// limit it rolls back and makes zero progress every day. Short ORDER BY id LIMIT statements
+	// keep each transaction small and the progress durable, with the same cutoff semantics. Capped
+	// per run so a pathological backlog cannot spin the worker indefinitely; the next daily run
+	// picks up where this one stopped.
+	$total_deleted = 0;
+	$max_batches   = 200; // 200 * 5000 = up to 1,000,000 rows removed per daily run.
+	for ( $batch = 0; $batch < $max_batches; $batch++ ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$deleted        = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE created_at < %s ORDER BY id ASC LIMIT 5000', $table, $cutoff ) );
+		$affected       = is_int( $deleted ) ? $deleted : 0;
+		$total_deleted += $affected;
+		// Fewer than a full batch (including 0 on a query error) means the expired rows are gone.
+		if ( $affected < 5000 ) {
+			break;
+		}
+	}
 
 	// Same reason the clear path drops it. A prune is usually gradual, so the review notice's
 	// five-minute count memo could be left to expire - but not when the operator shortens the
 	// retention window, which takes most of the log out on the next daily run. The heading would
 	// go on quoting the pre-prune number, and the render guard that exists to stop an ask the log
 	// cannot back reads the same memo, so it would pass on it too.
-	if ( $deleted > 0 && function_exists( 'aafm_review_request_flush_display_count' ) ) {
+	if ( $total_deleted > 0 && function_exists( 'aafm_review_request_flush_display_count' ) ) {
 		aafm_review_request_flush_display_count();
 	}
 }

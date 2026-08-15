@@ -100,6 +100,11 @@ jobs:
           # (Use workflow_dispatch to intentionally re-deploy an existing tag.)
           if [ "${{ github.event_name }}" = "push" ] && git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
             echo "Tag $VERSION already exists; nothing to publish on push."
+            # Say so in an annotation as well. This branch is exactly what a "Re-run failed jobs"
+            # click lands on after a run that tagged and deployed before failing, and every step
+            # below it is gated on skip != 'true', so without this line the replay finishes green
+            # having republished nothing at all.
+            echo "::notice::Tag $VERSION already exists, so this run republished nothing: no zip, no SVN deploy, no GitHub Release, no registry publish. To re-ship an already-tagged version, run this workflow from the Actions tab and type the version."
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -180,8 +185,14 @@ jobs:
   # skipped deploy would leave the registry permanently claiming a version
   # wordpress.org never received. continue-on-error
   # keeps the run green if the registry rejects or is down; the failed job and
-  # its annotations stay visible in the run summary. Recovery is re-running
-  # this job, or `mcp-publisher login github` + `mcp-publisher publish` locally.
+  # its annotations stay visible in the run summary. Recovery depends on which
+  # way it went. If this job RAN and failed, re-running it is enough. If it was
+  # SKIPPED because the publish job failed after the deploy, "Re-run failed
+  # jobs" is the wrong lever: the replayed push finds the tag already there and
+  # skips everything, so the rerun goes green with nothing republished. Ship it
+  # by running this workflow from the Actions tab with the already-tagged
+  # version, or publish from a workstation with `mcp-publisher login github` +
+  # `mcp-publisher publish`.
   # Note: re-dispatching an already-published version will be refused by the
   # registry as a duplicate - that is expected, not a defect.
   mcp-registry:

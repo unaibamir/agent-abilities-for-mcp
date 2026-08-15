@@ -148,7 +148,7 @@ function aafm_diagnostic_checks(): array {
  * by the subscriber role - least privilege by construction, no custom auth code.
  *
  * @param string $login Desired login.
- * @return array{user_id:int}|WP_Error
+ * @return array{user_id:int,login:string}|WP_Error
  */
 function aafm_create_agent_user( string $login ) {
 	$login = sanitize_user( $login, true );
@@ -210,7 +210,14 @@ function aafm_create_agent_user( string $login ) {
 	update_user_meta( $user_id, aafm_agent_user_marker_meta_key(), 1 );
 	update_user_meta( $user_id, 'aafm_agent_user_created', time() );
 
-	return array( 'user_id' => $user_id );
+	// Hand back the sanitized login too, not just the id: on the same-session create the JS rewrites
+	// the App-Password config snippets to name this account, and it must use the login the server
+	// actually created (sanitize_user() may have changed what the admin typed), which is exactly what
+	// the next page render resolves as $existing_agent_login.
+	return array(
+		'user_id' => $user_id,
+		'login'   => $login,
+	);
 }
 
 /**

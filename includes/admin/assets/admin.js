@@ -120,6 +120,83 @@
 			);
 		}
 
+		/**
+		 * Rewrite the WP_API_USERNAME value in a rendered snippet to a new agent login.
+		 *
+		 * The App-Password config snippets are rendered server-side naming the agent login known
+		 * at page load (the 'mcp-agent' seed on a fresh install). After the operator creates the
+		 * agent user in the same session without reloading, those snippets still name the seed, a
+		 * user that does not exist. This swaps the value in place so a copied config names the real
+		 * account. Only the "WP_API_USERNAME" value is touched, matched by its key role so an
+		 * unrelated value that happens to contain the same text is never rewritten. The login is
+		 * JSON-escaped so a value carrying a quote or backslash cannot break the JSON.
+		 *
+		 * @param {string} text  A rendered snippet (JSON text).
+		 * @param {string} login The agent login to write in.
+		 * @return {string} The snippet with its WP_API_USERNAME value replaced.
+		 */
+		#applyAgentLogin( text, login ) {
+			const value = JSON.stringify( login ).slice( 1, -1 );
+			return text.replace(
+				/("WP_API_USERNAME"\s*:\s*")(?:[^"\\]|\\.)*(")/,
+				( _match, before, after ) => `${ before }${ value }${ after }`
+			);
+		}
+
+		/**
+		 * Repoint every App-Password config snippet at a just-created agent login.
+		 *
+		 * Mirrors the server render's substitution for the same-session create flow: the default
+		 * OS blocks and every quickstart card are rewritten in place (textContent, data-copy, and
+		 * the card's data-config), scoped strictly to the App-Password fallback so no OAuth snippet
+		 * is touched. Both updates touch textContent / dataset only, never innerHTML. A no-op when
+		 * the login is empty or the fallback subtree is not on the page.
+		 *
+		 * @param {string} login The login the server just created and marked.
+		 */
+		#retargetSnippetLogin( login ) {
+			if ( ! login ) {
+				return;
+			}
+			const root = document.querySelector( '.aafm-app-password-fallback' );
+			if ( ! root ) {
+				return;
+			}
+			// Default OS blocks: the <pre> plus its copy button's data-copy.
+			root.querySelectorAll( '.aafm-snippet[data-os]' ).forEach( ( block ) => {
+				const pre = block.querySelector( 'pre' );
+				if ( ! pre ) {
+					return;
+				}
+				const next = this.#applyAgentLogin( pre.textContent, login );
+				pre.textContent = next;
+				const copy = block.querySelector( '.aafm-copy' );
+				if ( copy ) {
+					copy.dataset.copy = next;
+				}
+			} );
+			// Quickstart cards: the data-config payload the client picker reads, plus the card's
+			// own <pre> and copy button.
+			root.querySelectorAll( '.aafm-quickstart-card' ).forEach( ( card ) => {
+				if ( card.dataset.config ) {
+					card.dataset.config = this.#applyAgentLogin(
+						card.dataset.config,
+						login
+					);
+				}
+				const pre = card.querySelector( 'pre' );
+				if ( ! pre ) {
+					return;
+				}
+				const next = this.#applyAgentLogin( pre.textContent, login );
+				pre.textContent = next;
+				const copy = card.querySelector( '.aafm-copy' );
+				if ( copy ) {
+					copy.dataset.copy = next;
+				}
+			} );
+		}
+
 		#bindClientPicker() {
 			// Scope strictly to the App-Password fallback subtree. The OAuth picker has
 			// its own #bindOauthClientPicker and must never be touched here.
@@ -1292,6 +1369,10 @@
 						),
 						json.data.user_id
 					);
+					// Point the already-rendered App-Password snippets at the login just
+					// created, so a config copied in this same session (no reload) names the
+					// real account rather than the seed the server printed at page load.
+					this.#retargetSnippetLogin( json.data.login ?? '' );
 				} else {
 					// On a duplicate username the server returns the existing user's edit URL;
 					// show the friendly message plus a real "Edit user" link built via the DOM

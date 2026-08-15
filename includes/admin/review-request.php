@@ -327,6 +327,15 @@ function aafm_review_request_eligible(): bool {
 		// by a log clear.
 		if ( $changed ) {
 			wp_cache_delete( 'aafm_review_request', 'options' );
+			// The option's own key is only half of the cache. get_option() consults the
+			// 'notoptions' blob BEFORE the per-option cache and records a missing row there on the
+			// first read, so on a site where the row does not exist yet - a fresh install, or one
+			// the operator has just reset - dropping the key alone leaves the re-read answering
+			// defaults out of memory without ever reaching the database. It would then miss an
+			// answer another tab stored in the meantime and write straight over it. Core rebuilds
+			// the blob on the next miss, so this costs one cache round trip on a path that is
+			// about to write anyway.
+			wp_cache_delete( 'notoptions', 'options' );
 			$fresh = aafm_review_request_state();
 			if ( in_array( $fresh['status'], array( 'reviewed', 'dismissed' ), true ) ) {
 				// Answered for good while this request was counting. Leaving the stored answer alone

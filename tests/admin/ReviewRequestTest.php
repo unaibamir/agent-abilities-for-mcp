@@ -377,6 +377,45 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The re-read has to reach the database, and dropping the option's own cache key is not
+	 * enough to make it. get_option() checks the 'notoptions' blob first, and this request's own
+	 * opening read put the key in there when it found no row, so without the second cache drop
+	 * the re-read answers 'pending' defaults from memory and the save writes over whatever
+	 * another tab stored in the meantime. The row is inserted here with a raw query on purpose:
+	 * going through add_option() would clear notoptions itself and hide the defect.
+	 */
+	public function test_the_re_read_reaches_the_database_when_the_option_row_did_not_exist(): void {
+		global $wpdb;
+
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 10 );
+
+		// This request's opening read of a missing row is what poisons the blob.
+		$this->assertFalse( get_option( 'aafm_review_request', false ) );
+
+		// Another tab clicks "Already did" and the row appears, invisible to this request's cache.
+		$wpdb->insert(
+			$wpdb->options,
+			array(
+				'option_name'  => 'aafm_review_request',
+				'option_value' => maybe_serialize(
+					array(
+						'status'                => 'dismissed',
+						'first_success_seen_at' => time() - ( 8 * DAY_IN_SECONDS ),
+						'snooze_until'          => 0,
+						'snooze_count'          => 0,
+						'threshold_met'         => 1,
+					)
+				),
+				'autoload'     => 'off',
+			)
+		);
+
+		$this->assertFalse( aafm_review_request_eligible() );
+		$this->assertSame( 'dismissed', aafm_review_request_state()['status'] );
+	}
+
+	/**
 	 * Until the threshold latches, the eligibility check runs the count on every admin page load,
 	 * and a site that stays under ten successes never latches, so that is forever. It reads the
 	 * same five-minute memo the heading does. Both fields it can move only move one way, so a

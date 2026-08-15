@@ -702,11 +702,9 @@ final class AbilityCrashSafetyTest extends TestCase {
 	 * Repeated checks of the SAME ability record one row, not one per check. That is the whole of
 	 * the bound and this test measures exactly it: the key is ability plus failure, so a pass over
 	 * the catalogue still writes a row per affected ability, and only the repeat passes collapse.
-	 * An MCP request makes two passes (aafm_build_server_tools() on rest_api_init, then
-	 * tools/list), and aafm_build_server_tools() walks the callbacks on every REST request that
-	 * arrives with a logged-in user, so without this the
-	 * count multiplies by passes as well as by abilities with nothing to stop it:
-	 * aafm_prune_activity_log() is retention-day based rather than size based.
+	 * A tools/list response walks the whole catalogue, and a client that reconnects or re-lists
+	 * walks it again, so without this the count multiplies by passes as well as by abilities with
+	 * nothing to stop it: aafm_prune_activity_log() is retention-day based rather than size based.
 	 *
 	 * Beware when adding another crash test here. The dedupe's `static $seen` lives for the whole
 	 * PHPUnit process while the database rolls back per test, so a test that crashes an ability

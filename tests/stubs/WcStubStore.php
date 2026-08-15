@@ -52,6 +52,12 @@ class WcStubStore {
 	 * did not actually remove the row. This is what makes a guard on delete()'s return dead, and
 	 * what a re-read after delete catches.
 	 *
+	 * On a VARIATION it models a second, sharper condition as well: the delete genuinely succeeded
+	 * (the stub variation zeroes its own id, exactly as WC_Product_Data_Store_CPT::delete() does)
+	 * while wc_get_product() still answers with an object, because that data store never clears
+	 * WooCommerce's product caches. A variation delete must report success in that state, not
+	 * failure -- see WooVariationsTest::test_delete_variation_reports_success_when_the_wc_read_is_stale().
+	 *
 	 * @var bool
 	 */
 	public static bool $delete_returns_true_but_keeps = false;

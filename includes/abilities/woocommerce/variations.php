@@ -931,10 +931,22 @@ function aafm_exec_wc_delete_product_variation( array $input ) {
 		return aafm_generic_error();
 	}
 	$variation->delete( true );
+
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded variation always has
-	// one, so its return never signals a store-level failure. Verify the row is actually gone by
-	// re-reading rather than trusting the return.
-	if ( null !== aafm_wc_get_variation( $id ) ) {
+	// one, so its return never signals a store-level failure. Calling wc_get_product() again is not a
+	// re-read either: WC_Product_Data_Store_CPT::delete() (which the variation data store inherits)
+	// deletes the post and zeroes the product's id but never calls clear_caches(), so WooCommerce's
+	// per-product type cache -- and, with product instance caching on, the cached object itself --
+	// outlives the delete and hands back an object for a row that is already gone. Trusting that made
+	// this ability report failure for a delete that had in fact succeeded, which is worse than a plain
+	// error: every recovery an agent then picks (retry, tell the owner the variation survived, delete
+	// the parent product instead) is chosen on a false premise.
+	//
+	// So check the two signals that are not served from that cache. The data store zeroes the
+	// product's own id once it has run ($product->set_id( 0 )), and the backing post row is what it
+	// deleted through (wp_delete_post()), re-read here with the post cache busted first.
+	clean_post_cache( $id );
+	if ( $variation->get_id() > 0 || get_post( $id ) instanceof WP_Post ) {
 		return aafm_generic_error();
 	}
 

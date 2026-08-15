@@ -757,6 +757,36 @@ final class WooVariationsTest extends TestCase {
 		$this->assertTrue( WcStubStore::exists( 601 ), 'The variation must still exist after a failed delete.' );
 	}
 
+	/**
+	 * A variation delete that SUCCEEDED must report success even though a following wc_get_product()
+	 * still hands back an object for it.
+	 *
+	 * WC_Product_Data_Store_CPT::delete() (which the variation data store inherits) deletes the post
+	 * and zeroes the product's own id, but never calls clear_caches(), so WooCommerce's per-product
+	 * caches outlive the delete. Re-reading through wc_get_product() therefore finds a row that is
+	 * already gone, and the ability used to turn that into a generic error: the variation was deleted
+	 * from the store and the agent was told the request had failed. Every recovery it can then pick is
+	 * wrong, including escalating to deleting the whole parent product.
+	 *
+	 * $delete_returns_true_but_keeps models that state exactly: the stub variation zeroes its own id
+	 * (the vendor's set_id( 0 )) while the row stays visible to wc_get_product().
+	 */
+	public function test_delete_variation_reports_success_when_the_wc_read_is_stale(): void {
+		$this->acting_as( 'administrator' );
+
+		WcStubStore::$delete_returns_true_but_keeps = true;
+		$res                                        = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		WcStubStore::$delete_returns_true_but_keeps = false;
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A delete the data store carried out must not report failure just because the WC read is stale.'
+		);
+		$this->assertTrue( $res['deleted'] );
+		$this->assertSame( 601, $res['id'] );
+	}
+
 	public function test_delete_variation_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product-variation' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product-variation must be destructive.' );

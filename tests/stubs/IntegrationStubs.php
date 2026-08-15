@@ -863,7 +863,16 @@ class WC_Product_Variation {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	// Mirrors WC_Product_Data_Store_CPT::delete() (which the variation data store inherits): on the
+	// force path it deletes the post and then zeroes the product's OWN id, and it never calls
+	// clear_caches(). That missing cache clear is why a wc_get_product() after a variation delete can
+	// still hand back an object for a row that is gone, so the zeroed id is the signal that survives.
+	// When the store reports outright failure the vendor never reached set_id( 0 ) either.
+	public function delete( $force = false ) {
+		$result = \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) );
+		if ( $force && false !== $result ) { $this->data['id'] = 0; }
+		return $result;
+	}
 }
 PHP;
 	}

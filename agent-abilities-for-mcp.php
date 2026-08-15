@@ -168,8 +168,9 @@ add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
 /**
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.
  *
- * The event fires the `aafm_oauth_cleanup` action (wired in aafm_bootstrap()),
- * which prunes expired codes and dead tokens and reaps abandoned DCR clients.
+ * The event fires the `aafm_oauth_cleanup` action (wired at file scope below via
+ * add_action( 'aafm_oauth_cleanup', … )), which prunes expired codes and dead
+ * tokens and reaps abandoned DCR clients.
  *
  * Runs on activation and self-heals on admin_init and rest_api_init. A network
  * activation fires the activation hook once, on the activation blog only, so

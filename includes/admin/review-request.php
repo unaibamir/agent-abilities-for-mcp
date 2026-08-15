@@ -535,7 +535,9 @@ function aafm_render_review_request_notice(): void {
  * AJAX action, hands focus and an announcement to the two siblings the notice leaves behind,
  * then removes the notice. The two dismissal controls are links to admin-post.php, so the
  * handler preventDefault()s them and answers over AJAX instead; if this script never runs they
- * are followed as ordinary links and the same verdict is recorded server side. The native X that core's common.js injects into .is-dismissible
+ * are followed as ordinary links and the same verdict is recorded server side. The primary
+ * action is answered on auxclick as well, because a middle click opens its new tab without ever
+ * firing a click event. The native X that core's common.js injects into .is-dismissible
  * notices is caught by delegation on the notice element and posted as "later", so a reflexive
  * dismiss snoozes instead of burning the ask; core removes that element itself, so the script
  * only does the focus and announcement half for it.
@@ -632,6 +634,26 @@ function aafm_review_request_footer_js(): string {
 			send( 'later' );
 			handOff( 'later' );
 		}
+	} );
+	// A middle click opens the link in a new tab but fires auxclick, never click, so without
+	// this the operator would land on the review page having answered nothing: the state stays
+	// pending and the ask comes back on the next admin load. The two dismissal controls need no
+	// equivalent - they are nonced admin-post links, so a middle click records them server side.
+	// No preventDefault() here, so the browser still opens its tab, and the sent latch covers a
+	// browser that decides to fire both events.
+	notice.addEventListener( 'auxclick', ( event ) => {
+		if ( 1 !== event.button ) {
+			return;
+		}
+		if ( ! event.target.closest( '[data-aafm-review="review"]' ) ) {
+			return;
+		}
+		send( 'review' );
+		// Same next-tick clear as the click path, for the same reason.
+		window.setTimeout( () => {
+			handOff( 'review' );
+			notice.remove();
+		}, 0 );
 	} );
 }() );
 JS;

@@ -932,6 +932,22 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * Middle-clicking the primary action opens the review page but never fires a click event, so
+	 * the verdict has to be picked up from auxclick too. Without it the operator writes the
+	 * review and the ask keeps coming back until they answer it a second time. The two dismissal
+	 * controls need no equivalent: they are nonced admin-post links, so the same gesture records
+	 * them server side.
+	 */
+	public function test_the_primary_action_also_answers_on_a_middle_click(): void {
+		$js = aafm_review_request_footer_js();
+
+		$this->assertStringContainsString( "notice.addEventListener( 'auxclick'", $js );
+		$this->assertStringContainsString( '1 !== event.button', $js );
+		$this->assertStringContainsString( "event.target.closest( '[data-aafm-review=\"review\"]' )", $js );
+		$this->assertStringContainsString( "send( 'review' );", $js );
+	}
+
+	/**
 	 * The option rides the canonical config list, so reset clears it (re-arming only after a
 	 * fresh 7 days + 10 new successes, because reset also empties the log) and the delete-data
 	 * uninstall path removes it (pinned functionally by UninstallTest's loop over the list).

@@ -162,7 +162,16 @@ add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.
  *
  * The event fires the `aafm_oauth_cleanup` action (wired in aafm_bootstrap()),
- * which prunes expired codes and dead tokens.
+ * which prunes expired codes and dead tokens and reaps abandoned DCR clients.
+ *
+ * Runs on activation and self-heals on admin_init and rest_api_init. A network
+ * activation fires the activation hook once, on the activation blog only, so
+ * subsites would otherwise never schedule this event; WP-Cron is per-site, and
+ * without the reaper the public DCR endpoint could grow the clients table
+ * without bound on any subsite that turns on OAuth. The admin_init heal also
+ * covers a single-site install that predates this event and was updated in
+ * place without a reactivation; the rest_api_init heal covers a subsite serving
+ * only REST/MCP traffic. wp_next_scheduled() keeps every path idempotent.
  *
  * @return void
  */
@@ -172,6 +181,8 @@ function aafm_oauth_schedule_cleanup(): void {
 	}
 }
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_schedule_cleanup' );
+add_action( 'admin_init', 'aafm_oauth_schedule_cleanup' );
+add_action( 'rest_api_init', 'aafm_oauth_schedule_cleanup' );
 
 /**
  * Clear the scheduled OAuth cleanup event on deactivation.

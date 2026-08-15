@@ -338,7 +338,7 @@ function aafm_quickconnect_render(): void {
 
 						<div class="aafm-qc-control">
 							<label class="aafm-qc-toggle">
-								<input type="checkbox" data-qc-oauth checked>
+								<input type="checkbox" data-qc-oauth checked aria-label="<?php esc_attr_e( 'Enable OAuth', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">
@@ -459,7 +459,7 @@ function aafm_quickconnect_render(): void {
 
 						<div class="aafm-qc-control">
 							<label class="aafm-qc-toggle">
-								<input type="checkbox" checked disabled>
+								<input type="checkbox" checked disabled aria-label="<?php esc_attr_e( 'Read content', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">
@@ -470,7 +470,7 @@ function aafm_quickconnect_render(): void {
 
 						<div class="aafm-qc-control is-write">
 							<label class="aafm-qc-toggle amber">
-								<input type="checkbox" data-qc-write>
+								<input type="checkbox" data-qc-write aria-label="<?php esc_attr_e( 'Create and edit content', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">

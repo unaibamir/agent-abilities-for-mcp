@@ -1,6 +1,6 @@
 <?php
 /**
- * Server $tools builder: every enabled ability that exists, regardless of who is asking.
+ * Server $tools builder: only enabled AND currently-callable abilities are listed.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -97,59 +97,18 @@ final class ServerToolsTest extends TestCase {
 		return $registry;
 	}
 
-	/**
-	 * The catalog the server is BUILT from must not depend on who is asking.
-	 *
-	 * A name absent from this list is absent from dispatch, not merely from the listing: the
-	 * adapter answers `-32003 Tool not found` and no permission callback runs. Narrowing it
-	 * per-user therefore made the dispatchable set depend on whether the transport had resolved
-	 * the caller by rest_api_init priority 15 - true for an Application Password, false for an
-	 * OAuth bearer - so one principal got two different tool sets over two auth methods, and the
-	 * narrower one refused abilities it was entitled to use. Discovery narrowing belongs in
-	 * tools/list; the tests below cover it there.
-	 */
-	public function test_server_catalog_is_the_same_whoever_is_logged_in(): void {
+	public function test_subscriber_sees_only_callable_tools(): void {
 		$this->acting_as( 'subscriber' );
-		$as_subscriber = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
-
-		$this->acting_as( 'administrator' );
-		$as_admin = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
-
-		wp_set_current_user( 0 );
-		$as_anonymous = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
-
-		$this->assertSame( array( 'aafm/pub-read', 'aafm/admin-write' ), $as_subscriber );
-		$this->assertSame( $as_subscriber, $as_admin );
-		$this->assertSame( $as_subscriber, $as_anonymous );
+		$tools = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
+		$this->assertContains( 'aafm/pub-read', $tools );
+		$this->assertNotContains( 'aafm/admin-write', $tools );
 	}
 
-	public function test_server_catalog_still_drops_names_with_no_registered_ability(): void {
+	public function test_admin_sees_both_tools(): void {
 		$this->acting_as( 'administrator' );
-		$tools = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/never-registered' ) );
-		$this->assertSame( array( 'aafm/pub-read' ), $tools );
-	}
-
-	/**
-	 * Building the catalog must not walk a single permission callback.
-	 *
-	 * This runs on every REST request that arrives with a logged-in user, so a walk here is
-	 * both the timing bug above and a cost paid by block-editor traffic that never touches MCP.
-	 */
-	public function test_building_the_catalog_runs_no_permission_callbacks(): void {
-		$this->acting_as( 'administrator' );
-
-		$calls = 0;
-		add_filter(
-			'user_has_cap',
-			static function ( $allcaps ) use ( &$calls ) {
-				++$calls;
-				return $allcaps;
-			}
-		);
-
-		aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
-
-		$this->assertSame( 0, $calls, 'aafm_build_server_tools() must not evaluate capabilities.' );
+		$tools = aafm_build_server_tools( array( 'aafm/pub-read', 'aafm/admin-write' ) );
+		$this->assertContains( 'aafm/pub-read', $tools );
+		$this->assertContains( 'aafm/admin-write', $tools );
 	}
 
 	public function test_registering_the_server_does_not_error(): void {

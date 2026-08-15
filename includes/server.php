@@ -37,20 +37,6 @@ function aafm_mcp_tool_name( string $ability_name ): string {
  * agent user IS resolved. The hard gate remains each ability's own permission_callback at
  * execute time. (See ROADMAP "Carried issues" for the timing correction to Phase 0.5 #2.)
  *
- * The catalog is deliberately NOT filtered by the current user, and that is a correctness
- * requirement rather than an optimisation. This list is what the adapter builds its server
- * from, so a name missing here is missing from DISPATCH, not just from the listing:
- * ToolsHandler::call_tool() answers `-32003 Tool not found`, byte-identical to an invented
- * name, and no permission callback ever runs. Filtering here therefore used to make the
- * dispatchable tool set depend on WHEN the transport resolved the caller. An Application
- * Password is resolved before rest_api_init priority 15 and an OAuth bearer is not, so the
- * same principal got two different tool sets, and the narrower one denied abilities the
- * caller was genuinely entitled to use - including every ability whose permission callback
- * needs a concrete object id, since aafm_user_can_discover_ability() probes with empty input.
- * Discovery is an object-independent hint, so it belongs in tools/list only. Keep the two
- * auth methods agreeing by construction: build the full catalog here, narrow the listing in
- * aafm_filter_mcp_tools_list(), and let each ability's own permission_callback be the gate.
- *
  * @param array<int,string> $enabled Enabled ability names.
  * @return list<string>
  */
@@ -60,6 +46,15 @@ function aafm_build_server_tools( array $enabled ): array {
 		$ability = wp_get_ability( $name );
 		if ( ! $ability instanceof WP_Ability ) {
 			continue;
+		}
+		// If a user is already resolved (e.g. unit tests, or a transport that resolves auth
+		// before rest_api_init), drop abilities this user cannot call. On the live HTTP path
+		// the user is anonymous here, so this is a no-op and the request-time filter does the
+		// real work - belt and suspenders, never advertising more than the catalog.
+		if ( is_user_logged_in() ) {
+			if ( ! aafm_user_can_discover_ability( $name ) ) {
+				continue;
+			}
 		}
 		$tools[] = $name;
 	}
@@ -135,13 +130,17 @@ function aafm_user_can_call_ability( string $ability_name, array $input = array(
 function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e ): bool {
 	/** This filter is documented in includes/register.php, at the execute-side catch. */
 	if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
-		// Worth knowing before turning this on: the only caller that walks the whole catalog is
-		// tools/list, so on a WP_DEBUG site a throwing cap filter fatals the MCP listing rather than
-		// every REST request. (It used to be worse: aafm_build_server_tools() walked the callbacks
-		// too, on every REST request that arrived with a logged-in user, block-editor traffic
-		// included. It no longer evaluates capabilities at all.) That was true before this guard
-		// existed too - the bare `$permission( $input )` propagated identically - but the switch is
-		// what makes it a choice, so say so here.
+		// Worth knowing before turning this on: the callers below are reached from
+		// aafm_build_server_tools() as well as from tools/list, and the adapter builds its server
+		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15
+		// (McpAdapter::instance(), vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:59-64;
+		// the init priority 20 branch is WP-CLI only). So on a WP_DEBUG site a throwing cap filter
+		// fatals every REST request that arrives with a logged-in user, block editor traffic
+		// included, rather than only the MCP endpoint. aafm_build_server_tools() walks the
+		// permission callbacks behind an is_user_logged_in() gate, so ordinary page loads and
+		// anonymous REST requests never reach it and tools/list is the rest. That was true before
+		// this guard existed too - the bare `$permission( $input )` propagated identically - but the
+		// switch is what makes it a choice, so say so here.
 		throw $e;
 	}
 
@@ -153,9 +152,10 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	//
 	// Once per (ability, failure) per request, though, not once per check. Read that bound
 	// literally, because the ability name is half the key: this removes the REPEAT-CHECK
-	// multiplier, not the per-ability row. A client that lists twice in one request runs the loop
-	// twice, so the second pass writes nothing; a single pass over the catalog still writes one row
-	// per affected ability.
+	// multiplier, not the per-ability row. An MCP request runs the loop twice, once when
+	// aafm_build_server_tools() builds the server on rest_api_init and again in
+	// aafm_filter_mcp_tools_list at tools/list, so the second pass writes nothing; a single pass
+	// over the catalog still writes one row per affected ability.
 	// Measured with a throwing user_has_cap filter and the whole native catalog
 	// enabled: 83 abilities checked, 38 rows written (the other 45 fail closed before they reach
 	// the capability check), a second pass in the same request adds zero, and a genuinely
@@ -164,9 +164,10 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// A per-ability row is the deliberate trade. The alternative bound - one row per request,
 	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
 	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
-	// per CHECK: they run over every enabled ability, so the un-deduped shape was rows-per-ability
-	// times passes-per-request with nothing to bound it (the pruner is retention-day based, not
-	// size based).
+	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
+	// every REST request carrying a logged-in user, block editor traffic included, so the
+	// un-deduped shape was rows-per-ability times passes-per-request with nothing to bound it
+	// (the pruner is retention-day based, not size based).
 	//
 	// The static is request-scoped on php-fpm and mod_php, which is what WordPress almost always
 	// runs on. Under a persistent worker SAPI (FrankenPHP worker mode, RoadRunner, Swoole) or

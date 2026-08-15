@@ -366,7 +366,16 @@ function aafm_prune_activity_log(): void {
 	$cutoff = gmdate( 'Y-m-d H:i:s', time() - $days * DAY_IN_SECONDS );
 
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE created_at < %s', $table, $cutoff ) );
+	$deleted = $wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE created_at < %s', $table, $cutoff ) );
+
+	// Same reason the clear path drops it. A prune is usually gradual, so the review notice's
+	// five-minute count memo could be left to expire - but not when the operator shortens the
+	// retention window, which takes most of the log out on the next daily run. The heading would
+	// go on quoting the pre-prune number, and the render guard that exists to stop an ask the log
+	// cannot back reads the same memo, so it would pass on it too.
+	if ( $deleted > 0 && function_exists( 'aafm_review_request_flush_display_count' ) ) {
+		aafm_review_request_flush_display_count();
+	}
 }
 
 /**

@@ -192,10 +192,16 @@ add_action( 'shutdown', 'aafm_review_request_reset_success_count' );
  *
  * Five minutes of staleness costs nothing here. The heading quotes a rounded human number to
  * make a case for leaving a review, not a live meter, and the bar it stands on was latched
- * from an exact count. The render guard below still has to stay honest, so
- * aafm_clear_activity_log() drops this memo: an operator who clears the log is told the ask is
- * unbacked immediately, not in five minutes. Retention pruning is left to the expiry, since it
- * can only ever move the number gradually.
+ * from an exact count. The render guard below still has to stay honest, so both paths that
+ * delete rows drop this memo: aafm_clear_activity_log() and the retention prune. A prune
+ * normally moves the number gradually, but an operator who shortens the retention window takes
+ * most of the log out on the next daily run, and the guard would then be reading the same stale
+ * memo as the heading it is supposed to catch.
+ *
+ * One window stays open, and closing it would cost more than it saves. The fill below is a
+ * plain read then write, so a request that computed its count just before a clear can store it
+ * just after, and the ask quotes a pre-clear number until the memo expires. Sub-second to hit,
+ * five minutes at the outside to heal, on a display number.
  *
  * @return int Non-negative count of successful agent tool calls in the log.
  */

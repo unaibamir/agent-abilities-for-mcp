@@ -314,6 +314,24 @@ final class WooShippingTest extends TestCase {
 	}
 
 	/**
+	 * Zone 0 (Rest of the World) cannot be updated: it has no stored row, so WC_Shipping_Zone::save()
+	 * would take the CREATE branch and mint a stray duplicate zone while the executor re-read the
+	 * untouched zone 0 and reported it as "updated". The executor rejects zone_id 0 with an
+	 * actionable error before ever calling save(), so no phantom zone is created.
+	 */
+	public function test_update_shipping_zone_rejects_rest_of_world_zone_zero(): void {
+		$res = aafm_exec_wc_update_shipping_zone(
+			array(
+				'zone_id'   => 0,
+				'zone_name' => 'Should not stick',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'Updating zone 0 must be refused, not silently succeed.' );
+		$this->assertSame( 'aafm_zone_not_editable', $res->get_error_code() );
+	}
+
+	/**
 	 * Store failure on update surfaces as WP_Error.
 	 */
 	public function test_update_shipping_zone_store_failure_returns_error(): void {

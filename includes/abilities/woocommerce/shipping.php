@@ -492,8 +492,12 @@ function aafm_args_wc_update_shipping_zone(): array {
 	$write_props            = aafm_wc_shipping_zone_write_properties();
 	$write_props['zone_id'] = array(
 		'type'        => 'integer',
-		'minimum'     => 0,
-		'description' => __( "The shipping zone's id to update. Must reference an existing zone or the request fails.", 'agent-abilities-for-mcp' ),
+		// Minimum 1, not 0: zone 0 is WooCommerce's always-present "Rest of the World" pseudo-zone,
+		// which has no stored row to update. Calling save() on it takes the data store's CREATE
+		// branch and inserts a stray duplicate zone instead of editing anything, so it is rejected
+		// here (and again in the executor) rather than accepted as a no-op edit.
+		'minimum'     => 1,
+		'description' => __( "The shipping zone's id to update. Must reference an existing editable zone (1 or higher); zone 0 is the Rest of the World zone and cannot be edited.", 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
@@ -529,7 +533,20 @@ function aafm_args_wc_update_shipping_zone(): array {
  */
 function aafm_exec_wc_update_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
+
+	// Zone 0 is the always-present "Rest of the World" pseudo-zone. WC_Shipping_Zone::save()
+	// branches on a falsy id and takes the data store's CREATE path, so saving zone 0 inserts a
+	// brand-new zone (id >= 1) instead of editing anything; the executor would then re-read the
+	// untouched zone 0 and wrongly report it as updated. WooCommerce's own REST API forbids this
+	// for the same reason. Reject it with an actionable error rather than minting a stray duplicate.
+	if ( 0 === $zone_id ) {
+		return new \WP_Error(
+			'aafm_zone_not_editable',
+			__( 'The Rest of the World zone (zone 0) cannot be renamed or reordered. Pass the id of a zone you created (1 or higher).', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
 		return aafm_wc_shipping_zone_not_found();
 	}

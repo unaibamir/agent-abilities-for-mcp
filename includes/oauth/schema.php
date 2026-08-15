@@ -134,8 +134,8 @@ function aafm_install_oauth_tables(): void {
 	dbDelta( $access_tokens );
 	dbDelta( $consents );
 
-	aafm_oauth_enforce_lifecycle_engine();
-	aafm_oauth_finalize_schema();
+	$engine_ok = aafm_oauth_enforce_lifecycle_engine();
+	aafm_oauth_finalize_schema( $engine_ok );
 }
 
 /**
@@ -164,9 +164,19 @@ function aafm_oauth_lifecycle_table_suffixes(): array {
  * trusting an atomicity the engine cannot provide - the token endpoints keep working, they just
  * lose clean rollback on a rare mid-request failure until the host enables InnoDB.
  *
- * @return void
+ * The return value gates the schema-version stamp in aafm_oauth_finalize_schema(): a confirmed
+ * non-InnoDB table that could not be converted must NOT let the install record v7 as complete, or
+ * both self-heal hooks early-return on the version match and the conversion never retries - the
+ * table stays non-transactional and the warning transient silently expires within a day.
+ *
+ * @return bool True when every lifecycle table is transactional OR its engine is unverifiable - it
+ *              is InnoDB, was just converted to InnoDB, or reads as '' (absent, or a TEMPORARY
+ *              harness table information_schema does not list). False only when a table's engine
+ *              reads as a confirmed non-InnoDB value AND the ALTER left it that way. Unverifiable is
+ *              deliberately treated as "allowed", not "failed": blocking on '' would stop every
+ *              PHPUnit install (whose TEMPORARY tables always read '') from stamping its version.
  */
-function aafm_oauth_enforce_lifecycle_engine(): void {
+function aafm_oauth_enforce_lifecycle_engine(): bool {
 	global $wpdb;
 
 	$non_transactional = array();
@@ -177,7 +187,7 @@ function aafm_oauth_enforce_lifecycle_engine(): void {
 
 		// '' means the engine could not be read: the table is absent, or it is a TEMPORARY table
 		// (the PHPUnit harness form), which information_schema does not list. Either way there is
-		// nothing to convert and nothing to warn about.
+		// nothing to convert, nothing to warn about, and nothing to block the version stamp on.
 		if ( '' === $engine || 0 === strcasecmp( $engine, 'InnoDB' ) ) {
 			continue;
 		}
@@ -189,11 +199,12 @@ function aafm_oauth_enforce_lifecycle_engine(): void {
 
 	if ( empty( $non_transactional ) ) {
 		delete_transient( 'aafm_oauth_engine_warning' );
-		return;
+		return true;
 	}
 
 	// Bounded like the schema-error flag: a day-long note the next successful enforce clears.
 	set_transient( 'aafm_oauth_engine_warning', implode( ',', $non_transactional ), DAY_IN_SECONDS );
+	return false;
 }
 
 /**
@@ -269,18 +280,32 @@ add_action( 'admin_notices', 'aafm_oauth_engine_admin_notice' );
  * next admin or REST request retries the install - and raise a bounded admin notice rather than
  * silently advancing past a broken schema.
  *
+ * The stamp is also gated on $engine_ok, the result of aafm_oauth_enforce_lifecycle_engine(): the
+ * v7 migration exists to make the lifecycle tables transactional, so a confirmed non-InnoDB table
+ * that could not be converted is as much a failed migration as a missing column, and stamping past
+ * it would freeze the table on a non-transactional engine forever (both self-heal hooks match on the
+ * version and stop retrying, and the engine warning transient expires within a day). An unverifiable
+ * engine ('' - the TEMPORARY harness tables) reports $engine_ok = true, so tests still stamp normally.
+ * A pure engine failure does not raise the schema-error notice: aafm_oauth_enforce_lifecycle_engine()
+ * already sets its own bounded engine warning, so the table-shape notice would be misleading here.
+ *
+ * @param bool $engine_ok Whether the lifecycle tables are confirmed transactional (or unverifiable).
  * @return void
  */
-function aafm_oauth_finalize_schema(): void {
-	if ( aafm_oauth_schema_verify() ) {
+function aafm_oauth_finalize_schema( bool $engine_ok ): void {
+	$schema_ok = aafm_oauth_schema_verify();
+
+	if ( $schema_ok ) {
 		delete_transient( 'aafm_oauth_schema_error' );
-		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
-		return;
+	} else {
+		// Bounded: a day-long flag the next successful verify clears, so the notice shows only while
+		// the schema is genuinely behind and disappears the moment the self-heal lands.
+		set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
 	}
 
-	// Bounded: a day-long flag the next successful verify clears, so the notice shows only while
-	// the schema is genuinely behind and disappears the moment the self-heal lands.
-	set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
+	if ( $schema_ok && $engine_ok ) {
+		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+	}
 }
 
 /**

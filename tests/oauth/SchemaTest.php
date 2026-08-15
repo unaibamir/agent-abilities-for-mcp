@@ -299,11 +299,12 @@ class SchemaTest extends TestCase {
 		delete_transient( 'aafm_oauth_schema_error' );
 
 		// Break the schema the way a refused ALTER would, then run only the finalize step (no dbDelta
-		// re-heal) so the stamp decision sees the broken state.
+		// re-heal) so the stamp decision sees the broken state. The engine gate is passed true here so
+		// this asserts the table-shape failure alone withholds the stamp.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
 
-		aafm_oauth_finalize_schema();
+		aafm_oauth_finalize_schema( true );
 
 		$this->assertSame( '1', get_option( 'aafm_oauth_schema_version' ), 'A failed verify must leave the prior version so the self-heal retries.' );
 		$this->assertNotFalse( get_transient( 'aafm_oauth_schema_error' ), 'A failed verify must raise the bounded error flag.' );
@@ -359,8 +360,62 @@ class SchemaTest extends TestCase {
 		);
 
 		delete_transient( 'aafm_oauth_engine_warning' );
-		aafm_oauth_enforce_lifecycle_engine();
+		$this->assertTrue(
+			aafm_oauth_enforce_lifecycle_engine(),
+			'Enforcement must report success when every lifecycle table is InnoDB or its engine is unverifiable (the TEMPORARY harness case), or the harness could never stamp its schema version.'
+		);
 		$this->assertFalse( get_transient( 'aafm_oauth_engine_warning' ), 'Enforcement must not warn for an InnoDB (or unreadable) table.' );
+	}
+
+	/**
+	 * The core of this fix: a confirmed non-transactional lifecycle table (engine_ok = false) must NOT
+	 * stamp v7 even though the table shape verifies, so both self-heal hooks keep retrying the
+	 * conversion instead of early-returning on a version match forever. The false is injected directly
+	 * because a real ALTER cannot be made to fail deterministically on a dev server that supports
+	 * InnoDB; the gate's decision is what this asserts. The schema-error notice must stay clear here -
+	 * the table shape is fine, and aafm_oauth_enforce_lifecycle_engine() owns the engine warning.
+	 */
+	public function test_finalize_withholds_stamp_when_engine_not_transactional(): void {
+		aafm_install_oauth_tables();
+
+		// Healthy tables, but pretend the install is still behind and no error is outstanding.
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		aafm_oauth_finalize_schema( false );
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_schema_version' ),
+			'A confirmed non-InnoDB lifecycle table must leave the prior version so the conversion retries.'
+		);
+		$this->assertFalse(
+			get_transient( 'aafm_oauth_schema_error' ),
+			'An engine-only failure must not raise the schema-shape notice; the engine warning covers it.'
+		);
+
+		// Restore the healthy schema and version.
+		aafm_install_oauth_tables();
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+	}
+
+	/**
+	 * The harness guard: an unverifiable engine (the TEMPORARY tables read '' from information_schema)
+	 * is treated as "allowed" so a verified schema still stamps its version. Without this, every
+	 * PHPUnit install that reaches finalize would fail to record its schema version.
+	 */
+	public function test_finalize_stamps_when_schema_ok_and_engine_verified(): void {
+		aafm_install_oauth_tables();
+
+		update_option( 'aafm_oauth_schema_version', '1' );
+
+		aafm_oauth_finalize_schema( true );
+
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' ),
+			'A verified schema with a transactional-or-unverifiable engine must stamp the current version.'
+		);
 	}
 
 	/**

@@ -265,14 +265,15 @@ function aafm_review_request_save_state( array $state ): void {
  * or clearing the activity log can only delay the ask (the count has to rebuild), never
  * restart or shorten the clock.
  *
- * The COUNT only runs while the threshold is still unproven. Once the site clears it, that
- * fact is latched into the option and every later page load skips the query outright, which
- * matters because "pending" has no time limit and an operator who never answers would
- * otherwise pay for the query on every admin page load forever. A site that never reaches ten
- * successes never latches at all, so while the bar is unproven the number comes from the same
- * five-minute memo the heading reads rather than a fresh scan each time. The latch records
- * only that the bar WAS cleared. It never stores the number, so the heading quotes what the
- * log holds when it renders instead of repeating whatever it held on the day the ask armed.
+ * The COUNT only runs here while the threshold is still unproven. Once the site clears it,
+ * that fact is latched into the option and every later page load skips the ELIGIBILITY query
+ * outright, which matters because "pending" has no time limit. It does not make those page
+ * loads query-free: the heading still reads the count to quote it, and what bounds that half
+ * is the five-minute memo, not the latch. A site that never reaches ten successes never
+ * latches at all, so while the bar is unproven the number comes from that same memo rather
+ * than a fresh scan each time. The latch records only that the bar WAS cleared. It never
+ * stores the number, so the heading quotes what the log holds when it renders instead of
+ * repeating whatever it held on the day the ask armed.
  *
  * The success-only count is a deliberate divergence from aafm_agent_call_count()'s default
  * contract: denied calls prove the connection works, but the review ask needs evidence of

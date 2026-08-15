@@ -690,15 +690,15 @@ function aafm_exec_wc_get_customer( array $input ) {
  * This ability calls wc_create_new_customer(), which creates a real WordPress user account, so
  * manage_woocommerce alone is the wrong gate: it would turn a shop-manager grant into
  * account-creation authority. Requires create_users on top, matching aafm/create-user
- * (users.php:403-405), which is the same operation reached through a different door.
+ * (aafm_perm_create_user() in users.php), which is the same operation reached through a different door.
  *
  * Deliberately NOT folded into aafm_wc_perm() (_shared.php:27-29): that callback is shared by every
  * WooCommerce ability, and adding create_users there would gate reading an order list on a
  * user-management capability. Follows the aafm_perm_wc_delete_product precedent
  * (products.php:1029-1043) of a per-ability callback where the flat cap is not the right floor.
  *
- * No default_role floor is needed here, unlike aafm/create-user (users.php:441-453): the new
- * account's role is hardcoded to 'customer' by WooCommerce itself
+ * No default_role floor is needed here, unlike aafm/create-user (the default_role clamp in
+ * aafm_exec_create_user() in users.php): the new account's role is hardcoded to 'customer' by WooCommerce itself
  * (woocommerce/includes/wc-user-functions.php:146), never read from the site's default_role option.
  *
  * Takes no object id, so the ability stays object-independent and still falls through to this

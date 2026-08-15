@@ -1472,9 +1472,9 @@ function aafm_media_item_payload( WP_Post $attachment ): array {
 			// wp_get_attachment_image_src() never returns a truthy value for a non-image
 			// attachment (PDF, zip, audio), so $sizes stays array() and encodes as [] for every
 			// non-image while an image encodes as {} - the same class as issue #81. Nothing
-			// rejects this today because media.php:248 and :780 declare 'media' as a bare
-			// type:object with no nested properties, but fix it anyway: the moment anyone adds
-			// a 'sizes' property to that schema, this becomes a live violation.
+			// rejects this today because the three 'media' => object output schemas in media.php
+			// declare it as a bare type:object with no nested properties, but fix it anyway: the
+			// moment anyone adds a 'sizes' property to that schema, this becomes a live violation.
 			'sizes'       => array() === $sizes ? (object) $sizes : $sizes,
 		)
 	);

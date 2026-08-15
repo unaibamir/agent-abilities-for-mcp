@@ -146,9 +146,11 @@ function aafm_oauth_redeem_code( string $raw, string $client_id, string $redirec
 /**
  * Delete every authorization code issued to a client, redeemed or not.
  *
- * Used when an admin revokes the client: a code is valid for ~60s and the token endpoint does not
- * re-check consent at redemption, so a pending (not-yet-redeemed) code must be removed or it could
- * still mint fresh tokens after the revoke.
+ * Used when an admin revokes the client. A code is valid for ~60s, so a pending (not-yet-redeemed)
+ * code is deleted here as the first layer of defence. The token endpoint also re-checks consent at
+ * redemption (aafm_oauth_has_consent() in rest.php), so a code minted in the narrow window between
+ * the revoke and this delete cannot mint tokens either: it is refused as invalid_grant when it is
+ * presented.
  *
  * @param string $client_id The public client identifier.
  * @return int Rows deleted.

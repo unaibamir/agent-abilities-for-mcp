@@ -475,8 +475,9 @@ function aafm_announce_ability_resolved( ?int $row_id, string $status, ?int $res
 	 * failure an operator most wants to hear about and the reason $status can be 'denied' here even
 	 * though a denial writes its own row instead of resolving a 'started' one. What does NOT
 	 * announce is discovery: the tools/list visibility probe in includes/server.php runs the raw
-	 * permission callback over every enabled ability on every REST request, block editor traffic
-	 * included, and a call that was never made has not resolved. A crash there is still audited, just not broadcast - read
+	 * permission callback over every enabled ability on every REST request that arrives with a
+	 * logged-in user, block editor traffic included, plus MCP tools/list, and a call that was
+	 * never made has not resolved. A crash there is still audited, just not broadcast - read
 	 * the 'denied' rows for it.
 	 *
 	 * The record deliberately carries no ability name or principal. The resolve path receives
@@ -640,13 +641,14 @@ function aafm_activity_count_filtered( ?string $status = null ): int {
  * the admin-side events schema v5 introduced (ability toggles, blocked enables, setting
  * changes, the log-cleared marker) and the crashed discovery checks 1.7.0 typed as
  * 'permission_check_crashed' (aafm_deny_crashed_permission_check() logs a REAL ability name
- * with status 'denied', and its callers run on every REST request - the adapter builds its
- * server on rest_api_init priority 15 - block editor traffic included and with no MCP traffic
- * needed at all, so a third-party plugin with a throwing cap filter used to flip this count
- * with no agent involved. Ordinary admin and front-end page loads never reach it). The filter
- * is still not sufficient on its own: three writers land rows under
- * the DEFAULT 'ability_call' type that are not tool calls, so each is excluded by the
- * synthetic ability name it carries.
+ * with status 'denied', and its callers run on every REST request that arrives with a
+ * logged-in user - the adapter builds its server on rest_api_init priority 15 - block editor
+ * traffic included and with no MCP traffic needed at all, so a third-party plugin with a
+ * throwing cap filter used to flip this count with no agent involved. Ordinary page loads and
+ * anonymous REST requests never reach it, since the walk sits behind is_user_logged_in()).
+ * The filter is still not sufficient on its own: three writers land rows under the DEFAULT
+ * 'ability_call' type that are not tool calls, so each is excluded by the synthetic ability
+ * name it carries.
  *
  * - 'oauth:%' rows (includes/oauth/audit.php passes no event_type) record the browser-side
  *   OAuth ceremony (register/authorize/token/...) - that is the connect step's territory,

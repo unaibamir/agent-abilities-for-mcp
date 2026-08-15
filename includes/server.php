@@ -135,8 +135,10 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 		// inside mcp_adapter_init, which on a web request is hooked on rest_api_init priority 15
 		// (McpAdapter::instance(), vendor/wordpress/mcp-adapter/includes/Core/McpAdapter.php:59-64;
 		// the init priority 20 branch is WP-CLI only). So on a WP_DEBUG site a throwing cap filter
-		// fatals every REST request, block editor traffic included, rather than only the MCP
-		// endpoint. Ordinary admin and front-end page loads never reach it. That was true before
+		// fatals every REST request that arrives with a logged-in user, block editor traffic
+		// included, rather than only the MCP endpoint. aafm_build_server_tools() walks the
+		// permission callbacks behind an is_user_logged_in() gate, so ordinary page loads and
+		// anonymous REST requests never reach it and tools/list is the rest. That was true before
 		// this guard existed too - the bare `$permission( $input )` propagated identically - but the
 		// switch is what makes it a choice, so say so here.
 		throw $e;
@@ -163,9 +165,9 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 	// whatever crashed - would hide which abilities a partially broken cap filter takes out, and
 	// that is the diagnostic the row exists to carry. What the callers must not do is write a row
 	// per CHECK: they run over every enabled ability, and aafm_build_server_tools() does that on
-	// every REST request, block editor traffic included, so the un-deduped shape was
-	// rows-per-ability times passes-per-request with nothing to bound it (the pruner is
-	// retention-day based, not size based).
+	// every REST request carrying a logged-in user, block editor traffic included, so the
+	// un-deduped shape was rows-per-ability times passes-per-request with nothing to bound it
+	// (the pruner is retention-day based, not size based).
 	//
 	// The static is request-scoped on php-fpm and mod_php, which is what WordPress almost always
 	// runs on. Under a persistent worker SAPI (FrankenPHP worker mode, RoadRunner, Swoole) or
@@ -187,9 +189,10 @@ function aafm_deny_crashed_permission_check( string $ability_name, \Throwable $e
 				'client_id'         => aafm_oauth_current_client_id(),
 				// Its own type, never the 'ability_call' default. This row names a REAL ability,
 				// so aafm_agent_call_count()'s synthetic-name exclusions cannot see it - and the
-				// callers run on every REST request, with zero MCP traffic needed, so under the
-				// default type a throwing vendor cap filter flipped the dashboard's "Make your
-				// first call" step and every other consumer of that count with no agent involved.
+				// callers run on every REST request that carries a logged-in user, with zero MCP
+				// traffic needed, so under the default type a throwing vendor cap filter flipped the
+				// dashboard's "Make your first call" step and every other consumer of that count
+				// with no agent involved.
 				'event_type'        => 'permission_check_crashed',
 				'detail'            => $detail,
 			)

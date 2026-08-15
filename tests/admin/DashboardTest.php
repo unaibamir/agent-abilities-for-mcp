@@ -358,9 +358,9 @@ final class DashboardTest extends TestCase {
 
 		// A permission callback that crashes during a discovery check. This was the writer this
 		// test claimed to enumerate but never exercised: aafm_deny_crashed_permission_check()
-		// logs a REAL ability name with status 'denied', its callers run on init for every
-		// logged-in page load with zero MCP traffic, and under the default event_type the row
-		// passed every synthetic-name exclusion and flipped step [2]. Exercised through the real
+		// logs a REAL ability name with status 'denied', its callers run on every REST request
+		// that carries a logged-in user with zero MCP traffic, and under the default event_type
+		// the row passed every synthetic-name exclusion and flipped step [2]. Exercised through the real
 		// path - a throwing user_has_cap filter under aafm_user_can_discover_ability()'s
 		// short-circuit branch. aafm/get-block is deliberately an ability no other crash test
 		// uses: the guard's dedupe (`static $seen`) lives for the whole PHPUnit process while

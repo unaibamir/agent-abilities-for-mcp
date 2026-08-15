@@ -5,12 +5,13 @@
  * Shows a dismissible admin notice asking the operator to review the plugin, but only once the
  * site has demonstrable value from it: at least ten successful agent tool calls in the activity
  * log AND at least seven days since the first such call was observed. The heading quotes what the
- * activity log holds at render time, read from the same success-narrowed source as the trigger,
- * and says so in those words: the log is pruned on aafm_log_retention_days() and the operator can
- * clear it by hand, so no in-plugin counter can honestly claim an all-time total. All state lives
- * in one per-site option
- * (aafm_review_request, autoload off) registered in aafm_config_option_names(), so a plugin
- * reset and a delete-data uninstall both clean it up without extra code.
+ * activity log holds, read through the same five-minute memo of the same success-narrowed source
+ * the trigger reads, and says so in those words: the log is pruned on aafm_log_retention_days()
+ * and the operator can clear it by hand, so no in-plugin counter can honestly claim an all-time
+ * total. All state lives in one per-site option (aafm_review_request, autoload off) registered in
+ * aafm_config_option_names(), so a plugin reset and a delete-data uninstall clean it up with no
+ * code of its own. The count memo is the exception: it is a transient, so both of those paths
+ * name it explicitly (includes/audit/log.php, in the clear and the uninstall).
  *
  * The dismissal contract: "Sure, I'll review" and "Already did" are permanent; "Maybe later"
  * (and the native X, wired to behave the same) snoozes 14 days, capped at two snoozes, so the
@@ -237,8 +238,9 @@ function aafm_review_request_flush_display_count(): void {
 /**
  * Persist the review-request state.
  *
- * Autoload stays off: the option is only ever read on a handful of admin screens, so it has
- * no business riding along on every front-end request.
+ * Autoload stays off. The notice is site wide, so this is read on every wp-admin page load for
+ * every administrator, but never once on the front end, and autoloading it would put it in the
+ * bundle every front-end request pays for to answer questions only wp-admin asks.
  *
  * @param array<string,mixed> $state The full state array to store.
  * @return void
@@ -424,11 +426,11 @@ function aafm_review_request_action_url( string $verdict ): string {
  * the network-admin and capability exclusions sit in the eligibility check), the Quick
  * Connect suppression (the wizard modal owns the plugin page until the operator finishes or
  * opts out, and the first-run flow must never be interrupted by an ask), and the full
- * eligibility check. The heading reads the count at render time from the SAME
- * success-narrowed helper as the trigger, and describes it as what the activity log shows,
- * which is the only claim the data supports: any other counter could credit the agent with
- * calls it never made, and even this one is bounded by retention pruning and the operator's
- * own "Clear log" button.
+ * eligibility check. The heading reads the count from the SAME memoized, success-narrowed
+ * helper as the trigger, so the two cannot quote different numbers, and describes it as what
+ * the activity log shows, which is the only claim the data supports: any other counter could
+ * credit the agent with calls it never made, and even this one is bounded by retention pruning
+ * and the operator's own "Clear log" button.
  *
  * @return void
  */
@@ -447,8 +449,8 @@ function aafm_render_review_request_notice(): void {
 		return;
 	}
 
-	// Memoized for five minutes across requests, because the latch means the eligibility check
-	// above has usually already skipped the query, leaving this path to run the scan on every
+	// Memoized for five minutes across requests. Once the threshold is latched the eligibility
+	// check above skips the query entirely, which would leave this path running the scan on every
 	// admin page load until the ask is answered.
 	$count = aafm_review_request_display_count();
 	// The latch survives a log clear (deliberately: a clear must never re-arm or shorten the

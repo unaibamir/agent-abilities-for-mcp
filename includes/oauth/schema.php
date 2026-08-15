@@ -129,8 +129,112 @@ function aafm_install_oauth_tables(): void {
 	dbDelta( $access_tokens );
 	dbDelta( $consents );
 
-	update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+	aafm_oauth_finalize_schema();
 }
+
+/**
+ * Record the schema version, but only once the tables are verified to be really there.
+ *
+ * A dbDelta() run reports nothing when an ALTER it wanted is refused - a transient loss of the
+ * ALTER privilege mid-upgrade, a full disk, a single failed DDL - so the tables can be left partially
+ * upgraded while the call returns as if it succeeded. Stamping the version unconditionally then
+ * makes aafm_maybe_upgrade_oauth_tables() early-return forever, so a half-migrated install (say a
+ * codes/tokens insert that a missing `scope` column rejects) never self-heals and only a manual
+ * option delete recovers it. So verify first: advance the stored version only when the four tables
+ * and the latest columns are actually present. On failure leave the prior version in place - the
+ * next admin or REST request retries the install - and raise a bounded admin notice rather than
+ * silently advancing past a broken schema.
+ *
+ * @return void
+ */
+function aafm_oauth_finalize_schema(): void {
+	if ( aafm_oauth_schema_verify() ) {
+		delete_transient( 'aafm_oauth_schema_error' );
+		update_option( 'aafm_oauth_schema_version', AAFM_OAUTH_SCHEMA_VERSION );
+		return;
+	}
+
+	// Bounded: a day-long flag the next successful verify clears, so the notice shows only while
+	// the schema is genuinely behind and disappears the moment the self-heal lands.
+	set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
+}
+
+/**
+ * Whether the OAuth schema is actually present: all four tables plus the latest columns.
+ *
+ * Verifies table presence and the v6 `scope` column on codes + access-tokens - the most recent
+ * migration, so its absence is the signal a dbDelta run did not fully land. Gates the version
+ * stamp in aafm_oauth_finalize_schema().
+ *
+ * @return bool
+ */
+function aafm_oauth_schema_verify(): bool {
+	global $wpdb;
+
+	foreach ( aafm_oauth_table_suffixes() as $suffix ) {
+		if ( ! aafm_oauth_table_present( $wpdb->prefix . $suffix ) ) {
+			return false;
+		}
+	}
+
+	return aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_codes', 'scope' )
+		&& aafm_oauth_table_has_column( $wpdb->prefix . 'aafm_oauth_access_tokens', 'scope' );
+}
+
+/**
+ * Whether a table exists for the current blog.
+ *
+ * The PHPUnit harness rewrites plugin CREATE TABLE to its TEMPORARY form, which SHOW TABLES does
+ * not list, so existence is probed with a trivial select that sees a temporary table the same way
+ * the plugin's own queries do. The %i placeholder quotes the identifier (an internal constant).
+ *
+ * @param string $table Fully-prefixed table name.
+ * @return bool
+ */
+function aafm_oauth_table_present( string $table ): bool {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors( true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
+	$error = $wpdb->last_error;
+	$wpdb->suppress_errors( $suppressed );
+	return '' === $error;
+}
+
+/**
+ * Whether a named column exists on a table. Works on the harness's TEMPORARY tables.
+ *
+ * @param string $table  Fully-prefixed table name (an internal constant).
+ * @param string $column Column name to look for (no wildcards; matched exactly by SHOW COLUMNS).
+ * @return bool
+ */
+function aafm_oauth_table_has_column( string $table, string $column ): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
+	return null !== $found && '' !== $found;
+}
+
+/**
+ * Admin notice: the OAuth schema did not finish installing or upgrading.
+ *
+ * Shown only while aafm_oauth_finalize_schema()'s bounded transient is set (it clears the moment a
+ * verify passes), and only to users who can act on it.
+ *
+ * @return void
+ */
+function aafm_oauth_schema_admin_notice(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	if ( false === get_transient( 'aafm_oauth_schema_error' ) ) {
+		return;
+	}
+	echo '<div class="notice notice-error"><p>';
+	echo esc_html__( 'Agent Abilities for MCP could not finish setting up its OAuth database tables. OAuth may not work correctly until the update completes; the plugin retries automatically on the next admin or REST request.', 'agent-abilities-for-mcp' );
+	echo '</p></div>';
+}
+add_action( 'admin_notices', 'aafm_oauth_schema_admin_notice' );
 
 /**
  * Run the installer when the stored schema version is behind the current one.

@@ -254,4 +254,62 @@ class SchemaTest extends TestCase {
 			get_option( 'aafm_oauth_schema_version' )
 		);
 	}
+
+	/**
+	 * A healthy install stamps the version and clears any prior failure flag.
+	 */
+	public function test_finalize_stamps_and_clears_error_on_healthy_schema(): void {
+		set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
+
+		aafm_install_oauth_tables();
+
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertFalse( get_transient( 'aafm_oauth_schema_error' ), 'A healthy verify must clear the error flag.' );
+	}
+
+	/**
+	 * The verify predicate reports the real state of the tables.
+	 */
+	public function test_schema_verify_true_when_installed_false_when_a_table_is_missing(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+		$this->assertTrue( aafm_oauth_schema_verify(), 'A fully installed schema must verify.' );
+
+		// Drop one table (harness TEMPORARY form) so the schema is genuinely incomplete.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+		$this->assertFalse( aafm_oauth_schema_verify(), 'A missing table must fail verify.' );
+
+		// Restore the healthy schema for any later assertions on this connection.
+		aafm_install_oauth_tables();
+	}
+
+	/**
+	 * The core of F1: a failed migration must NOT advance the version, and must flag a bounded error,
+	 * so the admin_init / rest_api_init self-heal keeps retrying instead of early-returning forever.
+	 */
+	public function test_finalize_does_not_advance_version_on_broken_schema(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+
+		// Pretend the install is still on an older version, and that no error is outstanding.
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		// Break the schema the way a refused ALTER would, then run only the finalize step (no dbDelta
+		// re-heal) so the stamp decision sees the broken state.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+
+		aafm_oauth_finalize_schema();
+
+		$this->assertSame( '1', get_option( 'aafm_oauth_schema_version' ), 'A failed verify must leave the prior version so the self-heal retries.' );
+		$this->assertNotFalse( get_transient( 'aafm_oauth_schema_error' ), 'A failed verify must raise the bounded error flag.' );
+
+		// Restore the healthy schema and version.
+		aafm_install_oauth_tables();
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+	}
 }

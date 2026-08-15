@@ -181,18 +181,20 @@ function aafm_review_request_reset_success_count(): void {
 add_action( 'shutdown', 'aafm_review_request_reset_success_count' );
 
 /**
- * The count the heading quotes, memoized across requests for five minutes.
+ * The count both the trigger and the heading read, memoized across requests for five minutes.
  *
- * The eligibility check stops paying for the COUNT once the threshold is latched. The render
- * path does not: while the ask sits unanswered it runs the query on EVERY admin page load, and
- * that is the window in which the log is largest, because it is by definition a site whose
- * agent is working. The query is a confirmed full table scan (neither predicate is selective
- * enough for any index the table carries), and aafm_log_retention_days() can be set to 0,
- * which means keep forever and takes away the only bound there was.
+ * Each of them would otherwise run the query on EVERY admin page load: the eligibility check
+ * until the threshold latches, the heading for as long as the ask then sits unanswered. That
+ * is the window in which the log is largest, because it is by definition a site whose agent is
+ * working, and it never closes on a site that stays under ten successes. The query is a
+ * confirmed full table scan (neither predicate is selective enough for any index the table
+ * carries), and aafm_log_retention_days() can be set to 0, which means keep forever and takes
+ * away the only bound there was.
  *
- * Five minutes of staleness costs nothing here. The heading quotes a rounded human number to
- * make a case for leaving a review, not a live meter, and the bar it stands on was latched
- * from an exact count. The render guard below still has to stay honest, so both paths that
+ * Five minutes of staleness costs nothing to either. The heading quotes a rounded human number
+ * to make a case for leaving a review, not a live meter, and the trigger only reads it to move
+ * two fields that never move back, so an old count delays the stamp or the latch by minutes at
+ * worst. The render guard below still has to stay honest, so both paths that
  * delete rows drop this memo: aafm_clear_activity_log() and the retention prune. A prune
  * normally moves the number gradually, but an operator who shortens the retention window takes
  * most of the log out on the next daily run, and the guard would then be reading the same stale
@@ -257,10 +259,12 @@ function aafm_review_request_save_state( array $state ): void {
  *
  * The COUNT only runs while the threshold is still unproven. Once the site clears it, that
  * fact is latched into the option and every later page load skips the query outright, which
- * matters because "pending" has no time limit: an operator who never answers, or a site that
- * never reaches ten successes, would otherwise pay for the query on every admin page load
- * forever. The latch records only that the bar WAS cleared. It never stores the number, so
- * the heading still reads a live count when it renders.
+ * matters because "pending" has no time limit and an operator who never answers would
+ * otherwise pay for the query on every admin page load forever. A site that never reaches ten
+ * successes never latches at all, so while the bar is unproven the number comes from the same
+ * five-minute memo the heading reads rather than a fresh scan each time. The latch records
+ * only that the bar WAS cleared. It never stores the number, so the heading quotes what the
+ * log holds when it renders instead of repeating whatever it held on the day the ask armed.
  *
  * The success-only count is a deliberate divergence from aafm_agent_call_count()'s default
  * contract: denied calls prove the connection works, but the review ask needs evidence of
@@ -291,8 +295,13 @@ function aafm_review_request_eligible(): bool {
 	}
 
 	if ( ! $state['threshold_met'] ) {
-		// The success-narrowed count from the shared helper - never a hand-copied WHERE clause.
-		$successes = aafm_review_request_success_count();
+		// The success-narrowed count from the shared helper - never a hand-copied WHERE clause -
+		// and through the same five-minute memo the heading reads. Until the threshold latches
+		// this query runs on every admin page load for every administrator, and a site that never
+		// reaches ten successes never latches, so without the memo that site pays for a full scan
+		// forever and has no notice to show for it. Both readings only move one way, so a count up
+		// to five minutes old can delay the stamp or the latch and can never reverse either.
+		$successes = aafm_review_request_display_count();
 		$changed   = false;
 
 		// Stamp the seven-day clock exactly once, on the first success ever observed.

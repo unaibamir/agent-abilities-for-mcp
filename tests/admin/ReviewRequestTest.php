@@ -377,10 +377,37 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * Until the threshold latches, the eligibility check runs the count on every admin page load,
+	 * and a site that stays under ten successes never latches, so that is forever. It reads the
+	 * same five-minute memo the heading does. Both fields it can move only move one way, so a
+	 * stale count delays the latch and never undoes one.
+	 */
+	public function test_the_pre_latch_eligibility_count_reads_the_shared_memo(): void {
+		$this->acting_as( 'administrator' );
+		$this->log_success_calls( 3 );
+
+		$this->assertFalse( aafm_review_request_eligible() );
+		$this->assertSame( 3, (int) get_transient( 'aafm_review_request_count' ) );
+
+		// Ten more calls while the memo is warm: the next check answers from it instead of paying
+		// for a second scan, so the latch waits rather than arriving early.
+		$this->log_success_calls( 10 );
+		$this->assertFalse( aafm_review_request_eligible() );
+		$this->assertSame( 0, aafm_review_request_state()['threshold_met'] );
+
+		// Once it expires the check sees the real number and latches.
+		aafm_review_request_flush_display_count();
+		$this->backdate_first_success();
+		$this->assertTrue( aafm_review_request_eligible() );
+		$this->assertSame( 1, aafm_review_request_state()['threshold_met'] );
+	}
+
+	/**
 	 * The latch records only that the bar was cleared, never the number. The heading has to
 	 * quote what the log holds when it renders, so a site that keeps working sees its real,
 	 * current count and not the ten it happened to have on the day the notice armed. "When it
-	 * renders" is within the render count's five-minute memo, which is why this renders once.
+	 * renders" is to within the five-minute memo both the trigger and the heading read, which the
+	 * eligibility check below warms, so it is dropped here to stand for a render after it expired.
 	 * The point being pinned is that the latch does not freeze the number, not that the heading
 	 * is live to the row.
 	 */
@@ -391,6 +418,7 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertTrue( aafm_review_request_eligible() );
 
 		$this->log_success_calls( 2 );
+		aafm_review_request_flush_display_count();
 
 		$this->assertStringContainsString(
 			'Your activity log shows 12 successful agent calls on this site',

@@ -377,6 +377,42 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The third status the same re-read can surface. A "maybe later" from another tab is not
+	 * terminal, so the merge and the save are right, but falling through would render the ask on
+	 * a page the operator loaded seconds after snoozing it. Only this render is dropped: the
+	 * fields the count just proved still have to be there when the snooze runs out.
+	 */
+	public function test_a_snooze_that_lands_during_the_count_keeps_the_ask_off_this_page(): void {
+		$this->acting_as( 'administrator' );
+		$reads = 0;
+
+		// The other tab clicks "Maybe later" while this request counts.
+		$other_tab = static function ( $pre ) use ( &$reads ) {
+			++$reads;
+			if ( $reads > 2 ) {
+				return $pre;
+			}
+			return array(
+				'status'                => 1 === $reads ? 'pending' : 'snoozed',
+				'first_success_seen_at' => time() - ( 8 * DAY_IN_SECONDS ),
+				'snooze_until'          => 1 === $reads ? 0 : time() + ( 14 * DAY_IN_SECONDS ),
+				'snooze_count'          => 1 === $reads ? 0 : 1,
+				'threshold_met'         => 0,
+			);
+		};
+
+		$this->log_success_calls( 10 );
+		add_filter( 'pre_option_aafm_review_request', $other_tab );
+		$eligible = aafm_review_request_eligible();
+		remove_filter( 'pre_option_aafm_review_request', $other_tab );
+
+		$this->assertFalse( $eligible );
+		$stored = aafm_review_request_state();
+		$this->assertSame( 'snoozed', $stored['status'] );
+		$this->assertSame( 1, $stored['threshold_met'] );
+	}
+
+	/**
 	 * The re-read has to reach the database, and dropping the option's own cache key is not
 	 * enough to make it. get_option() checks the 'notoptions' blob first, and this request's own
 	 * opening read put the key in there when it found no row, so without the second cache drop

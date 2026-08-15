@@ -357,6 +357,14 @@ function aafm_review_request_eligible(): bool {
 					: $state['first_success_seen_at'];
 			}
 			aafm_review_request_save_state( $fresh );
+
+			// A "maybe later" can land in the same window a permanent answer can, and the checks
+			// below still run on the local copy read before it. The snooze is honoured after the
+			// save rather than instead of it, because the merged fields go on mattering once the
+			// snooze runs out - only the render for this page load is dropped.
+			if ( 'snoozed' === $fresh['status'] && time() < $fresh['snooze_until'] ) {
+				return false;
+			}
 		}
 
 		if ( ! $state['threshold_met'] ) {

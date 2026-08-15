@@ -311,6 +311,34 @@ final class TermsWriteTest extends TestCase {
 		$this->assertSame( 0, (int) $reloaded->parent );
 	}
 
+	public function test_update_term_blocks_the_term_as_its_own_parent(): void {
+		$this->acting_as( 'editor' );
+		$grandparent = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$term        = self::factory()->term->create(
+			array(
+				'taxonomy' => 'category',
+				'parent'   => $grandparent,
+			)
+		);
+
+		// term_is_ancestor_of() is false when the candidate parent IS the term, so
+		// the descendant guard alone lets this through; core's own loop check then
+		// resolves it to parent 0, silently detaching the term from its real parent.
+		$out = wp_get_ability( 'aafm/update-term' )->execute(
+			array(
+				'taxonomy' => 'category',
+				'term_id'  => $term,
+				'parent'   => $term,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_circular_term', $out->get_error_code() );
+
+		// The existing parent link survives the refused request.
+		$reloaded = get_term( $term, 'category' );
+		$this->assertSame( $grandparent, (int) $reloaded->parent );
+	}
+
 	public function test_update_term_updates_name(): void {
 		$this->acting_as( 'editor' );
 		$term = self::factory()->term->create(

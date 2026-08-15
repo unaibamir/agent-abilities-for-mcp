@@ -946,7 +946,8 @@ function aafm_args_update_term(): array {
  * different taxonomy, so a tag ID claimed as a category is rejected (the term/
  * taxonomy-confusion guard). A reparent target is confined to the same
  * hierarchical taxonomy the same way (aafm_validate_term_parent), then guarded
- * against cycles with term_is_ancestor_of before the update runs.
+ * against cycles - the term itself, or any descendant of it - before the update
+ * runs.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -975,9 +976,12 @@ function aafm_exec_update_term( array $input ) {
 		if ( is_wp_error( $parent ) ) {
 			return $parent;
 		}
-		// Circular-hierarchy guard: the requested parent must not be a descendant
-		// of the term being edited (which would make the term its own ancestor).
-		if ( $parent && term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) {
+		// Circular-hierarchy guard: the requested parent must not be the term
+		// itself, nor a descendant of it (either would make the term its own
+		// ancestor). term_is_ancestor_of() is false for the self case, and core
+		// then quietly resolves the loop by writing parent 0 - which reads as a
+		// success while destroying whatever parent the term already had.
+		if ( $parent && ( $parent === $term_id || term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) ) {
 			return new WP_Error( 'aafm_circular_term', __( 'That parent would create a circular hierarchy.', 'agent-abilities-for-mcp' ) );
 		}
 		$args['parent'] = $parent;

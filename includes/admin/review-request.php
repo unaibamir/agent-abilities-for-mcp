@@ -286,7 +286,7 @@ function aafm_review_request_eligible(): bool {
 		// The COUNT above is the slowest thing on the page, and the notice is site wide, so an
 		// answer can land in another tab while it runs. Saving the whole array read before the
 		// COUNT would write the pre-answer status back over it and resurrect a dismissed ask.
-		// So the option is re-read past the cache and only the two monotonic fields are carried
+		// So the option is re-read past the cache and only the two monotonic fields are merged
 		// onto the fresh copy, and a settled answer is left exactly as it stands. Both fields
 		// only ever move one way, so merging them forward loses nothing: the stamp still cannot
 		// be restarted or shortened by a log clear.
@@ -294,8 +294,18 @@ function aafm_review_request_eligible(): bool {
 			wp_cache_delete( 'aafm_review_request', 'options' );
 			$fresh = aafm_review_request_state();
 			if ( ! in_array( $fresh['status'], array( 'reviewed', 'dismissed' ), true ) ) {
-				$fresh['threshold_met']         = $state['threshold_met'];
-				$fresh['first_success_seen_at'] = $state['first_success_seen_at'];
+				// Merged, not assigned. Another tab running this same check can have latched the
+				// threshold or stamped the clock while this request's COUNT was still running, and
+				// writing this request's older copy over the top would un-latch that latch or push the
+				// stamp forward by however far apart the two requests were. So the latch is the OR of
+				// the two and the stamp is the earlier of the two: whichever request writes second,
+				// both fields end up where the earliest evidence puts them.
+				$fresh['threshold_met'] = max( $fresh['threshold_met'], $state['threshold_met'] );
+				if ( $state['first_success_seen_at'] > 0 ) {
+					$fresh['first_success_seen_at'] = $fresh['first_success_seen_at'] > 0
+						? min( $fresh['first_success_seen_at'], $state['first_success_seen_at'] )
+						: $state['first_success_seen_at'];
+				}
 				aafm_review_request_save_state( $fresh );
 			}
 		}

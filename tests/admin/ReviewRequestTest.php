@@ -293,6 +293,56 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * Two admin tabs can run the eligibility check at once, and the COUNT is slow enough that the
+	 * other tab's answer lands while this one is still counting. The re-read before the write is
+	 * there for exactly that, so what it finds has to be merged rather than overwritten: a latch
+	 * another request already earned must survive, and the stamp must keep the earlier of the two
+	 * times rather than being nudged forward.
+	 */
+	public function test_a_concurrent_latch_and_an_earlier_stamp_survive_the_write_back(): void {
+		$this->acting_as( 'administrator' );
+		$earlier = time() - HOUR_IN_SECONDS;
+		$reads   = 0;
+
+		// Stands in for the other tab: this request opens on a state with nothing latched, and by
+		// the time it re-reads to write, the other tab has latched the threshold and stamped the
+		// clock an hour earlier. Both reads are served from the filter; the save that follows falls
+		// through to the database.
+		$other_tab = static function ( $pre ) use ( &$reads, $earlier ) {
+			++$reads;
+			if ( 1 === $reads ) {
+				return array(
+					'status'                => 'pending',
+					'first_success_seen_at' => 0,
+					'snooze_until'          => 0,
+					'snooze_count'          => 0,
+					'threshold_met'         => 0,
+				);
+			}
+			if ( 2 === $reads ) {
+				return array(
+					'status'                => 'pending',
+					'first_success_seen_at' => $earlier,
+					'snooze_until'          => 0,
+					'snooze_count'          => 0,
+					'threshold_met'         => 1,
+				);
+			}
+			return $pre;
+		};
+
+		// Below the bar, so this request stamps the clock (the write it needs) without latching.
+		$this->log_success_calls( 3 );
+		add_filter( 'pre_option_aafm_review_request', $other_tab );
+		aafm_review_request_eligible();
+		remove_filter( 'pre_option_aafm_review_request', $other_tab );
+
+		$stored = aafm_review_request_state();
+		$this->assertSame( 1, $stored['threshold_met'] );
+		$this->assertSame( $earlier, $stored['first_success_seen_at'] );
+	}
+
+	/**
 	 * The latch records only that the bar was cleared, never the number. The heading has to
 	 * quote what the log holds when it renders, so a site that keeps working sees its real,
 	 * current count and not the ten it happened to have on the day the notice armed. "When it

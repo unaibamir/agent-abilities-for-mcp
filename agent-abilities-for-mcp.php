@@ -61,8 +61,14 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
  * Schedule the daily activity-log prune event, if not already scheduled.
  *
  * The event fires `aafm_prune_activity_log_daily`, which trims entries older than the
- * configured retention window. Runs on activation and self-heals on admin_init so an
- * install that predates this event still picks it up without a reactivation.
+ * configured retention window. Runs on activation and self-heals on both admin_init
+ * and rest_api_init. A network activation fires the activation hook once, on the
+ * activation blog only, so a subsite serving only REST/MCP traffic would otherwise
+ * write audit rows forever with the retention prune never scheduled; the rest_api_init
+ * heal schedules it on the path that actually carries that traffic, matching the
+ * activity-log schema's own self-heal. The admin_init heal also covers a single-site
+ * install that predates this event and was updated in place without a reactivation.
+ * wp_next_scheduled() keeps every path idempotent.
  *
  * @return void
  */
@@ -73,6 +79,7 @@ function aafm_schedule_log_prune(): void {
 }
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_schedule_log_prune' );
 add_action( 'admin_init', 'aafm_schedule_log_prune' );
+add_action( 'rest_api_init', 'aafm_schedule_log_prune' );
 
 /**
  * Clear the scheduled activity-log prune event on deactivation.

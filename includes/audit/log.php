@@ -107,8 +107,131 @@ function aafm_install_activity_log(): void {
 
 	dbDelta( $sql );
 
-	update_option( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+	aafm_activity_log_finalize_schema();
 }
+
+/**
+ * Record the activity-log schema version, but only once the table is verified to be really there.
+ *
+ * Same failure the OAuth installer guards against (aafm_oauth_finalize_schema()): a dbDelta() run
+ * whose ALTER is refused - a transient loss of the ALTER privilege, a full disk, one failed DDL -
+ * returns as if it worked, leaving the table missing a column the write path references. Stamping
+ * the version unconditionally then makes aafm_maybe_upgrade_activity_log() early-return forever, so
+ * every audit insert quietly fails against the old columns while the self-heal never retries and
+ * the security trail is lost. So verify first: advance the stored version only when the table and
+ * its latest columns/index are present. On failure leave the prior version so the next admin or
+ * REST request retries, and raise a bounded admin notice.
+ *
+ * @return void
+ */
+function aafm_activity_log_finalize_schema(): void {
+	if ( aafm_activity_log_schema_verify() ) {
+		delete_transient( 'aafm_activity_log_schema_error' );
+		update_option( 'aafm_activity_log_schema_version', AAFM_ACTIVITY_LOG_SCHEMA_VERSION );
+		return;
+	}
+
+	// Bounded: a day-long flag the next successful verify clears, so the notice shows only while the
+	// schema is genuinely behind and disappears the moment the self-heal lands.
+	set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+}
+
+/**
+ * Whether the activity-log schema is actually present: the table plus its latest columns and index.
+ *
+ * Verifies the table, the v5 event_type and detail columns, and the event_created index - the most
+ * recent migration, so their absence is the signal a dbDelta run did not fully land. Gates the
+ * version stamp in aafm_activity_log_finalize_schema().
+ *
+ * @return bool
+ */
+function aafm_activity_log_schema_verify(): bool {
+	$table = aafm_activity_log_table();
+
+	if ( ! aafm_activity_log_table_present( $table ) ) {
+		return false;
+	}
+
+	return aafm_activity_log_has_column( $table, 'event_type' )
+		&& aafm_activity_log_has_column( $table, 'detail' )
+		&& aafm_activity_log_has_index( $table, 'event_created' );
+}
+
+/**
+ * Whether the activity-log table exists for the current blog.
+ *
+ * The PHPUnit harness rewrites plugin CREATE TABLE to its TEMPORARY form, which SHOW TABLES does
+ * not list, so existence is probed with a trivial select. The %i placeholder quotes the identifier
+ * (an internal constant).
+ *
+ * @param string $table Fully-prefixed table name.
+ * @return bool
+ */
+function aafm_activity_log_table_present( string $table ): bool {
+	global $wpdb;
+	$suppressed = $wpdb->suppress_errors( true );
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( $wpdb->prepare( 'SELECT 1 FROM %i LIMIT 0', $table ) );
+	$error = $wpdb->last_error;
+	$wpdb->suppress_errors( $suppressed );
+	return '' === $error;
+}
+
+/**
+ * Whether a named column exists on the activity-log table. Works on the harness's TEMPORARY table.
+ *
+ * @param string $table  Fully-prefixed table name (an internal constant).
+ * @param string $column Column name to look for (no wildcards; matched exactly by SHOW COLUMNS).
+ * @return bool
+ */
+function aafm_activity_log_has_column( string $table, string $column ): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM %i LIKE %s', $table, $column ) );
+	return null !== $found && '' !== $found;
+}
+
+/**
+ * Whether a named index exists on the activity-log table. Works on the harness's TEMPORARY table.
+ *
+ * @param string $table    Fully-prefixed table name (an internal constant).
+ * @param string $key_name Index name to look for.
+ * @return bool
+ */
+function aafm_activity_log_has_index( string $table, string $key_name ): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$rows = $wpdb->get_results( $wpdb->prepare( 'SHOW INDEX FROM %i', $table ) );
+	foreach ( (array) $rows as $row ) {
+		// Key_name is MySQL's own SHOW INDEX column name, not a plugin property.
+		// phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+		if ( isset( $row->Key_name ) && $key_name === $row->Key_name ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
+ * Admin notice: the activity-log schema did not finish installing or upgrading.
+ *
+ * Shown only while aafm_activity_log_finalize_schema()'s bounded transient is set (it clears the
+ * moment a verify passes), and only to users who can act on it.
+ *
+ * @return void
+ */
+function aafm_activity_log_schema_admin_notice(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	if ( false === get_transient( 'aafm_activity_log_schema_error' ) ) {
+		return;
+	}
+	echo '<div class="notice notice-error"><p>';
+	echo esc_html__( 'Agent Abilities for MCP could not finish updating its activity-log table. New activity may not be recorded until the update completes; the plugin retries automatically on the next admin or REST request.', 'agent-abilities-for-mcp' );
+	echo '</p></div>';
+}
+add_action( 'admin_notices', 'aafm_activity_log_schema_admin_notice' );
 
 /**
  * Run the activity-log installer when the stored schema version is behind the current one.

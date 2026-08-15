@@ -35,14 +35,29 @@ if ( ! defined( 'AAFM_OAUTH_ACCESS_TOKEN_PREFIX' ) ) {
  * decisions - aafm_oauth_resolve_current_user() writes to it only AFTER a token has already fully
  * resolved a user, purely so the activity-log wrapper in register.php can attribute the resulting
  * ability call to the OAuth client that made it. Mirrors the aafm_remember_raw_permission() static
- * store in register.php. Never populated for a non-OAuth (Application Password/cookie) request, so
- * it correctly stays '' for those.
+ * store in register.php. A non-OAuth (Application Password/cookie) request never writes it.
+ *
+ * The store has to be per request, and a bare function static is not that on its own. On php-fpm and
+ * mod_php the process ends with the request, so the two are the same. Under a persistent worker SAPI
+ * (FrankenPHP worker mode, RoadRunner, Swoole) the static outlives the request: a worker that served
+ * an OAuth call for client 'abc' would still hold 'abc' when it next serves an Application Password
+ * request that never touches this store, and register.php would then mis-attribute that second call's
+ * audit row to 'abc'. So the value is cleared on `shutdown` (see aafm_oauth_reset_current_client_id())
+ * rather than trusted to die with the process, which makes "per request" true on every SAPI. The same
+ * reasoning is spelled out for the sibling static in includes/admin/review-request.php.
  *
  * @param string|null $client_id Client id to record, or null to read the currently stored value.
+ * @param bool        $forget    Discard the stored value and return ''. Used by the shutdown reset so
+ *                               the next request on a persistent worker starts with a cold store.
  * @return string The stored client id, or '' when no OAuth bearer has resolved this request.
  */
-function aafm_oauth_current_client_id( ?string $client_id = null ): string {
+function aafm_oauth_current_client_id( ?string $client_id = null, bool $forget = false ): string {
 	static $stored = '';
+
+	if ( $forget ) {
+		$stored = '';
+		return '';
+	}
 
 	if ( null !== $client_id ) {
 		$stored = $client_id;
@@ -50,6 +65,24 @@ function aafm_oauth_current_client_id( ?string $client_id = null ): string {
 
 	return $stored;
 }
+
+/**
+ * Drop the remembered OAuth client_id at the end of the request.
+ *
+ * Hooked on `shutdown` so a persistent worker starts each request with a cold store. On php-fpm and
+ * mod_php the process was ending anyway, so this costs one function call and changes nothing.
+ *
+ * @return void
+ */
+function aafm_oauth_reset_current_client_id(): void {
+	aafm_oauth_current_client_id( null, true );
+}
+
+// Registered at include time, beside the store whose contract it enforces, rather than in the
+// bootstrap's OAuth block. register.php reads the store during REST dispatch on any SAPI, so a
+// worker must clear it between requests whether or not OAuth is enabled; review-request.php wires
+// its own shutdown reset the same way and for the same reason.
+add_action( 'shutdown', 'aafm_oauth_reset_current_client_id' );
 
 /**
  * Resolve an OAuth bearer token to the WordPress user that approved it.

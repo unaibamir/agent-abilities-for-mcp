@@ -294,6 +294,8 @@ function aafm_quickconnect_render(): void {
 	$brandmark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" stroke-width="1.9" stroke-linejoin="round"/><path d="m11.6 15.6 3 3 6-6.4" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 	?>
+	<?php // With page JS off, every close path (X, scrim, Escape, Continue, opt-out) is dead, so hide the overlay and let the server-rendered admin behind it show through. ?>
+	<noscript><style>.aafm-qc-overlay{display:none !important;}</style></noscript>
 	<div class="aafm-qc-overlay" id="aafm-qc" role="dialog" aria-modal="true" aria-labelledby="aafm-qc-title" data-endpoint="<?php echo esc_attr( $endpoint ); ?>">
 		<div class="aafm-qc-scrim" data-qc-close="temporary"></div>
 		<div class="aafm-qc-modal">

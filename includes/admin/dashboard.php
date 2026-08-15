@@ -194,15 +194,13 @@ function aafm_has_oauth_grant(): bool {
  * many unrelated reasons, so counting them here flagged "connected" before any agent had.
  *
  * Step [2] gets the same discipline: it counts only rows recording an agent tool call, never
- * the log's other traffic - ability toggles, setting changes, OAuth ceremony rows, transport
- * refusals, the log-cleared marker, crashed discovery-time permission checks. That last one
- * holds for rows written from 1.7.0 onward, which is when crashed checks got their own event
- * type; earlier rows carry the column default under a real ability name, are indistinguishable
- * by shape from a denied agent call, and are still counted (aafm_agent_call_count() says the
- * same, and no backfill guesses at them). The raw total (aafm_activity_count()) flipped this step
- * to done the moment step [0] wrote its ability_enabled row, before any call existed. A
- * denied or rate-limited call still counts: the agent reached the endpoint and invoked a
- * real tool, which is exactly what this step exists to prove (see aafm_agent_call_count()).
+ * the log's other traffic. Which rows qualify, and the exclusions that keep that honest, are
+ * owned by aafm_agent_call_count() and documented there - deliberately not restated here, since
+ * a second prose copy would drift the moment the catalog gains an entry, the same way a second
+ * copy of the WHERE clause would. The raw total (aafm_activity_count()) flipped this step to
+ * done the moment step [0] wrote its ability_enabled row, before any call existed. A denied or
+ * rate-limited call still counts: the agent reached the endpoint and invoked a real tool, which
+ * is exactly what this step exists to prove.
  *
  * The zero-based index is the contract callers rely on: $steps[0] is always the
  * abilities step, $steps[1] is always the connect step.

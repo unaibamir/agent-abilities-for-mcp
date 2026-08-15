@@ -519,12 +519,16 @@ function aafm_review_request_footer_js(): string {
 		// Core's common.js moves div.notice to just after .wp-header-end on ready, and leaves
 		// these two siblings where admin_notices printed them, above .wrap entirely. Focus
 		// would then land outside the main content, above the page heading the operator had
-		// already tabbed past. Re-uniting them here runs after the relocation whenever it
+		// already tabbed past. Re-uniting the anchor here runs after the relocation whenever it
 		// happened, so it works either way round.
-		if ( anchor && status ) {
-			notice.after( anchor, status );
-		}
+		//
+		// Only the anchor moves. after() on a connected node is a remove-and-reinsert, and a
+		// live region torn out of the tree and written to in the same task is the classic way to
+		// lose the announcement. The status region is screen-reader-text, so where it sits in
+		// the document changes nothing a user can perceive - only the anchor's position matters,
+		// and only for tab order.
 		if ( anchor ) {
+			notice.after( anchor );
 			anchor.focus();
 		}
 		if ( status && message ) {

@@ -667,6 +667,19 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
+	 * The hand-off relocates the focus anchor and nothing else. after() on a connected node
+	 * removes and reinserts it, so moving the live region in the same task it is written to is
+	 * how an announcement gets dropped. The region is visually hidden, so its position in the
+	 * document buys nothing to weigh against that.
+	 */
+	public function test_the_live_region_is_not_relocated_when_it_is_written_to(): void {
+		$js = aafm_review_request_footer_js();
+
+		$this->assertStringContainsString( 'notice.after( anchor );', $js );
+		$this->assertStringNotContainsString( 'notice.after( anchor, status );', $js );
+	}
+
+	/**
 	 * The notice renders on every admin screen, so the nonce it prints has to open one door and
 	 * not nineteen. It must verify against its own action and must not be a usable aafm_admin
 	 * token, which any other plugin's admin-page XSS could otherwise lift and spend.

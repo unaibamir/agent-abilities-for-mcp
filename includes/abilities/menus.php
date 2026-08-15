@@ -600,11 +600,15 @@ function aafm_args_create_menu_item(): array {
 				),
 				'object_id' => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Not verified to exist before being applied.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Required for the post_type and taxonomy types, and it must exist: an id that resolves to nothing is refused rather than saved as a broken link.', 'agent-abilities-for-mcp' ),
 				),
 				'type'      => array(
 					'type'        => 'string',
 					'description' => __( 'Menu item type, for example post_type, post_type_archive, taxonomy, or custom. Not validated against a fixed list; an unrecognized value is passed straight through to WordPress.', 'agent-abilities-for-mcp' ),
+				),
+				'object'    => array(
+					'type'        => 'string',
+					'description' => __( 'Name of the thing the item points at: a post type slug such as page for the post_type and post_type_archive types, or a taxonomy name such as category for the taxonomy type. Omit it for post_type and taxonomy and it is looked up from object_id. Required for post_type_archive, which has no object_id to look up.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id', 'title' ),
@@ -652,11 +656,27 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( isset( $input['parent'] ) ) {
 		$args['menu-item-parent-id'] = (int) $input['parent'];
 	}
+	$object_id = isset( $input['object_id'] ) ? (int) $input['object_id'] : 0;
 	if ( isset( $input['object_id'] ) ) {
-		$args['menu-item-object-id'] = (int) $input['object_id'];
+		$args['menu-item-object-id'] = $object_id;
 	}
-	if ( isset( $input['type'] ) ) {
-		$args['menu-item-type'] = sanitize_key( (string) $input['type'] );
+	$type = isset( $input['type'] ) ? sanitize_key( (string) $input['type'] ) : '';
+	if ( '' !== $type ) {
+		$args['menu-item-type'] = $type;
+	}
+
+	// menu-item-object is not optional for anything but a custom link, and leaving it out is not
+	// a cosmetic omission: wp_setup_nav_menu_item() looks the object up by name and flags the item
+	// _invalid when the lookup fails, and wp_get_nav_menu_items() then drops every _invalid item.
+	// So an item saved without it does not appear in the menu at all, while a direct re-read of the
+	// post row still finds it - the plugin ends up reporting a link that the site will never render.
+	// Resolve it from object_id where it can be resolved, take it from the caller where it cannot.
+	$object = aafm_resolve_menu_item_object( $type, $object_id, isset( $input['object'] ) ? sanitize_key( (string) $input['object'] ) : '' );
+	if ( is_wp_error( $object ) ) {
+		return $object;
+	}
+	if ( '' !== $object ) {
+		$args['menu-item-object'] = $object;
 	}
 
 	$item_id = wp_update_nav_menu_item( $menu_id, 0, $args );
@@ -670,7 +690,88 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( null === $saved ) {
 		return aafm_generic_error();
 	}
+	// Belt and braces over the resolution above: whatever the reason, an item core marks _invalid
+	// is one wp_get_nav_menu_items() will hide, so reporting it as created would be a lie. Remove
+	// the row we just wrote - it is ours, created in this call, and nothing else can be relying on
+	// it yet - and answer with an error instead of a menu item that does not exist to the site.
+	if ( ! empty( $saved->_invalid ) ) {
+		wp_delete_post( (int) $item_id, true );
+		return new WP_Error(
+			'aafm_invalid_menu_item',
+			__( 'That menu item could not be linked to anything the site can resolve, so it was not created. Check object_id and object against the type you asked for.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
 	return aafm_redact_menu_item( $saved );
+}
+
+/**
+ * Work out the `menu-item-object` value for a menu item core will accept.
+ *
+ * Core stores the item's target as a (type, object, object_id) triple and resolves it by NAME:
+ * a post_type item carries the post type slug, a taxonomy item the taxonomy name, and a
+ * post_type_archive item the post type slug with no id at all. Get the name wrong or leave it
+ * blank and wp_setup_nav_menu_item() marks the item _invalid, which makes it invisible in the
+ * rendered menu while the underlying post row still exists.
+ *
+ * Callers may pass the name explicitly; when they do not, it is looked up from object_id, which
+ * is what an agent can reasonably be expected to know. A lookup that resolves to nothing is an
+ * error rather than a blank, so the caller hears about a bad id instead of getting a dead link.
+ *
+ * @param string $type      Menu item type, already sanitized ('' when the caller omitted it).
+ * @param int    $object_id Linked object id, 0 when the caller omitted it.
+ * @param string $requested Explicit object name from the caller, already sanitized ('' when absent).
+ * @return string|WP_Error The object name ('' when the type needs none), or an error.
+ */
+function aafm_resolve_menu_item_object( string $type, int $object_id, string $requested ) {
+	if ( '' !== $requested ) {
+		return $requested;
+	}
+
+	// 'custom' and the empty default are plain URLs: core fills object in itself and there is
+	// nothing to look up. Anything else we do not recognise is passed through untouched, the same
+	// way the type is - a third party may register its own nav-menu item types.
+	if ( 'post_type' !== $type && 'taxonomy' !== $type && 'post_type_archive' !== $type ) {
+		return '';
+	}
+
+	if ( 'post_type_archive' === $type ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'A post_type_archive menu item needs the object parameter set to the post type slug it should link to.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	if ( $object_id <= 0 ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'That menu item type needs object_id, or object naming the post type or taxonomy it points at.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	if ( 'post_type' === $type ) {
+		$post_type = get_post_type( $object_id );
+		if ( ! is_string( $post_type ) || '' === $post_type ) {
+			return new WP_Error(
+				'aafm_menu_item_object_required',
+				__( 'No post exists with that object_id, so the menu item has nothing to link to.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		return $post_type;
+	}
+
+	$term = get_term( $object_id );
+	if ( ! $term instanceof WP_Term ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'No term exists with that object_id, so the menu item has nothing to link to.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+	return (string) $term->taxonomy;
 }
 
 /**

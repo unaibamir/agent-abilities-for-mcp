@@ -331,6 +331,126 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 'Contact', $item['title'], 're-read by id returns the created item.' );
 	}
 
+	/**
+	 * A typed menu item must actually appear in the menu, not merely in wp_posts.
+	 *
+	 * Core resolves a menu item's target by NAME, from the `_menu_item_object` meta. Save a
+	 * post_type or taxonomy item without it and wp_setup_nav_menu_item() flags the item _invalid,
+	 * wp_get_nav_menu_items() drops it, and the site renders a menu that is missing the link -
+	 * while a direct read of the post row still finds it and reports success. So assert against
+	 * wp_get_nav_menu_items(), which is what the front end actually uses.
+	 */
+	public function test_create_menu_item_links_a_post_type_item_the_menu_will_render(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Typed' );
+		$page_id = (int) self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+				'post_title'  => 'About',
+			)
+		);
+
+		$item = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'title'     => 'About us',
+				'type'      => 'post_type',
+				'object_id' => $page_id,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $item );
+		$this->assertSame( 'page', $item['object'], 'the post type slug is resolved from object_id.' );
+
+		$rendered = wp_get_nav_menu_items( $menu_id );
+		$this->assertIsArray( $rendered );
+		$this->assertSame(
+			array( (int) $item['id'] ),
+			wp_list_pluck( $rendered, 'ID' ),
+			'the item core would render is the item we reported creating.'
+		);
+	}
+
+	public function test_create_menu_item_links_a_taxonomy_item_the_menu_will_render(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Taxo' );
+		$term_id = (int) self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+
+		$item = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'title'     => 'News',
+				'type'      => 'taxonomy',
+				'object_id' => $term_id,
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $item );
+		$this->assertSame( 'category', $item['object'], 'the taxonomy name is resolved from object_id.' );
+		$this->assertCount( 1, (array) wp_get_nav_menu_items( $menu_id ) );
+	}
+
+	public function test_create_menu_item_refuses_a_typed_item_that_points_at_nothing(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Broken' );
+
+		$res = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id'   => $menu_id,
+				'title'     => 'Ghost',
+				'type'      => 'post_type',
+				'object_id' => 99999999,
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $res, 'an object_id that resolves to nothing is refused.' );
+		$this->assertSame( array(), (array) wp_get_nav_menu_items( $menu_id ), 'and nothing is left behind in the menu.' );
+	}
+
+	public function test_create_menu_item_takes_an_explicit_object_for_an_archive(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Archive' );
+
+		$missing = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'All posts',
+				'type'    => 'post_type_archive',
+			)
+		);
+		$this->assertInstanceOf( WP_Error::class, $missing, 'an archive item has no object_id to look up, so object is required.' );
+
+		$item = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'All posts',
+				'type'    => 'post_type_archive',
+				'object'  => 'post',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $item );
+		$this->assertSame( 'post', $item['object'] );
+	}
+
+	public function test_create_menu_item_still_makes_a_plain_custom_link(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Custom' );
+
+		$item = wp_get_ability( 'aafm/create-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'title'   => 'Elsewhere',
+				'url'     => 'https://example.com/',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $item );
+		$this->assertSame( 'custom', $item['type'] );
+		$this->assertCount( 1, (array) wp_get_nav_menu_items( $menu_id ) );
+	}
+
 	public function test_update_menu_item_rejects_item_from_another_menu(): void {
 		// The cross-menu contract update relies on: an item that lives in menu A cannot be steered
 		// through menu B. The re-read helper scopes by the nav_menu term relationship, so an item of

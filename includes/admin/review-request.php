@@ -233,6 +233,12 @@ function aafm_review_request_display_count(): int {
  */
 function aafm_review_request_flush_display_count(): void {
 	delete_transient( 'aafm_review_request_count' );
+	// The per-request memo behind the transient has to go too, or a caller that read the count
+	// earlier in the same request refills the transient from its own warm static and puts the
+	// pre-flush number back for another five minutes. No caller does that today, but the
+	// promise in the line above is unconditional and this is what makes it true. Forgetting
+	// costs nothing: it discards the value rather than recomputing it.
+	aafm_review_request_success_count( false, true );
 }
 
 /**

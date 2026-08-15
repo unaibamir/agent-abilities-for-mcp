@@ -521,9 +521,9 @@ final class ReviewRequestTest extends TestCase {
 		$this->log_success_calls( 2 );
 		$this->assertStringContainsString( 'shows 10 successful agent calls', $this->render_on( 'plugins' ) );
 
-		// A clear is the case that cannot wait for the expiry.
+		// A clear is the case that cannot wait for the expiry. No hand-refresh of the per-request
+		// memo here on purpose: the flush drops that too, and this render is what proves it.
 		aafm_clear_activity_log();
-		aafm_review_request_success_count( true );
 		$this->assertFalse( get_transient( 'aafm_review_request_count' ) );
 		$this->assertSame( '', $this->render_on( 'plugins' ) );
 	}
@@ -541,7 +541,6 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-review-request', $this->render_on( 'plugins' ) );
 
 		aafm_clear_activity_log();
-		aafm_review_request_success_count( true );
 
 		$this->assertTrue( aafm_review_request_eligible() );
 		$this->assertSame( '', $this->render_on( 'plugins' ) );

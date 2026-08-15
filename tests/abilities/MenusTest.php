@@ -482,6 +482,45 @@ final class MenusTest extends TestCase {
 		$this->assertSame( 'A item', get_post( $item_id )->post_title, 'the item in its own menu is unchanged.' );
 	}
 
+	/**
+	 * A title-only edit must not reshuffle the menu.
+	 *
+	 * The first item in a menu stores menu_order 0, and wp_update_nav_menu_item() reads 0 as
+	 * "no position supplied" and moves the item to the end. So editing the first item's text sent
+	 * it to the bottom of the navigation, which is both wrong and invisible until someone looks at
+	 * the site.
+	 */
+	public function test_update_menu_item_keeps_the_first_item_first(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = $this->make_menu( 'Ordered' );
+
+		$ids = array();
+		foreach ( array( 'A', 'B', 'C' ) as $label ) {
+			$made  = wp_get_ability( 'aafm/create-menu-item' )->execute(
+				array(
+					'menu_id' => $menu_id,
+					'title'   => $label,
+					'url'     => home_url( '/' . strtolower( $label ) ),
+				)
+			);
+			$ids[] = (int) $made['id'];
+		}
+
+		$updated = wp_get_ability( 'aafm/update-menu-item' )->execute(
+			array(
+				'menu_id' => $menu_id,
+				'item_id' => $ids[0],
+				'title'   => 'A renamed',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $updated );
+		$this->assertSame( 'A renamed', $updated['title'] );
+
+		$order = wp_list_pluck( (array) wp_get_nav_menu_items( $menu_id ), 'ID' );
+		$this->assertSame( $ids, $order, 'renaming the first item leaves the menu in the same order.' );
+	}
+
 	public function test_menu_item_by_id_resolves_and_scopes(): void {
 		// Direct contract for the re-read helper: it resolves an item for its owning menu, returns
 		// null for a different menu (term-scoped), and null for a post that is not a nav_menu_item

@@ -858,12 +858,13 @@ function aafm_exec_update_menu_item( array $input ) {
 	// Position is read straight from the stored post row so the item keeps its exact saved
 	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
 	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
-	$stored_post = get_post( $item_id );
-	$args        = array(
+	$stored_post    = get_post( $item_id );
+	$original_order = $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0;
+	$args           = array(
 		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
 		'menu-item-object'      => isset( $existing->object ) ? (string) $existing->object : '',
 		'menu-item-parent-id'   => isset( $existing->menu_item_parent ) ? (int) $existing->menu_item_parent : 0,
-		'menu-item-position'    => $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0,
+		'menu-item-position'    => $original_order,
 		'menu-item-type'        => isset( $existing->type ) ? (string) $existing->type : 'custom',
 		'menu-item-title'       => isset( $existing->post_title ) ? wp_slash( (string) $existing->post_title ) : '',
 		'menu-item-url'         => isset( $existing->url ) ? (string) $existing->url : '',
@@ -885,6 +886,24 @@ function aafm_exec_update_menu_item( array $input ) {
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
+
+	// Passing the stored position back is not enough to keep it. wp_update_nav_menu_item() treats
+	// position 0 as "no position given" (nav-menu.php:460) and reassigns it to the end of the menu,
+	// and 0 is exactly what the FIRST item in a menu stores - our own create path leaves it there,
+	// because core does. So a title-only edit of the first item silently moved it last, which is
+	// the opposite of what this ability promises. Put the saved order back when core changed it.
+	if ( 0 === $original_order ) {
+		$after = get_post( $item_id );
+		if ( $after instanceof WP_Post && $original_order !== (int) $after->menu_order ) {
+			wp_update_post(
+				array(
+					'ID'         => $item_id,
+					'menu_order' => $original_order,
+				)
+			);
+		}
+	}
+
 	// Same B9 guard as create-menu-item: a null re-fetch must not be redacted into an empty
 	// object that violates the output schema.
 	$saved = aafm_menu_item_by_id( $menu_id, $item_id );

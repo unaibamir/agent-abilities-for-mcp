@@ -497,7 +497,7 @@ function aafm_render_review_request_notice(): void {
 	$body = __( 'That means Agent Abilities for MCP is doing its job. If it\'s been useful, would you take two minutes to leave a review on wordpress.org? Reviews are the main way other site owners find the plugin.', 'agent-abilities-for-mcp' );
 	?>
 	<div class="notice notice-info is-dismissible aafm-review-request"
-		<?php // Its own action, not the shared aafm_admin one. This notice renders on every admin screen, so printing the shared nonce would hand every page in wp-admin a token good for all nineteen of the plugin's AJAX actions. This one opens exactly one door. ?>
+		<?php // Its own action, not the shared aafm_admin one. This notice renders on every admin screen, so printing the shared nonce would hand every page in wp-admin a token good for all eighteen of the plugin's other AJAX actions. This one opens exactly one door. ?>
 		data-nonce="<?php echo esc_attr( wp_create_nonce( 'aafm_review_request' ) ); ?>"
 		data-msg-review="<?php echo esc_attr__( 'Thanks. The review page is open in a new tab.', 'agent-abilities-for-mcp' ); ?>"
 		data-msg-later="<?php echo esc_attr__( 'Okay. The review request is hidden for now.', 'agent-abilities-for-mcp' ); ?>"

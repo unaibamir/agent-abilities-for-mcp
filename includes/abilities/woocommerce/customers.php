@@ -694,8 +694,8 @@ function aafm_exec_wc_get_customer( array $input ) {
  *
  * Deliberately NOT folded into aafm_wc_perm() (_shared.php:27-29): that callback is shared by every
  * WooCommerce ability, and adding create_users there would gate reading an order list on a
- * user-management capability. Follows the aafm_perm_wc_delete_product precedent
- * (products.php:1029-1043) of a per-ability callback where the flat cap is not the right floor.
+ * user-management capability. Follows the aafm_perm_wc_delete_product() precedent in products.php,
+ * a per-ability callback where the flat cap is not the right floor.
  *
  * No default_role floor is needed here, unlike aafm/create-user (the default_role clamp in
  * aafm_exec_create_user() in users.php): the new account's role is hardcoded to 'customer' by WooCommerce itself

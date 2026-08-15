@@ -539,6 +539,40 @@ final class WooReportsTest extends TestCase {
 	}
 
 	/**
+	 * A refund is not an order.
+	 *
+	 * Under HPOS a refund is a row in the same wc_orders table with type shop_order_refund, and it
+	 * carries its own status - a refund against a completed order is itself 'wc-completed'. An
+	 * untyped wc_get_orders() returns both, so a store with zero completed orders and three
+	 * refunds reported three completed orders and a total nobody could reconcile.
+	 */
+	public function test_count_orders_does_not_count_refunds_as_orders(): void {
+		$this->acting_as( 'administrator' );
+
+		\AAFM\Tests\WcOrderStubStore::seed( 9320, array( 'status' => 'processing' ) );
+		\AAFM\Tests\WcOrderStubStore::seed(
+			9321,
+			array(
+				'status' => 'completed',
+				'type'   => 'shop_order_refund',
+			)
+		);
+		\AAFM\Tests\WcOrderStubStore::seed(
+			9322,
+			array(
+				'status' => 'completed',
+				'type'   => 'shop_order_refund',
+			)
+		);
+
+		$res = aafm_exec_wc_count_orders( array() );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 0, $res['completed'], 'refunds must not be counted as completed orders.' );
+		$this->assertSame( 1, $res['total'], 'only the one real order counts.' );
+	}
+
+	/**
 	 * Count orders returns WP_Error when WooCommerce is inactive.
 	 */
 	public function test_count_orders_inactive_wc(): void {

@@ -393,8 +393,13 @@ function aafm_exec_wc_list_orders( array $input ): array {
 		}
 	}
 
+	// 'type' is not optional. wc_get_orders() without it returns every order-ish record the store
+	// holds, and under HPOS a refund is a row in wc_orders with type shop_order_refund carrying its
+	// own status - a refund against a completed order is itself 'wc-completed'. So an untyped query
+	// counts refunds as orders and reports a list total nobody can reconcile with the store.
 	$query = wc_get_orders(
 		array(
+			'type'     => 'shop_order',
 			'limit'    => $per_page,
 			'page'     => $page,
 			'status'   => $status,

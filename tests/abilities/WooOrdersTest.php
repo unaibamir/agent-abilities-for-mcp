@@ -201,6 +201,40 @@ final class WooOrdersTest extends TestCase {
 		$this->assertSame( 3, $res['total'] );
 	}
 
+	/**
+	 * The list total must count orders, not refunds.
+	 *
+	 * Under HPOS a refund is a row in wc_orders with type shop_order_refund and a status of its
+	 * own, so an untyped query returns it. The rows themselves were already dropped by the
+	 * WC_Order instanceof guard, which made this worse rather than better: the store reported
+	 * "total 3" over an empty rows array, and paging walked pages that held nothing.
+	 */
+	public function test_list_orders_does_not_count_refunds_in_the_total(): void {
+		WcOrderStubStore::reset();
+		WcOrderStubStore::seed(
+			5030,
+			array(
+				'number' => '5030',
+				'status' => 'completed',
+			)
+		);
+		WcOrderStubStore::seed(
+			5031,
+			array(
+				'number' => '5031',
+				'status' => 'completed',
+				'type'   => 'shop_order_refund',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array( 'status' => 'completed' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $res['total'], 'the refund must not inflate the total.' );
+		$this->assertCount( 1, $res['orders'] );
+		$this->assertSame( 5030, $res['orders'][0]['id'] );
+	}
+
 	public function test_list_orders_empty_store_returns_empty(): void {
 		// With no orders in the store the ability must return orders:[] and total:0.
 		// This pins both the plain-array fallback path and the paginate object path on an empty result.

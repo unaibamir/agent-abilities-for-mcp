@@ -355,6 +355,19 @@ class WcOrderStubStore {
 		$status                = $args['status'] ?? '';
 		$rows                  = self::all();
 
+		// wc_get_orders() defaults to the shop_order type; pass no type and WooCommerce hands back
+		// every order-ish record, refunds included. Model that faithfully so a caller that omits
+		// 'type' sees the same over-counting here that it would see against a real HPOS store.
+		if ( isset( $args['type'] ) ) {
+			$wanted_types = array_map( 'strval', (array) $args['type'] );
+			$rows         = array_values(
+				array_filter(
+					$rows,
+					static fn( array $row ): bool => in_array( (string) ( $row['type'] ?? 'shop_order' ), $wanted_types, true )
+				)
+			);
+		}
+
 		if ( '' !== $status && 'any' !== $status ) {
 			$wanted = (array) $status;
 			$rows   = array_values(
@@ -650,6 +663,10 @@ class WcOrderStubStore {
 			array(
 				'id'             => 0,
 				'number'         => '',
+				// HPOS keeps refunds in the same table as orders, distinguished only by this
+				// column, so the stub carries it too - otherwise a query that forgets to filter
+				// on it looks correct here and counts refunds as orders in production.
+				'type'           => 'shop_order',
 				'status'         => 'processing',
 				'total'          => '0.00',
 				'currency'       => 'USD',

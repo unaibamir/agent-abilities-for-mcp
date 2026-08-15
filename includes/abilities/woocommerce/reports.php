@@ -189,6 +189,10 @@ function aafm_exec_wc_get_sales_report( array $input ) {
 	do {
 		$result = wc_get_orders(
 			array(
+				// Refunds share the wc_orders table under HPOS and carry their own status, so an
+				// untyped query pulls them in. The WC_Order instanceof guard below already keeps
+				// them out of the money, but they would still consume page slots and skew paging.
+				'type'         => 'shop_order',
 				'status'       => array( 'completed', 'processing' ),
 				'date_created' => $start_ts . '...' . $end_ts,
 				'limit'        => $per_page,
@@ -343,6 +347,8 @@ function aafm_exec_wc_get_top_sellers_report( array $input ) {
 	do {
 		$result = wc_get_orders(
 			array(
+				// Same reason as the sales report: refunds are order records too under HPOS.
+				'type'         => 'shop_order',
 				'status'       => array( 'completed', 'processing' ),
 				'date_created' => '>=' . $start_ts,
 				'limit'        => $per_page,
@@ -534,8 +540,13 @@ function aafm_exec_wc_count_orders( array $input ) { // phpcs:ignore Generic.Cod
  * @return int
  */
 function aafm_wc_count_orders_by_status( string $status ): int {
+	// 'type' is not optional: under HPOS refunds live in the same wc_orders table with type
+	// shop_order_refund, and a refund against a completed order carries status wc-completed itself.
+	// An untyped probe therefore counts refunds as orders - a store with no completed orders and
+	// three refunds reported three completed orders.
 	$result = wc_get_orders(
 		array(
+			'type'     => 'shop_order',
 			'status'   => $status,
 			'limit'    => 1,
 			'paginate' => true,

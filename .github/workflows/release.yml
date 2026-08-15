@@ -100,11 +100,17 @@ jobs:
           # (Use workflow_dispatch to intentionally re-deploy an existing tag.)
           if [ "${{ github.event_name }}" = "push" ] && git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
             echo "Tag $VERSION already exists; nothing to publish on push."
-            # Say so in an annotation as well. This branch is exactly what a "Re-run failed jobs"
-            # click lands on after a run that tagged and deployed before failing, and every step
-            # below it is gated on skip != 'true', so without this line the replay finishes green
-            # having republished nothing at all.
-            echo "::notice::Tag $VERSION already exists, so this run republished nothing: no zip, no SVN deploy, no GitHub Release, no registry publish. To re-ship an already-tagged version, run this workflow from the Actions tab and type the version."
+            # Say so in an annotation as well, but only on a replay. This branch is exactly what a
+            # "Re-run failed jobs" click lands on after a run that tagged and deployed before
+            # failing, and every step below it is gated on skip != 'true', so without this line
+            # the replay finishes green having republished nothing at all. Every ordinary push to
+            # main after a release lands here too - the header still reads the shipped version and
+            # its changelog block never goes away - and annotating all of those would train the
+            # eye to skip the one run this exists for. A re-run repeats the same run at attempt 2
+            # or higher; a fresh push always starts at 1.
+            if [ "${{ github.run_attempt }}" -gt 1 ]; then
+              echo "::notice::Tag $VERSION already exists, so this run republished nothing: no zip, no SVN deploy, no GitHub Release, no registry publish. To re-ship an already-tagged version, run this workflow from the Actions tab and type the version."
+            fi
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"

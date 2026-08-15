@@ -185,7 +185,8 @@ if ( ! defined( 'AAFM_FAILED_AUTH_LOG_WINDOW' ) ) {
  * cache-specific add() dance for a bound nobody reads precisely.
  *
  * @param string $bucket Short key namespace so each denial class gets its own counter:
- *                       'fa' (failed Application Password auth) or 'ipb' (IP-blocked transport).
+ *                       'fa' (failed Application Password auth), 'ipb' (IP-blocked transport),
+ *                       or 'br' (an invalid OAuth bearer that still matched a real stored token).
  * @return bool True when the caller may write its row (the slot is consumed), false when this
  *              IP has used up its cap for the current window.
  */

@@ -138,6 +138,42 @@ class OauthAuditTest extends TestCase {
 	}
 
 	/**
+	 * A single source IP cannot grow the log past AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW bearer-denial
+	 * rows inside the window. A real-but-invalid token (expired, wrong audience, deactivated client)
+	 * resolves before REST routing, so nothing else bounds a replay - this cap is the only limit.
+	 */
+	public function test_bearer_denials_are_bounded_per_ip_within_the_window(): void {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.42';
+
+		for ( $i = 0; $i < AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3; $i++ ) {
+			aafm_oauth_log_event( 'bearer', 'denied', array( 'client_id' => 'c0ffee' ) );
+		}
+
+		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
+		$this->assertCount(
+			AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW,
+			$rows,
+			'A single IP must not be able to write more than the capped number of bearer-denial rows in one window.'
+		);
+	}
+
+	/**
+	 * The grant-lifecycle events are user-driven, not attacker-replayable, so the bearer cap must
+	 * not touch them: firing well past the cap still writes every token-mint row.
+	 */
+	public function test_lifecycle_events_are_not_capped(): void {
+		$_SERVER['REMOTE_ADDR'] = '203.0.113.43';
+
+		$fires = AAFM_FAILED_AUTH_LOG_MAX_PER_WINDOW + 3;
+		for ( $i = 0; $i < $fires; $i++ ) {
+			aafm_oauth_log_event( 'token', 'success', array( 'client_id' => 'c0ffee' ) );
+		}
+
+		$rows = aafm_query_activity( array( 'per_page' => 50 ) );
+		$this->assertCount( $fires, $rows, 'Lifecycle events must never be dropped by the bearer-denial cap.' );
+	}
+
+	/**
 	 * The host helper derives host[:port] from a redirect URI and returns '' when unparseable.
 	 */
 	public function test_audit_host_from_uri(): void {

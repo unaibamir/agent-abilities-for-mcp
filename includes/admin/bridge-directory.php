@@ -200,6 +200,7 @@ function aafm_render_bridge_filter(): void {
 function aafm_bridge_known_plugin_labels(): array {
 	return array(
 		'wordpress-seo'          => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
+		'yoast-seo'              => __( 'Yoast SEO', 'agent-abilities-for-mcp' ),
 		'rank-math'              => __( 'Rank Math', 'agent-abilities-for-mcp' ),
 		'all-in-one-seo-pack'    => __( 'All in One SEO', 'agent-abilities-for-mcp' ),
 		'advanced-custom-fields' => __( 'ACF', 'agent-abilities-for-mcp' ),

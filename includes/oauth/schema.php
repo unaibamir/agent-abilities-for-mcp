@@ -28,7 +28,12 @@ if ( ! defined( 'AAFM_OAUTH_SCHEMA_VERSION' ) ) {
 	// aafm_oauth_token_capabilities filter. Bumping the version makes
 	// aafm_maybe_upgrade_oauth_tables() re-run dbDelta so existing installs pick the change
 	// up (additive - one nullable-defaulted column per table, no data migration).
-	define( 'AAFM_OAUTH_SCHEMA_VERSION', '6' );
+	// v7 pins the lifecycle tables (codes, access-tokens) to ENGINE=InnoDB so the code-redemption
+	// and refresh-rotation transactions can actually roll back. New installs get InnoDB from the
+	// CREATE; dbDelta never changes an existing table's engine, so the bump re-runs the installer
+	// once, which converts a pre-existing MyISAM lifecycle table with a guarded one-time ALTER
+	// (aafm_oauth_enforce_lifecycle_engine()). The stored charset/collation is unchanged.
+	define( 'AAFM_OAUTH_SCHEMA_VERSION', '7' );
 }
 
 /**
@@ -73,7 +78,7 @@ function aafm_install_oauth_tables(): void {
 		PRIMARY KEY  (id),
 		UNIQUE KEY client_id (client_id),
 		KEY created_at (created_at)
-	) {$charset_collate};";
+	) ENGINE=InnoDB {$charset_collate};";
 
 	$codes = "CREATE TABLE {$prefix}aafm_oauth_codes (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -91,7 +96,7 @@ function aafm_install_oauth_tables(): void {
 		KEY expires_at (expires_at),
 		KEY client_id (client_id),
 		KEY user_client (wp_user_id, client_id)
-	) {$charset_collate};";
+	) ENGINE=InnoDB {$charset_collate};";
 
 	$access_tokens = "CREATE TABLE {$prefix}aafm_oauth_access_tokens (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -113,7 +118,7 @@ function aafm_install_oauth_tables(): void {
 		KEY client_id (client_id),
 		KEY gc (is_active, refresh_expires_at),
 		KEY user_client (wp_user_id, client_id)
-	) {$charset_collate};";
+	) ENGINE=InnoDB {$charset_collate};";
 
 	$consents = "CREATE TABLE {$prefix}aafm_oauth_consents (
 		id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -122,15 +127,134 @@ function aafm_install_oauth_tables(): void {
 		granted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		PRIMARY KEY  (id),
 		UNIQUE KEY user_client (wp_user_id, client_id)
-	) {$charset_collate};";
+	) ENGINE=InnoDB {$charset_collate};";
 
 	dbDelta( $clients );
 	dbDelta( $codes );
 	dbDelta( $access_tokens );
 	dbDelta( $consents );
 
+	aafm_oauth_enforce_lifecycle_engine();
 	aafm_oauth_finalize_schema();
 }
+
+/**
+ * The lifecycle tables whose rows a multi-statement transaction spans.
+ *
+ * The code-redemption path (includes/oauth/rest.php) and the refresh rotation (tokens.php) both
+ * wrap consume + mint in START TRANSACTION/ROLLBACK, which only rolls back on a transactional
+ * engine. These two tables therefore must be InnoDB; clients and consents are single-statement
+ * writes and are not enrolled here.
+ *
+ * @return string[]
+ */
+function aafm_oauth_lifecycle_table_suffixes(): array {
+	return array( 'aafm_oauth_codes', 'aafm_oauth_access_tokens' );
+}
+
+/**
+ * Ensure the lifecycle tables use a transactional (InnoDB) engine.
+ *
+ * New installs get ENGINE=InnoDB straight from the CREATE, but dbDelta never changes an existing
+ * table's engine, so a table first created on a MyISAM-default server stays MyISAM through every
+ * upgrade. There the consume/deactivate UPDATE commits immediately and a later failing mint cannot
+ * roll back, permanently burning an auth code or refresh token with no successor. So convert any
+ * non-InnoDB lifecycle table with a guarded one-time ALTER. If the ALTER cannot take (a server
+ * with no InnoDB support at all), record a bounded operational warning rather than silently
+ * trusting an atomicity the engine cannot provide - the token endpoints keep working, they just
+ * lose clean rollback on a rare mid-request failure until the host enables InnoDB.
+ *
+ * @return void
+ */
+function aafm_oauth_enforce_lifecycle_engine(): void {
+	global $wpdb;
+
+	$non_transactional = array();
+
+	foreach ( aafm_oauth_lifecycle_table_suffixes() as $suffix ) {
+		$table  = $wpdb->prefix . $suffix;
+		$engine = aafm_oauth_table_engine( $table );
+
+		// '' means the engine could not be read: the table is absent, or it is a TEMPORARY table
+		// (the PHPUnit harness form), which information_schema does not list. Either way there is
+		// nothing to convert and nothing to warn about.
+		if ( '' === $engine || 0 === strcasecmp( $engine, 'InnoDB' ) ) {
+			continue;
+		}
+
+		if ( ! aafm_oauth_convert_table_to_innodb( $table ) ) {
+			$non_transactional[] = $suffix;
+		}
+	}
+
+	if ( empty( $non_transactional ) ) {
+		delete_transient( 'aafm_oauth_engine_warning' );
+		return;
+	}
+
+	// Bounded like the schema-error flag: a day-long note the next successful enforce clears.
+	set_transient( 'aafm_oauth_engine_warning', implode( ',', $non_transactional ), DAY_IN_SECONDS );
+}
+
+/**
+ * The storage engine of a table for the current blog, or '' when it cannot be read.
+ *
+ * The information_schema view may omit a TEMPORARY table (the PHPUnit harness rewrites plugin
+ * CREATE TABLE to that form) or a table that does not exist, so both return '' and callers treat
+ * that as "cannot verify, do not act". The table name is bound as a value here (information_schema stores
+ * it as data), never interpolated.
+ *
+ * @param string $table Fully-prefixed table name (an internal constant).
+ * @return string Engine name (e.g. 'InnoDB', 'MyISAM'), or '' when unknown.
+ */
+function aafm_oauth_table_engine( string $table ): string {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$engine = $wpdb->get_var(
+		$wpdb->prepare(
+			'SELECT ENGINE FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s',
+			$table
+		)
+	);
+	return is_string( $engine ) ? $engine : '';
+}
+
+/**
+ * Convert a table to InnoDB with a guarded one-time ALTER, and report whether it is now InnoDB.
+ *
+ * A dbDelta run cannot do this (it never touches an existing table's engine), hence the explicit
+ * ALTER. The %i placeholder quotes the identifier (an internal constant).
+ *
+ * @param string $table Fully-prefixed table name.
+ * @return bool True when the table is InnoDB after the attempt.
+ */
+function aafm_oauth_convert_table_to_innodb( string $table ): bool {
+	global $wpdb;
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange
+	$wpdb->query( $wpdb->prepare( 'ALTER TABLE %i ENGINE=InnoDB', $table ) );
+	return 0 === strcasecmp( aafm_oauth_table_engine( $table ), 'InnoDB' );
+}
+
+/**
+ * Admin notice: an OAuth lifecycle table is not on a transactional engine.
+ *
+ * Shown only while aafm_oauth_enforce_lifecycle_engine()'s bounded transient is set (it clears the
+ * moment every lifecycle table is InnoDB), and only to users who can act on it.
+ *
+ * @return void
+ */
+function aafm_oauth_engine_admin_notice(): void {
+	if ( ! current_user_can( 'activate_plugins' ) ) {
+		return;
+	}
+	if ( false === get_transient( 'aafm_oauth_engine_warning' ) ) {
+		return;
+	}
+	echo '<div class="notice notice-error"><p>';
+	echo esc_html__( 'Agent Abilities for MCP could not move its OAuth token tables to a transactional (InnoDB) storage engine. OAuth keeps working, but a rare failure mid-request may not roll back cleanly. Ask your host to enable InnoDB.', 'agent-abilities-for-mcp' );
+	echo '</p></div>';
+}
+add_action( 'admin_notices', 'aafm_oauth_engine_admin_notice' );
 
 /**
  * Record the schema version, but only once the tables are verified to be really there.

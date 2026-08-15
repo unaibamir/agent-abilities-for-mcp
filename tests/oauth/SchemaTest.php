@@ -174,7 +174,7 @@ class SchemaTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '6', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '7', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**
@@ -311,5 +311,88 @@ class SchemaTest extends TestCase {
 		// Restore the healthy schema and version.
 		aafm_install_oauth_tables();
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+	}
+
+	/**
+	 * The CREATE statement (F3) of the two lifecycle tables declares InnoDB, so a fresh install is
+	 * transactional. SHOW CREATE TABLE reveals the engine even for the harness's TEMPORARY tables.
+	 *
+	 * @param string $suffix Lifecycle table suffix.
+	 * @return string The table's CREATE statement.
+	 */
+	private function show_create( string $suffix ): string {
+		global $wpdb;
+		$table = $wpdb->prefix . $suffix;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( "SHOW CREATE TABLE {$table}", ARRAY_N );
+		return is_array( $row ) && isset( $row[1] ) ? (string) $row[1] : '';
+	}
+
+	/**
+	 * F3: new installs put the lifecycle tables on InnoDB so consume+mint can actually roll back.
+	 */
+	public function test_lifecycle_tables_are_created_on_innodb(): void {
+		aafm_install_oauth_tables();
+
+		foreach ( array( 'aafm_oauth_codes', 'aafm_oauth_access_tokens' ) as $suffix ) {
+			$this->assertMatchesRegularExpression(
+				'/ENGINE=InnoDB/i',
+				$this->show_create( $suffix ),
+				"{$suffix} must be created on InnoDB for the token transactions to roll back."
+			);
+		}
+	}
+
+	/**
+	 * Enforcement is a safe no-op after a normal install: the lifecycle table is already InnoDB
+	 * (some servers list it in information_schema even in its TEMPORARY form, others report the
+	 * engine as unreadable), so either way there is nothing to ALTER and no warning to raise.
+	 */
+	public function test_engine_enforce_is_a_safe_noop_after_install(): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+
+		$engine = aafm_oauth_table_engine( $wpdb->prefix . 'aafm_oauth_access_tokens' );
+		$this->assertTrue(
+			'' === $engine || 0 === strcasecmp( $engine, 'InnoDB' ),
+			'A freshly installed lifecycle table must be InnoDB (or its engine unreadable), never a non-transactional engine.'
+		);
+
+		delete_transient( 'aafm_oauth_engine_warning' );
+		aafm_oauth_enforce_lifecycle_engine();
+		$this->assertFalse( get_transient( 'aafm_oauth_engine_warning' ), 'Enforcement must not warn for an InnoDB (or unreadable) table.' );
+	}
+
+	/**
+	 * F3: a pre-existing non-InnoDB lifecycle table is converted by the guarded one-time ALTER that
+	 * dbDelta cannot do. Uses a real (non-TEMPORARY) throwaway table, since information_schema does
+	 * not list temporary tables; the harness's temporary-table rewrite is lifted only for this
+	 * probe and always restored, and the throwaway table is always dropped.
+	 */
+	public function test_non_innodb_table_is_converted_to_innodb(): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'aafm_engine_probe';
+
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$created = $wpdb->query( "CREATE TABLE {$table} ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) ) ENGINE=MyISAM" );
+
+		try {
+			if ( false === $created || 'MyISAM' !== aafm_oauth_table_engine( $table ) ) {
+				$this->markTestSkipped( 'This server would not create a MyISAM table to convert.' );
+			}
+
+			$this->assertTrue( aafm_oauth_convert_table_to_innodb( $table ), 'The guarded ALTER must land the table on InnoDB.' );
+			$this->assertSame( 'InnoDB', aafm_oauth_table_engine( $table ) );
+		} finally {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+			add_filter( 'query', array( $this, '_create_temporary_tables' ) );
+			add_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		}
 	}
 }

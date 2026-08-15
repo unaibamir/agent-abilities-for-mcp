@@ -223,7 +223,11 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	//
 	// Wrap both in a transaction so a crash between consume and mint can't leave
 	// the row consumed without a persisted successor (which would lock the user
-	// out). The InnoDB engine is implied by the table's get_charset_collate().
+	// out). This relies on the access-tokens table being InnoDB: get_charset_collate()
+	// sets only charset/collation, so the engine is pinned separately - the CREATE
+	// declares ENGINE=InnoDB and aafm_oauth_enforce_lifecycle_engine() (schema.php)
+	// converts a pre-existing MyISAM table and warns if it cannot. On a non-transactional
+	// engine START/ROLLBACK is a no-op and the atomicity below would be lost.
 	// The WP test harness already wraps each test in its own transaction, so this
 	// nested START/COMMIT is effectively a no-op there - it does not break test
 	// isolation.

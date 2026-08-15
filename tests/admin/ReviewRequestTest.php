@@ -922,8 +922,10 @@ final class ReviewRequestTest extends TestCase {
 	}
 
 	/**
-	 * The verdict POST has to survive the navigation the primary action starts, otherwise a
-	 * click on "Sure, I'll review" can be dropped mid-flight and the ask comes back.
+	 * The primary action opens the review page in a new tab, so the admin page it was clicked
+	 * from is not unloaded and the POST is in no danger on that path. keepalive covers the case
+	 * where a user setting or an extension forces the link into the same tab, which would
+	 * otherwise cancel the request on its way out and bring the ask back.
 	 */
 	public function test_the_verdict_post_is_sent_with_keepalive(): void {
 		$this->assertStringContainsString( 'keepalive: true', aafm_review_request_footer_js() );

@@ -1236,9 +1236,12 @@ function aafm_render_connection_tab(): void {
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
 	echo '<div class="aafm-card-pad">';
 
-	// Use the first client in the config-snippet grid (claude-code) for the default block.
-	$unix_snippet    = aafm_client_snippet( 'claude-code', 'mcp-agent', 'unix' );
-	$windows_snippet = aafm_client_snippet( 'claude-code', 'mcp-agent', 'windows' );
+	// Use the first client in the config-snippet grid (claude-code) for the default block. Seed the
+	// username from the actual marked agent login when one exists (the admin may have created the
+	// agent user under a different name than the 'mcp-agent' default), falling back to the default
+	// on a fresh install, so the copied config never names a user that does not exist.
+	$unix_snippet    = aafm_client_snippet( 'claude-code', $existing_agent_login, 'unix' );
+	$windows_snippet = aafm_client_snippet( 'claude-code', $existing_agent_login, 'windows' );
 
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
 	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
@@ -1287,7 +1290,8 @@ function aafm_render_connection_tab(): void {
 	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
 	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
 	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
-		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
+		// Same as the default block above: name the real marked agent login when one exists.
+		$snippet = aafm_client_snippet( $slug, $existing_agent_login, 'unix' );
 		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
 		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';

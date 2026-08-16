@@ -748,13 +748,16 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * one combined list and every item in it is added via add_product(). Neither field can edit,
  * replace, or remove an existing line item.
  *
- * @param \WC_Order           $order The order to mutate.
- * @param array<string,mixed> $input Validated input (already schema-checked).
+ * @param \WC_Order           $order          The order to mutate.
+ * @param array<string,mixed> $input          Validated input (already schema-checked).
+ * @param array<int,int>      $added_item_ids Out-param: receives the order-item ids this call
+ *                                            wrote, so a caller that keeps working on the order
+ *                                            afterwards can undo them if its own step fails.
  * @return array<int,int>|\WP_Error Requested product IDs that could not be resolved to a product
  *                                  (empty when all resolved), or a WP_Error when adding threw
  *                                  mid-loop (already-written items rolled back; see B27 note below).
  */
-function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
+function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$added_item_ids = array() ) {
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -894,6 +897,8 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 	// each new item id and, on a throw, delete the already-written rows so the "whole request
 	// fails with no partial write" promise the schema documents stays true.
 	$added_item_ids = array();
+	// The ids are also reported to the caller (out-param) because add_product() is not the last
+	// thing that can fail after these rows exist -- see aafm_exec_wc_update_order()'s recalculation.
 	try {
 		foreach ( $resolved as $to_add ) {
 			$added_item_ids[] = (int) $order->add_product( $to_add['product'], $to_add['qty'] );
@@ -1239,7 +1244,8 @@ function aafm_exec_wc_update_order( array $input ) {
 	// afterwards.
 	$adds_line_items = aafm_wc_input_adds_line_items( $fields );
 
-	$unresolved = aafm_wc_apply_order_input( $order, $fields );
+	$added_item_ids = array();
+	$unresolved     = aafm_wc_apply_order_input( $order, $fields, $added_item_ids );
 	if ( is_wp_error( $unresolved ) ) {
 		return $unresolved;
 	}
@@ -1268,8 +1274,20 @@ function aafm_exec_wc_update_order( array $input ) {
 	// brings the total up to the goods the order now holds, which is the harm this fix exists to
 	// stop. WooCommerce draws the same line: its own order screen only lets you edit items while
 	// the order is editable.
+	//
+	// The recalculation is its own failure point, and it runs AFTER add_product() has already
+	// written each item row. calculate_totals() fires woocommerce_order_before_calculate_totals,
+	// and an extension listening there can throw. B27's rollback wraps the add loop only, so a
+	// throw here used to leave the new item on the order, the total still at the old figure, and a
+	// raw Throwable escaping the ability -- goods the order carries but never bills for, which is
+	// the exact harm this recalculation was added to stop. Undo the rows this request wrote and
+	// report the same honest error the add-loop failure reports.
 	if ( $adds_line_items ) {
-		$order->calculate_totals( $order->is_editable() );
+		try {
+			$order->calculate_totals( $order->is_editable() );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			return aafm_wc_rollback_added_order_items( $added_item_ids );
+		}
 	}
 	$order->save();
 

@@ -658,6 +658,76 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * The B-05 recalculation added calculate_totals() to the UPDATE path, which 1.6.3 never called
+	 * there. That put a second, unguarded failure point AFTER add_product() has already persisted
+	 * its item rows: WooCommerce fires woocommerce_order_before_calculate_totals from inside
+	 * calculate_totals(), and any extension listening on it can throw. B27's rollback wraps the add
+	 * loop only, so a throw at that later point left the new item row written, the order total
+	 * stale, and a raw Throwable escaping the ability -- goods on the order that the total never
+	 * bills for, which is the exact harm B-05 exists to stop. Pins that a recalculation failure
+	 * returns a WP_Error and leaves the order exactly as it was found.
+	 */
+	public function test_update_order_recalculation_failure_leaves_no_partial_line_item_write(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Recalc-Failure Widget' );
+		$product->set_regular_price( '14.99' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$order = new \WC_Order();
+		$order->set_status( 'pending' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals();
+		$order_id = (int) $order->save();
+
+		$total_before = $order->get_total();
+		$items_before = count( $order->get_items() );
+
+		// An extension that refuses to let the order recalculate.
+		$boom = static function (): void {
+			throw new \RuntimeException( 'Extension refused the recalculation.' );
+		};
+		add_action( 'woocommerce_order_before_calculate_totals', $boom, 10, 0 );
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		remove_action( 'woocommerce_order_before_calculate_totals', $boom, 10 );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$result,
+			'A recalculation failure must be reported as a WP_Error, not raised as an uncaught Throwable.'
+		);
+
+		$reloaded = new \WC_Order( $order_id );
+		$this->assertCount(
+			$items_before,
+			$reloaded->get_items(),
+			'The item added before the recalculation failed must be rolled back, not left on the order.'
+		);
+		$this->assertSame(
+			$total_before,
+			$reloaded->get_total(),
+			'The order total must be exactly what it was before the failed request.'
+		);
+
+		$reloaded->delete( true );
+		$product->delete( true );
+	}
+
+	/**
 	 * WC1.3 per-object ownership: a caller who clears the manage_woocommerce floor but does
 	 * not own the specific product and lacks the others-level capability must be refused,
 	 * the same per-object pattern the post abilities already use for delete (see

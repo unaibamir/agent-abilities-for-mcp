@@ -502,6 +502,19 @@ final class WooOrdersTest extends TestCase {
 	/**
 	 * Enable + register the full order ability set including writes.
 	 */
+	/**
+	 * Put the seeded order into a status WooCommerce still treats as editable.
+	 *
+	 * The fixture seeds 5001 as `processing` (IntegrationStubs), which is the normal state of a
+	 * PAID order and one WooCommerce does NOT treat as editable. Since R3-1 the update ability
+	 * refuses to add line items to such an order, so every test that exercises a successful add has
+	 * to state which kind of order it is adding to. That precondition used to be incidental; it is
+	 * load-bearing now, which is why it is spelled rather than left to the fixture default.
+	 */
+	private function make_seeded_order_editable(): void {
+		WcOrderStubStore::$orders[5001]['status'] = 'on-hold';
+	}
+
 	private function register_wc_order_writes(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
@@ -746,6 +759,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_mid_loop_add_failure_leaves_no_partial_write(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		// Order 5001 seeds exactly one line item. Throw on the SECOND add of this request.
@@ -914,6 +928,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_add_line_items_adds_a_new_item(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
@@ -951,6 +966,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_add_line_items_recalculates_the_order_total(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
@@ -1038,6 +1054,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_line_items_deprecated_alias_still_adds(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
@@ -1065,6 +1082,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_add_line_items_and_line_items_combine_when_both_sent(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
@@ -1404,19 +1422,28 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
-	 * Found by the second Codex review pass. calculate_totals() re-runs tax calculation for EVERY
-	 * item at today's rates, so adding one line to an order that already carries tax from a rate
-	 * that has since changed would silently restate what the customer was actually charged.
-	 * Recomputing tax is therefore limited to orders WooCommerce still considers editable.
+	 * R3-1: adding a line item to an order WooCommerce no longer treats as editable is REFUSED.
+	 *
+	 * This replaces a test that asserted calculate_totals() was called with false for a completed
+	 * order. That assertion encoded the defect instead of detecting it: passing false does protect
+	 * the historical tax on the existing items, but it also means the NEW item keeps the empty tax
+	 * map it was created with, so a taxable line was recorded at its net price and the order
+	 * under-billed. Confirmed against real WooCommerce on the DDEV clone, 20% rate, price 100:
+	 * a completed order came out at total 100 / tax 0 while the identical pending order came out at
+	 * total 120 / tax 20.
+	 *
+	 * Neither branch was safe, so the write is refused. The assertion is deliberately on the
+	 * OUTCOME (an error, and no item written) rather than on which argument reached a stub, because
+	 * asserting the argument is what let the original defect through.
 	 */
-	public function test_adding_an_item_to_a_completed_order_does_not_recompute_its_taxes(): void {
+	public function test_adding_an_item_to_a_completed_order_is_refused(): void {
 		$this->register_wc_order_writes();
 		$this->acting_as( 'administrator' );
 
-		WcOrderStubStore::$orders[5001]['status']          = 'completed';
-		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+		WcOrderStubStore::$orders[5001]['status'] = 'completed';
+		$items_before                             = WcOrderStubStore::$add_product_calls;
 
-		wp_get_ability( 'aafm/wc-update-order' )->execute(
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
 			array(
 				'order_id'       => 5001,
 				'add_line_items' => array(
@@ -1428,9 +1455,102 @@ final class WooOrdersTest extends TestCase {
 			)
 		);
 
-		$this->assertFalse(
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'Adding goods to a non-editable order must be refused, not recorded without tax.'
+		);
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'completed',
+			$result->get_error_message(),
+			'The error names the status that blocked the write so the caller can act on it.'
+		);
+		$this->assertSame(
+			$items_before,
+			WcOrderStubStore::$add_product_calls,
+			'The refusal must happen BEFORE add_product(), which writes each item row immediately.'
+		);
+	}
+
+	/**
+	 * R3-1: the refusal covers every non-editable status, not just completed. processing is the one
+	 * that matters most in practice -- it is the normal state of a paid order, and it is NOT
+	 * editable, so this is where the old code silently recorded untaxed goods most often.
+	 *
+	 * @dataProvider provide_non_editable_statuses
+	 *
+	 * @param string $status A status WooCommerce does not treat as editable.
+	 */
+	public function test_adding_an_item_is_refused_for_every_non_editable_status( string $status ): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status'] = $status;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, $status . ' is not editable, so the add must be refused.' );
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+	}
+
+	/**
+	 * Cases: the WooCommerce order statuses that is_editable() excludes.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provide_non_editable_statuses(): array {
+		return array(
+			'processing' => array( 'processing' ),
+			'completed'  => array( 'completed' ),
+			'refunded'   => array( 'refunded' ),
+			'cancelled'  => array( 'cancelled' ),
+			'failed'     => array( 'failed' ),
+		);
+	}
+
+	/**
+	 * R3-1: a request that adds items AND completes the order in one call still taxes the goods.
+	 *
+	 * Editability is judged against the status the order HAD when the request arrived, and the
+	 * recalculation then runs with taxes on unconditionally. Re-reading editability at the
+	 * recalculation would consult the status this same request just applied, and take the untaxed
+	 * branch for goods it had already accepted.
+	 */
+	public function test_adding_an_item_while_completing_the_order_still_recomputes_taxes(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status']          = 'pending';
+		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'status'         => 'completed',
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $result, 'The order was editable when the request arrived, so the add is allowed.' );
+		$this->assertTrue(
 			WcOrderStubStore::$last_calculate_totals_and_taxes,
-			'A completed order must have its total summed without its historical taxes being rebuilt.'
+			'Taxes must be computed for the goods this request added, whatever status the same request went on to set.'
 		);
 	}
 

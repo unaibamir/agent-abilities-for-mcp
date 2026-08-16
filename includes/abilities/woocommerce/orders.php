@@ -1244,6 +1244,32 @@ function aafm_exec_wc_update_order( array $input ) {
 	// afterwards.
 	$adds_line_items = aafm_wc_input_adds_line_items( $fields );
 
+	// Goods can only be added while WooCommerce still considers the order editable, and the check
+	// has to happen HERE, before aafm_wc_apply_order_input() runs, because add_product() writes each
+	// item row the moment it is called.
+	//
+	// The reason is tax. A new order item is created with an empty tax map, and add_product() sets
+	// price, quantity and tax class but calculates nothing; the tax only appears when
+	// calculate_totals() is allowed to run calculate_taxes(). On an order that is no longer
+	// editable, running it would restate the historical tax on every EXISTING item at today's
+	// rates and rewrite what the customer was actually charged, so it must not run -- and without
+	// it the new goods are recorded with zero tax and the order under-bills. Neither answer is
+	// acceptable, so the request is refused instead of being silently half-applied.
+	//
+	// WooCommerce draws exactly this line itself: its order screen gates the "Add item(s)" and
+	// "Recalculate" buttons on is_editable() (html-order-items.php), so a status this refuses is a
+	// status where WooCommerce's own UI offers no way to add an item either.
+	if ( $adds_line_items && ! $order->is_editable() ) {
+		return new \WP_Error(
+			'aafm_wc_order_not_editable',
+			sprintf(
+				/* translators: %s: the order's current status, e.g. "completed". */
+				__( 'Line items cannot be added to this order because WooCommerce no longer treats an order with status "%s" as editable. Adding goods to it would either record them with no tax, understating what the customer is charged, or rewrite the tax already recorded against the existing items. Add the goods to a new order instead, or move this one back to an editable status first.', 'agent-abilities-for-mcp' ),
+				$order->get_status()
+			)
+		);
+	}
+
 	$added_item_ids = array();
 	$unresolved     = aafm_wc_apply_order_input( $order, $fields, $added_item_ids );
 	if ( is_wp_error( $unresolved ) ) {
@@ -1266,14 +1292,18 @@ function aafm_exec_wc_update_order( array $input ) {
 	// as an explicit action rather than running it on every save. Line items are the only thing
 	// aafm_wc_apply_order_input() can change that moves the money, so they are the only trigger.
 	//
-	// Taxes are recomputed only while the order is still editable. calculate_totals() re-runs tax
-	// calculation for EVERY item, old ones included, at today's rates. On an order that is already
-	// completed and carries tax from a rate that has since changed, adding one item would silently
-	// restate the historical tax on all the others and rewrite what the customer was actually
-	// charged. Passing false keeps every existing tax line exactly as it was recorded and still
-	// brings the total up to the goods the order now holds, which is the harm this fix exists to
-	// stop. WooCommerce draws the same line: its own order screen only lets you edit items while
-	// the order is editable.
+	// Taxes are always recomputed here, and can be, because the not-editable refusal above means
+	// this line is only ever reached for an order WooCommerce still considers editable -- one that
+	// has not been paid, whose tax is provisional rather than historical. Recomputing every item at
+	// today's rates is the right answer for such an order and is exactly what WooCommerce's own
+	// Recalculate button does.
+	//
+	// Passing true UNCONDITIONALLY rather than $order->is_editable() is deliberate. A single request
+	// may both add items and set a status, and by this point the status field has already been
+	// applied, so re-reading editability here would consult the NEW status: a request that added
+	// goods and completed the order in one call would take the false branch and record those goods
+	// with no tax at all. The question "may items be added to this order" is about the order as it
+	// stood when the request arrived, and it has already been answered above.
 	//
 	// The recalculation is its own failure point, and it runs AFTER add_product() has already
 	// written each item row. calculate_totals() fires woocommerce_order_before_calculate_totals,
@@ -1284,7 +1314,7 @@ function aafm_exec_wc_update_order( array $input ) {
 	// report the same honest error the add-loop failure reports.
 	if ( $adds_line_items ) {
 		try {
-			$order->calculate_totals( $order->is_editable() );
+			$order->calculate_totals( true );
 		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 			return aafm_wc_rollback_added_order_items( $added_item_ids );
 		}

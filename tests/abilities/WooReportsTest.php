@@ -796,7 +796,7 @@ final class WooReportsTest extends TestCase {
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		// The seeded paypal gateway has an 'api_secret' key which must be stripped.
-		$this->assertArrayNotHasKey( 'api_secret', $res['settings'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['api_secret'] );
 	}
 
 	/**
@@ -807,7 +807,7 @@ final class WooReportsTest extends TestCase {
 		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'stripe' ) );
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertArrayNotHasKey( 'stripe_secret', $res['settings'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['stripe_secret'] );
 	}
 
 	/**
@@ -858,8 +858,8 @@ final class WooReportsTest extends TestCase {
 		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$this->assertArrayNotHasKey( 'credential', $res['settings'], 'A "credential" key must be redacted.' );
-		$this->assertArrayNotHasKey( 'auth_pwd', $res['settings'], 'An "auth_pwd" key must be redacted.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['credential'], 'A "credential" key must be redacted.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['auth_pwd'], 'An "auth_pwd" key must be redacted.' );
 	}
 
 	/**
@@ -880,7 +880,7 @@ final class WooReportsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertArrayNotHasKey( 'passphrase', $res['settings'], 'A "passphrase" key must be redacted.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['passphrase'], 'A "passphrase" key must be redacted.' );
 	}
 
 	/**
@@ -900,7 +900,7 @@ final class WooReportsTest extends TestCase {
 		$this->acting_as( 'administrator' );
 		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertArrayNotHasKey( 'salt', $res['settings'], 'A "salt" key must be redacted.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['salt'], 'A "salt" key must be redacted.' );
 	}
 
 	/**
@@ -926,11 +926,11 @@ final class WooReportsTest extends TestCase {
 		$res = aafm_exec_wc_get_payment_gateway( array( 'gateway_id' => 'paypal' ) );
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 
-		$this->assertArrayNotHasKey( 'pin', $res['settings'] );
-		$this->assertArrayNotHasKey( 'security_pin', $res['settings'] );
-		$this->assertArrayNotHasKey( 'ssl_certificate', $res['settings'] );
-		$this->assertArrayNotHasKey( 'client_cert', $res['settings'] );
-		$this->assertArrayNotHasKey( 'private_key_pem', $res['settings'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['pin'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['security_pin'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['ssl_certificate'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['client_cert'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['private_key_pem'] );
 	}
 
 	/**
@@ -1235,6 +1235,6 @@ final class WooReportsTest extends TestCase {
 		);
 
 		$this->assertNotInstanceOf( WP_Error::class, $res );
-		$this->assertArrayNotHasKey( 'api_secret', $res['settings'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['api_secret'] );
 	}
 }

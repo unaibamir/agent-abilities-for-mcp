@@ -11,28 +11,44 @@
  * update-user, then the order billing/shipping addresses, then the whole sanitize_textarea_field
  * family. Every miss was the same shape - fixed at one call site, left at its siblings.
  *
- * WHAT THIS GUARANTEES, EXACTLY
+ * THE DESIGN RULE
  *
- * It finds every use of a NAMED sanitizer from self::SANITIZERS in shipped first-party PHP, in the
- * four spellings a developer would actually write (bare call, fully-qualified call, callable
- * string, aliased import), and fails the build on any that is not written down in the test's
- * allowlist with a reason.
+ * A fingerprint may be imprecise, but it may never be ambiguous.
  *
- * WHAT IT DOES NOT GUARANTEE, AND THIS MATTERS
+ * Imprecision is visible: a reader sees a coarse identity and knows roughly what it covers.
+ * Ambiguity is invisible, and invisible is what let three earlier versions of this mechanism
+ * transfer a justification silently from one call to another. So where the identity of a call
+ * cannot be determined precisely, it widens to something coarser rather than falling back to a
+ * value two sites could share.
  *
- * It does NOT enumerate stored writes. It has no model of which calls reach storage: it matches
- * sanitizer NAMES, not destinations. So it cannot prove that every stored write routes through the
- * helper - it can only prove that every raw call to a name it knows about has been looked at by a
- * human. A stored write that reaches the database through some other route entirely - a bespoke
- * sanitizer, wp_kses on a field that needed the strip, a direct $wpdb->insert of unsanitized input -
- * is invisible to it and always was.
+ * WHAT IT SEES AND DISTINGUISHES
  *
- * It also cannot follow a sanitizer reached indirectly through a variable:
- * `$fn = 'sanitize_text_field'; $fn( $value );`. Resolving that needs variable tracking, which is
- * a different kind of tool, so it is named here as a known boundary rather than left for a later
- * review round to discover. The four spellings above are the ones that appear in real code.
+ * 1. A bare call, `sanitize_text_field( $v )`.
+ * 2. A fully-qualified call, `\sanitize_text_field( $v )`, in both 7.4 and 8.x tokenization.
+ * 3. An aliased import, `use function sanitize_text_field as clean; clean( $v )`.
+ * 4. A callable string consumed by a named call, `array_map( 'sanitize_text_field', $v )`,
+ *    including through a receiver or static chain: `$a->map( … )`, `Foo::map( … )`,
+ *    `$this->svc->mapper->map( … )`.
+ * 5. A callable string consumed by an expression with no nameable callee - a variable function, an
+ *    invoked callable array - identified by its enclosing statement instead.
  *
- * That gap is deliberate rather than an oversight. Enumerating real storage sinks means modelling
+ * WHAT IT CANNOT SEE AT ALL
+ *
+ * 6. A sanitizer reached indirectly through a variable:
+ *    `$fn = 'sanitize_text_field'; $fn( $value );`. Resolving that needs variable tracking, which
+ *    is a different kind of tool. Named here as a boundary rather than left for a later review
+ *    round to find.
+ * 7. Any dynamically constructed name, `$prefix . '_text_field'`, for the same reason.
+ *
+ * OUT OF SCOPE BY DESIGN
+ *
+ * 8. WHERE a sanitized value is stored. This scan matches sanitizer NAMES, not destinations, so it
+ *    cannot prove every stored write routes through the helper - only that every raw call to a
+ *    name it knows has been looked at by a human. A stored write reaching the database by some
+ *    other route entirely - a bespoke sanitizer, wp_kses on a field that needed the strip, a
+ *    direct $wpdb->insert of unsanitized input - is invisible to it and always was.
+ *
+ * That last gap is deliberate rather than an oversight. Enumerating real storage sinks means modelling
  * every WordPress and WooCommerce setter that eventually writes, which is a project rather than a
  * test, and a half-built version of it would be worse than this: it would imply a completeness it
  * did not have. This scanner is a name-level guard plus a human allowlist, and the honest claim is
@@ -416,7 +432,6 @@ final class StoredTextSanitizerScanner {
 	 * @return string
 	 */
 	private static function enclosing_call_text( array $tokens, int $index, int $count, string $literal ): string {
-		$bare  = "'" . $literal . "' [as a callable string]";
 		$depth = 0;
 		$open  = null;
 
@@ -434,30 +449,198 @@ final class StoredTextSanitizerScanner {
 			}
 		}
 
-		if ( null === $open ) {
-			return $bare;
+		// The callee sits immediately before its opening parenthesis, but it may be the tail of a
+		// member-access chain rather than a bare name. Taking only the last name token made
+		// `$a->map( … )` and `$b->map( … )` identical (R5-3), so the whole chain is captured.
+		$callee = null;
+		if ( null !== $open ) {
+			$last = self::prev_significant( $tokens, $open - 1 );
+			if ( null !== $last && is_array( $tokens[ $last ] ) && self::is_name_token( $tokens[ $last ][0] ) ) {
+				$callee = self::callee_start_index( $tokens, $last );
+			}
 		}
 
-		// The callee sits immediately before its opening parenthesis.
-		$callee = null;
-		for ( $i = $open - 1; $i >= 0; $i-- ) {
+		if ( null !== $callee ) {
+			$args = self::balanced_args_text( $tokens, (int) $last, $count );
+			if ( null !== $args ) {
+				return self::text_between( $tokens, $callee, (int) $last ) . $args;
+			}
+		}
+
+		// No named callee: a variable function, an invoked callable array, or something else this
+		// scan cannot name. The old fallback was the literal alone, which is the SAME string at
+		// every such site, so two of them silently matched - R4-3's collision through another door.
+		// The enclosing statement is imprecise but never ambiguous, and imprecision is visible to a
+		// reader where ambiguity is not.
+		return "'" . $literal . "' in " . self::enclosing_statement_text( $tokens, $index );
+	}
+
+	/**
+	 * The index where a callee's member-access chain begins.
+	 *
+	 * Walks back from the final name token through `->`, `?->` and `::` links, taking the variable,
+	 * name or bracketed group that precedes each one. `$this->svc->map` starts at `$this`;
+	 * `Foo::map` starts at `Foo`; a bare `array_map` starts at itself.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens     All tokens.
+	 * @param int                                           $name_index Index of the final name token.
+	 * @return int
+	 */
+	private static function callee_start_index( array $tokens, int $name_index ): int {
+		$start = $name_index;
+
+		while ( true ) {
+			$operator = self::prev_significant( $tokens, $start - 1 );
+			if ( null === $operator || ! is_array( $tokens[ $operator ] ) || ! self::is_chain_operator( $tokens[ $operator ][0] ) ) {
+				return $start;
+			}
+
+			$element = self::prev_significant( $tokens, $operator - 1 );
+			if ( null === $element ) {
+				return $start;
+			}
+
+			// A subscript or a call in the chain: step over the balanced group to whatever owns it.
+			if ( ']' === $tokens[ $element ] || ')' === $tokens[ $element ] ) {
+				$owner = self::matching_open_owner( $tokens, $element );
+				if ( null === $owner ) {
+					return $start;
+				}
+				$element = $owner;
+			} elseif ( ! is_array( $tokens[ $element ] )
+				|| ! ( T_VARIABLE === $tokens[ $element ][0] || self::is_name_token( $tokens[ $element ][0] ) ) ) {
+				return $start;
+			}
+
+			$start = $element;
+		}
+	}
+
+	/**
+	 * Step back over a balanced `[...]` or `(...)` group and return the index of the variable or
+	 * name that owns it.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $close  Index of the closing bracket.
+	 * @return int|null
+	 */
+	private static function matching_open_owner( array $tokens, int $close ): ?int {
+		$closer = $tokens[ $close ];
+		$opener = ']' === $closer ? '[' : '(';
+		$depth  = 0;
+
+		for ( $i = $close; $i >= 0; $i-- ) {
+			if ( $closer === $tokens[ $i ] ) {
+				++$depth;
+				continue;
+			}
+			if ( $opener === $tokens[ $i ] ) {
+				--$depth;
+				if ( 0 === $depth ) {
+					$owner = self::prev_significant( $tokens, $i - 1 );
+					if ( null === $owner || ! is_array( $tokens[ $owner ] ) ) {
+						return null;
+					}
+					if ( T_VARIABLE === $tokens[ $owner ][0] || self::is_name_token( $tokens[ $owner ][0] ) ) {
+						return $owner;
+					}
+					return null;
+				}
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * The normalised text of the statement containing a token, bounded by the nearest `;` or `{`.
+	 *
+	 * The fallback identity when no callee can be named. Bounded by statement rather than by line
+	 * so it stays stable when the code is reflowed, and it is deliberately allowed to be long: a
+	 * verbose identity a human can read beats a short one two sites can share.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $index  Index inside the statement.
+	 * @return string
+	 */
+	private static function enclosing_statement_text( array $tokens, int $index ): string {
+		$start = 0;
+		for ( $i = $index; $i >= 0; $i-- ) {
+			if ( ';' === $tokens[ $i ] || '{' === $tokens[ $i ] || '}' === $tokens[ $i ] ) {
+				$start = $i + 1;
+				break;
+			}
+			if ( is_array( $tokens[ $i ] ) && T_OPEN_TAG === $tokens[ $i ][0] ) {
+				$start = $i + 1;
+				break;
+			}
+		}
+
+		$count = count( $tokens );
+		$end   = $count - 1;
+		for ( $i = $index; $i < $count; $i++ ) {
+			if ( ';' === $tokens[ $i ] || '{' === $tokens[ $i ] ) {
+				$end = $i;
+				break;
+			}
+		}
+
+		return self::text_between( $tokens, $start, $end );
+	}
+
+	/**
+	 * Whitespace-normalised source text spanning two token indexes, inclusive.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $from   First index.
+	 * @param int                                           $to     Last index.
+	 * @return string
+	 */
+	private static function text_between( array $tokens, int $from, int $to ): string {
+		$text = '';
+		for ( $i = $from; $i <= $to; $i++ ) {
+			if ( ! isset( $tokens[ $i ] ) ) {
+				break;
+			}
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			$text .= is_array( $token ) ? $token[1] : $token;
+		}
+
+		return (string) preg_replace( '~\s+~', ' ', trim( $text ) );
+	}
+
+	/**
+	 * The index of the previous token that is not whitespace or a comment.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $from   Index to start from, walking back.
+	 * @return int|null
+	 */
+	private static function prev_significant( array $tokens, int $from ): ?int {
+		for ( $i = $from; $i >= 0; $i-- ) {
 			$token = $tokens[ $i ];
 			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
 				continue;
 			}
-			if ( is_array( $token ) && self::is_name_token( $token[0] ) ) {
-				$callee = $i;
-			}
-			break;
+			return $i;
 		}
+		return null;
+	}
 
-		if ( null === $callee ) {
-			return $bare;
+	/**
+	 * Whether a token id links two parts of a member-access chain.
+	 *
+	 * @param int $id Token id.
+	 * @return bool
+	 */
+	private static function is_chain_operator( int $id ): bool {
+		if ( T_OBJECT_OPERATOR === $id || T_DOUBLE_COLON === $id ) {
+			return true;
 		}
-
-		$args = self::balanced_args_text( $tokens, $callee, $count );
-
-		return null === $args ? $bare : (string) $tokens[ $callee ][1] . $args;
+		return defined( 'T_NULLSAFE_OBJECT_OPERATOR' ) && constant( 'T_NULLSAFE_OBJECT_OPERATOR' ) === $id;
 	}
 
 	/**

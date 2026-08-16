@@ -604,6 +604,87 @@ PHP;
 	}
 
 	/**
+	 * R5-3: two calls that differ ONLY in their receiver must be distinguishable.
+	 *
+	 * Taking the last name token before the parenthesis meant `$a->map( … )` and `$b->map( … )`
+	 * produced the same identity. The pair here differs in nothing except the receiver, because
+	 * that is precisely what the chain walk changes - a pair that also differed in arguments would
+	 * have passed before the fix and proved nothing.
+	 */
+	public function test_two_calls_differing_only_in_receiver_are_distinguishable(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_receiver( $a, $b, $x ) {
+	$one = $a->map( 'sanitize_text_field', $x );
+	$two = $b->map( 'sanitize_text_field', $x );
+	return array( $one, $two );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records );
+		$this->assertNotSame(
+			$records[0]['call'],
+			$records[1]['call'],
+			'The receiver is part of what identifies the consuming call.'
+		);
+		$this->assertSame( "\$a->map( 'sanitize_text_field', \$x )", $records[0]['call'] );
+		$this->assertSame( "\$b->map( 'sanitize_text_field', \$x )", $records[1]['call'] );
+	}
+
+	/**
+	 * A static call and a chained one are the same shape and must resolve the same way.
+	 */
+	public function test_static_and_chained_receivers_are_captured(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_chains( $x ) {
+	$one = Vendor\Mapper::map( 'sanitize_text_field', $x );
+	$two = $this->services->mapper->map( 'sanitize_text_field', $x );
+	return array( $one, $two );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records );
+		$this->assertStringContainsString( 'Vendor\Mapper::map', $records[0]['call'] );
+		$this->assertStringContainsString( '$this->services->mapper->map', $records[1]['call'] );
+	}
+
+	/**
+	 * The half of R5-3 that was not reported: when no callee can be named at all, the old fallback
+	 * was the bare literal, which is the SAME string at every such site. Two variable-function
+	 * calls therefore matched each other silently - R4-3's collision arriving through another door.
+	 *
+	 * The rule the fallback now follows: a fingerprint may be imprecise, but it may never be
+	 * ambiguous. The statement is a coarser identity than the call, and that is fine, because a
+	 * reader can see the coarseness. They cannot see a collision.
+	 */
+	public function test_an_unnameable_callee_falls_back_to_something_unambiguous(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_unnamed( $fn1, $fn2, $x ) {
+	$one = $fn1( 'sanitize_text_field', $x );
+	$two = $fn2( 'sanitize_text_field', $x );
+	return array( $one, $two );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records );
+		$this->assertNotSame(
+			$records[0]['call'],
+			$records[1]['call'],
+			'Two unnameable consumers must not share the one fallback string.'
+		);
+		$this->assertStringContainsString( '$fn1', $records[0]['call'], 'The fallback keeps what distinguishes the site.' );
+		$this->assertStringContainsString( '$fn2', $records[1]['call'] );
+	}
+
+	/**
 	 * The scan must reach every file that actually ships.
 	 *
 	 * The file that proved the hand-picked list was the wrong shape (R3-3) was uninstall.php: it

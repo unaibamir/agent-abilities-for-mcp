@@ -250,7 +250,7 @@ function aafm_acf_read_fields( $selector ): array {
 
 /**
  * The ACF field types whose value is a URL and so must be sanitized with esc_url_raw (which drops
- * a javascript: scheme) rather than sanitize_text_field.
+ * a javascript: scheme) rather than the plain-text helper.
  *
  * @return string[]
  */
@@ -260,7 +260,7 @@ function aafm_acf_url_field_types(): array {
 
 /**
  * The ACF field types whose value is rich HTML and so are sanitized with wp_kses_post rather than
- * stripped flat by sanitize_text_field.
+ * stripped flat by the plain-text helper.
  *
  * @return string[]
  */
@@ -350,7 +350,8 @@ function aafm_acf_sub_field_def( array $parent_def, string $name, string $layout
  * Recursively sanitize one ACF field value for writing.
  *
  * Scalars are sanitized by the field's resolved type: a URL-type value through esc_url_raw, a
- * wysiwyg/textarea value through wp_kses_post, everything else through sanitize_text_field. Arrays
+ * wysiwyg/textarea value through wp_kses_post, everything else through aafm_sanitize_plain_text
+ * (sanitize_text_field plus the invisible-character strip, since these values are stored). Arrays
  * recurse, and crucially each level resolves its OWN field type rather than carrying the top-level
  * type down: a repeater/group/flexible-content sub-field's type comes from the parent def's
  * `sub_fields`, so a URL/link/image sub-field nested in a repeater is still esc_url_raw'd at depth
@@ -397,7 +398,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 		// container level (a numeric-indexed list of rows) no marker exists and none is needed.
 		$row_layout = isset( $value['acf_fc_layout'] ) && is_scalar( $value['acf_fc_layout'] ) ? (string) $value['acf_fc_layout'] : '';
 		foreach ( $value as $sub_key => $sub ) {
-			$safe_key = is_string( $sub_key ) ? sanitize_text_field( $sub_key ) : $sub_key;
+			$safe_key = is_string( $sub_key ) ? aafm_sanitize_plain_text( $sub_key ) : $sub_key;
 			if ( $is_cont && $def ) {
 				// A repeater/group/clone/flexible-content level. Numeric keys are row indices that
 				// keep the same container def; string keys are sub-field names whose own def
@@ -429,7 +430,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 		// the rest is plain text and must NOT be esc_url_raw'd.
 		return in_array( $key, aafm_acf_url_leaf_keys(), true )
 			? esc_url_raw( $as_string )
-			: sanitize_text_field( $as_string );
+			: aafm_sanitize_plain_text( $as_string );
 	}
 	if ( $is_url ) {
 		// A URL-typed field with a scalar value: the value IS the URL, regardless of key name.
@@ -438,7 +439,7 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 	if ( in_array( $type, aafm_acf_wysiwyg_field_types(), true ) ) {
 		return wp_kses_post( $as_string );
 	}
-	return sanitize_text_field( $as_string );
+	return aafm_sanitize_plain_text( $as_string );
 }
 
 /**
@@ -836,7 +837,7 @@ function aafm_args_acf_update_post_fields(): array {
 				'fields'  => array(
 					'type'                 => 'object',
 					'additionalProperties' => true,
-					'description'          => __( 'Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field\'s ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else via sanitize_text_field.', 'agent-abilities-for-mcp' ),
+					'description'          => __( 'Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field\'s ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else as plain text.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'fields' ),

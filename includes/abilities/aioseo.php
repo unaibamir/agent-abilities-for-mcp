@@ -468,7 +468,7 @@ function aafm_args_aioseo_update_post(): array {
  * Execute aafm/aioseo-update-post.
  *
  * Loads the model for the post, sets the allowlisted props (esc_url_raw on URL props,
- * sanitize_text_field on text, bool on robots), then ->save() - AIOSEO's own ORM writes the
+ * aafm_sanitize_plain_text on text, bool on robots), then ->save() - AIOSEO's own ORM writes the
  * custom-table row. A prop absent on the installed model version is skipped rather than set (so the
  * write never invents a property). Returns the refreshed read shape.
  *
@@ -500,7 +500,7 @@ function aafm_exec_aioseo_update_post( array $input ) {
 			continue; // The installed model version does not expose this prop; do not invent it.
 		}
 		$raw               = (string) $input[ $field ];
-		$model->$prop      = $spec['url'] ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		$model->$prop      = $spec['url'] ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 		$desired[ $field ] = (string) $model->$prop;
 
 		// A custom social image renders ONLY when its *_image_type column reads 'custom_image'.

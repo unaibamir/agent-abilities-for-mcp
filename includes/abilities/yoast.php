@@ -384,7 +384,9 @@ function aafm_args_yoast_update_post(): array {
 /**
  * Execute aafm/yoast-update-post.
  *
- * Writes the text/URL fields (esc_url_raw for URLs, sanitize_text_field otherwise) and the three
+ * Writes the text/URL fields (esc_url_raw for URLs, aafm_sanitize_plain_text otherwise -- a Yoast
+ * title or description is rendered into the page head and into feeds, so it gets the same
+ * invisible-character strip as a post title) and the three
  * robots keys (noindex/nofollow validated against their enums, adv filtered against the directive
  * allowlist). Returns the refreshed read shape.
  *
@@ -403,7 +405,7 @@ function aafm_exec_yoast_update_post( array $input ) {
 			continue;
 		}
 		$raw   = (string) $input[ $field ];
-		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first, exactly like the sibling meta writers.
 		update_post_meta( $id, $key, wp_slash( $clean ) );

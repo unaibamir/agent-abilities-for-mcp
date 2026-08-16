@@ -594,7 +594,7 @@ function aafm_wc_product_write_properties(): array {
  */
 function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'name', $input ) ) {
-		$product->set_name( sanitize_text_field( (string) $input['name'] ) );
+		$product->set_name( aafm_sanitize_plain_text( (string) $input['name'] ) );
 	}
 	if ( array_key_exists( 'status', $input ) ) {
 		$status = sanitize_key( (string) $input['status'] );
@@ -794,7 +794,7 @@ function aafm_wc_sanitize_attributes( array $attributes ): array {
 			$options[] = sanitize_text_field( (string) $option );
 		}
 		$clean[] = array(
-			'name'    => sanitize_text_field( (string) ( $attribute['name'] ?? '' ) ),
+			'name'    => aafm_sanitize_plain_text( (string) ( $attribute['name'] ?? '' ) ),
 			'options' => $options,
 		);
 	}
@@ -854,7 +854,7 @@ function aafm_exec_wc_create_product( array $input ) {
 	if ( ! class_exists( 'WC_Product' ) ) {
 		return aafm_generic_error();
 	}
-	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	if ( '' === $name ) {
 		return aafm_generic_error();
 	}

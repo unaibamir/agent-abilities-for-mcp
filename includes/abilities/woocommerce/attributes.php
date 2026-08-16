@@ -308,7 +308,7 @@ function aafm_args_wc_create_product_attribute(): array {
  * @return array<string,mixed>|\WP_Error
  */
 function aafm_exec_wc_create_product_attribute( array $input ) {
-	$name  = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name  = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$slug  = isset( $input['slug'] ) ? wc_sanitize_taxonomy_name( sanitize_title( (string) $input['slug'] ) ) : sanitize_title( $name );
 	$type  = sanitize_key( (string) ( $input['type'] ?? 'select' ) );
 	$order = sanitize_key( (string) ( $input['order_by'] ?? 'menu_order' ) );
@@ -414,7 +414,7 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 
 	$changed = false;
 	if ( array_key_exists( 'name', $input ) ) {
-		$args['name'] = sanitize_text_field( (string) $input['name'] );
+		$args['name'] = aafm_sanitize_plain_text( (string) $input['name'] );
 		$changed      = true;
 	}
 	if ( array_key_exists( 'slug', $input ) ) {

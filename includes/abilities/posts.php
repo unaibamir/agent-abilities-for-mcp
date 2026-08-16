@@ -795,7 +795,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 	}
 
 	// Max-title guard covers create (post + page via delegation) and, in the updater, update (post + page).
-	$title = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
+	$title = isset( $input['title'] ) ? aafm_sanitize_plain_text( (string) $input['title'] ) : '';
 	if ( ! aafm_title_within_limit( $title ) ) {
 		return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
 	}
@@ -811,7 +811,7 @@ function aafm_insert_post( array $input, string $default_status, string $type, ?
 		'post_status'  => $status,
 		'post_title'   => $title,
 		'post_content' => isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '',
-		'post_excerpt' => isset( $input['excerpt'] ) ? sanitize_text_field( (string) $input['excerpt'] ) : '',
+		'post_excerpt' => isset( $input['excerpt'] ) ? aafm_sanitize_plain_text( (string) $input['excerpt'] ) : '',
 	);
 
 	// Optional slug → sanitize_title → post_name, folded into the same atomic row write.
@@ -1078,7 +1078,7 @@ function aafm_exec_update_post( array $input ) {
 	);
 	$postarr = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
-		$title = sanitize_text_field( (string) $input['title'] );
+		$title = aafm_sanitize_plain_text( (string) $input['title'] );
 		if ( ! aafm_title_within_limit( $title ) ) {
 			return new WP_Error( 'aafm_title_too_long', __( 'The title exceeds the maximum allowed length.', 'agent-abilities-for-mcp' ) );
 		}
@@ -1093,7 +1093,7 @@ function aafm_exec_update_post( array $input ) {
 		}
 	}
 	if ( isset( $input['excerpt'] ) ) {
-		$postarr['post_excerpt'] = sanitize_text_field( (string) $input['excerpt'] );
+		$postarr['post_excerpt'] = aafm_sanitize_plain_text( (string) $input['excerpt'] );
 	}
 	if ( isset( $input['slug'] ) ) {
 		$slug = sanitize_title( (string) $input['slug'] );

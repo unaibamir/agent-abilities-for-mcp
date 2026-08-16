@@ -399,9 +399,9 @@ function aafm_exec_create_user( array $input ) {
 		'user_email'   => $email,
 		'user_pass'    => $password,
 		'role'         => $default_role,
-		'display_name' => sanitize_text_field( (string) ( $input['display_name'] ?? $username ) ),
-		'first_name'   => sanitize_text_field( (string) ( $input['first_name'] ?? '' ) ),
-		'last_name'    => sanitize_text_field( (string) ( $input['last_name'] ?? '' ) ),
+		'display_name' => aafm_sanitize_plain_text( (string) ( $input['display_name'] ?? $username ) ),
+		'first_name'   => aafm_sanitize_plain_text( (string) ( $input['first_name'] ?? '' ) ),
+		'last_name'    => aafm_sanitize_plain_text( (string) ( $input['last_name'] ?? '' ) ),
 	);
 
 	$result = wp_insert_user( $userdata );

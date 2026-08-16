@@ -636,7 +636,7 @@ function aafm_wc_sanitize_variation_attributes( array $attributes ): array {
 		if ( ! is_scalar( $value ) ) {
 			continue;
 		}
-		$clean[ sanitize_title( (string) $key ) ] = sanitize_text_field( (string) $value );
+		$clean[ sanitize_title( (string) $key ) ] = aafm_sanitize_plain_text( (string) $value );
 	}
 	return $clean;
 }

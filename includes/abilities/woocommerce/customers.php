@@ -384,10 +384,10 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
  */
 function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): void {
 	if ( array_key_exists( 'first_name', $input ) ) {
-		$customer->set_first_name( sanitize_text_field( (string) $input['first_name'] ) );
+		$customer->set_first_name( aafm_sanitize_plain_text( (string) $input['first_name'] ) );
 	}
 	if ( array_key_exists( 'last_name', $input ) ) {
-		$customer->set_last_name( sanitize_text_field( (string) $input['last_name'] ) );
+		$customer->set_last_name( aafm_sanitize_plain_text( (string) $input['last_name'] ) );
 	}
 
 	if ( isset( $input['billing'] ) && is_array( $input['billing'] ) ) {

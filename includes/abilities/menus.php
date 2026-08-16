@@ -414,7 +414,7 @@ function aafm_args_create_menu(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_menu( array $input ) {
-	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$id   = wp_update_nav_menu_object( 0, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
@@ -484,7 +484,7 @@ function aafm_exec_update_menu( array $input ) {
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
-	$name   = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name   = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$result = wp_update_nav_menu_object( $menu_id, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
@@ -647,7 +647,7 @@ function aafm_exec_create_menu_item( array $input ) {
 	}
 
 	$args = array(
-		'menu-item-title'  => sanitize_text_field( (string) ( $input['title'] ?? '' ) ),
+		'menu-item-title'  => aafm_sanitize_plain_text( (string) ( $input['title'] ?? '' ) ),
 		'menu-item-status' => 'publish',
 	);
 	if ( isset( $input['url'] ) ) {
@@ -876,7 +876,7 @@ function aafm_exec_update_menu_item( array $input ) {
 		'menu-item-status'      => isset( $existing->post_status ) ? (string) $existing->post_status : 'publish',
 	);
 	if ( isset( $input['title'] ) ) {
-		$args['menu-item-title'] = wp_slash( sanitize_text_field( (string) $input['title'] ) );
+		$args['menu-item-title'] = wp_slash( aafm_sanitize_plain_text( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
 		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );

@@ -269,7 +269,7 @@ function aafm_wc_shipping_zone_write_properties(): array {
  */
 function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): void {
 	if ( array_key_exists( 'zone_name', $input ) ) {
-		$zone->set_zone_name( sanitize_text_field( (string) $input['zone_name'] ) );
+		$zone->set_zone_name( aafm_sanitize_plain_text( (string) $input['zone_name'] ) );
 	}
 	if ( array_key_exists( 'zone_order', $input ) ) {
 		$zone->set_zone_order( absint( $input['zone_order'] ) );
@@ -1007,7 +1007,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	// instance settings are written by update_option() on the method's instance option
 	// key, mirroring WC core's WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
 	if ( array_key_exists( 'method_title', $input ) ) {
-		$title = sanitize_text_field( (string) $input['method_title'] );
+		$title = aafm_sanitize_plain_text( (string) $input['method_title'] );
 
 		$method->init_instance_settings();
 		$instance_settings          = is_array( $method->instance_settings ) ? $method->instance_settings : array();

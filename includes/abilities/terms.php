@@ -864,7 +864,7 @@ function aafm_exec_create_term( array $input ) {
 	}
 
 	$result = wp_insert_term(
-		sanitize_text_field( (string) $input['name'] ),
+		aafm_sanitize_plain_text( (string) $input['name'] ),
 		$taxonomy,
 		array(
 			'description' => isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '',
@@ -966,7 +966,7 @@ function aafm_exec_update_term( array $input ) {
 
 	$args = array();
 	if ( isset( $input['name'] ) ) {
-		$args['name'] = sanitize_text_field( (string) $input['name'] );
+		$args['name'] = aafm_sanitize_plain_text( (string) $input['name'] );
 	}
 	if ( isset( $input['description'] ) ) {
 		$args['description'] = wp_kses_post( (string) $input['description'] );

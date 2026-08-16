@@ -736,7 +736,7 @@ function aafm_exec_upload_media( array $input ) {
 	if ( isset( $input['alt'] ) ) {
 		// update_post_meta() unslashes the value, so a backslash in the alt text is stripped unless
 		// it is slashed first, exactly like the sibling meta writers.
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
 	}
 
 	$attachment = get_post( $attachment_id );
@@ -857,7 +857,7 @@ function aafm_exec_update_media( array $input ) {
 
 	$postarr = array( 'ID' => $att_id );
 	if ( $has_title ) {
-		$postarr['post_title'] = sanitize_text_field( (string) $input['title'] );
+		$postarr['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( $has_caption ) {
 		$postarr['post_excerpt'] = sanitize_textarea_field( (string) $input['caption'] );
@@ -878,7 +878,7 @@ function aafm_exec_update_media( array $input ) {
 	if ( $has_alt ) {
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
-		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
+		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
 	}
 
 	$fresh = get_post( $att_id );

@@ -62,7 +62,13 @@ function aafm_quickconnect_is_dismissed(): bool {
  *   - an ability is switched on (the option ships empty, so anything at all is a deliberate act)
  *   - an OAuth client is registered
  *   - a grant is live
- *   - the activity log has a row, meaning an agent has actually called something
+ *   - an agent has actually called something
+ *
+ * That last one counts real agent calls through aafm_agent_call_count(), never raw log rows. A
+ * plugin reset clears the log and then writes its own "activity log cleared" marker, so counting
+ * rows would leave a freshly reset site looking configured and suppress the very first-run screen
+ * the reset exists to bring back. The same helper backs the review-request notice, so both features
+ * agree on what an agent call is rather than keeping two definitions that can drift apart.
  *
  * Read in that order: the option is autoloaded and answers for almost every configured site, so the
  * three table reads below it rarely run. Nothing here WRITES, deliberately. The flags keep meaning
@@ -89,7 +95,7 @@ function aafm_quickconnect_site_looks_configured(): bool {
 	if ( function_exists( 'aafm_oauth_list_grants' ) && array() !== aafm_oauth_list_grants() ) {
 		return true;
 	}
-	if ( function_exists( 'aafm_activity_count_filtered' ) && aafm_activity_count_filtered() > 0 ) {
+	if ( function_exists( 'aafm_agent_call_count' ) && aafm_agent_call_count() > 0 ) {
 		return true;
 	}
 

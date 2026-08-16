@@ -729,7 +729,20 @@ function aafm_render_oauth_management(): void {
 	wp_nonce_field( 'aafm_admin', 'aafm_oauth_admin_nonce' );
 
 	// ---- Registered clients ----
-	echo '<h3>' . esc_html__( 'Registered clients', 'agent-abilities-for-mcp' ) . '</h3>';
+	// The count rides in the heading only when there is something to count: the zero case already
+	// has its own empty state below, and "Registered clients (0)" above "No clients have registered
+	// yet" says the same thing twice.
+	echo '<h3>';
+	if ( empty( $clients ) ) {
+		echo esc_html__( 'Registered clients', 'agent-abilities-for-mcp' );
+	} else {
+		printf(
+			/* translators: %s: number of registered OAuth clients. */
+			esc_html( _n( 'Registered clients (%s)', 'Registered clients (%s)', count( $clients ), 'agent-abilities-for-mcp' ) ),
+			esc_html( number_format_i18n( count( $clients ) ) )
+		);
+	}
+	echo '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $clients ) ) {
@@ -797,7 +810,17 @@ function aafm_render_oauth_management(): void {
 	}
 
 	// ---- Active grants ----
-	echo '<h3>' . esc_html__( 'Active grants', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3>';
+	if ( empty( $grants ) ) {
+		echo esc_html__( 'Active grants', 'agent-abilities-for-mcp' );
+	} else {
+		printf(
+			/* translators: %s: number of active OAuth grants. */
+			esc_html( _n( 'Active grants (%s)', 'Active grants (%s)', count( $grants ), 'agent-abilities-for-mcp' ) ),
+			esc_html( number_format_i18n( count( $grants ) ) )
+		);
+	}
+	echo '</h3>';
 	echo '<p class="sub">' . esc_html__( 'People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $grants ) ) {

@@ -232,6 +232,53 @@ final class PlainTextSanitizationTest extends TestCase {
 		$this->assertSame( "line one\nline two", $out );
 	}
 
+	/**
+	 * B2-09. `]]>` in an excerpt ends the CDATA section the feed wraps it in, so everything after
+	 * it is read as markup and the whole document stops being well-formed - the same harm B-18
+	 * exists to prevent, through a character B-18 never enumerated.
+	 *
+	 * It is NOT the same class as a NUL, and the fix is deliberately different. A NUL is invalid
+	 * XML anywhere and deceives in every context, so stripping it loses nothing. `]]>` is ordinary
+	 * text that only breaks one serialization, and a post about XML has every right to contain it,
+	 * so stripping it at storage would be silent data loss.
+	 *
+	 * WordPress already shows the right answer for the sibling field: get_the_content_feed() does
+	 * str_replace( ']]>', ']]&gt;' ) on post_content (wp-includes/feed.php:197). the_excerpt_rss()
+	 * has no equivalent - its only filters are convert_chars and ent2ncr, neither of which touches
+	 * the sequence - so the excerpt is unprotected where the content is protected. This closes that
+	 * asymmetry the same way core closed it, by escaping on the way OUT rather than mutating what
+	 * is stored.
+	 */
+	public function test_the_feed_escape_neutralises_a_cdata_terminator(): void {
+		$this->assertSame(
+			'before ]]&gt; after',
+			aafm_escape_feed_cdata( 'before ]]> after' ),
+			'The sequence must be escaped the way core escapes it for post_content.'
+		);
+	}
+
+	public function test_the_feed_escape_is_registered_on_the_excerpt_filter(): void {
+		$this->assertNotFalse(
+			has_filter( 'the_excerpt_rss', 'aafm_escape_feed_cdata' ),
+			'The escape is worthless unless it actually runs on the field that lacks core protection.'
+		);
+	}
+
+	public function test_the_feed_escape_leaves_ordinary_text_alone(): void {
+		foreach ( array( 'a ] b ]] c > d', 'array[] and <p>markup</p>', 'عنوان عربي', '' ) as $clean ) {
+			$this->assertSame( $clean, aafm_escape_feed_cdata( $clean ) );
+		}
+	}
+
+	/**
+	 * The storage side must NOT strip it. Deleting legitimate text is the failure mode this
+	 * character class introduces, and the reason the fix sits at output.
+	 */
+	public function test_the_stored_helpers_keep_the_sequence_intact(): void {
+		$this->assertSame( 'about ]]> in xml', aafm_sanitize_plain_text( 'about ]]> in xml' ) );
+		$this->assertSame( 'about ]]> in xml', aafm_sanitize_multiline_text( 'about ]]> in xml' ) );
+	}
+
 	public function test_multiline_helper_leaves_ordinary_text_alone(): void {
 		$this->assertSame( "Para one.\n\nPara two.", aafm_sanitize_multiline_text( "Para one.\n\nPara two." ) );
 	}

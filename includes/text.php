@@ -100,3 +100,35 @@ function aafm_sanitize_plain_text( string $value ): string {
 function aafm_sanitize_multiline_text( string $value ): string {
 	return str_replace( aafm_unsafe_text_characters(), '', sanitize_textarea_field( $value ) );
 }
+
+/**
+ * Escape a CDATA terminator on its way into the site's feed.
+ *
+ * The feed wraps each excerpt in `<![CDATA[ … ]]>`, so a raw `]]>` inside one ends the section
+ * early, turns everything after it into markup, and makes the whole document not well-formed. That
+ * is the same harm the invisible-character strip above exists to prevent, arriving through a
+ * character nobody enumerated (B2-09).
+ *
+ * It is fixed HERE, at output, rather than in the sanitizers above, and the difference matters.
+ * Every character those strip is invalid or deceptive in any context, so removing it loses nothing.
+ * `]]>` is ordinary text - a post explaining XML has every reason to contain it - and only breaks
+ * one serialization. Stripping it at storage would be silent data loss on legitimate content, so
+ * what is stored stays exactly as written and only the feed rendering is escaped.
+ *
+ * WordPress already does precisely this for the sibling field: get_the_content_feed() runs
+ * str_replace( ']]>', ']]&gt;' ) over post_content (wp-includes/feed.php). the_excerpt_rss() has no
+ * equivalent - its only filters are convert_chars and ent2ncr, and neither touches the sequence -
+ * so post_excerpt was unprotected where post_content was protected. This closes that asymmetry the
+ * same way core closed it.
+ *
+ * The filter can only ever repair a feed, never break a working one: any excerpt containing the raw
+ * sequence is already producing a malformed document.
+ *
+ * @param string $text Feed text.
+ * @return string
+ */
+function aafm_escape_feed_cdata( $text ): string {
+	return str_replace( ']]>', ']]&gt;', (string) $text );
+}
+
+add_filter( 'the_excerpt_rss', 'aafm_escape_feed_cdata' );

@@ -197,4 +197,24 @@ final class PlainTextSanitizationTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertSame( 'aafm-nulprobe', get_post( (int) $result['post']['id'] )->post_name );
 	}
+
+	/**
+	 * The create/update sibling. Found by the Codex review pass: create-user was swept and
+	 * update-user was not, which is this project's documented "fixed at one call site, never
+	 * swept" archetype. display_name is emitted in feeds, author markup and admin UI.
+	 */
+	public function test_update_user_does_not_store_a_nul_in_the_display_name(): void {
+		$this->acting_as( 'administrator' );
+		$id = self::factory()->user->create( array( 'display_name' => 'Clean Name' ) );
+
+		$result = aafm_exec_update_user(
+			array(
+				'user_id'      => $id,
+				'display_name' => "Visible\x00Name",
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result );
+		$this->assertStringNotContainsString( "\x00", get_userdata( $id )->display_name );
+	}
 }

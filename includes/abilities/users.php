@@ -579,7 +579,7 @@ function aafm_exec_update_user( array $input ) {
 	$data = array( 'ID' => $id );
 	foreach ( array( 'display_name', 'first_name', 'last_name' ) as $field ) {
 		if ( isset( $input[ $field ] ) ) {
-			$data[ $field ] = sanitize_text_field( (string) $input[ $field ] );
+			$data[ $field ] = aafm_sanitize_plain_text( (string) $input[ $field ] );
 		}
 	}
 	if ( isset( $input['email'] ) ) {

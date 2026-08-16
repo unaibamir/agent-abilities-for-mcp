@@ -897,6 +897,77 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R4-2: the rollback must survive an extension that throws while the rollback is cleaning up.
+	 *
+	 * WooCommerce's wc_delete_order_item() fires woocommerce_before_delete_order_item before removing the row, so
+	 * a callback listening there throws straight out of the deletion helper. Uncaught, that skipped
+	 * the order-level delete entirely and let a raw Throwable leave the ability with the part-built
+	 * order still in place, which is both halves of the defect the create fix was written to close,
+	 * reappearing exactly when an extension misbehaves during cleanup.
+	 *
+	 * Two extensions throw here, one from each hook, which is the realistic shape: whatever is
+	 * broken enough to fail during totals is broken enough to fail during cleanup.
+	 *
+	 * Measured before the fix: `RuntimeException: extension exploded during item cleanup` escaped
+	 * the ability and the order table gained a row.
+	 */
+	public function test_create_rollback_survives_an_extension_that_throws_during_item_cleanup(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Cleanup-Crash Widget' );
+		$product->set_regular_price( '100' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$orders_before = $this->count_orders();
+
+		$boom_totals  = static function (): void {
+			throw new \RuntimeException( 'Extension exploded after totals.' );
+		};
+		$boom_cleanup = static function (): void {
+			throw new \RuntimeException( 'Extension exploded during item cleanup.' );
+		};
+		add_action( 'woocommerce_order_after_calculate_totals', $boom_totals, 10, 0 );
+		add_action( 'woocommerce_before_delete_order_item', $boom_cleanup, 10, 0 );
+
+		$threw  = null;
+		$result = null;
+		try {
+			$result = aafm_exec_wc_create_order(
+				array(
+					'status'     => 'pending',
+					'line_items' => array(
+						array(
+							'product_id' => $product_id,
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$threw = $e;
+		}
+		remove_action( 'woocommerce_order_after_calculate_totals', $boom_totals, 10 );
+		remove_action( 'woocommerce_before_delete_order_item', $boom_cleanup, 10 );
+
+		$this->assertNull(
+			$threw,
+			'A rollback that can itself crash is not a rollback. The cleanup exception must not escape the ability.'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The caller must still get a structured error.' );
+		$this->assertSame(
+			$orders_before,
+			$this->count_orders(),
+			'The order-level delete must still run even though the item delete threw, so no part-built order survives.'
+		);
+
+		$product->delete( true );
+	}
+
+	/**
 	 * Count real orders, so a failed create leaving a row behind is visible.
 	 *
 	 * @return int

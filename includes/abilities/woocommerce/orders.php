@@ -983,12 +983,60 @@ function aafm_wc_delete_added_order_items( array $item_ids ): array {
 		if ( $item_id < 1 ) {
 			continue;
 		}
-		$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+		// wc_delete_order_item() fires woocommerce_before_delete_order_item before it removes the
+		// row, so an extension listening there can throw straight out of this loop. Uncaught, that
+		// exception escaped the whole rollback: on create it meant the order-level delete never ran,
+		// a raw Throwable left the ability, and the part-built order stayed -- both halves of the
+		// defect the create fix was written to close, reappearing precisely when an extension
+		// misbehaves during cleanup. A rollback that can itself crash is not a rollback.
+		//
+		// So a throw is recorded as an UNCONFIRMED survivor and the loop keeps going. Unconfirmed is
+		// the honest word: the throw says the delete did not complete, not that the row is still
+		// there, and the caller re-checks with aafm_wc_surviving_order_items() once the rest of the
+		// cleanup has had its turn.
+		$deleted = false;
+		try {
+			$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			$deleted = false;
+		}
 		if ( ! $deleted ) {
 			$kept[] = $item_id;
 		}
 	}
 	return $kept;
+}
+
+/**
+ * Narrow a list of unconfirmed survivors to the rows that are genuinely still there.
+ *
+ * Two things make the re-check necessary rather than tidy. A delete that threw may still have
+ * removed the row, because woocommerce_delete_order_item fires AFTER the deletion; and on create the
+ * order-level delete that runs afterwards takes its own items with it, so a row whose direct
+ * deletion failed can be gone by the time the message is chosen. Reporting either as a survivor
+ * would name ids the caller cannot find, which is its own kind of lie.
+ *
+ * @param array<int,int> $item_ids Ids whose deletion was not confirmed.
+ * @return array<int,int> The subset that still exists.
+ */
+function aafm_wc_surviving_order_items( array $item_ids ): array {
+	if ( array() === $item_ids || ! class_exists( 'WC_Order_Factory' ) ) {
+		return $item_ids;
+	}
+
+	$surviving = array();
+	foreach ( $item_ids as $item_id ) {
+		try {
+			if ( false !== \WC_Order_Factory::get_order_item( (int) $item_id ) ) {
+				$surviving[] = (int) $item_id;
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			// Cannot tell: keep reporting it, since the honest failure is to over-report a survivor
+			// the caller can check, never to quietly drop one.
+			$surviving[] = (int) $item_id;
+		}
+	}
+	return $surviving;
 }
 
 /**
@@ -1234,7 +1282,12 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
  * @return \WP_Error
  */
 function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, array $snapshot ): \WP_Error {
-	$kept = aafm_wc_delete_added_order_items( $item_ids );
+	// An item deletion that throws is recorded, not propagated, and the money restore below still
+	// runs. Letting cleanup crash here would abandon the restore entirely and hand the caller a raw
+	// Throwable in place of any of these errors, which is strictly worse than a partial rollback
+	// reported honestly.
+	$unconfirmed = aafm_wc_delete_added_order_items( $item_ids );
+	$kept        = aafm_wc_surviving_order_items( $unconfirmed );
 
 	$restored = false;
 	if ( array() !== $snapshot && $order_id > 0 && function_exists( 'wc_get_order' ) ) {
@@ -1271,6 +1324,30 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
 }
 
 /**
+ * Whether an order row is still in the database.
+ *
+ * Used instead of trusting what delete() returned, because the whole point of this rollback is to
+ * report what is actually there rather than what an API said it did.
+ *
+ * A lookup that throws is reported as "still exists": over-reporting a leftover the caller can go
+ * and check is recoverable, while claiming a clean rollback that did not happen is exactly the
+ * false promise this code exists to stop making.
+ *
+ * @param int $order_id Order id.
+ * @return bool
+ */
+function aafm_wc_order_still_exists( int $order_id ): bool {
+	if ( $order_id < 1 || ! function_exists( 'wc_get_order' ) ) {
+		return false;
+	}
+	try {
+		return wc_get_order( $order_id ) instanceof \WC_Order;
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return true;
+	}
+}
+
+/**
  * Undo a CREATE whose totals recalculation threw, and report what survived.
  *
  * Deliberately not the update path's rollback, because the two failures are not the same shape.
@@ -1287,23 +1364,34 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
  * Items are deleted before the order. Deleting the order takes its own items with it, but a row
  * written by add_product() while the order id was still 0 belongs to nothing and would outlive it.
  *
+ * Every step here assumes cleanup can fail, including the cleanup of the cleanup. Item deletion no
+ * longer throws out of the helper, the order delete is wrapped, and neither is believed on its own
+ * word: what gets reported is what a fresh look at the database finds. That ordering matters for
+ * accuracy as well as safety, because deleting the order removes items whose own deletion failed,
+ * so "the item delete threw" does not mean "the item is still there".
+ *
  * @param \WC_Order      $order    The part-built order.
  * @param array<int,int> $item_ids Order-item ids this request wrote.
  * @return \WP_Error
  */
 function aafm_wc_rollback_created_order( \WC_Order $order, array $item_ids ): \WP_Error {
-	$kept     = aafm_wc_delete_added_order_items( $item_ids );
-	$order_id = (int) $order->get_id();
-	$removed  = true;
+	$unconfirmed = aafm_wc_delete_added_order_items( $item_ids );
+	$order_id    = (int) $order->get_id();
 
 	if ( $order_id > 0 ) {
-		$removed = false;
 		try {
-			$removed = (bool) $order->delete( true );
-		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
-			$removed = false;
+			$order->delete( true );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a throw here is answered by the existence check below, which is the authority.
+			unset( $e );
 		}
 	}
+
+	// Deliberately NOT the return value of delete(). The question is whether the order is gone, and
+	// the only answer worth reporting comes from looking.
+	$removed = 0 === $order_id || ! aafm_wc_order_still_exists( $order_id );
+
+	// Re-check the survivors only now, after the order delete has had its chance to take them.
+	$kept = aafm_wc_surviving_order_items( $unconfirmed );
 
 	if ( ! $removed ) {
 		return new \WP_Error(

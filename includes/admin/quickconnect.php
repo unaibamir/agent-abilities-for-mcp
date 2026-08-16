@@ -50,10 +50,58 @@ function aafm_quickconnect_is_dismissed(): bool {
 }
 
 /**
+ * Whether the site shows evidence that someone has already set this plugin up.
+ *
+ * The wizard is a FIRST-RUN screen, but the two flags above only ever record what the operator did
+ * inside the wizard itself. Someone who closes it with the X and then configures the plugin through
+ * the normal tabs has done the whole job and set neither flag, so the wizard used to greet them on
+ * every visit forever with no way out short of finding the one exact "Don't show this again".
+ *
+ * So ask the site instead. Any one of these means setup has happened somewhere:
+ *
+ *   - an ability is switched on (the option ships empty, so anything at all is a deliberate act)
+ *   - an OAuth client is registered
+ *   - a grant is live
+ *   - the activity log has a row, meaning an agent has actually called something
+ *
+ * Read in that order: the option is autoloaded and answers for almost every configured site, so the
+ * three table reads below it rarely run. Nothing here WRITES, deliberately. The flags keep meaning
+ * exactly what they meant ("the operator finished the wizard" and "the operator opted out"), the
+ * onboarding checklist can still tell those apart, and a render still changes no state, which is
+ * the promise made at page.php's dashboard notice.
+ *
+ * Deliberately NOT memoized. aafm_quickconnect_apply_abilities() writes the enabled-abilities option
+ * partway through a request, so a cached answer could outlive the state it describes and report a
+ * site as unconfigured after the wizard had just configured it. The option read below is autoloaded
+ * and settles the common case before any table is touched, which is cheaper than the staleness
+ * would be to reason about.
+ *
+ * @return bool
+ */
+function aafm_quickconnect_site_looks_configured(): bool {
+	$enabled = get_option( 'aafm_enabled_abilities', array() );
+	if ( is_array( $enabled ) && array() !== array_filter( array_map( 'strval', $enabled ) ) ) {
+		return true;
+	}
+	if ( function_exists( 'aafm_oauth_count_active_clients' ) && aafm_oauth_count_active_clients() > 0 ) {
+		return true;
+	}
+	if ( function_exists( 'aafm_oauth_list_grants' ) && array() !== aafm_oauth_list_grants() ) {
+		return true;
+	}
+	if ( function_exists( 'aafm_activity_count_filtered' ) && aafm_activity_count_filtered() > 0 ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Whether the wizard should render on the plugin page for the current request.
  *
- * True only for a capable admin who has neither finished nor permanently dismissed it. A manual
- * close leaves both flags untouched, so this keeps returning true and the wizard reopens.
+ * True only for a capable admin who has neither finished it, nor permanently dismissed it, nor
+ * already set the plugin up some other way. A manual close still leaves both flags untouched, so on
+ * a genuinely untouched site the wizard does reopen, which is the point of a first-run screen.
  *
  * @return bool
  */
@@ -61,7 +109,10 @@ function aafm_quickconnect_should_render(): bool {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return false;
 	}
-	return ! aafm_quickconnect_is_finished() && ! aafm_quickconnect_is_dismissed();
+	if ( aafm_quickconnect_is_finished() || aafm_quickconnect_is_dismissed() ) {
+		return false;
+	}
+	return ! aafm_quickconnect_site_looks_configured();
 }
 
 /**

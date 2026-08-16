@@ -689,11 +689,11 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
  * - The value compared is the SANITIZED one, built with the same aafm_sanitize_plain_text() the
  *   writer runs, so the check sees the string that will reach postmeta rather than the raw input.
  *   A value that only differs by surrounding whitespace is therefore accepted, not refused.
- * - The options come from WC_Product_Attribute::get_slugs(), which is what papers over the two
- *   kinds of attribute: a global/taxonomy attribute stores TERM IDS and get_slugs() resolves them
- *   to term slugs (the form a variation stores), while a custom/local attribute stores its option
- *   strings and get_slugs() hands those straight back, unslugified. Comparing against get_options()
- *   instead would test a variation's slug against a list of term ids.
+ * - The options are resolved by aafm_wc_variation_attribute_options(), which reconciles the two
+ *   kinds of attribute: a global/taxonomy attribute stores TERM IDS that have to be resolved to
+ *   term slugs (the form a variation stores), while a custom/local attribute stores its option
+ *   strings and those are already the comparable list. Comparing against the raw options of a
+ *   taxonomy attribute would test a variation's slug against a list of term ids.
  * - The comparison is case-sensitive and exact, deliberately. WooCommerce matches a variation by
  *   comparing the stored attribute_<key> value against the parent's option, and this plugin stores
  *   the value verbatim rather than slugifying it, so "Blue" against an option of "blue" is exactly
@@ -752,31 +752,103 @@ function aafm_wc_invalid_variation_attribute_values_error( array $parent_attribu
 }
 
 /**
- * The option list a variation's value for this attribute has to come from, or null when the
- * attribute constrains nothing and no value can be judged against it.
+ * The option list a variation's value for this attribute has to come from, or null when there is
+ * nothing here a value can honestly be judged against.
  *
- * Null in two cases. An attribute declared with no options places no constraint on a variation at
- * all. And a taxonomy attribute whose taxonomy is not registered still holds raw TERM IDS, which
- * get_slugs() hands back verbatim: matching a sent value against a list of numeric ids would refuse
- * every legitimate write. That second case is defence rather than a live path, since
- * WC_Product_Data_Store_CPT::read_attributes() drops a taxonomy attribute whose taxonomy is missing
- * before the product object is built, but the attribute map is filterable and this function must
- * not be the thing that turns a third party's odd shape into a blocked write.
+ * DELIBERATELY NOT WC_Product_Attribute::get_slugs(), which is the obvious call and the wrong one.
+ * For a taxonomy attribute whose option does not resolve to an existing term, get_slugs() calls
+ * wp_insert_term() and CREATES it (class-wc-product-attribute.php, the get_slugs() else branch).
+ * A validator built on it would mutate the site's taxonomy as a side effect of checking a request
+ * it is about to REFUSE, and it would do so invisibly, because the validation still returns the
+ * right answer. On a plugin whose whole point is least-privilege governance, a write-on-validate
+ * path is not an acceptable shortcut. So the options are resolved here, read-only, and a term that
+ * cannot be found is simply not found.
  *
- * get_slugs() carries one write branch, an insert of a term named after an unresolved string
- * option. It is unreachable from here: read_attributes() sets a taxonomy attribute's options from
- * wc_get_object_terms( ..., 'term_id' ), which are ints, and get_slugs() only takes the insert path
- * for a non-int option.
+ * The insert branch is not currently reachable from a product read -- read_attributes() sets a
+ * taxonomy attribute's options from wc_get_object_terms( ..., 'term_id' ), whose ids are ints, and
+ * get_slugs() only takes the insert path for a non-int option. That reachability argument is
+ * exactly why it is not relied on: it runs through three separate pieces of WooCommerce and
+ * WordPress internals, any of which a version bump or a woocommerce_product_get_attributes filter
+ * can change, and the cost of being wrong is silent term creation.
+ *
+ * Null is returned in three cases, all of them "no honest list exists" rather than "everything is
+ * fine":
+ *
+ * - The attribute declares no options, so it constrains nothing.
+ * - It is a taxonomy attribute whose taxonomy is not registered. Its options are still raw term
+ *   ids, and matching a sent value against numeric ids would refuse every legitimate write.
+ * - Any one of its options cannot be resolved read-only. Judging a value against the PARTIAL list
+ *   that remains would reject a value the parent genuinely declares, punishing the caller for a
+ *   defect in the parent product's own data. Skipping is the lesser harm, and unlike a wrongly
+ *   rejected write it costs nothing the caller can see.
+ *
+ * is_taxonomy() is reproduced as `0 < get_id()` rather than called. That is real WooCommerce's own
+ * definition of the method (class-wc-product-attribute.php), and taking it from get_id() keeps this
+ * function to the four accessors the class has always had.
  *
  * @param \WC_Product_Attribute $attribute One of the parent product's attributes.
  * @return array<string>|null
  */
 function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute ): ?array {
-	if ( $attribute->is_taxonomy() && ! taxonomy_exists( (string) $attribute->get_name() ) ) {
+	$name        = (string) $attribute->get_name();
+	$is_taxonomy = 0 < (int) $attribute->get_id();
+	$options     = (array) $attribute->get_options();
+
+	if ( ! $is_taxonomy ) {
+		// A custom/local attribute stores its option strings and a variation stores the same string,
+		// so the options already ARE the comparable list.
+		$options = array_map( 'strval', $options );
+		return array() === $options ? null : $options;
+	}
+
+	if ( ! taxonomy_exists( $name ) ) {
 		return null;
 	}
-	$options = array_map( 'strval', $attribute->get_slugs() );
-	return array() === $options ? null : $options;
+
+	$slugs = array();
+	foreach ( $options as $option ) {
+		$term = aafm_wc_find_attribute_term( $option, $name );
+		if ( ! $term instanceof \WP_Term ) {
+			return null; // An option this cannot resolve without writing leaves no honest list.
+		}
+		$slugs[] = (string) $term->slug;
+	}
+
+	return array() === $slugs ? null : $slugs;
+}
+
+/**
+ * Resolve one of a taxonomy attribute's stored options to its term, reading only.
+ *
+ * This is the read-only stand-in for the resolution inside WC_Product_Attribute::get_slugs(), minus
+ * its wp_insert_term() fallback. A miss is returned as a miss; nothing is created to make one.
+ *
+ * An option out of the data store is an int term id. The numeric-string arm is there because that
+ * typing is a WordPress implementation detail (WP_Term::term_id happens to be an int) rather than a
+ * documented guarantee, and refusing to resolve "12" would be a silly thing to fail a write over.
+ * A genuinely non-numeric option is resolved by name first, matching WooCommerce's own order, then
+ * by slug, since an option already written in slug form should still produce a usable list.
+ *
+ * @param mixed  $option   One entry from WC_Product_Attribute::get_options().
+ * @param string $taxonomy The attribute taxonomy.
+ * @return \WP_Term|null The resolved term, or null when it cannot be found without creating it.
+ */
+function aafm_wc_find_attribute_term( $option, string $taxonomy ): ?\WP_Term {
+	if ( is_int( $option ) || ( is_string( $option ) && '' !== $option && ctype_digit( $option ) ) ) {
+		$term = get_term_by( 'id', (int) $option, $taxonomy );
+		return $term instanceof \WP_Term ? $term : null;
+	}
+
+	if ( ! is_string( $option ) || '' === $option ) {
+		return null;
+	}
+
+	$term = get_term_by( 'name', $option, $taxonomy );
+	if ( ! $term instanceof \WP_Term ) {
+		$term = get_term_by( 'slug', $option, $taxonomy );
+	}
+
+	return $term instanceof \WP_Term ? $term : null;
 }
 
 /**

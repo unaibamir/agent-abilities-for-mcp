@@ -262,13 +262,6 @@ if ( ! class_exists( 'WC_Product_Attribute' ) ) {
 		public function get_variation(): bool {
 			return false;
 		}
-		public function is_taxonomy(): bool {
-			return false;
-		}
-		/** @return array<int,mixed> */
-		public function get_slugs(): array {
-			return array();
-		}
 		/** @param mixed $value @return void */
 		public function set_id( $value ) {}
 		/** @param mixed $value @return void */

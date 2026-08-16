@@ -77,15 +77,17 @@ final class WooVariationsTest extends TestCase {
 	 *
 	 * Runs AFTER stub_woocommerce(), because that is what eval's the WC_Product_Attribute class this
 	 * builds instances of. A live parent's attribute map holds those objects, never plain values, and
-	 * the variation write validation reads three things off each one: the key, the "used for
-	 * variations" flag, and the option list behind get_slugs(). The four entries cover every branch
-	 * of that read:
+	 * the variation write validation reads four things off each one: the key, the id (which is how
+	 * WooCommerce itself decides whether an attribute is taxonomy-backed), the "used for variations"
+	 * flag, and the options. The four entries cover every branch of that read:
 	 *
-	 *   pa_color, pa_size -- global/taxonomy attributes (id > 0). Their options are TERM IDS, and
-	 *                        get_slugs() resolves them to term slugs, so the taxonomies and terms are
-	 *                        real WordPress ones here rather than faked.
+	 *   pa_color, pa_size -- global/taxonomy attributes (id > 0). Their options are TERM IDS, which
+	 *                        the validator resolves to term slugs, so the taxonomies and the terms
+	 *                        here are real WordPress ones rather than faked. That resolution runs
+	 *                        against real WP term functions, which is the point: the stub supplies
+	 *                        the attribute shape, never the lookup behaviour under test.
 	 *   material          -- a custom/local attribute (id 0). Its options are the option strings
-	 *                        themselves, unslugified ("Cotton"), which get_slugs() returns as-is.
+	 *                        themselves, unslugified ("Cotton"), and need no resolution.
 	 *   brand             -- declared for display only (variation flag off). WooCommerce never keys a
 	 *                        variation on one of these.
 	 */
@@ -929,6 +931,80 @@ final class WooVariationsTest extends TestCase {
 
 		$this->assertNotInstanceOf( WP_Error::class, $res, 'An attribute with no options places no constraint.' );
 		$this->assertSame( 'Matte', ( (array) $res['attributes'] )['finish'] ?? null );
+	}
+
+	/**
+	 * R2-10: an option the PARENT's own data cannot resolve read-only must not cost the caller a
+	 * write, and must not cost the site a term.
+	 *
+	 * Parent 704 declares a taxonomy attribute whose options are one resolvable term id and one
+	 * unresolved STRING. That second shape is exactly what makes real WooCommerce's
+	 * WC_Product_Attribute::get_slugs() reach wp_insert_term() and CREATE the term, which is why the
+	 * validator resolves options itself rather than calling it.
+	 *
+	 * Two things are asserted, and they are NOT equally strong evidence.
+	 *
+	 * The write going through is a real red-to-green pin. Resolving what can be resolved and judging
+	 * against the PARTIAL list that survives rejects "chartreuse" -- and "chartreuse" is exactly what
+	 * the parent's unresolved "Chartreuse" option licenses, because WooCommerce materializes that
+	 * option into a term the moment anything asks it to. The honest position is that an option we
+	 * cannot resolve read-only tells us nothing about which values it permits, so we must not judge
+	 * any value on that attribute at all.
+	 *
+	 * The term count is a GUARD, not a proof. No faithful stub may write, so this assertion passes
+	 * against the get_slugs() version too and cannot go red here. The read-only guarantee rests on
+	 * the production code never calling get_slugs(), argued in that function's docblock, not on this
+	 * line going green.
+	 */
+	public function test_an_unresolvable_parent_option_neither_blocks_the_write_nor_creates_a_term(): void {
+		$ids = $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ) );
+		WcStubStore::seed(
+			704,
+			array(
+				'id'         => 704,
+				'name'       => 'Half Broken Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'pa_color' => $this->wc_product_attribute( 1, 'pa_color', array( $ids[1], 'Chartreuse' ), true ),
+				),
+			)
+		);
+
+		$before = get_terms(
+			array(
+				'taxonomy'   => 'pa_color',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 704,
+				'attributes' => array( 'pa_color' => 'chartreuse' ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A value licensed by an option the parent product cannot resolve must not be rejected on the strength of the partial list that remains.'
+		);
+
+		$after = get_terms(
+			array(
+				'taxonomy'   => 'pa_color',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		);
+		$this->assertSame(
+			count( (array) $before ),
+			count( (array) $after ),
+			'Validating a variation write must never create a term.'
+		);
 	}
 
 	/**

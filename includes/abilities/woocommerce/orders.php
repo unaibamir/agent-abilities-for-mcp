@@ -1288,7 +1288,12 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 
 		$seen_rates = array();
 		foreach ( $order->get_taxes() as $tax_item_id => $tax_item ) {
-			$rate_id = (int) $tax_item->get_rate_id();
+			// 'edit' for the same reason the snapshot uses it, and specifically so the two AGREE:
+			// the snapshot keys its tax map by the edit-context rate id, so looking up here in view
+			// context would let a woocommerce_order_item_get_rate_id filter make the two disagree.
+			// A row that is in the snapshot would then read as one that is not, take the removal
+			// branch below, and be deleted and recreated under a different item id.
+			$rate_id = (int) $tax_item->get_rate_id( 'edit' );
 			if ( ! isset( $snapshot['taxes'][ $rate_id ] ) ) {
 				$order->remove_item( $tax_item_id );
 				continue;

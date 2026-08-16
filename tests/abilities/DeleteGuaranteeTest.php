@@ -289,6 +289,93 @@ final class DeleteGuaranteeTest extends TestCase {
 	}
 
 	/**
+	 * The escape hatches have to reach the UNANNOTATED case too, not only the annotated one.
+	 *
+	 * Failing closed on a missing risk is only defensible if the author has a way out of the false
+	 * alarm. If the hatches worked solely for a row already declaring risk: destructive, an
+	 * unannotated ability would be stuck warning forever and the fail-closed rule would be a trap
+	 * rather than a default. The ordering in aafm_enabled_can_delete_permanently() is what makes
+	 * this work - both list checks run BEFORE the risk is ever read - and ordering is exactly the
+	 * kind of thing that survives a refactor by luck, so it is pinned rather than reasoned about.
+	 */
+	public function test_the_recoverable_hatch_works_for_an_ability_with_no_risk_annotation(): void {
+		$declare = static function ( array $slugs ): array {
+			$slugs[] = 'aafm/third-party-bin-unannotated';
+			return $slugs;
+		};
+		add_filter( 'aafm_recoverable_delete_abilities', $declare );
+
+		try {
+			$this->with_registered_ability(
+				'aafm/third-party-bin-unannotated',
+				array( 'risk' => null ),
+				function (): void {
+					update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-bin-unannotated' ) );
+
+					$this->assertFalse(
+						aafm_enabled_can_delete_permanently(),
+						'Declaring an unannotated ability recoverable must clear the warning, or the author has no way out.'
+					);
+					$this->assertSame( 'Deletes go to Trash.', aafm_delete_guarantee()[0] );
+				}
+			);
+		} finally {
+			remove_filter( 'aafm_recoverable_delete_abilities', $declare );
+		}
+	}
+
+	/**
+	 * The same reach for the other hatch.
+	 */
+	public function test_the_non_removal_hatch_works_for_an_ability_with_no_risk_annotation(): void {
+		$declare = static function ( array $slugs ): array {
+			$slugs[] = 'aafm/third-party-rotate-unannotated';
+			return $slugs;
+		};
+		add_filter( 'aafm_non_removal_destructive_abilities', $declare );
+
+		try {
+			$this->with_registered_ability(
+				'aafm/third-party-rotate-unannotated',
+				array( 'risk' => null ),
+				function (): void {
+					update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-rotate-unannotated' ) );
+
+					$this->assertFalse(
+						aafm_enabled_can_delete_permanently(),
+						'Declaring an unannotated ability a non-removal must clear the warning.'
+					);
+				}
+			);
+		} finally {
+			remove_filter( 'aafm_non_removal_destructive_abilities', $declare );
+		}
+	}
+
+	/**
+	 * The thirteen hand-classified permanent slugs keep their precedence over every annotation.
+	 *
+	 * They are classified by hand precisely because the risk annotation cannot answer
+	 * recoverability, so a row claiming risk: read must not be able to talk one of them off the
+	 * permanent side. The permanent check runs first in the loop for this reason; this pins that
+	 * ordering rather than trusting it.
+	 */
+	public function test_a_hand_classified_permanent_slug_outranks_its_risk_annotation(): void {
+		$this->with_registered_ability(
+			'aafm/delete-post',
+			array( 'risk' => 'read' ),
+			function (): void {
+				update_option( 'aafm_enabled_abilities', array( 'aafm/delete-post' ) );
+
+				$this->assertTrue(
+					aafm_enabled_can_delete_permanently(),
+					'A hand-classified permanent delete must stay permanent whatever its annotation says.'
+				);
+			}
+		);
+	}
+
+	/**
 	 * A filter-added ability that is not destructive at all must not trip the warning. Without
 	 * this, "unknown means permanent" would over-warn on every third-party read.
 	 */

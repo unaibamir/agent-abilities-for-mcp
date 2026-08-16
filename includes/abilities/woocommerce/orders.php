@@ -767,44 +767,44 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 		$order->set_customer_id( absint( $input['customer_id'] ) );
 	}
 	if ( array_key_exists( 'customer_note', $input ) ) {
-		$order->set_customer_note( sanitize_textarea_field( (string) $input['customer_note'] ) );
+		$order->set_customer_note( aafm_sanitize_multiline_text( (string) $input['customer_note'] ) );
 	}
 
 	// Billing address -- sanitize each leaf individually (never flatten the map).
 	if ( array_key_exists( 'billing', $input ) && is_array( $input['billing'] ) ) {
 		$billing = $input['billing'];
 		if ( array_key_exists( 'first_name', $billing ) ) {
-			$order->set_billing_first_name( sanitize_text_field( (string) $billing['first_name'] ) );
+			$order->set_billing_first_name( aafm_sanitize_plain_text( (string) $billing['first_name'] ) );
 		}
 		if ( array_key_exists( 'last_name', $billing ) ) {
-			$order->set_billing_last_name( sanitize_text_field( (string) $billing['last_name'] ) );
+			$order->set_billing_last_name( aafm_sanitize_plain_text( (string) $billing['last_name'] ) );
 		}
 		if ( array_key_exists( 'company', $billing ) ) {
-			$order->set_billing_company( sanitize_text_field( (string) $billing['company'] ) );
+			$order->set_billing_company( aafm_sanitize_plain_text( (string) $billing['company'] ) );
 		}
 		if ( array_key_exists( 'address_1', $billing ) ) {
-			$order->set_billing_address_1( sanitize_text_field( (string) $billing['address_1'] ) );
+			$order->set_billing_address_1( aafm_sanitize_plain_text( (string) $billing['address_1'] ) );
 		}
 		if ( array_key_exists( 'address_2', $billing ) ) {
-			$order->set_billing_address_2( sanitize_text_field( (string) $billing['address_2'] ) );
+			$order->set_billing_address_2( aafm_sanitize_plain_text( (string) $billing['address_2'] ) );
 		}
 		if ( array_key_exists( 'city', $billing ) ) {
-			$order->set_billing_city( sanitize_text_field( (string) $billing['city'] ) );
+			$order->set_billing_city( aafm_sanitize_plain_text( (string) $billing['city'] ) );
 		}
 		if ( array_key_exists( 'state', $billing ) ) {
-			$order->set_billing_state( sanitize_text_field( (string) $billing['state'] ) );
+			$order->set_billing_state( aafm_sanitize_plain_text( (string) $billing['state'] ) );
 		}
 		if ( array_key_exists( 'postcode', $billing ) ) {
-			$order->set_billing_postcode( sanitize_text_field( (string) $billing['postcode'] ) );
+			$order->set_billing_postcode( aafm_sanitize_plain_text( (string) $billing['postcode'] ) );
 		}
 		if ( array_key_exists( 'country', $billing ) ) {
-			$order->set_billing_country( sanitize_text_field( (string) $billing['country'] ) );
+			$order->set_billing_country( aafm_sanitize_plain_text( (string) $billing['country'] ) );
 		}
 		if ( array_key_exists( 'email', $billing ) ) {
 			$order->set_billing_email( sanitize_email( (string) $billing['email'] ) );
 		}
 		if ( array_key_exists( 'phone', $billing ) ) {
-			$order->set_billing_phone( sanitize_text_field( (string) $billing['phone'] ) );
+			$order->set_billing_phone( aafm_sanitize_plain_text( (string) $billing['phone'] ) );
 		}
 	}
 
@@ -812,31 +812,31 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 	if ( array_key_exists( 'shipping', $input ) && is_array( $input['shipping'] ) ) {
 		$shipping = $input['shipping'];
 		if ( array_key_exists( 'first_name', $shipping ) ) {
-			$order->set_shipping_first_name( sanitize_text_field( (string) $shipping['first_name'] ) );
+			$order->set_shipping_first_name( aafm_sanitize_plain_text( (string) $shipping['first_name'] ) );
 		}
 		if ( array_key_exists( 'last_name', $shipping ) ) {
-			$order->set_shipping_last_name( sanitize_text_field( (string) $shipping['last_name'] ) );
+			$order->set_shipping_last_name( aafm_sanitize_plain_text( (string) $shipping['last_name'] ) );
 		}
 		if ( array_key_exists( 'company', $shipping ) ) {
-			$order->set_shipping_company( sanitize_text_field( (string) $shipping['company'] ) );
+			$order->set_shipping_company( aafm_sanitize_plain_text( (string) $shipping['company'] ) );
 		}
 		if ( array_key_exists( 'address_1', $shipping ) ) {
-			$order->set_shipping_address_1( sanitize_text_field( (string) $shipping['address_1'] ) );
+			$order->set_shipping_address_1( aafm_sanitize_plain_text( (string) $shipping['address_1'] ) );
 		}
 		if ( array_key_exists( 'address_2', $shipping ) ) {
-			$order->set_shipping_address_2( sanitize_text_field( (string) $shipping['address_2'] ) );
+			$order->set_shipping_address_2( aafm_sanitize_plain_text( (string) $shipping['address_2'] ) );
 		}
 		if ( array_key_exists( 'city', $shipping ) ) {
-			$order->set_shipping_city( sanitize_text_field( (string) $shipping['city'] ) );
+			$order->set_shipping_city( aafm_sanitize_plain_text( (string) $shipping['city'] ) );
 		}
 		if ( array_key_exists( 'state', $shipping ) ) {
-			$order->set_shipping_state( sanitize_text_field( (string) $shipping['state'] ) );
+			$order->set_shipping_state( aafm_sanitize_plain_text( (string) $shipping['state'] ) );
 		}
 		if ( array_key_exists( 'postcode', $shipping ) ) {
-			$order->set_shipping_postcode( sanitize_text_field( (string) $shipping['postcode'] ) );
+			$order->set_shipping_postcode( aafm_sanitize_plain_text( (string) $shipping['postcode'] ) );
 		}
 		if ( array_key_exists( 'country', $shipping ) ) {
-			$order->set_shipping_country( sanitize_text_field( (string) $shipping['country'] ) );
+			$order->set_shipping_country( aafm_sanitize_plain_text( (string) $shipping['country'] ) );
 		}
 	}
 
@@ -1616,7 +1616,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
 	// B58: textarea sanitizer, matching the customer_note sibling - sanitize_text_field() would
 	// collapse the newlines out of a multi-line note.
-	$note_text     = sanitize_textarea_field( (string) ( $input['note'] ?? '' ) );
+	$note_text     = aafm_sanitize_multiline_text( (string) ( $input['note'] ?? '' ) );
 	$customer_note = ! empty( $input['customer_note'] );
 
 	$order = aafm_wc_get_order_object( $order_id );
@@ -1903,7 +1903,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	$amount   = sanitize_text_field( (string) ( $input['amount'] ?? '0.00' ) );
 	// B58 sweep: the refund reason is the same class of free-form text as an order note, so it
 	// gets the textarea sanitizer too - line breaks survive.
-	$reason = sanitize_textarea_field( (string) ( $input['reason'] ?? '' ) );
+	$reason = aafm_sanitize_multiline_text( (string) ( $input['reason'] ?? '' ) );
 
 	$order = aafm_wc_get_order_object( $order_id );
 	if ( null === $order ) {

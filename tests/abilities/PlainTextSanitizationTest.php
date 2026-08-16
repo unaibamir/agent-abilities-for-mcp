@@ -217,4 +217,22 @@ final class PlainTextSanitizationTest extends TestCase {
 		$this->assertNotInstanceOf( \WP_Error::class, $result );
 		$this->assertStringNotContainsString( "\x00", get_userdata( $id )->display_name );
 	}
+
+	/**
+	 * The multi-line counterpart. sanitize_textarea_field() has the same gap as its single-line
+	 * sibling, and a media caption is stored as post_excerpt, which the RSS feed renders. So a NUL
+	 * arriving through a caption breaks the whole feed exactly the way one in a title does.
+	 */
+	public function test_multiline_helper_strips_invisibles_but_keeps_newlines(): void {
+		$this->assertSame( 'abcdef', aafm_sanitize_multiline_text( "abc\x00def" ) );
+		$this->assertSame( 'abcdef', aafm_sanitize_multiline_text( "abc\u{202E}def" ) );
+
+		$out = aafm_sanitize_multiline_text( "line one\nline two" );
+		$this->assertStringContainsString( "\n", $out, 'A newline is the whole point of the textarea sanitizer.' );
+		$this->assertSame( "line one\nline two", $out );
+	}
+
+	public function test_multiline_helper_leaves_ordinary_text_alone(): void {
+		$this->assertSame( "Para one.\n\nPara two.", aafm_sanitize_multiline_text( "Para one.\n\nPara two." ) );
+	}
 }

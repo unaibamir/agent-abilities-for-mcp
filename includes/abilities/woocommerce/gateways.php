@@ -495,7 +495,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$desired['title'] = sanitize_text_field( (string) $input['title'] );
 	}
 	if ( isset( $input['description'] ) ) {
-		$desired['description'] = sanitize_textarea_field( (string) $input['description'] );
+		$desired['description'] = aafm_sanitize_multiline_text( (string) $input['description'] );
 	}
 
 	foreach ( $desired as $key => $value ) {

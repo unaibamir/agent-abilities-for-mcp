@@ -329,6 +329,27 @@ function aafm_sanitize_plain_text( string $value ): string {
 }
 
 /**
+ * The multi-line counterpart, for a field that legitimately keeps its newlines: an order note, a
+ * refund reason, a media caption.
+ *
+ * Same strip, different WordPress sanitizer underneath. sanitize_text_field() would collapse the
+ * newlines out of a multi-line value, which is why these fields use the textarea sanitizer in the
+ * first place, and that one has exactly the same gap: a raw NUL is valid UTF-8, so it passes
+ * wp_check_invalid_utf8() and reaches storage.
+ *
+ * This matters as much as the single-line case, not less. A media caption is stored as
+ * post_excerpt, and post_excerpt is rendered into the site's RSS feed, so a NUL arriving through a
+ * caption breaks the whole feed document exactly the way one in a title does. The needle set
+ * already spares tab, LF and CR, so multi-line text survives intact.
+ *
+ * @param string $value Raw value from input.
+ * @return string Sanitized multi-line plain text.
+ */
+function aafm_sanitize_multiline_text( string $value ): string {
+	return str_replace( aafm_unsafe_text_characters(), '', sanitize_textarea_field( $value ) );
+}
+
+/**
  * Native abilities whose removals bypass the Trash and cannot be undone.
  *
  * The registry's own risk annotation cannot answer this. Every ability here is

@@ -355,7 +355,7 @@ function aafm_wc_apply_coupon_input( \WC_Coupon $coupon, array $input ): ?\WP_Er
 	if ( array_key_exists( 'description', $input ) ) {
 		// B58 sweep: the coupon description is free-form admin text; the textarea sanitizer keeps
 		// its line breaks where sanitize_text_field() would flatten them.
-		$coupon->set_description( sanitize_textarea_field( (string) $input['description'] ) );
+		$coupon->set_description( aafm_sanitize_multiline_text( (string) $input['description'] ) );
 	}
 	if ( array_key_exists( 'date_expires', $input ) ) {
 		$val = null === $input['date_expires'] ? null : sanitize_text_field( (string) $input['date_expires'] );

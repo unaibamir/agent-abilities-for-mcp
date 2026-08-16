@@ -860,7 +860,7 @@ function aafm_exec_update_media( array $input ) {
 		$postarr['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( $has_caption ) {
-		$postarr['post_excerpt'] = sanitize_textarea_field( (string) $input['caption'] );
+		$postarr['post_excerpt'] = aafm_sanitize_multiline_text( (string) $input['caption'] );
 	}
 	if ( $has_description ) {
 		$postarr['post_content'] = wp_kses_post( (string) $input['description'] );

@@ -274,7 +274,7 @@ function aafm_exec_update_site_settings( array $input ) {
  * Note absint() is deliberately NOT used for the integer bounds: it returns the ABSOLUTE value,
  * so absint('-3') is 3, not 0 - it would silently flip a negative into a live limit. The
  * floor/cap form (min(max, max(floor, (int) $raw))) clamps correctly. The string settings
- * run through sanitize_text_field.
+ * run through aafm_sanitize_plain_text.
  *
  * @param string $key   An allowlisted settings key (the caller has already proven this).
  * @param mixed  $value Raw submitted value.

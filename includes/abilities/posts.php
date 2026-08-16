@@ -760,7 +760,7 @@ function aafm_resolve_create_status( array $input, string $fallback_status, stri
  * Anti-escalation: post_author is never threaded from input - wp_insert_post
  * defaults it to the current (agent) user, so a caller cannot spoof authorship.
  * post_type is forced by the caller of this function, never by the agent's input. Title is
- * sanitized with sanitize_text_field and content with wp_kses_post so even an
+ * sanitized with aafm_sanitize_plain_text and content with wp_kses_post so even an
  * unfiltered_html-capable agent cannot store script.
  *
  * When $publish_cap is given, the effective status is resolved from $input['status'] (falling

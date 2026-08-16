@@ -739,7 +739,7 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * keys present in $input are applied; unsent fields are left untouched).
  *
  * Sanitize policy: billing.email -> sanitize_email; all other address leaves ->
- * sanitize_text_field; customer_note -> sanitize_textarea_field; customer_id -> absint.
+ * aafm_sanitize_plain_text; customer_note -> aafm_sanitize_multiline_text; customer_id -> absint.
  * The nested billing/shipping arrays are sanitized leaf-by-leaf so structured data
  * is never flattened or corrupted.
  *

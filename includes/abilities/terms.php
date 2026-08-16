@@ -844,7 +844,7 @@ function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
  *
  * Default-deny: the taxonomy is validated against the public allow-list, so an
  * unknown or internal taxonomy (nav_menu, link_category, etc.) is rejected before
- * any write. The name is sanitized with sanitize_text_field and the description
+ * any write. The name is sanitized with aafm_sanitize_plain_text and the description
  * with wp_kses_post, so script can never be stored. The closed input schema rejects
  * any undeclared field before this runs. A parent, if given, must belong to this
  * same hierarchical taxonomy (aafm_validate_term_parent).

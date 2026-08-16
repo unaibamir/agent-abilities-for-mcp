@@ -220,7 +220,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		$this->assertSame(
 			array(),
 			$unlisted,
-			"These ability call sites use a raw WordPress sanitizer that nobody has accounted for.\n"
+			"These call sites use a raw WordPress sanitizer that nobody has accounted for.\n"
 			. "If the value is STORED, route it through aafm_sanitize_plain_text() (or the multiline\n"
 			. "helper for a field that keeps its newlines). If it only feeds a query or a lookup and is\n"
 			. "never written back, add it to ALLOWED with a reason saying where the value goes.\n\n"

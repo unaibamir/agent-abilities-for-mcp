@@ -35,12 +35,14 @@ use SplFileInfo;
  * Finds every raw call to (and callable-string reference to) the WordPress plain-text sanitizers
  * anywhere in the shipped source, and reports each one with the function that encloses it.
  *
- * The scan covers all of includes/, not just includes/abilities/. It started at the abilities
- * because that is where B-18 was found, but the abilities are not where the plugin does all its
- * storing: the admin screens write the operator's meta-key allowlists into options, the OAuth
- * client registration stores a client_name that the consent screen renders back, and the activity
- * log writes a detail string to its own table. A scanner that only watched the abilities would have
- * been the same partial sweep it exists to prevent, one directory up.
+ * The scan covers every PHP file the plugin ships: the root plugin file and all of includes/, not
+ * just includes/abilities/. It started at the abilities because that is where B-18 was found, but
+ * the abilities are not where the plugin does all its storing: the admin screens write the
+ * operator's meta-key allowlists into options, the OAuth client registration stores a client_name
+ * that the consent screen renders back, and the activity log writes a detail string to its own
+ * table. A scanner that only watched the abilities would have been the same partial sweep it
+ * exists to prevent, one directory up. Nothing is left out by hand, because a hand-picked
+ * exclusion is where the next miss would land.
  *
  * Token-based rather than grep-based on purpose. These files talk about the sanitizers constantly
  * in docblocks and in the tool descriptions agents read; token_get_all() hands comments and string
@@ -279,28 +281,35 @@ final class StoredTextSanitizerScanner {
 	}
 
 	/**
-	 * Every shipped source file under includes/, sorted for a stable report.
+	 * Every shipped PHP file: the root plugin file plus the whole includes/ tree, sorted for a
+	 * stable report.
 	 *
-	 * The includes/ tree is the whole of the plugin's PHP apart from the root bootstrap file, so it
-	 * is the full surface on which the question "does a stored write skip the helper" can even be
-	 * asked. Scoping it to a subdirectory is what let the sweep be partial in the first place.
+	 * The root file is here for the same reason the scan covers all of includes/ rather than the
+	 * one subdirectory it started in. A file left out by hand is a hole exactly where the next miss
+	 * lands, and "it has no sanitizer calls today" is the argument that was made about update-user
+	 * and about the order addresses, both of which later needed fixing. It carries none today, so
+	 * the allowlist stays empty and the guard simply covers it from now on - which is the point.
 	 *
 	 * @return array<int,string> Absolute paths.
 	 */
 	public static function source_files(): array {
-		$root = self::plugin_root() . 'includes';
-		if ( ! is_dir( $root ) ) {
-			return array();
+		$files = array();
+
+		$bootstrap = self::plugin_root() . 'agent-abilities-for-mcp.php';
+		if ( is_file( $bootstrap ) ) {
+			$files[] = $bootstrap;
 		}
 
-		$files    = array();
-		$iterator = new RecursiveIteratorIterator(
-			new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS )
-		);
+		$root = self::plugin_root() . 'includes';
+		if ( is_dir( $root ) ) {
+			$iterator = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS )
+			);
 
-		foreach ( $iterator as $item ) {
-			if ( $item instanceof SplFileInfo && $item->isFile() && 'php' === strtolower( $item->getExtension() ) ) {
-				$files[] = $item->getPathname();
+			foreach ( $iterator as $item ) {
+				if ( $item instanceof SplFileInfo && $item->isFile() && 'php' === strtolower( $item->getExtension() ) ) {
+					$files[] = $item->getPathname();
+				}
 			}
 		}
 

@@ -47,6 +47,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
 aafm_register_adapter_autoloader();
 aafm_eager_load_adapter();
 
+// Stored plain-text sanitizing. First, because the audit log and the OAuth client registration
+// below both sanitize text they store, and both are required before aafm_bootstrap() runs. It
+// depends on nothing else the plugin defines, so there is no ordering cost to putting it here.
+require_once AAFM_PLUGIN_DIR . 'includes/text.php';
+
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';

@@ -360,6 +360,34 @@ if ( ! function_exists( 'wc_delete_attribute' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Order_Item_Tax' ) ) {
+	/**
+	 * Minimal WooCommerce order tax-line signature for static analysis only.
+	 */
+	class WC_Order_Item_Tax {
+		public function get_rate_id(): int { return 0; }
+		public function get_label(): string { return ''; }
+		public function get_compound(): bool { return false; }
+		/** @return int|float|string|null */
+		public function get_rate_percent() { return null; }
+		public function get_tax_total(): string { return '0.00'; }
+		public function get_shipping_tax_total(): string { return '0.00'; }
+		/** @param mixed $value @return void */
+		public function set_rate_id( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_label( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_compound( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_rate_percent( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_tax_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_tax_total( $value ) {}
+		public function save(): int { return 0; }
+	}
+}
+
 if ( ! class_exists( 'WC_Order' ) ) {
 	/**
 	 * Stub WC_Order for PHPStan - mirrors the getters the order abilities call.
@@ -390,16 +418,45 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		/** @return string */
 		public function get_customer_note() { return ''; }
 		/**
-		 * @param string $types
+		 * Real WooCommerce runs `array_filter( (array) $types )`, so a list of types is as valid as
+		 * a single one (abstract-wc-order.php:1068). The old string-only hint was a stub inaccuracy.
+		 *
+		 * @param string|array<int,string> $types
 		 * @return array<mixed>
 		 */
 		public function get_items( $types = 'line_item' ) { return array(); }
+		/** @return array<int,\WC_Order_Item_Tax> */
+		public function get_taxes() { return array(); }
 		/** @return string */
 		public function get_total_tax() { return '0.00'; }
 		/** @return string */
 		public function get_subtotal() { return '0.00'; }
 		/** @return string */
 		public function get_shipping_total() { return '0.00'; }
+		/** @return string */
+		public function get_cart_tax() { return '0.00'; }
+		/** @return string */
+		public function get_shipping_tax() { return '0.00'; }
+		/** @return string */
+		public function get_discount_total() { return '0.00'; }
+		/** @return string */
+		public function get_discount_tax() { return '0.00'; }
+		/** @param int $item_id @return void */
+		public function remove_item( $item_id ) {}
+		/** @param object $item @return void */
+		public function add_item( $item ) {}
+		/** @param mixed $value @return void */
+		public function set_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_cart_tax( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_tax( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_discount_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_discount_tax( $value ) {}
 		/** @return string */
 		public function get_billing_first_name() { return ''; }
 		/** @return string */

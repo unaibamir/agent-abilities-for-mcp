@@ -728,6 +728,126 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R3-2: the same failure, but from the hook that fires AFTER WooCommerce has already saved.
+	 *
+	 * The sibling test above throws from woocommerce_order_before_calculate_totals, which runs
+	 * before any mutation, so it proves only the easy half. calculate_totals() is not atomic: it
+	 * calls calculate_taxes() first, whose own WooCommerce comment reads "Note; this also triggers
+	 * save()", and fires woocommerce_order_after_calculate_totals only afterwards. An extension
+	 * throwing from that later hook therefore leaves recalculated tax ON DISK.
+	 *
+	 * Measured against real WooCommerce before the fix: an order holding one 100 line at 20% went
+	 * from a persisted tax of 20 to a persisted tax of 40 while the ability returned
+	 * "the order is unchanged" and the added item had been correctly rolled back. The order was
+	 * left claiming more tax than its own line items justified.
+	 *
+	 * Taxes are switched on through FILTERS rather than options, so this test changes no store
+	 * setting and has nothing to restore.
+	 */
+	public function test_update_order_recalculation_failure_after_taxes_are_saved_restores_the_money(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$tax_on   = '__return_true';
+		$tax_rate = static function (): array {
+			return array(
+				999 => array(
+					'rate'     => 20.0,
+					'label'    => 'AAFM Contract Tax',
+					'shipping' => 'no',
+					'compound' => 'no',
+				),
+			);
+		};
+		add_filter( 'wc_tax_enabled', $tax_on );
+		add_filter( 'woocommerce_matched_tax_rates', $tax_rate );
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Late-Recalc Widget' );
+		$product->set_regular_price( '100' );
+		$product->set_tax_status( 'taxable' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$order = new \WC_Order();
+		$order->set_status( 'pending' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+		$order_id = (int) $order->save();
+
+		$before = $this->money_state( $order_id );
+		$this->assertNotSame( '', $before['tax_rows'], 'The fixture must actually carry tax, or this test proves nothing.' );
+
+		$boom = static function (): void {
+			throw new \RuntimeException( 'Extension exploded after totals were calculated.' );
+		};
+		add_action( 'woocommerce_order_after_calculate_totals', $boom, 10, 0 );
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		remove_action( 'woocommerce_order_after_calculate_totals', $boom, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A late recalculation failure must be a WP_Error.' );
+		$this->assertSame(
+			'aafm_wc_line_items_not_applied',
+			$result->get_error_code(),
+			'The strong error code is only earned when the money was actually put back; the weak path has its own code.'
+		);
+
+		$after = $this->money_state( $order_id );
+		$this->assertSame(
+			$before['tax_rows'],
+			$after['tax_rows'],
+			'The persisted tax rows must be exactly what they were. This is the field that broke: it doubled and stayed doubled.'
+		);
+		$this->assertSame( $before['total'], $after['total'], 'The order total must be exactly what it was.' );
+		$this->assertSame( $before['total_tax'], $after['total_tax'], 'The order tax must be exactly what it was.' );
+		$this->assertSame( $before['items'], $after['items'], 'Every surviving line item must carry its original net and tax.' );
+
+		$reloaded = new \WC_Order( $order_id );
+		$reloaded->delete( true );
+		$product->delete( true );
+		remove_filter( 'wc_tax_enabled', $tax_on );
+		remove_filter( 'woocommerce_matched_tax_rates', $tax_rate );
+	}
+
+	/**
+	 * Read an order's money straight back out of storage, as strings, for exact comparison.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array<string,string>
+	 */
+	private function money_state( int $order_id ): array {
+		wp_cache_flush();
+		$order = new \WC_Order( $order_id );
+
+		$tax_rows = array();
+		foreach ( $order->get_taxes() as $tax_item ) {
+			$tax_rows[] = $tax_item->get_rate_id() . '=>' . $tax_item->get_tax_total();
+		}
+		$items = array();
+		foreach ( $order->get_items() as $item_id => $item ) {
+			$items[] = $item_id . ':' . $item->get_total() . '/' . $item->get_total_tax();
+		}
+
+		return array(
+			'total'     => (string) $order->get_total(),
+			'total_tax' => (string) $order->get_total_tax(),
+			'tax_rows'  => implode( '|', $tax_rows ),
+			'items'     => implode( '|', $items ),
+		);
+	}
+
+	/**
 	 * WC1.3 per-object ownership: a caller who clears the manage_woocommerce floor but does
 	 * not own the specific product and lacks the others-level capability must be refused,
 	 * the same per-object pattern the post abilities already use for delete (see

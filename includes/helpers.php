@@ -371,6 +371,33 @@ function aafm_non_removal_destructive_abilities(): array {
 }
 
 /**
+ * The risk annotations that mean "this ability removes nothing".
+ *
+ * The registry's whole vocabulary is three values - read, write, destructive -
+ * verified against every literal in includes/ and against all 153 rows of the
+ * live catalog. These are the two that do not remove.
+ *
+ * The delete guarantee tests membership of THIS list rather than testing for
+ * 'destructive', and the direction is the point. Matching the dangerous value
+ * was a denylist, and a denylist only covers what its author thought of: a
+ * third party who writes 'destrutive', or invents 'permanent-delete' because it
+ * sounds stronger, sailed straight through it and kept the Trash promise while
+ * deleting for good. Naming the safe values instead means a typo, an invented
+ * word, a case difference and a stray space all land on the safe side of the
+ * question, which is the permanent side.
+ *
+ * Deliberately not filterable. A hook here would let a third party re-open the
+ * hole this closes by declaring its own value safe wholesale; the two
+ * slug-scoped filters above are the sanctioned way for an author to say
+ * something weaker about one specific ability.
+ *
+ * @return list<string>
+ */
+function aafm_non_destructive_risk_values(): array {
+	return array( 'read', 'write' );
+}
+
+/**
  * Whether anything the operator has switched on can remove content for good.
  *
  * Reads the ENABLED set, not the catalog, so the answer describes this site as
@@ -390,16 +417,23 @@ function aafm_non_removal_destructive_abilities(): array {
  * destructive therefore resolves to permanent, and the two filters above are how
  * an author who knows better says so.
  *
- * An ability carrying NO risk annotation at all resolves to permanent for the
- * same reason. The two ways of being wrong are not worth the same: promising
- * "removals are recoverable" about an ability that deletes for good is a false
- * reassurance, while warning about permanence on a site where nothing permanent
- * is enabled is a false alarm. On the screen where someone is about to hand over
- * an access token, the reassurance is the far more expensive mistake, and it is
- * the reason B-08 exists. The remedy for the false alarm is also good: annotate
- * risk, which the Abilities API expects anyway, or use one of the two filters.
- * Every ability this plugin ships declares risk, so this can only ever fire for
- * a third-party row.
+ * The risk check is an ALLOWLIST: only a recognised non-destructive annotation
+ * (aafm_non_destructive_risk_values) clears the warning. Everything else lands
+ * on permanent together - 'destructive', a blank value, no annotation at all, a
+ * typo like 'destrutive', an invented word like 'permanent-delete'. Asking
+ * whether the value is known-safe rather than whether it is known-dangerous is
+ * what stops a misspelling from reading as a promise (R3-4).
+ *
+ * All of those resolve the same way for one reason: the two ways of being wrong
+ * are not worth the same. Promising "removals are recoverable" about an ability
+ * that deletes for good is a false reassurance, while warning about permanence
+ * on a site where nothing permanent is enabled is a false alarm. On the screen
+ * where someone is about to hand over an access token, the reassurance is the
+ * far more expensive mistake, and it is the reason B-08 exists. The remedy for
+ * the false alarm is also good: annotate risk with a recognised value, which the
+ * Abilities API expects anyway, or use one of the two filters. Every ability
+ * this plugin ships declares one, so this can only ever fire for a third-party
+ * row.
  *
  * Deliberately scoped to this one question. catalog.php defaults a missing risk
  * to 'write' and the integration manifest defaults it to 'read', which does not
@@ -424,11 +458,12 @@ function aafm_enabled_can_delete_permanently(): bool {
 		if ( in_array( $name, $recoverable, true ) || in_array( $name, $non_removal, true ) ) {
 			continue;
 		}
-		// An empty string covers both spellings of "no annotation": the key absent entirely, and
-		// the key present but blank. Neither tells us the ability is safe, so neither may buy it
-		// the softer wording.
+		// Membership of the safe list, not absence from a dangerous one. Only a recognised
+		// non-destructive annotation clears the warning; 'destructive', a blank, a missing key, a
+		// typo and an invented value all fall through to permanent together, because none of them
+		// is positive evidence that the ability removes nothing.
 		$risk = (string) ( $registry[ $name ]['risk'] ?? '' );
-		if ( 'destructive' === $risk || '' === $risk ) {
+		if ( ! in_array( $risk, aafm_non_destructive_risk_values(), true ) ) {
 			return true;
 		}
 	}

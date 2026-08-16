@@ -266,6 +266,82 @@ final class DeleteGuaranteeTest extends TestCase {
 	}
 
 	/**
+	 * R3-4: an unrecognised risk value must not read as safe.
+	 *
+	 * Matching only 'destructive' and '' was a denylist, and a denylist is exactly as complete as
+	 * whoever wrote it imagined. A typo sails through it: 'destrutive' is not 'destructive' and is
+	 * not blank, so it used to clear the warning while the ability deleted for good. So does an
+	 * invented spelling like 'permanent-delete', which is what an extension author reaching for a
+	 * stronger-sounding word would plausibly write.
+	 *
+	 * The values are checked from the outside in now: only the recognised non-destructive ones
+	 * clear the warning, and everything else - known-bad, misspelt, invented or absent - resolves
+	 * to permanent.
+	 *
+	 * @dataProvider provide_unrecognised_risk_values
+	 * @param string $risk The unrecognised annotation to inject.
+	 */
+	public function test_an_unrecognised_risk_value_drops_the_trash_promise( string $risk ): void {
+		$this->with_registered_ability(
+			'aafm/third-party-odd-risk',
+			array( 'risk' => $risk ),
+			function () use ( $risk ): void {
+				update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-odd-risk' ) );
+
+				$this->assertTrue(
+					aafm_enabled_can_delete_permanently(),
+					sprintf( 'risk "%s" is not a recognised non-destructive value and must fail closed.', $risk )
+				);
+				$this->assertSame( 'Some removals are permanent.', aafm_delete_guarantee()[0] );
+			}
+		);
+	}
+
+	/**
+	 * Risk annotations that are not recognised non-destructive values, in the shapes a real
+	 * extension author would plausibly produce.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provide_unrecognised_risk_values(): array {
+		return array(
+			'a typo of destructive'       => array( 'destrutive' ),
+			'an invented stronger word'   => array( 'permanent-delete' ),
+			'a plausible synonym'         => array( 'delete' ),
+			'the wrong case'              => array( 'Destructive' ),
+			'leading whitespace'          => array( ' destructive' ),
+			'a value from another schema' => array( 'high' ),
+		);
+	}
+
+	/**
+	 * The allowlist has to stay in step with what the registry actually uses. If a fourth risk
+	 * value is ever introduced and not added here, every ability carrying it starts warning about
+	 * permanent removals - the false alarm the fail-closed rule accepts in exchange for never
+	 * giving a false reassurance, but not one to discover in production.
+	 */
+	public function test_the_recognised_risk_values_cover_every_value_the_registry_uses(): void {
+		$recognised = array_merge( aafm_non_destructive_risk_values(), array( 'destructive' ) );
+
+		$unknown = array();
+		foreach ( aafm_get_abilities_registry_full() as $name => $row ) {
+			$risk = (string) ( $row['risk'] ?? '' );
+			if ( ! in_array( $risk, $recognised, true ) ) {
+				$unknown[ $risk ][] = $name;
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$unknown,
+			"The registry uses a risk value the delete guarantee does not recognise. Either it is a\n"
+			. "typo, or it is a new legitimate value that must be added to\n"
+			. "aafm_non_destructive_risk_values(). Until then every ability carrying it warns about\n"
+			. 'permanent removals: ' . wp_json_encode( $unknown )
+		);
+	}
+
+	/**
 	 * The regression the fail-closed rule could cause, pinned. Every ability this plugin ships
 	 * declares a risk, so the rule must never fire for one of ours - if a native row ever loses its
 	 * annotation, the whole consent screen would start warning about permanence on every site.

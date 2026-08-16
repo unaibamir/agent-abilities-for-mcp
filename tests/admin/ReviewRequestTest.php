@@ -768,19 +768,58 @@ final class ReviewRequestTest extends TestCase {
 		$this->assertSame( '', $this->render_on( 'plugins' ) );
 	}
 
+	/**
+	 * The wizard modal owns the plugin page, so the ask stays out of the first-run flow there.
+	 *
+	 * The eligibility is latched directly rather than by logging ten calls, because logging them
+	 * would itself close the wizard now: the wizard reads real setup evidence, and ten successful
+	 * agent calls are about as clear as that evidence gets. Latching keeps this test on the one
+	 * thing it is here to prove, which is the suppression branch itself.
+	 */
 	public function test_notice_is_suppressed_while_the_quick_connect_wizard_is_due(): void {
+		$this->acting_as( 'administrator' );
+
+		$state                          = aafm_review_request_state();
+		$state['threshold_met']         = 1;
+		$state['first_success_seen_at'] = time() - ( 8 * DAY_IN_SECONDS );
+		aafm_review_request_save_state( $state );
+
+		$this->assertTrue( aafm_quickconnect_should_render(), 'Nothing is configured, so the wizard is due.' );
+		$this->assertSame( '', $this->render_on( 'toplevel_page_agent-abilities-for-mcp' ) );
+
+		// ...and it renders once the wizard is no longer due. Real calls are logged here rather
+		// than only flipping the finished flag, because the heading quotes the log's own count and
+		// a latched threshold with an empty log has nothing to quote.
+		$this->log_success_calls( 10 );
+		$this->backdate_first_success();
+		update_option( 'aafm_quickconnect_finished', '1' );
+
+		$this->assertStringContainsString(
+			'aafm-review-request',
+			$this->render_on( 'toplevel_page_agent-abilities-for-mcp' )
+		);
+	}
+
+	/**
+	 * The same protection, stated structurally rather than through the suppression check.
+	 *
+	 * A site that has earned the ask has, by definition, stopped being a first-run site, so the
+	 * wizard has already closed itself and there is no flow left to interrupt. This is what the
+	 * suppression above used to be the only guard against.
+	 */
+	public function test_a_site_that_has_earned_the_ask_is_no_longer_first_run(): void {
 		$this->acting_as( 'administrator' );
 		$this->log_success_calls( 10 );
 		$this->backdate_first_success();
 
-		// Fresh flags: the wizard modal owns the plugin page, so the ask stays out of the
-		// first-run flow there...
-		$this->assertSame( '', $this->render_on( 'toplevel_page_agent-abilities-for-mcp' ) );
-
-		// ...and renders again once the operator has finished the wizard.
-		update_option( 'aafm_quickconnect_finished', '1' );
-		$html = $this->render_on( 'toplevel_page_agent-abilities-for-mcp' );
-		$this->assertStringContainsString( 'aafm-review-request', $html );
+		$this->assertFalse(
+			aafm_quickconnect_should_render(),
+			'Ten successful agent calls mean the site is set up, whatever the wizard flags say.'
+		);
+		$this->assertStringContainsString(
+			'aafm-review-request',
+			$this->render_on( 'toplevel_page_agent-abilities-for-mcp' )
+		);
 	}
 
 	/**

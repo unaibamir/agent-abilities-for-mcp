@@ -27,6 +27,11 @@
  * sanitizer, wp_kses on a field that needed the strip, a direct $wpdb->insert of unsanitized input -
  * is invisible to it and always was.
  *
+ * It also cannot follow a sanitizer reached indirectly through a variable:
+ * `$fn = 'sanitize_text_field'; $fn( $value );`. Resolving that needs variable tracking, which is
+ * a different kind of tool, so it is named here as a known boundary rather than left for a later
+ * review round to discover. The four spellings above are the ones that appear in real code.
+ *
  * That gap is deliberate rather than an oversight. Enumerating real storage sinks means modelling
  * every WordPress and WooCommerce setter that eventually writes, which is a project rather than a
  * test, and a half-built version of it would be worse than this: it would imply a completeness it
@@ -127,6 +132,11 @@ final class StoredTextSanitizerScanner {
 	 * papercut, but it fires exactly when what is being sanitized has changed, which is when a
 	 * second look is warranted. It does not fire on unrelated edits elsewhere in the file, which was
 	 * the failure mode that ruled line numbers out.
+	 *
+	 * A callable-string entry looks different from a direct-call one, and that is intentional: its
+	 * identity is the CONSUMING call, `array_map( 'sanitize_text_field', $req['grant_types'] )`,
+	 * rather than the bare literal. The literal alone is the same in every use, so it could not
+	 * distinguish two of them in one function (R4-3).
 	 *
 	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}> $records Scan output.
 	 * @return array<string,array{calls:array<int,string>,lines:array<int,int>}> Keyed by the stable key.
@@ -242,7 +252,7 @@ final class StoredTextSanitizerScanner {
 						'sanitizer' => $literal,
 						'line'      => (int) $token[2],
 						'form'      => 'callable-string',
-						'call'      => "'" . $literal . "' [as a callable string]",
+						'call'      => self::enclosing_call_text( $tokens, $i, $count, $literal ),
 					);
 				}
 			}
@@ -367,8 +377,10 @@ final class StoredTextSanitizerScanner {
 	/**
 	 * The normalised text of a call's argument list, used as its fingerprint in the allowlist.
 	 *
-	 * Whitespace is collapsed so reindenting a block does not churn the allowlist, and the text is
-	 * capped so one very long call cannot make an entry unreadable.
+	 * Whitespace is collapsed so reindenting a block does not churn the allowlist. The text is NOT
+	 * truncated: identity has to be the whole thing, or two long calls sharing a prefix would
+	 * fingerprint identically and the transfer hole reopens one layer down. format() caps the
+	 * rendering instead, so only terminal output is shortened, never the value being compared.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens    All tokens.
 	 * @param int                                           $index     Index of the name token.
@@ -377,9 +389,90 @@ final class StoredTextSanitizerScanner {
 	 * @return string
 	 */
 	private static function call_text( array $tokens, int $index, int $count, string $sanitizer ): string {
+		$args = self::balanced_args_text( $tokens, $index, $count );
+
+		return null === $args ? $sanitizer . '(?)' : $sanitizer . $args;
+	}
+
+	/**
+	 * The normalised text of the call that CONSUMES a callable string, e.g.
+	 * `array_map( 'sanitize_text_field', $req['grant_types'] )`.
+	 *
+	 * R4-3. Recording only the literal made every callable-string use in a function identical, so
+	 * the multiset could not tell two of them apart. aafm_oauth_register_client() already has two,
+	 * over grant_types and response_types; converting one to the helper and adding an unsafe map
+	 * over stored text left the allowlist byte-for-byte unchanged and every test green. Naming the
+	 * consuming call and its arguments is what distinguishes them.
+	 *
+	 * The walk stops at the FIRST enclosing call, which is the one that actually receives the
+	 * callable. In `array_values( array_map( 'sanitize_text_field', array_map( 'strval', $x ) ) )`
+	 * that is the middle array_map, not the outer array_values and not the inner one - the case
+	 * most likely to be got subtly wrong, so it has its own test.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  All tokens.
+	 * @param int                                           $index   Index of the string literal.
+	 * @param int                                           $count   Token count.
+	 * @param string                                        $literal The sanitizer name in the string.
+	 * @return string
+	 */
+	private static function enclosing_call_text( array $tokens, int $index, int $count, string $literal ): string {
+		$bare  = "'" . $literal . "' [as a callable string]";
+		$depth = 0;
+		$open  = null;
+
+		for ( $i = $index - 1; $i >= 0; $i-- ) {
+			if ( ')' === $tokens[ $i ] ) {
+				++$depth;
+				continue;
+			}
+			if ( '(' === $tokens[ $i ] ) {
+				if ( 0 === $depth ) {
+					$open = $i;
+					break;
+				}
+				--$depth;
+			}
+		}
+
+		if ( null === $open ) {
+			return $bare;
+		}
+
+		// The callee sits immediately before its opening parenthesis.
+		$callee = null;
+		for ( $i = $open - 1; $i >= 0; $i-- ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			if ( is_array( $token ) && self::is_name_token( $token[0] ) ) {
+				$callee = $i;
+			}
+			break;
+		}
+
+		if ( null === $callee ) {
+			return $bare;
+		}
+
+		$args = self::balanced_args_text( $tokens, $callee, $count );
+
+		return null === $args ? $bare : (string) $tokens[ $callee ][1] . $args;
+	}
+
+	/**
+	 * The whitespace-normalised text from a name token's opening parenthesis through its matching
+	 * close, inclusive.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $index  Index of the name token.
+	 * @param int                                           $count  Token count.
+	 * @return string|null Null when the name is not followed by a call.
+	 */
+	private static function balanced_args_text( array $tokens, int $index, int $count ): ?string {
 		$open = self::next_significant( $tokens, $index + 1, $count );
 		if ( null === $open || '(' !== $tokens[ $open ] ) {
-			return $sanitizer . '(?)';
+			return null;
 		}
 
 		$depth = 0;
@@ -397,12 +490,25 @@ final class StoredTextSanitizerScanner {
 			}
 		}
 
-		$text = (string) preg_replace( '~\s+~', ' ', trim( $text ) );
-		if ( strlen( $text ) > 120 ) {
-			$text = substr( $text, 0, 117 ) . '...';
-		}
+		return (string) preg_replace( '~\s+~', ' ', trim( $text ) );
+	}
 
-		return $sanitizer . $text;
+	/**
+	 * Whether a token id is a function-name token in either PHP 7.4 or PHP 8 tokenization.
+	 *
+	 * @param int $id Token id.
+	 * @return bool
+	 */
+	private static function is_name_token( int $id ): bool {
+		if ( T_STRING === $id ) {
+			return true;
+		}
+		foreach ( array( 'T_NAME_FULLY_QUALIFIED', 'T_NAME_QUALIFIED' ) as $name ) {
+			if ( defined( $name ) && constant( $name ) === $id ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -571,12 +677,18 @@ final class StoredTextSanitizerScanner {
 	public static function format( array $records ): string {
 		$lines = array();
 		foreach ( $records as $record ) {
+			$call = $record['call'];
+			// Rendering only. The stored identity stays whole, because truncating what is COMPARED
+			// would let two long calls sharing a prefix collide.
+			if ( strlen( $call ) > 120 ) {
+				$call = substr( $call, 0, 117 ) . '...';
+			}
 			$lines[] = sprintf(
 				'  %s:%d  %s()  %s',
 				$record['file'],
 				$record['line'],
 				$record['function'],
-				$record['call']
+				$call
 			);
 		}
 		return implode( "\n", $lines );

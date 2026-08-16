@@ -149,7 +149,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		),
 		'includes/abilities/woocommerce/products.php::aafm_wc_attribute_shape::sanitize_text_field' => array(
 			'calls'  => array(
-				'\'sanitize_text_field\' [as a callable string]',
+				'array_map( \'sanitize_text_field\', array_map( \'strval\', $options ) )',
 			),
 			'reason' => 'A read-path shaper: it sanitizes attribute options on the way OUT, assembling the JSON response from an already-stored product. Nothing here writes.',
 		),
@@ -174,7 +174,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		),
 		'includes/admin/bridge-directory.php::aafm_ajax_save_bridged_abilities::sanitize_text_field' => array(
 			'calls'  => array(
-				'\'sanitize_text_field\' [as a callable string]',
+				'array_map( \'sanitize_text_field\', wp_unslash( $_POST[\'bridged_abilities\'] ) )',
 			),
 			'reason' => 'Submitted bridge slugs, intersected against the slugs aafm_discover_foreign_abilities() actually found before anything is stored, so only a slug that already exists on this site survives.',
 		),
@@ -237,8 +237,8 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		),
 		'includes/oauth/clients.php::aafm_oauth_register_client::sanitize_text_field' => array(
 			'calls'  => array(
-				'\'sanitize_text_field\' [as a callable string]',
-				'\'sanitize_text_field\' [as a callable string]',
+				'array_map( \'sanitize_text_field\', $req[\'grant_types\'] )',
+				'array_map( \'sanitize_text_field\', $req[\'response_types\'] )',
 			),
 			'reason' => 'grant_types and response_types, both intersected against the hardcoded supported sets before storage, so only a literal this plugin already names can be written. The client_name beside them uses the helper.',
 		),
@@ -524,6 +524,83 @@ PHP;
 		$this->assertNotSame( $calls[0], $calls[1], 'Two different values must not share a fingerprint.' );
 		$this->assertStringContainsString( "\$input['search']", implode( ' ', $calls ) );
 		$this->assertStringContainsString( "\$input['title']", implode( ' ', $calls ) );
+	}
+
+	/**
+	 * R4-3: two callable-string uses in one function must be distinguishable.
+	 *
+	 * Recording only the literal made every callable string identical, so the multiset could not
+	 * tell one from another. aafm_oauth_register_client() has exactly this shape in real code -
+	 * two array_map() calls over different request fields - and converting one to the helper while
+	 * adding an unsafe map over stored text left the allowlist byte-for-byte unchanged.
+	 */
+	public function test_two_callable_strings_in_one_function_have_different_fingerprints(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_two_maps( array $req ) {
+	$a = array_map( 'sanitize_text_field', $req['grant_types'] );
+	$b = array_map( 'sanitize_text_field', $req['response_types'] );
+	return array( $a, $b );
+}
+PHP;
+
+		$grouped = StoredTextSanitizerScanner::group( StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+		$calls   = $grouped['probe.php::aafm_probe_two_maps::sanitize_text_field']['calls'];
+
+		$this->assertCount( 2, $calls );
+		$this->assertNotSame(
+			$calls[0],
+			$calls[1],
+			'Two callable-string uses over different values must not share a fingerprint.'
+		);
+		$this->assertStringContainsString( "\$req['grant_types']", implode( ' | ', $calls ) );
+		$this->assertStringContainsString( "\$req['response_types']", implode( ' | ', $calls ) );
+	}
+
+	/**
+	 * The hardest case for the enclosing-call walk, and the one most likely to be got subtly wrong.
+	 *
+	 * Three candidates are plausible here: the outer array_values, the middle array_map that
+	 * actually receives the callable, and the inner array_map( 'strval', … ). Two of the three are
+	 * wrong, and one of those is wrong in a way that still looks reasonable at a glance, so the
+	 * exact expected text is asserted rather than a substring.
+	 */
+	public function test_the_enclosing_call_is_the_one_that_receives_the_callable(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_nested( array $options ) {
+	return array_values( array_map( 'sanitize_text_field', array_map( 'strval', $options ) ) );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records );
+		$this->assertSame(
+			"array_map( 'sanitize_text_field', array_map( 'strval', \$options ) )",
+			$records[0]['call'],
+			'The fingerprint must name the array_map that receives the callable, not array_values and not the inner map.'
+		);
+	}
+
+	/**
+	 * Identity must not be truncated, or two long calls sharing a prefix collide and the transfer
+	 * hole reopens one layer down. Only the rendering is capped.
+	 */
+	public function test_a_long_call_is_not_truncated_into_a_collision(): void {
+		$long_a = '$input[\'' . str_repeat( 'a', 200 ) . '_one\']';
+		$long_b = '$input[\'' . str_repeat( 'a', 200 ) . '_two\']';
+		$source = "<?php\nfunction aafm_probe_long( array \$input ) {\n"
+			. "\t\$x = sanitize_text_field( (string) {$long_a} );\n"
+			. "\t\$y = sanitize_text_field( (string) {$long_b} );\n"
+			. "\treturn array( \$x, \$y );\n}\n";
+
+		$grouped = StoredTextSanitizerScanner::group( StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+		$calls   = $grouped['probe.php::aafm_probe_long::sanitize_text_field']['calls'];
+
+		$this->assertCount( 2, $calls );
+		$this->assertNotSame( $calls[0], $calls[1], 'A shared 120-character prefix must not collapse two calls into one identity.' );
+		$this->assertGreaterThan( 120, strlen( $calls[0] ), 'Identity is stored whole; only format() caps.' );
 	}
 
 	/**

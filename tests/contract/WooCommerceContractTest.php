@@ -1088,6 +1088,95 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R5-1: a throw from the hook that fires AFTER deletion must not become a phantom survivor.
+	 *
+	 * The sibling cleanup test throws from woocommerce_before_delete_order_item, which fires while
+	 * the row still exists, so it cannot reach this path at all. WooCommerce fires
+	 * woocommerce_delete_order_item AFTER the row is gone, and the catch added for R4-2 reports that
+	 * id as unconfirmed. Unconfirmed is correct; treating it as a survivor is not.
+	 *
+	 * Measured before the fix: the order held zero item rows and the error said
+	 * "Order item ids still persisted: 77" for an id that did not exist. A caller acting on that id
+	 * operates on nothing.
+	 *
+	 * The discriminating assertion is the ERROR CODE, not the row count: the row count is zero in
+	 * both versions, because the deletion genuinely succeeded either way. Only the message was wrong.
+	 */
+	public function test_a_post_delete_throw_is_not_reported_as_a_surviving_item(): void {
+		global $wpdb;
+
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		$product_a = new \WC_Product();
+		$product_a->set_name( 'AAFM Contract Post-Delete A' );
+		$product_a->set_regular_price( '10' );
+		$product_a->set_status( 'publish' );
+		$id_a = (int) $product_a->save();
+
+		$product_b = new \WC_Product();
+		$product_b->set_name( 'AAFM Contract Post-Delete B' );
+		$product_b->set_regular_price( '10' );
+		$product_b->set_status( 'publish' );
+		$id_b = (int) $product_b->save();
+
+		$order = new \WC_Order();
+		$order->set_status( 'pending' );
+		$order_id = (int) $order->save();
+
+		// Explodes while B's price is read, so B's add_product() fails AFTER A's row was written.
+		$boom_add = static function ( $price, $product ) use ( $id_b ) {
+			if ( (int) $product->get_id() === $id_b ) {
+				throw new \RuntimeException( 'Extension exploded reading product B price.' );
+			}
+			return $price;
+		};
+		// Explodes from the hook that fires AFTER the row has been deleted.
+		$boom_post_delete = static function (): void {
+			throw new \RuntimeException( 'Extension exploded after the item row was deleted.' );
+		};
+		add_filter( 'woocommerce_product_get_price', $boom_add, 10, 2 );
+		add_action( 'woocommerce_delete_order_item', $boom_post_delete, 10, 0 );
+
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $id_a,
+						'quantity'   => 1,
+					),
+					array(
+						'product_id' => $id_b,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		remove_filter( 'woocommerce_product_get_price', $boom_add, 10 );
+		remove_action( 'woocommerce_delete_order_item', $boom_post_delete, 10 );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_line_items_not_applied',
+			$result->get_error_code(),
+			'The row really was deleted, so the error must say the order is unchanged rather than claim an item survived.'
+		);
+
+		$rows = (int) $wpdb->get_var(
+			$wpdb->prepare( "SELECT COUNT(*) FROM {$wpdb->prefix}woocommerce_order_items WHERE order_id = %d", $order_id )
+		);
+		$this->assertSame( 0, $rows, 'No item row from this request may remain on the order.' );
+
+		$reloaded = new \WC_Order( $order_id );
+		$reloaded->delete( true );
+		$product_a->delete( true );
+		$product_b->delete( true );
+	}
+
+	/**
 	 * The first tax row's amount and rate identity, read back from storage.
 	 *
 	 * @param int $order_id Order id.

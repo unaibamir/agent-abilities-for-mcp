@@ -945,11 +945,19 @@ function aafm_wc_input_adds_line_items( array $input ): bool {
  * states exactly which order-item ids persisted, so the caller is never told "failed" about
  * state that actually changed (B27).
  *
+ * The deletion helper reports an id it could not CONFIRM removing, which is not the same as an id
+ * that survived: WooCommerce fires woocommerce_delete_order_item AFTER the row is gone, so an
+ * extension throwing from there produces a caught exception over a row that no longer exists.
+ * Naming it here would send the caller after an id it cannot find, so the list is narrowed to what
+ * is genuinely still there before the message is chosen. The narrowing stays in the CALLERS rather
+ * than moving into the deletion helper, because the create rollback has to defer the same check
+ * until after its order-level delete, which removes items of its own.
+ *
  * @param array<int,int> $item_ids Order-item ids written before the failure.
  * @return \WP_Error
  */
 function aafm_wc_rollback_added_order_items( array $item_ids ): \WP_Error {
-	$kept = aafm_wc_delete_added_order_items( $item_ids );
+	$kept = aafm_wc_surviving_order_items( aafm_wc_delete_added_order_items( $item_ids ) );
 
 	if ( array() !== $kept ) {
 		return new \WP_Error(

@@ -575,8 +575,13 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
  * The parent's own attribute map is the authority: its keys are exactly the form a variation's
  * attribute map has to use (`pa_color` for a global/taxonomy attribute, the sanitized name for a
  * custom one), and both sides run through sanitize_title(), so the comparison is like for like.
- * An empty VALUE is untouched by this -- that is WooCommerce's "Any" and a legitimate thing to
- * send; only KEYS are refused here.
+ *
+ * The same is true of the VALUES. A variation's value has to be one of the options its parent
+ * declares for that attribute, because that option list is the only thing WooCommerce ever matches
+ * a variation against; a value outside it is stored happily and then matches nothing, the same
+ * silent no-op an unusable key produces. The one value that is exempt is the empty string, which is
+ * WooCommerce's "Any <attribute>" and a legitimate, common configuration -- so it is passed through
+ * here rather than refused.
  *
  * Being declared is not enough on its own. WooCommerce carries a per-attribute "Used for
  * variations" flag (WC_Product_Attribute::get_variation()), and an attribute with that flag off
@@ -589,7 +594,8 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
  *
  * @param \WC_Product             $parent_product The variation's parent product.
  * @param array<int|string,mixed> $attributes     The requested attribute map.
- * @return \WP_Error|null Null when every key is one the parent uses for variations.
+ * @return \WP_Error|null Null when every key is one the parent uses for variations and every value
+ *                       is one of that attribute's options (or empty, meaning "Any").
  */
 function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product, array $attributes ): ?\WP_Error {
 	$parent_attributes = $parent_product->get_attributes();
@@ -622,7 +628,7 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 	}
 
 	if ( array() === $unknown && array() === $display_only ) {
-		return null;
+		return aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, $attributes );
 	}
 
 	if ( array() === $for_variations ) {
@@ -669,6 +675,108 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 			implode( ', ', $for_variations )
 		)
 	);
+}
+
+/**
+ * Reject variation attribute values that are not among the options the parent declares, naming the
+ * options that would have worked for each one.
+ *
+ * Runs only once every key has been accepted, so each value here is being checked against the
+ * attribute it will actually be stored under.
+ *
+ * Three things make the comparison like for like:
+ *
+ * - The value compared is the SANITIZED one, built with the same aafm_sanitize_plain_text() the
+ *   writer runs, so the check sees the string that will reach postmeta rather than the raw input.
+ *   A value that only differs by surrounding whitespace is therefore accepted, not refused.
+ * - The options come from WC_Product_Attribute::get_slugs(), which is what papers over the two
+ *   kinds of attribute: a global/taxonomy attribute stores TERM IDS and get_slugs() resolves them
+ *   to term slugs (the form a variation stores), while a custom/local attribute stores its option
+ *   strings and get_slugs() hands those straight back, unslugified. Comparing against get_options()
+ *   instead would test a variation's slug against a list of term ids.
+ * - The comparison is case-sensitive and exact, deliberately. WooCommerce matches a variation by
+ *   comparing the stored attribute_<key> value against the parent's option, and this plugin stores
+ *   the value verbatim rather than slugifying it, so "Blue" against an option of "blue" is exactly
+ *   the silently-never-matches case this check exists to stop. The error lists the real options, so
+ *   a case slip costs the caller one corrected call.
+ *
+ * An empty value is exempt: that is WooCommerce's "Any <attribute>", a supported configuration, and
+ * refusing it would break valid variations.
+ *
+ * @param array<int|string,mixed> $parent_attributes The parent product's attribute map.
+ * @param array<int|string,mixed> $attributes        The requested attribute map.
+ * @return \WP_Error|null Null when every value is one the parent declares, or empty.
+ */
+function aafm_wc_invalid_variation_attribute_values_error( array $parent_attributes, array $attributes ): ?\WP_Error {
+	$invalid = array();
+	foreach ( $attributes as $raw_key => $raw_value ) {
+		// A non-scalar never reaches storage: the closed schema refuses it before execute and
+		// aafm_wc_sanitize_variation_attributes() drops it. There is no stored value to validate.
+		if ( ! is_scalar( $raw_value ) ) {
+			continue;
+		}
+		$key       = sanitize_title( (string) $raw_key );
+		$attribute = $parent_attributes[ $key ] ?? null;
+		if ( ! $attribute instanceof \WC_Product_Attribute ) {
+			continue;
+		}
+		$value = aafm_sanitize_plain_text( (string) $raw_value );
+		if ( '' === $value ) {
+			continue; // WooCommerce's "Any <attribute>".
+		}
+		$options = aafm_wc_variation_attribute_options( $attribute );
+		if ( null === $options || in_array( $value, $options, true ) ) {
+			continue;
+		}
+		$invalid[] = sprintf(
+			/* translators: 1: attribute key. 2: the rejected value. 3: comma-separated list of the parent's options for that attribute. */
+			__( '%1$s=%2$s (its options are: %3$s)', 'agent-abilities-for-mcp' ),
+			$key,
+			$value,
+			implode( ', ', $options )
+		);
+	}
+
+	if ( array() === $invalid ) {
+		return null;
+	}
+
+	return new \WP_Error(
+		'aafm_wc_invalid_variation_attribute_value',
+		sprintf(
+			/* translators: %s: semicolon-separated list of rejected key=value pairs, each with the parent's options for that attribute. */
+			__( 'These attribute values are not options the parent product declares, so setting them would apply nothing: %s. Use one of the listed options exactly (the match is case-sensitive), or send an empty string to leave the attribute as "Any".', 'agent-abilities-for-mcp' ),
+			implode( '; ', $invalid )
+		)
+	);
+}
+
+/**
+ * The option list a variation's value for this attribute has to come from, or null when the
+ * attribute constrains nothing and no value can be judged against it.
+ *
+ * Null in two cases. An attribute declared with no options places no constraint on a variation at
+ * all. And a taxonomy attribute whose taxonomy is not registered still holds raw TERM IDS, which
+ * get_slugs() hands back verbatim: matching a sent value against a list of numeric ids would refuse
+ * every legitimate write. That second case is defence rather than a live path, since
+ * WC_Product_Data_Store_CPT::read_attributes() drops a taxonomy attribute whose taxonomy is missing
+ * before the product object is built, but the attribute map is filterable and this function must
+ * not be the thing that turns a third party's odd shape into a blocked write.
+ *
+ * get_slugs() carries one write branch, an insert of a term named after an unresolved string
+ * option. It is unreachable from here: read_attributes() sets a taxonomy attribute's options from
+ * wc_get_object_terms( ..., 'term_id' ), which are ints, and get_slugs() only takes the insert path
+ * for a non-int option.
+ *
+ * @param \WC_Product_Attribute $attribute One of the parent product's attributes.
+ * @return array<string>|null
+ */
+function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute ): ?array {
+	if ( $attribute->is_taxonomy() && ! taxonomy_exists( (string) $attribute->get_name() ) ) {
+		return null;
+	}
+	$options = array_map( 'strval', $attribute->get_slugs() );
+	return array() === $options ? null : $options;
 }
 
 /**

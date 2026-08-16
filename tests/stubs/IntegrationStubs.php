@@ -725,6 +725,25 @@ class WC_Product_Attribute {
 	public function get_position() { return (int) $this->data['position']; }
 	public function get_visible() { return (bool) $this->data['visible']; }
 	public function get_variation() { return (bool) $this->data['variation']; }
+	public function is_taxonomy() { return 0 < $this->get_id(); }
+	public function get_taxonomy() { return $this->is_taxonomy() ? $this->get_name() : ''; }
+	// A port of the real get_slugs() read path: a taxonomy attribute's options are term ids that
+	// resolve to term slugs, a custom attribute's options ARE the strings. The vendor's method also
+	// carries a wp_insert_term() branch for a non-int option on a taxonomy attribute; it is left out
+	// deliberately, because a stub read must never create a term and nothing reaches that branch
+	// from a product read (WC_Product_Data_Store_CPT::read_attributes() sets those options from
+	// wc_get_object_terms( ..., 'term_id' )).
+	public function get_slugs() {
+		if ( ! $this->is_taxonomy() || ! taxonomy_exists( $this->get_name() ) ) {
+			return $this->get_options();
+		}
+		$slugs = array();
+		foreach ( $this->get_options() as $option ) {
+			$term = is_int( $option ) ? get_term_by( 'id', $option, $this->get_name() ) : get_term_by( 'name', $option, $this->get_name() );
+			if ( $term && ! is_wp_error( $term ) ) { $slugs[] = $term->slug; }
+		}
+		return $slugs;
+	}
 	public function set_id( $v ) { $this->data['id'] = (int) $v; }
 	public function set_name( $v ) { $this->data['name'] = (string) $v; }
 	public function set_options( $v ) { $this->data['options'] = (array) $v; }

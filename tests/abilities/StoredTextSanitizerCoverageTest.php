@@ -52,6 +52,81 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 * @var array<string,array{count:int,reason:string}>
 	 */
 	private const ALLOWED = array(
+		// --- includes/text.php: the helpers themselves -------------------------------------------
+		'includes/text.php::aafm_sanitize_plain_text::sanitize_text_field'                              => array(
+			'count'  => 1,
+			'reason' => 'The helper\'s own implementation. This IS the chokepoint every stored write is required to route through; the WordPress sanitizer runs here and the invisible-character strip is applied to its result.',
+		),
+		'includes/text.php::aafm_sanitize_multiline_text::sanitize_textarea_field'                      => array(
+			'count'  => 1,
+			'reason' => 'The multi-line helper\'s own implementation, same reason as its single-line sibling above.',
+		),
+
+		// --- includes/admin: operator input ------------------------------------------------------
+		'includes/admin/bridge-directory.php::aafm_ajax_save_bridged_abilities::sanitize_text_field'    => array(
+			'count'  => 1,
+			'reason' => 'Submitted bridge slugs, intersected against the slugs aafm_discover_foreign_abilities() actually found before anything is stored, so only a slug that already exists on this site survives.',
+		),
+		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field'             => array(
+			'count'  => 1,
+			'reason' => 'A client_id used only to look up and revoke an existing OAuth client. Nothing is written back under this value.',
+		),
+		'includes/admin/connection.php::aafm_ajax_oauth_revoke_grant::sanitize_text_field'              => array(
+			'count'  => 1,
+			'reason' => 'The same client_id lookup on the grant-revocation path.',
+		),
+		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field'                     => array(
+			'count'  => 1,
+			'reason' => 'Ability names ticked in the admin screen, intersected against array_keys( aafm_get_abilities_registry() ) two lines later, so only a name the registry already holds can be stored.',
+		),
+		'includes/admin/settings.php::aafm_sanitize_settings_input::sanitize_text_field'                => array(
+			'count'  => 1,
+			'reason' => 'One line of the IP allowlist textarea. A line is stored only after aafm_is_valid_ip_or_cidr() accepts it, and no invisible character survives that.',
+		),
+		'includes/admin/settings.php::aafm_count_dropped_ip_lines::sanitize_text_field'                 => array(
+			'count'  => 1,
+			'reason' => 'The same parse run purely to count how many lines were rejected, so the save notice can say so. It returns an integer and stores nothing at all.',
+		),
+
+		// --- includes/audit ----------------------------------------------------------------------
+		'includes/audit/log.php::aafm_source_ip::sanitize_text_field'                                   => array(
+			'count'  => 1,
+			'reason' => 'REMOTE_ADDR, returned only when filter_var( $ip, FILTER_VALIDATE_IP ) accepts it and \'\' otherwise, so nothing carrying an invisible character can reach a log row.',
+		),
+
+		// --- includes/helpers.php ----------------------------------------------------------------
+		'includes/helpers.php::aafm_rich_post::sanitize_text_field'                                     => array(
+			'count'  => 1,
+			'reason' => 'A read-path shaper: the stored excerpt of a password-protected post on its way OUT into the response. Nothing here writes.',
+		),
+
+		// --- includes/oauth: protocol parameters -------------------------------------------------
+		'includes/oauth/authorize.php::aafm_oauth_read_authorize_params::sanitize_text_field'           => array(
+			'count'  => 1,
+			'reason' => 'The eight OAuth authorize parameters. Each is compared rather than displayed: redirect_uri is exact-matched against the client\'s registered URIs, response_type/code_challenge_method/scope against fixed supported sets, client_id is a lookup key, and code_challenge is a PKCE digest that either verifies against the verifier or does not. None is stored prose a person reads.',
+		),
+		'includes/oauth/authorize.php::aafm_oauth_handle_authorize::sanitize_text_field'                => array(
+			'count'  => 4,
+			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, REQUEST_URI, the _wpnonce, and the approve/deny decision. All four are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper.',
+		),
+		'includes/oauth/clients.php::aafm_oauth_register_client::sanitize_text_field'                   => array(
+			'count'  => 2,
+			'reason' => 'grant_types and response_types, both intersected against the hardcoded supported sets before storage, so only a literal this plugin already names can be written. The client_name beside them uses the helper.',
+		),
+		'includes/oauth/discovery.php::aafm_oauth_maybe_serve_well_known::sanitize_text_field'          => array(
+			'count'  => 1,
+			'reason' => 'REQUEST_URI, matched against the .well-known paths to decide whether to serve a discovery document. Routing only.',
+		),
+		'includes/oauth/validator.php::aafm_oauth_request_targets_mcp_route::sanitize_text_field'       => array(
+			'count'  => 2,
+			'reason' => 'rest_route and REQUEST_URI, both used to decide whether this request is aimed at the MCP endpoint. Routing only, never written.',
+		),
+		'includes/oauth/validator.php::aafm_oauth_read_bearer_token::sanitize_text_field'               => array(
+			'count'  => 2,
+			'reason' => 'The Authorization header in its two server spellings, parsed for a bearer token that is then hashed and compared against stored tokens. The header text itself is never stored.',
+		),
+
+		// --- includes/abilities ------------------------------------------------------------------
 		'includes/abilities/blocks.php::aafm_exec_list_blocks::sanitize_text_field'                             => array(
 			'count'  => 1,
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
@@ -230,7 +305,7 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 * precisely zero code, which is the failure mode this whole file exists to prevent.
 	 */
 	public function test_the_scan_is_not_vacuous(): void {
-		$this->assertGreaterThan( 20, count( StoredTextSanitizerScanner::ability_files() ) );
+		$this->assertGreaterThan( 20, count( StoredTextSanitizerScanner::source_files() ) );
 		$this->assertNotSame( array(), StoredTextSanitizerScanner::scan() );
 	}
 

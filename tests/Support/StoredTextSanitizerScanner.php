@@ -33,12 +33,19 @@ use SplFileInfo;
 
 /**
  * Finds every raw call to (and callable-string reference to) the WordPress plain-text sanitizers
- * inside the ability sources, and reports each one with the function that encloses it.
+ * anywhere in the shipped source, and reports each one with the function that encloses it.
  *
- * Token-based rather than grep-based on purpose. The ability files talk about these sanitizers
- * constantly in docblocks and in the tool descriptions agents read; token_get_all() hands comments
- * and string literals back as their own token types, so a mention in prose can never be mistaken
- * for a call, and a real call can never hide behind unusual spacing.
+ * The scan covers all of includes/, not just includes/abilities/. It started at the abilities
+ * because that is where B-18 was found, but the abilities are not where the plugin does all its
+ * storing: the admin screens write the operator's meta-key allowlists into options, the OAuth
+ * client registration stores a client_name that the consent screen renders back, and the activity
+ * log writes a detail string to its own table. A scanner that only watched the abilities would have
+ * been the same partial sweep it exists to prevent, one directory up.
+ *
+ * Token-based rather than grep-based on purpose. These files talk about the sanitizers constantly
+ * in docblocks and in the tool descriptions agents read; token_get_all() hands comments and string
+ * literals back as their own token types, so a mention in prose can never be mistaken for a call,
+ * and a real call can never hide behind unusual spacing.
  */
 final class StoredTextSanitizerScanner {
 
@@ -64,7 +71,7 @@ final class StoredTextSanitizerScanner {
 	public static function scan(): array {
 		$found = array();
 
-		foreach ( self::ability_files() as $file ) {
+		foreach ( self::source_files() as $file ) {
 			foreach ( self::scan_file( $file ) as $record ) {
 				$found[] = $record;
 			}
@@ -272,12 +279,16 @@ final class StoredTextSanitizerScanner {
 	}
 
 	/**
-	 * Every ability source file, sorted for a stable report.
+	 * Every shipped source file under includes/, sorted for a stable report.
+	 *
+	 * The includes/ tree is the whole of the plugin's PHP apart from the root bootstrap file, so it
+	 * is the full surface on which the question "does a stored write skip the helper" can even be
+	 * asked. Scoping it to a subdirectory is what let the sweep be partial in the first place.
 	 *
 	 * @return array<int,string> Absolute paths.
 	 */
-	public static function ability_files(): array {
-		$root = self::plugin_root() . 'includes/abilities';
+	public static function source_files(): array {
+		$root = self::plugin_root() . 'includes';
 		if ( ! is_dir( $root ) ) {
 			return array();
 		}

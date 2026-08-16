@@ -149,7 +149,8 @@ function aafm_perm_seo_get_head_floor(): bool {
  *
  * At every depth: arrays recurse; a value under a url-ish key (url / image / logo / sameAs / @id,
  * case-insensitive) is run through esc_url_raw so a javascript: scheme is dropped; every other scalar
- * leaf is run through sanitize_text_field, which strips <script> tags and control noise; anything that
+ * leaf is run through aafm_sanitize_plain_text, which strips <script> tags, control noise, and the
+ * invisible characters that survive the WordPress sanitizer; anything that
  * is neither scalar nor array (objects, resources) is dropped. So script payloads cannot survive at
  * any level.
  *
@@ -170,7 +171,7 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
 	$url_keys = array( 'url', 'image', 'logo', 'sameas', '@id', 'contenturl', 'thumbnailurl' );
 	$clean    = array();
 	foreach ( $schema as $key => $value ) {
-		$safe_key = is_string( $key ) ? sanitize_text_field( $key ) : $key;
+		$safe_key = is_string( $key ) ? aafm_sanitize_plain_text( $key ) : $key;
 		if ( is_array( $value ) ) {
 			// Past the depth bound, drop the sub-tree rather than recursing further.
 			if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
@@ -186,7 +187,7 @@ function aafm_sanitize_schema_array( array $schema, int $depth = 0 ): array {
 		if ( is_string( $safe_key ) && in_array( strtolower( $safe_key ), $url_keys, true ) ) {
 			$clean[ $safe_key ] = esc_url_raw( (string) $as_string );
 		} else {
-			$clean[ $safe_key ] = is_bool( $as_string ) ? $as_string : sanitize_text_field( (string) $as_string );
+			$clean[ $safe_key ] = is_bool( $as_string ) ? $as_string : aafm_sanitize_plain_text( (string) $as_string );
 		}
 	}
 	return $clean;

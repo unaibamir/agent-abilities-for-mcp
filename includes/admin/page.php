@@ -491,7 +491,7 @@ function aafm_ajax_save_post_types(): void {
  * Sanitize the posted "exposed meta keys" textarea into a clean, de-duplicated allowlist.
  *
  * Splits on newlines, trims each line (meta keys are case-sensitive, so case is preserved;
- * only surrounding whitespace and control chars are stripped via sanitize_text_field), drops
+ * only surrounding whitespace and control chars are stripped via aafm_sanitize_plain_text), drops
  * empties, drops any hard-blocked key so a blocked key can never even be stored, de-duplicates,
  * and re-indexes. The read path (aafm_allowed_meta_keys) re-floors anyway; this is best-effort.
  *
@@ -502,7 +502,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_meta_keys'] ) ? (string) $posted['aafm_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || aafm_hard_blocked_meta_key( $key ) ) {
 			continue;
 		}
@@ -517,7 +517,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
  * Mirrors aafm_sanitize_allowed_meta_keys_input() but for the DENY list: it KEEPS the `*`
  * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys - denying an already
  * hard-blocked key is a harmless no-op, and the deny list must be able to name anything an
- * admin wants refused. Splits on newlines, trims, sanitize_text_field (never sanitize_key,
+ * admin wants refused. Splits on newlines, trims, aafm_sanitize_plain_text (never sanitize_key,
  * which would strip `*`), drops empties, and de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -527,7 +527,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_deny_meta_keys'] ) ? (string) $posted['aafm_deny_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}
@@ -540,7 +540,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
  * Parse the exposed-user-meta textarea into a clean list.
  *
  * Mirrors the allow-list sanitizer but for user meta and KEEPS the `*` wildcard. Splits on
- * newlines, trims, sanitize_text_field (never sanitize_key, which would strip `*`), drops
+ * newlines, trims, aafm_sanitize_plain_text (never sanitize_key, which would strip `*`), drops
  * empties and any hard-blocked user key (best-effort - aafm_allowed_user_meta_keys() re-floors
  * anyway), and de-duplicates.
  *
@@ -551,7 +551,7 @@ function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_exposed_user_meta_keys'] ) ? (string) $posted['aafm_exposed_user_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_user_meta_key( $key ) ) ) {
 			continue;
 		}
@@ -564,7 +564,7 @@ function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
  * Parse the denied-user-meta textarea into a clean list.
  *
  * Like aafm_sanitize_denied_meta_keys_input() but user-scoped: KEEPS `*` (deny-all) and does
- * NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops empties,
+ * NOT strip hard-blocked keys. Splits on newlines, trims, aafm_sanitize_plain_text, drops empties,
  * de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -574,7 +574,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_denied_user_meta_keys'] ) ? (string) $posted['aafm_denied_user_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}
@@ -587,7 +587,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
  * Parse the exposed-term-meta textarea into a clean list.
  *
  * Mirrors aafm_sanitize_exposed_user_meta_keys_input() but term-scoped (the term/post-meta
- * hard-block applies). KEEPS the `*` wildcard, splits on newlines, trims, sanitize_text_field
+ * hard-block applies). KEEPS the `*` wildcard, splits on newlines, trims, aafm_sanitize_plain_text
  * (never sanitize_key, which would strip `*`), drops empties and any hard-blocked key
  * (best-effort - aafm_allowed_term_meta_keys() re-floors anyway), and de-duplicates.
  *
@@ -598,7 +598,7 @@ function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_exposed_term_meta_keys'] ) ? (string) $posted['aafm_exposed_term_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_meta_key( $key ) ) ) {
 			continue;
 		}
@@ -611,7 +611,7 @@ function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
  * Parse the denied-term-meta textarea into a clean list.
  *
  * Like aafm_sanitize_denied_user_meta_keys_input() but term-scoped: KEEPS `*` (deny-all) and
- * does NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops
+ * does NOT strip hard-blocked keys. Splits on newlines, trims, aafm_sanitize_plain_text, drops
  * empties, de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -621,7 +621,7 @@ function aafm_sanitize_denied_term_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_denied_term_meta_keys'] ) ? (string) $posted['aafm_denied_term_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}

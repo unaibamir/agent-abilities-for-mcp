@@ -57,7 +57,7 @@ function aafm_oauth_register_client( array $req ) {
 		}
 	}
 
-	$client_name = isset( $req['client_name'] ) ? sanitize_text_field( (string) $req['client_name'] ) : '';
+	$client_name = isset( $req['client_name'] ) ? aafm_sanitize_plain_text( (string) $req['client_name'] ) : '';
 
 	// Only authorization_code + refresh_token (and the `code` response type) are implemented, so
 	// filter any client-supplied grant_types/response_types down to that supported set rather than

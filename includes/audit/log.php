@@ -397,7 +397,7 @@ add_action( 'application_password_failed_authentication', 'aafm_log_failed_appli
  * @return string Sanitized, single-line, at most 255 characters.
  */
 function aafm_sanitize_activity_detail( string $detail ): string {
-	$clean = sanitize_text_field( $detail );
+	$clean = aafm_sanitize_plain_text( $detail );
 	$clean = (string) preg_replace( '/\s+/', ' ', $clean );
 	return mb_substr( trim( $clean ), 0, 255 );
 }

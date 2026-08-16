@@ -481,7 +481,7 @@ function aafm_sanitize_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'post', 'post' );
 	if ( ! is_scalar( $value ) ) {
@@ -613,7 +613,7 @@ function aafm_sanitize_term_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'term', 'term' );
 	if ( ! is_scalar( $value ) ) {
@@ -835,7 +835,7 @@ function aafm_sanitize_user_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'user', 'user' );
 	if ( ! is_scalar( $value ) ) {

@@ -1053,6 +1053,23 @@ function aafm_wc_surviving_order_items( array $item_ids ): array {
  *
  * Taken BEFORE the request touches the order, so it describes the order as the caller found it.
  *
+ * EVERY read here passes 'edit' explicitly, and that is not a style choice. A WooCommerce getter
+ * defaults to 'view' context, and view context runs the property's display filter
+ * (WC_Data::get_prop applies woocommerce_{object_type}_get_{prop} only when the context is view).
+ * So a getter called with no argument is a DISPLAY read, and a snapshot built from display reads
+ * records what an extension wants shown rather than what is stored. The restore then writes that
+ * presentation value into order history, and the verification, re-reading through the same filter,
+ * agrees with itself and hands back the strong "totals and taxes were put back" message.
+ *
+ * That was not hypothetical: an extension filtering only the tax label for display had its label
+ * written into the stored row, on an order whose rate had not changed at all, and the strong
+ * message was still returned. get_label() does the same thing without any extension involved,
+ * substituting a translated "Tax" for an empty stored label in view context only.
+ *
+ * The rule worth carrying past this function: a snapshot must represent PERSISTENCE, NOT
+ * PRESENTATION. Any WooCommerce getter here without an explicit 'edit' is a bug waiting to be
+ * written back.
+ *
  * Coupon items are deliberately absent: calculate_totals() reads a coupon's recorded discount to
  * work out the order's totals, it does not rewrite the coupon row itself, so there is nothing there
  * to put back.
@@ -1073,11 +1090,11 @@ function aafm_wc_order_money_snapshot( \WC_Order $order ): array {
 				return array();
 			}
 			$items[ (int) $item_id ] = array(
-				'total'        => (string) $item->get_total(),
-				'subtotal'     => method_exists( $item, 'get_subtotal' ) ? (string) $item->get_subtotal() : null,
-				'total_tax'    => method_exists( $item, 'get_total_tax' ) ? (string) $item->get_total_tax() : null,
-				'subtotal_tax' => method_exists( $item, 'get_subtotal_tax' ) ? (string) $item->get_subtotal_tax() : null,
-				'taxes'        => (array) $item->get_taxes(),
+				'total'        => (string) $item->get_total( 'edit' ),
+				'subtotal'     => method_exists( $item, 'get_subtotal' ) ? (string) $item->get_subtotal( 'edit' ) : null,
+				'total_tax'    => method_exists( $item, 'get_total_tax' ) ? (string) $item->get_total_tax( 'edit' ) : null,
+				'subtotal_tax' => method_exists( $item, 'get_subtotal_tax' ) ? (string) $item->get_subtotal_tax( 'edit' ) : null,
+				'taxes'        => (array) $item->get_taxes( 'edit' ),
 			);
 		}
 
@@ -1094,7 +1111,7 @@ function aafm_wc_order_money_snapshot( \WC_Order $order ): array {
 			if ( ! method_exists( $order, $getter ) ) {
 				return array();
 			}
-			$order_money[ $key ] = (string) $order->{$getter}();
+			$order_money[ $key ] = (string) $order->{$getter}( 'edit' );
 		}
 
 		$taxes = array();
@@ -1106,13 +1123,13 @@ function aafm_wc_order_money_snapshot( \WC_Order $order ): array {
 			// from the CURRENT rate, not just its amounts (abstract-wc-order.php, the existing-taxes
 			// loop). All of it therefore has to be captured, or a restore puts the old money back
 			// under the new rate's identity.
-			$taxes[ (int) $tax_item->get_rate_id() ] = array(
-				'rate_code'          => (string) $tax_item->get_rate_code(),
-				'label'              => (string) $tax_item->get_label(),
-				'compound'           => (bool) $tax_item->get_compound(),
-				'rate_percent'       => $tax_item->get_rate_percent(),
-				'tax_total'          => (string) $tax_item->get_tax_total(),
-				'shipping_tax_total' => (string) $tax_item->get_shipping_tax_total(),
+			$taxes[ (int) $tax_item->get_rate_id( 'edit' ) ] = array(
+				'rate_code'          => (string) $tax_item->get_rate_code( 'edit' ),
+				'label'              => (string) $tax_item->get_label( 'edit' ),
+				'compound'           => (bool) $tax_item->get_compound( 'edit' ),
+				'rate_percent'       => $tax_item->get_rate_percent( 'edit' ),
+				'tax_total'          => (string) $tax_item->get_tax_total( 'edit' ),
+				'shipping_tax_total' => (string) $tax_item->get_shipping_tax_total( 'edit' ),
 			);
 		}
 

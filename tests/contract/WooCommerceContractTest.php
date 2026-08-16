@@ -1088,6 +1088,147 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R5-2: a DISPLAY value must never be written back as stored order history.
+	 *
+	 * WooCommerce getters default to 'view' context, and view context runs the property's display
+	 * filter (WC_Data::get_prop). A snapshot built from default getters therefore records what an
+	 * extension wants shown, not what is stored, and the restore writes that presentation value into
+	 * the order. The verification, re-reading through the same filter, agrees with itself and hands
+	 * back the strong message over a corrupted row.
+	 *
+	 * The rate is deliberately NOT changed here. Recalculation rewrites the correct raw values; only
+	 * the restore corrupts them. That isolates the defect to the snapshot's context.
+	 *
+	 * Measured before the fix, with a filter that only prettifies the label on screen: the stored raw
+	 * label went from "AAFMRAW" to "Display Tax" and the strong message was still returned.
+	 *
+	 * Every assertion reads with an explicit 'edit', which is the whole point: reading back through
+	 * the view getter would return the filtered value in both versions and prove nothing.
+	 */
+	public function test_a_display_filter_is_never_written_into_stored_order_history(): void {
+		global $wpdb;
+
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) || ! class_exists( '\WC_Tax' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order/WC_Tax unavailable.' );
+		}
+
+		\WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate_country'  => '',
+				'tax_rate_state'    => '',
+				'tax_rate'          => '20.0000',
+				'tax_rate_name'     => 'AAFMVIEWCTX',
+				'tax_rate_priority' => 1,
+				'tax_rate_compound' => 0,
+				'tax_rate_shipping' => 0,
+				'tax_rate_order'    => 0,
+				'tax_rate_class'    => '',
+			)
+		);
+		$rate_id = (int) $wpdb->insert_id;
+
+		$tax_on  = '__return_true';
+		$matched = static function () use ( $rate_id ): array {
+			return array(
+				$rate_id => array(
+					'rate'     => 20.0,
+					'label'    => 'AAFM Contract Tax',
+					'shipping' => 'no',
+					'compound' => 'no',
+				),
+			);
+		};
+		add_filter( 'wc_tax_enabled', $tax_on );
+		add_filter( 'woocommerce_matched_tax_rates', $matched );
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract View-Context Widget' );
+		$product->set_regular_price( '100' );
+		$product->set_tax_status( 'taxable' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$order = new \WC_Order();
+		$order->set_status( 'pending' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+		$order_id = (int) $order->save();
+
+		$before = $this->raw_tax_identity( $order_id );
+		$this->assertNotSame( '', $before['label'], 'The fixture must carry a real stored label, or this test proves nothing.' );
+
+		// An extension that only prettifies the tax row ON SCREEN. It stores nothing.
+		$display = static function () {
+			return 'Display Tax';
+		};
+		add_filter( 'woocommerce_order_item_get_rate_code', $display );
+		add_filter( 'woocommerce_order_item_get_label', $display );
+
+		$boom = static function (): void {
+			throw new \RuntimeException( 'Extension exploded after totals were calculated.' );
+		};
+		add_action( 'woocommerce_order_after_calculate_totals', $boom, 10, 0 );
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		remove_action( 'woocommerce_order_after_calculate_totals', $boom, 10 );
+		remove_filter( 'woocommerce_order_item_get_rate_code', $display );
+		remove_filter( 'woocommerce_order_item_get_label', $display );
+
+		$after = $this->raw_tax_identity( $order_id );
+
+		$this->assertSame(
+			$before['label'],
+			$after['label'],
+			'The RAW stored label must be untouched. This is the field that took the display value and kept it.'
+		);
+		$this->assertSame( $before['rate_code'], $after['rate_code'], 'The RAW stored rate code must be untouched too.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_line_items_not_applied',
+			$result->get_error_code(),
+			'The strong message is only correct when what was put back is what was actually stored.'
+		);
+
+		$reloaded = new \WC_Order( $order_id );
+		$reloaded->delete( true );
+		$product->delete( true );
+		\WC_Tax::_delete_tax_rate( $rate_id );
+		remove_filter( 'wc_tax_enabled', $tax_on );
+		remove_filter( 'woocommerce_matched_tax_rates', $matched );
+	}
+
+	/**
+	 * The first tax row's identity as STORED, read with an explicit edit context so no display
+	 * filter can touch it.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array<string,string>
+	 */
+	private function raw_tax_identity( int $order_id ): array {
+		wp_cache_flush();
+		$order = new \WC_Order( $order_id );
+		foreach ( $order->get_taxes() as $tax_item ) {
+			return array(
+				'rate_code' => (string) $tax_item->get_rate_code( 'edit' ),
+				'label'     => (string) $tax_item->get_label( 'edit' ),
+			);
+		}
+		return array(
+			'rate_code' => '',
+			'label'     => '',
+		);
+	}
+
+	/**
 	 * R5-1: a throw from the hook that fires AFTER deletion must not become a phantom survivor.
 	 *
 	 * The sibling cleanup test throws from woocommerce_before_delete_order_item, which fires while

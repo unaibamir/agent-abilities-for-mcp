@@ -365,14 +365,22 @@ if ( ! class_exists( 'WC_Order_Item_Tax' ) ) {
 	 * Minimal WooCommerce order tax-line signature for static analysis only.
 	 */
 	class WC_Order_Item_Tax {
-		public function get_rate_id(): int { return 0; }
-		public function get_rate_code(): string { return ''; }
-		public function get_label(): string { return ''; }
-		public function get_compound(): bool { return false; }
-		/** @return int|float|string|null */
-		public function get_rate_percent() { return null; }
-		public function get_tax_total(): string { return '0.00'; }
-		public function get_shipping_tax_total(): string { return '0.00'; }
+		// Real WooCommerce gives every one of these a $context param defaulting to 'view', and view
+		// context runs the property's display filter. The snapshot passes 'edit' deliberately.
+		/** @param string $context */
+		public function get_rate_id( $context = 'view' ): int { return 0; }
+		/** @param string $context */
+		public function get_rate_code( $context = 'view' ): string { return ''; }
+		/** @param string $context */
+		public function get_label( $context = 'view' ): string { return ''; }
+		/** @param string $context */
+		public function get_compound( $context = 'view' ): bool { return false; }
+		/** @param string $context @return int|float|string|null */
+		public function get_rate_percent( $context = 'view' ) { return null; }
+		/** @param string $context */
+		public function get_tax_total( $context = 'view' ): string { return '0.00'; }
+		/** @param string $context */
+		public function get_shipping_tax_total( $context = 'view' ): string { return '0.00'; }
 		/** @param mixed $value @return void */
 		public function set_rate_id( $value ) {}
 		/** @param mixed $value @return void */
@@ -408,8 +416,8 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		public function get_order_number() { return ''; }
 		/** @return string */
 		public function get_status() { return ''; }
-		/** @return string */
-		public function get_total() { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_total( $context = 'view' ) { return '0.00'; }
 		/** @return string */
 		public function get_currency() { return 'USD'; }
 		/** @return string|object|null */
@@ -434,16 +442,16 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		public function get_total_tax() { return '0.00'; }
 		/** @return string */
 		public function get_subtotal() { return '0.00'; }
-		/** @return string */
-		public function get_shipping_total() { return '0.00'; }
-		/** @return string */
-		public function get_cart_tax() { return '0.00'; }
-		/** @return string */
-		public function get_shipping_tax() { return '0.00'; }
-		/** @return string */
-		public function get_discount_total() { return '0.00'; }
-		/** @return string */
-		public function get_discount_tax() { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_shipping_total( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_cart_tax( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_shipping_tax( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_discount_total( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_discount_tax( $context = 'view' ) { return '0.00'; }
 		/** @param int $item_id @return void */
 		public function remove_item( $item_id ) {}
 		/** @param object $item @return void */

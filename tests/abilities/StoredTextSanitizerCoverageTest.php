@@ -34,8 +34,8 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 
 	/**
 	 * Raw sanitizer calls that are correct as they stand, keyed by
-	 * `<file>::<enclosing function>::<sanitizer>` and carrying the number of uses in that function
-	 * plus the reason they do not need the invisible-character strip.
+	 * `<file>::<enclosing function>::<sanitizer>` and carrying the exact calls being justified plus
+	 * the reason they do not need the invisible-character strip.
 	 *
 	 * Two rules for anyone editing this list:
 	 *
@@ -46,158 +46,233 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 *    (an order status, a shipping method id) is the one borderline case that does, and the
 	 *    entry has to name the validator.
 	 *
-	 * The count matters. It is what stops a second, stored-write call from quietly inheriting the
-	 * justification written for the query-path call already sitting in the same function.
+	 * `calls` carries the normalised text of each justified call rather than a bare count, and that
+	 * is what stops a justification transferring (R3-3). A count is satisfied by any call in the
+	 * right function, so swapping a justified query call for an unsafe stored write in one edit kept
+	 * the total the same and inherited the reason. Naming the calls means a new one has to be argued
+	 * for on its own. It also makes the list read better: the entry shows the code it is defending.
 	 *
-	 * @var array<string,array{count:int,reason:string}>
+	 * The trade is that editing a justified call - renaming its variable, changing its input key -
+	 * requires updating the entry here. That fires exactly when what is being sanitized changed,
+	 * which is when the reason deserves re-reading, and never on unrelated edits elsewhere.
+	 *
+	 * @var array<string,array{calls:array<int,string>,reason:string}>
 	 */
 	private const ALLOWED = array(
-		// --- includes/text.php: the helpers themselves -------------------------------------------
-		'includes/text.php::aafm_sanitize_plain_text::sanitize_text_field'                              => array(
-			'count'  => 1,
-			'reason' => 'The helper\'s own implementation. This IS the chokepoint every stored write is required to route through; the WordPress sanitizer runs here and the invisible-character strip is applied to its result.',
-		),
-		'includes/text.php::aafm_sanitize_multiline_text::sanitize_textarea_field'                      => array(
-			'count'  => 1,
-			'reason' => 'The multi-line helper\'s own implementation, same reason as its single-line sibling above.',
-		),
-
-		// --- includes/admin: operator input ------------------------------------------------------
-		'includes/admin/bridge-directory.php::aafm_ajax_save_bridged_abilities::sanitize_text_field'    => array(
-			'count'  => 1,
-			'reason' => 'Submitted bridge slugs, intersected against the slugs aafm_discover_foreign_abilities() actually found before anything is stored, so only a slug that already exists on this site survives.',
-		),
-		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field'             => array(
-			'count'  => 1,
-			'reason' => 'A client_id used only to look up and revoke an existing OAuth client. Nothing is written back under this value.',
-		),
-		'includes/admin/connection.php::aafm_ajax_oauth_revoke_grant::sanitize_text_field'              => array(
-			'count'  => 1,
-			'reason' => 'The same client_id lookup on the grant-revocation path.',
-		),
-		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field'                     => array(
-			'count'  => 1,
-			'reason' => 'Ability names ticked in the admin screen, intersected against array_keys( aafm_get_abilities_registry() ) two lines later, so only a name the registry already holds can be stored.',
-		),
-		'includes/admin/settings.php::aafm_sanitize_settings_input::sanitize_text_field'                => array(
-			'count'  => 1,
-			'reason' => 'One line of the IP allowlist textarea. A line is stored only after aafm_is_valid_ip_or_cidr() accepts it, and no invisible character survives that.',
-		),
-		'includes/admin/settings.php::aafm_count_dropped_ip_lines::sanitize_text_field'                 => array(
-			'count'  => 1,
-			'reason' => 'The same parse run purely to count how many lines were rejected, so the save notice can say so. It returns an integer and stores nothing at all.',
-		),
-
-		// --- includes/audit ----------------------------------------------------------------------
-		'includes/audit/log.php::aafm_source_ip::sanitize_text_field'                                   => array(
-			'count'  => 1,
-			'reason' => 'REMOTE_ADDR, returned only when filter_var( $ip, FILTER_VALIDATE_IP ) accepts it and \'\' otherwise, so nothing carrying an invisible character can reach a log row.',
-		),
-
-		// --- includes/helpers.php ----------------------------------------------------------------
-		'includes/helpers.php::aafm_rich_post::sanitize_text_field'                                     => array(
-			'count'  => 1,
-			'reason' => 'A read-path shaper: the stored excerpt of a password-protected post on its way OUT into the response. Nothing here writes.',
-		),
-
-		// --- includes/oauth: protocol parameters -------------------------------------------------
-		'includes/oauth/authorize.php::aafm_oauth_read_authorize_params::sanitize_text_field'           => array(
-			'count'  => 1,
-			'reason' => 'The eight OAuth authorize parameters. Each is compared rather than displayed: redirect_uri is exact-matched against the client\'s registered URIs, response_type/code_challenge_method/scope against fixed supported sets, client_id is a lookup key, and code_challenge is a PKCE digest that either verifies against the verifier or does not. None is stored prose a person reads.',
-		),
-		'includes/oauth/authorize.php::aafm_oauth_handle_authorize::sanitize_text_field'                => array(
-			'count'  => 4,
-			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, REQUEST_URI, the _wpnonce, and the approve/deny decision. All four are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper.',
-		),
-		'includes/oauth/clients.php::aafm_oauth_register_client::sanitize_text_field'                   => array(
-			'count'  => 2,
-			'reason' => 'grant_types and response_types, both intersected against the hardcoded supported sets before storage, so only a literal this plugin already names can be written. The client_name beside them uses the helper.',
-		),
-		'includes/oauth/discovery.php::aafm_oauth_maybe_serve_well_known::sanitize_text_field'          => array(
-			'count'  => 1,
-			'reason' => 'REQUEST_URI, matched against the .well-known paths to decide whether to serve a discovery document. Routing only.',
-		),
-		'includes/oauth/validator.php::aafm_oauth_request_targets_mcp_route::sanitize_text_field'       => array(
-			'count'  => 2,
-			'reason' => 'rest_route and REQUEST_URI, both used to decide whether this request is aimed at the MCP endpoint. Routing only, never written.',
-		),
-		'includes/oauth/validator.php::aafm_oauth_read_bearer_token::sanitize_text_field'               => array(
-			'count'  => 2,
-			'reason' => 'The Authorization header in its two server spellings, parsed for a bearer token that is then hashed and compared against stored tokens. The header text itself is never stored.',
-		),
-
-		// --- includes/abilities ------------------------------------------------------------------
-		'includes/abilities/blocks.php::aafm_exec_list_blocks::sanitize_text_field'                             => array(
-			'count'  => 1,
+		'includes/abilities/blocks.php::aafm_exec_list_blocks::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
 			'reason' => 'The list-blocks search term. It becomes WP_Query\'s `s` argument and is never written back, so nothing about it reaches storage.',
 		),
-		'includes/abilities/media.php::aafm_exec_count_media::sanitize_text_field'                              => array(
-			'count'  => 1,
+		'includes/abilities/media.php::aafm_exec_count_media::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'mime_type\'] )',
+			),
 			'reason' => 'The mime_type filter for the media count. A read filter compared against attachment mime types; no write path touches it.',
 		),
-		'includes/abilities/media.php::aafm_exec_get_media::sanitize_text_field'                                => array(
-			'count'  => 1,
+		'includes/abilities/media.php::aafm_exec_get_media::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
 			'reason' => 'The media search term, passed as WP_Query\'s `s` inside the language-scoped closure. Query input only.',
 		),
-		'includes/abilities/posts.php::aafm_exec_get_posts::sanitize_text_field'                                => array(
-			'count'  => 1,
+		'includes/abilities/posts.php::aafm_exec_get_posts::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
 			'reason' => 'The get-posts search term, passed as WP_Query\'s `s`. Query input only.',
 		),
-		'includes/abilities/search.php::aafm_exec_search_content::sanitize_text_field'                          => array(
-			'count'  => 1,
+		'includes/abilities/search.php::aafm_exec_search_content::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'search\'] ?? \'\' ) )',
+			),
 			'reason' => 'The search-content term. Drives the query and is echoed back in the response; never stored.',
 		),
-		'includes/abilities/terms.php::aafm_exec_get_terms::sanitize_text_field'                                => array(
-			'count'  => 1,
+		'includes/abilities/terms.php::aafm_exec_get_terms::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
 			'reason' => 'The get-terms search term, passed to get_terms(). Query input only.',
 		),
-		'includes/abilities/themes.php::aafm_exec_get_template::sanitize_text_field'                            => array(
-			'count'  => 1,
+		'includes/abilities/themes.php::aafm_exec_get_template::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'template_id\'] ?? \'\' ) )',
+			),
 			'reason' => 'A template_id used solely as the lookup key for get_block_template(). An id that matches nothing returns an error; it is never persisted.',
 		),
-		'includes/abilities/themes.php::aafm_exec_update_template::sanitize_text_field'                         => array(
-			'count'  => 1,
+		'includes/abilities/themes.php::aafm_exec_update_template::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'template_id\'] ?? \'\' ) )',
+			),
 			'reason' => 'The same template_id lookup on the update path. The write itself uses the resolved template\'s wp_id and the kses-filtered content, not this string.',
 		),
-		'includes/abilities/users.php::aafm_exec_get_users::sanitize_text_field'                                => array(
-			'count'  => 1,
+		'includes/abilities/users.php::aafm_exec_get_users::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'search\'] )',
+			),
 			'reason' => 'The get-users search term, wrapped in wildcards for WP_User_Query. Query input only.',
 		),
-		'includes/abilities/woocommerce/coupons.php::aafm_wc_apply_coupon_input::sanitize_text_field'           => array(
-			'count'  => 5,
+		'includes/abilities/woocommerce/coupons.php::aafm_wc_apply_coupon_input::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'amount\'] )',
+				'sanitize_text_field( (string) $input[\'date_expires\'] )',
+				'sanitize_text_field( (string) $input[\'discount_type\'] )',
+				'sanitize_text_field( (string) $input[\'maximum_amount\'] )',
+				'sanitize_text_field( (string) $input[\'minimum_amount\'] )',
+			),
 			'reason' => 'Five non-text coupon inputs. discount_type is closed by the input schema\'s enum (percent/fixed_cart/fixed_product). amount is refused outright unless is_numeric() accepts it, which no invisible character survives. date_expires is parsed by set_date_expires() into a WC_DateTime after a strtotime() gate, so the string itself never lands. minimum_amount and maximum_amount both go through WooCommerce\'s wc_format_decimal(), which keeps only digits and a separator. The coupon CODE, which is real stored text, uses the helper.',
 		),
-		'includes/abilities/woocommerce/gateways.php::aafm_exec_wc_get_payment_gateway::sanitize_text_field'    => array(
-			'count'  => 1,
+		'includes/abilities/woocommerce/gateways.php::aafm_exec_wc_get_payment_gateway::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'gateway_id\'] ?? \'\' ) )',
+			),
 			'reason' => 'A gateway_id used only as an array key into the live WC_Payment_Gateways map. An id that matches no gateway returns not-found; it is never written.',
 		),
 		'includes/abilities/woocommerce/gateways.php::aafm_exec_wc_update_payment_gateway::sanitize_text_field' => array(
-			'count'  => 1,
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'gateway_id\'] ?? \'\' ) )',
+			),
 			'reason' => 'The same gateway_id lookup on the update path. The gateway title, which is stored and shown at checkout, uses the helper.',
 		),
-		'includes/abilities/woocommerce/orders.php::aafm_exec_wc_create_order_refund::sanitize_text_field'      => array(
-			'count'  => 1,
+		'includes/abilities/woocommerce/orders.php::aafm_exec_wc_create_order_refund::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'amount\'] ?? \'0.00\' ) )',
+			),
 			'reason' => 'The refund amount, whose input schema pins it to ^\\d+(\\.\\d{1,2})?$ - a pattern no invisible character can satisfy. The refund REASON, which is stored text, uses the multiline helper.',
 		),
-		'includes/abilities/woocommerce/orders.php::aafm_wc_apply_order_input::sanitize_text_field'             => array(
-			'count'  => 1,
+		'includes/abilities/woocommerce/orders.php::aafm_wc_apply_order_input::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $input[\'status\'] )',
+			),
 			'reason' => 'The order status. Both callers (create and update) refuse anything aafm_wc_order_status_valid() does not find in wc_get_order_statuses() before this line runs, so only a registered status slug can reach set_status().',
 		),
-		'includes/abilities/woocommerce/products.php::aafm_wc_attribute_shape::sanitize_text_field'             => array(
-			'count'  => 1,
+		'includes/abilities/woocommerce/products.php::aafm_wc_attribute_shape::sanitize_text_field' => array(
+			'calls'  => array(
+				'\'sanitize_text_field\' [as a callable string]',
+			),
 			'reason' => 'A read-path shaper: it sanitizes attribute options on the way OUT, assembling the JSON response from an already-stored product. Nothing here writes.',
 		),
-		'includes/abilities/woocommerce/reports.php::aafm_exec_wc_get_sales_report::sanitize_text_field'        => array(
-			'count'  => 2,
+		'includes/abilities/woocommerce/reports.php::aafm_exec_wc_get_sales_report::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'end_date\'] ?? gmdate( \'Y-m-d\' ) ) )',
+				'sanitize_text_field( (string) ( $input[\'start_date\'] ?? gmdate( \'Y-m-01\' ) ) )',
+			),
 			'reason' => 'The report start_date and end_date. Both bound a read-only query and are never persisted.',
 		),
-		'includes/abilities/woocommerce/reports.php::aafm_exec_wc_get_top_sellers_report::sanitize_text_field'  => array(
-			'count'  => 1,
+		'includes/abilities/woocommerce/reports.php::aafm_exec_wc_get_top_sellers_report::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'period\'] ?? \'month\' ) )',
+			),
 			'reason' => 'The report period. Selects a date range for a read-only query; never persisted.',
 		),
 		'includes/abilities/woocommerce/shipping.php::aafm_exec_wc_create_shipping_method::sanitize_text_field' => array(
-			'count'  => 1,
+			'calls'  => array(
+				'sanitize_text_field( (string) ( $input[\'method_type\'] ?? \'\' ) )',
+			),
 			'reason' => 'A method_type that WC_Shipping_Zone::add_shipping_method() checks against the registered shipping-method class names and drops when unrecognised, so only a real registered method id is ever stored.',
+		),
+		'includes/admin/bridge-directory.php::aafm_ajax_save_bridged_abilities::sanitize_text_field' => array(
+			'calls'  => array(
+				'\'sanitize_text_field\' [as a callable string]',
+			),
+			'reason' => 'Submitted bridge slugs, intersected against the slugs aafm_discover_foreign_abilities() actually found before anything is stored, so only a slug that already exists on this site survives.',
+		),
+		'includes/admin/connection.php::aafm_ajax_oauth_revoke_client::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'client_id\'] ) )',
+			),
+			'reason' => 'A client_id used only to look up and revoke an existing OAuth client. Nothing is written back under this value.',
+		),
+		'includes/admin/connection.php::aafm_ajax_oauth_revoke_grant::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( (string) $_POST[\'client_id\'] ) )',
+			),
+			'reason' => 'The same client_id lookup on the grant-revocation path.',
+		),
+		'includes/admin/page.php::aafm_sanitize_enabled_input::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $name )',
+			),
+			'reason' => 'Ability names ticked in the admin screen, intersected against array_keys( aafm_get_abilities_registry() ) two lines later, so only a name the registry already holds can be stored.',
+		),
+		'includes/admin/settings.php::aafm_count_dropped_ip_lines::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $line )',
+			),
+			'reason' => 'The same parse run purely to count how many lines were rejected, so the save notice can say so. It returns an integer and stores nothing at all.',
+		),
+		'includes/admin/settings.php::aafm_sanitize_settings_input::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $line )',
+			),
+			'reason' => 'One line of the IP allowlist textarea. A line is stored only after aafm_is_valid_ip_or_cidr() accepts it, and no invisible character survives that.',
+		),
+		'includes/audit/log.php::aafm_source_ip::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REMOTE_ADDR\'] ) )',
+			),
+			'reason' => 'REMOTE_ADDR, returned only when filter_var( $ip, FILTER_VALIDATE_IP ) accepts it and \'\' otherwise, so nothing carrying an invisible character can reach a log row.',
+		),
+		'includes/helpers.php::aafm_rich_post::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( (string) $post->post_excerpt )',
+			),
+			'reason' => 'A read-path shaper: the stored excerpt of a password-protected post on its way OUT into the response. Nothing here writes.',
+		),
+		'includes/oauth/authorize.php::aafm_oauth_handle_authorize::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_GET[\'aafm_oauth\'] ) )',
+				'sanitize_text_field( wp_unslash( $_POST[\'_wpnonce\'] ) )',
+				'sanitize_text_field( wp_unslash( $_POST[\'aafm_oauth_decision\'] ) )',
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
+			),
+			'reason' => 'The request-shaped reads around the consent POST: the ?aafm_oauth marker, REQUEST_URI, the _wpnonce, and the approve/deny decision. All four are compared against known values within the request and none is persisted. The client_name, which IS stored and rendered on this very screen, uses the helper.',
+		),
+		'includes/oauth/authorize.php::aafm_oauth_read_authorize_params::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $source[ $key ] ) )',
+			),
+			'reason' => 'The eight OAuth authorize parameters. Each is compared rather than displayed: redirect_uri is exact-matched against the client\'s registered URIs, response_type/code_challenge_method/scope against fixed supported sets, client_id is a lookup key, and code_challenge is a PKCE digest that either verifies against the verifier or does not. None is stored prose a person reads.',
+		),
+		'includes/oauth/clients.php::aafm_oauth_register_client::sanitize_text_field' => array(
+			'calls'  => array(
+				'\'sanitize_text_field\' [as a callable string]',
+				'\'sanitize_text_field\' [as a callable string]',
+			),
+			'reason' => 'grant_types and response_types, both intersected against the hardcoded supported sets before storage, so only a literal this plugin already names can be written. The client_name beside them uses the helper.',
+		),
+		'includes/oauth/discovery.php::aafm_oauth_maybe_serve_well_known::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
+			),
+			'reason' => 'REQUEST_URI, matched against the .well-known paths to decide whether to serve a discovery document. Routing only.',
+		),
+		'includes/oauth/validator.php::aafm_oauth_read_bearer_token::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_SERVER[\'HTTP_AUTHORIZATION\'] ) )',
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REDIRECT_HTTP_AUTHORIZATION\'] ) )',
+			),
+			'reason' => 'The Authorization header in its two server spellings, parsed for a bearer token that is then hashed and compared against stored tokens. The header text itself is never stored.',
+		),
+		'includes/oauth/validator.php::aafm_oauth_request_targets_mcp_route::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( wp_unslash( $_GET[\'rest_route\'] ) )',
+				'sanitize_text_field( wp_unslash( $_SERVER[\'REQUEST_URI\'] ) )',
+			),
+			'reason' => 'rest_route and REQUEST_URI, both used to decide whether this request is aimed at the MCP endpoint. Routing only, never written.',
+		),
+		'includes/text.php::aafm_sanitize_multiline_text::sanitize_textarea_field' => array(
+			'calls'  => array(
+				'sanitize_textarea_field( $value )',
+			),
+			'reason' => 'The multi-line helper\'s own implementation, same reason as its single-line sibling above.',
+		),
+		'includes/text.php::aafm_sanitize_plain_text::sanitize_text_field' => array(
+			'calls'  => array(
+				'sanitize_text_field( $value )',
+			),
+			'reason' => 'The helper\'s own implementation. This IS the chokepoint every stored write is required to route through; the WordPress sanitizer runs here and the invisible-character strip is applied to its result.',
 		),
 	);
 
@@ -249,13 +324,17 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	}
 
 	/**
-	 * A function already allowlisted for one query-path call must not silently absorb a second.
+	 * A justification covers the exact calls it was written for, and no others.
 	 *
-	 * Without this, the archetype survives in miniature: aafm_wc_apply_coupon_input() is allowed
-	 * five raw calls for five non-text inputs, and a sixth raw call on a stored field would sit
-	 * inside an entry that already reads "allowed" and never be looked at again.
+	 * R3-3. A count alone was transferable: convert a justified query call to the helper and add an
+	 * unsafe stored write to the same function in one edit, and the count is unchanged, so the old
+	 * reason silently covers the new call. Comparing what each call actually sanitizes closes that
+	 * - the new call does not match the justified one, so it has to be argued for on its own.
+	 *
+	 * aafm_wc_apply_coupon_input() is the live example: five raw calls for five non-text inputs,
+	 * each named, so a sixth on a stored field cannot hide among them.
 	 */
-	public function test_an_allowlisted_function_gains_no_extra_raw_calls(): void {
+	public function test_a_justification_covers_only_the_calls_it_was_written_for(): void {
 		$present    = StoredTextSanitizerScanner::group( StoredTextSanitizerScanner::scan() );
 		$mismatched = array();
 
@@ -263,13 +342,18 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 			if ( ! isset( $present[ $key ] ) ) {
 				continue; // Reported by the staleness test; not this test's business.
 			}
-			if ( $present[ $key ]['count'] !== $entry['count'] ) {
+
+			$found     = $present[ $key ]['calls'];
+			$justified = $entry['calls'];
+			sort( $found );
+			sort( $justified );
+
+			if ( $found !== $justified ) {
 				$mismatched[] = sprintf(
-					'%s: allowlisted for %d, found %d (lines %s)',
+					"%s\n      justified: %s\n      found:     %s",
 					$key,
-					$entry['count'],
-					$present[ $key ]['count'],
-					implode( ', ', $present[ $key ]['lines'] )
+					implode( ' | ', $justified ),
+					implode( ' | ', $found )
 				);
 			}
 		}
@@ -277,9 +361,10 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 		$this->assertSame(
 			array(),
 			$mismatched,
-			"The number of raw sanitizer calls in an allowlisted function changed. Read the new call\n"
-			. "on its own merits - the existing reason was written for the OTHER calls - then either fix\n"
-			. "it or update the count and extend the reason.\n\n  "
+			"The raw sanitizer calls in an allowlisted function are not the ones its reason was written\n"
+			. "for. A call was added, removed, or changed what it sanitizes. Read it on its own merits -\n"
+			. "the existing reason describes the OTHER calls - then either route it through the helper or\n"
+			. "update the entry and extend the reason.\n\n  "
 			. implode( "\n  ", $mismatched )
 		);
 	}
@@ -354,6 +439,116 @@ PHP;
 		$this->assertSame( 'aafm_probe_two', $records[1]['function'] );
 		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 		$this->assertSame( 'call', $records[1]['form'] );
+	}
+
+	/**
+	 * R3-3: a fully-qualified call is the same function and must be seen.
+	 *
+	 * On PHP 8 `\sanitize_text_field(...)` is a single T_NAME_FULLY_QUALIFIED token, not the
+	 * T_STRING the scan used to look for, so it slipped past entirely - a real bypass, and the
+	 * natural spelling for anyone writing inside a namespace. On the 7.4 floor the same source
+	 * tokenizes as T_NS_SEPARATOR plus T_STRING, so both spellings are asserted.
+	 */
+	public function test_the_scanner_finds_a_fully_qualified_call(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_qualified( array $input ) {
+	return \sanitize_textarea_field( (string) $input['note'] );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records, 'A leading backslash must not hide a call.' );
+		$this->assertSame( 'sanitize_textarea_field', $records[0]['sanitizer'] );
+		$this->assertSame( 'aafm_probe_qualified', $records[0]['function'] );
+	}
+
+	/**
+	 * A partially-qualified name is a DIFFERENT function and must not be reported. Without this the
+	 * fully-qualified fix would over-match and start flagging unrelated code.
+	 */
+	public function test_the_scanner_ignores_a_namespaced_function_of_the_same_name(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_namespaced( $value ) {
+	return Vendor\Helpers\sanitize_text_field( $value );
+}
+PHP;
+
+		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
+	 * R3-3: an aliased import renames the sanitizer to something no grep would look for.
+	 *
+	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
+	 * call under a name the allowlist has never heard of. The scan resolves the import so the call
+	 * is reported under the real sanitizer's name.
+	 */
+	public function test_the_scanner_resolves_an_aliased_import(): void {
+		$source = <<<'PHP'
+<?php
+use function sanitize_text_field as clean;
+
+function aafm_probe_aliased( array $input ) {
+	return clean( (string) $input['title'] );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 1, $records, 'An aliased import must not hide a call.' );
+		$this->assertSame( 'sanitize_text_field', $records[0]['sanitizer'] );
+		$this->assertSame( 'aafm_probe_aliased', $records[0]['function'] );
+	}
+
+	/**
+	 * The fingerprint has to describe what is sanitized, since that is the whole mechanism stopping
+	 * a justification from transferring to a different call.
+	 */
+	public function test_the_call_fingerprint_records_what_is_sanitized(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_fingerprint( array $input ) {
+	$a = sanitize_text_field( (string) $input['search'] );
+	$b = sanitize_text_field( (string) $input['title'] );
+	return array( $a, $b );
+}
+PHP;
+
+		$grouped = StoredTextSanitizerScanner::group( StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+		$calls   = $grouped['probe.php::aafm_probe_fingerprint::sanitize_text_field']['calls'];
+
+		$this->assertCount( 2, $calls );
+		$this->assertNotSame( $calls[0], $calls[1], 'Two different values must not share a fingerprint.' );
+		$this->assertStringContainsString( "\$input['search']", implode( ' ', $calls ) );
+		$this->assertStringContainsString( "\$input['title']", implode( ' ', $calls ) );
+	}
+
+	/**
+	 * The scan must reach every file that actually ships.
+	 *
+	 * The file that proved the hand-picked list was the wrong shape (R3-3) was uninstall.php: it
+	 * ships, it was outside the scan, and only a source review caught it. The list is derived from
+	 * git archive now, so this asserts the derivation really does reach it.
+	 */
+	public function test_the_scan_covers_every_shipped_first_party_file(): void {
+		$scanned = array_map(
+			static function ( string $path ): string {
+				return str_replace( dirname( __DIR__, 2 ) . '/', '', $path );
+			},
+			StoredTextSanitizerScanner::source_files()
+		);
+
+		foreach ( array( 'uninstall.php', 'agent-abilities-for-mcp.php', 'includes/text.php', 'includes/helpers.php' ) as $expected ) {
+			$this->assertContains( $expected, $scanned, $expected . ' ships and must be scanned.' );
+		}
+
+		foreach ( $scanned as $path ) {
+			$this->assertStringStartsNotWith( 'vendor/', $path, 'Third-party code is deliberately out of scope.' );
+			$this->assertStringStartsNotWith( 'tests/', $path, 'Tests do not ship.' );
+		}
 	}
 
 	/**

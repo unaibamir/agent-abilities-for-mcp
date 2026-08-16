@@ -9,15 +9,36 @@
  *
  * That sweep was declared complete three separate times and was wrong each time: it missed
  * update-user, then the order billing/shipping addresses, then the whole sanitize_textarea_field
- * family. Every miss was the same shape - fixed at one call site, left at its siblings. Sweeping
- * harder does not close that class; a scan that runs on every build does.
+ * family. Every miss was the same shape - fixed at one call site, left at its siblings.
  *
- * What this scanner deliberately does NOT do is decide whether a call is wrong. Plenty of raw
+ * WHAT THIS GUARANTEES, EXACTLY
+ *
+ * It finds every use of a NAMED sanitizer from self::SANITIZERS in shipped first-party PHP, in the
+ * four spellings a developer would actually write (bare call, fully-qualified call, callable
+ * string, aliased import), and fails the build on any that is not written down in the test's
+ * allowlist with a reason.
+ *
+ * WHAT IT DOES NOT GUARANTEE, AND THIS MATTERS
+ *
+ * It does NOT enumerate stored writes. It has no model of which calls reach storage: it matches
+ * sanitizer NAMES, not destinations. So it cannot prove that every stored write routes through the
+ * helper - it can only prove that every raw call to a name it knows about has been looked at by a
+ * human. A stored write that reaches the database through some other route entirely - a bespoke
+ * sanitizer, wp_kses on a field that needed the strip, a direct $wpdb->insert of unsanitized input -
+ * is invisible to it and always was.
+ *
+ * That gap is deliberate rather than an oversight. Enumerating real storage sinks means modelling
+ * every WordPress and WooCommerce setter that eventually writes, which is a project rather than a
+ * test, and a half-built version of it would be worse than this: it would imply a completeness it
+ * did not have. This scanner is a name-level guard plus a human allowlist, and the honest claim is
+ * that it closes the "fixed at one call site, left at its siblings" family for the sanitizers it
+ * knows, not that a fourth miss is impossible.
+ *
+ * The other thing it deliberately does NOT do is decide whether a call is wrong. Plenty of raw
  * sanitize_text_field() calls are correct and must stay raw, because they sanitize a query or
  * lookup parameter that is never stored - a WP_Query search term, a report date, a template id. A
  * check that flagged call presence would force those to be "fixed" and make the codebase worse. So
- * the scanner only reports WHERE the raw calls are; the destination judgement lives in the test's
- * allowlist, one written reason per entry, and a raw call nobody has justified fails the build.
+ * the scanner reports WHERE the raw calls are; the destination judgement lives in the allowlist.
  *
  * @package AgentAbilitiesForMCP
  */
@@ -26,23 +47,11 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Support;
 
-use FilesystemIterator;
-use RecursiveDirectoryIterator;
-use RecursiveIteratorIterator;
-use SplFileInfo;
+use RuntimeException;
 
 /**
- * Finds every raw call to (and callable-string reference to) the WordPress plain-text sanitizers
- * anywhere in the shipped source, and reports each one with the function that encloses it.
- *
- * The scan covers every PHP file the plugin ships: the root plugin file and all of includes/, not
- * just includes/abilities/. It started at the abilities because that is where B-18 was found, but
- * the abilities are not where the plugin does all its storing: the admin screens write the
- * operator's meta-key allowlists into options, the OAuth client registration stores a client_name
- * that the consent screen renders back, and the activity log writes a detail string to its own
- * table. A scanner that only watched the abilities would have been the same partial sweep it
- * exists to prevent, one directory up. Nothing is left out by hand, because a hand-picked
- * exclusion is where the next miss would land.
+ * Finds every raw use of the WordPress plain-text sanitizers in shipped first-party PHP, and
+ * reports each one with the function that encloses it and the text of what it sanitizes.
  *
  * Token-based rather than grep-based on purpose. These files talk about the sanitizers constantly
  * in docblocks and in the tool descriptions agents read; token_get_all() hands comments and string
@@ -65,9 +74,16 @@ final class StoredTextSanitizerScanner {
 	);
 
 	/**
-	 * Scan every ability source and return one record per raw sanitizer use.
+	 * Cache for the shipped-file list, which costs a subprocess to compute.
 	 *
-	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string}>
+	 * @var array<int,string>|null
+	 */
+	private static ?array $shipped_cache = null;
+
+	/**
+	 * Scan every shipped source file and return one record per raw sanitizer use.
+	 *
+	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}>
 	 *         Sorted by file, then line.
 	 */
 	public static function scan(): array {
@@ -90,21 +106,30 @@ final class StoredTextSanitizerScanner {
 	}
 
 	/**
-	 * Collapse scan() records into the stable key the allowlist is written against.
+	 * Collapse scan() records into the shape the allowlist is written against.
 	 *
-	 * The key is `<relative file>::<enclosing function>::<sanitizer>` and the value is how many
-	 * uses that combination carries. Line numbers are deliberately NOT part of the key: any edit
-	 * above a call shifts them, so a line-keyed allowlist goes stale on unrelated work and gets
-	 * disabled. A file plus a function name plus the sanitizer only moves when someone renames the
-	 * function or moves the code, which is exactly when the justification deserves re-reading.
+	 * The key is `<relative file>::<enclosing function>::<sanitizer>`, and the value is the list of
+	 * normalised call texts in that function. Two decisions are load-bearing here.
 	 *
-	 * The count is part of the record for the same reason it is stable: it changes only when a raw
-	 * sanitizer use is added to or removed from that function. So a second, stored-write call
-	 * landing inside a function already allowlisted for its query-path call cannot inherit that
-	 * function's justification silently.
+	 * Line numbers are NOT part of the key. Any edit above a call shifts them, so a line-keyed
+	 * allowlist goes stale on unrelated work and gets disabled. A file plus a function name plus the
+	 * sanitizer only moves when someone renames the function or moves the code, which is exactly
+	 * when the justification deserves re-reading.
 	 *
-	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string}> $records Scan output.
-	 * @return array<string,array{count:int,lines:array<int,int>}> Keyed by the stable key.
+	 * The value is the call TEXT rather than a count, and that is the fix for a real hole Codex
+	 * found (R3-3). A bare count is transferable: convert a justified query call to the helper and
+	 * add an unsafe stored write to the same function in one edit, and the count is unchanged, so
+	 * the old reason silently covers the new call. Recording what each call actually sanitizes means
+	 * the new call does not match the justified one and the build fails.
+	 *
+	 * The cost is honest and bounded: editing a justified call - renaming its variable, changing the
+	 * input key - changes its text and forces the allowlist entry to be updated. That is a real
+	 * papercut, but it fires exactly when what is being sanitized has changed, which is when a
+	 * second look is warranted. It does not fire on unrelated edits elsewhere in the file, which was
+	 * the failure mode that ruled line numbers out.
+	 *
+	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}> $records Scan output.
+	 * @return array<string,array{calls:array<int,string>,lines:array<int,int>}> Keyed by the stable key.
 	 */
 	public static function group( array $records ): array {
 		$grouped = array();
@@ -113,12 +138,17 @@ final class StoredTextSanitizerScanner {
 			$key = self::key( $record );
 			if ( ! isset( $grouped[ $key ] ) ) {
 				$grouped[ $key ] = array(
-					'count' => 0,
+					'calls' => array(),
 					'lines' => array(),
 				);
 			}
-			++$grouped[ $key ]['count'];
+			$grouped[ $key ]['calls'][] = $record['call'];
 			$grouped[ $key ]['lines'][] = $record['line'];
+		}
+
+		foreach ( $grouped as $key => $entry ) {
+			sort( $entry['calls'] );
+			$grouped[ $key ]['calls'] = $entry['calls'];
 		}
 
 		ksort( $grouped );
@@ -129,7 +159,7 @@ final class StoredTextSanitizerScanner {
 	/**
 	 * The stable allowlist key for one record.
 	 *
-	 * @param array{file:string,function:string,sanitizer:string,line:int,form:string} $record Scan record.
+	 * @param array{file:string,function:string,sanitizer:string,line:int,form:string,call:string} $record Scan record.
 	 * @return string
 	 */
 	public static function key( array $record ): string {
@@ -140,7 +170,7 @@ final class StoredTextSanitizerScanner {
 	 * Scan one file.
 	 *
 	 * @param string $file Absolute path.
-	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string}>
+	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}>
 	 */
 	public static function scan_file( string $file ): array {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a plugin source file from disk for static analysis in a test, not a remote resource.
@@ -151,16 +181,20 @@ final class StoredTextSanitizerScanner {
 	 * Scan a source string.
 	 *
 	 * Split out from scan_file() so the scanner's own behaviour can be proven against known input -
-	 * a docblock mention, a method of the same name, a callable string - without inventing a file
-	 * on disk or relying on some real ability file keeping its current wording.
+	 * a docblock mention, a qualified call, an aliased import, a method of the same name - without
+	 * inventing a file on disk or relying on some real source file keeping its current wording.
 	 *
 	 * @param string $source   PHP source, including its opening tag.
 	 * @param string $relative The label reported as `file` on each record.
-	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string}>
+	 * @return array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}>
 	 */
 	public static function scan_source( string $source, string $relative ): array {
 		$tokens = token_get_all( $source );
 		$count  = count( $tokens );
+
+		// `use function sanitize_text_field as clean;` renames a tracked sanitizer for the rest of
+		// the file. Resolved first so the call loop below can match the local name.
+		$aliases = self::collect_function_aliases( $tokens, $count );
 
 		$function = '{file scope}';
 		$found    = array();
@@ -183,17 +217,15 @@ final class StoredTextSanitizerScanner {
 				continue;
 			}
 
-			// The ordinary call form: sanitize_text_field( … ).
-			if ( T_STRING === $token[0] && in_array( $token[1], self::SANITIZERS, true ) ) {
-				if ( ! self::is_function_call( $tokens, $i, $count ) ) {
-					continue;
-				}
+			$sanitizer = self::called_sanitizer( $tokens, $i, $count, $aliases );
+			if ( null !== $sanitizer ) {
 				$found[] = array(
 					'file'      => $relative,
 					'function'  => $function,
-					'sanitizer' => (string) $token[1],
+					'sanitizer' => $sanitizer,
 					'line'      => (int) $token[2],
 					'form'      => 'call',
+					'call'      => self::call_text( $tokens, $i, $count, $sanitizer ),
 				);
 				continue;
 			}
@@ -202,6 +234,7 @@ final class StoredTextSanitizerScanner {
 			// same values, invisible to any check that only looks for a name followed by a paren.
 			if ( T_CONSTANT_ENCAPSED_STRING === $token[0] ) {
 				$literal = trim( (string) $token[1], "'\"" );
+				$literal = ltrim( $literal, '\\' );
 				if ( in_array( $literal, self::SANITIZERS, true ) ) {
 					$found[] = array(
 						'file'      => $relative,
@@ -209,12 +242,186 @@ final class StoredTextSanitizerScanner {
 						'sanitizer' => $literal,
 						'line'      => (int) $token[2],
 						'form'      => 'callable-string',
+						'call'      => "'" . $literal . "' [as a callable string]",
 					);
 				}
 			}
 		}
 
 		return $found;
+	}
+
+	/**
+	 * The tracked sanitizer being CALLED at $index, or null.
+	 *
+	 * Covers the spellings that all resolve to the same global function:
+	 *
+	 * - `sanitize_text_field(...)`            - T_STRING, the ordinary case.
+	 * - `\sanitize_text_field(...)`           - T_NAME_FULLY_QUALIFIED on PHP 8, which the old
+	 *                                           T_STRING-only match missed entirely. This is the
+	 *                                           bypass Codex found: a fully-qualified call is the
+	 *                                           natural spelling inside a namespaced file and was
+	 *                                           invisible to the scan.
+	 * - `\sanitize_text_field(...)` on 7.4    - T_NS_SEPARATOR followed by T_STRING, which the
+	 *                                           lookbehind already tolerated, so both tokenizations
+	 *                                           are handled.
+	 * - an aliased import                     - resolved via $aliases.
+	 *
+	 * A partially-qualified name (`Some\Ns\sanitize_text_field`) is a DIFFERENT function and is
+	 * deliberately not matched.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  All tokens.
+	 * @param int                                           $index   Current index.
+	 * @param int                                           $count   Token count.
+	 * @param array<string,string>                          $aliases Local name => tracked sanitizer.
+	 * @return string|null The tracked sanitizer name, or null.
+	 */
+	private static function called_sanitizer( array $tokens, int $index, int $count, array $aliases ): ?string {
+		$token = $tokens[ $index ];
+		if ( ! is_array( $token ) ) {
+			return null;
+		}
+
+		$name = null;
+
+		if ( T_STRING === $token[0] ) {
+			$name = (string) $token[1];
+		} elseif ( defined( 'T_NAME_FULLY_QUALIFIED' ) && T_NAME_FULLY_QUALIFIED === $token[0] ) {
+			// Leading backslash only: this is the global function, spelled explicitly.
+			$name = ltrim( (string) $token[1], '\\' );
+			if ( false !== strpos( $name, '\\' ) ) {
+				return null;
+			}
+		}
+
+		if ( null === $name ) {
+			return null;
+		}
+
+		$resolved = null;
+		if ( in_array( $name, self::SANITIZERS, true ) ) {
+			$resolved = $name;
+		} elseif ( isset( $aliases[ $name ] ) ) {
+			$resolved = $aliases[ $name ];
+		}
+
+		if ( null === $resolved || ! self::is_function_call( $tokens, $index, $count ) ) {
+			return null;
+		}
+
+		return $resolved;
+	}
+
+	/**
+	 * Local aliases imported for a tracked sanitizer via `use function`.
+	 *
+	 * `use function sanitize_text_field as clean;` makes every later `clean( $v )` a raw sanitizer
+	 * call under a name no grep would ever look for. The import is also recorded when the name is
+	 * NOT renamed, which is harmless (the local name equals the tracked one) and keeps the parser
+	 * simple.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $count  Token count.
+	 * @return array<string,string> Local name => tracked sanitizer name.
+	 */
+	private static function collect_function_aliases( array $tokens, int $count ): array {
+		$aliases = array();
+
+		for ( $i = 0; $i < $count; $i++ ) {
+			$token = $tokens[ $i ];
+			if ( ! is_array( $token ) || T_USE !== $token[0] ) {
+				continue;
+			}
+
+			// Only `use function …`, never a class import or a closure's `use ( … )`.
+			$next = self::next_significant( $tokens, $i + 1, $count );
+			if ( null === $next || ! is_array( $tokens[ $next ] ) || T_FUNCTION !== $tokens[ $next ][0] ) {
+				continue;
+			}
+
+			// Collect the statement's text up to the terminating semicolon, then read the
+			// comma-separated `original as alias` clauses out of it.
+			$statement = '';
+			for ( $j = $next + 1; $j < $count; $j++ ) {
+				if ( ';' === $tokens[ $j ] ) {
+					break;
+				}
+				$statement .= is_array( $tokens[ $j ] ) ? $tokens[ $j ][1] : $tokens[ $j ];
+			}
+
+			foreach ( explode( ',', $statement ) as $clause ) {
+				$parts    = preg_split( '~\s+as\s+~i', trim( $clause ) );
+				$original = ltrim( trim( (string) ( $parts[0] ?? '' ) ), '\\' );
+				$local    = trim( (string) ( $parts[1] ?? $original ) );
+
+				if ( '' === $local || ! in_array( $original, self::SANITIZERS, true ) ) {
+					continue;
+				}
+				$aliases[ $local ] = $original;
+			}
+		}
+
+		return $aliases;
+	}
+
+	/**
+	 * The normalised text of a call's argument list, used as its fingerprint in the allowlist.
+	 *
+	 * Whitespace is collapsed so reindenting a block does not churn the allowlist, and the text is
+	 * capped so one very long call cannot make an entry unreadable.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens    All tokens.
+	 * @param int                                           $index     Index of the name token.
+	 * @param int                                           $count     Token count.
+	 * @param string                                        $sanitizer The resolved sanitizer name.
+	 * @return string
+	 */
+	private static function call_text( array $tokens, int $index, int $count, string $sanitizer ): string {
+		$open = self::next_significant( $tokens, $index + 1, $count );
+		if ( null === $open || '(' !== $tokens[ $open ] ) {
+			return $sanitizer . '(?)';
+		}
+
+		$depth = 0;
+		$text  = '';
+		for ( $i = $open; $i < $count; $i++ ) {
+			$piece = is_array( $tokens[ $i ] ) ? $tokens[ $i ][1] : $tokens[ $i ];
+			if ( '(' === $tokens[ $i ] ) {
+				++$depth;
+			} elseif ( ')' === $tokens[ $i ] ) {
+				--$depth;
+			}
+			$text .= $piece;
+			if ( 0 === $depth ) {
+				break;
+			}
+		}
+
+		$text = (string) preg_replace( '~\s+~', ' ', trim( $text ) );
+		if ( strlen( $text ) > 120 ) {
+			$text = substr( $text, 0, 117 ) . '...';
+		}
+
+		return $sanitizer . $text;
+	}
+
+	/**
+	 * The index of the next token that is not whitespace or a comment.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $from   Index to start from.
+	 * @param int                                           $count  Token count.
+	 * @return int|null
+	 */
+	private static function next_significant( array $tokens, int $from, int $count ): ?int {
+		for ( $i = $from; $i < $count; $i++ ) {
+			$token = $tokens[ $i ];
+			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
+				continue;
+			}
+			return $i;
+		}
+		return null;
 	}
 
 	/**
@@ -245,7 +452,7 @@ final class StoredTextSanitizerScanner {
 	}
 
 	/**
-	 * Whether a T_STRING at $index is being CALLED, rather than declared or reached through an
+	 * Whether the name token at $index is being CALLED, rather than declared or reached through an
 	 * object or a class.
 	 *
 	 * A method named sanitize_text_field on some object is a different function entirely, and a
@@ -253,7 +460,7 @@ final class StoredTextSanitizerScanner {
 	 * sanitizer call.
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
-	 * @param int                                           $index  Index of the T_STRING token.
+	 * @param int                                           $index  Index of the name token.
 	 * @param int                                           $count  Token count.
 	 * @return bool
 	 */
@@ -269,51 +476,68 @@ final class StoredTextSanitizerScanner {
 			break;
 		}
 
-		for ( $i = $index + 1; $i < $count; $i++ ) {
-			$token = $tokens[ $i ];
-			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
-				continue;
-			}
-			return '(' === $token;
-		}
+		$next = self::next_significant( $tokens, $index + 1, $count );
 
-		return false;
+		return null !== $next && '(' === $tokens[ $next ];
 	}
 
 	/**
-	 * Every shipped PHP file: the root plugin file plus the whole includes/ tree, sorted for a
-	 * stable report.
+	 * Every shipped first-party PHP file, sorted for a stable report.
 	 *
-	 * The root file is here for the same reason the scan covers all of includes/ rather than the
-	 * one subdirectory it started in. A file left out by hand is a hole exactly where the next miss
-	 * lands, and "it has no sanitizer calls today" is the argument that was made about update-user
-	 * and about the order addresses, both of which later needed fixing. It carries none today, so
-	 * the allowlist stays empty and the guard simply covers it from now on - which is the point.
+	 * Derived from `git archive`, which is literally what the release zip is built from, rather
+	 * than from a list somebody maintains by hand. That is the whole point: a hand-picked list has
+	 * its hole exactly where the next file lands, and "it has no sanitizer calls today" is the
+	 * argument that was made about update-user and about the order addresses, both of which later
+	 * needed fixing. uninstall.php was the file that proved it - it ships, it was outside the scan,
+	 * and nobody noticed until Codex read the source list (R3-3).
 	 *
+	 * Two boundaries, both deliberate and both stated so they are not mistaken for oversights:
+	 *
+	 * - vendor/ is excluded. It ships, but it is third-party code this project does not author and
+	 *   cannot fix; allowlisting hundreds of vendor calls would bury the entries that matter.
+	 * - The list comes from HEAD, so a PHP file added but not yet committed is not scanned until it
+	 *   is committed. It cannot ship before then either, so the guard still runs before release.
+	 *
+	 * @throws RuntimeException When the shipped list cannot be determined, which must fail loudly
+	 *                          rather than silently scanning nothing.
 	 * @return array<int,string> Absolute paths.
 	 */
 	public static function source_files(): array {
-		$files = array();
-
-		$bootstrap = self::plugin_root() . 'agent-abilities-for-mcp.php';
-		if ( is_file( $bootstrap ) ) {
-			$files[] = $bootstrap;
+		if ( null !== self::$shipped_cache ) {
+			return self::$shipped_cache;
 		}
 
-		$root = self::plugin_root() . 'includes';
-		if ( is_dir( $root ) ) {
-			$iterator = new RecursiveIteratorIterator(
-				new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS )
-			);
+		$root = self::plugin_root();
 
-			foreach ( $iterator as $item ) {
-				if ( $item instanceof SplFileInfo && $item->isFile() && 'php' === strtolower( $item->getExtension() ) ) {
-					$files[] = $item->getPathname();
-				}
+		$output = array();
+		$status = 0;
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.system_calls_exec -- asking git what the release archive contains is the only authoritative answer, and this is a test-only static analysis helper.
+		exec( 'cd ' . escapeshellarg( rtrim( $root, '/' ) ) . ' && git archive HEAD 2>/dev/null | tar -t 2>/dev/null', $output, $status );
+
+		if ( 0 !== $status || array() === $output ) {
+			throw new RuntimeException(
+				'Could not determine the shipped file list from "git archive HEAD". The sanitizer scan '
+				. 'covers whatever actually ships, so it must not fall back to a guess.'
+			);
+		}
+
+		$files = array();
+		foreach ( $output as $path ) {
+			$path = trim( (string) $path );
+			if ( '' === $path || 'php' !== strtolower( (string) pathinfo( $path, PATHINFO_EXTENSION ) ) ) {
+				continue;
+			}
+			if ( 0 === strpos( $path, 'vendor/' ) ) {
+				continue;
+			}
+			$absolute = $root . $path;
+			if ( is_file( $absolute ) ) {
+				$files[] = $absolute;
 			}
 		}
 
 		sort( $files );
+		self::$shipped_cache = $files;
 
 		return $files;
 	}
@@ -341,19 +565,18 @@ final class StoredTextSanitizerScanner {
 	/**
 	 * Render records as one human line each for a test failure message.
 	 *
-	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string}> $records Records to format.
+	 * @param array<int,array{file:string,function:string,sanitizer:string,line:int,form:string,call:string}> $records Records to format.
 	 * @return string
 	 */
 	public static function format( array $records ): string {
 		$lines = array();
 		foreach ( $records as $record ) {
 			$lines[] = sprintf(
-				'  %s:%d  %s() calls %s()%s',
+				'  %s:%d  %s()  %s',
 				$record['file'],
 				$record['line'],
 				$record['function'],
-				$record['sanitizer'],
-				'callable-string' === $record['form'] ? ' [as a callable string]' : ''
+				$record['call']
 			);
 		}
 		return implode( "\n", $lines );

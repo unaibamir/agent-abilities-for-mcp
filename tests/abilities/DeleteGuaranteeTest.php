@@ -219,6 +219,76 @@ final class DeleteGuaranteeTest extends TestCase {
 	}
 
 	/**
+	 * The other half of unknown: an ability with NO risk key at all.
+	 *
+	 * The registry reads risk with a `?? ''` fallback, so a row that never declares one used to
+	 * land on "not destructive" and keep the Trash promise. That is a false reassurance, and it is
+	 * not worth the same as the false alarm on the other side: warning about permanence on a site
+	 * that has none costs an annotation, while promising recoverability about a permanent delete
+	 * costs the site owner their data. So an unannotated ability resolves to permanent.
+	 */
+	public function test_an_ability_with_no_risk_annotation_drops_the_trash_promise(): void {
+		$this->with_registered_ability(
+			'aafm/third-party-unannotated',
+			array( 'risk' => null ),
+			function (): void {
+				$this->assertArrayNotHasKey(
+					'risk',
+					aafm_get_abilities_registry()['aafm/third-party-unannotated'],
+					'The fixture must carry NO risk key, not a blank one - that is the case under test.'
+				);
+
+				update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-unannotated' ) );
+
+				$this->assertTrue(
+					aafm_enabled_can_delete_permanently(),
+					'An ability that declares no risk must fail closed, not inherit the Trash promise.'
+				);
+				$this->assertSame( 'Some removals are permanent.', aafm_delete_guarantee()[0] );
+			}
+		);
+	}
+
+	/**
+	 * The blank spelling of the same thing. A row carrying `risk => ''` says no more than a row
+	 * carrying no risk at all, so it must not resolve differently.
+	 */
+	public function test_an_ability_with_a_blank_risk_annotation_drops_the_trash_promise(): void {
+		$this->with_registered_ability(
+			'aafm/third-party-blank-risk',
+			array( 'risk' => '' ),
+			function (): void {
+				update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-blank-risk' ) );
+
+				$this->assertTrue( aafm_enabled_can_delete_permanently() );
+			}
+		);
+	}
+
+	/**
+	 * The regression the fail-closed rule could cause, pinned. Every ability this plugin ships
+	 * declares a risk, so the rule must never fire for one of ours - if a native row ever loses its
+	 * annotation, the whole consent screen would start warning about permanence on every site.
+	 */
+	public function test_every_shipped_ability_declares_a_risk(): void {
+		$missing = array();
+		foreach ( aafm_get_abilities_registry_full() as $name => $row ) {
+			if ( ! array_key_exists( 'risk', $row ) || '' === (string) $row['risk'] ) {
+				$missing[] = $name;
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$missing,
+			"These abilities declare no risk. aafm_enabled_can_delete_permanently() fails closed on a\n"
+			. "missing annotation, so each of these would make the consent screen warn about permanent\n"
+			. "removals on every site that enables it. Annotate them.\n  "
+			. implode( "\n  ", $missing )
+		);
+	}
+
+	/**
 	 * A filter-added ability that is not destructive at all must not trip the warning. Without
 	 * this, "unknown means permanent" would over-warn on every third-party read.
 	 */
@@ -258,13 +328,16 @@ final class DeleteGuaranteeTest extends TestCase {
 	 * cache has to be flushed on the way in AND on the way out, or the synthetic ability leaks
 	 * into whichever test runs next in this process.
 	 *
+	 * Passing null for a field removes it from the row entirely, which is how a test builds the
+	 * row a careless extender would: one with no risk annotation at all, rather than a blank one.
+	 *
 	 * @param string              $name Ability name to inject.
-	 * @param array<string,mixed> $row  Registry row fields to merge over the defaults.
+	 * @param array<string,mixed> $row  Registry row fields to merge over the defaults; a null value removes the key.
 	 * @param callable():void     $body Assertions to run while it is registered.
 	 */
 	private function with_registered_ability( string $name, array $row, callable $body ): void {
 		$inject = static function ( array $registry ) use ( $name, $row ): array {
-			$registry[ $name ] = array_merge(
+			$built = array_merge(
 				array(
 					'label' => 'Third Party Ability',
 					'group' => 'writes',
@@ -272,6 +345,12 @@ final class DeleteGuaranteeTest extends TestCase {
 				),
 				$row
 			);
+			foreach ( $row as $key => $value ) {
+				if ( null === $value ) {
+					unset( $built[ $key ] );
+				}
+			}
+			$registry[ $name ] = $built;
 			return $registry;
 		};
 

@@ -390,6 +390,22 @@ function aafm_non_removal_destructive_abilities(): array {
  * destructive therefore resolves to permanent, and the two filters above are how
  * an author who knows better says so.
  *
+ * An ability carrying NO risk annotation at all resolves to permanent for the
+ * same reason. The two ways of being wrong are not worth the same: promising
+ * "removals are recoverable" about an ability that deletes for good is a false
+ * reassurance, while warning about permanence on a site where nothing permanent
+ * is enabled is a false alarm. On the screen where someone is about to hand over
+ * an access token, the reassurance is the far more expensive mistake, and it is
+ * the reason B-08 exists. The remedy for the false alarm is also good: annotate
+ * risk, which the Abilities API expects anyway, or use one of the two filters.
+ * Every ability this plugin ships declares risk, so this can only ever fire for
+ * a third-party row.
+ *
+ * Deliberately scoped to this one question. catalog.php defaults a missing risk
+ * to 'write' and the integration manifest defaults it to 'read', which does not
+ * agree with failing closed here - those feed different decisions, and
+ * rationalising all three is its own job, not a thing to do on the way past.
+ *
  * @return bool
  */
 function aafm_enabled_can_delete_permanently(): bool {
@@ -408,7 +424,11 @@ function aafm_enabled_can_delete_permanently(): bool {
 		if ( in_array( $name, $recoverable, true ) || in_array( $name, $non_removal, true ) ) {
 			continue;
 		}
-		if ( 'destructive' === (string) ( $registry[ $name ]['risk'] ?? '' ) ) {
+		// An empty string covers both spellings of "no annotation": the key absent entirely, and
+		// the key present but blank. Neither tells us the ability is safe, so neither may buy it
+		// the softer wording.
+		$risk = (string) ( $registry[ $name ]['risk'] ?? '' );
+		if ( 'destructive' === $risk || '' === $risk ) {
 			return true;
 		}
 	}

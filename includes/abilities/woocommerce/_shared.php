@@ -86,3 +86,53 @@ function aafm_wc_date_string( $date ): ?string {
 	}
 	return is_string( $date ) ? $date : null;
 }
+
+/**
+ * Resolve one of a taxonomy attribute's stored options to its term, reading only.
+ *
+ * THE RULE THIS EXISTS TO ENFORCE, and the reason it lives here rather than beside one caller:
+ * **a WooCommerce attribute API that resolves an option by NAME can create that option.** Both
+ * WC_Product_Attribute methods that turn stored options into terms take the same branch --
+ * `get_term_by( 'name', ... )`, and on a miss `wp_insert_term( $option, ... )`. The family is
+ * exactly two, enumerated rather than assumed by grepping the class:
+ *
+ *   WC_Product_Attribute::get_terms()   class-wc-product-attribute.php, the insert is in its else arm
+ *   WC_Product_Attribute::get_slugs()   same shape, same insert
+ *
+ * Neither is called anywhere in this plugin, deliberately. `get_slugs()` was removed from the
+ * variation validator once it was clear a validator must not write, and `get_terms()` is the one
+ * the product write path would have reached: it is what
+ * WC_Product_Data_Store_CPT::update_attributes() calls to persist a taxonomy attribute, so a
+ * caller echoing back the term IDS a read handed them would have had three terms literally NAMED
+ * "1707", "1708", "1709" created in the taxonomy. Anything new on this class that turns an option
+ * into a term belongs on this list, and belongs behind this function.
+ *
+ * A miss is returned as a miss; nothing is created to make one.
+ *
+ * An option out of the data store is an int term id. The numeric-string arm is there because that
+ * typing is a WordPress implementation detail (WP_Term::term_id happens to be an int) rather than a
+ * documented guarantee, and refusing to resolve "12" would be a silly thing to fail a write over.
+ * A genuinely non-numeric option is resolved by name first, matching WooCommerce's own order, then
+ * by slug, since an option already written in slug form should still produce a usable list.
+ *
+ * @param mixed  $option   One entry from WC_Product_Attribute::get_options().
+ * @param string $taxonomy The attribute taxonomy.
+ * @return \WP_Term|null The resolved term, or null when it cannot be found without creating it.
+ */
+function aafm_wc_find_attribute_term( $option, string $taxonomy ): ?\WP_Term {
+	if ( is_int( $option ) || ( is_string( $option ) && '' !== $option && ctype_digit( $option ) ) ) {
+		$term = get_term_by( 'id', (int) $option, $taxonomy );
+		return $term instanceof \WP_Term ? $term : null;
+	}
+
+	if ( ! is_string( $option ) || '' === $option ) {
+		return null;
+	}
+
+	$term = get_term_by( 'name', $option, $taxonomy );
+	if ( ! $term instanceof \WP_Term ) {
+		$term = get_term_by( 'slug', $option, $taxonomy );
+	}
+
+	return $term instanceof \WP_Term ? $term : null;
+}

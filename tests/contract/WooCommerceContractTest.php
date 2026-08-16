@@ -1207,6 +1207,261 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * B2-01 / B2-03: reading a product and writing it straight back must change nothing.
+	 *
+	 * The most ordinary turn an agent takes, and it used to silently demote a global attribute to a
+	 * local one. The read reported a taxonomy attribute's options as term IDS; echoing those back
+	 * rebuilt the attribute with set_id( 0 ), which dropped the taxonomy binding, so
+	 * `_product_attributes` flipped is_taxonomy 1 to 0 and every variation keyed on it was left
+	 * holding a value the product no longer declared. The response was isError:false throughout.
+	 *
+	 * EVERY assertion here is on STORED state or on a downstream operation, never on the response
+	 * body. The response was already a full, plausible product shape in the broken version, and a
+	 * second read came back byte-identical, so a test that read the reply would pass against the bug.
+	 *
+	 * The term-count assertion is the one that matters most. It fails against the tempting one-line
+	 * fix (carry the attribute id, leave the read emitting ids), because persisting a taxonomy
+	 * attribute routes through WC_Product_Attribute::get_terms(), which resolves an unmatched option
+	 * by NAME and calls wp_insert_term() on a miss: echoing ids back would create terms literally
+	 * named "1768" and "1769".
+	 *
+	 * The fixture builds its OWN global attribute and taxonomy rather than borrowing one, so that
+	 * any term pollution a regression causes lands somewhere this test owns and deletes.
+	 */
+	public function test_a_product_attribute_round_trip_changes_nothing(): void {
+		if ( ! class_exists( '\WC_Product_Variable' ) || ! function_exists( 'wc_create_attribute' ) ) {
+			$this->markTestSkipped( 'WooCommerce product/attribute API unavailable.' );
+		}
+
+		$fixture  = $this->seed_global_attribute_product( 'aafmroundtrip', 'AAFM Round Trip' );
+		$taxonomy = $fixture['taxonomy'];
+
+		$before_meta  = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+		$before_terms = $this->attribute_term_count( $taxonomy );
+
+		$read = aafm_exec_wc_get_product( array( 'product_id' => $fixture['product_id'] ) );
+		$this->assertIsArray( $read );
+		$row = (array) ( (array) $read['attributes'] )[ $taxonomy ];
+
+		// B2-03: the read must speak the vocabulary the write paths accept, and say which kind it is.
+		$this->assertTrue( (bool) $row['taxonomy'], 'A global attribute must be flagged as taxonomy-backed.' );
+		$this->assertSame(
+			array( 'blue', 'green' ),
+			array_values( (array) $row['options'] ),
+			'A global attribute\'s options must be reported as term SLUGS, not the term ids the write path rejects.'
+		);
+
+		// B2-01: echo exactly what the read gave back.
+		$result = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => (string) $row['name'],
+						'options' => array_values( (array) $row['options'] ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $result, 'An unchanged echo is the ordinary turn and must stay lossless.' );
+
+		clean_post_cache( $fixture['product_id'] );
+		$after_meta = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+
+		$this->assertSame(
+			1,
+			(int) $after_meta[ $taxonomy ]['is_taxonomy'],
+			'The attribute must still be global. This is the field that flipped to 0 and took the taxonomy binding with it.'
+		);
+		$this->assertSame(
+			'',
+			(string) $after_meta[ $taxonomy ]['value'],
+			'A global attribute stores no inline value; a non-empty one means it was rewritten as a local attribute.'
+		);
+		$this->assertSame( $before_meta, $after_meta, 'The whole stored attribute row must be byte-identical after a round trip.' );
+		$this->assertSame(
+			$before_terms,
+			$this->attribute_term_count( $taxonomy ),
+			'No term may be created. This is what the one-line fix would have got wrong, via get_terms() -> wp_insert_term().'
+		);
+
+		$this->cleanup_global_attribute_product( $fixture );
+	}
+
+	/**
+	 * B2-01: a genuine CHANGE to a global attribute is refused, and both custom-attribute controls
+	 * still work.
+	 *
+	 * Refusing is right because the `attributes` field models a custom attribute and nothing else:
+	 * a name and literal option strings. A global attribute's options are terms in a shared
+	 * taxonomy, so the field cannot express the change, and the old behaviour of accepting it
+	 * anyway is what demoted the attribute. The positive controls are in the same test on purpose:
+	 * a refusal that also broke ordinary custom attributes would be a worse bug than the one fixed.
+	 */
+	public function test_changing_a_global_attribute_is_refused_but_custom_ones_still_work(): void {
+		if ( ! class_exists( '\WC_Product_Variable' ) || ! function_exists( 'wc_create_attribute' ) ) {
+			$this->markTestSkipped( 'WooCommerce product/attribute API unavailable.' );
+		}
+
+		$fixture  = $this->seed_global_attribute_product( 'aafmrefuse', 'AAFM Refuse', true );
+		$taxonomy = $fixture['taxonomy'];
+
+		$refused = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => $taxonomy,
+						'options' => array( 'blue', 'red' ),
+					),
+				),
+			)
+		);
+		$this->assertInstanceOf( \WP_Error::class, $refused, 'A genuine change to a global attribute must be refused, not silently demoted.' );
+		$this->assertSame( 'aafm_wc_global_attribute_not_editable', $refused->get_error_code() );
+		$this->assertStringContainsString( 'wc-update-product-attribute', $refused->get_error_message(), 'The error must name the tool that CAN do it.' );
+
+		clean_post_cache( $fixture['product_id'] );
+		$meta = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+		$this->assertSame( 1, (int) $meta[ $taxonomy ]['is_taxonomy'], 'A refused write must leave the attribute global.' );
+
+		// Positive control 1: a genuinely new custom attribute still upserts.
+		$added = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => 'Finish',
+						'options' => array( 'Matte', 'Gloss' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $added );
+
+		// Positive control 2: an existing custom attribute's options are still editable.
+		$edited = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => 'Material',
+						'options' => array( 'Cotton', 'Linen' ),
+					),
+				),
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $edited );
+
+		clean_post_cache( $fixture['product_id'] );
+		$meta = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+		$this->assertSame( 'Matte | Gloss', (string) $meta['finish']['value'], 'A new custom attribute must still be written.' );
+		$this->assertSame( 'Cotton | Linen', (string) $meta['material']['value'], 'An existing custom attribute must still be editable.' );
+		$this->assertSame( 1, (int) $meta[ $taxonomy ]['is_taxonomy'], 'And the global attribute must survive all of it.' );
+
+		$this->cleanup_global_attribute_product( $fixture );
+	}
+
+	/**
+	 * Create a global attribute, its taxonomy, two terms, and a variable product declaring it.
+	 *
+	 * @param string $slug          Attribute slug (without the pa_ prefix).
+	 * @param string $label         Attribute label.
+	 * @param bool   $with_custom   Also give the product a custom attribute, for the positive controls.
+	 * @return array<string,mixed>
+	 */
+	private function seed_global_attribute_product( string $slug, string $label, bool $with_custom = false ): array {
+		$attribute_id = wc_create_attribute(
+			array(
+				'name' => $label,
+				'slug' => $slug,
+				'type' => 'select',
+			)
+		);
+		$this->assertNotInstanceOf( \WP_Error::class, $attribute_id, 'The fixture attribute must be creatable.' );
+		$attribute_id = (int) $attribute_id;
+		$taxonomy     = wc_attribute_taxonomy_name( $slug );
+		register_taxonomy( $taxonomy, 'product', array( 'public' => false ) );
+
+		$term_ids = array();
+		foreach ( array(
+			'blue'  => 'Blue',
+			'green' => 'Green',
+		) as $term_slug => $term_name ) {
+			$term       = wp_insert_term( $term_name, $taxonomy, array( 'slug' => $term_slug ) );
+			$term_ids[] = (int) $term['term_id'];
+		}
+
+		$global = new \WC_Product_Attribute();
+		$global->set_id( $attribute_id );
+		$global->set_name( $taxonomy );
+		$global->set_options( $term_ids );
+		$global->set_visible( true );
+		$global->set_variation( true );
+
+		$attributes = array( $global );
+		if ( $with_custom ) {
+			$custom = new \WC_Product_Attribute();
+			$custom->set_id( 0 );
+			$custom->set_name( 'Material' );
+			$custom->set_options( array( 'Cotton', 'Wool' ) );
+			$custom->set_visible( true );
+			$attributes[] = $custom;
+		}
+
+		$product = new \WC_Product_Variable();
+		$product->set_name( 'AAFM Contract ' . $label . ' Product' );
+		$product->set_status( 'publish' );
+		$product->set_attributes( $attributes );
+
+		return array(
+			'attribute_id' => $attribute_id,
+			'taxonomy'     => $taxonomy,
+			'product_id'   => (int) $product->save(),
+		);
+	}
+
+	/**
+	 * Remove everything seed_global_attribute_product() created.
+	 *
+	 * @param array<string,mixed> $fixture From seed_global_attribute_product().
+	 * @return void
+	 */
+	private function cleanup_global_attribute_product( array $fixture ): void {
+		$product = wc_get_product( (int) $fixture['product_id'] );
+		if ( $product ) {
+			$product->delete( true );
+		}
+		foreach ( (array) get_terms(
+			array(
+				'taxonomy'   => (string) $fixture['taxonomy'],
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		) as $term_id ) {
+			wp_delete_term( (int) $term_id, (string) $fixture['taxonomy'] );
+		}
+		wc_delete_attribute( (int) $fixture['attribute_id'] );
+	}
+
+	/**
+	 * Count the terms in an attribute taxonomy, so term creation by a regression is visible.
+	 *
+	 * @param string $taxonomy Attribute taxonomy.
+	 * @return int
+	 */
+	private function attribute_term_count( string $taxonomy ): int {
+		$terms = get_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		);
+		return is_array( $terms ) ? count( $terms ) : 0;
+	}
+
+	/**
 	 * The first tax row's identity as STORED, read with an explicit edit context so no display
 	 * filter can touch it.
 	 *

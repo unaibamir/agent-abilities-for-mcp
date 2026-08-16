@@ -817,39 +817,6 @@ function aafm_wc_variation_attribute_options( \WC_Product_Attribute $attribute )
 	return array() === $slugs ? null : $slugs;
 }
 
-/**
- * Resolve one of a taxonomy attribute's stored options to its term, reading only.
- *
- * This is the read-only stand-in for the resolution inside WC_Product_Attribute::get_slugs(), minus
- * its wp_insert_term() fallback. A miss is returned as a miss; nothing is created to make one.
- *
- * An option out of the data store is an int term id. The numeric-string arm is there because that
- * typing is a WordPress implementation detail (WP_Term::term_id happens to be an int) rather than a
- * documented guarantee, and refusing to resolve "12" would be a silly thing to fail a write over.
- * A genuinely non-numeric option is resolved by name first, matching WooCommerce's own order, then
- * by slug, since an option already written in slug form should still produce a usable list.
- *
- * @param mixed  $option   One entry from WC_Product_Attribute::get_options().
- * @param string $taxonomy The attribute taxonomy.
- * @return \WP_Term|null The resolved term, or null when it cannot be found without creating it.
- */
-function aafm_wc_find_attribute_term( $option, string $taxonomy ): ?\WP_Term {
-	if ( is_int( $option ) || ( is_string( $option ) && '' !== $option && ctype_digit( $option ) ) ) {
-		$term = get_term_by( 'id', (int) $option, $taxonomy );
-		return $term instanceof \WP_Term ? $term : null;
-	}
-
-	if ( ! is_string( $option ) || '' === $option ) {
-		return null;
-	}
-
-	$term = get_term_by( 'name', $option, $taxonomy );
-	if ( ! $term instanceof \WP_Term ) {
-		$term = get_term_by( 'slug', $option, $taxonomy );
-	}
-
-	return $term instanceof \WP_Term ? $term : null;
-}
 
 /**
  * Sanitize a variation's flat attribute map: each key is a taxonomy-like slug (sanitize_title) and

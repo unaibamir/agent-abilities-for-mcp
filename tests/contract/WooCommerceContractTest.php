@@ -821,6 +821,98 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * The same late-throwing extension, but on CREATE, where the failure is worse.
+	 *
+	 * Before this fix, aafm_exec_wc_create_order() called calculate_totals() with no catch, so the exception
+	 * left the ability as a raw Throwable. That is not a wrong answer, it is an unhandled crash: the
+	 * agent gets no structured error and nothing to act on.
+	 *
+	 * The part that surprises is that there is an order to clean up. `new WC_Order()` persists
+	 * nothing, but calculate_totals() runs calculate_taxes() and WooCommerce saves inside it, so the
+	 * order exists by the time the after hook throws. Measured before the fix: the order table
+	 * gained a row AND the Throwable escaped.
+	 *
+	 * Asserts the outcome on both counts, because either alone would pass while the other was
+	 * broken: a structured error is worthless if it leaves a half-built order behind, and a clean
+	 * table is worthless if the ability still crashes.
+	 */
+	public function test_create_order_recalculation_failure_leaves_no_order_behind(): void {
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order unavailable.' );
+		}
+
+		global $wpdb;
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Create-Crash Widget' );
+		$product->set_regular_price( '100' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$orders_before = $this->count_orders();
+
+		$boom = static function (): void {
+			throw new \RuntimeException( 'Extension exploded during create.' );
+		};
+		add_action( 'woocommerce_order_after_calculate_totals', $boom, 10, 0 );
+
+		$threw  = null;
+		$result = null;
+		try {
+			$result = aafm_exec_wc_create_order(
+				array(
+					'status'     => 'pending',
+					'line_items' => array(
+						array(
+							'product_id' => $product_id,
+							'quantity'   => 1,
+						),
+					),
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$threw = $e;
+		}
+		remove_action( 'woocommerce_order_after_calculate_totals', $boom, 10 );
+
+		$this->assertNull(
+			$threw,
+			'A late create failure must not escape as a raw Throwable. On this plugin\'s WP floor nothing above catches it, so the agent gets a crash instead of an error it can act on.'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $result, 'The failure must come back as a structured WP_Error.' );
+		$this->assertSame(
+			'aafm_wc_order_not_created',
+			$result->get_error_code(),
+			'The clean code is only earned when nothing was left behind; the partial case has its own.'
+		);
+
+		$this->assertSame(
+			$orders_before,
+			$this->count_orders(),
+			'A failed create must leave no order behind. calculate_taxes() saves, so the order really does exist by the time the throw is caught.'
+		);
+
+		$product->delete( true );
+		unset( $wpdb );
+	}
+
+	/**
+	 * Count real orders, so a failed create leaving a row behind is visible.
+	 *
+	 * @return int
+	 */
+	private function count_orders(): int {
+		$orders = wc_get_orders(
+			array(
+				'limit'  => -1,
+				'return' => 'ids',
+				'status' => array_keys( wc_get_order_statuses() ),
+			)
+		);
+		return is_array( $orders ) ? count( $orders ) : 0;
+	}
+
+	/**
 	 * Read an order's money straight back out of storage, as strings, for exact comparison.
 	 *
 	 * @param int $order_id Order id.

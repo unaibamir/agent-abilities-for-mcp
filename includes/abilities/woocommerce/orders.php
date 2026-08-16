@@ -1271,6 +1271,69 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
 }
 
 /**
+ * Undo a CREATE whose totals recalculation threw, and report what survived.
+ *
+ * Deliberately not the update path's rollback, because the two failures are not the same shape.
+ * An update has an order that existed before the request and has to be put back the way it was. A
+ * create has no earlier state at all: the right answer is not to restore anything but to remove
+ * everything the request brought into being, so the caller's "no order was created" is true.
+ *
+ * There IS an order to remove, which is the part that surprises. `new WC_Order()` persists nothing,
+ * but calculate_totals() runs calculate_taxes() and WooCommerce saves inside it, so an order that
+ * did not exist when the request began exists by the time an after-hook throw is caught. Confirmed
+ * against real WooCommerce: a create that threw left the order table one row heavier while a raw
+ * Throwable escaped the ability entirely.
+ *
+ * Items are deleted before the order. Deleting the order takes its own items with it, but a row
+ * written by add_product() while the order id was still 0 belongs to nothing and would outlive it.
+ *
+ * @param \WC_Order      $order    The part-built order.
+ * @param array<int,int> $item_ids Order-item ids this request wrote.
+ * @return \WP_Error
+ */
+function aafm_wc_rollback_created_order( \WC_Order $order, array $item_ids ): \WP_Error {
+	$kept     = aafm_wc_delete_added_order_items( $item_ids );
+	$order_id = (int) $order->get_id();
+	$removed  = true;
+
+	if ( $order_id > 0 ) {
+		$removed = false;
+		try {
+			$removed = (bool) $order->delete( true );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			$removed = false;
+		}
+	}
+
+	if ( ! $removed ) {
+		return new \WP_Error(
+			'aafm_wc_order_partially_created',
+			sprintf(
+				/* translators: %d: the id of the order that was created and could not be removed. */
+				__( 'Creating the order failed while its totals were being calculated, and the part-built order could not be removed. Order %d exists and its totals may be wrong. Read or delete it before trying again; do not simply retry, or you will end up with two.', 'agent-abilities-for-mcp' ),
+				$order_id
+			)
+		);
+	}
+
+	if ( array() !== $kept ) {
+		return new \WP_Error(
+			'aafm_wc_order_partially_created',
+			sprintf(
+				/* translators: %s: comma-separated list of order item ids that could not be removed. */
+				__( 'Creating the order failed while its totals were being calculated. No order was kept, but these order item ids could not be removed: %s. They belong to no order.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $kept )
+			)
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_order_not_created',
+		__( 'Creating the order failed while its totals were being calculated. No order was created and nothing from this request was kept, so it is safe to try again.', 'agent-abilities-for-mcp' )
+	);
+}
+
+/**
  * Build the WP_Error returned when one or more line-item product IDs cannot be resolved.
  *
  * Keeps create and update reporting identical and lets the caller see exactly which IDs failed
@@ -1426,8 +1489,9 @@ function aafm_exec_wc_create_order( array $input ) {
 		return $email_error;
 	}
 
-	$order      = new \WC_Order();
-	$unresolved = aafm_wc_apply_order_input( $order, $input );
+	$order          = new \WC_Order();
+	$added_item_ids = array();
+	$unresolved     = aafm_wc_apply_order_input( $order, $input, $added_item_ids );
 	if ( is_wp_error( $unresolved ) ) {
 		return $unresolved;
 	}
@@ -1436,7 +1500,19 @@ function aafm_exec_wc_create_order( array $input ) {
 	}
 	// Recalculate line + cart totals so the order total reflects its items. Without this the order
 	// total stays at 0.00 even when line_items were added (downstream refunds depend on it).
-	$order->calculate_totals();
+	//
+	// Guarded for the same reason the update path is, and the create case is worse in one respect.
+	// With no catch at all an extension throwing from woocommerce_order_after_calculate_totals sent
+	// a raw Throwable straight out of the ability: not a wrong answer but an unhandled crash, so the
+	// agent got no structured error to act on. That is exactly what AbilityCrashSafetyTest exists to
+	// prevent, and fixing the update path while leaving its sibling uncaught is this project's
+	// signature archetype. The rollback differs from the update path's because a create has no
+	// earlier state to restore -- see aafm_wc_rollback_created_order().
+	try {
+		$order->calculate_totals();
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return aafm_wc_rollback_created_order( $order, $added_item_ids );
+	}
 	$id = (int) $order->save();
 
 	$saved = aafm_wc_get_order_object( $id );

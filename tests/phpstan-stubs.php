@@ -366,6 +366,7 @@ if ( ! class_exists( 'WC_Order_Item_Tax' ) ) {
 	 */
 	class WC_Order_Item_Tax {
 		public function get_rate_id(): int { return 0; }
+		public function get_rate_code(): string { return ''; }
 		public function get_label(): string { return ''; }
 		public function get_compound(): bool { return false; }
 		/** @return int|float|string|null */
@@ -374,6 +375,8 @@ if ( ! class_exists( 'WC_Order_Item_Tax' ) ) {
 		public function get_shipping_tax_total(): string { return '0.00'; }
 		/** @param mixed $value @return void */
 		public function set_rate_id( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_rate_code( $value ) {}
 		/** @param mixed $value @return void */
 		public function set_label( $value ) {}
 		/** @param mixed $value @return void */

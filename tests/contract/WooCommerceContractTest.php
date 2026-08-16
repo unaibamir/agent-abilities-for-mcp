@@ -968,6 +968,151 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R4-1: the strong "totals and taxes were put back" message must not be returned over a tax row
+	 * whose rate identity is still the new rate's.
+	 *
+	 * WooCommerce's update_taxes() rewrites a tax row's rate code, label, compound flag AND rate percent from the
+	 * current rate before the late hook fires, not just its amounts. Restoring the amounts alone
+	 * left the old money sitting under the new rate's identity, and because the verification
+	 * compared only amounts, that inconsistent row still earned the strong message.
+	 *
+	 * The rate really is edited mid-test, because WC_Tax::get_rate_percent_value() reads the rate
+	 * table directly and has no filter, so this cannot be faked. The rate is created, edited and
+	 * deleted by this test; no pre-existing rate is touched.
+	 *
+	 * Measured before the fix: tax_total restored to 20, but rate_percent 5 and label AAFMREPROB,
+	 * with the strong error code returned.
+	 */
+	public function test_late_failure_restores_tax_rate_identity_not_just_the_amounts(): void {
+		global $wpdb;
+
+		if ( ! class_exists( '\WC_Product' ) || ! class_exists( '\WC_Order' ) || ! class_exists( '\WC_Tax' ) ) {
+			$this->markTestSkipped( 'WC_Product/WC_Order/WC_Tax unavailable.' );
+		}
+
+		$rate_percent = 20.0;
+		$tax_on       = '__return_true';
+		\WC_Tax::_insert_tax_rate(
+			array(
+				'tax_rate_country'  => '',
+				'tax_rate_state'    => '',
+				'tax_rate'          => '20.0000',
+				'tax_rate_name'     => 'AAFMCONTRACTA',
+				'tax_rate_priority' => 1,
+				'tax_rate_compound' => 0,
+				'tax_rate_shipping' => 0,
+				'tax_rate_order'    => 0,
+				'tax_rate_class'    => '',
+			)
+		);
+		$rate_id = (int) $wpdb->insert_id;
+		$matched = static function () use ( $rate_id, &$rate_percent ): array {
+			return array(
+				$rate_id => array(
+					'rate'     => (float) $rate_percent,
+					'label'    => 'AAFM Contract Tax',
+					'shipping' => 'no',
+					'compound' => 'no',
+				),
+			);
+		};
+		add_filter( 'wc_tax_enabled', $tax_on );
+		add_filter( 'woocommerce_matched_tax_rates', $matched );
+
+		$product = new \WC_Product();
+		$product->set_name( 'AAFM Contract Rate-Identity Widget' );
+		$product->set_regular_price( '100' );
+		$product->set_tax_status( 'taxable' );
+		$product->set_status( 'publish' );
+		$product_id = (int) $product->save();
+
+		$order = new \WC_Order();
+		$order->set_status( 'pending' );
+		$order->add_product( $product, 1 );
+		$order->calculate_totals( true );
+		$order_id = (int) $order->save();
+
+		$before = $this->tax_row_identity( $order_id );
+		$this->assertSame( '20', $before['rate_percent'], 'The fixture must record the ORIGINAL rate, or this test proves nothing.' );
+
+		// The shop edits that same rate, which is what makes the metadata diverge.
+		\WC_Tax::_update_tax_rate(
+			$rate_id,
+			array(
+				'tax_rate'      => '5.0000',
+				'tax_rate_name' => 'AAFMCONTRACTB',
+			)
+		);
+		$rate_percent = 5.0;
+		\WC_Cache_Helper::invalidate_cache_group( 'taxes' );
+
+		$boom = static function (): void {
+			throw new \RuntimeException( 'Extension exploded after totals were calculated.' );
+		};
+		add_action( 'woocommerce_order_after_calculate_totals', $boom, 10, 0 );
+		$result = aafm_exec_wc_update_order(
+			array(
+				'order_id'       => $order_id,
+				'add_line_items' => array(
+					array(
+						'product_id' => $product_id,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+		remove_action( 'woocommerce_order_after_calculate_totals', $boom, 10 );
+
+		$after = $this->tax_row_identity( $order_id );
+
+		$this->assertSame(
+			$before['rate_percent'],
+			$after['rate_percent'],
+			'The tax row\'s rate percent must be restored. This is the field that survived as the NEW rate while the strong message was still returned.'
+		);
+		$this->assertSame( $before['label'], $after['label'], 'The tax row\'s label must be restored too.' );
+		$this->assertSame( $before['tax_total'], $after['tax_total'], 'The amount must still be restored.' );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame(
+			'aafm_wc_line_items_not_applied',
+			$result->get_error_code(),
+			'With the identity genuinely restored the strong message is earned; it must not be earned any other way.'
+		);
+
+		$reloaded = new \WC_Order( $order_id );
+		$reloaded->delete( true );
+		$product->delete( true );
+		\WC_Tax::_delete_tax_rate( $rate_id );
+		remove_filter( 'wc_tax_enabled', $tax_on );
+		remove_filter( 'woocommerce_matched_tax_rates', $matched );
+	}
+
+	/**
+	 * The first tax row's amount and rate identity, read back from storage.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array<string,string>
+	 */
+	private function tax_row_identity( int $order_id ): array {
+		wp_cache_flush();
+		$order = new \WC_Order( $order_id );
+		foreach ( $order->get_taxes() as $tax_item ) {
+			return array(
+				'tax_total'    => (string) $tax_item->get_tax_total(),
+				'rate_percent' => (string) $tax_item->get_rate_percent(),
+				'label'        => (string) $tax_item->get_label(),
+				'rate_code'    => (string) $tax_item->get_rate_code(),
+			);
+		}
+		return array(
+			'tax_total'    => '',
+			'rate_percent' => '',
+			'label'        => '',
+			'rate_code'    => '',
+		);
+	}
+
+	/**
 	 * Count real orders, so a failed create leaving a row behind is visible.
 	 *
 	 * @return int

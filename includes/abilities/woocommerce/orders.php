@@ -1094,7 +1094,12 @@ function aafm_wc_order_money_snapshot( \WC_Order $order ): array {
 			if ( ! is_object( $tax_item ) || ! method_exists( $tax_item, 'get_rate_id' ) ) {
 				return array();
 			}
+			// update_taxes() rewrites a tax row's rate_code, label, compound flag and rate_percent
+			// from the CURRENT rate, not just its amounts (abstract-wc-order.php, the existing-taxes
+			// loop). All of it therefore has to be captured, or a restore puts the old money back
+			// under the new rate's identity.
 			$taxes[ (int) $tax_item->get_rate_id() ] = array(
+				'rate_code'          => (string) $tax_item->get_rate_code(),
 				'label'              => (string) $tax_item->get_label(),
 				'compound'           => (bool) $tax_item->get_compound(),
 				'rate_percent'       => $tax_item->get_rate_percent(),
@@ -1132,11 +1137,52 @@ function aafm_wc_money_figure( $value ): string {
 }
 
 /**
+ * Canonicalize an order item's tax map so two of them can be compared without their key TYPES
+ * deciding the answer.
+ *
+ * WooCommerce hands this map back with rate ids as ints from one code path and numeric strings from
+ * another, and the amounts as floats or strings depending on where they came from. Comparing the
+ * raw arrays would report a perfectly good restore as a failure. Casting the keys to int, running
+ * the amounts through the same normalizer as every other figure, and sorting removes all three
+ * sources of noise while keeping every semantic value.
+ *
+ * The map used to be left out of the comparison for exactly that noise, which meant the strong
+ * message covered less than it sounded like it did. Canonicalizing is the way to include it
+ * honestly rather than exclude it quietly.
+ *
+ * @param mixed $taxes A WC_Order_Item::get_taxes() map.
+ * @return array<string,array<int,string>>
+ */
+function aafm_wc_canonical_tax_map( $taxes ): array {
+	$canonical = array();
+	foreach ( array( 'total', 'subtotal' ) as $bucket ) {
+		$rates    = ( is_array( $taxes ) && isset( $taxes[ $bucket ] ) && is_array( $taxes[ $bucket ] ) ) ? $taxes[ $bucket ] : array();
+		$bucketed = array();
+		foreach ( $rates as $rate_id => $amount ) {
+			$bucketed[ (int) $rate_id ] = aafm_wc_money_figure( $amount );
+		}
+		ksort( $bucketed );
+		$canonical[ $bucket ] = $bucketed;
+	}
+	return $canonical;
+}
+
+/**
  * Flatten a money snapshot into one comparable string.
  *
- * Only the scalar figures take part. The per-item tax MAP is restored but left out of the
- * comparison, because its keys arrive as ints from one code path and numeric strings from another,
- * and a signature that flips on that would report a good restore as a failed one.
+ * This is what decides whether the caller is told the money was put back, so it has to cover
+ * everything the restore claims to have restored. It covers the order's own figures, each item's
+ * amounts AND its canonicalized tax map, and each tax row's amounts AND its rate identity: rate
+ * code, label, compound flag and rate percent.
+ *
+ * The rate identity is in here because leaving it out was a real defect. update_taxes() rewrites a
+ * tax row's rate metadata from the current rate, so a shop that edited a rate between the order
+ * being placed and this request could get its old tax AMOUNT restored under the NEW rate's percent
+ * and label, and the signature, comparing only amounts, would still hand back the strong
+ * "totals and taxes were put back" message over a row that was internally inconsistent. A
+ * verification that checks less than the message asserts is the same false promise in a new place.
+ *
+ * Nothing is excluded from this comparison. If that changes, say here what is left out and why.
  *
  * @param array<string,mixed> $snapshot A snapshot from aafm_wc_order_money_snapshot().
  * @return string
@@ -1153,11 +1199,13 @@ function aafm_wc_money_signature( array $snapshot ): string {
 	$items = (array) ( $snapshot['items'] ?? array() );
 	ksort( $items );
 	foreach ( $items as $item_id => $row ) {
+		$map     = aafm_wc_canonical_tax_map( $row['taxes'] ?? array() );
 		$parts[] = 'i.' . $item_id . '='
 			. aafm_wc_money_figure( $row['total'] ) . '/'
 			. aafm_wc_money_figure( $row['subtotal'] ) . '/'
 			. aafm_wc_money_figure( $row['total_tax'] ) . '/'
-			. aafm_wc_money_figure( $row['subtotal_tax'] );
+			. aafm_wc_money_figure( $row['subtotal_tax'] )
+			. '/map:' . (string) wp_json_encode( $map );
 	}
 
 	$taxes = (array) ( $snapshot['taxes'] ?? array() );
@@ -1165,7 +1213,11 @@ function aafm_wc_money_signature( array $snapshot ): string {
 	foreach ( $taxes as $rate_id => $row ) {
 		$parts[] = 't.' . $rate_id . '='
 			. aafm_wc_money_figure( $row['tax_total'] ) . '/'
-			. aafm_wc_money_figure( $row['shipping_tax_total'] );
+			. aafm_wc_money_figure( $row['shipping_tax_total'] )
+			. '/code:' . (string) ( $row['rate_code'] ?? '' )
+			. '/label:' . (string) ( $row['label'] ?? '' )
+			. '/compound:' . ( empty( $row['compound'] ) ? '0' : '1' )
+			. '/percent:' . aafm_wc_money_figure( $row['rate_percent'] ?? 0 );
 	}
 
 	return implode( ';', $parts );
@@ -1216,9 +1268,13 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 				$order->remove_item( $tax_item_id );
 				continue;
 			}
+			// A SURVIVING row gets every captured field back, not just its amounts. update_taxes()
+			// rewrote its rate code, label, compound flag and percent from the current rate before
+			// the throw, so restoring the amounts alone leaves the old money sitting under the new
+			// rate's identity: a row that is internally inconsistent and matches nothing the caller
+			// started with. Recreated rows below get the same treatment, for the same reason.
 			$row = $snapshot['taxes'][ $rate_id ];
-			$tax_item->set_tax_total( $row['tax_total'] );
-			$tax_item->set_shipping_tax_total( $row['shipping_tax_total'] );
+			aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
 			$tax_item->save();
 			$seen_rates[ $rate_id ] = true;
 		}
@@ -1230,13 +1286,7 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 				}
 				$tax_item = new \WC_Order_Item_Tax();
 				$tax_item->set_rate_id( (int) $rate_id );
-				$tax_item->set_label( $row['label'] );
-				$tax_item->set_compound( $row['compound'] );
-				if ( null !== $row['rate_percent'] ) {
-					$tax_item->set_rate_percent( $row['rate_percent'] );
-				}
-				$tax_item->set_tax_total( $row['tax_total'] );
-				$tax_item->set_shipping_tax_total( $row['shipping_tax_total'] );
+				aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
 				$order->add_item( $tax_item );
 			}
 		}
@@ -1253,6 +1303,31 @@ function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool 
 	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
 		return false;
 	}
+}
+
+/**
+ * Write one captured tax row back onto a tax item, identity and all.
+ *
+ * Shared by the surviving-row and recreated-row branches so the two can never drift into restoring
+ * different field sets, which is exactly how the amounts-only version came to be right in one place
+ * and wrong in the other.
+ *
+ * rate_id is not set here: a surviving row already carries it, and the recreated branch sets it
+ * before calling, because that is the key it was matched on in the first place.
+ *
+ * @param \WC_Order_Item_Tax  $tax_item The tax row to write to.
+ * @param array<string,mixed> $row      One entry from a snapshot's `taxes` map.
+ * @return void
+ */
+function aafm_wc_apply_tax_row_snapshot( \WC_Order_Item_Tax $tax_item, array $row ): void {
+	$tax_item->set_rate_code( (string) ( $row['rate_code'] ?? '' ) );
+	$tax_item->set_label( (string) ( $row['label'] ?? '' ) );
+	$tax_item->set_compound( ! empty( $row['compound'] ) );
+	if ( null !== ( $row['rate_percent'] ?? null ) ) {
+		$tax_item->set_rate_percent( $row['rate_percent'] );
+	}
+	$tax_item->set_tax_total( $row['tax_total'] );
+	$tax_item->set_shipping_tax_total( $row['shipping_tax_total'] );
 }
 
 /**

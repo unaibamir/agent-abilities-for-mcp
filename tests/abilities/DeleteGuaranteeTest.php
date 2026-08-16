@@ -33,8 +33,10 @@ final class DeleteGuaranteeTest extends TestCase {
 		$permanent   = aafm_permanent_delete_abilities();
 		$recoverable = aafm_recoverable_delete_abilities();
 
-		// Destructive abilities that remove nothing, so recoverability does not apply.
-		$not_removals = array( 'aafm/create-user', 'aafm/update-site-settings' );
+		// Destructive abilities that remove nothing, so recoverability does not apply. Read from
+		// the source rather than restated here: the runtime classifier reads the same list, and a
+		// second copy in the test would let the two drift into disagreeing about the same ability.
+		$not_removals = aafm_non_removal_destructive_abilities();
 
 		$unclassified = array();
 		foreach ( aafm_get_abilities_registry_full() as $name => $row ) {
@@ -131,6 +133,157 @@ final class DeleteGuaranteeTest extends TestCase {
 		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
 
 		$this->assertStringContainsString( 'Removals are recoverable', $this->render_consent_screen() );
+	}
+
+	/**
+	 * R2-11. The three classification lists name NATIVE abilities, so a destructive ability added
+	 * by a third party through the aafm_abilities_registry filter appears in none of them. The
+	 * guarantee used to read that silence as "not a permanent delete" and keep promising the
+	 * Trash, which is the same false promise the thirteen native slugs caused, arriving through a
+	 * door the hardcoded list cannot see.
+	 *
+	 * Unknown plus destructive resolves to permanent, matching the rule already applied to bridged
+	 * abilities a few lines up: we did not write it, so we cannot promise its removals land
+	 * anywhere recoverable.
+	 */
+	public function test_a_filter_added_destructive_ability_drops_the_trash_promise(): void {
+		$this->with_registered_ability(
+			'aafm/third-party-purge',
+			array( 'risk' => 'destructive' ),
+			function (): void {
+				update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-purge' ) );
+
+				$this->assertTrue(
+					aafm_enabled_can_delete_permanently(),
+					'An unclassified destructive ability must resolve to permanent, not inherit the Trash promise.'
+				);
+				$this->assertSame( 'Some removals are permanent.', aafm_delete_guarantee()[0] );
+			}
+		);
+	}
+
+	/**
+	 * The extension point. A third party that knows its destructive ability IS recoverable can say
+	 * so, and only then does the softer wording come back. Silence produces the conservative
+	 * answer, so forgetting to declare never downgrades a warning.
+	 */
+	public function test_a_third_party_can_declare_its_destructive_ability_recoverable(): void {
+		$declare = static function ( array $slugs ): array {
+			$slugs[] = 'aafm/third-party-bin';
+			return $slugs;
+		};
+		add_filter( 'aafm_recoverable_delete_abilities', $declare );
+
+		try {
+			$this->with_registered_ability(
+				'aafm/third-party-bin',
+				array( 'risk' => 'destructive' ),
+				function (): void {
+					update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-bin' ) );
+
+					$this->assertFalse( aafm_enabled_can_delete_permanently() );
+					$this->assertSame( 'Deletes go to Trash.', aafm_delete_guarantee()[0] );
+				}
+			);
+		} finally {
+			remove_filter( 'aafm_recoverable_delete_abilities', $declare );
+		}
+	}
+
+	/**
+	 * The same escape hatch for the other shape: risk "destructive" but nothing is removed. Two
+	 * native abilities are already in that position (create-user rotates a password, and
+	 * update-site-settings overwrites options), and a third-party one must not be forced to
+	 * over-warn about deletions it never performs.
+	 */
+	public function test_a_third_party_can_declare_its_destructive_ability_removes_nothing(): void {
+		$declare = static function ( array $slugs ): array {
+			$slugs[] = 'aafm/third-party-rotate';
+			return $slugs;
+		};
+		add_filter( 'aafm_non_removal_destructive_abilities', $declare );
+
+		try {
+			$this->with_registered_ability(
+				'aafm/third-party-rotate',
+				array( 'risk' => 'destructive' ),
+				function (): void {
+					update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-rotate' ) );
+
+					$this->assertFalse( aafm_enabled_can_delete_permanently() );
+				}
+			);
+		} finally {
+			remove_filter( 'aafm_non_removal_destructive_abilities', $declare );
+		}
+	}
+
+	/**
+	 * A filter-added ability that is not destructive at all must not trip the warning. Without
+	 * this, "unknown means permanent" would over-warn on every third-party read.
+	 */
+	public function test_a_filter_added_read_ability_keeps_the_trash_promise(): void {
+		$this->with_registered_ability(
+			'aafm/third-party-report',
+			array( 'risk' => 'read' ),
+			function (): void {
+				update_option( 'aafm_enabled_abilities', array( 'aafm/third-party-report' ) );
+
+				$this->assertFalse( aafm_enabled_can_delete_permanently() );
+				$this->assertSame( 'Deletes go to Trash.', aafm_delete_guarantee()[0] );
+			}
+		);
+	}
+
+	/**
+	 * The two native non-removal abilities are the regression this rule could most easily cause:
+	 * both are risk "destructive" and neither deletes anything, so treating unknown-destructive as
+	 * permanent must not sweep them up. create-user in particular is ordinary configuration.
+	 */
+	public function test_the_native_non_removal_abilities_keep_the_trash_promise(): void {
+		update_option( 'aafm_enabled_abilities', aafm_non_removal_destructive_abilities() );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+
+		$this->assertNotSame( array(), aafm_non_removal_destructive_abilities() );
+		$this->assertFalse(
+			aafm_enabled_can_delete_permanently(),
+			'An ability that deletes nothing must not make the screen warn about permanent removals.'
+		);
+	}
+
+	/**
+	 * Run $body with $name present in the live registry, then restore the registry exactly.
+	 *
+	 * The registry is memoized per request, so adding the filter is not enough on its own: the
+	 * cache has to be flushed on the way in AND on the way out, or the synthetic ability leaks
+	 * into whichever test runs next in this process.
+	 *
+	 * @param string              $name Ability name to inject.
+	 * @param array<string,mixed> $row  Registry row fields to merge over the defaults.
+	 * @param callable():void     $body Assertions to run while it is registered.
+	 */
+	private function with_registered_ability( string $name, array $row, callable $body ): void {
+		$inject = static function ( array $registry ) use ( $name, $row ): array {
+			$registry[ $name ] = array_merge(
+				array(
+					'label' => 'Third Party Ability',
+					'group' => 'writes',
+					'risk'  => 'destructive',
+				),
+				$row
+			);
+			return $registry;
+		};
+
+		add_filter( 'aafm_abilities_registry', $inject );
+		aafm_flush_registry_cache();
+
+		try {
+			$body();
+		} finally {
+			remove_filter( 'aafm_abilities_registry', $inject );
+			aafm_flush_registry_cache();
+		}
 	}
 
 	/**

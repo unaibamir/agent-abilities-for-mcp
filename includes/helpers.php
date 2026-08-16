@@ -277,9 +277,14 @@ function aafm_validate_meta_key( string $key ) {
  *
  * aafm/delete-* and aafm/trash-* are a deliberate two-ability split, so this
  * list is a description of what the plugin already does, never a licence to
- * change it. AbilityDeleteClassificationTest fails if a destructive ability is
- * ever added without being classified on this axis, so a new permanent delete
- * cannot quietly inherit the recoverable side.
+ * change it. DeleteGuaranteeTest fails if a destructive ability is ever added
+ * without being classified on this axis, so a new permanent delete cannot
+ * quietly inherit the recoverable side.
+ *
+ * Deliberately NOT filterable. Anything destructive that this list does not name
+ * already resolves to permanent (see aafm_enabled_can_delete_permanently), so a
+ * hook to add to it would buy nothing; the two filters that exist are on the
+ * lists that soften the warning, where silence has to mean the safe answer.
  *
  * @return list<string>
  */
@@ -302,7 +307,7 @@ function aafm_permanent_delete_abilities(): array {
 }
 
 /**
- * Native destructive abilities whose removals are recoverable.
+ * Destructive abilities whose removals are recoverable.
  *
  * Kept beside aafm_permanent_delete_abilities() so the classification test can
  * prove every destructive ability sits on exactly one side.
@@ -310,11 +315,59 @@ function aafm_permanent_delete_abilities(): array {
  * @return list<string>
  */
 function aafm_recoverable_delete_abilities(): array {
-	return array(
+	$slugs = array(
 		'aafm/trash-post',
 		'aafm/trash-page',
 		'aafm/delete-block',
 	);
+
+	/**
+	 * Filters the abilities whose removals are recoverable.
+	 *
+	 * The escape hatch for a destructive ability added through the
+	 * aafm_abilities_registry filter. Without it such an ability resolves to
+	 * permanent, because that is the only honest default for an implementation
+	 * this plugin did not write. Declaring it here is a claim about that
+	 * ability's own behaviour, and it softens what the consent screen tells a
+	 * site owner, so only add a slug whose removals really are undoable.
+	 *
+	 * @param list<string> $slugs Ability names whose removals are recoverable.
+	 */
+	return array_values( array_unique( array_map( 'strval', (array) apply_filters( 'aafm_recoverable_delete_abilities', $slugs ) ) ) );
+}
+
+/**
+ * Destructive abilities that remove nothing at all.
+ *
+ * Risk and removal are not the same question. aafm/create-user is destructive
+ * because it can overwrite an existing account's password, and
+ * aafm/update-site-settings because it overwrites options; neither deletes
+ * anything, so recoverability does not apply to either and neither should make
+ * the consent screen warn about permanent removals.
+ *
+ * This used to live only inside DeleteGuaranteeTest, which was fine while the
+ * test was the only reader. The runtime classifier needs the same answer now,
+ * and two copies of one fact drift, so the list moved here and the test reads
+ * it back.
+ *
+ * @return list<string>
+ */
+function aafm_non_removal_destructive_abilities(): array {
+	$slugs = array(
+		'aafm/create-user',
+		'aafm/update-site-settings',
+	);
+
+	/**
+	 * Filters the destructive abilities that remove nothing.
+	 *
+	 * The companion escape hatch to aafm_recoverable_delete_abilities: same
+	 * purpose, for an ability that performs no removal in the first place rather
+	 * than a reversible one.
+	 *
+	 * @param list<string> $slugs Ability names that delete nothing.
+	 */
+	return array_values( array_unique( array_map( 'strval', (array) apply_filters( 'aafm_non_removal_destructive_abilities', $slugs ) ) ) );
 }
 
 /**
@@ -329,11 +382,35 @@ function aafm_recoverable_delete_abilities(): array {
  * Its implementation belongs to that plugin, so we cannot promise its removals
  * land anywhere recoverable, and claiming otherwise is the defect this guards.
  *
+ * The same rule now covers a native ability added through the
+ * aafm_abilities_registry filter (R2-11). The three classification lists name
+ * abilities this plugin ships, so a third-party destructive one appeared in none
+ * of them, and reading that silence as "not a permanent delete" reproduced the
+ * original false promise through a door the lists cannot see. Unknown plus
+ * destructive therefore resolves to permanent, and the two filters above are how
+ * an author who knows better says so.
+ *
  * @return bool
  */
 function aafm_enabled_can_delete_permanently(): bool {
-	if ( array() !== array_intersect( aafm_get_enabled_abilities(), aafm_permanent_delete_abilities() ) ) {
-		return true;
+	$permanent   = aafm_permanent_delete_abilities();
+	$recoverable = aafm_recoverable_delete_abilities();
+	$non_removal = aafm_non_removal_destructive_abilities();
+	$registry    = aafm_get_abilities_registry();
+
+	foreach ( aafm_get_enabled_abilities() as $name ) {
+		// Checked before the risk annotation rather than folded into it: these thirteen are
+		// classified by hand precisely because the annotation cannot answer this question, so a
+		// wrong or missing risk on one of them must not be able to drop it off the permanent side.
+		if ( in_array( $name, $permanent, true ) ) {
+			return true;
+		}
+		if ( in_array( $name, $recoverable, true ) || in_array( $name, $non_removal, true ) ) {
+			continue;
+		}
+		if ( 'destructive' === (string) ( $registry[ $name ]['risk'] ?? '' ) ) {
+			return true;
+		}
 	}
 
 	if ( ! function_exists( 'aafm_get_enabled_bridged_abilities' ) || ! function_exists( 'wp_has_ability' ) ) {

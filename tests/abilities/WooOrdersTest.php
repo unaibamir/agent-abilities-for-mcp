@@ -1474,6 +1474,44 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
+	 * R3-1: a PROCESSING order refuses the add, and this is the case worth doubting.
+	 *
+	 * It has its own named test rather than only a data-provider row because it is the one a future
+	 * reader will question. processing is the normal state of a paid order, so refusing it looks at
+	 * first glance like this plugin inventing a restriction. It is not: WC_Order::is_editable()
+	 * (class-wc-order.php:1715) returns true only for pending, on-hold and auto-draft, and
+	 * WooCommerce's own order screen gates its "Add item(s)" button on that same call. A processing
+	 * order gives you no way to add an item in WooCommerce's own UI either.
+	 *
+	 * This is also where the old defect fired most often. Adding a taxable line to a processing
+	 * order recorded it with no tax at all, which understated what the customer was charged.
+	 */
+	public function test_adding_an_item_to_a_processing_order_is_refused(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status'] = 'processing';
+		$items_before                             = WcOrderStubStore::$add_product_calls;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'A paid, processing order is not editable, so the add is refused.' );
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+		$this->assertStringContainsString( 'processing', $result->get_error_message(), 'The error names the status so the caller knows why.' );
+		$this->assertSame( $items_before, WcOrderStubStore::$add_product_calls, 'Nothing was written before the refusal.' );
+	}
+
+	/**
 	 * R3-1: the refusal covers every non-editable status, not just completed. processing is the one
 	 * that matters most in practice -- it is the normal state of a paid order, and it is NOT
 	 * editable, so this is where the old code silently recorded untaxed goods most often.

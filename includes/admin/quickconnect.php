@@ -85,9 +85,15 @@ function aafm_quickconnect_is_dismissed(): bool {
  * @return bool
  */
 function aafm_quickconnect_site_looks_configured(): bool {
-	$enabled = get_option( 'aafm_enabled_abilities', array() );
-	if ( is_array( $enabled ) && array() !== array_filter( array_map( 'strval', $enabled ) ) ) {
-		return true;
+	// Native and bridged abilities are stored in two separate options and either one on its own is
+	// a deliberate act of configuration. A site running purely on bridged integrations has no
+	// native ability enabled at all, so reading only the native option would keep calling it a
+	// first-run site.
+	foreach ( array( 'aafm_enabled_abilities', 'aafm_enabled_bridged_abilities' ) as $option ) {
+		$stored = get_option( $option, array() );
+		if ( is_array( $stored ) && array() !== array_filter( array_map( 'strval', $stored ) ) ) {
+			return true;
+		}
 	}
 	if ( function_exists( 'aafm_oauth_count_active_clients' ) && aafm_oauth_count_active_clients() > 0 ) {
 		return true;

@@ -126,4 +126,17 @@ final class QuickConnectInferenceTest extends TestCase {
 			'The wizard must be closed, which is what unblocks the review ask on this screen.'
 		);
 	}
+
+	/**
+	 * Found by the Codex review pass: native and bridged abilities live in two separate options.
+	 * A site running purely on bridged integrations has no native ability enabled at all, and
+	 * reading only the native option kept calling it a first-run site.
+	 */
+	public function test_a_bridged_only_site_is_not_treated_as_first_run(): void {
+		delete_option( 'aafm_enabled_abilities' );
+		update_option( 'aafm_enabled_bridged_abilities', array( 'woocommerce/list-products' ) );
+
+		$this->assertTrue( aafm_quickconnect_site_looks_configured() );
+		$this->assertFalse( aafm_quickconnect_should_render() );
+	}
 }

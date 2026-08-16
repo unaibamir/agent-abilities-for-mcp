@@ -492,7 +492,7 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$desired['enabled'] = $input['enabled'] ? 'yes' : 'no';
 	}
 	if ( isset( $input['title'] ) ) {
-		$desired['title'] = sanitize_text_field( (string) $input['title'] );
+		$desired['title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( isset( $input['description'] ) ) {
 		$desired['description'] = aafm_sanitize_multiline_text( (string) $input['description'] );

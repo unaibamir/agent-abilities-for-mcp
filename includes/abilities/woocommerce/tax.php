@@ -523,10 +523,10 @@ function aafm_exec_wc_create_tax_rate( array $input ) {
 	}
 
 	$data = array(
-		'tax_rate_country'  => isset( $input['country'] ) ? sanitize_text_field( (string) $input['country'] ) : '',
-		'tax_rate_state'    => isset( $input['state'] ) ? sanitize_text_field( (string) $input['state'] ) : '',
+		'tax_rate_country'  => isset( $input['country'] ) ? aafm_sanitize_plain_text( (string) $input['country'] ) : '',
+		'tax_rate_state'    => isset( $input['state'] ) ? aafm_sanitize_plain_text( (string) $input['state'] ) : '',
 		'tax_rate'          => $rate,
-		'tax_rate_name'     => isset( $input['name'] ) ? sanitize_text_field( (string) $input['name'] ) : '',
+		'tax_rate_name'     => isset( $input['name'] ) ? aafm_sanitize_plain_text( (string) $input['name'] ) : '',
 		'tax_rate_priority' => isset( $input['priority'] ) ? absint( $input['priority'] ) : 1,
 		'tax_rate_compound' => isset( $input['compound'] ) ? ( (bool) $input['compound'] ? 1 : 0 ) : 0,
 		'tax_rate_shipping' => isset( $input['shipping'] ) ? ( (bool) $input['shipping'] ? 1 : 0 ) : 1,
@@ -668,13 +668,13 @@ function aafm_exec_wc_update_tax_rate( array $input ) {
 		$fields['tax_rate'] = $rate;
 	}
 	if ( array_key_exists( 'country', $input ) ) {
-		$fields['tax_rate_country'] = sanitize_text_field( (string) $input['country'] );
+		$fields['tax_rate_country'] = aafm_sanitize_plain_text( (string) $input['country'] );
 	}
 	if ( array_key_exists( 'state', $input ) ) {
-		$fields['tax_rate_state'] = sanitize_text_field( (string) $input['state'] );
+		$fields['tax_rate_state'] = aafm_sanitize_plain_text( (string) $input['state'] );
 	}
 	if ( array_key_exists( 'name', $input ) ) {
-		$fields['tax_rate_name'] = sanitize_text_field( (string) $input['name'] );
+		$fields['tax_rate_name'] = aafm_sanitize_plain_text( (string) $input['name'] );
 	}
 	if ( array_key_exists( 'priority', $input ) ) {
 		$fields['tax_rate_priority'] = absint( $input['priority'] );
@@ -876,7 +876,7 @@ function aafm_exec_wc_create_tax_class( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$slug = isset( $input['slug'] ) ? sanitize_title( (string) $input['slug'] ) : '';
 
 	// B29: WC_Tax::create_tax_class() does NOT de-duplicate a colliding slug (the old description

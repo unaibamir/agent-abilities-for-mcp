@@ -608,7 +608,7 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		$product->set_status( $status );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
-		$sku = sanitize_text_field( (string) $input['sku'] );
+		$sku = aafm_sanitize_plain_text( (string) $input['sku'] );
 		try {
 			$product->set_sku( $sku );
 		} catch ( \WC_Data_Exception $e ) {
@@ -791,7 +791,7 @@ function aafm_wc_sanitize_attributes( array $attributes ): array {
 		}
 		$options = array();
 		foreach ( (array) ( $attribute['options'] ?? array() ) as $option ) {
-			$options[] = sanitize_text_field( (string) $option );
+			$options[] = aafm_sanitize_plain_text( (string) $option );
 		}
 		$clean[] = array(
 			'name'    => aafm_sanitize_plain_text( (string) ( $attribute['name'] ?? '' ) ),

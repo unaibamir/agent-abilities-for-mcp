@@ -505,7 +505,7 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 		$variation->set_status( sanitize_key( (string) $input['status'] ) );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
-		$sku = sanitize_text_field( (string) $input['sku'] );
+		$sku = aafm_sanitize_plain_text( (string) $input['sku'] );
 		try {
 			$variation->set_sku( $sku );
 		} catch ( \WC_Data_Exception $e ) {

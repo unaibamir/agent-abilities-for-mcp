@@ -144,6 +144,99 @@ final class ReplaceInPostTest extends TestCase {
 		$this->assertStringNotContainsString( '<script', $content );
 	}
 
+	/**
+	 * B2-02: the stored-XSS reproduction, asserted on the ASSEMBLED document.
+	 *
+	 * The replacement is judged by wp_kses_post() in isolation, and in isolation
+	 * `x" onmouseover="alert(1)" data-z="` is plain text with no tags in it - kses returns it
+	 * untouched and is right to. Spliced into the middle of an existing attribute value it closes
+	 * that attribute and opens an event handler, and nothing re-examines the result.
+	 *
+	 * A test that asserted on `wp_kses_post( $replace )` would pass against the broken code, which
+	 * is exactly the trap. So this asserts on what reaches post_content.
+	 *
+	 * The acting user is an administrator on purpose: kses_init() attaches wp_filter_post_kses only
+	 * for users who LACK unfiltered_html, so core's save filters are not a net for anyone who can
+	 * actually reach this ability.
+	 */
+	public function test_a_replacement_cannot_break_out_of_an_attribute(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = self::factory()->post->create(
+			array( 'post_content' => '<a href="https://example.com" title="PLACEHOLDER">link</a>' )
+		);
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'PLACEHOLDER',
+				'replace' => 'x" onmouseover="alert(1)" data-z="',
+			)
+		);
+
+		$stored = (string) get_post( $id )->post_content;
+
+		$this->assertStringNotContainsString(
+			'onmouseover',
+			$stored,
+			'A replacement spliced into an attribute must not be able to add an event handler.'
+		);
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$out,
+			'Refusing is the honest answer: rewriting the body would mutate content the caller did not touch.'
+		);
+	}
+
+	/**
+	 * The same shape one context over: a search term inside an HTML comment, where a replacement
+	 * carrying `-->` ends the comment early and exposes whatever followed as live markup.
+	 */
+	public function test_a_replacement_cannot_close_a_comment_early(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = self::factory()->post->create(
+			array( 'post_content' => '<!-- note: PLACEHOLDER --><p>body</p>' )
+		);
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'PLACEHOLDER',
+				'replace' => '--><img src=x onerror=alert(1)><!--',
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertStringNotContainsString( 'onerror', (string) get_post( $id )->post_content );
+	}
+
+	/**
+	 * The other half of the constraint, and the reason the fix refuses rather than sanitizes.
+	 *
+	 * Commit 687ff62 exists because an earlier version ran kses over the whole rewritten body and
+	 * silently stripped an unfiltered_html user's markup elsewhere in the post. A replacement in
+	 * ordinary body text must still go through, and must still leave the rest byte-for-byte.
+	 */
+	public function test_an_ordinary_text_replacement_still_works_and_leaves_the_rest_alone(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$content = '<script>keep_me()</script><p>the red fox</p><iframe src="x"></iframe>';
+		$id      = self::factory()->post->create( array( 'post_content' => $content ) );
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'red',
+				'replace' => 'blue',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $out );
+		$this->assertSame(
+			'<script>keep_me()</script><p>the blue fox</p><iframe src="x"></iframe>',
+			(string) get_post( $id )->post_content,
+			'Only the replaced span changes; the untouched markup survives byte for byte.'
+		);
+	}
+
 	public function test_status_is_never_changed(): void {
 		$author = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $author );

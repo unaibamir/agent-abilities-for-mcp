@@ -1214,16 +1214,119 @@ function aafm_perm_replace_in_post( array $input ): bool {
 }
 
 /**
+ * The byte ranges of $content that are not ordinary text: tags, comments, and the raw-text
+ * elements whose bodies are parsed as markup context rather than as content.
+ *
+ * Used to decide whether a replacement would land somewhere its own sanitizing cannot reach.
+ * Deliberately a lexical scan rather than a parser: it only has to answer "is this offset inside
+ * markup", it never has to understand the document, and an unterminated tag or comment runs to the
+ * end of the string, which is the conservative reading.
+ *
+ * @param string $content Post content.
+ * @return array<int,array{0:int,1:int}> Half-open [start, end) ranges, in order.
+ */
+function aafm_markup_regions( string $content ): array {
+	$ranges = array();
+	$length = strlen( $content );
+	$index  = 0;
+
+	while ( $index < $length ) {
+		$open = strpos( $content, '<', $index );
+		if ( false === $open ) {
+			break;
+		}
+
+		if ( '<!--' === substr( $content, $open, 4 ) ) {
+			$close    = strpos( $content, '-->', $open + 4 );
+			$end      = false === $close ? $length : $close + 3;
+			$ranges[] = array( $open, $end );
+			$index    = $end;
+			continue;
+		}
+
+		$close    = strpos( $content, '>', $open + 1 );
+		$end      = false === $close ? $length : $close + 1;
+		$ranges[] = array( $open, $end );
+		$index    = $end;
+
+		// script/style/textarea/title bodies are not text content: a replacement inside one is
+		// inside a markup context even though no angle bracket surrounds it.
+		if ( 1 === preg_match( '~^<\s*(script|style|textarea|title)\b~i', substr( $content, $open, 32 ), $matches ) ) {
+			$closer = stripos( $content, '</' . strtolower( $matches[1] ), $end );
+			$body   = false === $closer ? $length : $closer;
+			if ( $body > $end ) {
+				$ranges[] = array( $end, $body );
+			}
+			$index = $body;
+		}
+	}
+
+	return $ranges;
+}
+
+/**
+ * Whether every occurrence of $search in $content sits wholly in ordinary text.
+ *
+ * @param string $content Post content.
+ * @param string $search  Literal search term.
+ * @return bool False when any occurrence touches a tag, comment or raw-text body.
+ */
+function aafm_replacements_land_in_text( string $content, string $search ): bool {
+	$regions = aafm_markup_regions( $content );
+	if ( array() === $regions ) {
+		return true;
+	}
+
+	$width  = strlen( $search );
+	$offset = 0;
+
+	while ( true ) {
+		$at = strpos( $content, $search, $offset );
+		if ( false === $at ) {
+			return true;
+		}
+		foreach ( $regions as $region ) {
+			// Half-open overlap: the span may not merely start outside a region, it must not
+			// reach into one either, or the replacement eats part of a tag.
+			if ( $at < $region[1] && ( $at + $width ) > $region[0] ) {
+				return false;
+			}
+		}
+		$offset = $at + $width;
+	}
+}
+
+/**
  * Execute aafm/replace-in-post.
  *
  * Literal str_replace (no regex - avoids ReDoS/injection). Counts occurrences of the
- * search term BEFORE replacing. Only the INSERTED replacement text is run through
- * wp_kses_post (so an agent cannot inject script via the replacement string) - never the
- * whole body: full-body kses silently stripped an unfiltered_html user's markup everywhere
- * else in the post on a one-word edit and reported success (B8). The invariant: no byte
- * outside the replaced spans is changed by this ability. The write goes through
- * wp_update_post( wp_slash(...) ), so when the acting user lacks unfiltered_html, core's
- * own kses save filters sanitize the full body exactly as a normal editor save would.
+ * search term BEFORE replacing.
+ *
+ * Two requirements pull against each other here, and the resolution is worth stating because
+ * either one alone produces a bug this ability has already shipped.
+ *
+ * Sanitizing only the inserted text is not enough. wp_kses_post() judges the replacement in
+ * isolation, and `x" onmouseover="alert(1)" data-z="` contains no tags at all, so kses returns it
+ * unchanged and is right to. Spliced into an existing attribute value it closes that attribute and
+ * opens an event handler, and the assembled document was never looked at again (B2-02).
+ *
+ * Sanitizing the assembled document is not available either. That is what this used to do, and a
+ * one-word edit silently stripped an unfiltered_html user's markup everywhere else in the post
+ * while reporting success (B8, fixed in 687ff62). The invariant that no byte outside the replaced
+ * spans changes is not negotiable.
+ *
+ * So the assembled document is VALIDATED rather than rewritten: a replacement that would land in a
+ * tag, a comment, or a script/style body is refused outright, because that is the only position
+ * from which sanitized text can still change the document's structure. A replacement in ordinary
+ * body text cannot, and still goes through with the rest of the post untouched. Refusing keeps
+ * both properties; rewriting would have to give one of them up.
+ *
+ * Note what this does NOT rely on: core's kses save filters. kses_init() attaches
+ * wp_filter_post_kses only for users who LACK unfiltered_html, and on a standard single site both
+ * editors and administrators hold it, while the permission callback asks only for edit_post. An
+ * earlier version of this docblock cited those filters as a safety net; they are not one for
+ * anybody who can actually reach this ability.
+ *
  * Only post_content is written - status is never touched, so this inherits nothing
  * status-related and can never publish/unpublish. A search term that does not occur is a
  * no-op (replacements:0) returning the unchanged post, not an error.
@@ -1250,6 +1353,17 @@ function aafm_exec_replace_in_post( array $input ) {
 		return array(
 			'post'         => aafm_redact_post( $post ),
 			'replacements' => 0,
+		);
+	}
+
+	// Refuse before writing anything when a replacement would land inside markup. Sanitizing the
+	// inserted text cannot help there: it is judged on its own, where it is harmless, and only
+	// becomes an attribute break-out once spliced (B2-02).
+	if ( ! aafm_replacements_land_in_text( $content, $search ) ) {
+		return new WP_Error(
+			'aafm_replace_inside_markup',
+			__( 'That search term occurs inside the post\'s markup - within a tag, an HTML comment, or a script or style block - so replacing it could change the structure of the page rather than its text. Nothing was changed. Choose a search term that appears in the visible body text, or edit the block directly.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
 		);
 	}
 

@@ -561,7 +561,7 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 }
 
 /**
- * Reject variation attribute keys the parent product does not declare, naming the keys that would
+ * Reject variation attribute keys the parent product will not honour, naming the keys that would
  * have worked.
  *
  * WC_Product_Variation::set_attributes() writes whatever map it is handed straight to postmeta.
@@ -576,18 +576,43 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
  * attribute map has to use (`pa_color` for a global/taxonomy attribute, the sanitized name for a
  * custom one), and both sides run through sanitize_title(), so the comparison is like for like.
  * An empty VALUE is untouched by this -- that is WooCommerce's "Any" and a legitimate thing to
- * send; only unknown KEYS are refused.
+ * send; only KEYS are refused here.
+ *
+ * Being declared is not enough on its own. WooCommerce carries a per-attribute "Used for
+ * variations" flag (WC_Product_Attribute::get_variation()), and an attribute with that flag off
+ * exists for display on the parent only: WooCommerce's own variation REST controller skips any
+ * such attribute outright before writing, and its variation matching never consults one. A
+ * display-only key therefore lands in postmeta through this plugin and is matched against by
+ * nothing, which is the same silent no-op as an undeclared key -- just wearing a name that looks
+ * right. So the keys that would have worked are the parent's VARIATION attributes, not every
+ * attribute it declares, and that is the list the errors below name.
  *
  * @param \WC_Product             $parent_product The variation's parent product.
  * @param array<int|string,mixed> $attributes     The requested attribute map.
- * @return \WP_Error|null Null when every key is declared by the parent.
+ * @return \WP_Error|null Null when every key is one the parent uses for variations.
  */
 function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product, array $attributes ): ?\WP_Error {
-	$declared = array_map( 'strval', array_keys( $parent_product->get_attributes() ) );
-	$unknown  = array();
+	$parent_attributes = $parent_product->get_attributes();
+	$declared          = array_map( 'strval', array_keys( $parent_attributes ) );
+	$for_variations    = array();
+	foreach ( $parent_attributes as $declared_key => $declared_attribute ) {
+		// A parent whose attribute map holds something other than a WC_Product_Attribute carries no
+		// flag to read. Treat that as usable rather than refuse a write on the strength of a shape
+		// this plugin did not create and cannot interpret.
+		if ( ! $declared_attribute instanceof \WC_Product_Attribute || $declared_attribute->get_variation() ) {
+			$for_variations[] = (string) $declared_key;
+		}
+	}
+
+	$unknown      = array();
+	$display_only = array();
 	foreach ( array_keys( $attributes ) as $raw_key ) {
 		$key = sanitize_title( (string) $raw_key );
+		if ( in_array( $key, $for_variations, true ) ) {
+			continue;
+		}
 		if ( in_array( $key, $declared, true ) ) {
+			$display_only[] = $key;
 			continue;
 		}
 		// A key that sanitizes away to nothing is reported under its ORIGINAL spelling, and is
@@ -596,28 +621,52 @@ function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product
 		$unknown[] = '' === $key ? '(empty)' : $key;
 	}
 
-	if ( array() === $unknown ) {
+	if ( array() === $unknown && array() === $display_only ) {
 		return null;
 	}
 
-	if ( array() === $declared ) {
+	if ( array() === $for_variations ) {
+		$rejected = implode( ', ', array_merge( $unknown, $display_only ) );
+		if ( array() === $declared ) {
+			return new \WP_Error(
+				'aafm_wc_unknown_variation_attribute',
+				sprintf(
+					/* translators: %s: comma-separated list of the rejected attribute keys. */
+					__( 'The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first.', 'agent-abilities-for-mcp' ),
+					$rejected
+				)
+			);
+		}
+		return new \WP_Error(
+			'aafm_wc_attribute_not_used_for_variations',
+			sprintf(
+				/* translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of every attribute key the parent declares. */
+				__( 'The parent product uses none of its attributes for variations, so no attribute can be set on its variations. Rejected: %1$s. It declares %2$s for display only; turn on "Used for variations" for one of those on the parent product first.', 'agent-abilities-for-mcp' ),
+				$rejected,
+				implode( ', ', $declared )
+			)
+		);
+	}
+
+	if ( array() !== $unknown ) {
 		return new \WP_Error(
 			'aafm_wc_unknown_variation_attribute',
 			sprintf(
-				/* translators: %s: comma-separated list of the rejected attribute keys. */
-				__( 'The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first.', 'agent-abilities-for-mcp' ),
-				implode( ', ', $unknown )
+				/* translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys. */
+				__( 'The parent product does not declare these attributes: %1$s. Its variation attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_).', 'agent-abilities-for-mcp' ),
+				implode( ', ', $unknown ),
+				implode( ', ', $for_variations )
 			)
 		);
 	}
 
 	return new \WP_Error(
-		'aafm_wc_unknown_variation_attribute',
+		'aafm_wc_attribute_not_used_for_variations',
 		sprintf(
-			/* translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's declared attribute keys. */
-			__( 'The parent product does not declare these attributes: %1$s. Its attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_).', 'agent-abilities-for-mcp' ),
-			implode( ', ', $unknown ),
-			implode( ', ', $declared )
+			/* translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys. */
+			__( 'The parent product declares these attributes but does not use them for variations, so setting them would apply nothing: %1$s. Its variation attribute keys are: %2$s. Use one of those, or turn on "Used for variations" for the attribute on the parent product first.', 'agent-abilities-for-mcp' ),
+			implode( ', ', $display_only ),
+			implode( ', ', $for_variations )
 		)
 	);
 }

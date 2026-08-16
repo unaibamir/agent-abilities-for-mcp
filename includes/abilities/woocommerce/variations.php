@@ -585,12 +585,15 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
 function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product, array $attributes ): ?\WP_Error {
 	$declared = array_map( 'strval', array_keys( $parent_product->get_attributes() ) );
 	$unknown  = array();
-	foreach ( array_keys( $attributes ) as $key ) {
-		$key = sanitize_title( (string) $key );
-		if ( '' === $key || in_array( $key, $declared, true ) ) {
+	foreach ( array_keys( $attributes ) as $raw_key ) {
+		$key = sanitize_title( (string) $raw_key );
+		if ( in_array( $key, $declared, true ) ) {
 			continue;
 		}
-		$unknown[] = $key;
+		// A key that sanitizes away to nothing is reported under its ORIGINAL spelling, and is
+		// still refused. Skipping it here would let '' through to the writer, which stores an
+		// attribute under the empty key: the same silent no-op this whole check exists to stop.
+		$unknown[] = '' === $key ? '(empty)' : $key;
 	}
 
 	if ( array() === $unknown ) {

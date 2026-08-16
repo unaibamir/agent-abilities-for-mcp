@@ -927,4 +927,23 @@ final class WooVariationsTest extends TestCase {
 			'delete-product-variation' => array( 'aafm/wc-delete-product-variation', array( 'variation_id' => 601 ), 'editor' ),
 		);
 	}
+
+	/**
+	 * Found by the Codex review pass: an attribute key that sanitizes away to nothing used to be
+	 * waved through, so the writer stored an attribute under the empty key. That is the same silent
+	 * no-op the validation exists to stop.
+	 */
+	public function test_create_variation_rejects_an_attribute_key_that_sanitizes_to_nothing(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$result = aafm_exec_wc_create_product_variation(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '24.99',
+				'attributes'    => array( '---' => 'large' ),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A key that sanitizes to empty must be refused.' );
+	}
 }

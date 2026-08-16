@@ -370,6 +370,7 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 * @return string
 		 */
 		public function calculate_totals( $and_taxes = true ) { return '0.00'; }
+		public function is_editable() { return true; }
 		/** @return int */
 		public function get_id() { return 0; }
 		/** @return string */

@@ -39,6 +39,16 @@ class WcOrderStubStore {
 	public static int $next_id = 5000;
 
 	/**
+	 * The $and_taxes argument of the most recent calculate_totals() call, or null if none.
+	 *
+	 * Lets a test prove that a completed order's historical taxes were left alone rather than
+	 * rebuilt at today's rates.
+	 *
+	 * @var bool|null
+	 */
+	public static ?bool $last_calculate_totals_and_taxes = null;
+
+	/**
 	 * Order notes keyed by order_id, then by note_id.
 	 *
 	 * @var array<int,array<int,array<string,mixed>>>

@@ -609,6 +609,10 @@ class WC_Order {
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
 	public function get_order_number() { return (string) ( $this->data['number'] ?? (string) $this->get_id() ); }
 	public function get_status() { return (string) ( $this->data['status'] ?? 'processing' ); }
+	// Mirrors WC_Order::is_editable(): pending, on-hold and auto-draft only. That is the line
+	// WooCommerce itself draws for editing an order's items, and the order abilities now use it to
+	// decide whether recalculating totals may also recompute tax.
+	public function is_editable() { return in_array( $this->get_status(), array( 'pending', 'on-hold', 'auto-draft' ), true ); }
 	public function get_total() { return (string) ( $this->data['total'] ?? '0.00' ); }
 	public function get_currency() { return (string) ( $this->data['currency'] ?? 'USD' ); }
 	public function get_date_created() { return $this->data['date_created'] ?? null; }
@@ -686,6 +690,8 @@ class WC_Order {
 		return $item['id'];
 	}
 	public function calculate_totals( $and_taxes = true ) {
+		// Recorded so a test can assert WHETHER taxes were recomputed, not just that a total moved.
+		\AAFM\Tests\WcOrderStubStore::$last_calculate_totals_and_taxes = (bool) $and_taxes;
 		$subtotal = 0.0;
 		foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) {
 			$subtotal += (float) ( $item['total'] ?? 0 );

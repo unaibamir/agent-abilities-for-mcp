@@ -1402,4 +1402,60 @@ final class WooOrdersTest extends TestCase {
 			),
 		);
 	}
+
+	/**
+	 * Found by the second Codex review pass. calculate_totals() re-runs tax calculation for EVERY
+	 * item at today's rates, so adding one line to an order that already carries tax from a rate
+	 * that has since changed would silently restate what the customer was actually charged.
+	 * Recomputing tax is therefore limited to orders WooCommerce still considers editable.
+	 */
+	public function test_adding_an_item_to_a_completed_order_does_not_recompute_its_taxes(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status']          = 'completed';
+		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+
+		wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertFalse(
+			WcOrderStubStore::$last_calculate_totals_and_taxes,
+			'A completed order must have its total summed without its historical taxes being rebuilt.'
+		);
+	}
+
+	public function test_adding_an_item_to_an_editable_order_does_recompute_taxes(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status']          = 'pending';
+		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+
+		wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertTrue(
+			WcOrderStubStore::$last_calculate_totals_and_taxes,
+			'An order still being assembled should get a full recalculation, taxes included.'
+		);
+	}
 }

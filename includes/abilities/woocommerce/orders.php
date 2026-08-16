@@ -1259,8 +1259,17 @@ function aafm_exec_wc_update_order( array $input ) {
 	// set on purpose; WooCommerce's own order screen takes the same position, offering Recalculate
 	// as an explicit action rather than running it on every save. Line items are the only thing
 	// aafm_wc_apply_order_input() can change that moves the money, so they are the only trigger.
+	//
+	// Taxes are recomputed only while the order is still editable. calculate_totals() re-runs tax
+	// calculation for EVERY item, old ones included, at today's rates. On an order that is already
+	// completed and carries tax from a rate that has since changed, adding one item would silently
+	// restate the historical tax on all the others and rewrite what the customer was actually
+	// charged. Passing false keeps every existing tax line exactly as it was recorded and still
+	// brings the total up to the goods the order now holds, which is the harm this fix exists to
+	// stop. WooCommerce draws the same line: its own order screen only lets you edit items while
+	// the order is editable.
 	if ( $adds_line_items ) {
-		$order->calculate_totals();
+		$order->calculate_totals( $order->is_editable() );
 	}
 	$order->save();
 

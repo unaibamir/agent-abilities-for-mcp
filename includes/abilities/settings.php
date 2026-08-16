@@ -289,5 +289,8 @@ function aafm_sanitize_site_setting( string $key, $value ) {
 		// WordPress stores 0 (Sunday) .. 6 (Saturday); clamp so a 99 can never be persisted.
 		return min( 6, max( 0, (int) $value ) );
 	}
-	return sanitize_text_field( (string) $value );
+	// The site identity is the most feed-visible text on the whole site: blogname and
+	// blogdescription go straight into the RSS and Atom headers, so a raw NUL here breaks every
+	// feed document, not one item in it. Same defect as a post title, one level up.
+	return aafm_sanitize_plain_text( (string) $value );
 }

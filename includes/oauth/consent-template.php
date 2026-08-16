@@ -135,12 +135,16 @@ function aafm_oauth_render_consent_page( array $view ): void {
 	$tick_svg     = '<span class="tick"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke="#00a32a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 	$shield_svg   = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l8 3v6c0 5-3.4 8.6-8 11-4.6-2.4-8-6-8-11V5l8-3z" stroke="#787c82" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
-	// Governance guarantees: each a bold lead + plain description, both translatable.
-	$guarantees = array(
+	// Governance guarantees: each a bold lead + plain description, both translatable. The delete
+	// guarantee is the one that depends on configuration - thirteen native abilities and any
+	// destructive bridged one remove content for good - so it is read from the enabled set rather
+	// than asserted. See aafm_delete_guarantee().
+	$delete_guarantee = aafm_delete_guarantee();
+	$guarantees       = array(
 		array( __( 'Off by default.', 'agent-abilities-for-mcp' ), __( 'The agent can only call abilities an admin has switched on in WordPress.', 'agent-abilities-for-mcp' ) ),
 		array( __( 'Capped to your role.', 'agent-abilities-for-mcp' ), __( 'Every action runs inside your capabilities, never above them.', 'agent-abilities-for-mcp' ) ),
 		array( __( 'Every action is logged.', 'agent-abilities-for-mcp' ), __( 'There is an audit trail of what the agent did and when.', 'agent-abilities-for-mcp' ) ),
-		array( __( 'Deletes go to Trash.', 'agent-abilities-for-mcp' ), __( 'Removals are recoverable, not permanent.', 'agent-abilities-for-mcp' ) ),
+		array( $delete_guarantee[0], $delete_guarantee[1] ),
 	);
 
 	echo '<!DOCTYPE html>';

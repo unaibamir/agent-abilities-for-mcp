@@ -329,6 +329,125 @@ function aafm_sanitize_plain_text( string $value ): string {
 }
 
 /**
+ * Native abilities whose removals bypass the Trash and cannot be undone.
+ *
+ * The registry's own risk annotation cannot answer this. Every ability here is
+ * risk "destructive", but so are aafm/trash-post, aafm/trash-page and
+ * aafm/delete-block, whose removals ARE recoverable, and so are two abilities
+ * that delete nothing at all. Recoverability is a separate axis from risk, and
+ * this is where it is recorded.
+ *
+ * aafm/delete-* and aafm/trash-* are a deliberate two-ability split, so this
+ * list is a description of what the plugin already does, never a licence to
+ * change it. AbilityDeleteClassificationTest fails if a destructive ability is
+ * ever added without being classified on this axis, so a new permanent delete
+ * cannot quietly inherit the recoverable side.
+ *
+ * @return list<string>
+ */
+function aafm_permanent_delete_abilities(): array {
+	return array(
+		'aafm/delete-post',
+		'aafm/delete-page',
+		'aafm/delete-comment',
+		'aafm/delete-media',
+		'aafm/delete-user',
+		'aafm/delete-revision',
+		'aafm/delete-menu',
+		'aafm/delete-menu-item',
+		'aafm/delete-post-meta',
+		'aafm/delete-term-meta',
+		'aafm/delete-user-meta',
+		'aafm/wc-delete-product',
+		'aafm/wc-delete-product-variation',
+	);
+}
+
+/**
+ * Native destructive abilities whose removals are recoverable.
+ *
+ * Kept beside aafm_permanent_delete_abilities() so the classification test can
+ * prove every destructive ability sits on exactly one side.
+ *
+ * @return list<string>
+ */
+function aafm_recoverable_delete_abilities(): array {
+	return array(
+		'aafm/trash-post',
+		'aafm/trash-page',
+		'aafm/delete-block',
+	);
+}
+
+/**
+ * Whether anything the operator has switched on can remove content for good.
+ *
+ * Reads the ENABLED set, not the catalog, so the answer describes this site as
+ * configured right now. aafm_get_enabled_abilities() has already applied the
+ * read-only and high-risk floors, so a site in read-only mode correctly answers
+ * false: nothing there can delete anything at all.
+ *
+ * A bridged ability counts whenever the host plugin annotates it destructive.
+ * Its implementation belongs to that plugin, so we cannot promise its removals
+ * land anywhere recoverable, and claiming otherwise is the defect this guards.
+ *
+ * @return bool
+ */
+function aafm_enabled_can_delete_permanently(): bool {
+	if ( array() !== array_intersect( aafm_get_enabled_abilities(), aafm_permanent_delete_abilities() ) ) {
+		return true;
+	}
+
+	if ( ! function_exists( 'aafm_get_enabled_bridged_abilities' ) || ! function_exists( 'wp_has_ability' ) ) {
+		return false;
+	}
+
+	foreach ( aafm_get_enabled_bridged_abilities() as $slug ) {
+		// wp_has_ability() first: an enabled slug whose host plugin is inactive is an ordinary
+		// state, and wp_get_ability() would raise _doing_it_wrong for it on every consent render.
+		if ( ! wp_has_ability( $slug ) ) {
+			continue;
+		}
+		$ability = wp_get_ability( $slug );
+		if ( ! $ability instanceof WP_Ability ) {
+			continue;
+		}
+		if ( ! empty( aafm_bridge_risk( $ability )['destructive'] ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * The delete guarantee, worded to match what this site can actually do.
+ *
+ * The consent screen and the Quick Connect wizard both used to state "Deletes go
+ * to Trash. Removals are recoverable, not permanent" unconditionally, while
+ * thirteen native abilities and any destructive bridged one delete outright. A
+ * site owner reading that sentence is forty seconds from approving a token, so
+ * it has to be true of the configuration they are approving.
+ *
+ * @return array{0:string,1:string,2:string} Bold lead, description, short chip label.
+ */
+function aafm_delete_guarantee(): array {
+	if ( aafm_enabled_can_delete_permanently() ) {
+		return array(
+			__( 'Some removals are permanent.', 'agent-abilities-for-mcp' ),
+			__( 'Abilities that bypass the Trash say so in their own description.', 'agent-abilities-for-mcp' ),
+			__( 'Some removals are permanent', 'agent-abilities-for-mcp' ),
+		);
+	}
+
+	return array(
+		__( 'Deletes go to Trash.', 'agent-abilities-for-mcp' ),
+		__( 'Removals are recoverable, not permanent.', 'agent-abilities-for-mcp' ),
+		__( 'Deletes go to Trash', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Coerce + sanitize a meta value for writing. Scalar-only: arrays/objects are refused so
  * the agent can never store a serialized structure. Strings are plain-text sanitized (meta
  * is not rendered as post content); the result is then run through sanitize_meta so any

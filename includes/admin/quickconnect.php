@@ -495,7 +495,9 @@ function aafm_quickconnect_render(): void {
 									__( 'Off by default', 'agent-abilities-for-mcp' ),
 									__( 'Capped to your role', 'agent-abilities-for-mcp' ),
 									__( 'Every action is logged', 'agent-abilities-for-mcp' ),
-									__( 'Deletes go to Trash', 'agent-abilities-for-mcp' ),
+									// Reads the enabled set rather than asserting recoverability the
+									// permanent-delete abilities do not have. See aafm_delete_guarantee().
+									aafm_delete_guarantee()[2],
 								) as $chip
 							) {
 								echo '<span class="aafm-qc-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>' . esc_html( $chip ) . '</span>';

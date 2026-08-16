@@ -139,4 +139,62 @@ final class QuickConnectInferenceTest extends TestCase {
 		$this->assertTrue( aafm_quickconnect_site_looks_configured() );
 		$this->assertFalse( aafm_quickconnect_should_render() );
 	}
+
+	/**
+	 * Found by the second Codex review pass. Revoking an OAuth client deactivates the client row
+	 * and its tokens but deliberately leaves the consent row, and aafm_oauth_list_grants() does not
+	 * filter on the client being active -- that listing is shipped 1.6.3 behaviour and stays as it
+	 * is. What is new here is reading it as first-run evidence. The grant branch is only reached
+	 * once the active-client count is already zero, so every grant it can see belongs to a
+	 * deactivated or deleted client by construction: it can only ever suppress the wizard wrongly.
+	 * 1.6.3 had no inference at all and always reopened the wizard, so an administrator who revoked
+	 * their only client could no longer get the first-run screen back.
+	 */
+	public function test_a_revoked_clients_leftover_consent_is_not_first_run_evidence(): void {
+		if ( ! function_exists( 'aafm_oauth_register_client' ) || ! function_exists( 'aafm_install_oauth_tables' ) ) {
+			$this->markTestSkipped( 'OAuth client helpers unavailable.' );
+		}
+
+		aafm_install_oauth_tables();
+
+		$client = aafm_oauth_register_client(
+			array(
+				'client_name'   => 'AAFM Revoked Client',
+				'redirect_uris' => array( 'https://example.test/cb' ),
+			)
+		);
+		$this->assertIsArray( $client );
+		$client_id = (string) $client['client_id'];
+
+		global $wpdb;
+		$wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- test fixture.
+			$wpdb->prefix . 'aafm_oauth_consents',
+			array(
+				'client_id'  => $client_id,
+				'wp_user_id' => get_current_user_id(),
+				'granted_at' => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+
+		$this->assertTrue(
+			aafm_quickconnect_site_looks_configured(),
+			'Sanity: while the client is still active the grant is genuine evidence.'
+		);
+
+		aafm_oauth_deactivate_client( $client_id );
+
+		$this->assertNotSame(
+			array(),
+			aafm_oauth_list_grants(),
+			'The admin grant listing keeps showing the row -- that is 1.6.3 behaviour and is not what this fixes.'
+		);
+		$this->assertFalse(
+			aafm_quickconnect_site_looks_configured(),
+			'A consent belonging to a revoked client is not evidence that the site is set up.'
+		);
+		$this->assertTrue(
+			aafm_quickconnect_should_render(),
+			'The administrator must be able to get the first-run wizard back after revoking their only client.'
+		);
+	}
 }

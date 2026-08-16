@@ -95,10 +95,17 @@ function aafm_quickconnect_site_looks_configured(): bool {
 			return true;
 		}
 	}
+	// An active client is the OAuth evidence. The consent (grant) table deliberately is NOT
+	// consulted as a second signal, and that is worth stating because reading it looks obviously
+	// right: revoking a client deactivates the client row and its tokens but LEAVES the consent
+	// row, and aafm_oauth_list_grants() does not filter on the client being active (shipped 1.6.3
+	// behaviour, which the admin grant listing still depends on and which is not changed here). A
+	// grant against a client that is still active is already covered by the check above, since such
+	// a grant implies an active client. So the only thing a grants check can add is the case where
+	// no client is active, where every row it can match belongs to a revoked or deleted client. It
+	// would suppress the first-run wizard for an administrator who had revoked their only client
+	// and left them no way to get it back.
 	if ( function_exists( 'aafm_oauth_count_active_clients' ) && aafm_oauth_count_active_clients() > 0 ) {
-		return true;
-	}
-	if ( function_exists( 'aafm_oauth_list_grants' ) && array() !== aafm_oauth_list_grants() ) {
 		return true;
 	}
 	if ( function_exists( 'aafm_agent_call_count' ) && aafm_agent_call_count() > 0 ) {

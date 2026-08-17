@@ -527,6 +527,14 @@ function aafm_acf_normalize_stored( $value ) {
  * aafm_acf_sub_field_def(), which already resolves a sub-field by `_name` as well as by `name`.
  * The two halves disagreeing is what produced the bug.
  *
+ * The bound, stated as measured rather than as intended. All four clone modes above were checked
+ * against ACF Pro 6.8.7 by calling acf_clone_field() and this function in memory, with nothing
+ * written: each one emits a name that clone's update_value() accepts. What is NOT demonstrated is
+ * the end-to-end path, because no clone field is defined on the development site, so no real
+ * acf-update-post-fields call has ever been driven through a real clone. That half is modelled by
+ * the stub in the write-verify corpus, not observed. A clone that is nested inside another
+ * container is also unmeasured; the `_name` handling is the same code, but nobody has driven it.
+ *
  * @param array<string,mixed> $def The container field definition (from acf_get_field()).
  * @return array<string,string> key => name.
  */
@@ -637,7 +645,12 @@ function aafm_acf_rekey_row_to_names( array $row, array $def ) {
  *   - A sent list keeps its exact length. A dropped or extra row is a real persistence failure and
  *     must still be caught, so a length mismatch abandons the projection.
  *   - A key the caller sent that storage does not hold at all abandons the projection, so a
- *     sub-field that failed to persist still fails.
+ *     sub-field that failed to persist still fails. This one is DEFENSIVE, not load-bearing, and
+ *     the distinction is measured rather than assumed: deleting it leaves the whole regression
+ *     corpus green, because the missing key reads back as null and then mismatches the sent value
+ *     anyway. Attempts to build a row that dies without it (sending '', false, and array values)
+ *     all still refuse. What it actually contributes is avoiding an undefined-array-key read, and
+ *     saying so plainly beats leaving a comment that claims a guarantee nothing demonstrates.
  *   - A scalar is returned as-is, leaving the scalar verify path byte-for-byte as it was.
  *
  * @param mixed $stored The re-keyed stored value (already through aafm_acf_rekey_stored_to_names).

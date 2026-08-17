@@ -836,6 +836,94 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 	}
 
 	/**
+	 * Resolving a sub-field by its ORIGINAL name must change nothing for an ordinary sub-field.
+	 *
+	 * The safety of the whole `_name` change rests on this: if `_name` and `name` disagreed anywhere
+	 * outside a prefixed clone, three working container types would have been broken to fix a fourth.
+	 * Measured on ACF Pro 6.8.7, acf_validate_field() sets `_name = name` for every field
+	 * (acf-field-functions.php:270), so the two agree everywhere except where acf_clone_field()
+	 * deliberately separates them.
+	 *
+	 * The last assertion is the one that stops this test passing vacuously. Without it the whole
+	 * thing is satisfied by a key map that ignores `_name` entirely, which is the code the fix
+	 * replaced.
+	 */
+	public function test_the_original_name_mapping_is_a_no_op_for_ordinary_sub_fields(): void {
+		$this->boot( $this->repeater_config() );
+
+		$def = acf_get_field( 'field_emails' );
+		$this->assertIsArray( $def, 'The repeater definition must resolve.' );
+
+		// No sub-field here declares _name, so every entry must fall back to name.
+		$by_name = array();
+		foreach ( $def['sub_fields'] as $sub ) {
+			$by_name[ (string) $sub['key'] ] = (string) $sub['name'];
+		}
+		$this->assertSame(
+			$by_name,
+			aafm_acf_sub_field_key_map( $def ),
+			'With no _name declared, the map must fall back to name exactly as it always did.'
+		);
+
+		// And declaring _name equal to name, which is what real ACF does, must change nothing.
+		$with_alias = $def;
+		foreach ( $with_alias['sub_fields'] as $index => $sub ) {
+			$with_alias['sub_fields'][ $index ]['_name'] = $sub['name'];
+		}
+		$this->assertSame(
+			$by_name,
+			aafm_acf_sub_field_key_map( $with_alias ),
+			'_name equal to name is the ordinary case and must produce an identical map.'
+		);
+
+		// The discriminator: a prefixed clone MUST map to something other than name, or the map is
+		// ignoring _name and this test proves nothing.
+		$this->boot( $this->clone_config() );
+		$clone_def = acf_get_field( 'field_contact' );
+		$this->assertIsArray( $clone_def, 'The clone definition must resolve.' );
+		$clone_map = aafm_acf_sub_field_key_map( $clone_def );
+		$this->assertSame( 'email', $clone_map['field_clone_email'], 'A prefixed clone must map to its original name.' );
+		$this->assertNotSame(
+			'contact_email',
+			$clone_map['field_clone_email'],
+			'Mapping a prefixed clone to name is the shipped defect; the map must not do it.'
+		);
+	}
+
+	/**
+	 * The clone rows above are only worth anything if the stub really hydrates a clone's row.
+	 *
+	 * Added after a mutation run, and it closes a real hole. Stubbing out the stub's row
+	 * materialisation left the entire corpus green except for ONE assertion, the sentinel in the
+	 * repeater test below. Every clone row kept passing, because with no unsent sub-fields coming
+	 * back there is nothing for the projection to project away and the comparison matches
+	 * trivially. That is the shape of a test that passes for a reason unrelated to what its name
+	 * claims, so the clone configuration needs its own sentinel rather than borrowing the
+	 * repeater's.
+	 */
+	public function test_the_stub_hydrates_a_clone_row_or_the_clone_rows_prove_nothing(): void {
+		$post_id = $this->boot( $this->clone_config() );
+
+		$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_contact' => array( 'email' => 'a@example.test' ) ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A partial write to a prefixed clone must be accepted.' );
+
+		$stored = AcfStubStore::value( 'field_contact', $post_id );
+		$this->assertIsArray( $stored, 'The clone map must be in storage.' );
+		$this->assertSame( 'a@example.test', $stored['field_clone_email'], 'The sent value must be stored under the sub-field key.' );
+		$this->assertArrayHasKey(
+			'field_clone_phone',
+			$stored,
+			'ACF hydrates every declared sub-field of a clone on read-back; without that the clone rows are vacuous.'
+		);
+		$this->assertArrayHasKey( 'field_clone_note', $stored, 'Same for the third sub-field nobody sent.' );
+	}
+
+	/**
 	 * The partial-row case again, spelled out end to end rather than as a corpus row, because it is
 	 * the defect the simulation actually found and it deserves to fail with a message that says so.
 	 * Success AND persistence are both asserted; either alone would pass against broken code.

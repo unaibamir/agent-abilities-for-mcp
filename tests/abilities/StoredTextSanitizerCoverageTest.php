@@ -685,6 +685,68 @@ PHP;
 	}
 
 	/**
+	 * R6-5: a parenthesized receiver is still a receiver.
+	 *
+	 * The chain walk stepped back over a bracketed group only when a variable or name owned it, so
+	 * `(new A())->map( … )` found no owner, gave up, and returned the bare method - two different
+	 * receivers collapsing to one fingerprint again.
+	 */
+	public function test_a_parenthesized_receiver_is_kept(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_paren( $x ) {
+	$one = (new A())->map( 'sanitize_text_field', $x );
+	$two = (new B())->map( 'sanitize_text_field', $x );
+	return array( $one, $two );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records );
+		// assertSame, not a substring check. The statement fallback CONTAINS this text too, so a
+		// substring assertion would pass whether the chain resolved or the walk gave up - it could
+		// not go red, and would have proved nothing about the fix.
+		$this->assertSame( "(new A())->map( 'sanitize_text_field', \$x )", $records[0]['call'] );
+		$this->assertSame( "(new B())->map( 'sanitize_text_field', \$x )", $records[1]['call'] );
+	}
+
+	/**
+	 * The invariant that closes the family rather than the next instance.
+	 *
+	 * Five rounds have each found one more receiver shape. Enumerating shapes forever is a losing
+	 * game, so the walk now refuses to return a HALF-resolved chain: if a chain operator still sits
+	 * in front of what it consumed, it met something it does not understand and falls back to the
+	 * statement. Imprecise, and visibly so - but never two different receivers sharing one string.
+	 */
+	public function test_a_chain_the_walk_cannot_finish_falls_back_rather_than_half_resolving(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_unresolvable( $x ) {
+	$one = static::alpha()->map( 'sanitize_text_field', $x );
+	$two = static::beta()->map( 'sanitize_text_field', $x );
+	return array( $one, $two );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records );
+		$this->assertNotSame(
+			$records[0]['call'],
+			$records[1]['call'],
+			'A chain the walk cannot finish must never reduce to a shared string.'
+		);
+		foreach ( $records as $record ) {
+			$this->assertStringNotContainsString(
+				"'sanitize_text_field' [as a callable string]",
+				$record['call'],
+				'The old ambiguous fallback must not reappear.'
+			);
+		}
+	}
+
+	/**
 	 * The scan must reach every file that actually ships.
 	 *
 	 * The file that proved the hand-picked list was the wrong shape (R3-3) was uninstall.php: it

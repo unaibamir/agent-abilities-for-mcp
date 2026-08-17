@@ -27,10 +27,16 @@
  * 2. A fully-qualified call, `\sanitize_text_field( $v )`, in both 7.4 and 8.x tokenization.
  * 3. An aliased import, `use function sanitize_text_field as clean; clean( $v )`.
  * 4. A callable string consumed by a named call, `array_map( 'sanitize_text_field', $v )`,
- *    including through a receiver or static chain: `$a->map( … )`, `Foo::map( … )`,
- *    `$this->svc->mapper->map( … )`.
- * 5. A callable string consumed by an expression with no nameable callee - a variable function, an
- *    invoked callable array - identified by its enclosing statement instead.
+ *    including through a receiver chain the walk can follow to its start: `$a->map( … )`,
+ *    `Foo::map( … )`, `$this->svc->mapper->map( … )`, `$rows[0]->map( … )`, `(new A())->map( … )`.
+ * 5. A callable string consumed by anything else - a variable function, an invoked callable array,
+ *    or a receiver chain the walk cannot follow all the way back - identified by its enclosing
+ *    statement instead.
+ *
+ * Point 5 is what makes this list stable rather than a running tally of shapes. Five review rounds
+ * each found one more receiver form, so the walk no longer tries to enumerate them: it either
+ * resolves a chain completely or hands the whole statement back. A HALF-resolved chain is never
+ * returned, because that is precisely how two different receivers came to share one string.
  *
  * WHAT IT CANNOT SEE AT ALL
  *
@@ -461,7 +467,15 @@ final class StoredTextSanitizerScanner {
 		}
 
 		if ( null !== $callee ) {
-			$args = self::balanced_args_text( $tokens, (int) $last, $count );
+			// The chain is only trustworthy if it was consumed to its start. If a chain operator
+			// still sits in front of it, the walk met something it does not understand and stopped
+			// halfway, and a HALF chain is exactly the ambiguity this is meant to prevent - two
+			// different receivers reducing to the same text. Fall through to the statement instead
+			// of returning a partial answer that looks precise.
+			$before = self::prev_significant( $tokens, $callee - 1 );
+			$whole  = null === $before || ! is_array( $tokens[ $before ] ) || ! self::is_chain_operator( $tokens[ $before ][0] );
+
+			$args = $whole ? self::balanced_args_text( $tokens, (int) $last, $count ) : null;
 			if ( null !== $args ) {
 				return self::text_between( $tokens, $callee, (int) $last ) . $args;
 			}
@@ -538,13 +552,14 @@ final class StoredTextSanitizerScanner {
 				--$depth;
 				if ( 0 === $depth ) {
 					$owner = self::prev_significant( $tokens, $i - 1 );
-					if ( null === $owner || ! is_array( $tokens[ $owner ] ) ) {
-						return null;
-					}
-					if ( T_VARIABLE === $tokens[ $owner ][0] || self::is_name_token( $tokens[ $owner ][0] ) ) {
+					if ( null !== $owner && is_array( $tokens[ $owner ] )
+						&& ( T_VARIABLE === $tokens[ $owner ][0] || self::is_name_token( $tokens[ $owner ][0] ) ) ) {
 						return $owner;
 					}
-					return null;
+					// Nothing owns the group, so the group itself is the chain element:
+					// `(new A())->map( … )`. Returning null here dropped the receiver entirely
+					// and let two different receivers share one fingerprint (R6-5).
+					return $i;
 				}
 			}
 		}

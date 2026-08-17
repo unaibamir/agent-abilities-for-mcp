@@ -385,6 +385,52 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	}
 
 	/**
+	 * Every receiver form any round has ever fixed, pinned in one place.
+	 *
+	 * APPEND-ONLY. Never delete a case. Each one is a fingerprint collision that shipped or nearly
+	 * did, and each was found only after an earlier fix handled one receiver form and left its
+	 * sibling: R5-3 fixed the bare `$a->map()` pair, R6-5 fixed parenthesized receivers, and round 7
+	 * found that a subscript with an ANONYMOUS owner still collapsed to `[0]->map( … )`. A named
+	 * owner such as `$rows[0]` always resolved correctly, which is why no real call site ever hit it.
+	 *
+	 * Two calls that differ only in their receiver must never reduce to the same string, because a
+	 * shared string silently transfers one call's allowlist reason to the other.
+	 */
+	public function test_no_two_receiver_forms_share_a_fingerprint(): void {
+		$source = <<<'SRC'
+<?php
+function probe( $x, $flag ) {
+	$a = [new A()][0]->map( 'sanitize_text_field', $x );
+	$b = [new B()][0]->map( 'sanitize_text_field', $x );
+	$c = alpha()[0][1]->map( 'sanitize_text_field', $x );
+	$d = beta()[0][1]->map( 'sanitize_text_field', $x );
+	$e = ( $flag ? alpha() : bravo() )[0]->map( 'sanitize_text_field', $x );
+	$f = ( $flag ? charlie() : delta() )[0]->map( 'sanitize_text_field', $x );
+	$g = $rows[0]->map( 'sanitize_text_field', $x );
+	$h = $cols[0]->map( 'sanitize_text_field', $x );
+	$i = ( new C() )->map( 'sanitize_text_field', $x );
+	$j = ( new D() )->map( 'sanitize_text_field', $x );
+	$k = $this->svc->mapper->map( 'sanitize_text_field', $x );
+	$l = $this->other->mapper->map( 'sanitize_text_field', $x );
+}
+SRC;
+
+		$calls = array();
+		foreach ( StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) as $found ) {
+			$calls[] = $found['call'];
+		}
+
+		$this->assertCount( 12, $calls, 'The probe source should yield one finding per call.' );
+		$this->assertSame(
+			count( $calls ),
+			count( array_unique( $calls ) ),
+			"Two receiver forms reduced to the same fingerprint, so one call's allowlist reason would\n"
+			. "silently cover the other. Duplicates:\n  "
+			. implode( "\n  ", array_keys( array_filter( array_count_values( $calls ), static fn( $n ) => $n > 1 ) ) )
+		);
+	}
+
+	/**
 	 * The scanner has to actually be looking at something. A scan that silently returns nothing -
 	 * a moved directory, a broken iterator - would make every assertion above pass while checking
 	 * precisely zero code, which is the failure mode this whole file exists to prevent.

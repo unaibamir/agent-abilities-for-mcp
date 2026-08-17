@@ -475,6 +475,17 @@ final class StoredTextSanitizerScanner {
 			$before = self::prev_significant( $tokens, $callee - 1 );
 			$whole  = null === $before || ! is_array( $tokens[ $before ] ) || ! self::is_chain_operator( $tokens[ $before ][0] );
 
+			// A start that is itself a subscript open is not a start. The walk steps over `[ … ]` to
+			// whatever owns it, which for `$rows[0]->map( … )` is the variable `$rows` and resolves
+			// fine. But when the owner is anonymous - `[new A()][0]`, `alpha()[0][1]`, a
+			// parenthesized ternary - there is no name to land on and the walk stops holding only
+			// the trailing subscript, so `[new A()][0]` and `[new B()][0]` both reduce to
+			// `[0]->map( … )`. That is a HALF chain, and the same ambiguity R5-3 and R6-5 each fixed
+			// for one receiver form and left at this one. Hand back the statement instead.
+			if ( '[' === $tokens[ $callee ] ) {
+				$whole = false;
+			}
+
 			$args = $whole ? self::balanced_args_text( $tokens, (int) $last, $count ) : null;
 			if ( null !== $args ) {
 				return self::text_between( $tokens, $callee, (int) $last ) . $args;

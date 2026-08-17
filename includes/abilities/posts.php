@@ -1214,86 +1214,86 @@ function aafm_perm_replace_in_post( array $input ): bool {
 }
 
 /**
- * The byte ranges of $content that are not ordinary text: tags, comments, and the raw-text
- * elements whose bodies are parsed as markup context rather than as content.
+ * A comparable signature of every NON-text token in a document.
  *
- * Used to decide whether a replacement would land somewhere its own sanitizing cannot reach.
- * Deliberately a lexical scan rather than a parser: it only has to answer "is this offset inside
- * markup", it never has to understand the document, and an unterminated tag or comment runs to the
- * end of the string, which is the conservative reading.
+ * Built on WP_HTML_Tag_Processor, core's HTML5 tokenizer, rather than a hand-rolled scan. The
+ * hand-rolled version was wrong in both directions at once (R6-2, R6-4): it ended a tag at the
+ * first `>` even inside a quoted attribute value, so an attribute-break-out splice read as body
+ * text and went through, and it treated a literal `<` in prose as a tag opener, so ordinary
+ * sentences were refused. Quote state, raw-text elements and the rule that `<` only opens a tag
+ * when followed by a letter are exactly the things a spec tokenizer already gets right.
  *
- * @param string $content Post content.
- * @return array<int,array{0:int,1:int}> Half-open [start, end) ranges, in order.
+ * Text tokens are deliberately excluded: changing text is the entire point of this ability. What
+ * must survive a replacement untouched is the structure around the text, which is everything else.
+ *
+ * @param string $html Document to tokenize.
+ * @return array<int,string> One opaque comparable string per non-text token, in document order.
  */
-function aafm_markup_regions( string $content ): array {
-	$ranges = array();
-	$length = strlen( $content );
-	$index  = 0;
+function aafm_html_structure_signature( string $html ): array {
+	$processor = new WP_HTML_Tag_Processor( $html );
+	$signature = array();
 
-	while ( $index < $length ) {
-		$open = strpos( $content, '<', $index );
-		if ( false === $open ) {
-			break;
-		}
-
-		if ( '<!--' === substr( $content, $open, 4 ) ) {
-			$close    = strpos( $content, '-->', $open + 4 );
-			$end      = false === $close ? $length : $close + 3;
-			$ranges[] = array( $open, $end );
-			$index    = $end;
+	while ( $processor->next_token() ) {
+		$type = (string) $processor->get_token_type();
+		if ( '#text' === $type ) {
 			continue;
 		}
 
-		$close    = strpos( $content, '>', $open + 1 );
-		$end      = false === $close ? $length : $close + 1;
-		$ranges[] = array( $open, $end );
-		$index    = $end;
-
-		// script/style/textarea/title bodies are not text content: a replacement inside one is
-		// inside a markup context even though no angle bracket surrounds it.
-		if ( 1 === preg_match( '~^<\s*(script|style|textarea|title)\b~i', substr( $content, $open, 32 ), $matches ) ) {
-			$closer = stripos( $content, '</' . strtolower( $matches[1] ), $end );
-			$body   = false === $closer ? $length : $closer;
-			if ( $body > $end ) {
-				$ranges[] = array( $end, $body );
+		if ( '#tag' === $type ) {
+			$attributes = array();
+			foreach ( (array) $processor->get_attribute_names_with_prefix( '' ) as $name ) {
+				$value = $processor->get_attribute( (string) $name );
+				// A boolean attribute reads as true; keep the distinction from an empty string.
+				$attributes[ (string) $name ] = is_string( $value ) ? $value : wp_json_encode( $value );
 			}
-			$index = $body;
+			ksort( $attributes );
+			$signature[] = 'tag:' . strtolower( (string) $processor->get_tag() )
+				. ':' . ( $processor->is_tag_closer() ? 'close' : 'open' )
+				. ':' . (string) wp_json_encode( $attributes );
+			continue;
 		}
+
+		// Comments, doctype, CDATA-ish and funky tokens: their own text is part of the structure,
+		// because ending a comment early turns whatever followed it into live markup.
+		$signature[] = $type . ':' . $processor->get_modifiable_text();
 	}
 
-	return $ranges;
+	return $signature;
 }
 
 /**
- * Whether every occurrence of $search in $content sits wholly in ordinary text.
+ * Whether $before's structure survives intact in $after, given what was inserted and how often.
  *
- * @param string $content Post content.
- * @param string $search  Literal search term.
- * @return bool False when any occurrence touches a tag, comment or raw-text body.
+ * Two conditions, and both are needed. Every token of the original must still be present, in
+ * order, so no existing tag or comment was altered or destroyed. And the total must have grown by
+ * exactly what the replacement itself contributes, so nothing NEW appeared that the replacement
+ * did not legitimately bring - which is what catches a splice that ends a comment early and turns
+ * the rest of it into live markup, even though every original token is technically still there.
+ *
+ * @param string $before   Original content.
+ * @param string $after    Content with the replacement applied.
+ * @param string $inserted The sanitized replacement text, as inserted.
+ * @param int    $times    How many occurrences were replaced.
+ * @return bool
  */
-function aafm_replacements_land_in_text( string $content, string $search ): bool {
-	$regions = aafm_markup_regions( $content );
-	if ( array() === $regions ) {
-		return true;
+function aafm_replacement_preserves_structure( string $before, string $after, string $inserted, int $times ): bool {
+	$original = aafm_html_structure_signature( $before );
+	$result   = aafm_html_structure_signature( $after );
+	$added    = aafm_html_structure_signature( $inserted );
+
+	if ( count( $result ) !== count( $original ) + ( $times * count( $added ) ) ) {
+		return false;
 	}
 
-	$width  = strlen( $search );
-	$offset = 0;
-
-	while ( true ) {
-		$at = strpos( $content, $search, $offset );
-		if ( false === $at ) {
-			return true;
+	// Subsequence check: walk the result once, consuming the original in order.
+	$next = 0;
+	foreach ( $result as $token ) {
+		if ( $next < count( $original ) && $original[ $next ] === $token ) {
+			++$next;
 		}
-		foreach ( $regions as $region ) {
-			// Half-open overlap: the span may not merely start outside a region, it must not
-			// reach into one either, or the replacement eats part of a tag.
-			if ( $at < $region[1] && ( $at + $width ) > $region[0] ) {
-				return false;
-			}
-		}
-		$offset = $at + $width;
 	}
+
+	return count( $original ) === $next;
 }
 
 /**
@@ -1315,11 +1315,20 @@ function aafm_replacements_land_in_text( string $content, string $search ): bool
  * while reporting success (B8, fixed in 687ff62). The invariant that no byte outside the replaced
  * spans changes is not negotiable.
  *
- * So the assembled document is VALIDATED rather than rewritten: a replacement that would land in a
- * tag, a comment, or a script/style body is refused outright, because that is the only position
- * from which sanitized text can still change the document's structure. A replacement in ordinary
- * body text cannot, and still goes through with the rest of the post untouched. Refusing keeps
- * both properties; rewriting would have to give one of them up.
+ * So the assembled document is VALIDATED rather than rewritten. Both versions are tokenized with
+ * WP_HTML_Tag_Processor and their non-text structure compared: every tag and comment of the
+ * original must survive unchanged, and the total may only grow by what the replacement itself
+ * contributes. A replacement in ordinary body text satisfies both and goes through with the rest
+ * of the post untouched; one that lands in a tag, a comment, or a raw-text body does not, and is
+ * refused. Refusing keeps both properties above; rewriting would have to give one of them up.
+ *
+ * The comparison is built on core's tokenizer rather than a hand-rolled scan because the first
+ * attempt at this was wrong in BOTH directions at once (R6-2, R6-4). It ended a tag at the first
+ * `>` even inside a quoted attribute value, so the break-out splice still went through, and it
+ * treated a literal `<` in prose as a tag opener, so ordinary sentences were refused. An evadable
+ * refusal is worse than no refusal, because it reads as protection. Quote state, raw-text elements
+ * and the rule that `<` only opens a tag before a letter are exactly what a spec tokenizer already
+ * handles.
  *
  * Note what this does NOT rely on: core's kses save filters. kses_init() attaches
  * wp_filter_post_kses only for users who LACK unfiltered_html, and on a standard single site both
@@ -1356,18 +1365,19 @@ function aafm_exec_replace_in_post( array $input ) {
 		);
 	}
 
-	// Refuse before writing anything when a replacement would land inside markup. Sanitizing the
-	// inserted text cannot help there: it is judged on its own, where it is harmless, and only
-	// becomes an attribute break-out once spliced (B2-02).
-	if ( ! aafm_replacements_land_in_text( $content, $search ) ) {
+	$inserted = wp_kses_post( $replace );
+	$new      = str_replace( $search, $inserted, $content );
+
+	// Compare the assembled document's structure against the original before writing anything.
+	// Sanitizing the inserted text cannot settle this on its own: it is judged in isolation, where
+	// it is harmless, and only becomes an attribute break-out once spliced (B2-02).
+	if ( ! aafm_replacement_preserves_structure( $content, $new, $inserted, $replacements ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_markup',
-			__( 'That search term occurs inside the post\'s markup - within a tag, an HTML comment, or a script or style block - so replacing it could change the structure of the page rather than its text. Nothing was changed. Choose a search term that appears in the visible body text, or edit the block directly.', 'agent-abilities-for-mcp' ),
+			__( 'That replacement would change the structure of the page rather than its text - the search term sits inside a tag, an HTML comment, or a script or style block. Nothing was changed. Choose a search term that appears in the visible body text, or edit the block directly.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
 	}
-
-	$new = str_replace( $search, wp_kses_post( $replace ), $content );
 
 	// Guard the rewritten markup so a replacement cannot silently introduce editor-invalid blocks.
 	$guard = aafm_block_guard_evaluate( $new );

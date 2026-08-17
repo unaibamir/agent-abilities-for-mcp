@@ -237,6 +237,68 @@ final class ReplaceInPostTest extends TestCase {
 		);
 	}
 
+	/**
+	 * R6-2: the refusal was evadable, so the stored XSS was still live.
+	 *
+	 * The first lexer called the first `>` the end of the tag. A perfectly valid `>` inside an
+	 * earlier quoted attribute value ended the tag early in its eyes, so everything after it -
+	 * including the rest of that same tag - looked like ordinary body text and the splice went
+	 * through. An evadable refusal is worse than none: it reads as protection while protecting
+	 * nothing.
+	 */
+	public function test_a_quoted_angle_bracket_does_not_open_a_hole(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = self::factory()->post->create(
+			array( 'post_content' => '<a href="https://example.com/?a=1&b=2" data-note="x > y" title="PLACEHOLDER">link</a>' )
+		);
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'PLACEHOLDER',
+				'replace' => 'x" onmouseover="alert(1)" data-z="',
+			)
+		);
+
+		$this->assertStringNotContainsString(
+			'onmouseover',
+			(string) get_post( $id )->post_content,
+			'A > inside a quoted attribute must not make the rest of the tag look like body text.'
+		);
+		$this->assertInstanceOf( WP_Error::class, $out );
+	}
+
+	/**
+	 * R6-4, the other direction and a regression of my own making. A literal `<` in visible prose
+	 * is ordinary text - HTML5 only starts a tag when `<` is followed by a letter - but the first
+	 * lexer treated it as a tag opener through the next `>` and refused a replacement that was
+	 * never near any markup.
+	 *
+	 * Both directions need their own test. One that only covers the attack leaves this live, and
+	 * users hit it while writing perfectly normal sentences.
+	 */
+	public function test_a_literal_angle_bracket_in_prose_does_not_block_a_replacement(): void {
+		wp_set_current_user( self::factory()->user->create( array( 'role' => 'administrator' ) ) );
+		$id = self::factory()->post->create(
+			array( 'post_content' => '<p>if x < y then PLACEHOLDER holds</p>' )
+		);
+
+		$out = aafm_exec_replace_in_post(
+			array(
+				'post_id' => $id,
+				'search'  => 'PLACEHOLDER',
+				'replace' => 'the theorem',
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$out,
+			'Prose containing a less-than sign is not markup and must not be refused.'
+		);
+		$this->assertStringContainsString( 'then the theorem holds', (string) get_post( $id )->post_content );
+	}
+
 	public function test_status_is_never_changed(): void {
 		$author = self::factory()->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $author );

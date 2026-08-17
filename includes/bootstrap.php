@@ -356,12 +356,52 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 	}
 
 	$body = $request->get_json_params();
-	if ( ! is_array( $body ) || 'initialize' !== ( $body['method'] ?? '' ) || ! isset( $body['params'] ) || ! is_array( $body['params'] ) ) {
+	if ( ! is_array( $body ) || array() === $body ) {
 		return $result;
 	}
 
-	$params = $body['params'];
+	// A JSON-RPC batch is a list of call objects. Handling only the single-object form let the same
+	// oversized handshake through simply by wrapping it in brackets (R6-3), so both shapes walk the
+	// same path and every element is bounded on its own.
+	$is_batch = array_keys( $body ) === range( 0, count( $body ) - 1 );
+	$calls    = $is_batch ? $body : array( $body );
+	$changed  = false;
 
+	foreach ( $calls as $index => $call ) {
+		if ( ! is_array( $call ) || 'initialize' !== ( $call['method'] ?? '' ) || ! isset( $call['params'] ) || ! is_array( $call['params'] ) ) {
+			continue;
+		}
+
+		$bounded = aafm_bound_initialize_params_array( $call['params'] );
+		if ( null === $bounded ) {
+			return new WP_Error(
+				'aafm_initialize_params_too_large',
+				__( 'The initialize parameters are too large. Send a normal handshake: a protocol version, your capabilities, and a short client name and version.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( $bounded !== $call['params'] ) {
+			$calls[ $index ]['params'] = $bounded;
+			$changed                   = true;
+		}
+	}
+
+	if ( $changed ) {
+		// set_body() clears the parsed-JSON cache, so the adapter reads the bounded version.
+		$request->set_body( (string) wp_json_encode( $is_batch ? $calls : $calls[0] ) );
+	}
+
+	return $result;
+}
+
+/**
+ * Bound one initialize params object, or report that it is too large to accept at all.
+ *
+ * @param array<string,mixed> $params Params from a single initialize call.
+ * @return array<string,mixed>|null The bounded params, or null when the object exceeds the cap.
+ */
+function aafm_bound_initialize_params_array( array $params ): ?array {
 	if ( isset( $params['clientInfo'] ) && is_array( $params['clientInfo'] ) ) {
 		$client = array();
 		foreach ( array( 'name', 'version' ) as $field ) {
@@ -377,22 +417,11 @@ function aafm_bound_mcp_initialize_params( $result, $server = null, $request = n
 		$params['clientInfo'] = $client;
 	}
 
-	$encoded = (string) wp_json_encode( $params );
-	if ( strlen( $encoded ) > AAFM_MCP_INITIALIZE_PARAMS_MAX ) {
-		return new WP_Error(
-			'aafm_initialize_params_too_large',
-			__( 'The initialize parameters are too large. Send a normal handshake: a protocol version, your capabilities, and a short client name and version.', 'agent-abilities-for-mcp' ),
-			array( 'status' => 400 )
-		);
+	if ( strlen( (string) wp_json_encode( $params ) ) > AAFM_MCP_INITIALIZE_PARAMS_MAX ) {
+		return null;
 	}
 
-	if ( $params !== $body['params'] ) {
-		$body['params'] = $params;
-		// set_body() clears the parsed-JSON cache, so the adapter reads the bounded version.
-		$request->set_body( (string) wp_json_encode( $body ) );
-	}
-
-	return $result;
+	return $params;
 }
 
 add_filter( 'rest_pre_dispatch', 'aafm_bound_mcp_initialize_params', 10, 3 );

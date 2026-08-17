@@ -152,4 +152,67 @@ final class InitializeClientInfoBoundTest extends TestCase {
 		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $tools ) );
 		$this->assertSame( 5000, strlen( $tools->get_json_params()['params']['clientInfo']['name'] ) );
 	}
+
+	/**
+	 * R6-3: the same payload inside a one-element JSON-RPC batch.
+	 *
+	 * The bound looked at the body as a single object, so wrapping the identical oversized
+	 * handshake in `[...]` walked straight past it and reached the session store unchanged. Same
+	 * shape as the params-versus-clientInfo sibling: the fix was right for the shape it examined
+	 * and blind to the one beside it.
+	 */
+	public function test_an_oversized_client_name_in_a_batch_is_cut_down_too(): void {
+		$request = new WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					array(
+						'jsonrpc' => '2.0',
+						'id'      => 1,
+						'method'  => 'initialize',
+						'params'  => array(
+							'clientInfo' => array( 'name' => str_repeat( 'A', 2000000 ) ),
+						),
+					),
+				)
+			)
+		);
+
+		$this->assertNull( aafm_bound_mcp_initialize_params( null, null, $request ) );
+
+		$body = $request->get_json_params();
+		$this->assertLessThanOrEqual( 128, strlen( (string) $body[0]['params']['clientInfo']['name'] ) );
+	}
+
+	/**
+	 * And the refusal half of the same bypass, on a batch element that is oversized outside
+	 * clientInfo.
+	 */
+	public function test_an_oversized_batch_element_is_refused(): void {
+		$request = new WP_REST_Request( 'POST', aafm_mcp_rest_route() );
+		$request->set_header( 'Content-Type', 'application/json' );
+		$request->set_body(
+			(string) wp_json_encode(
+				array(
+					array(
+						'jsonrpc' => '2.0',
+						'id'      => 1,
+						'method'  => 'tools/list',
+					),
+					array(
+						'jsonrpc' => '2.0',
+						'id'      => 2,
+						'method'  => 'initialize',
+						'params'  => array( 'padding' => str_repeat( 'B', 2000000 ) ),
+					),
+				)
+			)
+		);
+
+		$result = aafm_bound_mcp_initialize_params( null, null, $request );
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_initialize_params_too_large', $result->get_error_code() );
+	}
 }

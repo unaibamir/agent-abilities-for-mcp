@@ -212,6 +212,121 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 	}
 
 	/**
+	 * Three clone fields covering every way ACF names a cloned sub-field, because the naming is the
+	 * whole difficulty with this type and only one of the three shapes was ever exercised.
+	 *
+	 * A clone's sub-field carries THREE names and they are not always the same string. Measured on
+	 * the ACF Pro 6.8.7 in this repo's wp/ tree, by calling acf_clone_field() on a validated field
+	 * with nothing written to the database, for a sub-field named `email` cloned into a clone named
+	 * `contact`:
+	 *
+	 *   display=group,    prefix_name=0 -> name `email`,         _name `email`,         __name `email`
+	 *   display=group,    prefix_name=1 -> name `contact_email`, _name `email`,         __name `email`
+	 *   display=seamless, prefix_name=1 -> name `contact_email`, _name `contact_email`, __name `email`
+	 *
+	 * The middle row is the one that shipped broken. ACF accepts a write under `key` or `_name` and
+	 * nothing else (class-acf-field-clone.php:551-561) and hands the raw value back keyed by `key`
+	 * (:~440), while this plugin re-keyed storage to `name` - so an agent wrote `email`, the value
+	 * landed in the database, storage came back as `contact_email`, the projection found no `email`
+	 * key to project onto and abandoned, and the ability reported failure on a write that worked.
+	 * Unlike the repeater case it does not need a partial row: for a prefixed clone EVERY write
+	 * false-failed.
+	 *
+	 * @return array<string,mixed> The field-group config for stub_acf().
+	 */
+	private function clone_config(): array {
+		return array(
+			'groups' => array(
+				array(
+					'key'    => 'group_clones',
+					'title'  => 'Clones',
+					'fields' => array(
+						array(
+							'key'         => 'field_contact',
+							'name'        => 'contact',
+							'label'       => 'Contact',
+							'type'        => 'clone',
+							'display'     => 'group',
+							'prefix_name' => 1,
+							'sub_fields'  => array(
+								array(
+									'key'    => 'field_clone_email',
+									'name'   => 'contact_email',
+									'_name'  => 'email',
+									'__name' => 'email',
+									'type'   => 'text',
+								),
+								array(
+									'key'    => 'field_clone_phone',
+									'name'   => 'contact_phone',
+									'_name'  => 'phone',
+									'__name' => 'phone',
+									'type'   => 'text',
+								),
+								array(
+									'key'    => 'field_clone_note',
+									'name'   => 'contact_note',
+									'_name'  => 'note',
+									'__name' => 'note',
+									'type'   => 'text',
+								),
+							),
+						),
+						array(
+							'key'         => 'field_plainclone',
+							'name'        => 'plain',
+							'label'       => 'Plain clone',
+							'type'        => 'clone',
+							'display'     => 'group',
+							'prefix_name' => 0,
+							'sub_fields'  => array(
+								array(
+									'key'    => 'field_plain_email',
+									'name'   => 'email',
+									'_name'  => 'email',
+									'__name' => 'email',
+									'type'   => 'text',
+								),
+								array(
+									'key'    => 'field_plain_phone',
+									'name'   => 'phone',
+									'_name'  => 'phone',
+									'__name' => 'phone',
+									'type'   => 'text',
+								),
+							),
+						),
+						array(
+							'key'         => 'field_seamless',
+							'name'        => 'seam',
+							'label'       => 'Seamless clone',
+							'type'        => 'clone',
+							'display'     => 'seamless',
+							'prefix_name' => 1,
+							'sub_fields'  => array(
+								array(
+									'key'    => 'field_seam_email',
+									'name'   => 'seam_email',
+									'_name'  => 'seam_email',
+									'__name' => 'email',
+									'type'   => 'text',
+								),
+								array(
+									'key'    => 'field_seam_phone',
+									'name'   => 'seam_phone',
+									'_name'  => 'seam_phone',
+									'__name' => 'phone',
+									'type'   => 'text',
+								),
+							),
+						),
+					),
+				),
+			),
+		);
+	}
+
+	/**
 	 * Boot the ACF stubs with real-ACF container modelling on, register the ability set, and return
 	 * a post id to write against.
 	 *
@@ -422,6 +537,23 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 				false,
 				array( 'field_emails' => false ),
 			),
+			// Storage holds MORE rows than were sent. Added after a mutation run: deleting the
+			// projection's row-count bail-out left the whole corpus green, because every other
+			// refuse row differs in a way the missing-key check catches anyway. This is the one
+			// shape only the count can see - every sent index is present and correct, and storage
+			// simply carries a row nobody asked for, which is what a half-applied clear or a
+			// duplicated append looks like.
+			'refuse: storage has an extra row'  => array(
+				'repeater',
+				array( 'field_emails' => array( array( 'name' => 'A' ) ) ),
+				false,
+				array(
+					'field_emails' => array(
+						array( 'field_email_name' => 'A' ),
+						array( 'field_email_name' => 'B' ),
+					),
+				),
+			),
 			// A clear that did not happen: the old rows are still there.
 			'refuse: clear did not take'        => array(
 				'repeater',
@@ -462,6 +594,123 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 				false,
 				array( 'field_headline' => 'Stored something else' ),
 			),
+
+			// -----------------------------------------------------------------
+			// CLONE. The container type the round-3 sim could not drive at all,
+			// because no clone field is defined on the clone site, so the claim
+			// that it shared the repeater fix was argued and never demonstrated.
+			// It did not share it: a clone with "Prefix Field Names" on renames
+			// the sub-field on the way out but not on the way in, and every one
+			// of its writes false-failed. See clone_config() for the three name
+			// shapes and where each was measured.
+			// -----------------------------------------------------------------
+			'clone prefixed: partial map'       => array(
+				'clone',
+				array( 'field_contact' => array( 'email' => 'a@example.test' ) ),
+				true,
+				null,
+			),
+			'clone prefixed: full map'          => array(
+				'clone',
+				array(
+					'field_contact' => array(
+						'email' => 'a@example.test',
+						'phone' => '0100',
+						'note'  => 'call after six',
+					),
+				),
+				true,
+				null,
+			),
+			'clone unprefixed: partial map'     => array(
+				'clone',
+				array( 'field_plainclone' => array( 'email' => 'b@example.test' ) ),
+				true,
+				null,
+			),
+			'clone seamless: partial map'       => array(
+				'clone',
+				array( 'field_seamless' => array( 'seam_email' => 'c@example.test' ) ),
+				true,
+				null,
+			),
+			// The REFUSE half for clone. Without these the accept rows above are
+			// satisfiable by a comparison that stopped comparing.
+			'refuse: clone sub-field vanished'  => array(
+				'clone',
+				array(
+					'field_contact' => array(
+						'email' => 'a@example.test',
+						'phone' => '0100',
+					),
+				),
+				false,
+				array( 'field_contact' => array( 'field_clone_email' => 'a@example.test' ) ),
+			),
+			'refuse: clone value was altered'   => array(
+				'clone',
+				array( 'field_contact' => array( 'email' => 'a@example.test' ) ),
+				false,
+				array( 'field_contact' => array( 'field_clone_email' => 'ALTERED' ) ),
+			),
+			'refuse: clone nothing persisted'   => array(
+				'clone',
+				array( 'field_contact' => array( 'email' => 'a@example.test' ) ),
+				false,
+				array( 'field_contact' => false ),
+			),
+			// Sending the PREFIXED name is not a write ACF performs: its clone
+			// update_value() matches `key` or `_name` and skips anything else, so
+			// nothing lands and reporting failure is the correct answer. This row
+			// is what stops the fix being "accept both names", which would report
+			// success on a write that never happened.
+			'refuse: clone sent prefixed name'  => array(
+				'clone',
+				array( 'field_contact' => array( 'contact_email' => 'a@example.test' ) ),
+				false,
+				null,
+			),
+
+			// -----------------------------------------------------------------
+			// The acf_fc_layout marker, both directions. The projection keeps
+			// only the keys the caller sent, so the marker's presence on one side
+			// and not the other decides whether the whole projection is abandoned
+			// - and abandoning it is what reinstates the original false failure.
+			// -----------------------------------------------------------------
+			// Stored carries the marker, sent does not: harmlessly dropped by the
+			// projection, so a row written without it still verifies.
+			'flex marker: stored only'          => array(
+				'nested',
+				array( 'field_sections' => array( array( 'heading' => 'Top' ) ) ),
+				true,
+				array(
+					'field_sections' => array(
+						array(
+							'acf_fc_layout'         => 'section',
+							'field_section_heading' => 'Top',
+						),
+					),
+				),
+			),
+			// Sent carries the marker, storage does not. array_key_exists fails,
+			// the projection is abandoned and the write is reported failed - which
+			// is the right answer, because a flexible-content row with no layout
+			// recorded is not the row that was asked for. Real ACF sets the marker
+			// unconditionally on read (class-acf-field-flexible-content.php:569),
+			// so this shape means the write genuinely did not land as sent.
+			'flex marker: sent only'            => array(
+				'nested',
+				array(
+					'field_sections' => array(
+						array(
+							'acf_fc_layout' => 'section',
+							'heading'       => 'Top',
+						),
+					),
+				),
+				false,
+				array( 'field_sections' => array( array( 'field_section_heading' => 'Top' ) ) ),
+			),
 		);
 	}
 
@@ -470,13 +719,19 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 	 *
 	 * @dataProvider provide_write_shapes
 	 *
-	 * @param string                   $config_name    'repeater' or 'nested'.
+	 * @param string                   $config_name    'repeater', 'nested' or 'clone'.
 	 * @param array<string,mixed>      $fields         The field map to write.
 	 * @param bool                     $must_succeed   Whether the ability must report success.
 	 * @param array<string,mixed>|null $read_override  Raw read-back override, or null.
 	 */
 	public function test_write_verdict( string $config_name, array $fields, bool $must_succeed, ?array $read_override ): void {
-		$config  = 'nested' === $config_name ? $this->nested_config() : $this->repeater_config();
+		if ( 'nested' === $config_name ) {
+			$config = $this->nested_config();
+		} elseif ( 'clone' === $config_name ) {
+			$config = $this->clone_config();
+		} else {
+			$config = $this->repeater_config();
+		}
 		$post_id = $this->boot( $config );
 
 		if ( null !== $read_override ) {

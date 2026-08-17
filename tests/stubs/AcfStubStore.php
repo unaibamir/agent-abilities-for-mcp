@@ -182,6 +182,25 @@ class AcfStubStore {
 	/**
 	 * Re-key one row (or flat group/clone map), recursing into nested container sub-fields.
 	 *
+	 * A sub-field is resolved by `key`, by `_name` (its ORIGINAL name), and by `name`, in that
+	 * order. The `_name` entry is what models a clone field with "Prefix Field Names" on, the one
+	 * ACF setting that makes the two names diverge: acf_clone_field() rewrites `name` to
+	 * `<clone>_<name>` while leaving `_name` alone (class-acf-field-clone.php:291-302), and the
+	 * clone's update_value() then accepts the written value under `key` or `_name` and nothing else
+	 * (:551-561). Measured on the ACF Pro 6.8.7 in this repo's wp/ tree by calling acf_clone_field()
+	 * on a validated field with no database involved: cloning `email` into a clone named `contact`
+	 * gives name `contact_email` / `_name` `email` for display=group + prefix, both `contact_email`
+	 * for seamless + prefix, and both `email` without prefix.
+	 *
+	 * Two deliberate divergences from ACF, both stated so a reader can check rather than trust:
+	 *
+	 *   - Real ACF accepts ONLY `key` and `_name` on write. Here a `clone` parent matches that
+	 *     exactly, dropping an unresolved sub-key the way update_value() `continue`s past one; every
+	 *     other container type keeps the older, laxer passthrough the rest of the suite relies on.
+	 *   - On the way OUT a clone's format_value() emits `__name`, the pre-prefix backup (:480), not
+	 *     `name`; that is modelled here too. `__name` is absent on ordinary sub-fields, where the
+	 *     fallback to `name` leaves every other test unchanged.
+	 *
 	 * @param array<int|string,mixed> $row    The row map.
 	 * @param array<string,mixed>     $def    The parent container definition.
 	 * @param string                  $layout The row's acf_fc_layout name ('' outside flex).
@@ -189,30 +208,47 @@ class AcfStubStore {
 	 * @return array<int|string,mixed>
 	 */
 	private static function rekey_row( array $row, array $def, string $layout, bool $to_key ): array {
-		$by_name = array();
-		$by_key  = array();
+		$by_name  = array();
+		$by_alias = array();
+		$by_key   = array();
 		foreach ( self::sub_defs( $def, $layout ) as $sub ) {
 			if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
 				$by_name[ (string) $sub['name'] ] = $sub;
 				$by_key[ (string) $sub['key'] ]   = $sub;
+				$alias                            = isset( $sub['_name'] ) ? (string) $sub['_name'] : '';
+				if ( '' !== $alias ) {
+					$by_alias[ $alias ] = $sub;
+				}
 			}
 		}
-		$out = array();
+		$is_clone = 'clone' === (string) ( $def['type'] ?? '' );
+		$out      = array();
 		foreach ( $row as $sub_key => $sub_val ) {
 			$sub_key = (string) $sub_key;
 			if ( 'acf_fc_layout' === $sub_key ) {
 				$out[ $sub_key ] = $sub_val;
 				continue;
 			}
-			$sub = $by_name[ $sub_key ] ?? ( $by_key[ $sub_key ] ?? null );
+			$sub = $by_key[ $sub_key ] ?? ( $by_alias[ $sub_key ] ?? null );
+			if ( null === $sub && ! ( $is_clone && $to_key ) ) {
+				$sub = $by_name[ $sub_key ] ?? null;
+			}
 			if ( null === $sub ) {
+				if ( $is_clone && $to_key ) {
+					continue; // A clone's update_value() skips a key it does not recognise.
+				}
 				$out[ $sub_key ] = $sub_val;
 				continue;
 			}
 			if ( in_array( (string) ( $sub['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
 				$sub_val = self::rekey_container( $sub_val, $sub, $to_key );
 			}
-			$out[ $to_key ? (string) $sub['key'] : (string) $sub['name'] ] = $sub_val;
+			if ( $to_key ) {
+				$out[ (string) $sub['key'] ] = $sub_val;
+				continue;
+			}
+			$backup = isset( $sub['__name'] ) ? (string) $sub['__name'] : '';
+			$out[ '' !== $backup ? $backup : (string) $sub['name'] ] = $sub_val;
 		}
 		return $out;
 	}

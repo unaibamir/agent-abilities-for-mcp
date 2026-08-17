@@ -782,7 +782,7 @@ function aafm_wc_attributes_by_slug( array $attributes ): array {
  *
  * Resending an attribute UNCHANGED is not refused. That is the ordinary read-modify-write turn --
  * read a product, change the price, send the body back -- and it has to stay lossless, so an echo
- * whose options match what the read reported is accepted and applied as a no-op by
+ * whose options are already the STORED set is accepted and applied as a no-op by
  * aafm_wc_build_product_attributes(). Only a genuine attempted CHANGE is refused, because that is
  * the one this field cannot carry out.
  *
@@ -792,16 +792,30 @@ function aafm_wc_attributes_by_slug( array $attributes ): array {
  * `value` is empty and the terms live in the object-term relationship), so a reordered echo is the
  * same set and refusing it would be pedantry.
  *
- * TWO collections, and which one answers which question is load-bearing. $stored decides whether a
- * slug is really a global attribute, because that is a fact about persistence and a view filter has
- * no business changing it. $shown decides only whether the caller echoed what they were given,
- * because that is a fact about the conversation. Reading "is this global" from $shown would let a
- * filter invent a global attribute; reading "did they echo" from $stored would refuse a caller for
- * sending back exactly what we printed.
+ * STORED IS THE ONLY REFERENCE A WRITE CAN BE JUDGED AGAINST, and getting that wrong is what R7B-1
+ * was. This comparison used to run against $shown, on the reasoning that $shown is what the caller
+ * echoed. It is, but that reasoning silently assumes they were echoing. When a display filter hides
+ * a stored term the two readings of the same request are indistinguishable from the request alone:
+ * the caller may be handing back the view unchanged, or asking for exactly that set and so for the
+ * hidden term's removal. Guessing "echo" turned the second one into a no-op against stored state,
+ * so the edit was dropped while the same filter shaped a response that looked like it had worked.
+ * Comparing against $stored guesses nothing: a request that already IS the stored set changes
+ * nothing whichever it meant, and everything else is refused.
  *
- * A slug that is global in $shown but absent from $stored is a filter's invention. There is no
+ * $shown still answers two narrower questions, both about the conversation rather than the state. A
+ * slug that is global in $shown but absent from $stored is a filter's invention, and there is no
  * honest write for it: creating it would promote a display artefact into stored state, so it is
- * refused with the rest.
+ * refused with the rest. And a refused set that matches $shown is refused with a different message,
+ * because "send its current options back unchanged" is useless advice to a caller who just did
+ * exactly that; they need to be told a filter is standing between them and the stored state.
+ *
+ * WHAT THIS DOES NOT COVER, so nobody claims more for it later. It is a guard on this one field, not
+ * on display filtering generally. The response to an accepted no-op is still built in view context,
+ * so a filtered product still reads back filtered here exactly as it does through wc-get-product;
+ * what can no longer happen is the combination that made that dangerous, a response confirming the
+ * set the caller ASKED for while storage holds something else, because any set that differs from
+ * stored is now refused before anything is written. Nothing here addresses WooCommerce's own
+ * view-context re-read during a genuine attribute save (see aafm_wc_apply_product_input()).
  *
  * THE RULE THIS FUNCTION IS AN INSTANCE OF, worth more than the function: a safety claim resting on
  * two functions agreeing needs a test on the AGREEMENT, not on each function. The previous version
@@ -818,6 +832,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 	$shown_by_slug  = aafm_wc_attributes_by_slug( $shown );
 
 	$refused = array();
+	$masked  = array();
 	foreach ( $sanitized as $item ) {
 		$name = (string) ( $item['name'] ?? '' );
 		if ( '' === $name ) {
@@ -838,17 +853,40 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 			continue; // Otherwise a custom attribute, or a genuinely new name: both editable here.
 		}
 
-		// Compare against what the caller was SHOWN, because that is what they echoed.
-		$reference = $shown_previous instanceof \WC_Product_Attribute ? $shown_previous : $stored_previous;
-		$sent      = array_map( 'strval', array_values( (array) ( $item['options'] ?? array() ) ) );
-		$current   = array_map( 'strval', array_values( (array) aafm_wc_attribute_shape( $reference )['options'] ) );
+		// Compare against what is STORED, because that is the only thing a write changes.
+		$sent           = array_map( 'strval', array_values( (array) ( $item['options'] ?? array() ) ) );
+		$stored_options = array_map( 'strval', array_values( (array) aafm_wc_attribute_shape( $stored_previous )['options'] ) );
 		sort( $sent );
-		sort( $current );
-		if ( $sent === $current ) {
-			continue; // Unchanged echo: allowed, and applied as a no-op against the STORED object.
+		sort( $stored_options );
+		if ( $sent === $stored_options ) {
+			continue; // Already the stored set: allowed, and applied as a no-op against it.
+		}
+
+		// Refused either way. Which message the caller gets depends on whether a display filter is
+		// what put them in this position, because that changes what they can usefully do next.
+		$reference = $shown_previous instanceof \WC_Product_Attribute ? $shown_previous : $stored_previous;
+		$displayed = array_map( 'strval', array_values( (array) aafm_wc_attribute_shape( $reference )['options'] ) );
+		sort( $displayed );
+		if ( $sent === $displayed ) {
+			$masked[] = $slug;
+			continue;
 		}
 
 		$refused[] = $slug;
+	}
+
+	// A masked attribute is reported first and on its own. Its cause is the surprising one and its
+	// remedy is different, and the whole request is refused either way, so a genuine change sent
+	// alongside one is simply refused again, with its own message, on the next attempt.
+	if ( array() !== $masked ) {
+		return new \WP_Error(
+			'aafm_wc_global_attribute_display_masked',
+			sprintf(
+				/* translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones. */
+				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. To change the attribute itself, use wc-update-product-attribute.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $masked )
+			)
+		);
 	}
 
 	if ( array() === $refused ) {

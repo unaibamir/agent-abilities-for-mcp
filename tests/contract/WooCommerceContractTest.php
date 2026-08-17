@@ -1436,6 +1436,123 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R7B-1: a display filter that HIDES a stored term must not turn a real edit into a false no-op.
+	 *
+	 * The sibling test above covers a filter that INVENTS an option, which the read path drops
+	 * because it resolves to no term, so shown and stored agree by the time they are compared. This
+	 * is the other direction and it is the dangerous one: hide one of two real terms and the caller
+	 * is shown a set that is a legitimate edit request in its own right. Sending it back used to be
+	 * classified as an unchanged echo, allowed, and applied as a no-op against stored state.
+	 *
+	 * Measured before the fix, through this exact path: no error, the response reported the single
+	 * displayed term, and `wp_get_object_terms()` still held BOTH. The caller asked for a removal,
+	 * was told it worked, and nothing changed. Note which assertion catches that -- the object-term
+	 * relationship. `_product_attributes` is byte-identical either way, because a taxonomy
+	 * attribute's terms do not live there, so a test that only diffed the meta row would pass
+	 * against the bug.
+	 *
+	 * The positive control in the same test is what stops this from being fixed by refusing every
+	 * filtered attribute: the caller who sends the STORED set is still accepted, filter and all,
+	 * because that request is a no-op whichever way it was meant.
+	 */
+	public function test_a_filter_hiding_a_stored_term_cannot_make_an_edit_a_silent_no_op(): void {
+		if ( ! class_exists( '\WC_Product_Variable' ) || ! function_exists( 'wc_create_attribute' ) ) {
+			$this->markTestSkipped( 'WooCommerce product/attribute API unavailable.' );
+		}
+
+		$fixture  = $this->seed_global_attribute_product( 'aafmmasked', 'AAFM Masked' );
+		$taxonomy = $fixture['taxonomy'];
+		$blue     = get_term_by( 'slug', 'blue', $taxonomy );
+		$this->assertInstanceOf( \WP_Term::class, $blue, 'The fixture must have created a blue term.' );
+
+		$before_terms = $this->attribute_term_count( $taxonomy );
+		$before_meta  = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+
+		// An extension that shows only one of the two stored terms. Every option it does show is a
+		// real, resolvable term, which is what makes the displayed set a plausible edit request.
+		$hide = static function ( $attributes ) use ( $taxonomy, $blue ) {
+			if ( isset( $attributes[ $taxonomy ] ) && $attributes[ $taxonomy ] instanceof \WC_Product_Attribute ) {
+				$clone = clone $attributes[ $taxonomy ];
+				$clone->set_options( array( (int) $blue->term_id ) );
+				$attributes[ $taxonomy ] = $clone;
+			}
+			return $attributes;
+		};
+		add_filter( 'woocommerce_product_get_attributes', $hide );
+
+		$read = aafm_exec_wc_get_product( array( 'product_id' => $fixture['product_id'] ) );
+		$this->assertIsArray( $read );
+		$shown = array_values( (array) ( (array) ( (array) $read['attributes'] )[ $taxonomy ] )['options'] );
+		$this->assertSame(
+			array( 'blue' ),
+			$shown,
+			'The filter must actually hide a term, or this test proves nothing.'
+		);
+
+		$masked = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => $taxonomy,
+						'options' => $shown,
+					),
+				),
+			)
+		);
+
+		// Positive control, with the filter still active: the stored set is still accepted.
+		$echo = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => $taxonomy,
+						'options' => array( 'blue', 'green' ),
+					),
+				),
+			)
+		);
+		remove_filter( 'woocommerce_product_get_attributes', $hide );
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$masked,
+			'A set that differs from stored state must be refused, not accepted and quietly dropped.'
+		);
+		$this->assertSame( 'aafm_wc_global_attribute_display_masked', $masked->get_error_code() );
+		$this->assertStringNotContainsString(
+			'unchanged',
+			$masked->get_error_message(),
+			'Telling this caller to resend the current options is the advice that just failed them.'
+		);
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$echo,
+			'A caller who sends the STORED set is asking for nothing and must still be accepted.'
+		);
+
+		clean_post_cache( $fixture['product_id'] );
+		$this->assertSame(
+			array( 'blue', 'green' ),
+			array_values( (array) wp_get_object_terms( $fixture['product_id'], $taxonomy, array( 'fields' => 'slugs' ) ) ),
+			'Both terms must still be related to the product. This is the assertion that goes red on the false no-op.'
+		);
+		$this->assertSame(
+			$before_terms,
+			$this->attribute_term_count( $taxonomy ),
+			'No term may be created on either request.'
+		);
+		$this->assertSame(
+			$before_meta,
+			get_post_meta( $fixture['product_id'], '_product_attributes', true ),
+			'The stored attribute row must be byte-identical; a refusal writes nothing and a no-op changes nothing.'
+		);
+
+		$this->cleanup_global_attribute_product( $fixture );
+	}
+
+	/**
 	 * Create a global attribute, its taxonomy, two terms, and a variable product declaring it.
 	 *
 	 * @param string $slug          Attribute slug (without the pa_ prefix).

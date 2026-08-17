@@ -63,7 +63,12 @@ jobs:
       - name: Install Composer dependencies
         # See the note in test.yml: ramsey/composer-install looks for Composer in a tool-cache path
         # setup-php no longer writes to, so it cannot find the Composer setup-php just installed.
-        run: composer install --no-interaction --no-progress --no-dev
+        # vendor/ is committed and its installed.json lists the dev packages while their
+        # directories are not tracked, so a plain install skips downloading them and then dies
+        # generating an autoloader that requires files that are not there. Install clean.
+        run: |
+          rm -rf vendor
+          composer install --no-interaction --no-progress --no-dev
 
       - name: Set up WordPress + Plugin Check
         run: |

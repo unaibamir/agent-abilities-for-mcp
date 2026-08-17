@@ -46,7 +46,14 @@ jobs:
         # setup-php no longer writes to, so every job that needed dependencies failed on
         # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
         # were already pinned to their newest releases, so there was no version to bump to.
-        run: composer install --no-interaction --no-progress
+        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
+        # dev packages too, while their directories are not tracked. A plain install therefore trusts
+        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
+        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
+        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
+        run: |
+          rm -rf vendor
+          composer install --no-interaction --no-progress
 
       - name: Run PHPCS
         id: phpcs
@@ -82,7 +89,14 @@ jobs:
         # setup-php no longer writes to, so every job that needed dependencies failed on
         # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
         # were already pinned to their newest releases, so there was no version to bump to.
-        run: composer install --no-interaction --no-progress
+        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
+        # dev packages too, while their directories are not tracked. A plain install therefore trusts
+        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
+        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
+        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
+        run: |
+          rm -rf vendor
+          composer install --no-interaction --no-progress
 
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --no-progress --error-format=checkstyle | cs2pr
@@ -230,7 +244,14 @@ jobs:
         # setup-php no longer writes to, so every job that needed dependencies failed on
         # "Unable to find Composer at /opt/hostedtoolcache/setup-php/tools/composer". Both actions
         # were already pinned to their newest releases, so there was no version to bump to.
-        run: composer install --no-interaction --no-progress
+        # vendor/ is committed for distribution, and its committed composer/installed.json lists the
+        # dev packages too, while their directories are not tracked. A plain install therefore trusts
+        # that state, skips downloading phpstan and friends, and then dies generating an autoloader
+        # that requires vendor/phpstan/phpstan/bootstrap.php. Discard the stale state and install
+        # clean. This only affects the CI checkout; the shipped tree comes from git archive.
+        run: |
+          rm -rf vendor
+          composer install --no-interaction --no-progress
 
       - name: Provision WordPress core + PHPUnit test suite
         run: |

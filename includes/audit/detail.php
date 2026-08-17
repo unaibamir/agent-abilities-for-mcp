@@ -7,7 +7,10 @@
  * the whole of it: an ability logs a detail only if it appears in aafm_activity_detail_map(), and
  * only the fields that map names, each of which must clear a type check that no free-form string
  * can pass. Default deny in both directions. There is deliberately no string or text field type,
- * and adding one is the change a reviewer should refuse. A failed call also records its WP_Error
+ * and adding one is the change a reviewer should refuse. The `keys` type is not that change and
+ * the distinction is worth stating: it reads the KEY NAMES of a structured argument, never a value
+ * from it, and renders a name only if the ability's own allowlist already contains it, so no input
+ * an agent can craft puts its own text in this column. A failed call also records its WP_Error
  * code, which is an identifier by construction for an ability THIS PLUGIN ships - every
  * `new WP_Error(` under includes/ takes a string literal - but not for a bridged one, whose code a
  * foreign plugin is free to build out of its own input, so bridged results are excluded from that
@@ -34,12 +37,21 @@ defined( 'ABSPATH' ) || exit;
  * A rejected field is dropped silently: detail is observability, never control flow, so a value
  * that fails its check must never turn into an error an agent sees.
  *
- * @param string            $type    One of id|key|slug|enum|count.
+ * @param string            $type    One of id|key|slug|enum|count|keys.
  * @param mixed             $value   The candidate value.
- * @param array<int,string> $allowed Allowed members, for the enum type only.
+ * @param array<int,string> $allowed Allowed members, for the enum and keys types only.
  * @return string|null The rendered value, or null when it fails its check.
  */
 function aafm_activity_detail_field( string $type, $value, array $allowed = array() ): ?string {
+	// The keys type is the only one whose candidate is a structured value, and it is answered
+	// before the guard below because that guard rejects every array outright - which is the right
+	// answer for all five scalar types and the wrong one for this. It reads KEY NAMES only, never
+	// a value from the array, and every name must be a member of $allowed. See
+	// aafm_activity_detail_key_list().
+	if ( 'keys' === $type ) {
+		return aafm_activity_detail_key_list( $value, $allowed );
+	}
+
 	if ( is_array( $value ) || is_object( $value ) || null === $value || is_bool( $value ) ) {
 		return null;
 	}
@@ -76,6 +88,69 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
 	}
 
 	return null;
+}
+
+/**
+ * Render the recognised KEY NAMES of a structured argument, or reject it.
+ *
+ * The one field type that reads a nested value, added for aafm/update-site-settings, whose whole
+ * payload is a `settings` object: without this the row recorded that someone changed site settings
+ * and could not say which, because arg_keys sees only the wrapper name `settings`.
+ *
+ * It does not weaken this file's central promise, and the reason is membership rather than
+ * character filtering. A name is rendered only if it is in $allowed, which for the one entry using
+ * this type resolves to aafm_allowed_site_settings() - the ability's OWN allowlist, chosen by the
+ * site and never by the caller. So the column can only ever hold one of the setting names that
+ * site permits. A caller who invents keys contributes nothing here, which is the property that
+ * makes this different from the free-form string type the header tells a reviewer to refuse: there
+ * is no input an agent can craft that lands its own text in this column.
+ *
+ * VALUES are deliberately never read, not even the two integer settings. Recording that
+ * blogname changed is the audit fact; recording what it changed to would put caller-supplied prose
+ * in the column, and blogname and blogdescription are free text that heads every RSS and Atom
+ * feed. Splitting the difference - values for the numeric settings, names for the rest - would
+ * make the column's guarantee depend on which setting was touched, and a guarantee with an
+ * exception in it is the kind this codebase has been bitten by before.
+ *
+ * The charset check is belt and braces on top of membership: aafm_allowed_site_settings() is
+ * filterable, so a site could add a name with punctuation in it, and this column has one job.
+ * Sorted so the same call always renders the same string regardless of the caller's key order, and
+ * capped with a trailing '~' on the same reasoning as the class-name cap below: a reader must be
+ * able to tell a complete list from one that was cut.
+ *
+ * @param mixed             $value   The candidate value, expected to be an array.
+ * @param array<int,string> $allowed The setting names that may be rendered.
+ * @return string|null The sorted, comma-separated names, or null when nothing recognisable is present.
+ */
+function aafm_activity_detail_key_list( $value, array $allowed ): ?string {
+	if ( ! is_array( $value ) || array() === $value || array() === $allowed ) {
+		return null;
+	}
+
+	$members = array_map( 'strval', $allowed );
+	$names   = array();
+
+	foreach ( array_keys( $value ) as $name ) {
+		// A list rather than a settings object yields integer keys; neither those nor an
+		// unrecognised name contributes anything.
+		if ( ! is_string( $name ) || ! in_array( $name, $members, true ) ) {
+			continue;
+		}
+		if ( ! preg_match( '/^[A-Za-z0-9_\-]{1,64}$/', $name ) ) {
+			continue;
+		}
+		$names[] = $name;
+	}
+
+	if ( array() === $names ) {
+		return null;
+	}
+
+	$names = array_values( array_unique( $names ) );
+	sort( $names );
+
+	$joined = implode( ', ', $names );
+	return mb_strlen( $joined ) > 128 ? mb_substr( $joined, 0, 128 ) . '~' : $joined;
 }
 
 /**
@@ -445,6 +520,27 @@ function aafm_activity_detail_map(): array {
 				),
 			),
 			'link'     => 'post',
+		),
+		// S-5, the same audit blindness away from the delete abilities. A successful
+		// update-site-settings call recorded detail:null, so the log showed that an agent had
+		// changed the site's settings and could not say which - arg_keys sees only the wrapper
+		// name `settings`, never what is inside it. Reproduced before being fixed: a call setting
+		// blogname and posts_per_page succeeded, both options really changed, and the row's detail
+		// was null.
+		//
+		// Names only, never values, and the enum is the ability's own allowlist rather than a
+		// literal list, so the two cannot drift and a site that filters the allowlist gets a
+		// truthful row. No link: a setting is not a post, user, term or order.
+		'aafm/update-site-settings'        => array(
+			/* translators: %s: comma-separated list of the site setting names that were changed. */
+			'template' => __( 'Updated site settings: %s', 'agent-abilities-for-mcp' ),
+			'args'     => array(
+				array(
+					'key'  => 'settings',
+					'type' => 'keys',
+					'enum' => 'aafm_allowed_site_settings',
+				),
+			),
 		),
 		'aafm/wc-delete-product-variation' => array(
 			/* translators: %s: the variation's numeric ID. */

@@ -244,7 +244,7 @@ final class DetailTest extends TestCase {
 			foreach ( $entry['args'] ?? array() as $field ) {
 				$this->assertContains(
 					$field['type'],
-					array( 'id', 'key', 'slug', 'enum', 'count' ),
+					array( 'id', 'key', 'slug', 'enum', 'count', 'keys' ),
 					"{$ability} declares field type '{$field['type']}', which is not identifier-safe."
 				);
 			}
@@ -877,6 +877,136 @@ final class DetailTest extends TestCase {
 				)
 			)
 		);
+	}
+
+	/**
+	 * The hardest case for the keys type, so it comes first: a name the caller invented must not
+	 * reach the column. Membership of the ability's own allowlist is what makes this type safe,
+	 * and a character filter alone would have let every one of these through.
+	 */
+	public function test_the_keys_type_drops_a_name_the_caller_invented(): void {
+		$allowed = array( 'blogname', 'posts_per_page' );
+
+		$this->assertSame(
+			'blogname',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'blogname'    => 'Whatever',
+					'admin_email' => 'attacker@example.com',
+					'siteurl'     => 'https://example.com',
+					'notasetting' => 1,
+				),
+				$allowed
+			)
+		);
+
+		// Nothing recognisable at all renders nothing, rather than an empty template.
+		$this->assertNull(
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'admin_email' => 'x',
+					'siteurl'     => 'y',
+				),
+				$allowed
+			)
+		);
+	}
+
+	/**
+	 * The second hardest case: a setting VALUE must never reach the column, which is the promise
+	 * this file's header makes about every field type.
+	 */
+	public function test_the_keys_type_never_renders_a_value(): void {
+		$rendered = aafm_activity_detail_field(
+			'keys',
+			array( 'blogname' => 'CONFIDENTIAL PAYLOAD' ),
+			array( 'blogname' )
+		);
+
+		$this->assertSame( 'blogname', $rendered );
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $rendered );
+	}
+
+	public function test_the_keys_type_sorts_so_caller_order_does_not_change_the_row(): void {
+		$allowed = array( 'blogname', 'blogdescription', 'posts_per_page' );
+
+		$this->assertSame(
+			'blogdescription, blogname, posts_per_page',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'posts_per_page'  => 5,
+					'blogname'        => 'a',
+					'blogdescription' => 'b',
+				),
+				$allowed
+			)
+		);
+		$this->assertSame(
+			'blogdescription, blogname, posts_per_page',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'blogname'        => 'a',
+					'blogdescription' => 'b',
+					'posts_per_page'  => 5,
+				),
+				$allowed
+			)
+		);
+	}
+
+	public function test_the_keys_type_rejects_everything_that_is_not_a_settings_object(): void {
+		$allowed = array( 'blogname' );
+
+		$this->assertNull( aafm_activity_detail_field( 'keys', 'blogname', $allowed ), 'A bare string is not a settings object.' );
+		$this->assertNull( aafm_activity_detail_field( 'keys', 42, $allowed ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', null, $allowed ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array(), $allowed ), 'An empty object changed nothing.' );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( 'blogname' ), $allowed ), 'A list has integer keys and names nothing.' );
+		// An empty allowlist fails closed, the same direction aafm_activity_detail_enum() fails.
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( 'blogname' => 'a' ), array() ) );
+	}
+
+	/**
+	 * The allowlist is filterable through aafm_allowed_site_settings(), so a site could introduce a
+	 * name this column has no business holding. Membership alone would admit it; the charset check
+	 * is why it does not.
+	 */
+	public function test_the_keys_type_still_filters_a_punctuated_allowlist_member(): void {
+		$this->assertNull(
+			aafm_activity_detail_field( 'keys', array( 'a name; DROP' => 'x' ), array( 'a name; DROP' ) )
+		);
+	}
+
+	/**
+	 * S-5, end to end on the real call path. Before this, the row said an agent had changed site
+	 * settings and could not say which: detail was null and arg_keys held only the wrapper name.
+	 */
+	public function test_update_site_settings_records_which_settings_changed(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/update-site-settings' ) );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'CONFIDENTIAL PAYLOAD',
+					'posts_per_page' => 7,
+				),
+			)
+		);
+		$this->assertIsArray( $result, 'update-site-settings returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'CONFIDENTIAL PAYLOAD', get_option( 'blogname' ), 'The write must really have happened, or this asserts nothing.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( 'Updated site settings: blogname, posts_per_page', $row['detail'] );
+		// The wrapper is all arg_keys ever saw, which is why the detail had to carry the names.
+		$this->assertSame( 'settings', (string) $row['arg_keys'] );
+		$this->assertRowIsFreeOfTheValue( $row );
 	}
 
 	public function test_wc_delete_product_detail_renders_the_template(): void {

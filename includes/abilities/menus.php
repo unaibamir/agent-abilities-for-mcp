@@ -292,10 +292,25 @@ function aafm_args_list_menu_items(): array {
  * directly, so the list is language-agnostic and works the same with or without WPML. An unknown
  * or empty menu yields an empty items list.
  *
- * get_objects_in_term() applies no post_status filter, whereas wp_get_nav_menu_items() defaulted to
- * post_status => 'publish'. We restore that filter here so the returned SET matches the pre-fix
- * behaviour exactly on a non-WPML site (published items only, drafts excluded) while keeping the
- * language-agnostic resolution that is the actual WPML fix.
+ * Resolving the items ourselves also means core's own two filters have to be reapplied by hand, and
+ * both are:
+ *
+ *   1. get_objects_in_term() applies no post_status filter, whereas wp_get_nav_menu_items() defaults
+ *      to post_status => 'publish'. Restored below, so drafts stay excluded.
+ *   2. wp_get_nav_menu_items() drops every item wp_setup_nav_menu_item() marked _invalid - an item
+ *      whose target no longer resolves, most commonly because the linked post was trashed or deleted
+ *      after the item was created (nav-menu.php, _is_valid_nav_menu_item()). Without this the ability
+ *      answers with links the site will not render, which is the same lie the create path goes to
+ *      real lengths to avoid. Restored below.
+ *
+ * The exact bound on that second filter: core applies it only when ! is_admin(), keeping invalid
+ * items visible on the wp-admin Menus screen so they can be removed there. This ability applies it
+ * unconditionally, because a read served over MCP should not return a different set depending on
+ * which PHP entry point happened to invoke it. Two consequences worth knowing. The returned set
+ * equals what the site renders, which is the point. But an invalid item is no longer DISCOVERABLE
+ * here, so an agent cannot learn its id from this ability in order to clean it up - delete-menu-item
+ * still removes it by id, and wp-admin still shows it. The contiguous 1..N `order` is numbered over
+ * the returned set, so skipped items leave no gap.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -313,11 +328,17 @@ function aafm_exec_list_menu_items( array $input ): array {
 			continue;
 		}
 		// Publish-only parity with the old wp_get_nav_menu_items() default: skip any item that is not
-		// published so the returned list is byte-identical to the pre-fix behaviour.
+		// published so drafts stay out of the returned list.
 		if ( 'publish' !== $post->post_status ) {
 			continue;
 		}
-		$decorated[] = wp_setup_nav_menu_item( $post );
+		$item = wp_setup_nav_menu_item( $post );
+		// Same parity for core's other filter: an item core marked _invalid is one the site will not
+		// render, so returning it would report a menu entry that does not exist to a visitor.
+		if ( ! empty( $item->_invalid ) ) {
+			continue;
+		}
+		$decorated[] = $item;
 	}
 
 	// usort() only became stable in PHP 8.0. Programmatic nav menus commonly carry menu_order 0

@@ -598,6 +598,75 @@ function aafm_acf_rekey_row_to_names( array $row, array $def ) {
 }
 
 /**
+ * Reduce a re-keyed stored value to just the shape the caller actually sent, so the write-verify
+ * compares what was asked for and not what ACF materialises around it.
+ *
+ * ACF hydrates a container row with EVERY sub-field its definition declares. Write a repeater row
+ * carrying three of its eight sub-fields - the ordinary way to write one - and get_field(..., false)
+ * hands back all eight, the five unsent ones filled with their defaults or an empty value. A
+ * whole-row comparison therefore differs by keys the caller never mentioned, and the write is
+ * reported as failed although it persisted exactly as asked. Measured against ACF Pro 6.x: a
+ * three-sub-field row read back with all eight keys present, `''` for text/wysiwyg/radio, `false`
+ * for select, the configured default for true_false.
+ *
+ * So project storage onto the sent shape: keep the keys and row indexes the caller supplied, drop
+ * the rest, then let the existing canonicalise-and-compare judge the result. The projection is
+ * deliberately conservative - anything that cannot be projected is handed back untouched, which
+ * leaves the mismatch (and the failure report) in place:
+ *
+ *   - A sent list keeps its exact length. A dropped or extra row is a real persistence failure and
+ *     must still be caught, so a length mismatch abandons the projection.
+ *   - A key the caller sent that storage does not hold at all abandons the projection, so a
+ *     sub-field that failed to persist still fails.
+ *   - A scalar is returned as-is, leaving the scalar verify path byte-for-byte as it was.
+ *
+ * @param mixed $stored The re-keyed stored value (already through aafm_acf_rekey_stored_to_names).
+ * @param mixed $sent   The sanitized value the caller asked to write.
+ * @return mixed The stored value reduced to $sent's shape, or $stored untouched when it cannot be.
+ */
+function aafm_acf_project_stored_onto_sent( $stored, $sent ) {
+	if ( ! is_array( $sent ) ) {
+		return $stored;
+	}
+
+	if ( array() === $sent ) {
+		// An emptied container. ACF stores "no rows" and then reads the whole field back as false -
+		// the same thing a never-written container reads back as - so the honest read-back of a
+		// successful clear is an empty value, not an empty array. Count any empty read-back as the
+		// match it is. A clear that did NOT happen still reads back its surviving rows, which is not
+		// empty, so it still mismatches and still reports failure.
+		$is_empty = ( false === $stored || null === $stored || '' === $stored || array() === $stored );
+		return $is_empty ? array() : $stored;
+	}
+
+	if ( ! is_array( $stored ) ) {
+		return $stored;
+	}
+
+	$out = array();
+	if ( array_keys( $sent ) === range( 0, count( $sent ) - 1 ) ) {
+		if ( count( $stored ) !== count( $sent ) ) {
+			return $stored;
+		}
+		foreach ( $sent as $index => $sub ) {
+			if ( ! array_key_exists( $index, $stored ) ) {
+				return $stored;
+			}
+			$out[ $index ] = aafm_acf_project_stored_onto_sent( $stored[ $index ], $sub );
+		}
+		return $out;
+	}
+
+	foreach ( $sent as $key => $sub ) {
+		if ( ! array_key_exists( $key, $stored ) ) {
+			return $stored;
+		}
+		$out[ $key ] = aafm_acf_project_stored_onto_sent( $stored[ $key ], $sub );
+	}
+	return $out;
+}
+
+/**
  * Canonicalise a value for the write-verify comparison: normalise scalar typing (via
  * aafm_acf_normalize_stored) and sort string-keyed maps by key so a container write the caller sent
  * in a different sub-field order still compares equal, while preserving numeric-indexed (row) order,
@@ -656,6 +725,21 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  * verified, so one field that fails to persist can never silently skip the fields that follow it. The
  * request reports failure only after all fields have been attempted.
  *
+ * What the verify GUARANTEES, stated exactly: for every value the caller sent - each field, each row
+ * index of a sent list, each sub-field key of a sent row, recursively - storage holds that value
+ * after the write, allowing for ACF's storage typing; and a sent list holds exactly as many rows as
+ * were sent. A value that differs, a sent key storage does not hold, or a row count that does not
+ * match, all still report failure.
+ *
+ * What it does NOT guarantee: sub-fields the caller did not send are not inspected at all. ACF
+ * materialises every declared sub-field of a container row on read-back, and those keys are
+ * deliberately excluded from the comparison (aafm_acf_project_stored_onto_sent) - without that
+ * exclusion an ordinary partial-row write reported failure on a write that had persisted correctly.
+ * So if ACF put something unexpected into a sub-field the caller never mentioned, this verify will
+ * not see it. Nor can it distinguish a container the caller emptied from one that was never written:
+ * ACF reads both back as false, so an empty read-back is accepted for a sent empty container. And it
+ * says nothing about fields absent from the caller's map.
+ *
  * @param array<string,mixed> $fields        Caller field map: field key => raw value.
  * @param int|string          $selector      ACF object selector.
  * @param string              $selector_type One of 'post', 'term', 'user' - selects the denylist.
@@ -713,8 +797,15 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			// value back to names and compare order-insensitively for string-keyed maps, so a container
 			// write that actually persisted is recognised as the success it is instead of always
 			// mismatching. Scalars and non-container values pass straight through both helpers.
+			// ACF then hydrates a container row with every sub-field its definition declares, so a
+			// partial row - three of eight sub-fields, the ordinary way to write one - reads back with
+			// all eight and a whole-row comparison fails on the five the caller never mentioned.
+			// Project storage onto the sent shape so the verify judges what was asked for. A missing
+			// key, a changed value, and a wrong row count all still mismatch; see the projection's
+			// own docblock for the exact bound.
 			$def     = function_exists( 'acf_get_field' ) ? acf_get_field( (string) $field_key ) : false;
 			$stored  = aafm_acf_rekey_stored_to_names( $stored, is_array( $def ) ? $def : null );
+			$stored  = aafm_acf_project_stored_onto_sent( $stored, $clean );
 			$as_read = wp_json_encode( aafm_acf_canonicalize_for_compare( $stored ) );
 			$as_sent = wp_json_encode( aafm_acf_canonicalize_for_compare( $clean ) );
 			if ( $as_read !== $as_sent ) {

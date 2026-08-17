@@ -79,9 +79,28 @@ class AcfStubStore {
 	 * KV behaviour every other ACF test relies on. This flag is what lets a test reproduce the
 	 * container re-keying that only real ACF Pro performs, which the verbatim stub hid.
 	 *
+	 * It ALSO materialises the row on read, because that is the other half of the same reality and
+	 * leaving it out hid a shipped bug for three releases. Real ACF hands back every sub-field its
+	 * definition declares, filling in the ones nobody wrote - measured against ACF Pro 6.x, a
+	 * three-sub-field row written into an eight-sub-field repeater reads back with all eight keys
+	 * present. Without that, the stub echoed the caller's partial row straight back, the read-back
+	 * verify compared equal, and the unit suite could not see a write that reported failure on a row
+	 * that had persisted correctly. See materialize_row().
+	 *
 	 * @var bool
 	 */
 	public static bool $model_container_rekeying = false;
+
+	/**
+	 * Raw read-back overrides, field key => the value the read must return regardless of what was
+	 * written. Models the case the write-verify exists for: storage came back holding something other
+	 * than what the caller asked to write - a row dropped, a sub-field missing, a value altered. The
+	 * write itself still "succeeds", so only the read-back can catch it, which makes these the rows
+	 * that prove a relaxed comparison has not turned a false failure into a false success.
+	 *
+	 * @var array<string,mixed>
+	 */
+	public static array $read_override = array();
 
 	/**
 	 * Clear all state.
@@ -96,6 +115,7 @@ class AcfStubStore {
 		self::$update_should_fail       = false;
 		self::$fail_keys                = array();
 		self::$model_container_rekeying = false;
+		self::$read_override            = array();
 	}
 
 	/**
@@ -193,6 +213,68 @@ class AcfStubStore {
 				$sub_val = self::rekey_container( $sub_val, $sub, $to_key );
 			}
 			$out[ $to_key ? (string) $sub['key'] : (string) $sub['name'] ] = $sub_val;
+		}
+		return $out;
+	}
+
+	/**
+	 * Fill in the sub-fields a container row does not carry, the way real ACF hydrates one.
+	 *
+	 * ACF reads a container row through its definition, not through whatever happens to be in the
+	 * database, so every declared sub-field comes back whether or not anyone wrote it. Keys are the
+	 * RAW (key-keyed) storage form, matching the value this store hands back when re-keying is
+	 * modelled. A sub-field's filler is its declared `default_value` when it has one, else the empty
+	 * string; a nested container with no rows fills as false. Measured on ACF Pro 6.x: text, wysiwyg
+	 * and radio sub-fields read back '', an unset select reads back false, a true_false reads back
+	 * its default. Declare `default_value` on a row's sub-field def to model any of those exactly.
+	 *
+	 * @param array<int|string,mixed> $row    One stored row (or a group's/clone's flat map), key-keyed.
+	 * @param array<string,mixed>     $def    The parent container definition.
+	 * @param string                  $layout The row's acf_fc_layout name ('' outside flex).
+	 * @return array<int|string,mixed> The row with every declared sub-field present.
+	 */
+	private static function materialize_row( array $row, array $def, string $layout ): array {
+		foreach ( self::sub_defs( $def, $layout ) as $sub ) {
+			if ( ! is_array( $sub ) || empty( $sub['key'] ) ) {
+				continue;
+			}
+			$sub_key = (string) $sub['key'];
+			if ( array_key_exists( $sub_key, $row ) ) {
+				// Present already: recurse so a nested container's own rows materialise too.
+				if ( in_array( (string) ( $sub['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
+					$row[ $sub_key ] = self::materialize_container( $row[ $sub_key ], $sub );
+				}
+				continue;
+			}
+			if ( in_array( (string) ( $sub['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
+				$row[ $sub_key ] = false;
+				continue;
+			}
+			$row[ $sub_key ] = array_key_exists( 'default_value', $sub ) ? $sub['default_value'] : '';
+		}
+		return $row;
+	}
+
+	/**
+	 * Materialise a whole container value: a flat map for a group/clone, every row for a
+	 * repeater/flexible-content field. A non-array value (an empty or never-written container, which
+	 * real ACF reads back as false) is handed back untouched.
+	 *
+	 * @param mixed               $value The container value, key-keyed.
+	 * @param array<string,mixed> $def   The container field definition.
+	 * @return mixed
+	 */
+	private static function materialize_container( $value, array $def ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		if ( in_array( (string) ( $def['type'] ?? '' ), array( 'group', 'clone' ), true ) ) {
+			return self::materialize_row( $value, $def, '' );
+		}
+		$out = array();
+		foreach ( $value as $i => $row ) {
+			$layout    = is_array( $row ) && isset( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+			$out[ $i ] = is_array( $row ) ? self::materialize_row( $row, $def, $layout ) : $row;
 		}
 		return $out;
 	}
@@ -331,10 +413,23 @@ class AcfStubStore {
 	public static function value( $field_key, $selector ) {
 		$bucket = self::bucket( $selector );
 		$key    = (string) $field_key;
-		if ( isset( self::$written[ $bucket ] ) && array_key_exists( $key, self::$written[ $bucket ] ) ) {
-			return self::$written[ $bucket ][ $key ];
+		if ( array_key_exists( $key, self::$read_override ) ) {
+			return self::$read_override[ $key ]; // Storage disagreeing with the write, verbatim.
 		}
-		return self::$seed_values[ $key ] ?? null;
+		if ( isset( self::$written[ $bucket ] ) && array_key_exists( $key, self::$written[ $bucket ] ) ) {
+			$raw = self::$written[ $bucket ][ $key ];
+		} else {
+			$raw = self::$seed_values[ $key ] ?? null;
+		}
+		// Real ACF hydrates a container through its definition, so every declared sub-field is present
+		// on the way out even when nobody wrote it. Model that alongside the re-keying.
+		if ( self::$model_container_rekeying ) {
+			$def = self::$field_defs[ $key ] ?? null;
+			if ( is_array( $def ) && in_array( (string) ( $def['type'] ?? '' ), self::CONTAINER_TYPES, true ) ) {
+				return self::materialize_container( $raw, $def );
+			}
+		}
+		return $raw;
 	}
 
 	/**

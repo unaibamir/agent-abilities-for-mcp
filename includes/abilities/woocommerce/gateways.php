@@ -154,20 +154,25 @@ function aafm_wc_redact_settings_deep( array $settings ): array {
  * arbitrary-string value domain as real data can always be forged by accident. The claim that it was
  * "impossible to mistake for a real configured value" was not achievable as written.
  *
- * So the authoritative answer moves outside the values: a list of dot-notation paths. A caller
- * comparing against that list can always tell a withheld field from one that merely happens to hold
- * that string, and the marker stays only as an in-place convenience for reading the object.
+ * So the authoritative answer moves outside the values: a list of paths. Each path is an ARRAY OF
+ * SEGMENTS, not a joined string, and the difference is the whole point. A settings key is an
+ * arbitrary array key, so it may contain any character including whatever separator a joined path
+ * would use; "a.b" then reads identically as the nested key b under a and as a single key literally
+ * named "a.b". Escaping the separator would work, but segments cannot be ambiguous in the first
+ * place: every element is exactly one key, verbatim, so a caller reconstructs the exact key by
+ * indexing rather than by parsing.
  *
  * @param array<int|string,mixed> $settings Raw settings array (may be nested).
- * @param string                  $prefix   Dot path of the parent, used by the recursion.
- * @return array{settings:array<int|string,mixed>,redacted:array<int,string>}
+ * @param array<int,string>       $prefix   Segments of the parent's path, used by the recursion.
+ * @return array{settings:array<int|string,mixed>,redacted:array<int,array<int,string>>}
  */
-function aafm_wc_redact_settings_report( array $settings, string $prefix = '' ): array {
+function aafm_wc_redact_settings_report( array $settings, array $prefix = array() ): array {
 	$redacted = array();
 	$paths    = array();
 
 	foreach ( $settings as $key => $value ) {
-		$path = '' === $prefix ? (string) $key : $prefix . '.' . (string) $key;
+		$path   = $prefix;
+		$path[] = (string) $key;
 
 		if ( aafm_wc_settings_key_is_secret( (string) $key ) ) {
 			$redacted[ $key ] = aafm_wc_redaction_marker();
@@ -196,8 +201,8 @@ function aafm_wc_redact_settings_report( array $settings, string $prefix = '' ):
  *
  * A convenience, NOT the signal. It cannot be the signal: this is an arbitrary string sitting in a
  * field whose real values are also arbitrary strings, so a setting genuinely holding "[redacted]" is
- * indistinguishable from a withheld one by value alone. The `redacted_fields` path list returned
- * alongside the settings is the authoritative answer; read that, not this.
+ * indistinguishable from a withheld one by value alone. The `redacted_fields` segment-path list
+ * returned alongside the settings is the authoritative answer; read that, not this.
  *
  * Deliberately not translated: an agent parses it, so it has to be stable across locales.
  *
@@ -297,9 +302,10 @@ function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): arra
 		// gateway) leaves $settings as an empty array, which encodes as [] rather than the {}
 		// the declared object schema needs.
 		'settings'        => array() === $settings ? (object) $settings : $settings,
-		// The AUTHORITATIVE list of what was withheld. The marker inside `settings` is a
-		// convenience; it lives in the same string domain as real values, so only this list can
-		// distinguish a withheld field from one that happens to hold that string.
+		// The AUTHORITATIVE list of what was withheld, each entry an array of key segments. The
+		// marker inside `settings` is a convenience; it lives in the same string domain as real
+		// values, so only this list can distinguish a withheld field from one that holds that
+		// string. Segments rather than a joined path because a key may contain any separator.
 		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
@@ -413,11 +419,7 @@ function aafm_args_wc_get_payment_gateway(): array {
 				'enabled'         => array( 'type' => 'boolean' ),
 				'order'           => array( 'type' => 'integer' ),
 				'settings'        => array( 'type' => 'object' ),
-				'redacted_fields' => array(
-					'type'        => 'array',
-					'items'       => array( 'type' => 'string' ),
-					'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
-				),
+				'redacted_fields' => aafm_wc_redacted_fields_schema(),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_payment_gateway',
@@ -504,11 +506,7 @@ function aafm_args_wc_update_payment_gateway(): array {
 				'enabled'         => array( 'type' => 'boolean' ),
 				'order'           => array( 'type' => 'integer' ),
 				'settings'        => array( 'type' => 'object' ),
-				'redacted_fields' => array(
-					'type'        => 'array',
-					'items'       => array( 'type' => 'string' ),
-					'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
-				),
+				'redacted_fields' => aafm_wc_redacted_fields_schema(),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_update_payment_gateway',

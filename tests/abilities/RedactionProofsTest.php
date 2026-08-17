@@ -411,15 +411,18 @@ final class RedactionProofsTest extends TestCase {
 		$this->assertSame( aafm_wc_redaction_marker(), $report['settings']['api_key'], 'The secret is withheld.' );
 
 		$this->assertNotContains(
-			'instructions',
+			array( 'instructions' ),
 			$report['redacted'],
 			'A benign field that merely holds the marker string must NOT be reported as withheld.'
 		);
-		$this->assertContains( 'api_key', $report['redacted'], 'The withheld field must be reported.' );
+		$this->assertContains( array( 'api_key' ), $report['redacted'], 'The withheld field must be reported.' );
 	}
 
 	/**
-	 * R6-6: nested withheld fields are reported by their full dot path, and benign siblings survive.
+	 * R6-6: nested withheld fields are reported by their full path, and benign siblings survive.
+	 *
+	 * Round 7: the path is an array of key SEGMENTS, not a joined string. A settings key may itself
+	 * contain a separator, so a joined path could not be parsed back to the exact key.
 	 */
 	public function test_nested_withheld_fields_are_reported_by_path(): void {
 		$report = aafm_wc_redact_settings_report(
@@ -433,7 +436,7 @@ final class RedactionProofsTest extends TestCase {
 			)
 		);
 
-		$this->assertSame( array( 'advanced.live.passcode' ), $report['redacted'] );
+		$this->assertSame( array( array( 'advanced', 'live', 'passcode' ) ), $report['redacted'] );
 		$this->assertSame( 'Live', $report['settings']['advanced']['live']['label'] );
 	}
 
@@ -474,12 +477,13 @@ final class RedactionProofsTest extends TestCase {
 	}
 
 	/**
-	 * The four tokens deliberately left broad stay broad.
+	 * The broad tokens stay broad.
 	 *
 	 * The tokens user and number predate this release, and a considered decision keeps them wide
-	 * rather than risk un-redacting something an earlier review relied on being caught. bank and login are new
-	 * but genuinely credential-flavoured. Pinned so a later narrowing has to argue with this test
-	 * rather than slip through as tidying.
+	 * rather than risk un-redacting something an earlier review relied on being caught. bank and
+	 * login stay broad too, but round 7 released the names whose last segment says how a thing is
+	 * displayed - see GatewayRedactionCorpusTest, which holds both directions of that carve-out.
+	 * Pinned here so a later narrowing has to argue with a test rather than slip through as tidying.
 	 *
 	 * @return void
 	 */

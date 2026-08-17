@@ -629,8 +629,8 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 		'method_title'    => $display_title,
 		'enabled'         => (string) $method->enabled,
 		'settings'        => $settings_out,
-		// Authoritative list of withheld paths; see the gateway shape for why the in-place marker
-		// cannot carry this on its own.
+		// Authoritative list of withheld paths, each an array of key segments; see the gateway
+		// shape for why the in-place marker cannot carry this on its own.
 		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
@@ -664,11 +664,7 @@ function aafm_wc_shipping_method_output_properties(): array {
 			'enum' => array( 'yes', 'no' ),
 		),
 		'settings'        => array( 'type' => 'object' ),
-		'redacted_fields' => array(
-			'type'        => 'array',
-			'items'       => array( 'type' => 'string' ),
-			'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. Authoritative: a real value may itself read "[redacted]", so check membership here rather than comparing values.',
-		),
+		'redacted_fields' => aafm_wc_redacted_fields_schema(),
 	);
 }
 

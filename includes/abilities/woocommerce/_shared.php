@@ -55,6 +55,28 @@ function aafm_wc_billing_email_error( array $input ): ?\WP_Error {
 }
 
 /**
+ * The declared output schema for the `redacted_fields` list, shared by every shape that carries it.
+ *
+ * Three shapes return this field - the two gateway abilities and the shipping-method properties,
+ * which themselves back both a get and a list ability - and the contract was written out three
+ * times. That is the shape of a fact that drifts, so it lives here once and each schema points at
+ * it. Lives in _shared.php rather than gateways.php because shipping.php is required BEFORE
+ * gateways.php; a shared helper belongs in the file that loads first.
+ *
+ * @return array<string,mixed>
+ */
+function aafm_wc_redacted_fields_schema(): array {
+	return array(
+		'type'        => 'array',
+		'items'       => array(
+			'type'  => 'array',
+			'items' => array( 'type' => 'string' ),
+		),
+		'description' => 'Which values inside `settings` were withheld as credentials. Each entry is a path given as an ARRAY OF KEY SEGMENTS from the root of `settings` - ["advanced","live","passcode"] means settings.advanced.live.passcode. Segments rather than a joined string because a settings key may itself contain any character, so a joined path could not be parsed back to the exact key. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
+	);
+}
+
+/**
  * Sanitize a price-like string to a bare decimal: strips every character except digits and the
  * decimal point (currency symbols, spaces, thousands separators, and any minus sign all go).
  *

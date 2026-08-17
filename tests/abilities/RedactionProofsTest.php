@@ -392,6 +392,106 @@ final class RedactionProofsTest extends TestCase {
 	 *
 	 * @return void
 	 */
+	/**
+	 * R6-6: a real setting whose value IS the marker must be distinguishable from a withheld one.
+	 *
+	 * The marker lives in the same arbitrary-string domain as real values, so it can always be
+	 * forged by accident. The out-of-band path list is the authoritative signal, and this is the
+	 * assertion that proves it: both fields read "[redacted]", and only one is listed.
+	 */
+	public function test_a_real_redacted_string_is_distinguishable_from_a_withheld_field(): void {
+		$report = aafm_wc_redact_settings_report(
+			array(
+				'instructions' => '[redacted]',
+				'api_key'      => 'live_sk_real_secret',
+			)
+		);
+
+		$this->assertSame( '[redacted]', $report['settings']['instructions'], 'The real value is returned untouched.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $report['settings']['api_key'], 'The secret is withheld.' );
+
+		$this->assertNotContains(
+			'instructions',
+			$report['redacted'],
+			'A benign field that merely holds the marker string must NOT be reported as withheld.'
+		);
+		$this->assertContains( 'api_key', $report['redacted'], 'The withheld field must be reported.' );
+	}
+
+	/**
+	 * R6-6: nested withheld fields are reported by their full dot path, and benign siblings survive.
+	 */
+	public function test_nested_withheld_fields_are_reported_by_path(): void {
+		$report = aafm_wc_redact_settings_report(
+			array(
+				'advanced' => array(
+					'live' => array(
+						'passcode' => 'x',
+						'label'    => 'Live',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( 'advanced.live.passcode' ), $report['redacted'] );
+		$this->assertSame( 'Live', $report['settings']['advanced']['live']['label'] );
+	}
+
+	/**
+	 * R6-6: the two tokens this release added and got wrong are compounds only now.
+	 *
+	 * The names security_badge and terminal_display are ordinary UI configuration. Marking them
+	 * withheld an answer the operator actually wanted. The credential compounds those tokens exist for must
+	 * still be caught, which is the other half of the assertion.
+	 *
+	 * @dataProvider provide_tightened_token_cases
+	 *
+	 * @param string $key    Settings key.
+	 * @param bool   $secret Whether it must be treated as a secret.
+	 */
+	public function test_security_and_terminal_are_compounds_only( string $key, bool $secret ): void {
+		$this->assertSame(
+			$secret,
+			aafm_wc_settings_key_is_secret( $key ),
+			sprintf( '"%s" should %sbe treated as a secret.', $key, $secret ? '' : 'NOT ' )
+		);
+	}
+
+	/**
+	 * Cases: benign UI names versus the credential compounds.
+	 *
+	 * @return array<string,array{0:string,1:bool}>
+	 */
+	public function provide_tightened_token_cases(): array {
+		return array(
+			'security_badge'   => array( 'security_badge', false ),
+			'terminal_display' => array( 'terminal_display', false ),
+			'security_code'    => array( 'security_code', true ),
+			'security_key'     => array( 'security_key', true ),
+			'terminal_id'      => array( 'terminal_id', true ),
+			'terminal_secret'  => array( 'terminal_secret', true ),
+		);
+	}
+
+	/**
+	 * The four tokens deliberately left broad stay broad.
+	 *
+	 * The tokens user and number predate this release, and a considered decision keeps them wide
+	 * rather than risk un-redacting something an earlier review relied on being caught. bank and login are new
+	 * but genuinely credential-flavoured. Pinned so a later narrowing has to argue with this test
+	 * rather than slip through as tidying.
+	 *
+	 * @return void
+	 */
+	public function test_the_deliberately_broad_tokens_stay_broad(): void {
+		foreach ( array( 'user', 'account_number', 'bank_details', 'x_login' ) as $key ) {
+			$this->assertTrue(
+				aafm_wc_settings_key_is_secret( $key ),
+				sprintf( '"%s" is deliberately caught; narrowing it trades a withheld benign value for a possible leak.', $key )
+			);
+		}
+	}
+
 	public function test_tightened_words_no_longer_match_mid_word(): void {
 		foreach ( array( 'monkey_bars', 'rapid_dispatch', 'design_template', 'author', 'capital_city_only' ) as $benign ) {
 			$this->assertFalse(

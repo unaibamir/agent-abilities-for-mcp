@@ -616,18 +616,22 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	// tax_status) lives in instance_settings, which is also where our own write path
 	// stores it. Reading the legacy bucket returned {"type":"class"} for flat_rate and []
 	// for free_shipping/local_pickup, so a write never showed up in its own response.
-	$settings = aafm_wc_redact_settings_deep( aafm_wc_instance_settings( $method ) );
+	$report   = aafm_wc_redact_settings_report( (array) aafm_wc_instance_settings( $method ) );
+	$settings = (array) $report['settings'];
 	// Cast only the empty case so it encodes to "{}" per the declared object schema; a
 	// populated map is already string-keyed, encodes correctly as-is, and stays
 	// array-accessible for callers (same convention as aafm_rich_post()'s terms/meta).
 	$settings_out = array() === $settings ? (object) array() : $settings;
 
 	return array(
-		'instance_id'  => (int) $method->instance_id,
-		'id'           => (string) $method->id,
-		'method_title' => $display_title,
-		'enabled'      => (string) $method->enabled,
-		'settings'     => $settings_out,
+		'instance_id'     => (int) $method->instance_id,
+		'id'              => (string) $method->id,
+		'method_title'    => $display_title,
+		'enabled'         => (string) $method->enabled,
+		'settings'        => $settings_out,
+		// Authoritative list of withheld paths; see the gateway shape for why the in-place marker
+		// cannot carry this on its own.
+		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
 
@@ -652,14 +656,19 @@ function aafm_wc_instance_settings( \WC_Shipping_Method $method ): array {
  */
 function aafm_wc_shipping_method_output_properties(): array {
 	return array(
-		'instance_id'  => array( 'type' => 'integer' ),
-		'id'           => array( 'type' => 'string' ),
-		'method_title' => array( 'type' => 'string' ),
-		'enabled'      => array(
+		'instance_id'     => array( 'type' => 'integer' ),
+		'id'              => array( 'type' => 'string' ),
+		'method_title'    => array( 'type' => 'string' ),
+		'enabled'         => array(
 			'type' => 'string',
 			'enum' => array( 'yes', 'no' ),
 		),
-		'settings'     => array( 'type' => 'object' ),
+		'settings'        => array( 'type' => 'object' ),
+		'redacted_fields' => array(
+			'type'        => 'array',
+			'items'       => array( 'type' => 'string' ),
+			'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. Authoritative: a real value may itself read "[redacted]", so check membership here rather than comparing values.',
+		),
 	);
 }
 

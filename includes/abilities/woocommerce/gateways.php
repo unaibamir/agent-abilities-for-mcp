@@ -142,22 +142,64 @@ function aafm_wc_gateways_registry_definitions(): array {
  * @return array<int|string,mixed>
  */
 function aafm_wc_redact_settings_deep( array $settings ): array {
-	$redacted = array();
-	foreach ( $settings as $key => $value ) {
-		if ( aafm_wc_settings_key_is_secret( (string) $key ) ) {
-			$redacted[ $key ] = aafm_wc_redaction_marker();
-			continue;
-		}
-		$redacted[ $key ] = is_array( $value ) ? aafm_wc_redact_settings_deep( $value ) : $value;
-	}
-	return $redacted;
+	$result = aafm_wc_redact_settings_report( $settings );
+	return (array) $result['settings'];
 }
 
 /**
- * The value a withheld setting is replaced with.
+ * Redact a settings array AND report, out of band, exactly which paths were withheld.
  *
- * Deliberately not translated and deliberately not empty: this is data an agent parses, so it has
- * to be stable across locales and impossible to mistake for a real configured value.
+ * The marker alone cannot carry this signal, and that is not a detail. A gateway may legitimately
+ * store the literal string "[redacted]" in a benign field, so a marker living inside the same
+ * arbitrary-string value domain as real data can always be forged by accident. The claim that it was
+ * "impossible to mistake for a real configured value" was not achievable as written.
+ *
+ * So the authoritative answer moves outside the values: a list of dot-notation paths. A caller
+ * comparing against that list can always tell a withheld field from one that merely happens to hold
+ * that string, and the marker stays only as an in-place convenience for reading the object.
+ *
+ * @param array<int|string,mixed> $settings Raw settings array (may be nested).
+ * @param string                  $prefix   Dot path of the parent, used by the recursion.
+ * @return array{settings:array<int|string,mixed>,redacted:array<int,string>}
+ */
+function aafm_wc_redact_settings_report( array $settings, string $prefix = '' ): array {
+	$redacted = array();
+	$paths    = array();
+
+	foreach ( $settings as $key => $value ) {
+		$path = '' === $prefix ? (string) $key : $prefix . '.' . (string) $key;
+
+		if ( aafm_wc_settings_key_is_secret( (string) $key ) ) {
+			$redacted[ $key ] = aafm_wc_redaction_marker();
+			$paths[]          = $path;
+			continue;
+		}
+
+		if ( is_array( $value ) ) {
+			$nested           = aafm_wc_redact_settings_report( $value, $path );
+			$redacted[ $key ] = $nested['settings'];
+			$paths            = array_merge( $paths, $nested['redacted'] );
+			continue;
+		}
+
+		$redacted[ $key ] = $value;
+	}
+
+	return array(
+		'settings' => $redacted,
+		'redacted' => $paths,
+	);
+}
+
+/**
+ * The value a withheld setting is replaced with, in place.
+ *
+ * A convenience, NOT the signal. It cannot be the signal: this is an arbitrary string sitting in a
+ * field whose real values are also arbitrary strings, so a setting genuinely holding "[redacted]" is
+ * indistinguishable from a withheld one by value alone. The `redacted_fields` path list returned
+ * alongside the settings is the authoritative answer; read that, not this.
+ *
+ * Deliberately not translated: an agent parses it, so it has to be stable across locales.
  *
  * @return string
  */
@@ -179,7 +221,17 @@ function aafm_wc_settings_key_is_secret( string $key ): bool {
 	// Longer alternatives first, so "certificate" is not shadowed by "cert". Bare "pass" is here
 	// rather than in the loose group for the reason the original docblock recorded: anchored, it
 	// catches a field literally named "pass" without matching every word containing those letters.
-	$anchored = 'certificate|cert|security|sort[_-]?code|terminal|username|user|account|merchant|license|number|login|routing|swift|iban|epin|seed|salt|bank|pass|auth|sign|key|api|pem|pin|cvv|cvc|bic|mid|iv';
+	// "security" and "terminal" are compounds ONLY. Bare, they marked security_badge and
+	// terminal_display, which are ordinary UI configuration. Both were added by this release, so
+	// narrowing them corrects this release's own overreach.
+	//
+	// Four tokens are deliberately LEFT broad: user, number, bank and login. user and number predate
+	// this release and the docblock records a considered decision to keep them wide rather than risk
+	// un-redacting something an earlier review relied on being caught; reversing that on a review's
+	// say-so trades a withheld benign value for a possible leak, and those are not symmetric. bank
+	// and login are new but genuinely credential-flavoured (bank_details, x_login). A future finding
+	// that says "narrow these" needs to engage with this paragraph, not just restate the breadth.
+	$anchored = 'certificate|cert|security[_-]?(?:code|key|token|question|answer|pin|hash)|sort[_-]?code|terminal[_-]?(?:id|key|password|token|secret)|username|user|account|merchant|license|number|login|routing|swift|iban|epin|seed|salt|bank|pass|auth|sign|key|api|pem|pin|cvv|cvc|bic|mid|iv';
 
 	return 1 === preg_match( '/(?:' . $loose . ')|(?:^|[_-])(?:' . $anchored . ')(?:[_-]|$)/i', $key );
 }
@@ -230,20 +282,25 @@ function aafm_wc_gateway_order( string $gateway_id, array $gateways ): int {
 function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): array {
 	// Strip credential fields before the settings ever reach the shape (denylist walk, see
 	// aafm_wc_redact_settings_deep()'s docblock above).
-	$settings = aafm_wc_redact_gateway_settings( $gateway->settings );
+	$report   = aafm_wc_redact_settings_report( (array) $gateway->settings );
+	$settings = (array) $report['settings'];
 	return array(
-		'id'          => $gateway->id,
+		'id'              => $gateway->id,
 		// WC_Payment_Gateway declares $title and $description with no default; a gateway that
 		// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
 		// back as null, which would violate the declared string schema. Cast defensively.
-		'title'       => (string) $gateway->title,
-		'description' => (string) $gateway->description,
-		'enabled'     => 'yes' === $gateway->enabled,
-		'order'       => $order,
+		'title'           => (string) $gateway->title,
+		'description'     => (string) $gateway->description,
+		'enabled'         => 'yes' === $gateway->enabled,
+		'order'           => $order,
 		// A gateway that never calls init_settings() (again, a non-conforming third-party
 		// gateway) leaves $settings as an empty array, which encodes as [] rather than the {}
 		// the declared object schema needs.
-		'settings'    => array() === $settings ? (object) $settings : $settings,
+		'settings'        => array() === $settings ? (object) $settings : $settings,
+		// The AUTHORITATIVE list of what was withheld. The marker inside `settings` is a
+		// convenience; it lives in the same string domain as real values, so only this list can
+		// distinguish a withheld field from one that happens to hold that string.
+		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
 
@@ -350,12 +407,17 @@ function aafm_args_wc_get_payment_gateway(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'id'          => array( 'type' => 'string' ),
-				'title'       => array( 'type' => 'string' ),
-				'description' => array( 'type' => 'string' ),
-				'enabled'     => array( 'type' => 'boolean' ),
-				'order'       => array( 'type' => 'integer' ),
-				'settings'    => array( 'type' => 'object' ),
+				'id'              => array( 'type' => 'string' ),
+				'title'           => array( 'type' => 'string' ),
+				'description'     => array( 'type' => 'string' ),
+				'enabled'         => array( 'type' => 'boolean' ),
+				'order'           => array( 'type' => 'integer' ),
+				'settings'        => array( 'type' => 'object' ),
+				'redacted_fields' => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_payment_gateway',
@@ -436,12 +498,17 @@ function aafm_args_wc_update_payment_gateway(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'id'          => array( 'type' => 'string' ),
-				'title'       => array( 'type' => 'string' ),
-				'description' => array( 'type' => 'string' ),
-				'enabled'     => array( 'type' => 'boolean' ),
-				'order'       => array( 'type' => 'integer' ),
-				'settings'    => array( 'type' => 'object' ),
+				'id'              => array( 'type' => 'string' ),
+				'title'           => array( 'type' => 'string' ),
+				'description'     => array( 'type' => 'string' ),
+				'enabled'         => array( 'type' => 'boolean' ),
+				'order'           => array( 'type' => 'integer' ),
+				'settings'        => array( 'type' => 'object' ),
+				'redacted_fields' => array(
+					'type'        => 'array',
+					'items'       => array( 'type' => 'string' ),
+					'description' => 'Dot-notation paths into `settings` whose values were withheld as credentials. This list is authoritative: a value inside `settings` may itself read "[redacted]" without having been withheld, so check membership here rather than comparing values.',
+				),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_update_payment_gateway',

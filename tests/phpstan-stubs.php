@@ -78,8 +78,14 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		public function get_image_id(): int {
 			return 0;
 		}
-		/** @return array<int|string,mixed> */
-		public function get_attributes(): array {
+		/**
+		 * Real WooCommerce takes $context = 'view' here, and view context runs
+		 * woocommerce_product_get_attributes. The write path passes 'edit' deliberately.
+		 *
+		 * @param string $context
+		 * @return array<int|string,mixed>
+		 */
+		public function get_attributes( $context = 'view' ): array {
 			return array();
 		}
 		/** @return int[] */

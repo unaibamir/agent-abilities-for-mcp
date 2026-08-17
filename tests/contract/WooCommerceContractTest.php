@@ -1363,6 +1363,79 @@ final class WooCommerceContractTest extends TestCase {
 	}
 
 	/**
+	 * R6-1: a DISPLAY filter on the attributes must never reach storage, and must never create a term.
+	 *
+	 * WC_Product::get_attributes() defaults to view context, which runs
+	 * woocommerce_product_get_attributes. Preserving that object on the unchanged-echo path carried
+	 * a display-only option into set_attributes(), and saving a taxonomy attribute routes through
+	 * WC_Product_Attribute::get_terms(), which resolves each option by NAME and calls
+	 * wp_insert_term() on a miss. Measured before the fix: an unchanged echo created a
+	 * "display-swatch" term out of a string no extension ever stored.
+	 *
+	 * The filter is what makes the term-count assertion able to go red. Without a phantom option in
+	 * the collection the count is trivially unchanged and the test proves nothing, which is the
+	 * shape a count assertion fails in. This one appends exactly one unresolvable string.
+	 *
+	 * Note the sibling round-trip test cannot catch this: its fixture has no filter, so its own
+	 * term-count assertion passes either way. That is why this is a separate test rather than an
+	 * extra assertion there.
+	 */
+	public function test_a_display_filter_on_attributes_never_reaches_storage(): void {
+		if ( ! class_exists( '\WC_Product_Variable' ) || ! function_exists( 'wc_create_attribute' ) ) {
+			$this->markTestSkipped( 'WooCommerce product/attribute API unavailable.' );
+		}
+
+		$fixture  = $this->seed_global_attribute_product( 'aafmdisplay', 'AAFM Display' );
+		$taxonomy = $fixture['taxonomy'];
+
+		$before_terms = $this->attribute_term_count( $taxonomy );
+		$before_meta  = get_post_meta( $fixture['product_id'], '_product_attributes', true );
+
+		// An extension that appends a display-only option corresponding to no term.
+		$display = static function ( $attributes ) use ( $taxonomy ) {
+			if ( isset( $attributes[ $taxonomy ] ) && $attributes[ $taxonomy ] instanceof \WC_Product_Attribute ) {
+				$clone = clone $attributes[ $taxonomy ];
+				$clone->set_options( array_merge( (array) $clone->get_options(), array( 'Display swatch' ) ) );
+				$attributes[ $taxonomy ] = $clone;
+			}
+			return $attributes;
+		};
+		add_filter( 'woocommerce_product_get_attributes', $display );
+
+		$read = aafm_exec_wc_get_product( array( 'product_id' => $fixture['product_id'] ) );
+		$row  = (array) ( (array) $read['attributes'] )[ $taxonomy ];
+
+		$result = aafm_exec_wc_update_product(
+			array(
+				'product_id' => $fixture['product_id'],
+				'attributes' => array(
+					array(
+						'name'    => (string) $row['name'],
+						'options' => array_values( (array) $row['options'] ),
+					),
+				),
+			)
+		);
+		remove_filter( 'woocommerce_product_get_attributes', $display );
+
+		$this->assertNotInstanceOf( \WP_Error::class, $result, 'The echo matches what was shown, so it must still be accepted.' );
+
+		clean_post_cache( $fixture['product_id'] );
+		$this->assertSame(
+			$before_terms,
+			$this->attribute_term_count( $taxonomy ),
+			'No term may be created. A display-only option reached get_terms() and was inserted as a real term.'
+		);
+		$this->assertSame(
+			$before_meta,
+			get_post_meta( $fixture['product_id'], '_product_attributes', true ),
+			'The stored attribute row must be byte-identical; a display filter is not state.'
+		);
+
+		$this->cleanup_global_attribute_product( $fixture );
+	}
+
+	/**
 	 * Create a global attribute, its taxonomy, two terms, and a variable product declaring it.
 	 *
 	 * @param string $slug          Attribute slug (without the pa_ prefix).

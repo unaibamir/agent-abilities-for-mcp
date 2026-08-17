@@ -650,6 +650,24 @@ final class DetailTest extends TestCase {
 	private const PROBE_ID = '424242';
 
 	/**
+	 * The smallest number of permanent-delete abilities this plugin may ship without someone
+	 * deciding to.
+	 *
+	 * Not a roster and not a restatement of the classification: membership still comes entirely
+	 * from aafm_permanent_delete_abilities(), so a fourteenth ability is still caught without
+	 * touching this number. It is a floor on CARDINALITY, and it exists because both completeness
+	 * guards below iterate a derived set, and an empty derived set makes an "I found no problems"
+	 * assertion pass for the emptiest possible reason. Mutation testing confirmed that: with the
+	 * classification stubbed to array(), the guard reported OK on ONE assertion instead of its
+	 * usual forty-three, so the whole test could have been deleted with the suite still green.
+	 *
+	 * Lowering it is a deliberate, security-relevant act rather than routine maintenance. Dropping
+	 * an ability off the permanent side also softens what the OAuth consent screen promises a site
+	 * owner about recoverability, which is the false reassurance B-08 exists to prevent.
+	 */
+	private const PERMANENT_DELETE_FLOOR = 13;
+
+	/**
 	 * B2-07's completeness guard, and the guard whose absence let nine of thirteen permanent
 	 * deletes ship writing detail:null.
 	 *
@@ -677,9 +695,29 @@ final class DetailTest extends TestCase {
 	 * pin the exact rendered string for each.
 	 */
 	public function test_every_permanent_delete_ability_records_an_identifier(): void {
-		$blind = array();
+		$destructive = aafm_permanent_delete_abilities();
 
-		foreach ( aafm_permanent_delete_abilities() as $ability ) {
+		// Prove the derived set is real BEFORE trusting a "nothing was blind" result, because an
+		// empty set makes that result meaningless. The canary is a spot check against a derivation
+		// that returns something non-empty but wrong; the floor catches silent shrinkage.
+		$this->assertContains(
+			'aafm/delete-post',
+			$destructive,
+			'The permanent-delete classification no longer contains a known permanent delete, so '
+			. 'nothing below is being checked against the set it claims to check.'
+		);
+		$this->assertGreaterThanOrEqual(
+			self::PERMANENT_DELETE_FLOOR,
+			count( $destructive ),
+			'The permanent-delete classification has shrunk. If that was deliberate, lower '
+			. 'PERMANENT_DELETE_FLOOR in the same change and say why.'
+		);
+
+		$blind   = array();
+		$checked = 0;
+
+		foreach ( $destructive as $ability ) {
+			++$checked;
 			$detail = aafm_build_activity_detail( $ability, $this->identifier_probe_args( $ability ) );
 			if ( null === $detail || false === strpos( $detail, self::PROBE_ID ) ) {
 				$blind[] = $ability;
@@ -693,6 +731,9 @@ final class DetailTest extends TestCase {
 			. 'destroyed. Add an entry to aafm_activity_detail_map(), reading the key from that '
 			. "ability's own args builder rather than from a sibling."
 		);
+		// The loop really ran over the whole set. Without this, an early return or a filtered
+		// iteration could leave $blind empty for a reason that has nothing to do with the mapping.
+		$this->assertSame( count( $destructive ), $checked, 'The guard did not examine every derived ability.' );
 	}
 
 	/**
@@ -705,11 +746,13 @@ final class DetailTest extends TestCase {
 	 */
 	public function test_every_mapped_arg_key_is_a_real_property_of_its_ability(): void {
 		$unknown = array();
+		$checked = 0;
 
 		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
 			if ( empty( $entry['args'] ) ) {
 				continue;
 			}
+			++$checked;
 			$properties = $this->ability_input_properties( $ability );
 			foreach ( $entry['args'] as $field ) {
 				$key = (string) $field['key'];
@@ -718,6 +761,15 @@ final class DetailTest extends TestCase {
 				}
 			}
 		}
+
+		// Same anti-vacuity guard as the test above, for the same measured reason: an empty map
+		// makes "no unknown keys" true for the emptiest possible reason. Every permanent delete is
+		// an arg-bearing entry, so the floor is the same number.
+		$this->assertGreaterThanOrEqual(
+			self::PERMANENT_DELETE_FLOOR,
+			$checked,
+			'Too few arg-bearing map entries were examined for this result to mean anything.'
+		);
 
 		$this->assertSame(
 			array(),
@@ -769,7 +821,9 @@ final class DetailTest extends TestCase {
 
 		$spec       = call_user_func( $builder );
 		$properties = $spec['input_schema']['properties'] ?? array();
-		$this->assertIsArray( $properties, $ability . ' declares no input schema properties array.' );
+		// assertIsArray() passes on an empty array, which would hand the callers a probe with no
+		// arguments in it and turn a real check into a hollow one.
+		$this->assertNotEmpty( $properties, $ability . ' declares no input schema properties.' );
 
 		return $properties;
 	}

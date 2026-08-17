@@ -508,6 +508,25 @@ function aafm_acf_normalize_stored( $value ) {
  * and this plugin's documented shape key rows by sub-field name. This map lets the verify translate
  * one into the other.
  *
+ * The name it maps to is `_name`, the ORIGINAL name, falling back to `name`. For every ordinary
+ * sub-field the two are the same string (acf-field-functions.php acf_validate_field sets
+ * `_name = name`), so this is a no-op for repeater, group and flexible-content sub-fields. It is
+ * not a no-op for a clone field with "Prefix Field Names" turned on, which is the one place ACF
+ * makes them diverge, and getting it wrong there reported failure on writes that had persisted:
+ *
+ *   - `acf_clone_field()` rewrites the cloned sub-field's `name` to `<clone>_<name>` but leaves
+ *     `_name` alone unless the clone also displays seamlessly (class-acf-field-clone.php:291-302).
+ *   - The clone's `update_value()` accepts the sent value under `key` or `_name`, and NOTHING else
+ *     (:551-561), so `_name` is the only name form a write can arrive under.
+ *   - Measured on ACF Pro 6.8.7, cloning a sub-field named `email` into a clone named `contact`:
+ *     display=group + prefix -> name `contact_email`, `_name` `email`; seamless + prefix -> both
+ *     `contact_email`; either display without prefix -> both `email`. Mapping to `_name` is right
+ *     in all four, mapping to `name` is wrong in the first.
+ *
+ * Mapping to the name ACF itself accepts is also what keeps this function agreeing with
+ * aafm_acf_sub_field_def(), which already resolves a sub-field by `_name` as well as by `name`.
+ * The two halves disagreeing is what produced the bug.
+ *
  * @param array<string,mixed> $def The container field definition (from acf_get_field()).
  * @return array<string,string> key => name.
  */
@@ -516,7 +535,8 @@ function aafm_acf_sub_field_key_map( array $def ): array {
 	$collect = static function ( $sub_fields ) use ( &$map ): void {
 		foreach ( (array) $sub_fields as $sub ) {
 			if ( is_array( $sub ) && ! empty( $sub['key'] ) && isset( $sub['name'] ) && '' !== (string) $sub['name'] ) {
-				$map[ (string) $sub['key'] ] = (string) $sub['name'];
+				$alias                       = isset( $sub['_name'] ) ? (string) $sub['_name'] : '';
+				$map[ (string) $sub['key'] ] = '' !== $alias ? $alias : (string) $sub['name'];
 			}
 		}
 	};

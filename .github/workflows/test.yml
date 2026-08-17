@@ -40,6 +40,35 @@ jobs:
           coverage: none
           tools: cs2pr
 
+      # Ask Composer where its download cache lives rather than hardcoding ~/.cache/composer,
+      # which is only correct until something sets COMPOSER_HOME or COMPOSER_CACHE_DIR.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      # Restore Composer's download cache so these jobs stop re-fetching every dependency from
+      # codeload on every run. Dropping ramsey/composer-install to get past the missing-Composer
+      # fault also dropped its caching, and the runs that followed tripped GitHub's rate limit -
+      # every error was HTTP 429 from codeload.github.com, on jobs that had nothing to do with
+      # each other. This is the replacement.
+      #
+      # The key carries the PHP version so the phpunit matrix legs do not fight over one entry,
+      # and a dev/no-dev scope because plugin-check.yml installs with --no-dev: cache entries are
+      # immutable, so if that job won the race under a shared key, every dev job would restore a
+      # cache with no dev packages in it and re-download them forever.
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          # A lock change degrades to the newest cache for the same scope and PHP version. The
+          # second fallback borrows another PHP leg's cache, which is safe because composer.lock
+          # pins one package set and dist archives do not vary by PHP version - that is what warms
+          # a cold matrix instead of running twelve simultaneous cold downloads.
+          key: ${{ runner.os }}-composer-dev-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-dev-php8.3-
+            ${{ runner.os }}-composer-dev-
+
       - name: Install Composer dependencies
         # Called directly rather than through ramsey/composer-install. setup-php installs Composer
         # and puts it on PATH, but that action resolves it from a fixed tool-cache path that
@@ -82,6 +111,20 @@ jobs:
           php-version: '8.3'
           coverage: none
           tools: cs2pr
+
+      # See the note in the PHPCS job above for why the cache is here and how the key is scoped.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-dev-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-dev-php8.3-
+            ${{ runner.os }}-composer-dev-
 
       - name: Install Composer dependencies
         # Called directly rather than through ramsey/composer-install. setup-php installs Composer
@@ -237,6 +280,21 @@ jobs:
           extensions: mysqli, zip, gd
           coverage: none
           tools: composer:v2
+
+      # See the note in the PHPCS job above. This is the job the PHP version in the key exists
+      # for: twelve legs run at once, and without it they would all race for the same entry.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-dev-php${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-dev-php${{ matrix.php }}-
+            ${{ runner.os }}-composer-dev-
 
       - name: Install Composer dependencies
         # Called directly rather than through ramsey/composer-install. setup-php installs Composer

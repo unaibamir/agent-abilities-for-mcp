@@ -59,6 +59,27 @@ jobs:
           coverage: none
           tools: wp-cli
 
+      # See the note in test.yml's PHPCS job: the direct composer install lost
+      # ramsey/composer-install's caching, and the runs after that change died on HTTP 429 from
+      # codeload.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          # Scoped "nodev" because the install below is --no-dev and would otherwise save a cache
+          # missing every dev package under a key the dev jobs also use. Cache entries cannot be
+          # overwritten, so that would stick. The last fallback reads a dev cache on purpose: it
+          # is a superset of what this job needs, so it is a full hit rather than a cold download.
+          key: ${{ runner.os }}-composer-nodev-php8.3-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-nodev-php8.3-
+            ${{ runner.os }}-composer-nodev-
+            ${{ runner.os }}-composer-dev-php8.3-
+
       # Production dependencies only - this is what ships to wordpress.org.
       - name: Install Composer dependencies
         # See the note in test.yml: ramsey/composer-install looks for Composer in a tool-cache path

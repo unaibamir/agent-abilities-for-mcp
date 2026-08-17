@@ -64,6 +64,23 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # See the note in test.yml's PHPCS job: the direct composer install lost
+      # ramsey/composer-install's caching, and the runs after that change died on HTTP 429 from
+      # codeload. Same key shape as test.yml on purpose, so this workflow and that one warm each
+      # other's cache instead of each keeping its own copy.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-dev-php${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-dev-php${{ matrix.php }}-
+            ${{ runner.os }}-composer-dev-
+
       - name: Install Composer dependencies
         # See the note in test.yml: ramsey/composer-install looks for Composer in a tool-cache path
         # setup-php no longer writes to, so it cannot find the Composer setup-php just installed.

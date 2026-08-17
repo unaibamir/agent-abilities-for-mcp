@@ -1214,23 +1214,73 @@ function aafm_perm_replace_in_post( array $input ): bool {
 }
 
 /**
- * A comparable signature of every NON-text token in a document.
+ * The HTML elements core's tokenizer consumes whole, body and all, as a single token.
  *
- * Built on WP_HTML_Tag_Processor, core's HTML5 tokenizer, rather than a hand-rolled scan. The
- * hand-rolled version was wrong in both directions at once (R6-2, R6-4): it ended a tag at the
- * first `>` even inside a quoted attribute value, so an attribute-break-out splice read as body
- * text and went through, and it treated a literal `<` in prose as a tag opener, so ordinary
- * sentences were refused. Quote state, raw-text elements and the rule that `<` only opens a tag
- * when followed by a letter are exactly the things a spec tokenizer already gets right.
+ * These are the raw-text and RCDATA elements. Their contents are never markup and never child
+ * tokens, so the body is reported as the element's own modifiable text rather than as separate
+ * text tokens between an opener and a closer - the element has no closer in the token stream at
+ * all. Anything spliced into one of these bodies is therefore invisible to a comparison that only
+ * looks at tag names and attributes, which is exactly how the round-7 regression happened.
  *
- * Text tokens are deliberately excluded: changing text is the entire point of this ability. What
- * must survive a replacement untouched is the structure around the text, which is everything else.
+ * Taken from the switch in WP_HTML_Tag_Processor that decides which openers to skip past whole,
+ * not from memory. Verified identical on the WP 6.9 floor and on 7.0. NOSCRIPT is deliberately
+ * absent: the Tag Processor parses with the scripting flag disabled and descends into it, so its
+ * contents arrive as ordinary tokens and are already covered.
+ *
+ * @return array<string,true> Uppercase tag names, as a lookup.
+ */
+function aafm_html_raw_text_elements(): array {
+	return array(
+		'SCRIPT'   => true,
+		'TEXTAREA' => true,
+		'TITLE'    => true,
+		'IFRAME'   => true,
+		'NOEMBED'  => true,
+		'NOFRAMES' => true,
+		'STYLE'    => true,
+		'XMP'      => true,
+	);
+}
+
+/**
+ * The attributes of the token a processor is parked on, in a stable comparable form.
+ *
+ * @param WP_HTML_Tag_Processor $processor Processor parked on a tag token.
+ * @return string
+ */
+function aafm_html_token_attributes( WP_HTML_Tag_Processor $processor ): string {
+	$attributes = array();
+	foreach ( (array) $processor->get_attribute_names_with_prefix( '' ) as $name ) {
+		$value = $processor->get_attribute( (string) $name );
+		// A boolean attribute reads as true; keep the distinction from an empty string.
+		$attributes[ (string) $name ] = is_string( $value ) ? $value : wp_json_encode( $value );
+	}
+	ksort( $attributes );
+
+	return (string) wp_json_encode( $attributes );
+}
+
+/**
+ * A flat signature of every NON-text token, from core's tokenizer.
+ *
+ * Built on WP_HTML_Tag_Processor, which reads the byte stream without building a tree. That makes
+ * it the half that never gives up: it has no unsupported markup, and it still reports tokens a
+ * tree builder would discard. What it cannot do is tell an SVG or MathML subtree from HTML, which
+ * is what the tree signature is for.
+ *
+ * Raw-text bodies are part of this signature. Leaving them out is what let a splice inside a
+ * SCRIPT or TITLE body through while every gate stayed green.
+ *
+ * Text tokens are excluded: changing text is the entire point of this ability. What must survive
+ * untouched is the structure around the text, which is everything else.
  *
  * @param string $html Document to tokenize.
- * @return array<int,string> One opaque comparable string per non-text token, in document order.
+ * @return array<int,string>|null One comparable string per non-text token, or null if the document
+ *                                ran out mid-token and the tokenizer could not finish it.
  */
-function aafm_html_structure_signature( string $html ): array {
+function aafm_html_flat_signature( string $html ): ?array {
 	$processor = new WP_HTML_Tag_Processor( $html );
+	$raw_text  = aafm_html_raw_text_elements();
 	$signature = array();
 
 	while ( $processor->next_token() ) {
@@ -1240,16 +1290,17 @@ function aafm_html_structure_signature( string $html ): array {
 		}
 
 		if ( '#tag' === $type ) {
-			$attributes = array();
-			foreach ( (array) $processor->get_attribute_names_with_prefix( '' ) as $name ) {
-				$value = $processor->get_attribute( (string) $name );
-				// A boolean attribute reads as true; keep the distinction from an empty string.
-				$attributes[ (string) $name ] = is_string( $value ) ? $value : wp_json_encode( $value );
-			}
-			ksort( $attributes );
-			$signature[] = 'tag:' . strtolower( (string) $processor->get_tag() )
+			$name  = strtoupper( (string) $processor->get_tag() );
+			$entry = 'tag:' . strtolower( $name )
 				. ':' . ( $processor->is_tag_closer() ? 'close' : 'open' )
-				. ':' . (string) wp_json_encode( $attributes );
+				. ':' . ( $processor->has_self_closing_flag() ? 'self' : '-' )
+				. ':' . aafm_html_token_attributes( $processor );
+
+			if ( isset( $raw_text[ $name ] ) && ! $processor->is_tag_closer() ) {
+				$entry .= ':body=' . $processor->get_modifiable_text();
+			}
+
+			$signature[] = $entry;
 			continue;
 		}
 
@@ -1258,42 +1309,112 @@ function aafm_html_structure_signature( string $html ): array {
 		$signature[] = $type . ':' . $processor->get_modifiable_text();
 	}
 
-	return $signature;
+	// A document that ran out mid-token yields a truncated signature. Refuse rather than compare
+	// two truncations against each other.
+	return $processor->paused_at_incomplete_token() ? null : $signature;
 }
 
 /**
- * Whether $before's structure survives intact in $after, given what was inserted and how often.
+ * A tree-aware signature of every NON-text token, from core's full HTML processor.
  *
- * Two conditions, and both are needed. Every token of the original must still be present, in
- * order, so no existing tag or comment was altered or destroyed. And the total must have grown by
- * exactly what the replacement itself contributes, so nothing NEW appeared that the replacement
- * did not legitimately bring - which is what catches a splice that ends a comment early and turns
- * the rest of it into live markup, even though every original token is technically still there.
+ * WP_HTML_Processor implements the actual parsing algorithm, so unlike the tag processor it knows
+ * which namespace each token is in and preserves the self-closing flag where the spec honours it.
  *
- * @param string $before   Original content.
- * @param string $after    Content with the replacement applied.
- * @param string $inserted The sanitized replacement text, as inserted.
- * @param int    $times    How many occurrences were replaced.
- * @return bool
+ * Be precise about what that is worth here, because it is easy to claim too much for it. Measured
+ * against the corpus by removing this half and re-running, what it uniquely contributes is the
+ * ability to REFUSE: it knows when core declines to parse a document, and the flat tokenizer never
+ * does. The foreign-content rows are already caught by exact equality on the flat signature, and
+ * removing the namespace or the self-closing flag from this signature currently fails no row at
+ * all. Both are kept because they close a named gap by construction and cost nothing, not because
+ * anything here has been shown to depend on them.
+ *
+ * It is used ALONGSIDE the flat signature, not instead of it. The tree builder discards tokens the
+ * flat pass still reports, and the flat pass catches a document that runs out mid-token, which
+ * this one does not. Each covers the other's blind spot and a replacement must satisfy both.
+ *
+ * @param string $html Document to parse.
+ * @return array<int,string>|null One comparable string per non-text token, or null if the document
+ *                                could not be parsed with confidence.
  */
-function aafm_replacement_preserves_structure( string $before, string $after, string $inserted, int $times ): bool {
-	$original = aafm_html_structure_signature( $before );
-	$result   = aafm_html_structure_signature( $after );
-	$added    = aafm_html_structure_signature( $inserted );
-
-	if ( count( $result ) !== count( $original ) + ( $times * count( $added ) ) ) {
-		return false;
+function aafm_html_tree_signature( string $html ): ?array {
+	$processor = WP_HTML_Processor::create_fragment( $html );
+	if ( ! $processor instanceof WP_HTML_Processor ) {
+		return null;
 	}
 
-	// Subsequence check: walk the result once, consuming the original in order.
-	$next = 0;
-	foreach ( $result as $token ) {
-		if ( $next < count( $original ) && $original[ $next ] === $token ) {
-			++$next;
+	$raw_text  = aafm_html_raw_text_elements();
+	$signature = array();
+
+	while ( $processor->next_token() ) {
+		$type = (string) $processor->get_token_type();
+		if ( '#text' === $type ) {
+			continue;
+		}
+
+		$namespace = $processor->get_namespace();
+
+		if ( '#tag' === $type ) {
+			$name  = strtoupper( (string) $processor->get_tag() );
+			$entry = 'tag:' . $namespace . ':' . strtolower( $name )
+				. ':' . ( $processor->is_tag_closer() ? 'close' : 'open' )
+				. ':' . ( $processor->has_self_closing_flag() ? 'self' : '-' )
+				. ':d' . $processor->get_current_depth()
+				. ':' . aafm_html_token_attributes( $processor );
+
+			if ( 'html' === $namespace && isset( $raw_text[ $name ] ) && ! $processor->is_tag_closer() ) {
+				$entry .= ':body=' . $processor->get_modifiable_text();
+			}
+
+			$signature[] = $entry;
+			continue;
+		}
+
+		$signature[] = $type . ':' . $namespace . ':' . $processor->get_modifiable_text();
+	}
+
+	// Core raises WP_HTML_Unsupported_Exception internally for markup it declines to parse and
+	// surfaces it here. A partial parse is not evidence of anything, so refuse instead.
+	return null === $processor->get_last_error() ? $signature : null;
+}
+
+/**
+ * Whether the replacement changed the document's text and nothing else.
+ *
+ * The test is exact equality of both signatures, not an accounting of what grew. That is the
+ * whole point of this revision. The previous version allowed the token count to grow by whatever
+ * the replacement contributed and then checked that the original tokens still appeared in order -
+ * which is satisfiable by a splice that breaks out of an SVG subtree and re-opens it, because the
+ * originals do all survive and the arithmetic balances. Demanding that the structure be IDENTICAL
+ * removes that whole class of evasion, and it makes the property provable by reading the function
+ * rather than by reasoning about what an attacker can make the numbers add up to.
+ *
+ * The cost is deliberate and worth stating: a replacement that introduces markup is now refused
+ * even when the markup is harmless and survives wp_kses_post(), because introducing markup is by
+ * definition a structural change. Text goes in, text comes out; a caller that wants to change
+ * markup should edit the content directly. That trade buys a guard whose guarantee can be checked
+ * rather than argued.
+ *
+ * FAILS CLOSED. If either tokenizer cannot finish the document with confidence, this returns false
+ * and the replacement is refused. A false alarm costs the caller one rejected edit; a false
+ * reassurance on this surface stores markup that runs in every visitor's browser.
+ *
+ * @param string $before Original content.
+ * @param string $after  Content with the replacement applied.
+ * @return bool
+ */
+function aafm_replacement_preserves_structure( string $before, string $after ): bool {
+	$builders = array( 'aafm_html_flat_signature', 'aafm_html_tree_signature' );
+
+	foreach ( $builders as $builder ) {
+		$original = $builder( $before );
+		$result   = $builder( $after );
+
+		if ( null === $original || null === $result || $original !== $result ) {
+			return false;
 		}
 	}
 
-	return count( $original ) === $next;
+	return true;
 }
 
 /**
@@ -1315,20 +1436,31 @@ function aafm_replacement_preserves_structure( string $before, string $after, st
  * while reporting success (B8, fixed in 687ff62). The invariant that no byte outside the replaced
  * spans changes is not negotiable.
  *
- * So the assembled document is VALIDATED rather than rewritten. Both versions are tokenized with
- * WP_HTML_Tag_Processor and their non-text structure compared: every tag and comment of the
- * original must survive unchanged, and the total may only grow by what the replacement itself
- * contributes. A replacement in ordinary body text satisfies both and goes through with the rest
- * of the post untouched; one that lands in a tag, a comment, or a raw-text body does not, and is
- * refused. Refusing keeps both properties above; rewriting would have to give one of them up.
+ * So the assembled document is VALIDATED rather than rewritten. Both versions are parsed twice -
+ * once flatly with WP_HTML_Tag_Processor, once as a tree with WP_HTML_Processor - and their
+ * non-text structure must come out IDENTICAL. A replacement in ordinary body text satisfies that
+ * and goes through with the rest of the post untouched. One that lands in a tag, an attribute, a
+ * comment, a raw-text body or a foreign-content subtree does not, and neither does one that brings
+ * markup of its own. Refusing keeps both properties above; rewriting would have to give one up.
  *
- * The comparison is built on core's tokenizer rather than a hand-rolled scan because the first
+ * The comparison is built on core's parsers rather than a hand-rolled scan because the first
  * attempt at this was wrong in BOTH directions at once (R6-2, R6-4). It ended a tag at the first
  * `>` even inside a quoted attribute value, so the break-out splice still went through, and it
  * treated a literal `<` in prose as a tag opener, so ordinary sentences were refused. An evadable
  * refusal is worse than no refusal, because it reads as protection. Quote state, raw-text elements
- * and the rule that `<` only opens a tag before a letter are exactly what a spec tokenizer already
+ * and the rule that `<` only opens a tag before a letter are exactly what a spec parser already
  * handles.
+ *
+ * What the second attempt got wrong is worth naming too, because it was subtler and the commit
+ * message asserted the opposite. Core's tokenizer does isolate a SCRIPT or TITLE body correctly;
+ * the signature built on top of it then threw that body away, so a splice inside one was invisible.
+ * Being right about the library says nothing about the code calling it. The corpus in
+ * tests/abilities/ReplaceInPostStructureTest.php now pins every case any version of this guard has
+ * ever protected, so the next rewrite fails loudly instead of silently dropping one.
+ *
+ * The guard's bound, stated rather than implied: it decides whether the document's STRUCTURE
+ * changed. It does not judge whether the resulting text is safe wherever that text ends up, and it
+ * makes no claim about content this ability never touches.
  *
  * Note what this does NOT rely on: core's kses save filters. kses_init() attaches
  * wp_filter_post_kses only for users who LACK unfiltered_html, and on a standard single site both
@@ -1371,10 +1503,10 @@ function aafm_exec_replace_in_post( array $input ) {
 	// Compare the assembled document's structure against the original before writing anything.
 	// Sanitizing the inserted text cannot settle this on its own: it is judged in isolation, where
 	// it is harmless, and only becomes an attribute break-out once spliced (B2-02).
-	if ( ! aafm_replacement_preserves_structure( $content, $new, $inserted, $replacements ) ) {
+	if ( ! aafm_replacement_preserves_structure( $content, $new ) ) {
 		return new WP_Error(
 			'aafm_replace_inside_markup',
-			__( 'That replacement would change the structure of the page rather than its text - the search term sits inside a tag, an HTML comment, or a script or style block. Nothing was changed. Choose a search term that appears in the visible body text, or edit the block directly.', 'agent-abilities-for-mcp' ),
+			__( 'That replacement would change the structure of the page rather than its text. Either the search term sits inside markup - a tag, an attribute value, an HTML comment, a script or style block, or an SVG - or the replacement introduces markup of its own. Nothing was changed. Choose a search term that appears in the visible body text and a replacement that is plain text, or edit the content directly.', 'agent-abilities-for-mcp' ),
 			array( 'status' => 400 )
 		);
 	}

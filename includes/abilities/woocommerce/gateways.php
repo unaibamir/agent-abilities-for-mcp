@@ -230,15 +230,60 @@ function aafm_wc_settings_key_is_secret( string $key ): bool {
 	// terminal_display, which are ordinary UI configuration. Both were added by this release, so
 	// narrowing them corrects this release's own overreach.
 	//
-	// Four tokens are deliberately LEFT broad: user, number, bank and login. user and number predate
-	// this release and the docblock records a considered decision to keep them wide rather than risk
-	// un-redacting something an earlier review relied on being caught; reversing that on a review's
-	// say-so trades a withheld benign value for a possible leak, and those are not symmetric. bank
-	// and login are new but genuinely credential-flavoured (bank_details, x_login). A future finding
-	// that says "narrow these" needs to engage with this paragraph, not just restate the breadth.
-	$anchored = 'certificate|cert|security[_-]?(?:code|key|token|question|answer|pin|hash)|sort[_-]?code|terminal[_-]?(?:id|key|password|token|secret)|username|user|account|merchant|license|number|login|routing|swift|iban|epin|seed|salt|bank|pass|auth|sign|key|api|pem|pin|cvv|cvc|bic|mid|iv';
+	// Two tokens are deliberately LEFT broad: user and number. They predate this release and the
+	// docblock records a considered decision to keep them wide rather than risk un-redacting
+	// something an earlier review relied on being caught; reversing that on a review's say-so trades
+	// a withheld benign value for a possible leak, and those are not symmetric.
+	$anchored = 'certificate|cert|security[_-]?(?:code|key|token|question|answer|pin|hash)|sort[_-]?code|terminal[_-]?(?:id|key|password|token|secret)|username|user|account|merchant|license|number|routing|swift|iban|epin|seed|salt|pass|auth|sign|key|api|pem|pin|cvv|cvc|bic|mid|iv';
 
-	return 1 === preg_match( '/(?:' . $loose . ')|(?:^|[_-])(?:' . $anchored . ')(?:[_-]|$)/i', $key );
+	if ( 1 === preg_match( '/(?:' . $loose . ')|(?:^|[_-])(?:' . $anchored . ')(?:[_-]|$)/i', $key ) ) {
+		return true;
+	}
+
+	// "bank" and "login" are SOFT: broad enough to be worth keeping, broad enough to be wrong on
+	// their own. This release added them to catch bank_details and x_login, two of the names the
+	// traffic sim read back in full off a real gateway, and they do still catch those. But bare they
+	// also marked bank_logo and login_button_label, which are a picture and a piece of button copy.
+	//
+	// The carve-out below is SUBTRACTIVE rather than a narrowing, and that is deliberate. Rewriting
+	// these into a compound list the way security and terminal were rewritten would flip the default
+	// from "caught unless proven benign" to "missed unless enumerated", and every credential-shaped
+	// bank_* or *_login name nobody thought to enumerate would go out in full. Instead the tokens
+	// stay as broad as they were, and a name is released ONLY when its last segment is one of a
+	// closed list of words that name how a thing is displayed, not what it holds. So bank_details,
+	// bank_account, bank_iban, x_login and login_token are all still withheld, unchanged, and only
+	// bank_logo, login_button_label and their kind come back.
+	//
+	// The strong pattern above is checked FIRST and wins outright, so a key that carries any other
+	// credential signal is never released by this rule: bank_account_label is still withheld, on
+	// "account". This rule can only ever release a name whose sole credential signal was bank or
+	// login. A future finding that wants these narrowed further needs to argue with this paragraph.
+	if ( 1 !== preg_match( '/(?:^|[_-])(?:bank|login)(?:[_-]|$)/i', $key ) ) {
+		return false;
+	}
+
+	return ! aafm_wc_settings_key_is_presentational( $key );
+}
+
+/**
+ * Whether a key's last segment names how something is DISPLAYED rather than what it holds.
+ *
+ * Only consulted for the two soft tokens in aafm_wc_settings_key_is_secret(); see the reasoning
+ * there for why the release is subtractive and why this list is closed rather than open-ended.
+ *
+ * The list is deliberately short and deliberately excludes url and link. A logo is a picture and a
+ * label is a caption, so neither can be a credential whatever the surrounding words say; a URL can
+ * be, because a secret carried in a query string is the one failure mode the whole name denylist is
+ * already documented as unable to see. Releasing login_url would put a name-shaped hole exactly
+ * where the value-shaped hole already is.
+ *
+ * @param string $key Settings key.
+ * @return bool
+ */
+function aafm_wc_settings_key_is_presentational( string $key ): bool {
+	$suffixes = 'logo|label|title|subtitle|text|icon|image|img|heading|subheading|description|desc|placeholder|tooltip|caption|banner|badge|colou?r|position|display|style|class|width|height|message|note|notice|instructions|button|alt|enabled|visible|visibility';
+
+	return 1 === preg_match( '/(?:^|[_-])(?:' . $suffixes . ')$/i', $key );
 }
 
 /**

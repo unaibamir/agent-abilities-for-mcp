@@ -6,11 +6,11 @@
  * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
  *
  * Same reasoning as the replace-in-post corpus next door, learned from the same failure. This
- * denylist has been rewritten repeatedly: widened when a traffic sim read real bank fields back off
- * a live gateway, narrowed when the widening started marking ordinary UI configuration, and
- * re-shaped when the withheld-fields report turned out not to be parseable. Each pass pinned only
- * what the round in front of it had found, so a later pass could drop an earlier one's coverage with
- * every gate green.
+ * denylist has now been rewritten three times: widened when a traffic sim read real bank fields
+ * back off a live gateway, narrowed when the widening started marking a logo and a piece of button
+ * copy, and re-shaped when the withheld-fields report turned out not to be parseable. Each pass
+ * pinned only what the round in front of it had found, so a later pass could drop an earlier one's
+ * coverage with every gate green.
  *
  * This file is the union instead. Each row carries where it came from, and the rows are pinned
  * together so the next rewrite fails loudly rather than quietly shipping a hole. If you are here to
@@ -126,6 +126,46 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			// -----------------------------------------------------------------
 			'R6-6 broad user'                 => array( 'user', true ),
 			'R6-6 broad account_number'       => array( 'account_number', true ),
+
+			// -----------------------------------------------------------------
+			// ROUND 7, this fix. bank and login stayed broad but stopped
+			// marking names whose last segment says how a thing is displayed.
+			// The two the reviewer named come first.
+			// -----------------------------------------------------------------
+			'R7 bank_logo released'           => array( 'bank_logo', false ),
+			'R7 login_button_label released'  => array( 'login_button_label', false ),
+			'R7 bank_title released'          => array( 'bank_title', false ),
+			'R7 login_logo released'          => array( 'login_logo', false ),
+			'R7 bank_transfer_note released'  => array( 'bank_transfer_note', false ),
+			'R7 login_message released'       => array( 'login_message', false ),
+
+			// The other direction, and the reason the fix is subtractive rather
+			// than a narrowing: everything bank and login were ADDED to catch
+			// must still be caught. bank_details and x_login are the two the sim
+			// proved leak; the rest are the credential-shaped neighbours a
+			// compound rewrite would have had to enumerate and would have missed.
+			'R7 bank_details still held'      => array( 'bank_details', true ),
+			'R7 x_login still held'           => array( 'x_login', true ),
+			'R7 bare bank held'               => array( 'bank', true ),
+			'R7 bare login held'              => array( 'login', true ),
+			'R7 bank_account held'            => array( 'bank_account', true ),
+			'R7 bank_iban held'               => array( 'bank_iban', true ),
+			'R7 bank_reference held'          => array( 'bank_reference', true ),
+			'R7 bank_name held'               => array( 'bank_name', true ),
+			'R7 login_token held'             => array( 'login_token', true ),
+			'R7 login_id held'                => array( 'login_id', true ),
+
+			// A URL is deliberately NOT presentational. A secret carried in a
+			// query string is the one failure mode the name denylist is already
+			// documented as unable to see, so releasing a login URL by name
+			// would open a hole exactly where the value-shaped hole already is.
+			'R7 login_url held'               => array( 'login_url', true ),
+			'R7 login_redirect held'          => array( 'login_redirect', true ),
+
+			// The carve-out fires ONLY when bank or login was the sole
+			// credential signal. Any other signal wins outright.
+			'R7 bank_logo_password held'      => array( 'bank_logo_password', true ),
+			'R7 bank_account_label held'      => array( 'bank_account_label', true ),
 
 			// -----------------------------------------------------------------
 			// Ordinary configuration, from the shapes these abilities actually

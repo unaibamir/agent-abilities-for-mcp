@@ -90,7 +90,7 @@ function aafm_activity_detail_field( string $type, $value, array $allowed = arra
  */
 function aafm_activity_detail_map(): array {
 	return array(
-		'aafm/update-post-meta'          => array(
+		'aafm/update-post-meta'            => array(
 			/* translators: 1: meta key name. 2: the post's numeric ID. */
 			'template' => __( 'Updated meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -105,7 +105,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/create-page'               => array(
+		'aafm/create-page'                 => array(
 			/* translators: %s: the new page's numeric ID. */
 			'template'  => __( 'Created page #%s', 'agent-abilities-for-mcp' ),
 			// Dotted path, NOT a bare 'id'. aafm_insert_post() returns
@@ -115,7 +115,7 @@ function aafm_activity_detail_map(): array {
 			'result_id' => 'post.id',
 			'link'      => 'post',
 		),
-		'aafm/wc-update-order-status'    => array(
+		'aafm/wc-update-order-status'      => array(
 			/* translators: 1: the order's numeric ID. 2: the new order status key. */
 			'template' => __( 'Set order #%1$s to status `%2$s`', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -136,7 +136,7 @@ function aafm_activity_detail_map(): array {
 		// name is verified against the ability's own args builder (or, for a result entry, the
 		// executor's actual return shape) before being written here - see LESSONS-LEARNED and
 		// DetailTest for why a guessed key is a silent-wrong-answer bug, not a loud one.
-		'aafm/create-post'               => array(
+		'aafm/create-post'                 => array(
 			/* translators: %s: the new post's numeric ID. */
 			'template'  => __( 'Created post #%s', 'agent-abilities-for-mcp' ),
 			// aafm_exec_create_post() delegates to aafm_insert_post(), which returns
@@ -144,13 +144,13 @@ function aafm_activity_detail_map(): array {
 			'result_id' => 'post.id',
 			'link'      => 'post',
 		),
-		'aafm/create-draft'              => array(
+		'aafm/create-draft'                => array(
 			/* translators: %s: the new draft's numeric ID. */
 			'template'  => __( 'Created draft #%s', 'agent-abilities-for-mcp' ),
 			'result_id' => 'post.id',
 			'link'      => 'post',
 		),
-		'aafm/create-user'               => array(
+		'aafm/create-user'                 => array(
 			/* translators: %s: the new user's numeric ID. */
 			'template'  => __( 'Created user #%s', 'agent-abilities-for-mcp' ),
 			// aafm_exec_create_user() returns array( 'user' => aafm_rich_user( … ) ), never a
@@ -158,7 +158,7 @@ function aafm_activity_detail_map(): array {
 			'result_id' => 'user.id',
 			'link'      => 'user',
 		),
-		'aafm/delete-post-meta'          => array(
+		'aafm/delete-post-meta'            => array(
 			/* translators: 1: meta key name. 2: the post's numeric ID. */
 			'template' => __( 'Deleted meta key `%1$s` on post #%2$s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -173,7 +173,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/update-post'               => array(
+		'aafm/update-post'                 => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Updated post #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -184,7 +184,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/update-page'               => array(
+		'aafm/update-page'                 => array(
 			/* translators: %s: the page's numeric ID. */
 			'template' => __( 'Updated page #%s', 'agent-abilities-for-mcp' ),
 			// aafm_args_update_page() names its own id field page_id, not post_id - confirmed
@@ -198,7 +198,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/delete-post'               => array(
+		'aafm/delete-post'                 => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Deleted post #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -209,7 +209,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/delete-page'               => array(
+		'aafm/delete-page'                 => array(
 			/* translators: %s: the page's numeric ID. */
 			'template' => __( 'Deleted page #%s', 'agent-abilities-for-mcp' ),
 			// page_id, not post_id - see aafm/update-page above.
@@ -221,7 +221,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/trash-post'                => array(
+		'aafm/trash-post'                  => array(
 			/* translators: %s: the post's numeric ID. */
 			'template' => __( 'Trashed post #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -232,7 +232,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/trash-page'                => array(
+		'aafm/trash-page'                  => array(
 			/* translators: %s: the page's numeric ID. */
 			'template' => __( 'Trashed page #%s', 'agent-abilities-for-mcp' ),
 			// page_id, not post_id - see aafm/update-page above.
@@ -244,7 +244,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/restore-revision'          => array(
+		'aafm/restore-revision'            => array(
 			/* translators: %s: the restored revision's numeric ID. */
 			'template' => __( 'Restored revision #%s', 'agent-abilities-for-mcp' ),
 			// revision_id, confirmed against aafm_args_restore_revision(). post_id is also a
@@ -258,7 +258,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
-		'aafm/update-user'               => array(
+		'aafm/update-user'                 => array(
 			/* translators: %s: the user's numeric ID. */
 			'template' => __( 'Updated user #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -269,7 +269,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'user',
 		),
-		'aafm/delete-user'               => array(
+		'aafm/delete-user'                 => array(
 			/* translators: %s: the user's numeric ID. */
 			'template' => __( 'Deleted user #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -280,7 +280,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'user',
 		),
-		'aafm/wc-create-order-refund'    => array(
+		'aafm/wc-create-order-refund'      => array(
 			/* translators: %s: the order's numeric ID. */
 			'template' => __( 'Refunded order #%s', 'agent-abilities-for-mcp' ),
 			'args'     => array(
@@ -291,7 +291,7 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'order',
 		),
-		'aafm/wc-update-payment-gateway' => array(
+		'aafm/wc-update-payment-gateway'   => array(
 			/* translators: %s: the payment gateway's id slug. */
 			'template' => __( 'Updated payment gateway `%s`', 'agent-abilities-for-mcp' ),
 			// gateway_id is a slug ("bacs", "cod", "stripe"), never a numeric id, so it takes the
@@ -302,6 +302,163 @@ function aafm_activity_detail_map(): array {
 					'type' => 'key',
 				),
 			),
+		),
+
+		// The permanent-delete sweep (B2-07). Every ability named by
+		// aafm_permanent_delete_abilities() in helpers.php now records the identifier of what it
+		// destroyed. Before this, nine of those thirteen logged detail:null, so the audit trail
+		// could say that an agent permanently deleted something but never say WHAT - measured on
+		// the wire, where aafm/delete-comment resolved to detail:null carrying only the key NAME
+		// "comment_id", one second after aafm/delete-post resolved to "Deleted post #355935".
+		// That asymmetry shipped in 1.6.3 and earlier.
+		//
+		// The completeness of this block is not maintained by hand. DetailTest's
+		// test_every_permanent_delete_ability_records_an_identifier derives the destructive set
+		// from aafm_permanent_delete_abilities() at runtime and fails the moment a fourteenth
+		// permanent delete is added without an entry here, which is the guard whose absence let
+		// the original nine ship.
+		//
+		// Every key below is read from that ability's OWN args builder, never inferred from a
+		// sibling. aafm/delete-user-meta is why that rule is written down: it names its parameter
+		// `key` where the post-meta abilities name theirs `meta_key`, and its schema description
+		// says in as many words that the two "are not interchangeable". A sibling-shaped guess of
+		// `meta_key` there resolves to null through the all-or-nothing rule in
+		// aafm_build_activity_detail(), logging exactly the blindness this block removes, with
+		// every gate still green.
+		//
+		// All nine read the caller's arguments rather than a result_id, and that is forced rather
+		// than stylistic: register.php builds the args detail on the opening 'started' row before
+		// the execute callback runs, which is the only moment the object still exists. A permanent
+		// delete has no identifier left to dig out of its return value.
+		'aafm/delete-comment'              => array(
+			/* translators: %s: the comment's numeric ID. */
+			'template' => __( 'Deleted comment #%s', 'agent-abilities-for-mcp' ),
+			// comment_id, confirmed against aafm_args_delete_comment() in comments.php. No link:
+			// aafm_activity_detail_link() resolves post, user, term and order, and there is no
+			// comment type. Adding one is a change to that renderer, not to this map.
+			'args'     => array(
+				array(
+					'key'  => 'comment_id',
+					'type' => 'id',
+				),
+			),
+		),
+		'aafm/delete-media'                => array(
+			/* translators: %s: the attachment's numeric ID. */
+			'template' => __( 'Deleted media #%s', 'agent-abilities-for-mcp' ),
+			// attachment_id, not media_id or post_id - confirmed against aafm_args_delete_media().
+			'args'     => array(
+				array(
+					'key'  => 'attachment_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-menu'                 => array(
+			/* translators: %s: the navigation menu's numeric ID. */
+			'template' => __( 'Deleted menu #%s', 'agent-abilities-for-mcp' ),
+			// menu_id, confirmed against aafm_args_delete_menu(). A navigation menu is a nav_menu
+			// TERM, so the link type is term rather than post.
+			'args'     => array(
+				array(
+					'key'  => 'menu_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/delete-menu-item'            => array(
+			/* translators: %s: the menu item's numeric ID. */
+			'template' => __( 'Deleted menu item #%s', 'agent-abilities-for-mcp' ),
+			// item_id, NOT menu_item_id and not the menu_id its sibling above takes - confirmed
+			// against aafm_args_delete_menu_item(). A menu item is a nav_menu_item post.
+			'args'     => array(
+				array(
+					'key'  => 'item_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-revision'             => array(
+			/* translators: %s: the deleted revision's numeric ID. */
+			'template' => __( 'Deleted revision #%s', 'agent-abilities-for-mcp' ),
+			// revision_id, confirmed against aafm_args_delete_revision(). post_id is also required
+			// by that ability and is deliberately not declared, matching aafm/restore-revision
+			// above: the map names the one identifier worth showing, and a second id field would
+			// fail the one-linkable-id rule.
+			'args'     => array(
+				array(
+					'key'  => 'revision_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/delete-term-meta'            => array(
+			/* translators: 1: meta key name. 2: the term's numeric ID. */
+			'template' => __( 'Deleted meta key `%1$s` on term #%2$s', 'agent-abilities-for-mcp' ),
+			// meta_key and term_id, confirmed against aafm_args_delete_term_meta(). The ability
+			// also takes an optional taxonomy, which is not an identifier of the thing deleted and
+			// is left out. The term itself survives, so unlike its neighbours here this link
+			// resolves to a live edit screen.
+			'args'     => array(
+				array(
+					'key'  => 'meta_key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'term_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/delete-user-meta'            => array(
+			/* translators: 1: meta key name. 2: the user's numeric ID. */
+			'template' => __( 'Deleted meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
+			// `key`, NOT `meta_key` - see the block comment above. Confirmed against
+			// aafm_args_delete_user_meta(), whose own description states the post-meta abilities
+			// name the equivalent parameter differently and that the two are not interchangeable.
+			'args'     => array(
+				array(
+					'key'  => 'key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
+		'aafm/wc-delete-product'           => array(
+			/* translators: %s: the product's numeric ID. */
+			'template' => __( 'Deleted product #%s', 'agent-abilities-for-mcp' ),
+			// product_id, confirmed against aafm_args_wc_delete_product(). A product is a post, so
+			// the link type is post; 'order' is only for rows whose id is a WooCommerce order.
+			'args'     => array(
+				array(
+					'key'  => 'product_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
+		),
+		'aafm/wc-delete-product-variation' => array(
+			/* translators: %s: the variation's numeric ID. */
+			'template' => __( 'Deleted product variation #%s', 'agent-abilities-for-mcp' ),
+			// variation_id, not product_id - confirmed against
+			// aafm_args_wc_delete_product_variation(). A variation is its own product_variation
+			// post, so the id here is not the parent's.
+			'args'     => array(
+				array(
+					'key'  => 'variation_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'post',
 		),
 	);
 }

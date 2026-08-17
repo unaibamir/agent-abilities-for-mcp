@@ -61,9 +61,9 @@ jobs:
 
       # Production dependencies only - this is what ships to wordpress.org.
       - name: Install Composer dependencies
-        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
-        with:
-          composer-options: '--no-dev'
+        # See the note in test.yml: ramsey/composer-install looks for Composer in a tool-cache path
+        # setup-php no longer writes to, so it cannot find the Composer setup-php just installed.
+        run: composer install --no-interaction --no-progress --no-dev
 
       - name: Set up WordPress + Plugin Check
         run: |

@@ -597,6 +597,26 @@ PHP;
 	}
 
 	/**
+	 * A method reached through `?->` is still a method, not WordPress's function.
+	 *
+	 * The lookbehind used to name `->` and `::` inline and miss the nullsafe operator, so this was
+	 * reported as a raw global call on PHP 8. It could not reach shipped source, since nullsafe is a
+	 * parse error on the 7.4 floor, but a scanner that over-reports buries the allowlist entries
+	 * that matter. Asserted on both tokenizations: 8 lexes `?->` as one operator, 7.4 lexes it as a
+	 * `?` followed by an ordinary `->`, and both must come back empty.
+	 */
+	public function test_the_scanner_ignores_a_nullsafe_method_of_the_same_name(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_nullsafe( $obj, $value ) {
+	return $obj?->sanitize_text_field( $value );
+}
+PHP;
+
+		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
 	 * The fingerprint has to describe what is sanitized, since that is the whole mechanism stopping
 	 * a justification from transferring to a different call.
 	 */

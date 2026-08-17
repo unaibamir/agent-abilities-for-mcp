@@ -883,6 +883,13 @@ final class StoredTextSanitizerScanner {
 	 * declaration of our own would be a shadow, not a use. Neither should be reported as a raw
 	 * sanitizer call.
 	 *
+	 * The chain-operator test is shared with the receiver walk rather than spelled out again here,
+	 * which is what brings `?->` in. Listing the operators inline covered `->` and `::` and missed
+	 * the nullsafe one, so `$obj?->sanitize_text_field( $v )` was reported as a raw global call.
+	 * That was unreachable in this plugin's own source - nullsafe is a parse error on the 7.4 floor,
+	 * so shipped code cannot contain it - and it was an over-report rather than a bypass. Fixed
+	 * anyway, because one list of chain operators is easier to keep honest than two.
+	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
 	 * @param int                                           $index  Index of the name token.
 	 * @param int                                           $count  Token count.
@@ -894,7 +901,7 @@ final class StoredTextSanitizerScanner {
 			if ( is_array( $token ) && in_array( $token[0], array( T_WHITESPACE, T_COMMENT, T_DOC_COMMENT ), true ) ) {
 				continue;
 			}
-			if ( is_array( $token ) && in_array( $token[0], array( T_OBJECT_OPERATOR, T_DOUBLE_COLON, T_FUNCTION ), true ) ) {
+			if ( is_array( $token ) && ( self::is_chain_operator( $token[0] ) || T_FUNCTION === $token[0] ) ) {
 				return false;
 			}
 			break;

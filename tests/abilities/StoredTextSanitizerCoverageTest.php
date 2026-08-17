@@ -393,6 +393,12 @@ final class StoredTextSanitizerCoverageTest extends TestCase {
 	 * found that a subscript with an ANONYMOUS owner still collapsed to `[0]->map( … )`. A named
 	 * owner such as `$rows[0]` always resolved correctly, which is why no real call site ever hit it.
 	 *
+	 * The last pair is the relative-name head, and it belongs to the family of collisions that are
+	 * reachable ONLY on the 7.4 floor. PHP 8 spells `namespace\Mapper` as one token; 7.4 splits it,
+	 * and the walk used to keep the separator while dropping the `namespace` keyword in front of it,
+	 * so `namespace\Mapper::map` and a genuinely global `\Mapper::map` both reduced to the same
+	 * `\Mapper::map( … )`. Every 8.x job was green while that was true.
+	 *
 	 * Two calls that differ only in their receiver must never reduce to the same string, because a
 	 * shared string silently transfers one call's allowlist reason to the other.
 	 */
@@ -414,6 +420,8 @@ function probe( $x, $flag ) {
 	$l = $this->other->mapper->map( 'sanitize_text_field', $x );
 	$m = \Vendor\Mapper::map( 'sanitize_text_field', $x );
 	$n = \Other\Mapper::map( 'sanitize_text_field', $x );
+	$o = namespace\Mapper::map( 'sanitize_text_field', $x );
+	$p = \Mapper::map( 'sanitize_text_field', $x );
 }
 SRC;
 
@@ -422,7 +430,7 @@ SRC;
 			$calls[] = $found['call'];
 		}
 
-		$this->assertCount( 14, $calls, 'The probe source should yield one finding per call.' );
+		$this->assertCount( 16, $calls, 'The probe source should yield one finding per call.' );
 		$this->assertSame(
 			count( $calls ),
 			count( array_unique( $calls ) ),

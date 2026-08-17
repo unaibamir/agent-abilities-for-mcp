@@ -746,7 +746,20 @@ final class StoredTextSanitizerScanner {
 			$start = $separator;
 
 			$previous = self::prev_significant( $tokens, $start - 1 );
-			if ( null === $previous || ! is_array( $tokens[ $previous ] ) || ! self::is_name_token( $tokens[ $previous ][0] ) ) {
+			if ( null === $previous || ! is_array( $tokens[ $previous ] ) ) {
+				return $start;
+			}
+
+			// `namespace\Mapper` is a relative name whose head is the keyword itself, spelled by PHP 8
+			// as one T_NAME_RELATIVE token. Stopping at the separator instead dropped the head and
+			// reduced it to `\Mapper::map( … )` - the same text a genuinely global `\Mapper::map( … )`
+			// produces, which is a demonstrated collision, not a theoretical one. A relative name has
+			// exactly one head, so take it and stop rather than continuing to walk.
+			if ( T_NAMESPACE === $tokens[ $previous ][0] ) {
+				return $previous;
+			}
+
+			if ( ! self::is_name_token( $tokens[ $previous ][0] ) ) {
 				return $start;
 			}
 
@@ -808,7 +821,7 @@ final class StoredTextSanitizerScanner {
 		if ( T_STRING === $id ) {
 			return true;
 		}
-		foreach ( array( 'T_NAME_FULLY_QUALIFIED', 'T_NAME_QUALIFIED' ) as $name ) {
+		foreach ( array( 'T_NAME_FULLY_QUALIFIED', 'T_NAME_QUALIFIED', 'T_NAME_RELATIVE' ) as $name ) {
 			if ( defined( $name ) && constant( $name ) === $id ) {
 				return true;
 			}

@@ -642,6 +642,261 @@ final class DetailTest extends TestCase {
 		$this->assertNull( aafm_activity_detail_link_type( 'aafm/wc-update-payment-gateway' ) );
 	}
 
+	/**
+	 * The value every probe below is built from. Distinctive on purpose: asserting that the
+	 * rendered detail CONTAINS it is what makes these tests check the outcome (an identifier
+	 * reached the row) rather than the mechanism (a map entry exists).
+	 */
+	private const PROBE_ID = '424242';
+
+	/**
+	 * B2-07's completeness guard, and the guard whose absence let nine of thirteen permanent
+	 * deletes ship writing detail:null.
+	 *
+	 * The destructive set is DERIVED, never restated: aafm_permanent_delete_abilities() is the
+	 * plugin's own hand-classified list of removals that bypass the Trash, and
+	 * DeleteGuaranteeTest already fails if a destructive ability is missing from it. So a
+	 * fourteenth permanent delete is forced into that list by one test and forced into
+	 * aafm_activity_detail_map() by this one. A hardcoded roster here would only restate today's
+	 * answer and could not fail on tomorrow's ability, which is the whole defect being closed.
+	 *
+	 * There is deliberately NO allowlist. An allowlist naming the known-blind abilities was the
+	 * weaker option considered and rejected: an empty assertion set means the next gap is a
+	 * failure rather than an entry someone adds to make the build pass. Adding one back is the
+	 * change a reviewer should refuse.
+	 *
+	 * The arguments come from each ability's OWN input schema, not from the map entry, and that
+	 * asymmetry is the point. A map entry that names a key the ability does not actually take -
+	 * aafm/delete-user-meta takes `key`, its post-meta siblings take `meta_key` - gets no value
+	 * for it, and aafm_build_activity_detail()'s all-or-nothing rule collapses the whole detail
+	 * to null. That is a silent-wrong-answer bug in production and a red assertion here.
+	 *
+	 * Bound, stated rather than implied: this proves every permanent delete CAN render an
+	 * identifier from a schema-valid call. It does not prove the identifier is the right object's
+	 * - only that the key exists, is populated, and reaches the row. The per-ability tests below
+	 * pin the exact rendered string for each.
+	 */
+	public function test_every_permanent_delete_ability_records_an_identifier(): void {
+		$blind = array();
+
+		foreach ( aafm_permanent_delete_abilities() as $ability ) {
+			$detail = aafm_build_activity_detail( $ability, $this->identifier_probe_args( $ability ) );
+			if ( null === $detail || false === strpos( $detail, self::PROBE_ID ) ) {
+				$blind[] = $ability;
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$blind,
+			'A permanent-delete ability logs no identifier, so its audit row cannot say what it '
+			. 'destroyed. Add an entry to aafm_activity_detail_map(), reading the key from that '
+			. "ability's own args builder rather than from a sibling."
+		);
+	}
+
+	/**
+	 * Every key the map declares must be a real property of that ability's input schema.
+	 *
+	 * Scoped to the WHOLE map rather than to the destructive set, because the failure it catches
+	 * is not specific to deletes: a key that does not exist can never be supplied, so the entry
+	 * silently renders nothing while every gate stays green. Separate from the test above for the
+	 * diagnostics - this one names the offending key, where all-or-nothing only yields a null.
+	 */
+	public function test_every_mapped_arg_key_is_a_real_property_of_its_ability(): void {
+		$unknown = array();
+
+		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
+			if ( empty( $entry['args'] ) ) {
+				continue;
+			}
+			$properties = $this->ability_input_properties( $ability );
+			foreach ( $entry['args'] as $field ) {
+				$key = (string) $field['key'];
+				if ( ! array_key_exists( $key, $properties ) ) {
+					$unknown[] = $ability . ' declares `' . $key . '`';
+				}
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$unknown,
+			'A map entry names an argument its ability does not accept. The value can never arrive, '
+			. 'so the row logs no detail at all.'
+		);
+	}
+
+	/**
+	 * Fill every property an ability declares with a probe value carrying PROBE_ID.
+	 *
+	 * Read from the ability's own args builder so the call is schema-valid. An unreachable builder
+	 * or an unhandled property type fails loudly rather than skipping: a probe that quietly
+	 * produced no arguments would make the caller's assertion pass for the wrong reason.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function identifier_probe_args( string $ability ): array {
+		$args = array();
+		foreach ( $this->ability_input_properties( $ability ) as $name => $spec ) {
+			$type = (string) ( $spec['type'] ?? '' );
+			if ( 'integer' === $type || 'number' === $type ) {
+				$args[ $name ] = (int) self::PROBE_ID;
+			} elseif ( 'string' === $type ) {
+				// Passes the `key` type's own character check, so a string-typed identifier such as
+				// delete-user-meta's `key` renders instead of being rejected on its charset.
+				$args[ $name ] = 'probe' . self::PROBE_ID;
+			} else {
+				$this->fail( $ability . ' declares property `' . $name . '` of unhandled type `' . $type . '`; teach this probe about it rather than letting it be skipped.' );
+			}
+		}
+		return $args;
+	}
+
+	/**
+	 * The input-schema properties an ability really accepts, read from its own args builder.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function ability_input_properties( string $ability ): array {
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertArrayHasKey( $ability, $registry, $ability . ' is not in the full registry.' );
+
+		$builder = (string) ( $registry[ $ability ]['args_builder'] ?? '' );
+		$this->assertTrue( function_exists( $builder ), $ability . " declares args builder '{$builder}', which does not exist." );
+
+		$spec       = call_user_func( $builder );
+		$properties = $spec['input_schema']['properties'] ?? array();
+		$this->assertIsArray( $properties, $ability . ' declares no input schema properties array.' );
+
+		return $properties;
+	}
+
+	public function test_delete_comment_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted comment #61',
+			aafm_build_activity_detail( 'aafm/delete-comment', array( 'comment_id' => 61 ) )
+		);
+		// No comment link type exists in aafm_activity_detail_link(), so the entry declares none.
+		$this->assertNull( aafm_activity_detail_link_type( 'aafm/delete-comment' ) );
+	}
+
+	/**
+	 * The key is attachment_id, not media_id and not post_id - read from aafm_args_delete_media().
+	 */
+	public function test_delete_media_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted media #712',
+			aafm_build_activity_detail( 'aafm/delete-media', array( 'attachment_id' => 712 ) )
+		);
+	}
+
+	public function test_delete_menu_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted menu #33',
+			aafm_build_activity_detail( 'aafm/delete-menu', array( 'menu_id' => 33 ) )
+		);
+		// A navigation menu is a nav_menu term, not a post.
+		$this->assertSame( 'term', aafm_activity_detail_link_type( 'aafm/delete-menu' ) );
+	}
+
+	/**
+	 * The key is item_id, NOT the menu_id its sibling takes. The two menu abilities name their
+	 * differently, which is exactly the pair a sibling-shaped guess gets wrong.
+	 */
+	public function test_delete_menu_item_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted menu item #34',
+			aafm_build_activity_detail( 'aafm/delete-menu-item', array( 'item_id' => 34 ) )
+		);
+		$this->assertSame( 'post', aafm_activity_detail_link_type( 'aafm/delete-menu-item' ) );
+	}
+
+	/**
+	 * Declares revision_id only, matching aafm/restore-revision: post_id is required by the ability
+	 * not the thing that was destroyed, and a second id field would break the one-linkable-id rule.
+	 */
+	public function test_delete_revision_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted revision #502',
+			aafm_build_activity_detail(
+				'aafm/delete-revision',
+				array(
+					'post_id'     => 310,
+					'revision_id' => 502,
+				)
+			)
+		);
+	}
+
+	public function test_delete_term_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted meta key `colour` on term #21',
+			aafm_build_activity_detail(
+				'aafm/delete-term-meta',
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => 21,
+					'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
+			)
+		);
+	}
+
+	/**
+	 * The trap this whole sweep is written around. delete-user-meta names its parameter `key`
+	 * while every post-meta ability names theirs `meta_key`, and the ability's own description
+	 * says the two are not interchangeable. A sibling-shaped `meta_key` here would log nothing.
+	 */
+	public function test_delete_user_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted meta key `nickname` on user #14',
+			aafm_build_activity_detail(
+				'aafm/delete-user-meta',
+				array(
+					'user_id' => 14,
+					'key'     => 'nickname',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The same call sent with the post-meta spelling must log NOTHING, which is what makes the
+	 * assertion above a statement about the right key rather than about any key.
+	 */
+	public function test_delete_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+		$this->assertNull(
+			aafm_build_activity_detail(
+				'aafm/delete-user-meta',
+				array(
+					'user_id'  => 14,
+					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
+			)
+		);
+	}
+
+	public function test_wc_delete_product_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted product #808',
+			aafm_build_activity_detail( 'aafm/wc-delete-product', array( 'product_id' => 808 ) )
+		);
+	}
+
+	/**
+	 * The key is variation_id, not product_id: a variation is its own post, so the row must name the
+	 * variation that was destroyed rather than the parent that survived.
+	 */
+	public function test_wc_delete_product_variation_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted product variation #909',
+			aafm_build_activity_detail( 'aafm/wc-delete-product-variation', array( 'variation_id' => 909 ) )
+		);
+	}
+
 	// -------------------------------------------------------------------------
 	// The crash detail builder: the one writer that is not map-driven.
 	// -------------------------------------------------------------------------

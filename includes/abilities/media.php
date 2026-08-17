@@ -656,8 +656,11 @@ function aafm_fileinfo_available(): bool {
  * - fileinfo availability is guarded (aafm_fileinfo_available) before finfo is
  *   ever instantiated, so a host without the extension errors instead of
  *   fataling on a missing class.
- * - The filename is sanitized (sanitize_file_name) and rebuilt with the canonical
- *   extension for the real type; traversal segments cannot survive.
+ * - The filename is sanitized (sanitize_file_name, then aafm_sanitize_plain_text for
+ *   the control and bidi characters core keeps) and rebuilt with the canonical
+ *   extension for the real type; traversal segments cannot survive. The same
+ *   sanitized base becomes the attachment title, so neither can be used to spoof
+ *   how a name renders in the media library.
  * - wp_upload_bits() writes the bytes inside the uploads dir under WordPress's
  *   control - never a raw file_put_contents to a caller-chosen path.
  * - A second wp_check_filetype_and_ext() check on the written file guards against
@@ -698,7 +701,22 @@ function aafm_exec_upload_media( array $input ) {
 	// Build a safe filename with the canonical extension for the real type. The
 	// supplied name is reduced to its basename and sanitized, so '../' segments
 	// and the client-declared extension cannot influence where the file lands.
-	$base      = sanitize_file_name( wp_basename( (string) ( $input['filename'] ?? '' ), '.' . pathinfo( (string) ( $input['filename'] ?? '' ), PATHINFO_EXTENSION ) ) );
+	//
+	// sanitize_file_name() alone is not enough for what gets STORED. It handles the
+	// path- and shell-hostile punctuation, but it keeps every C0 control except tab,
+	// LF and CR, and it keeps the whole Trojan Source bidi set - so a name carrying
+	// U+202E lands intact. aafm_sanitize_plain_text() runs on top and has the last
+	// word, which is the same rule aafm-update-media already applies to a title on
+	// this very object; without it the two abilities disagree about the same field.
+	// Ordering is deliberate: the plain-text strip runs last so nothing can
+	// reintroduce a bidi override after it, and the path guarantee does not weaken,
+	// because wp_upload_bits() -> wp_unique_filename() re-applies sanitize_file_name()
+	// to the name that actually reaches disk.
+	//
+	// $base feeds BOTH consumers - the stored file name below and post_title at the
+	// wp_insert_attachment() call - so one strip covers both. The corpus test pins
+	// each of them separately, so decoupling them later fails loudly.
+	$base      = aafm_sanitize_plain_text( sanitize_file_name( wp_basename( (string) ( $input['filename'] ?? '' ), '.' . pathinfo( (string) ( $input['filename'] ?? '' ), PATHINFO_EXTENSION ) ) ) );
 	$base      = '' !== $base ? $base : 'upload';
 	$safe_name = $base . '.' . $allow[ $real_mime ];
 

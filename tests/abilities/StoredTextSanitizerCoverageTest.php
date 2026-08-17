@@ -412,6 +412,8 @@ function probe( $x, $flag ) {
 	$j = ( new D() )->map( 'sanitize_text_field', $x );
 	$k = $this->svc->mapper->map( 'sanitize_text_field', $x );
 	$l = $this->other->mapper->map( 'sanitize_text_field', $x );
+	$m = \Vendor\Mapper::map( 'sanitize_text_field', $x );
+	$n = \Other\Mapper::map( 'sanitize_text_field', $x );
 }
 SRC;
 
@@ -420,7 +422,7 @@ SRC;
 			$calls[] = $found['call'];
 		}
 
-		$this->assertCount( 12, $calls, 'The probe source should yield one finding per call.' );
+		$this->assertCount( 14, $calls, 'The probe source should yield one finding per call.' );
 		$this->assertSame(
 			count( $calls ),
 			count( array_unique( $calls ) ),

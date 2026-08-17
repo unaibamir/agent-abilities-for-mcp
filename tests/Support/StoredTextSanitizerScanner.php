@@ -462,7 +462,7 @@ final class StoredTextSanitizerScanner {
 		if ( null !== $open ) {
 			$last = self::prev_significant( $tokens, $open - 1 );
 			if ( null !== $last && is_array( $tokens[ $last ] ) && self::is_name_token( $tokens[ $last ][0] ) ) {
-				$callee = self::callee_start_index( $tokens, $last );
+				$callee = self::extend_over_namespace( $tokens, self::callee_start_index( $tokens, $last ) );
 			}
 		}
 
@@ -700,6 +700,44 @@ final class StoredTextSanitizerScanner {
 		}
 
 		return (string) preg_replace( '~\s+~', ' ', trim( $text ) );
+	}
+
+	/**
+	 * Extend a start index back over a namespace qualifier written as separate 7.4 tokens.
+	 *
+	 * PHP 8 hands back `Vendor\Mapper` as ONE T_NAME_QUALIFIED token, so a chain walk that lands on
+	 * it already holds the whole name. PHP 7.4 splits it into T_STRING, T_NS_SEPARATOR, T_STRING, so
+	 * the same walk lands on `Mapper` alone, sees a separator rather than a chain operator in front
+	 * of it, and stops. `\Vendor\Mapper::map( … )` and `\Other\Mapper::map( … )` then reduce to the
+	 * same `Mapper::map( … )` and one call's allowlist reason silently covers the other.
+	 *
+	 * That is the ambiguity this whole class exists to prevent, and it was reachable only on the
+	 * plugin's actual PHP floor: every 8.x job was green while both 7.4 jobs failed. The class
+	 * docblock already claimed both tokenizations were handled, which was true of a bare qualified
+	 * CALL and false of a qualified RECEIVER.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $start  Index of the name token landed on.
+	 * @return int
+	 */
+	private static function extend_over_namespace( array $tokens, int $start ): int {
+		while ( true ) {
+			$separator = self::prev_significant( $tokens, $start - 1 );
+			if ( null === $separator || ! is_array( $tokens[ $separator ] ) || T_NS_SEPARATOR !== $tokens[ $separator ][0] ) {
+				return $start;
+			}
+
+			// The separator itself is part of the name: `\Vendor\Mapper` begins at the leading slash,
+			// which is what PHP 8 reports as the single token's text.
+			$start = $separator;
+
+			$previous = self::prev_significant( $tokens, $start - 1 );
+			if ( null === $previous || ! is_array( $tokens[ $previous ] ) || ! self::is_name_token( $tokens[ $previous ][0] ) ) {
+				return $start;
+			}
+
+			$start = $previous;
+		}
 	}
 
 	/**

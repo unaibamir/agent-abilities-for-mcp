@@ -515,16 +515,53 @@ PHP;
 	/**
 	 * A partially-qualified name is a DIFFERENT function and must not be reported. Without this the
 	 * fully-qualified fix would over-match and start flagging unrelated code.
+	 *
+	 * Every qualifier depth is here because the two-level form alone was not enough. On the 7.4
+	 * floor a qualified name is not one token but T_STRING, T_NS_SEPARATOR, T_STRING, so the tail
+	 * arrives looking exactly like a bare call and all of these were reported. It went red on both
+	 * 7.4 jobs while every 8.x job stayed green, which is the shape this whole file keeps meeting.
 	 */
 	public function test_the_scanner_ignores_a_namespaced_function_of_the_same_name(): void {
 		$source = <<<'PHP'
 <?php
 function aafm_probe_namespaced( $value ) {
-	return Vendor\Helpers\sanitize_text_field( $value );
+	$a = Vendor\Helpers\sanitize_text_field( $value );
+	$b = Vendor\sanitize_text_field( $value );
+	$c = \Vendor\sanitize_text_field( $value );
+	$d = \Vendor\Helpers\sanitize_text_field( $value );
+	$e = Vendor\sanitize_textarea_field( $value );
+	$f = namespace\sanitize_text_field( $value );
+	return array( $a, $b, $c, $d, $e, $f );
 }
 PHP;
 
 		$this->assertSame( array(), StoredTextSanitizerScanner::scan_source( $source, 'probe.php' ) );
+	}
+
+	/**
+	 * The other half of that distinction, asserted right beside it on purpose.
+	 *
+	 * A leading separator with NOTHING in front of it is WordPress's own function spelled
+	 * explicitly, and it must still be found. Getting one half right and the other wrong is exactly
+	 * how this lane went red: the ignore half is a false positive that buries the allowlist, and the
+	 * detect half is a silent bypass, so neither may be traded for the other.
+	 */
+	public function test_a_leading_separator_is_the_global_function_and_a_qualifier_is_not(): void {
+		$source = <<<'PHP'
+<?php
+function aafm_probe_leading( $value ) {
+	$a = \sanitize_text_field( $value );
+	$b = \sanitize_textarea_field( $value );
+	$c = Vendor\sanitize_text_field( $value );
+	return array( $a, $b, $c );
+}
+PHP;
+
+		$records = StoredTextSanitizerScanner::scan_source( $source, 'probe.php' );
+
+		$this->assertCount( 2, $records, 'A leading separator is the global function; a qualifier is not.' );
+		$this->assertSame( 'sanitize_text_field', $records[0]['sanitizer'] );
+		$this->assertSame( 'sanitize_textarea_field', $records[1]['sanitizer'] );
 	}
 
 	/**

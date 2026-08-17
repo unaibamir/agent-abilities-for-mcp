@@ -24,7 +24,11 @@
  * WHAT IT SEES AND DISTINGUISHES
  *
  * 1. A bare call, `sanitize_text_field( $v )`.
- * 2. A fully-qualified call, `\sanitize_text_field( $v )`, in both 7.4 and 8.x tokenization.
+ * 2. A fully-qualified call, `\sanitize_text_field( $v )`, in both 7.4 and 8.x tokenization - and,
+ *    as the other half of the same distinction, NOT `Vendor\sanitize_text_field( $v )`, which is
+ *    somebody else's function of the same short name. Both halves are asserted on both
+ *    tokenizations, because getting one right and the other wrong is how this went red on the 7.4
+ *    floor while every 8.x job stayed green.
  * 3. An aliased import, `use function sanitize_text_field as clean; clean( $v )`.
  * 4. A callable string consumed by a named call, `array_map( 'sanitize_text_field', $v )`,
  *    including through a receiver chain the walk can follow to its start: `$a->map( … )`,
@@ -300,7 +304,13 @@ final class StoredTextSanitizerScanner {
 	 * - an aliased import                     - resolved via $aliases.
 	 *
 	 * A partially-qualified name (`Some\Ns\sanitize_text_field`) is a DIFFERENT function and is
-	 * deliberately not matched.
+	 * deliberately not matched. PHP 8 makes that free: the whole name arrives as one
+	 * T_NAME_QUALIFIED token and the strpos check above rejects it. PHP 7.4 does not, because it
+	 * splits the name into T_STRING, T_NS_SEPARATOR, T_STRING, so the tail arrives here looking
+	 * exactly like a bare call and was reported as one. That is what is_namespace_qualified()
+	 * exists for, and it is the difference between a leading separator with nothing in front of it
+	 * (the global function, still matched) and a name in front of it (someone else's function,
+	 * ignored).
 	 *
 	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens  All tokens.
 	 * @param int                                           $index   Current index.
@@ -317,6 +327,10 @@ final class StoredTextSanitizerScanner {
 		$name = null;
 
 		if ( T_STRING === $token[0] ) {
+			// On 7.4 this may be the tail of a qualified name rather than a bare one.
+			if ( self::is_namespace_qualified( $tokens, $index ) ) {
+				return null;
+			}
 			$name = (string) $token[1];
 		} elseif ( defined( 'T_NAME_FULLY_QUALIFIED' ) && T_NAME_FULLY_QUALIFIED === $token[0] ) {
 			// Leading backslash only: this is the global function, spelled explicitly.
@@ -738,6 +752,50 @@ final class StoredTextSanitizerScanner {
 
 			$start = $previous;
 		}
+	}
+
+	/**
+	 * Whether the name token at $index carries a namespace qualifier in front of it, written as the
+	 * separate tokens PHP 7.4 produces.
+	 *
+	 * The counterpart to extend_over_namespace(), and the same 7.4 split-token cause pointing the
+	 * other way. That one lost a receiver's namespace and made two receivers collide; this one
+	 * gained a call that was never ours. `Vendor\sanitize_text_field( $v )` is one
+	 * T_NAME_QUALIFIED token on PHP 8, which the caller rejects on the backslash it contains. On
+	 * 7.4 it is T_STRING, T_NS_SEPARATOR, T_STRING, so the tail is an ordinary T_STRING spelled
+	 * `sanitize_text_field` sitting in front of a parenthesis - indistinguishable from a bare call
+	 * without looking behind it. Every 8.x job was green and both 7.4 jobs failed, on the version
+	 * the plugin actually supports.
+	 *
+	 * The distinction is what precedes the separator, and the two cases must not be confused:
+	 *
+	 * - nothing name-like     - `\sanitize_text_field( $v )`, the global function spelled
+	 *                           explicitly. Still a match, and there is a test that fails if it
+	 *                           stops being one.
+	 * - a name or `namespace` - `Vendor\sanitize_text_field( $v )`, `\Vendor\Helpers\…`,
+	 *                           `namespace\…`. A different function. Not a match.
+	 *
+	 * Read as "qualified only when something name-like precedes the separator" rather than as an
+	 * allowlist of tokens that may precede a global call, deliberately: an unfamiliar token then
+	 * errs toward reporting the call, and an over-report is visible in the allowlist where a
+	 * missed call is a silent bypass.
+	 *
+	 * @param array<int,array{0:int,1:string,2:int}|string> $tokens All tokens.
+	 * @param int                                           $index  Index of the name token.
+	 * @return bool
+	 */
+	private static function is_namespace_qualified( array $tokens, int $index ): bool {
+		$separator = self::prev_significant( $tokens, $index - 1 );
+		if ( null === $separator || ! is_array( $tokens[ $separator ] ) || T_NS_SEPARATOR !== $tokens[ $separator ][0] ) {
+			return false;
+		}
+
+		$before = self::prev_significant( $tokens, $separator - 1 );
+		if ( null === $before || ! is_array( $tokens[ $before ] ) ) {
+			return false;
+		}
+
+		return self::is_name_token( $tokens[ $before ][0] ) || T_NAMESPACE === $tokens[ $before ][0];
 	}
 
 	/**

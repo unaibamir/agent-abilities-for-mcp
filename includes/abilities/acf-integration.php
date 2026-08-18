@@ -1290,6 +1290,21 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// so the derivation produced no key and the hard block had nothing to refuse, and the strip
 		// then handed ACF the bare protected name. Refused without the character, WRITTEN with it.
 		// Judging $raw instead could only ever over-block, because $raw is never what gets stored.
+		//
+		// THE BOUND IS EVERY TRANSFORMATION aafm_sanitize_plain_text() PERFORMS, not its character
+		// list, and writing the character list here would be a caveat doing work it cannot do. That
+		// helper is str_replace( aafm_unsafe_text_characters(), '', sanitize_text_field( $value ) ),
+		// and CORE TRANSFORMS THE STRING FIRST. Measured on `wp_capabilities`, each of these
+		// collapses to the bare protected key and so was a door of its own: a leading space, a
+		// trailing space, a tab, a newline, a NUL, an HTML tag at either end, and a percent-encoded
+		// octet - all of them sanitize_text_field()'s doing, before this plugin's list is consulted
+		// at all - plus U+202E and BEL, which are the list's. Ten doors, eight of them core's.
+		// Computing $clean once closes every one of them by the same construction, because what the
+		// floors judge is the post-sanitize value whatever produced it, so the count does not need
+		// to be known to be complete. U+200B is the control that proves the boundary is real rather
+		// than universal: the sanitizer KEEPS it, the address stays unresolvable, and the unknown
+		// sub-field floor below refuses it. A character that survives is caught there; a character
+		// that is transformed away is caught here.
 		$clean = aafm_acf_sanitize_value( $raw, $field_key );
 
 		$candidates = array_merge( array( $field_key ), aafm_acf_effective_meta_keys( $def, $clean ) );

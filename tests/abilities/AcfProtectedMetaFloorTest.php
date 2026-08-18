@@ -371,7 +371,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				true,
 			),
 			// A second protected name in the same clone, so the refusal is not one string's luck.
-			'clone unprefixed, session_tokens sub'        => array(
+			'clone unprefixed, session_tokens sub'         => array(
 				'post',
 				array( 'field_bare_group' => array( 'session_tokens' => 'pwned' ) ),
 				true,
@@ -401,6 +401,16 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			// this block had nothing to refuse - and the strip then handed `wp_capabilities` to
 			// ACF. Reproduced end to end on a user selector: refused without the character, WRITTEN
 			// with it. Both floors now judge the value that actually reaches storage.
+			//
+			// THE WINDOW WAS WIDER THAN THE CHARACTER LIST, AND THE ROWS BELOW SAY SO. It was first
+			// written up as the unsafe-character strip set, which is a caveat doing work it cannot
+			// do: aafm_sanitize_plain_text() is str_replace( aafm_unsafe_text_characters(), '',
+			// sanitize_text_field( $value ) ), and CORE transforms the string first. Measured on
+			// `wp_capabilities`, every one of these collapses to the bare protected key - a leading
+			// space, a trailing space, a tab, a newline, a NUL, a tag at either end, and a
+			// percent-encoded octet - and all of them are sanitize_text_field()'s doing, before this
+			// plugin's list is consulted. Ten doors, eight of them core's. They are rows rather than
+			// a sentence because a sentence cannot go red.
 			'clone unprefixed, protected address carrying a bidi char, USER' => array(
 				'user',
 				array( 'field_bare_group' => array( "wp_capabilities\u{202E}" => 'pwned' ) ),
@@ -426,8 +436,82 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				array( 'field_bare_group' => array( "email\u{202E}" => 'ok@example.com' ) ),
 				false,
 			),
+			// The CORE-side doors. Nothing in this plugin's character list touches any of these;
+			// sanitize_text_field() trims the whitespace, strips the tags and removes the octet, and
+			// each address then resolves to `wp_capabilities` on the way to storage. They are here
+			// because the window was originally described as the character list, and four of them
+			// were not in the first write-up of it at all.
+			'protected address with a LEADING space, USER' => array(
+				'user',
+				array( 'field_bare_group' => array( ' wp_capabilities' => 'pwned' ) ),
+				true,
+			),
+			'protected address with a TRAILING space, USER' => array(
+				'user',
+				array( 'field_bare_group' => array( 'wp_capabilities ' => 'pwned' ) ),
+				true,
+			),
+			'protected address with a trailing TAG'        => array(
+				'post',
+				array( 'field_bare_group' => array( 'session_tokens<b>' => 'pwned' ) ),
+				true,
+			),
+			// The tag at the FRONT, because a strip that only looked at the tail would pass this.
+			'protected address with a leading TAG'         => array(
+				'post',
+				array( 'field_bare_group' => array( '<b>session_tokens' => 'pwned' ) ),
+				true,
+			),
+			'protected address with a PERCENT-ENCODED octet' => array(
+				'user',
+				array( 'field_bare_group' => array( 'wp_capabilities%e2%80%ae' => 'pwned' ) ),
+				true,
+			),
+			// A tab and a newline are the same core trim, and they are the shapes an address picks
+			// up by accident from a pasted payload rather than deliberately.
+			'protected address with a trailing TAB'        => array(
+				'user',
+				array( 'field_bare_group' => array( "wp_capabilities\t" => 'pwned' ) ),
+				true,
+			),
+			'protected address with a trailing NEWLINE'    => array(
+				'user',
+				array( 'field_bare_group' => array( "wp_capabilities\n" => 'pwned' ) ),
+				true,
+			),
+			// The benign twins for the core-side doors. Without these the block above is satisfiable
+			// by refusing every address that carries a space or a tag, which is the over-block from
+			// the other direction and would break ordinary writes on live sites.
+			'benign address with a LEADING space'          => array(
+				'post',
+				array( 'field_bare_group' => array( ' email' => 'ok@example.com' ) ),
+				false,
+			),
+			'benign address with a trailing TAG'           => array(
+				'post',
+				array( 'field_bare_group' => array( 'email<b>' => 'ok@example.com' ) ),
+				false,
+			),
+			'benign address with a PERCENT-ENCODED octet'  => array(
+				'post',
+				array( 'field_bare_group' => array( 'email%e2%80%ae' => 'ok@example.com' ) ),
+				false,
+			),
+			// THE CONTROL THAT PROVES THE BOUNDARY IS REAL RATHER THAN UNIVERSAL, and it is a
+			// different floor's job. U+200B is NOT in aafm_unsafe_text_characters() and core does
+			// not touch it, so it SURVIVES sanitization: the address stays unresolvable, this floor
+			// derives no key and has correctly nothing to say, and the unknown-sub-field floor
+			// refuses it instead. The error code is asserted so the two floors' responsibilities
+			// cannot quietly merge - a version where this block started refusing survivors too would
+			// be over-blocking, and would pass on the verdict alone.
+			'protected address with a SURVIVING invisible char, USER' => array(
+				'user',
+				array( 'field_bare_group' => array( "wp_capabilities\u{200B}" => 'pwned' ) ),
+				true,
+				'aafm_acf_unknown_sub_field',
+			),
 			// Prefixed is not the same as safe: `wp` + `capabilities` composes to a blocked key.
-			'group named wp composing to wp_capabilities' => array(
+			'group named wp composing to wp_capabilities'  => array(
 				'post',
 				array( 'field_wp' => array( 'capabilities' => 'pwned' ) ),
 				true,
@@ -459,7 +543,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				true,
 			),
 			// The second row proves the index is not hardcoded to zero anywhere.
-			'repeater composing onto it from a later row' => array(
+			'repeater composing onto it from a later row'  => array(
 				'post',
 				array( 'field_prep' => array( array( 'note' => 'ok' ), array( 'capabilities' => 'pwned' ) ) ),
 				true,
@@ -478,7 +562,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			),
 			// The caller-supplied selector is checked in its own right, not only the name it
 			// resolves to.
-			'field whose KEY is itself a protected name'  => array(
+			'field whose KEY is itself a protected name'   => array(
 				'post',
 				array( 'wp_capabilities' => 'pwned' ),
 				true,
@@ -486,7 +570,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 
 			// ---- SUCCEED: every ordinary container write must still land. ---------------------
 
-			'clone unprefixed, benign sub'                => array(
+			'clone unprefixed, benign sub'                 => array(
 				'post',
 				array( 'field_bare_group' => array( 'email' => 'ok@example.com' ) ),
 				false,
@@ -520,17 +604,17 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				),
 				false,
 			),
-			'group named wp, benign sub'                  => array(
+			'group named wp, benign sub'                   => array(
 				'post',
 				array( 'field_wp' => array( 'note' => 'still fine' ) ),
 				false,
 			),
-			'group composing from _name, benign sub'      => array(
+			'group composing from _name, benign sub'       => array(
 				'post',
 				array( 'field_sess' => array( 'note' => 'still fine' ) ),
 				false,
 			),
-			'repeater named for the prefix, benign sub'   => array(
+			'repeater named for the prefix, benign sub'    => array(
 				'post',
 				array( 'field_prep' => array( array( 'note' => 'still fine' ) ) ),
 				false,
@@ -547,7 +631,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				),
 				false,
 			),
-			'clone with a mismatched _name, benign sub'   => array(
+			'clone with a mismatched _name, benign sub'    => array(
 				'post',
 				array( 'field_odd' => array( 'note' => 'still fine' ) ),
 				false,
@@ -559,7 +643,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			),
 			// The row that stops a future "completion" of the derivation from blocking flexible
 			// content outright: ACF's own `_flex_layout_meta` row must not be derived.
-			'flexible content, ordinary row'              => array(
+			'flexible content, ordinary row'               => array(
 				'post',
 				array(
 					'field_flex' => array(
@@ -583,14 +667,14 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				),
 				false,
 			),
-			'plain scalar field'                          => array(
+			'plain scalar field'                           => array(
 				'post',
 				array( 'field_plain' => 'ok' ),
 				false,
 			),
 			// A container sent a scalar: ACF writes nothing per sub-field, and the floor must not
 			// invent keys from a shape that is not there.
-			'clone sent a scalar instead of a map'        => array(
+			'clone sent a scalar instead of a map'         => array(
 				'post',
 				array( 'field_bare_group' => 'ok' ),
 				false,
@@ -602,7 +686,7 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			// because ACF wrote the sub-fields it did recognise and the request was then reported
 			// as failed anyway. The row keeps its original point by naming the code: the property
 			// pinned here is still that the PROTECTED-META floor is not what refuses this.
-			'clone, address matching no sub-field'        => array(
+			'clone, address matching no sub-field'         => array(
 				'post',
 				array( 'field_bare_group' => array( 'not_a_sub_field' => 'ok' ) ),
 				true,

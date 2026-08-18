@@ -560,8 +560,11 @@ function aafm_acf_clone_sub_prefix( array $def, string $name ): string {
  * A definition carrying no `_name` at all falls back to `name`; real ACF always sets `_name` in
  * acf_validate_field(), so that branch is reachable only with a hand-built definition.
  *
- * Measured coverage, from a mutation pass over the corpus rather than asserted: fourteen mutants,
- * twelve killed. The two that survive are named rather than counted as proof.
+ * Measured coverage, from a mutation pass over the corpus rather than asserted: eighteen mutants,
+ * sixteen killed. That includes blinding this derivation to each container type in turn, because a
+ * single whole-derivation mutant cannot tell a version that handles clone correctly and flexible
+ * content not at all from one that handles both. All four blindings go red on a refuse row that
+ * names their own type. The two mutants that survive are named rather than counted as proof.
  *
  *   - Removing the `acf_fc_layout` skip changes nothing, because no sub-field resolves under that
  *     address anyway. It is EQUIVALENT unless a layout declares a sub-field literally named

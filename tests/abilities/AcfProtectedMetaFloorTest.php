@@ -68,6 +68,19 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 	}
 
 	/**
+	 * The table prefix with its trailing underscore removed.
+	 *
+	 * `^{$wpdb->prefix}\d*_?capabilities$` is the denylist's multisite pattern, so this is the only
+	 * container name that can compose onto it once a row index is inserted.
+	 *
+	 * @return string
+	 */
+	private function prefix_name(): string {
+		global $wpdb;
+		return rtrim( (string) $wpdb->prefix, '_' );
+	}
+
+	/**
 	 * The field group every row here writes against.
 	 *
 	 * Each container carries a sub-field named after a protected key alongside a benign twin, so a
@@ -203,6 +216,53 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 									'sub_fields' => array(
 										$this->sub( 'field_flex_email', 'email' ),
 										$this->sub( 'field_flex_caps', 'wp_capabilities' ),
+									),
+								),
+							),
+						),
+						// A repeater and a flexible-content field that compose ONTO a protected key
+						// rather than merely containing a hostile-looking sub-field name. The
+						// multisite capabilities pattern is anchored to the table prefix
+						// (^{$wpdb->prefix}\d*_?capabilities$), so `wp` + row 0 + `capabilities`
+						// gives `wp_0_capabilities`, which the denylist blocks. The name is derived
+						// from the live prefix rather than hardcoded, so a test core configured with
+						// a different prefix still exercises the row instead of silently passing.
+						//
+						// These two exist so repeater and flexible content have a refuse row that
+						// asserts the OUTCOME, the way clone and group already do. Without them both
+						// types were covered only by the derived-key assertion, and a per-type
+						// mutation pass showed that gap: blinding the derivation to repeater or to
+						// flexible content killed one test each, while blinding it to clone or group
+						// took down whole refuse rows.
+						//
+						// Three containers deliberately share the meta name below. Real ACF would
+						// call that a misconfiguration, but the derivation resolves each by its own
+						// field key and the composed key is the only thing under test.
+						array(
+							'key'        => 'field_prep',
+							'name'       => $this->prefix_name(),
+							'_name'      => $this->prefix_name(),
+							'label'      => 'Repeater named for the table prefix',
+							'type'       => 'repeater',
+							'sub_fields' => array(
+								$this->sub( 'field_prep_caps', 'capabilities' ),
+								$this->sub( 'field_prep_note', 'note' ),
+							),
+						),
+						array(
+							'key'     => 'field_pflex',
+							'name'    => $this->prefix_name(),
+							'_name'   => $this->prefix_name(),
+							'label'   => 'Flexible content named for the table prefix',
+							'type'    => 'flexible_content',
+							'layouts' => array(
+								'layout_p' => array(
+									'key'        => 'layout_p',
+									'name'       => 'main',
+									'label'      => 'Main',
+									'sub_fields' => array(
+										$this->sub( 'field_pflex_caps', 'capabilities' ),
+										$this->sub( 'field_pflex_note', 'note' ),
 									),
 								),
 							),
@@ -354,6 +414,31 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				array( 'field_odd' => array( 'wp_capabilities' => 'pwned' ) ),
 				true,
 			),
+			// A repeater row index sits between the container name and the sub-field name, and the
+			// result composes onto the prefixed capabilities pattern.
+			'repeater composing onto the prefixed capabilities key' => array(
+				'post',
+				array( 'field_prep' => array( array( 'capabilities' => 'pwned' ) ) ),
+				true,
+			),
+			// The second row proves the index is not hardcoded to zero anywhere.
+			'repeater composing onto it from a later row' => array(
+				'post',
+				array( 'field_prep' => array( array( 'note' => 'ok' ), array( 'capabilities' => 'pwned' ) ) ),
+				true,
+			),
+			'flexible content composing onto the prefixed capabilities key' => array(
+				'post',
+				array(
+					'field_pflex' => array(
+						array(
+							'acf_fc_layout' => 'main',
+							'capabilities'  => 'pwned',
+						),
+					),
+				),
+				true,
+			),
 			// The caller-supplied selector is checked in its own right, not only the name it
 			// resolves to.
 			'field whose KEY is itself a protected name'  => array(
@@ -406,6 +491,23 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			'group composing from _name, benign sub'      => array(
 				'post',
 				array( 'field_sess' => array( 'note' => 'still fine' ) ),
+				false,
+			),
+			'repeater named for the prefix, benign sub'   => array(
+				'post',
+				array( 'field_prep' => array( array( 'note' => 'still fine' ) ) ),
+				false,
+			),
+			'flexible content named for the prefix, benign sub' => array(
+				'post',
+				array(
+					'field_pflex' => array(
+						array(
+							'acf_fc_layout' => 'main',
+							'note'          => 'still fine',
+						),
+					),
+				),
 				false,
 			),
 			'clone with a mismatched _name, benign sub'   => array(
@@ -642,6 +744,8 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				'field_sess'       => 2,
 				'field_rep'        => 2,
 				'field_flex'       => 2,
+				'field_prep'       => 2,
+				'field_pflex'      => 2,
 				'field_odd'        => 2,
 			),
 			$counts,

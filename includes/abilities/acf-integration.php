@@ -968,6 +968,12 @@ function aafm_acf_sub_field_key_map( array $def ): array {
  * non-array value, is returned untouched, so scalar fields are unaffected. Nested containers recurse
  * through the child definition resolved by name.
  *
+ * It runs over BOTH operands of that comparison, not only storage. The caller's own value goes
+ * through it as well, via aafm_acf_rekey_sent_to_names(), because ACF documents and accepts a
+ * sub-field addressed by its field KEY and storage always reads back under the name - so a sent key
+ * had nothing to match until both sides shared one name-space. Read that function's docblock before
+ * changing anything here: this is now a rule two values depend on, not a storage-side detail.
+ *
  * @param mixed                    $stored The raw stored value from get_field(..., false).
  * @param array<string,mixed>|null $def    The field definition, or null when it cannot be resolved.
  * @return mixed The value with container sub-field keys rewritten to names.
@@ -1021,6 +1027,50 @@ function aafm_acf_rekey_row_to_names( array $row, array $def ) {
 		$out[ $name ] = aafm_acf_rekey_stored_to_names( $sub_val, $child_def );
 	}
 	return $out;
+}
+
+/**
+ * Rewrite a SENT container value's sub-field addresses to names, so the write-verify compares two
+ * values in one name-space instead of two.
+ *
+ * Deliberately a delegation to aafm_acf_rekey_stored_to_names() and not a second implementation.
+ * The transformation both operands need is identical - rewrite sub-field KEYS to the name ACF
+ * accepts on write, recursing through each child definition and leaving a flexible-content row's
+ * acf_fc_layout marker alone - and the whole defect this closes came from the two sides being
+ * normalised by different rules. One function means a future edit cannot desynchronise them, which
+ * is a property no test can assert. This exists for the name and the docblock; if the two sides ever
+ * genuinely need to diverge, that has to be a deliberate decision made here rather than a drift.
+ *
+ * WHY THE SENT SIDE NEEDED NORMALISING AT ALL. ACF documents addressing a sub-field by its field
+ * KEY: /resources/add_row shows a whole row keyed by sub-field keys ("Add a new row using field
+ * keys"), and /resources/update_field states the key form is the one to use when saving a value that
+ * does not yet exist - the create case. ACF accepts such an address and writes the row. This
+ * plugin's read-back then re-keyed STORAGE to sub-field names while comparing it against the sent
+ * KEY, which no re-keyed storage can ever hold, so the projection abandoned, the comparison
+ * mismatched and the request reported failure with the data already written. Measured end to end
+ * against real ACF free 6.3.6: a sub-field went from `BEFORE` to `AFTER-BY-KEY` on the call that
+ * returned WP_Error(aafm_error). The same re-keyer feeds the same comparison in shipped 1.6.3.
+ *
+ * A STRICT NO-OP FOR EVERY ADDRESS THAT IS ALREADY A NAME. The rewrite is driven by
+ * aafm_acf_sub_field_key_map(), which is keyed by sub-field KEY, and an address matching no entry is
+ * passed through untouched. So a value addressed entirely by names - every shape this plugin
+ * accepted before - comes back identical and the comparison is byte-for-byte what it was. Mixed
+ * addressing within one request is handled per address, which is what ACF does too.
+ *
+ * WHAT IT DOES NOT DO, stated so nobody reads more into it. It never DROPS an address. An address
+ * that names nothing the definition declares survives the rewrite unchanged, still finds no match in
+ * storage, and still fails the comparison - so this cannot turn a real persistence failure into a
+ * reported success. (Such an address is refused before any write by the unresolved-address floor;
+ * the pass-through is what keeps that true if it ever were not.) And where a sub-field's key
+ * collides with a different sub-field's name, the key wins, matching ACF's own container write path,
+ * which reads $value[$sub['key']] before it looks at the name.
+ *
+ * @param mixed                    $sent The sanitized value the caller asked to write.
+ * @param array<string,mixed>|null $def  The field definition, or null when it cannot be resolved.
+ * @return mixed The value with container sub-field keys rewritten to names.
+ */
+function aafm_acf_rekey_sent_to_names( $sent, ?array $def ) {
+	return aafm_acf_rekey_stored_to_names( $sent, $def );
 }
 
 /**
@@ -1178,11 +1228,18 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  * verified, so one field that fails to persist can never silently skip the fields that follow it. The
  * request reports failure only after all fields have been attempted.
  *
+ * Both sides of that comparison are first put into ONE name-space. Storage reads back keyed by
+ * sub-field key, and the caller may legitimately have addressed a sub-field by its key too - ACF
+ * documents that form and writes the row for it - so the sent value goes through the same
+ * key-to-name rewrite as storage (aafm_acf_rekey_sent_to_names). Without that, a by-key write
+ * landed and was then reported as a failure, because the sent address could never appear in
+ * re-keyed storage. The rewrite is a strict no-op for a value addressed by names.
+ *
  * What the verify GUARANTEES, stated exactly: for every value the caller sent - each field, each row
- * index of a sent list, each sub-field key of a sent row, recursively - storage holds that value
- * after the write, allowing for ACF's storage typing; and a sent list holds exactly as many rows as
- * were sent. A value that differs, a sent key storage does not hold, or a row count that does not
- * match, all still report failure.
+ * index of a sent list, each sub-field of a sent row, recursively, addressed by name or by key -
+ * storage holds that value after the write, allowing for ACF's storage typing; and a sent list holds
+ * exactly as many rows as were sent. A value that differs, a sent sub-field storage does not hold,
+ * or a row count that does not match, all still report failure.
  *
  * What it does NOT guarantee: sub-fields the caller did not send are not inspected at all. ACF
  * materialises every declared sub-field of a container row on read-back, and those keys are
@@ -1290,11 +1347,20 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			// Project storage onto the sent shape so the verify judges what was asked for. A missing
 			// key, a changed value, and a wrong row count all still mismatch; see the projection's
 			// own docblock for the exact bound.
-			$def     = function_exists( 'acf_get_field' ) ? acf_get_field( (string) $field_key ) : false;
-			$stored  = aafm_acf_rekey_stored_to_names( $stored, is_array( $def ) ? $def : null );
-			$stored  = aafm_acf_project_stored_onto_sent( $stored, $clean );
-			$as_read = wp_json_encode( aafm_acf_canonicalize_for_compare( $stored ) );
-			$as_sent = wp_json_encode( aafm_acf_canonicalize_for_compare( $clean ) );
+			// Both operands go through the SAME key-to-name rule before they meet. ACF documents
+			// addressing a sub-field by its field KEY (/resources/add_row keys a whole row that
+			// way), accepts it, and writes the row - but storage then reads back under the
+			// sub-field's name, so a caller who used a key was comparing its own address against a
+			// name that could never match. The projection abandoned, the comparison mismatched, and
+			// the request reported failure AFTER the write had landed. Normalising the sent value
+			// too is what makes the two sides the same name-space; see aafm_acf_rekey_sent_to_names.
+			$def      = function_exists( 'acf_get_field' ) ? acf_get_field( (string) $field_key ) : false;
+			$def      = is_array( $def ) ? $def : null;
+			$expected = aafm_acf_rekey_sent_to_names( $clean, $def );
+			$stored   = aafm_acf_rekey_stored_to_names( $stored, $def );
+			$stored   = aafm_acf_project_stored_onto_sent( $stored, $expected );
+			$as_read  = wp_json_encode( aafm_acf_canonicalize_for_compare( $stored ) );
+			$as_sent  = wp_json_encode( aafm_acf_canonicalize_for_compare( $expected ) );
 			if ( $as_read !== $as_sent ) {
 				$failed[] = (string) $field_key;
 			}

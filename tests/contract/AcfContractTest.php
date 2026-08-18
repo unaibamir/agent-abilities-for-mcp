@@ -212,4 +212,113 @@ final class AcfContractTest extends TestCase {
 			'The accepted write really reached storage.'
 		);
 	}
+
+	/**
+	 * A sub-field addressed by its field KEY: the vendor accepts it, and so must the write path.
+	 *
+	 * ACF documents this address form. /resources/add_row shows a whole row keyed by sub-field keys
+	 * ("Add a new row using field keys"), and /resources/update_field states the key form is the one
+	 * to use when saving a value that does not yet exist - the create case an agent hits constantly.
+	 * So this is not an exotic address; it is the one ACF recommends for a new value.
+	 *
+	 * The plugin reported it as a FAILURE while the write LANDED. The read-back re-keys storage to
+	 * sub-field NAMES, so the sent key could never be found in it, the projection abandoned, the
+	 * comparison mismatched, and the request returned a generic error with the data already in
+	 * wp_postmeta - the same silent-wrong-answer class as the undeclared-address defect above, at a
+	 * different trigger, and shipped in 1.6.3 where the same re-keyer feeds the same comparison.
+	 *
+	 * The `alpha` value is what separates the fix from the defect here, exactly as in the test
+	 * above: both the broken and the fixed version write it, and only the fixed version says so.
+	 * The container is a `group` for the same reason as above - this suite pins ACF free/SCF, which
+	 * has no repeater, flexible-content or clone field at all. The other three are covered against
+	 * the stub in the unit corpus and against ACF Pro 6.8.7 by probe on the bench.
+	 */
+	public function test_a_sub_field_addressed_by_its_key_is_written_and_reported_as_written(): void {
+		acf_add_local_field_group(
+			array(
+				'key'      => 'group_aafm_contract_bykey',
+				'title'    => 'AAFM Contract By Key',
+				'fields'   => array(
+					array(
+						'key'        => 'field_aafm_bk_grp',
+						'label'      => 'BK Grp',
+						'name'       => 'aafm_bk_grp',
+						'type'       => 'group',
+						'sub_fields' => array(
+							array(
+								'key'   => 'field_aafm_bk_alpha',
+								'label' => 'Alpha',
+								'name'  => 'bk_alpha',
+								'type'  => 'text',
+							),
+							array(
+								'key'   => 'field_aafm_bk_beta',
+								'label' => 'Beta',
+								'name'  => 'bk_beta',
+								'type'  => 'text',
+							),
+						),
+					),
+				),
+				'location' => array(
+					array(
+						array(
+							'param'    => 'post_type',
+							'operator' => '==',
+							'value'    => 'post',
+						),
+					),
+				),
+			)
+		);
+
+		$post_id = self::factory()->post->create();
+
+		// The vendor half: ACF resolves a sub-field by its key and writes the row under the
+		// sub-field's NAME. Both halves matter - the acceptance is why the write must not be
+		// refused, and the naming is why the sent key could never match re-keyed storage.
+		update_field( 'field_aafm_bk_grp', array( 'field_aafm_bk_alpha' => 'VENDOR-BY-KEY' ), $post_id );
+		$this->assertSame(
+			'VENDOR-BY-KEY',
+			get_post_meta( $post_id, 'aafm_bk_grp_bk_alpha', true ),
+			'ACF accepts a sub-field addressed by its field key and writes the row.'
+		);
+
+		update_field( 'field_aafm_bk_grp', array( 'bk_alpha' => 'BEFORE' ), $post_id );
+
+		// The plugin half. Before the fix this returned WP_Error(aafm_error) with `bk_alpha`
+		// already holding the new value.
+		$result = aafm_acf_write_fields(
+			array( 'field_aafm_bk_grp' => array( 'field_aafm_bk_alpha' => 'AFTER-BY-KEY' ) ),
+			$post_id,
+			'post'
+		);
+
+		$this->assertNotInstanceOf(
+			\WP_Error::class,
+			$result,
+			$result instanceof \WP_Error
+				? 'A by-key write lands in the database, so it must not be reported as a failure. Got: ' . $result->get_error_code()
+				: ''
+		);
+		$this->assertSame(
+			'AFTER-BY-KEY',
+			get_post_meta( $post_id, 'aafm_bk_grp_bk_alpha', true ),
+			'The by-key write really reached storage; success over an unwritten value would be the worse defect.'
+		);
+
+		// And the verify has not gone blind: a by-key address that names no declared sub-field is
+		// still refused, so this is not "accept everything with field_ in front of it".
+		$refused = aafm_acf_write_fields(
+			array( 'field_aafm_bk_grp' => array( 'field_aafm_bk_nosuch' => 'X' ) ),
+			$post_id,
+			'post'
+		);
+		$this->assertInstanceOf( \WP_Error::class, $refused, 'An address ACF resolves to nothing is still refused.' );
+		$this->assertSame(
+			'AFTER-BY-KEY',
+			get_post_meta( $post_id, 'aafm_bk_grp_bk_alpha', true ),
+			'The refusal still leaves storage untouched.'
+		);
+	}
 }

@@ -21,13 +21,15 @@
  * them also asserts the write really reached update_field(), because a refusal that had quietly
  * become "refuse nothing, write nothing" would otherwise read as success.
  *
- * Addressing a sub-field by its KEY is the one case that looks like it belongs in that list and
- * does not. ACF accepts a key address and writes the row, but this plugin's read-back re-keys
- * storage to sub-field NAMES, so the sent key is never found and the request fails anyway - the
- * same class of defect, a different trigger, and present in shipped 1.6.3 for the same reason. It
- * is recorded here as a `fail-after-write` row rather than fixed, because the fix lives in the
- * re-keyer and the projection. What the rows below DO prove about it is the thing this change is
- * responsible for: this floor is not what refuses it.
+ * Addressing a sub-field by its KEY is a second instance of that same class, at a different
+ * trigger, and it is now fixed too. ACF documents the form (/resources/add_row keys a whole row by
+ * sub-field keys) and writes the row for it, but this plugin's read-back re-keyed storage to
+ * sub-field NAMES while comparing against the sent KEY, so the sent address could never be found
+ * and the request failed anyway - with the data already written. Present in shipped 1.6.3, where
+ * the same re-keyer feeds the same comparison. The rows for it were `fail-after-write` while this
+ * floor was the only thing that had been changed; they are now `accept-by-key`, which asserts the
+ * strictly stronger pair: this floor still refuses nothing, AND the value physically reached
+ * storage. The over-acceptance direction is pinned next door in AcfContainerVerifyCorpusTest.
  *
  * The shapes are the ones measured against real ACF Pro 6.8.7 on the bench, by a zero-write probe
  * that short-circuits acf/pre_update_metadata and captures the meta keys ACF's own update_value()
@@ -234,25 +236,35 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	/**
 	 * Every address shape the floor has been asked to judge, and the verdict it must reach.
 	 *
-	 * Each row is [ sent field map, verdict ], where the verdict is one of three states and the
-	 * third is the reason there are three rather than two:
+	 * Each row is [ sent field map, verdict ]. The verdict has four states, and the last two are the
+	 * reason there are more than two:
 	 *
 	 *   'accept'             the request succeeds and the values reach update_field().
 	 *   'refuse-before-write' this floor rejects it and NOTHING reaches update_field(). The
 	 *                        distinction from the row below is the entire defect.
 	 *   'fail-after-write'   the request comes back an error AFTER the write landed. That is the
-	 *                        defect's own shape, and these rows record where it still happens for a
-	 *                        DIFFERENT trigger this change deliberately does not touch: a caller
-	 *                        addressing a sub-field by its KEY. ACF accepts a key address and
-	 *                        writes the row, while the read-back re-keys storage to sub-field NAMES
-	 *                        (aafm_acf_rekey_stored_to_names), so the sent key is never found and
-	 *                        the comparison mismatches. Measured against real ACF: `bk_alpha` went
-	 *                        to `AFTER-BY-KEY` on a call that returned an error. Present in shipped
-	 *                        1.6.3, where the same re-keyer feeds the same comparison. Fixing it
-	 *                        means changing the re-keyer and the projection, which is a separate
-	 *                        piece of work; what matters here is that THIS floor is not what
-	 *                        refuses them, which the error code asserts and the direct
-	 *                        detector rows prove address by address.
+	 *                        defect's own shape, kept as a verdict of its own because an error and
+	 *                        an empty AcfStubStore::$written are two different claims and only the
+	 *                        pair says the request never ran.
+	 *   'accept-by-key'      a sub-field addressed by its field KEY. ACF documents this form
+	 *                        (/resources/add_row keys a whole row by sub-field keys) and writes the
+	 *                        row for it, so it must succeed - and until the by-key fix it did NOT:
+	 *                        the read-back re-keyed storage to sub-field NAMES while comparing
+	 *                        against the sent KEY, which no re-keyed storage can hold, so the
+	 *                        request came back an error with the data already written. Measured
+	 *                        against real ACF free 6.3.6: a sub-field went from `BEFORE` to
+	 *                        `AFTER-BY-KEY` on the call that returned WP_Error(aafm_error). Present
+	 *                        in shipped 1.6.3, where the same re-keyer feeds the same comparison.
+	 *
+	 * THESE ROWS WERE `fail-after-write` AND THE FIX TURNED THEM RED, WHICH WAS THE HANDSHAKE. What
+	 * they asserted then was that THIS floor is not what refuses a by-key address - by elimination,
+	 * from the error code. That claim is not weakened by flipping them, it is made positively and
+	 * more precisely: `accept-by-key` asserts the detector flags NOTHING for the exact address, by
+	 * name, calling aafm_acf_unresolved_sub_addresses() directly. A wrong-reason pass in the other
+	 * direction - the verify going blind and accepting everything - is what the flip newly risks,
+	 * so these rows also assert the value physically reached storage under the sub-field's own key,
+	 * and AcfContainerVerifyCorpusTest carries the by-key row whose storage disagrees and must
+	 * still FAIL. Success alone would prove nothing at all here.
 	 *
 	 * @return array<string,array{0:array<string,mixed>,1:string}>
 	 */
@@ -267,11 +279,12 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				array( 'field_grp' => array( 'alpha' => 'A' ) ),
 				'accept',
 			),
-			// By-KEY addressing: this floor must stay silent, and it does. The request still fails,
-			// on the separate pre-existing trigger described in the provider docblock.
+			// By-KEY addressing: this floor must stay silent, and it does. It now SUCCEEDS as ACF's
+			// own documented row-by-field-keys form should; see the provider docblock for what
+			// these rows assert instead of the error code they used to.
 			'group by sub-field KEY'            => array(
 				array( 'field_grp' => array( 'field_grp_a' => 'A' ) ),
-				'fail-after-write',
+				'accept-by-key',
 			),
 			'group, both sub-fields'            => array(
 				array(
@@ -297,9 +310,11 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
+			// By KEY at BOTH depths: the nested container's own address and its sub-field's. A fix
+			// that rewrote only the top level would leave this one failing.
 			'repeater, nested group by KEY'     => array(
 				array( 'field_rep' => array( array( 'field_rep_g' => array( 'field_rep_g_x' => 'X' ) ) ) ),
-				'fail-after-write',
+				'accept-by-key',
 			),
 			// The acf_fc_layout marker resolves to no sub-field by design. Flagging it would refuse
 			// EVERY flexible-content write - the same trap ACF's `_layout_meta` row set for the
@@ -360,9 +375,11 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				array( 'field_cl1' => array( 'email' => 'e@example.test' ) ),
 				'accept',
 			),
+			// A prefixed clone is where `name` and `_name` diverge, so the key must resolve to the
+			// name ACF accepts on write (`_name`) and to the same name storage reads back under.
 			'clone prefix=1 by sub-field KEY'   => array(
 				array( 'field_cl1' => array( 'field_cl1_e' => 'e@example.test' ) ),
-				'fail-after-write',
+				'accept-by-key',
 			),
 			// A definition with no declared shape cannot say what is undeclared. Refusing a whole
 			// write on no information would be far worse than the defect; this falls through to the
@@ -565,6 +582,46 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			return;
 		}
 
+		if ( 'accept-by-key' === $verdict ) {
+			// The cause-discriminator these rows used to carry, made positively. It used to read
+			// the error code and conclude "not this floor" by elimination; now it names the address
+			// and asks the detector directly, which is the same claim with the guesswork removed.
+			// It runs FIRST so a regression here reports "the floor started flagging a by-key
+			// address" rather than a downstream mismatch that would send a reader to the wrong file.
+			foreach ( $fields as $field_key => $sent ) {
+				$def = acf_get_field( (string) $field_key );
+				$this->assertIsArray( $def, 'The by-key fixture field must resolve.' );
+				$this->assertSame(
+					array(),
+					aafm_acf_unresolved_sub_addresses( $def, $sent ),
+					'A sub-field addressed by its KEY is an address ACF resolves, so this floor must flag nothing.'
+				);
+			}
+
+			$this->assertNotInstanceOf(
+				WP_Error::class,
+				$result,
+				$result instanceof WP_Error
+					? 'ACF documents addressing a sub-field by its field key and writes the row for it, so the write must not report failure. Got: ' . $result->get_error_code()
+					: ''
+			);
+
+			// Success is NOT the assertion. The risk this flip introduces is the opposite of the
+			// defect - a verify that has gone blind and accepts anything - so prove the value
+			// physically landed, in the RAW store, under the sub-field's own key, with no
+			// production helper on the expectation side. The read-back's own re-keying is exactly
+			// what is under test here and cannot be the thing that certifies it.
+			$this->assertNotSame(
+				array(),
+				AcfStubStore::$written,
+				'An accepted write must actually reach update_field().'
+			);
+			foreach ( $fields as $field_key => $sent ) {
+				$this->assertStoredUnderSentAddress( (string) $field_key, $sent, $post_id );
+			}
+			return;
+		}
+
 		$this->assertNotInstanceOf(
 			WP_Error::class,
 			$result,
@@ -577,6 +634,85 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			AcfStubStore::$written,
 			'An accepted write must actually reach update_field(); "refuse nothing, write nothing" is not success.'
 		);
+	}
+
+	/**
+	 * Assert every leaf of a by-KEY send physically reached the raw store, address for address.
+	 *
+	 * Deliberately does NOT call aafm_acf_rekey_stored_to_names() or the projection. Those two are
+	 * exactly what the by-key fix changed, so using them to certify it would be a test that agrees
+	 * with the code by construction. The stub writes a container row keyed by each sub-field's own
+	 * `key` (AcfStubStore::rekey_row), so for a send addressed by KEY the sent address IS the
+	 * storage address and the walk is a literal one.
+	 *
+	 * That equivalence is the row's premise rather than a coincidence, so it is asserted: every
+	 * address walked must be a declared sub-field KEY. A by-NAME row given this verdict by mistake
+	 * fails here, by name, instead of quietly asserting against the wrong storage address.
+	 *
+	 * @param string $field_key Top-level field key.
+	 * @param mixed  $sent      The value sent for it.
+	 * @param int    $post_id   Object selector.
+	 * @return void
+	 */
+	private function assertStoredUnderSentAddress( string $field_key, $sent, int $post_id ): void {
+		$def = acf_get_field( $field_key );
+		$this->assertIsArray( $def, 'The by-key fixture field must resolve.' );
+		$this->assertIsArray( $sent, 'A by-key row sends a container value.' );
+		$this->assertLandedUnderKeys( AcfStubStore::value( $field_key, $post_id ), $sent, $def, $field_key );
+	}
+
+	/**
+	 * The recursion behind assertStoredUnderSentAddress().
+	 *
+	 * @param mixed               $stored Raw stored value at this depth, keyed by sub-field key.
+	 * @param mixed               $sent   Sent value at this depth.
+	 * @param array<string,mixed> $def    The container definition for this depth.
+	 * @param string              $path   Human-readable path for the failure message.
+	 * @return void
+	 */
+	private function assertLandedUnderKeys( $stored, $sent, array $def, string $path ): void {
+		$this->assertIsArray( $stored, sprintf( 'Storage must hold a container at %s.', $path ) );
+
+		// A repeater or flexible-content value is a list of rows; a group or clone is one flat map.
+		if ( array_keys( $sent ) === range( 0, count( $sent ) - 1 ) ) {
+			foreach ( $sent as $index => $row ) {
+				$this->assertArrayHasKey( $index, $stored, sprintf( 'Storage is missing row %s/%d.', $path, (int) $index ) );
+				$this->assertLandedUnderKeys( $stored[ $index ], $row, $def, $path . '/' . (int) $index );
+			}
+			return;
+		}
+
+		$layout   = isset( $sent['acf_fc_layout'] ) ? (string) $sent['acf_fc_layout'] : '';
+		$sub_defs = array();
+		foreach ( aafm_acf_sub_field_defs( $def, $layout ) as $sub ) {
+			$sub_defs[ (string) $sub['key'] ] = $sub;
+		}
+
+		foreach ( $sent as $address => $value ) {
+			if ( 'acf_fc_layout' === $address ) {
+				continue;
+			}
+			$address = (string) $address;
+			$this->assertArrayHasKey(
+				$address,
+				$sub_defs,
+				sprintf( 'This verdict is for addresses that ARE sub-field keys; %s/%s is not one.', $path, $address )
+			);
+			$this->assertArrayHasKey(
+				$address,
+				$stored,
+				sprintf( 'The write did not land under %s/%s.', $path, $address )
+			);
+			if ( is_array( $value ) ) {
+				$this->assertLandedUnderKeys( $stored[ $address ], $value, $sub_defs[ $address ], $path . '/' . $address );
+				continue;
+			}
+			$this->assertSame(
+				(string) $value,
+				(string) $stored[ $address ],
+				sprintf( 'Storage must hold the value that was sent at %s/%s.', $path, $address )
+			);
+		}
 	}
 
 	/**

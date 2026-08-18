@@ -968,4 +968,271 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 			'ACF hydrates every declared sub-field on read-back; the stub must model that or this corpus proves nothing.'
 		);
 	}
+
+	/**
+	 * A sub-field addressed by its field KEY, across every container type - the second instance of
+	 * the false-failure class, at a different trigger from the partial row above.
+	 *
+	 * ACF documents this address form (/resources/add_row shows a whole row keyed by sub-field keys,
+	 * and /resources/update_field recommends the key form when saving a value that does not yet
+	 * exist) and writes the row for it. This plugin's read-back re-keyed STORAGE to sub-field names
+	 * while comparing against the sent KEY, which no re-keyed storage can ever hold, so the
+	 * projection abandoned and the request came back an error with the data already written.
+	 * Reproduced end to end against real ACF free 6.3.6, where a sub-field went from `BEFORE` to
+	 * `AFTER-BY-KEY` on the call that returned WP_Error(aafm_error). Shipped in 1.6.3, where the
+	 * same re-keyer feeds the same comparison.
+	 *
+	 * Written as its own method rather than as corpus rows because the driver's assertion walks the
+	 * SENT shape against name-keyed storage, which a by-key send does not fit - and reshaping that
+	 * driver to fit it would put the change inside the thing under test. Here the storage assertion
+	 * names the sub-field's own key literally, so no production helper certifies its own fix.
+	 *
+	 * @return void
+	 */
+	public function test_a_sub_field_addressed_by_its_key_is_written_and_reported_as_written(): void {
+		// [ config, sent field map, [ top-level field key, path of storage keys, expected value ] ].
+		$cases = array(
+			'repeater row by key'           => array(
+				'repeater',
+				array( 'field_emails' => array( array( 'field_email_name' => 'By Key' ) ) ),
+				array( 'field_emails', array( 0, 'field_email_name' ), 'By Key' ),
+			),
+			'repeater row, mixed addresses' => array(
+				'repeater',
+				array(
+					'field_emails' => array(
+						array(
+							'field_email_name' => 'By Key',
+							'subject'          => 'By Name',
+						),
+					),
+				),
+				array( 'field_emails', array( 0, 'field_email_subject' ), 'By Name' ),
+			),
+			'group by key'                  => array(
+				'nested',
+				array( 'field_meta' => array( 'field_meta_label' => 'L' ) ),
+				array( 'field_meta', array( 'field_meta_label' ), 'L' ),
+			),
+			'flex, nested repeater by key'  => array(
+				'nested',
+				array(
+					'field_sections' => array(
+						array(
+							'acf_fc_layout'       => 'section',
+							'field_section_items' => array( array( 'field_item_label' => 'Deep' ) ),
+						),
+					),
+				),
+				array( 'field_sections', array( 0, 'field_section_items', 0, 'field_item_label' ), 'Deep' ),
+			),
+			'clone prefixed by key'         => array(
+				'clone',
+				array( 'field_contact' => array( 'field_clone_email' => 'a@example.test' ) ),
+				array( 'field_contact', array( 'field_clone_email' ), 'a@example.test' ),
+			),
+			'clone unprefixed by key'       => array(
+				'clone',
+				array( 'field_plainclone' => array( 'field_plain_email' => 'b@example.test' ) ),
+				array( 'field_plainclone', array( 'field_plain_email' ), 'b@example.test' ),
+			),
+			'clone seamless by key'         => array(
+				'clone',
+				array( 'field_seamless' => array( 'field_seam_email' => 'c@example.test' ) ),
+				array( 'field_seamless', array( 'field_seam_email' ), 'c@example.test' ),
+			),
+		);
+
+		foreach ( $cases as $label => $case ) {
+			list( $config_name, $fields, $expectation ) = $case;
+			list( $field_key, $path, $value )           = $expectation;
+
+			$post_id = $this->boot( $this->config_named( $config_name ) );
+			$res     = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+				array(
+					'post_id' => $post_id,
+					'fields'  => $fields,
+				)
+			);
+
+			$this->assertNotInstanceOf(
+				WP_Error::class,
+				$res,
+				$res instanceof WP_Error
+					? sprintf( 'ACF accepts a by-key address and writes the row, so [%s] must not report failure. Got: %s', $label, $res->get_error_code() )
+					: ''
+			);
+
+			// Success on its own would also be reported by a verify that had stopped comparing, so
+			// walk to the value in the RAW store, under the sub-field keys ACF really stores it by.
+			$stored = AcfStubStore::value( $field_key, $post_id );
+			foreach ( $path as $step ) {
+				$this->assertIsArray( $stored, sprintf( 'Storage must hold a container on the way to %s in [%s].', (string) $step, $label ) );
+				$this->assertArrayHasKey( $step, $stored, sprintf( 'Storage is missing %s in [%s].', (string) $step, $label ) );
+				$stored = $stored[ $step ];
+			}
+			$this->assertSame( $value, $stored, sprintf( 'The by-key write must reach storage in [%s].', $label ) );
+
+			$this->reset_integration_stubs();
+		}
+	}
+
+	/**
+	 * THE OTHER DIRECTION, and the one this change actually risks.
+	 *
+	 * Teaching the verify to recognise a by-key address is a relaxation of a comparison, and the way
+	 * to be worse than the defect is to relax it into accepting anything: a false failure traded for
+	 * a false success, which is the worse of the two on a write path. So every by-key shape that
+	 * genuinely did NOT persist must still report failure. Storage is forced to disagree with the
+	 * write through AcfStubStore::$read_override, which is the only way to model "update_field said
+	 * yes and storage says otherwise".
+	 *
+	 * The last case is the one a careless fix fails: an address that is neither a key nor a name
+	 * must not be quietly dropped on its way into the comparison. It is refused before any write by
+	 * the unresolved-address floor, and this asserts the request still ends in an error rather than
+	 * in a projection that ignored it.
+	 *
+	 * @return void
+	 */
+	public function test_a_by_key_write_that_did_not_persist_still_reports_failure(): void {
+		$cases = array(
+			'by key, sub-field vanished'   => array(
+				'clone',
+				array(
+					'field_contact' => array(
+						'field_clone_email' => 'a@example.test',
+						'field_clone_phone' => '0100',
+					),
+				),
+				array( 'field_contact' => array( 'field_clone_email' => 'a@example.test' ) ),
+			),
+			'by key, value was altered'    => array(
+				'clone',
+				array( 'field_contact' => array( 'field_clone_email' => 'a@example.test' ) ),
+				array( 'field_contact' => array( 'field_clone_email' => 'ALTERED' ) ),
+			),
+			'by key, nothing persisted'    => array(
+				'clone',
+				array( 'field_contact' => array( 'field_clone_email' => 'a@example.test' ) ),
+				array( 'field_contact' => false ),
+			),
+			'by key, repeater row dropped' => array(
+				'repeater',
+				array(
+					'field_emails' => array(
+						array( 'field_email_name' => 'A' ),
+						array( 'field_email_name' => 'B' ),
+					),
+				),
+				array( 'field_emails' => array( array( 'field_email_name' => 'A' ) ) ),
+			),
+			'by key, wrong sub-field'      => array(
+				'repeater',
+				array( 'field_emails' => array( array( 'field_email_name' => 'A' ) ) ),
+				array( 'field_emails' => array( array( 'field_email_subject' => 'A' ) ) ),
+			),
+			'neither key nor name'         => array(
+				'repeater',
+				array( 'field_emails' => array( array( 'field_email_nosuch' => 'A' ) ) ),
+				null,
+			),
+		);
+
+		foreach ( $cases as $label => $case ) {
+			list( $config_name, $fields, $read_override ) = $case;
+
+			$post_id = $this->boot( $this->config_named( $config_name ) );
+			if ( null !== $read_override ) {
+				AcfStubStore::$read_override = $read_override;
+			}
+
+			$res = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+				array(
+					'post_id' => $post_id,
+					'fields'  => $fields,
+				)
+			);
+
+			$this->assertInstanceOf(
+				WP_Error::class,
+				$res,
+				sprintf( 'A by-key write that did not persist as sent must still report failure [%s].', $label )
+			);
+
+			$this->reset_integration_stubs();
+		}
+	}
+
+	/**
+	 * The name-to-key rewrite must be a STRICT no-op for a value addressed entirely by names.
+	 *
+	 * This is the safety argument for touching the verify at all, and it is asserted rather than
+	 * reasoned: every shape this plugin already accepted must reach the comparison byte-identical,
+	 * so the only behaviour that can have changed is the by-key one. Driven over the corpus's own
+	 * container types through the production helper, at the top level and at depth.
+	 *
+	 * @return void
+	 */
+	public function test_the_key_rewrite_is_a_no_op_for_values_addressed_by_name(): void {
+		$by_config = array(
+			'repeater' => array(
+				'field_emails' => array(
+					array(
+						'name'    => 'Row One',
+						'content' => '<p>x</p>',
+						'active'  => true,
+					),
+					array( 'subject' => 'Two' ),
+				),
+			),
+			'nested'   => array(
+				'field_meta'     => array(
+					'label' => 'L',
+					'url'   => 'https://example.test/',
+				),
+				'field_sections' => array(
+					array(
+						'acf_fc_layout' => 'section',
+						'heading'       => 'H',
+						'items'         => array( array( 'label' => 'I' ) ),
+					),
+				),
+			),
+			'clone'    => array(
+				'field_contact'    => array( 'email' => 'a@example.test' ),
+				'field_plainclone' => array( 'email' => 'b@example.test' ),
+				'field_seamless'   => array( 'seam_email' => 'c@example.test' ),
+			),
+		);
+
+		foreach ( $by_config as $config_name => $fields ) {
+			$this->boot( $this->config_named( $config_name ) );
+			foreach ( $fields as $field_key => $sent ) {
+				$def = acf_get_field( (string) $field_key );
+				$this->assertIsArray( $def, sprintf( '%s must resolve.', (string) $field_key ) );
+				$this->assertSame(
+					$sent,
+					aafm_acf_rekey_sent_to_names( $sent, $def ),
+					sprintf( 'A by-name value must pass through the key rewrite untouched: %s.', (string) $field_key )
+				);
+			}
+			$this->reset_integration_stubs();
+		}
+	}
+
+	/**
+	 * Resolve a config name to its field-group definition.
+	 *
+	 * @param string $config_name 'repeater', 'nested' or 'clone'.
+	 * @return array<string,mixed>
+	 */
+	private function config_named( string $config_name ): array {
+		if ( 'nested' === $config_name ) {
+			return $this->nested_config();
+		}
+		if ( 'clone' === $config_name ) {
+			return $this->clone_config();
+		}
+		return $this->repeater_config();
+	}
 }

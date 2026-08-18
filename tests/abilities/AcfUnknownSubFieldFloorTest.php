@@ -1,0 +1,1063 @@
+<?php
+/**
+ * The unknown-sub-field floor corpus: every address a container write can carry, and whether the
+ * request must be refused before anything is written.
+ *
+ * ROWS IN THIS FILE ARE APPEND-ONLY. NEVER DELETE ONE.
+ *
+ * The defect this exists for shipped in 1.6.3 and earlier. A container write carrying a sub-field
+ * name the definition does not declare was reported as a FAILURE while the write LANDED: ACF wrote
+ * every sub-field it recognised, ignored the address it did not, the read-back verify then could
+ * not find that address in storage, and the whole request came back an error. Measured end to end
+ * against real ACF, a sub-field went from `BEFORE` to `AFTER-WRITE-LANDED` on the very call that
+ * returned the error. An agent told the write failed retries it, or reports failure to a user,
+ * while the data is already in wp_postmeta - the silent-wrong-answer class.
+ *
+ * Both directions are pinned together and the succeed rows are not the optional half. This is a
+ * refusal added to a live write path, so the way to be worse than the bug is to refuse an ordinary
+ * ACF write: a flexible-content row carrying the `acf_fc_layout` marker every such row must carry,
+ * a prefixed clone addressed by `_name`, a container nested inside another container, a link's
+ * structured value, a checkbox list. Every one of those is here as a MUST-SUCCEED row, and each of
+ * them also asserts the write really reached update_field(), because a refusal that had quietly
+ * become "refuse nothing, write nothing" would otherwise read as success.
+ *
+ * Addressing a sub-field by its KEY is the one case that looks like it belongs in that list and
+ * does not. ACF accepts a key address and writes the row, but this plugin's read-back re-keys
+ * storage to sub-field NAMES, so the sent key is never found and the request fails anyway - the
+ * same class of defect, a different trigger, and present in shipped 1.6.3 for the same reason. It
+ * is recorded here as a `fail-after-write` row rather than fixed, because the fix lives in the
+ * re-keyer and the projection. What the rows below DO prove about it is the thing this change is
+ * responsible for: this floor is not what refuses it.
+ *
+ * The shapes are the ones measured against real ACF Pro 6.8.7 on the bench, by a zero-write probe
+ * that short-circuits acf/pre_update_metadata and captures the meta keys ACF's own update_value()
+ * would write. What that probe established, and what these rows encode: ACF resolves a row's
+ * values against its OWN sub-field definitions, by the sub-field's key and then its name/_name, and
+ * an address matching none of them is never read and never written - for all four container types.
+ *
+ * @package AgentAbilitiesForMCP
+ */
+
+declare( strict_types=1 );
+
+namespace AAFM\Tests\Abilities;
+
+use AAFM\Tests\AcfStubStore;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\TestCase;
+use WP_Error;
+
+final class AcfUnknownSubFieldFloorTest extends TestCase {
+
+	use IntegrationStubs;
+
+	public function set_up(): void {
+		parent::set_up();
+		aafm_install_activity_log();
+		aafm_clear_activity_log();
+	}
+
+	public function tear_down(): void {
+		$this->reset_integration_stubs();
+		parent::tear_down();
+	}
+
+	/**
+	 * One text sub-field definition in the shape acf_get_field() returns.
+	 *
+	 * @param string $key   Sub-field key.
+	 * @param string $name  Sub-field name, already prefix_name-rewritten where a clone applies one.
+	 * @param string $alias Sub-field `_name` (its pre-prefix name). Defaults to $name.
+	 * @return array<string,mixed>
+	 */
+	private function sub( string $key, string $name, string $alias = '' ): array {
+		return array(
+			'key'   => $key,
+			'name'  => $name,
+			'_name' => '' !== $alias ? $alias : $name,
+			'label' => $name,
+			'type'  => 'text',
+		);
+	}
+
+	/**
+	 * The field group every row here writes against: one of each container type, a container with
+	 * no declared shape, and two non-containers whose values are arrays.
+	 *
+	 * @return array<string,mixed> The field-group config for stub_acf().
+	 */
+	private function config(): array {
+		return array(
+			'groups' => array(
+				array(
+					'key'    => 'group_addr',
+					'title'  => 'Addresses',
+					'fields' => array(
+						array(
+							'key'        => 'field_grp',
+							'name'       => 'grp',
+							'label'      => 'Group',
+							'type'       => 'group',
+							'sub_fields' => array(
+								$this->sub( 'field_grp_a', 'alpha' ),
+								$this->sub( 'field_grp_b', 'beta' ),
+							),
+						),
+						array(
+							'key'        => 'field_rep',
+							'name'       => 'rep',
+							'label'      => 'Repeater',
+							'type'       => 'repeater',
+							'sub_fields' => array(
+								$this->sub( 'field_rep_t', 'title' ),
+								array(
+									'key'        => 'field_rep_g',
+									'name'       => 'inner',
+									'_name'      => 'inner',
+									'label'      => 'Inner',
+									'type'       => 'group',
+									'sub_fields' => array( $this->sub( 'field_rep_g_x', 'x' ) ),
+								),
+							),
+						),
+						array(
+							'key'     => 'field_flex',
+							'name'    => 'flex',
+							'label'   => 'Flex',
+							'type'    => 'flexible_content',
+							'layouts' => array(
+								array(
+									'key'        => 'layout_hero',
+									'name'       => 'hero',
+									'sub_fields' => array( $this->sub( 'field_flex_h', 'heading' ) ),
+								),
+								array(
+									'key'        => 'layout_cards',
+									'name'       => 'cards',
+									'sub_fields' => array(
+										$this->sub( 'field_flex_c', 'caption' ),
+										array(
+											'key'        => 'field_flex_r',
+											'name'       => 'items',
+											'_name'      => 'items',
+											'label'      => 'Items',
+											'type'       => 'repeater',
+											'sub_fields' => array( $this->sub( 'field_flex_r_n', 'note' ) ),
+										),
+									),
+								),
+							),
+						),
+						// A top-level clone with prefix_name off: the sub-field keeps its bare name.
+						array(
+							'key'         => 'field_cl0',
+							'name'        => 'cl0',
+							'label'       => 'Clone bare',
+							'type'        => 'clone',
+							'display'     => 'group',
+							'prefix_name' => 0,
+							'sub_fields'  => array( $this->sub( 'field_cl0_e', 'email' ) ),
+						),
+						// A prefixed clone: `name` and `_name` diverge, and ACF accepts a write
+						// under `key` or `_name` only. Measured on ACF Pro 6.8.7: the sub-field's
+						// KEY is not rewritten by acf_clone_field(), only its name.
+						array(
+							'key'         => 'field_cl1',
+							'name'        => 'cl1',
+							'label'       => 'Clone prefixed',
+							'type'        => 'clone',
+							'display'     => 'group',
+							'prefix_name' => 1,
+							'sub_fields'  => array( $this->sub( 'field_cl1_e', 'cl1_email', 'email' ) ),
+						),
+						// A container declaring no shape at all: nothing can be judged undeclared
+						// against it, so it must fall through untouched.
+						array(
+							'key'        => 'field_noshape',
+							'name'       => 'noshape',
+							'label'      => 'No shape',
+							'type'       => 'group',
+							'sub_fields' => array(),
+						),
+						// Non-containers whose values are arrays: a link's structured return format
+						// and a multi-value checkbox. Neither declares sub-fields and neither is
+						// addressed the way a container is, so the walk must not descend into them.
+						array(
+							'key'   => 'field_link',
+							'name'  => 'lnk',
+							'_name' => 'lnk',
+							'label' => 'Link',
+							'type'  => 'link',
+						),
+						array(
+							'key'   => 'field_chk',
+							'name'  => 'chk',
+							'_name' => 'chk',
+							'label' => 'Checkbox',
+							'type'  => 'checkbox',
+						),
+						array(
+							'key'   => 'field_plain',
+							'name'  => 'plain',
+							'_name' => 'plain',
+							'label' => 'Plain',
+							'type'  => 'text',
+						),
+					),
+				),
+			),
+		);
+	}
+
+	/**
+	 * Boot the ACF stubs with real-ACF container modelling on and register the write ability.
+	 *
+	 * The modelling flag is load-bearing here, not decoration. With it off the stub stores whatever
+	 * the caller sent, verbatim, so an undeclared address round-trips and the defect this file
+	 * exists for cannot be reproduced at all.
+	 *
+	 * @return int The post id to write against.
+	 */
+	private function boot(): int {
+		$this->force_integration( 'acf' );
+		$this->stub_acf( $this->config() );
+		AcfStubStore::$model_container_rekeying = true;
+		aafm_registry_cache_should_flush( true );
+		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+		update_option( 'aafm_enabled_abilities', array( 'aafm/acf-update-post-fields' ) );
+		$this->in_action( 'wp_abilities_api_init', 'aafm_register_enabled_abilities' );
+
+		$admin_id = $this->acting_as( 'administrator' );
+		return (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+	}
+
+	/**
+	 * Every address shape the floor has been asked to judge, and the verdict it must reach.
+	 *
+	 * Each row is [ sent field map, verdict ], where the verdict is one of three states and the
+	 * third is the reason there are three rather than two:
+	 *
+	 *   'accept'             the request succeeds and the values reach update_field().
+	 *   'refuse-before-write' this floor rejects it and NOTHING reaches update_field(). The
+	 *                        distinction from the row below is the entire defect.
+	 *   'fail-after-write'   the request comes back an error AFTER the write landed. That is the
+	 *                        defect's own shape, and these rows record where it still happens for a
+	 *                        DIFFERENT trigger this change deliberately does not touch: a caller
+	 *                        addressing a sub-field by its KEY. ACF accepts a key address and
+	 *                        writes the row, while the read-back re-keys storage to sub-field NAMES
+	 *                        (aafm_acf_rekey_stored_to_names), so the sent key is never found and
+	 *                        the comparison mismatches. Measured against real ACF: `bk_alpha` went
+	 *                        to `AFTER-BY-KEY` on a call that returned an error. Present in shipped
+	 *                        1.6.3, where the same re-keyer feeds the same comparison. Fixing it
+	 *                        means changing the re-keyer and the projection, which is a separate
+	 *                        piece of work; what matters here is that THIS floor is not what
+	 *                        refuses them, which the error code asserts and the direct
+	 *                        detector rows prove address by address.
+	 *
+	 * @return array<string,array{0:array<string,mixed>,1:string}>
+	 */
+	public function provide_address_shapes(): array {
+		return array(
+			// ---------------------------------------------------------------
+			// MUST SUCCEED. Each of these is a way an agent legitimately
+			// addresses a sub-field, and refusing any of them would be worse
+			// than the defect being fixed.
+			// ---------------------------------------------------------------
+			'group by name'                     => array(
+				array( 'field_grp' => array( 'alpha' => 'A' ) ),
+				'accept',
+			),
+			// By-KEY addressing: this floor must stay silent, and it does. The request still fails,
+			// on the separate pre-existing trigger described in the provider docblock.
+			'group by sub-field KEY'            => array(
+				array( 'field_grp' => array( 'field_grp_a' => 'A' ) ),
+				'fail-after-write',
+			),
+			'group, both sub-fields'            => array(
+				array(
+					'field_grp' => array(
+						'alpha' => 'A',
+						'beta'  => 'B',
+					),
+				),
+				'accept',
+			),
+			'repeater row'                      => array(
+				array( 'field_rep' => array( array( 'title' => 'T' ) ) ),
+				'accept',
+			),
+			'repeater row, nested group'        => array(
+				array(
+					'field_rep' => array(
+						array(
+							'title' => 'T',
+							'inner' => array( 'x' => 'X' ),
+						),
+					),
+				),
+				'accept',
+			),
+			'repeater, nested group by KEY'     => array(
+				array( 'field_rep' => array( array( 'field_rep_g' => array( 'field_rep_g_x' => 'X' ) ) ) ),
+				'fail-after-write',
+			),
+			// The acf_fc_layout marker resolves to no sub-field by design. Flagging it would refuse
+			// EVERY flexible-content write - the same trap ACF's `_layout_meta` row set for the
+			// effective-key derivation next door.
+			'flex row with layout marker'       => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'heading'       => 'H',
+						),
+					),
+				),
+				'accept',
+			),
+			'flex, second layout'               => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'cards',
+							'caption'       => 'C',
+						),
+					),
+				),
+				'accept',
+			),
+			'flex, two rows two layouts'        => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'heading'       => 'H',
+						),
+						array(
+							'acf_fc_layout' => 'cards',
+							'caption'       => 'C',
+						),
+					),
+				),
+				'accept',
+			),
+			'flex, repeater nested in layout'   => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'cards',
+							'items'         => array( array( 'note' => 'N' ) ),
+						),
+					),
+				),
+				'accept',
+			),
+			'clone prefix=0 by bare name'       => array(
+				array( 'field_cl0' => array( 'email' => 'e@example.test' ) ),
+				'accept',
+			),
+			'clone prefix=1 by _name'           => array(
+				array( 'field_cl1' => array( 'email' => 'e@example.test' ) ),
+				'accept',
+			),
+			'clone prefix=1 by sub-field KEY'   => array(
+				array( 'field_cl1' => array( 'field_cl1_e' => 'e@example.test' ) ),
+				'fail-after-write',
+			),
+			// A definition with no declared shape cannot say what is undeclared. Refusing a whole
+			// write on no information would be far worse than the defect; this falls through to the
+			// read-back verify exactly as it did before.
+			// Refused, but by the read-back verify and not by this floor, and NOTHING of the
+			// caller's reaches storage - measured against real ACF, where the post held only core's
+			// own _pingme/_encloseme rows afterwards. So the failure it reports is a true one, and
+			// the fall-through leaves that untouched rather than inventing a refusal on a shape it
+			// cannot judge.
+			'container with no declared shape'  => array(
+				array( 'field_noshape' => array( 'whatever' => 'W' ) ),
+				'fail-after-write',
+			),
+			// Non-containers whose value is an array. `url`/`title`/`target` are members of a link's
+			// return format, not sub-fields, and a checkbox value is a plain list.
+			'link structured array'             => array(
+				array(
+					'field_link' => array(
+						'url'    => 'https://example.test/',
+						'title'  => 'T',
+						'target' => '_blank',
+					),
+				),
+				'accept',
+			),
+			'checkbox list value'               => array(
+				array( 'field_chk' => array( 'a', 'b' ) ),
+				'accept',
+			),
+			'plain scalar field'                => array(
+				array( 'field_plain' => 'ok' ),
+				'accept',
+			),
+			// A container sent a scalar: there are no addresses to judge.
+			'container sent a scalar'           => array(
+				array( 'field_grp' => 'not-a-map' ),
+				'accept',
+			),
+			// The address carries an invisible character the sanitizer strips, so what actually
+			// reaches update_field() is the declared name and the write lands normally. Judging
+			// the RAW value instead would refuse a write that succeeds today - a false refusal
+			// invented out of a difference the write itself never sees.
+			'address with a stripped bidi char' => array(
+				array( 'field_grp' => array( "alpha\u{202E}" => 'A' ) ),
+				'accept',
+			),
+
+			// ---------------------------------------------------------------
+			// MUST REFUSE, and refuse BEFORE anything is written. Every one of
+			// these is a shape where ACF writes the sub-fields it recognises
+			// and ignores the address it does not - which is precisely how the
+			// request came back an error with the data already stored.
+			// ---------------------------------------------------------------
+			'group, undeclared address'         => array(
+				array(
+					'field_grp' => array(
+						'alpha'     => 'A',
+						'nosuchsub' => 'X',
+					),
+				),
+				'refuse-before-write',
+			),
+			'repeater, undeclared address'      => array(
+				array(
+					'field_rep' => array(
+						array(
+							'title' => 'T',
+							'nope'  => 'X',
+						),
+					),
+				),
+				'refuse-before-write',
+			),
+			// Only the SECOND row carries it, so a walk that stops after row 0 goes red here.
+			'repeater, second row only'         => array(
+				array(
+					'field_rep' => array(
+						array( 'title' => 'T' ),
+						array( 'nope' => 'X' ),
+					),
+				),
+				'refuse-before-write',
+			),
+			'repeater, nested group address'    => array(
+				array( 'field_rep' => array( array( 'inner' => array( 'nope' => 'X' ) ) ) ),
+				'refuse-before-write',
+			),
+			// Per-layout resolution: `caption` is declared by the `cards` layout and is genuinely
+			// undeclared in a `hero` row. ACF writes nothing for it.
+			'flex, sub-field of other layout'   => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'caption'       => 'C',
+						),
+					),
+				),
+				'refuse-before-write',
+			),
+			'flex, undeclared in its layout'    => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'cards',
+							'nope'          => 'X',
+						),
+					),
+				),
+				'refuse-before-write',
+			),
+			'flex, nested repeater address'     => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'cards',
+							'items'         => array( array( 'nope' => 'N' ) ),
+						),
+					),
+				),
+				'refuse-before-write',
+			),
+			'clone prefix=0, undeclared'        => array(
+				array( 'field_cl0' => array( 'nosuch' => 'X' ) ),
+				'refuse-before-write',
+			),
+			'clone prefix=1, undeclared'        => array(
+				array( 'field_cl1' => array( 'nosuch' => 'X' ) ),
+				'refuse-before-write',
+			),
+			// A second field in the map is enough: the refusal is per REQUEST, so a legitimate
+			// field alongside an offending one must not be written either.
+			'offending field beside a good one' => array(
+				array(
+					'field_plain' => 'ok',
+					'field_grp'   => array( 'nosuchsub' => 'X' ),
+				),
+				'refuse-before-write',
+			),
+		);
+	}
+
+	/**
+	 * Drive one address shape through the real ability and check the verdict.
+	 *
+	 * A refusal is checked three ways over, and the SECOND is the one that matters. Before the fix
+	 * this request ALSO returned a WP_Error - after the recognised sub-fields had already been
+	 * written. So asserting the error alone proves nothing at all, which is exactly why the
+	 * `fail-after-write` verdict exists as a state of its own: an error and an empty
+	 * AcfStubStore::$written are two different claims, and only the pair together says the request
+	 * never ran.
+	 *
+	 * @dataProvider provide_address_shapes
+	 *
+	 * @param array<string,mixed> $fields  The field map to write.
+	 * @param string              $verdict 'accept', 'refuse-before-write' or 'fail-after-write'.
+	 * @return void
+	 */
+	public function test_address_verdict( array $fields, string $verdict ): void {
+		$post_id = $this->boot();
+
+		AcfStubStore::$written = array();
+		$result                = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => $fields,
+			)
+		);
+
+		if ( 'refuse-before-write' === $verdict ) {
+			$this->assertInstanceOf(
+				WP_Error::class,
+				$result,
+				'A write addressing a sub-field the definition does not declare must be refused.'
+			);
+			$this->assertSame(
+				array(),
+				AcfStubStore::$written,
+				'The refusal must land BEFORE any write: this is the whole defect, not the error itself.'
+			);
+			$this->assertSame(
+				'aafm_acf_unknown_sub_field',
+				$result->get_error_code(),
+				'The refusal must name its own reason so an agent can correct the address.'
+			);
+			return;
+		}
+
+		if ( 'fail-after-write' === $verdict ) {
+			$this->assertInstanceOf(
+				WP_Error::class,
+				$result,
+				'This shape still fails; the row exists to record WHICH floor is responsible.'
+			);
+			$this->assertNotSame(
+				'aafm_acf_unknown_sub_field',
+				$result->get_error_code(),
+				'This floor must NOT be what refuses this shape - that would be the over-block it exists to avoid.'
+			);
+			return;
+		}
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$result,
+			$result instanceof WP_Error
+				? 'An ordinary ACF write must not be refused: a wrong refusal is its own defect. Got: ' . $result->get_error_code()
+				: ''
+		);
+		$this->assertNotSame(
+			array(),
+			AcfStubStore::$written,
+			'An accepted write must actually reach update_field(); "refuse nothing, write nothing" is not success.'
+		);
+	}
+
+	/**
+	 * The defect itself, pinned at the outcome rather than at the verdict.
+	 *
+	 * The provider row above says the request is refused and nothing is written. This says what
+	 * that means in storage: the sub-field the caller DID declare correctly keeps its previous
+	 * value, because the request never ran. Before the fix this exact call returned an error and
+	 * left `alpha` holding the new value - reproduced end to end against real ACF, where a
+	 * sub-field went from `BEFORE` to `AFTER-WRITE-LANDED` on the call that reported the failure.
+	 *
+	 * @return void
+	 */
+	public function test_the_landed_write_no_longer_lands(): void {
+		$post_id = $this->boot();
+
+		$seeded = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_grp' => array( 'alpha' => 'BEFORE' ) ),
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $seeded, 'The seeding write is an ordinary one and must succeed.' );
+		$this->assertSame(
+			'BEFORE',
+			AcfStubStore::value( 'field_grp', $post_id )['field_grp_a'] ?? null,
+			'Storage holds the seeded value, keyed the way real ACF keys it.'
+		);
+
+		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_grp' => array(
+						'alpha'     => 'AFTER-WRITE-LANDED',
+						'nosuchsub' => 'X',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'The request is refused.' );
+		$this->assertSame(
+			'BEFORE',
+			AcfStubStore::value( 'field_grp', $post_id )['field_grp_a'] ?? null,
+			'A refused request must leave storage exactly as it was: reporting failure while the write lands is the defect.'
+		);
+	}
+
+	/**
+	 * The message hands the caller its own address back, so the error is actionable.
+	 *
+	 * @return void
+	 */
+	public function test_the_refusal_names_the_address_the_caller_sent(): void {
+		$post_id = $this->boot();
+
+		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'cards',
+							'items'         => array( array( 'nope' => 'N' ) ),
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertStringContainsString(
+			'flex.0.items.0.nope',
+			$result->get_error_message(),
+			'The message must locate the address inside the structure the caller sent.'
+		);
+	}
+
+	/**
+	 * The message is bounded: a caller sending many undeclared addresses gets a readable list, not
+	 * an unbounded echo of its own request.
+	 *
+	 * Added under the mutation pass. Removing the cap left the whole corpus green, so the bound was
+	 * carried by nothing at all.
+	 *
+	 * @return void
+	 */
+	public function test_the_refusal_message_is_bounded(): void {
+		$post_id = $this->boot();
+
+		$row = array();
+		foreach ( range( 1, 9 ) as $i ) {
+			$row[ 'nosuch' . $i ] = 'X';
+		}
+		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array( 'field_grp' => $row ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$named = 0;
+		foreach ( range( 1, 9 ) as $i ) {
+			$named += false === strpos( $result->get_error_message(), 'grp.nosuch' . $i ) ? 0 : 1;
+		}
+		$this->assertSame( 5, $named, 'At most five addresses are named, and the cap is what decides that.' );
+	}
+
+	/**
+	 * The detector, exercised directly against the definitions above.
+	 *
+	 * The provider rows judge the OUTCOME, which is the property that matters, but they cannot show
+	 * WHICH address produced a verdict - a refusal for the wrong reason reads exactly like a
+	 * refusal for the right one. These rows name the addresses.
+	 *
+	 * @return void
+	 */
+	public function test_the_flagged_addresses_are_the_ones_acf_ignores(): void {
+		$this->boot();
+		$defs = array();
+		foreach ( $this->config()['groups'][0]['fields'] as $field ) {
+			$defs[ (string) $field['key'] ] = $field;
+		}
+
+		$cases = array(
+			// [ field key, sent value, expected flagged addresses ]
+			array( 'field_grp', array( 'alpha' => 'A' ), array() ),
+			array( 'field_grp', array( 'field_grp_a' => 'A' ), array() ),
+			array( 'field_grp', array( 'nosuchsub' => 'X' ), array( 'grp.nosuchsub' ) ),
+			array(
+				'field_grp',
+				array(
+					'alpha' => 'A',
+					'two'   => 'X',
+					'three' => 'Y',
+				),
+				array( 'grp.two', 'grp.three' ),
+			),
+			array( 'field_rep', array( array( 'title' => 'T' ) ), array() ),
+			array( 'field_rep', array( array( 'nope' => 'X' ) ), array( 'rep.0.nope' ) ),
+			array(
+				'field_rep',
+				array( array( 'title' => 'T' ), array( 'nope' => 'X' ) ),
+				array( 'rep.1.nope' ),
+			),
+			array(
+				'field_rep',
+				array( array( 'inner' => array( 'nope' => 'X' ) ) ),
+				array( 'rep.0.inner.nope' ),
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'heading'       => 'H',
+					),
+				),
+				array(),
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'caption'       => 'C',
+					),
+				),
+				array( 'flex.0.caption' ),
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'cards',
+						'items'         => array( array( 'nope' => 'N' ) ),
+					),
+				),
+				array( 'flex.0.items.0.nope' ),
+			),
+			array( 'field_cl0', array( 'email' => 'e' ), array() ),
+			array( 'field_cl0', array( 'nosuch' => 'X' ), array( 'cl0.nosuch' ) ),
+			array( 'field_cl1', array( 'email' => 'e' ), array() ),
+			array( 'field_cl1', array( 'field_cl1_e' => 'e' ), array() ),
+			array( 'field_cl1', array( 'nosuch' => 'X' ), array( 'cl1.nosuch' ) ),
+			array( 'field_noshape', array( 'whatever' => 'W' ), array() ),
+			array(
+				'field_link',
+				array(
+					'url'   => 'https://example.test/',
+					'title' => 'T',
+				),
+				array(),
+			),
+			array( 'field_chk', array( 'a', 'b' ), array() ),
+			array( 'field_plain', 'x', array() ),
+			array( 'field_grp', 'x', array() ),
+		);
+
+		foreach ( $cases as $case ) {
+			list( $field_key, $sent, $expected ) = $case;
+			$flagged                             = aafm_acf_unresolved_sub_addresses( $defs[ $field_key ], $sent );
+			sort( $flagged );
+			sort( $expected );
+			$this->assertSame(
+				$expected,
+				$flagged,
+				sprintf( 'Flagged addresses for %s must be exactly the ones ACF ignores.', $field_key )
+			);
+		}
+	}
+
+	/**
+	 * The two walks over the caller's structure must agree, or they will drift apart.
+	 *
+	 * One walk, aafm_acf_effective_meta_keys(), derives the meta keys ACF will write from the sent
+	 * value; the other, aafm_acf_unresolved_sub_addresses(), walks the same value to find the
+	 * addresses ACF will ignore. They share every resolution rule through the same helpers, but they are still two
+	 * walks, and two walks that can disagree are how this project's documented "fixed at one call
+	 * site, never swept" archetype starts. So pin the relationship rather than trusting it: an
+	 * address the derivation turns into a meta key must NOT be flagged, and an address the detector
+	 * flags must contribute NO key to the derivation.
+	 *
+	 * Attribution is the difficulty, and the naive version of this test got it wrong. Asking "did
+	 * the derivation emit anything beyond the field's own name" credits the wrong address as soon
+	 * as the path runs through a resolved container: `rep.0.inner.nope` makes the derivation emit
+	 * `rep_0_inner`, which `inner` earned and `nope` did not. So each probe carries the same value
+	 * twice, once with the address under test and once without it, and the address is judged by
+	 * the DIFFERENCE it makes. That is exact, and it is attributable to one address.
+	 *
+	 * @return void
+	 */
+	public function test_the_key_derivation_and_the_detector_agree(): void {
+		$this->boot();
+		$defs = array();
+		foreach ( $this->config()['groups'][0]['fields'] as $field ) {
+			$defs[ (string) $field['key'] ] = $field;
+		}
+
+		// [ field key, value WITH the address, the same value WITHOUT it, a label ].
+		$probes = array(
+			array(
+				'field_grp',
+				array(
+					'alpha' => 'A',
+					'beta'  => 'B',
+				),
+				array( 'beta' => 'B' ),
+				'grp.alpha (name)',
+				'derivation',
+			),
+			array(
+				'field_grp',
+				array(
+					'field_grp_a' => 'A',
+					'beta'        => 'B',
+				),
+				array( 'beta' => 'B' ),
+				'grp.field_grp_a (key)',
+				'derivation',
+			),
+			array(
+				'field_grp',
+				array(
+					'nosuchsub' => 'X',
+					'beta'      => 'B',
+				),
+				array( 'beta' => 'B' ),
+				'grp.nosuchsub',
+				'detector',
+			),
+			array(
+				'field_rep',
+				array(
+					array(
+						'title' => 'T',
+						'inner' => array( 'x' => 'X' ),
+					),
+				),
+				array( array( 'inner' => array( 'x' => 'X' ) ) ),
+				'rep.0.title',
+				'derivation',
+			),
+			array(
+				'field_rep',
+				array(
+					array(
+						'title' => 'T',
+						'nope'  => 'X',
+					),
+				),
+				array( array( 'title' => 'T' ) ),
+				'rep.0.nope',
+				'detector',
+			),
+			array(
+				'field_rep',
+				array( array( 'inner' => array( 'x' => 'X' ) ) ),
+				array( array( 'inner' => array() ) ),
+				'rep.0.inner.x',
+				'derivation',
+			),
+			array(
+				'field_rep',
+				array(
+					array(
+						'inner' => array(
+							'x'    => 'X',
+							'nope' => 'N',
+						),
+					),
+				),
+				array( array( 'inner' => array( 'x' => 'X' ) ) ),
+				'rep.0.inner.nope',
+				'detector',
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'heading'       => 'H',
+					),
+				),
+				array( array( 'acf_fc_layout' => 'hero' ) ),
+				'flex.0.heading',
+				'derivation',
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'caption'       => 'C',
+					),
+				),
+				array( array( 'acf_fc_layout' => 'hero' ) ),
+				'flex.0.caption (wrong layout)',
+				'detector',
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'cards',
+						'items'         => array( array( 'note' => 'N' ) ),
+					),
+				),
+				array(
+					array(
+						'acf_fc_layout' => 'cards',
+						'items'         => array( array() ),
+					),
+				),
+				'flex.0.items.0.note',
+				'derivation',
+			),
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'cards',
+						'items'         => array(
+							array(
+								'note' => 'N',
+								'nope' => 'X',
+							),
+						),
+					),
+				),
+				array(
+					array(
+						'acf_fc_layout' => 'cards',
+						'items'         => array( array( 'note' => 'N' ) ),
+					),
+				),
+				'flex.0.items.0.nope',
+				'detector',
+			),
+			array( 'field_cl0', array( 'email' => 'e' ), array(), 'cl0.email', 'derivation' ),
+			array( 'field_cl0', array( 'nosuch' => 'X' ), array(), 'cl0.nosuch', 'detector' ),
+			array( 'field_cl1', array( 'email' => 'e' ), array(), 'cl1.email (_name)', 'derivation' ),
+			array( 'field_cl1', array( 'field_cl1_e' => 'e' ), array(), 'cl1.field_cl1_e (key)', 'derivation' ),
+			array( 'field_cl1', array( 'nosuch' => 'X' ), array(), 'cl1.nosuch', 'detector' ),
+			// The no-shape container: both walks say nothing, which IS agreement. Listed rather
+			// than exempted, so the fall-through cannot quietly become a disagreement.
+			array( 'field_noshape', array( 'whatever' => 'W' ), array(), 'noshape.whatever', 'neither' ),
+			array(
+				'field_link',
+				array(
+					'url'   => 'https://example.test/',
+					'title' => 'T',
+				),
+				array( 'url' => 'https://example.test/' ),
+				'lnk.title (not a sub-field)',
+				'neither',
+			),
+		);
+
+		$seen = array(
+			'derivation' => 0,
+			'detector'   => 0,
+			'neither'    => 0,
+		);
+		foreach ( $probes as $probe ) {
+			list( $field_key, $with, $without, $label, $expected ) = $probe;
+			$def = $defs[ $field_key ];
+
+			$keys_with    = aafm_acf_effective_meta_keys( $def, $with );
+			$keys_without = aafm_acf_effective_meta_keys( $def, $without );
+			sort( $keys_with );
+			sort( $keys_without );
+			$derives = $keys_with !== $keys_without;
+
+			$flags = count( aafm_acf_unresolved_sub_addresses( $def, $with ) )
+				!== count( aafm_acf_unresolved_sub_addresses( $def, $without ) );
+
+			// The invariant, stated as one claimant per address. "Never both" alone would be
+			// satisfied by a detector that flags nothing, so the claimant is named instead.
+			$actual = $derives && $flags ? 'both' : ( $derives ? 'derivation' : ( $flags ? 'detector' : 'neither' ) );
+			$this->assertSame(
+				$expected,
+				$actual,
+				sprintf( '%s: expected the %s to claim this address, got %s. The walks have drifted.', $label, $expected, $actual )
+			);
+			++$seen[ $expected ];
+		}
+
+		// Both walks must have done real work here, or the per-probe assertion above holds
+		// vacuously: a derivation that derives nothing, or a detector that flags nothing, would
+		// still satisfy every 'neither' row.
+		$this->assertSame(
+			array(
+				'derivation' => 9,
+				'detector'   => 7,
+				'neither'    => 2,
+			),
+			$seen,
+			'The agreement corpus must not shrink or lose either side of the comparison.'
+		);
+	}
+
+	/**
+	 * The definitions above are only worth anything if they really carry sub-fields.
+	 *
+	 * A fixture whose containers declare nothing would send every MUST-SUCCEED row through the
+	 * no-shape fall-through and every MUST-REFUSE row would stop refusing - so the succeed half
+	 * would pass while proving nothing at all. Anti-vacuity applied to the fixture itself.
+	 *
+	 * @return void
+	 */
+	public function test_the_fixture_declares_sub_fields_or_this_corpus_proves_nothing(): void {
+		$counts = array();
+		foreach ( $this->config()['groups'][0]['fields'] as $field ) {
+			$key = (string) $field['key'];
+			if ( isset( $field['layouts'] ) ) {
+				$total = 0;
+				foreach ( (array) $field['layouts'] as $layout ) {
+					$total += count( (array) $layout['sub_fields'] );
+				}
+				$counts[ $key ] = $total;
+				continue;
+			}
+			if ( isset( $field['sub_fields'] ) ) {
+				$counts[ $key ] = count( (array) $field['sub_fields'] );
+			}
+		}
+
+		$this->assertSame(
+			array(
+				'field_grp'     => 2,
+				'field_rep'     => 2,
+				'field_flex'    => 3,
+				'field_cl0'     => 1,
+				'field_cl1'     => 1,
+				'field_noshape' => 0,
+			),
+			$counts,
+			'Every container in the fixture must still declare the sub-fields its rows depend on.'
+		);
+	}
+}

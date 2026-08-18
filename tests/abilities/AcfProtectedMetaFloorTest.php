@@ -339,9 +339,14 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 	/**
 	 * Every write shape the floor has been asked to judge, and the verdict it must reach.
 	 *
-	 * Each row is [ selector type, sent field map, must_refuse ].
+	 * Each row is [ selector type, sent field map, must_refuse, expected error code ]. The code
+	 * defaults to the hard block's own generic `aafm_error`, and asserting it is not decoration:
+	 * there is now a second floor in the same pass, refusing container addresses that name no
+	 * sub-field, and without the code a row that started being refused for THAT reason instead
+	 * would still look green while the protected-meta property it exists for went untested. That
+	 * is this release's documented wrong-reason-red failure mode.
 	 *
-	 * @return array<string,array{0:string,1:array<string,mixed>,2:bool}>
+	 * @return array<string,array{0:string,1:array<string,mixed>,2:bool,3?:string}>
 	 */
 	public function provide_floor_shapes(): array {
 		return array(
@@ -559,11 +564,17 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				false,
 			),
 			// An address matching no sub-field is skipped by ACF, so nothing is written for it and
-			// nothing may be derived from it either.
+			// nothing may be derived from it either. This row was written expecting the request to
+			// be ACCEPTED, because the hard block genuinely has nothing to say about it. It is now
+			// refused - by the SEPARATE unknown-sub-field floor added alongside, which exists
+			// because ACF wrote the sub-fields it did recognise and the request was then reported
+			// as failed anyway. The row keeps its original point by naming the code: the property
+			// pinned here is still that the PROTECTED-META floor is not what refuses this.
 			'clone, address matching no sub-field'        => array(
 				'post',
 				array( 'field_bare_group' => array( 'not_a_sub_field' => 'ok' ) ),
-				false,
+				true,
+				'aafm_acf_unknown_sub_field',
 			),
 		);
 	}
@@ -580,9 +591,11 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 	 * @param string              $selector_type 'post' or 'user'.
 	 * @param array<string,mixed> $fields        The field map to write.
 	 * @param bool                $must_refuse   True when the floor must reject the whole request.
+	 * @param string              $expected_code The error code the refusal must carry, so a refusal
+	 *                                           for a different reason cannot read as this one.
 	 * @return void
 	 */
-	public function test_floor_verdict( string $selector_type, array $fields, bool $must_refuse ): void {
+	public function test_floor_verdict( string $selector_type, array $fields, bool $must_refuse, string $expected_code = 'aafm_error' ): void {
 		$object_id = $this->boot( $selector_type );
 		$slug      = 'user' === $selector_type ? 'aafm/acf-update-user-fields' : 'aafm/acf-update-post-fields';
 		$arg       = 'user' === $selector_type ? 'user_id' : 'post_id';
@@ -600,6 +613,11 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				WP_Error::class,
 				$result,
 				'A write whose effective meta key is hard-blocked must be refused.'
+			);
+			$this->assertSame(
+				$expected_code,
+				$result->get_error_code(),
+				'The refusal must come from the floor this row is about, not from a neighbouring one.'
 			);
 			// The refusal has to happen before anything is written, not after. A floor that rejects
 			// the response while the value is already in storage is not a floor.

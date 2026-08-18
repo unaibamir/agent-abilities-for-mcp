@@ -234,8 +234,18 @@ class AcfStubStore {
 				$sub = $by_name[ $sub_key ] ?? null;
 			}
 			if ( null === $sub ) {
-				if ( $is_clone && $to_key ) {
-					continue; // A clone's update_value() skips a key it does not recognise.
+				if ( $to_key ) {
+					// NOTHING is written for an address the definition does not declare. Every
+					// container type iterates its OWN sub_fields and pulls the caller's value out
+					// by the sub-field's key and then its name/_name; an address matching none of
+					// them is never read (class-acf-field-repeater.php::update_row, the group and
+					// clone update_value, the flexible-content update_row). Measured against real
+					// ACF: a group write carrying `alpha` plus an undeclared `nosuchsub` stores
+					// `{name}_alpha` and no `{name}_nosuchsub` row at all. The stub used to keep
+					// the undeclared address for every type but clone, which echoed it straight
+					// back on read and hid the shipped defect where the recognised sub-fields land
+					// and the request is still reported as failed.
+					continue;
 				}
 				$out[ $sub_key ] = $sub_val;
 				continue;

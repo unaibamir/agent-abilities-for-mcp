@@ -664,6 +664,171 @@ function aafm_acf_sub_field_by_address( array $parent_def, string $address, stri
 }
 
 /**
+ * Every address in a container write that names no sub-field the definition declares.
+ *
+ * ACF never writes such an address. Each container type iterates the sub-fields its DEFINITION
+ * declares and pulls the caller's value out by the sub-field's key and then its name/`_name`
+ * (class-acf-field-repeater.php::update_row, the group/clone update_value, the flexible-content
+ * update_row); an address matching none of them is simply never read. Measured against real ACF:
+ * a group write carrying `alpha` plus an undeclared `nosuchsub` stores `{name}_alpha` and no
+ * `{name}_nosuchsub` row at all.
+ *
+ * That is what made the address worth refusing up front rather than discovering afterwards. The
+ * write of the recognised sub-fields LANDS, the read-back verify then cannot find the undeclared
+ * address in storage, and the whole request is reported as a failure - so the caller is told the
+ * write failed while the data changed underneath them. Measured end to end against real ACF: a
+ * sub-field went from `BEFORE` to `AFTER-WRITE-LANDED` on the very call that returned an error.
+ * Refusing before any write makes the sub-field level behave the way the top-level key already
+ * behaves, where an unresolved field key rejects the request with the database untouched.
+ *
+ * Addresses are resolved exactly the way ACF resolves them, through
+ * aafm_acf_sub_field_by_address(): by sub-field key first, then by name and `_name`, and inside a
+ * flexible-content row through the layout that row names. Two things are deliberately NOT flagged:
+ *
+ *   - `acf_fc_layout`, the marker every flexible-content row must carry. It resolves to no
+ *     sub-field by design, so flagging it would refuse every flexible-content write - the same
+ *     trap the `_layout_meta` row set for the effective-key derivation.
+ *   - Anything below a definition that declares no sub-fields at this depth. A definition we
+ *     cannot see the shape of tells us nothing about what is undeclared, and refusing a whole
+ *     write on no information is a far worse failure than the one being fixed. That shape keeps
+ *     today's behaviour: ACF writes nothing, the read-back verify mismatches, and the request
+ *     reports the failure it really is.
+ *
+ * The walk deliberately descends only into container-typed sub-fields. A URL/link/image field's
+ * value is a structured array whose members (`url`, `title`, `target`, ...) are not sub-fields,
+ * and a checkbox/select/gallery value is a plain list; neither declares sub-fields and neither is
+ * addressed the way a container is.
+ *
+ * This is a second walk over the caller's structure alongside aafm_acf_effective_meta_keys(), and
+ * two walks are how this project's documented drift starts. They share every resolution rule
+ * through the same helpers (aafm_acf_sub_field_by_address, aafm_acf_sub_field_defs,
+ * aafm_acf_container_field_types, aafm_acf_flat_container_field_types), and what remains is pinned
+ * by a test asserting the two agree across the whole corpus: every address the derivation resolves
+ * to a key is one this function does not flag, and every address this function flags is one the
+ * derivation derives no key for. Blinding this function to a single container type while leaving
+ * the derivation alone makes that test go red by name, so the pin is load-bearing rather than
+ * decorative.
+ *
+ * Measured coverage, from a mutation pass rather than asserted: twenty-one mutants, twenty killed.
+ * That includes blinding this walk to each container type individually - clone, group, repeater and
+ * flexible_content each kill an OUTCOME-level refuse row that names them, because a single
+ * whole-function mutant cannot tell a version that handles clone correctly and flexible content not
+ * at all from one that handles both. It also includes dropping the `acf_fc_layout` skip (which
+ * refuses every flexible-content write), dropping the no-shape fall-through, judging the raw value
+ * instead of the sanitized one, walking only the first row of a list, walking only the first field
+ * of the request, and not recursing into nested containers. The one survivor is named where it
+ * lives, in aafm_acf_unknown_sub_field_error(), rather than counted as proof.
+ *
+ * @param array<string,mixed> $def  The field definition, from acf_get_field().
+ * @param mixed               $sent The sanitized value the caller asked to write at this depth.
+ * @param string              $path The dotted address of $def within the request, for the message.
+ * @return array<int,string> The unresolved addresses, dotted from the top-level field name.
+ */
+function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = '' ): array {
+	$type = (string) ( $def['type'] ?? '' );
+	if ( ! is_array( $sent ) || ! in_array( $type, aafm_acf_container_field_types(), true ) ) {
+		return array();
+	}
+	$path = '' !== $path ? $path : (string) ( $def['name'] ?? '' );
+
+	// group and clone: ONE flat map of sub-field values. repeater and flexible_content: a list of
+	// such maps, one per row, so the row's own position joins the address.
+	if ( in_array( $type, aafm_acf_flat_container_field_types(), true ) ) {
+		return aafm_acf_unresolved_in_row( $def, $sent, $path );
+	}
+	$out       = array();
+	$row_index = -1;
+	foreach ( $sent as $row ) {
+		++$row_index;
+		if ( ! is_array( $row ) ) {
+			continue; // Not a row shape at all; ACF writes nothing and the verify still catches it.
+		}
+		$out = array_merge( $out, aafm_acf_unresolved_in_row( $def, $row, $path . '.' . $row_index ) );
+	}
+	return $out;
+}
+
+/**
+ * The per-row half of aafm_acf_unresolved_sub_addresses(): one container row, or a group's or
+ * clone's flat sub-field map.
+ *
+ * @param array<string,mixed>     $def  The parent container definition.
+ * @param array<int|string,mixed> $row  The row the caller sent.
+ * @param string                  $path The dotted address of $row within the request.
+ * @return array<int,string> The unresolved addresses within this row.
+ */
+function aafm_acf_unresolved_in_row( array $def, array $row, string $path ): array {
+	$layout = isset( $row['acf_fc_layout'] ) && is_scalar( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+	if ( array() === aafm_acf_sub_field_defs( $def, $layout ) ) {
+		return array(); // No declared shape to judge against; see the docblock's second exclusion.
+	}
+	$out = array();
+	foreach ( $row as $address => $sub_value ) {
+		$address = (string) $address;
+		if ( 'acf_fc_layout' === $address ) {
+			continue; // The layout marker names the row's layout, not a sub-field.
+		}
+		$sub = aafm_acf_sub_field_by_address( $def, $address, $layout );
+		if ( null === $sub ) {
+			$out[] = '' !== $path ? $path . '.' . $address : $address;
+			continue;
+		}
+		$out = array_merge(
+			$out,
+			aafm_acf_unresolved_sub_addresses( $sub, $sub_value, ( '' !== $path ? $path . '.' : '' ) . $address )
+		);
+	}
+	return $out;
+}
+
+/**
+ * The refusal for a container write addressing sub-fields the field definition does not declare.
+ *
+ * Named rather than generic, and it echoes the offending addresses back, unlike the hard-block
+ * refusal one line above it. The two are not the same kind of secret. The hard block stays generic
+ * because saying which meta key was protected tells a caller something about the site it did not
+ * supply; an unrecognised sub-field address is the caller's own string handed straight back, and
+ * the declared sub-field names are already readable through aafm-acf-list-field-groups. Naming it
+ * is what turns "the request could not be completed" into something an agent can correct on its
+ * next turn, which is most of the point of refusing early.
+ *
+ * The addresses are capped and sanitized before they reach the message, and the two halves have
+ * different standing, measured rather than assumed. The CAP is load-bearing: removing it left the
+ * whole corpus green until a row was added for it, so a caller could have had its entire request
+ * echoed back. The SANITIZE is DEFENSIVE, not demonstrated load-bearing: removing it changes no
+ * row, because the walk runs over the value aafm_acf_sanitize_value() already returned and that
+ * sanitizer puts every string key through aafm_sanitize_plain_text() at every depth. It stays
+ * because it is the last step before caller-derived text becomes a rendered string, and because
+ * that upstream guarantee lives in a different function than this one.
+ *
+ * @param array<int,string> $addresses The unresolved addresses.
+ * @return \WP_Error
+ */
+function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
+	$clean = array();
+	foreach ( array_values( array_unique( $addresses ) ) as $address ) {
+		// Cast the substr: on PHP 7.4 it returns false rather than '' when it cannot cut, and
+		// strict_types would make that a TypeError. Offset zero cannot actually reach that branch,
+		// so this is the same belt-and-braces cast the clone prefix helper already carries.
+		$safe = aafm_sanitize_plain_text( (string) substr( (string) $address, 0, 200 ) );
+		if ( '' !== $safe ) {
+			$clean[] = $safe;
+		}
+		if ( count( $clean ) >= 5 ) {
+			break; // A bounded message; the caller can fix these and re-send to see any others.
+		}
+	}
+	return new WP_Error(
+		'aafm_acf_unknown_sub_field',
+		sprintf(
+			/* translators: %s: comma-separated list of sub-field addresses the caller sent. */
+			__( 'These do not name a sub-field of the field they were sent under, so nothing was written: %s', 'agent-abilities-for-mcp' ),
+			implode( ', ', $clean )
+		)
+	);
+}
+
+/**
  * Normalize a value to the canonical form ACF's own storage round-trips it to, so a persisted write
  * can be verified without demanding JSON-exact equality with the value we sent.
  *
@@ -928,7 +1093,7 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
  * read shape so the agent sees ground truth after the write.
  *
- * Every key is gated up front, before any write lands - two floors, both required:
+ * Every key is gated up front, before any write lands - three floors, all required:
  *
  *   1. The key MUST resolve to a real, defined ACF field (acf_get_field() returns an array, not
  *      false). This is the privilege-escalation fix: for an UNRESOLVED key, ACF's update_field()
@@ -943,11 +1108,21 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  *      caller-supplied key and the field's real storage name (the meta_key ACF writes under) are
  *      checked, so a field whose name collides with a protected key (wp_capabilities, session
  *      tokens, application passwords, 2FA keys, …) can never be written through this path either.
+ *   3. Every address INSIDE a container value must name a sub-field that container declares.
+ *      ACF resolves a row's values against its own sub-field definitions and never reads an
+ *      address matching none of them, so it writes the sub-fields it recognises and silently
+ *      ignores the rest - and the read-back verify below then cannot find the ignored address in
+ *      storage and reports the whole request as failed, AFTER the recognised sub-fields have
+ *      already landed. Refusing before any write is what makes the report true, and it makes the
+ *      sub-field level behave the way an unresolved top-level key already behaves. See
+ *      aafm_acf_unresolved_sub_addresses() for what is deliberately not flagged.
  *
- * A single offending key rejects the whole request with a generic WP_Error before any update_field()
- * runs - matching this function's single-generic-error convention (the verify step below likewise
+ * A single offending key rejects the whole request with a WP_Error before any update_field()
+ * runs - matching this function's single-error convention (the verify step below likewise
  * collapses any non-persisting write to one generic error) and avoiding a partial write when any key
- * in the map is rejected. Legitimate, defined fields are written and verified exactly as before.
+ * in the map is rejected. Floors 1 and 2 refuse generically, because what they refuse says something
+ * about the site; floor 3 names the caller's own addresses so an agent can correct them. Legitimate,
+ * defined fields are written and verified exactly as before.
  *
  * After every field is written its stored value is read back and compared to the sanitized value
  * written, so a failed update_field() that stored nothing is never audited as a success. Two things
@@ -1008,6 +1183,17 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
 				return aafm_generic_error(); // Defense in depth: protected meta key.
 			}
+		}
+
+		// Second floor: every address inside a container must name a sub-field the definition
+		// declares, because ACF silently ignores one that does not while still writing the rest -
+		// which used to report the whole request as failed AFTER the recognised sub-fields had
+		// already landed. Judged on the SANITIZED value, not $raw: the sanitizer normalises string
+		// keys, so an address that only differs by an invisible character resolves once cleaned and
+		// must not be refused for a difference the write itself would never see.
+		$unresolved = aafm_acf_unresolved_sub_addresses( $def, aafm_acf_sanitize_value( $raw, $field_key ) );
+		if ( array() !== $unresolved ) {
+			return aafm_acf_unknown_sub_field_error( $unresolved );
 		}
 	}
 

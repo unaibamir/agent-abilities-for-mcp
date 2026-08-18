@@ -471,6 +471,59 @@ function aafm_activity_detail_map(): array {
 			),
 			'link'     => 'post',
 		),
+		// The update counterparts of the two delete entries below. A meta write is exactly as
+		// irreversible as a meta delete - there is no revision history for post, term or user meta,
+		// so overwriting a value destroys the previous one for good - yet only the deletes recorded
+		// what they touched. Before this, a successful write logged detail:null with arg_keys holding
+		// only the parameter NAMES (`user_id,key,value`), so the row could say an agent had written
+		// some user meta and name neither the user nor the key.
+		//
+		// Names and ids only, never the `value` these two carry and the deletes do not. Unlike
+		// aafm/update-site-settings, which constrains rendering to its ability's own closed allowlist,
+		// there is no closed set to check against here: the user-meta allowlist supports an allow-all
+		// `*` wildcard, so the `key` type's charset is the containment, the same as the four meta
+		// entries that shipped before this one.
+		//
+		// A hard-blocked key such as session_tokens is refused by the PERMISSION callback rather than
+		// inside execute, so its NAME does land here on the denied path. That is deliberate and is the
+		// row an operator most wants: an attempted privilege escalation, recorded with status 'denied'
+		// and nothing written. DetailTest pins both halves.
+		'aafm/update-term-meta'            => array(
+			/* translators: 1: meta key name. 2: the term's numeric ID. */
+			'template' => __( 'Updated meta key `%1$s` on term #%2$s', 'agent-abilities-for-mcp' ),
+			// meta_key and term_id, confirmed against aafm_args_update_term_meta() in terms.php. The
+			// optional taxonomy arg and the required `value` are both left out: one is not an
+			// identifier of the thing written, the other is what this column must never hold.
+			'args'     => array(
+				array(
+					'key'  => 'meta_key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'term_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'term',
+		),
+		'aafm/update-user-meta'            => array(
+			/* translators: 1: meta key name. 2: the user's numeric ID. */
+			'template' => __( 'Updated meta key `%1$s` on user #%2$s', 'agent-abilities-for-mcp' ),
+			// `key`, NOT `meta_key` - confirmed against aafm_args_update_user_meta(). BOTH user-meta
+			// abilities diverge from the post-meta family's spelling, so copying from the wrong
+			// neighbour still silently yields null here.
+			'args'     => array(
+				array(
+					'key'  => 'key',
+					'type' => 'key',
+				),
+				array(
+					'key'  => 'user_id',
+					'type' => 'id',
+				),
+			),
+			'link'     => 'user',
+		),
 		'aafm/delete-term-meta'            => array(
 			/* translators: 1: meta key name. 2: the term's numeric ID. */
 			'template' => __( 'Deleted meta key `%1$s` on term #%2$s', 'agent-abilities-for-mcp' ),

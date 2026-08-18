@@ -1063,6 +1063,155 @@ final class DetailTest extends TestCase {
 		$this->assertRowIsFreeOfTheValue( $row );
 	}
 
+	public function test_update_term_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated meta key `colour` on term #21',
+			aafm_build_activity_detail(
+				'aafm/update-term-meta',
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => 21,
+					'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'blue',
+				)
+			)
+		);
+		$this->assertSame( 'term', aafm_activity_detail_link_type( 'aafm/update-term-meta' ) );
+	}
+
+	/**
+	 * The same spelling trap as the delete sibling: BOTH user-meta abilities name their parameter
+	 * `key` while the whole post-meta family names theirs `meta_key`.
+	 */
+	public function test_update_user_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated meta key `nickname` on user #14',
+			aafm_build_activity_detail(
+				'aafm/update-user-meta',
+				array(
+					'user_id' => 14,
+					'key'     => 'nickname',
+					'value'   => 'Bob',
+				)
+			)
+		);
+		$this->assertSame( 'user', aafm_activity_detail_link_type( 'aafm/update-user-meta' ) );
+	}
+
+	public function test_update_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+		$this->assertNull(
+			aafm_build_activity_detail(
+				'aafm/update-user-meta',
+				array(
+					'user_id'  => 14,
+					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'Bob',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The hardest case for these two entries, and genuinely new coverage: unlike their delete
+	 * siblings, both update abilities carry a `value`, which is the one thing this column exists
+	 * to keep out. Asserted for both, because a per-ability slip would only show on one.
+	 *
+	 * The payload is deliberately charset-CLEAN (underscores, no space). Mutation testing proved
+	 * why: with the map mutated to name `value`, a spaced payload renders as null because the
+	 * `key` type's charset rejects it, so a spaced fixture would make this test pass for a reason
+	 * that has nothing to do with the map omitting `value`. A charset-clean value really does
+	 * render under that mutant - measured, `Updated meta key `SECRET_TOKEN_123` on user #14` - and
+	 * charset-clean is exactly the shape of the values worth protecting: tokens, hashes, ids.
+	 * The spaced case is kept below as the second assertion, documenting the charset as defence in
+	 * depth rather than as the thing under test.
+	 */
+	public function test_a_meta_update_value_never_reaches_the_detail(): void {
+		$term = aafm_build_activity_detail(
+			'aafm/update-term-meta',
+			array(
+				'term_id'  => 21,
+				'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$user = aafm_build_activity_detail(
+			'aafm/update-user-meta',
+			array(
+				'user_id' => 14,
+				'key'     => 'nickname',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+
+		// Leak assertions FIRST, deliberately. Under a map mutated to name `value` the assertSame
+		// below also fails, but it reports "two strings are identical" - a wrong-string diagnostic
+		// for what is actually a value disclosure. Ordering these first makes the failure say so.
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $term, 'A term-meta VALUE reached the audit detail.' );
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $user, 'A user-meta VALUE reached the audit detail.' );
+		$this->assertSame( 'Updated meta key `colour` on term #21', $term );
+		$this->assertSame( 'Updated meta key `nickname` on user #14', $user );
+
+		// Defence in depth, not the thing under test: even if the map named `value`, a value
+		// carrying a space could not clear the key charset. Kept so the distinction stays visible.
+		$this->assertNull( aafm_activity_detail_field( 'key', 'CONFIDENTIAL PAYLOAD' ) );
+	}
+
+	/**
+	 * The real call path. Before this entry existed a successful write logged detail:null while
+	 * arg_keys held only the parameter NAMES, so the row named neither the user nor the key.
+	 */
+	public function test_update_user_meta_records_what_it_wrote_end_to_end(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname' ) );
+		$this->register_enabled( array( 'aafm/update-user-meta' ) );
+		aafm_clear_activity_log();
+
+		$user_id = get_current_user_id();
+		$result  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $user_id,
+				'key'     => 'nickname',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$this->assertIsArray( $result, 'update-user-meta returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'CONFIDENTIAL_TOKEN_123', get_user_meta( $user_id, 'nickname', true ), 'The write must really have happened, or this asserts nothing.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( "Updated meta key `nickname` on user #{$user_id}", $row['detail'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	/**
+	 * A hard-blocked key is refused by the PERMISSION callback, not inside execute, so the row is
+	 * built from the caller's arguments and the attempted key name is recorded. That is deliberate:
+	 * an attempted privilege escalation is the row an operator most wants. The half that matters
+	 * for safety is the other one - the write must not have happened, and the row must not say
+	 * 'success'.
+	 */
+	public function test_a_refused_user_meta_key_is_recorded_and_not_logged_as_success(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname' ) );
+		$this->register_enabled( array( 'aafm/update-user-meta' ) );
+		aafm_clear_activity_log();
+
+		$user_id = get_current_user_id();
+		$result  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $user_id,
+				'key'     => 'session_tokens',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$this->assertWPError( $result, 'A hard-blocked key must be refused, or this is not testing the refusal.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'denied', $row['status'], 'A refused write must never read as a successful one.' );
+		$this->assertSame( "Updated meta key `session_tokens` on user #{$user_id}", $row['detail'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
 	public function test_wc_delete_product_detail_renders_the_template(): void {
 		$this->assertSame(
 			'Deleted product #808',

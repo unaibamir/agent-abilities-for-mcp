@@ -370,6 +370,37 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				array( 'field_bare_group' => array( 'field_bg_caps' => 'pwned' ) ),
 				true,
 			),
+			// THE BACKSTOP ROWS. Until the by-key write fix, a by-key address aimed at a protected
+			// sub-field was refused TWICE: this floor derived the protected key, and the write-verify's
+			// re-keyer independently failed the comparison because a sent key was never found in
+			// name-keyed storage. That second refusal was accidental, and asserting the outcome while
+			// it existed would have been a wrong-reason pass, which is why only the derivation was
+			// pinned. The re-keyer now ACCEPTS by-key writes, deliberately, so THIS FLOOR IS THE ONLY
+			// THING LEFT REFUSING THESE - and an outcome-level assertion finally means what it says.
+			// The error code is asserted so it cannot silently become a neighbouring floor's refusal.
+			'clone unprefixed, hostile sub by key, USER'   => array(
+				'user',
+				array( 'field_bare_group' => array( 'field_bg_caps' => 'pwned' ) ),
+				true,
+			),
+			// The benign twin, and it is not optional: without it the rows above are satisfiable by
+			// refusing EVERY by-key address, which would undo the by-key write fix entirely and
+			// reinstate the false failure it exists to remove. Measured: reverting that fix reds
+			// exactly this row and leaves the two hostile ones green, which is what proves the two
+			// mechanisms are separable and that each row tests the guard it names.
+			'clone unprefixed, benign sub by key'          => array(
+				'post',
+				array( 'field_bare_group' => array( 'field_bg_email' => 'ok@example.com' ) ),
+				false,
+			),
+			// The intersection of the two fixes: a by-KEY address to a protected sub-field carrying a
+			// character the sanitizer transforms away. Nothing else drives both mechanisms at once.
+			// A trailing space is the cheapest variant and needs no exotic character at all.
+			'hostile sub by key with a trailing space, USER' => array(
+				'user',
+				array( 'field_bare_group' => array( 'field_bg_caps ' => 'pwned' ) ),
+				true,
+			),
 			// A second protected name in the same clone, so the refusal is not one string's luck.
 			'clone unprefixed, session_tokens sub'         => array(
 				'post',
@@ -405,12 +436,17 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			// THE WINDOW WAS WIDER THAN THE CHARACTER LIST, AND THE ROWS BELOW SAY SO. It was first
 			// written up as the unsafe-character strip set, which is a caveat doing work it cannot
 			// do: aafm_sanitize_plain_text() is str_replace( aafm_unsafe_text_characters(), '',
-			// sanitize_text_field( $value ) ), and CORE transforms the string first. Measured on
-			// `wp_capabilities`, every one of these collapses to the bare protected key - a leading
-			// space, a trailing space, a tab, a newline, a NUL, a tag at either end, and a
-			// percent-encoded octet - and all of them are sanitize_text_field()'s doing, before this
-			// plugin's list is consulted. Ten doors, eight of them core's. They are rows rather than
-			// a sentence because a sentence cannot go red.
+			// sanitize_text_field( $value ) ), and CORE transforms the string first. The rule these
+			// rows encode is: the gap was open iff sanitize( address ) resolves to a declared
+			// sub-field while the RAW address does not.
+			//
+			// THE CHEAPEST WAY IN WAS A PLAIN TRAILING SPACE. No Trojan Source character, nothing
+			// exotic - typo-shaped input was enough to slip a security floor, which makes this far
+			// more reachable than "invisible bidi character" makes it sound. The other core-side
+			// doors are here too (leading space, tab, newline, tag at either end, percent-encoded
+			// octet), as rows rather than a sentence, because a sentence cannot go red. They are
+			// illustrative, not a closed set: the fix is complete by the rule above, not by the
+			// enumeration.
 			'clone unprefixed, protected address carrying a bidi char, USER' => array(
 				'user',
 				array( 'field_bare_group' => array( "wp_capabilities\u{202E}" => 'pwned' ) ),
@@ -507,6 +543,18 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 			'protected address with a SURVIVING invisible char, USER' => array(
 				'user',
 				array( 'field_bare_group' => array( "wp_capabilities\u{200B}" => 'pwned' ) ),
+				true,
+				'aafm_acf_unknown_sub_field',
+			),
+			// THE SECOND CONTROL, and it is what makes the rule a rule rather than a list. A tag
+			// STRIPPED off one end leaves the protected name behind and is a door; a tag WRAPPING the
+			// address leaves `x`, a different name entirely, which resolves to no sub-field either
+			// raw or clean. So it is refused, and again by the OTHER floor. The two controls sit on
+			// the two ways a transformation can fail to open a door: the character survives, or the
+			// result is not the protected name.
+			'address wrapped in a tag, sanitizes to a different name' => array(
+				'user',
+				array( 'field_bare_group' => array( '<b>x</b>' => 'pwned' ) ),
 				true,
 				'aafm_acf_unknown_sub_field',
 			),

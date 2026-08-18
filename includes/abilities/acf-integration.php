@@ -1306,20 +1306,28 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// then handed ACF the bare protected name. Refused without the character, WRITTEN with it.
 		// Judging $raw instead could only ever over-block, because $raw is never what gets stored.
 		//
-		// THE BOUND IS EVERY TRANSFORMATION aafm_sanitize_plain_text() PERFORMS, not its character
-		// list, and writing the character list here would be a caveat doing work it cannot do. That
-		// helper is str_replace( aafm_unsafe_text_characters(), '', sanitize_text_field( $value ) ),
-		// and CORE TRANSFORMS THE STRING FIRST. Measured on `wp_capabilities`, each of these
-		// collapses to the bare protected key and so was a door of its own: a leading space, a
-		// trailing space, a tab, a newline, a NUL, an HTML tag at either end, and a percent-encoded
-		// octet - all of them sanitize_text_field()'s doing, before this plugin's list is consulted
-		// at all - plus U+202E and BEL, which are the list's. Ten doors, eight of them core's.
-		// Computing $clean once closes every one of them by the same construction, because what the
-		// floors judge is the post-sanitize value whatever produced it, so the count does not need
-		// to be known to be complete. U+200B is the control that proves the boundary is real rather
-		// than universal: the sanitizer KEEPS it, the address stays unresolvable, and the unknown
-		// sub-field floor below refuses it. A character that survives is caught there; a character
-		// that is transformed away is caught here.
+		// THE BOUND IS A RULE, NOT A LIST OF CHARACTERS, and this is the formulation to keep:
+		//
+		// the gap was open iff sanitize( address ) resolves to a declared sub-field
+		// while the RAW address does not.
+		//
+		// Enumerating characters here would be a caveat doing work it cannot do, because
+		// aafm_sanitize_plain_text() is str_replace( aafm_unsafe_text_characters(), '',
+		// sanitize_text_field( $value ) ) and CORE TRANSFORMS THE STRING FIRST. The cheapest way in
+		// was not an exotic character at all: `wp_capabilities` with a TRAILING SPACE, which core
+		// trims. Typo-shaped input, no Trojan Source needed. Also measured as doors on the same
+		// address, illustrative rather than exhaustive: a leading space, a tab, a newline, a NUL, an
+		// HTML tag at either END, and a percent-encoded octet - every one of them core's doing
+		// before this plugin's list is consulted - plus U+202E and BEL, which are the list's.
+		//
+		// The rule is what makes the fix complete without the count being known. Computing $clean
+		// once closes every case by construction, because the floors judge the post-sanitize value
+		// whatever produced it. Two controls show this is a boundary and not "refuse anything odd":
+		// U+200B SURVIVES sanitization, so the cleaned address still resolves to nothing, and
+		// `<b>x</b>` sanitizes to `x`, a DIFFERENT name that resolves to nothing either. Both are
+		// correctly refused, and by the unknown-sub-field floor below rather than by this one. A
+		// character that survives is caught there; a transformation that lands on the protected name
+		// is caught here.
 		//
 		// $def is passed down rather than re-resolved. acf_get_field() runs the `acf/load_field`
 		// filter chain, so it is not a pure function of its key; what makes repeated calls agree is

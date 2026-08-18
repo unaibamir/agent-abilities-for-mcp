@@ -893,8 +893,20 @@ function aafm_acf_unresolved_in_row( array $def, array $row, string $path, array
 	$out = array();
 	foreach ( $row as $address => $sub_value ) {
 		$address = (string) $address;
-		if ( 'acf_fc_layout' === $address ) {
-			continue; // The layout marker names the row's layout, not a sub-field.
+		if ( 'acf_fc_layout' === $address && 'flexible_content' === $type ) {
+			// The layout marker names the row's layout, not a sub-field. The skip MUST stay for
+			// flexible content - dropping it refuses every flexible-content write, which a mutant
+			// has already demonstrated. It is scoped to that one type because on a repeater, group
+			// or clone the key names nothing at all: ACF resolves a row's values against that
+			// container's own sub-fields and never reads a marker, so the value is silently
+			// dropped. Skipping it there hid the SAME fail-after-write defect at a third trigger,
+			// measured against real ACF Pro 6.8.7: a group row sent
+			// {alpha, acf_fc_layout} moved alpha from GROUP-BEFORE to GROUP-AFTER and the request
+			// still returned an error, and a repeater row behaved identically. Milder than the
+			// flexible-content case because the caller's intent does land, but it is the same
+			// silent wrong answer. Judging it as an ordinary undeclared address refuses it before
+			// the write, which is what the rest of this floor already does for such an address.
+			continue;
 		}
 		$sub = aafm_acf_sub_field_by_address( $def, $address, $layout );
 		if ( null === $sub ) {

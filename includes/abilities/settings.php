@@ -261,7 +261,29 @@ function aafm_exec_update_site_settings( array $input ) {
 	foreach ( $settings as $key => $value ) {
 		$key = (string) $key;
 		update_option( $key, aafm_sanitize_site_setting( $key, $value ) );
-		// Read the value back so the agent sees ground truth after the clamp/sanitize.
+		// Report the value the option layer gives back right after the write, rather than echoing
+		// the submission. That is what makes the clamp, the sanitize, and core's own escaping of a
+		// stored value visible to the agent, which is why the read-back is here.
+		//
+		// It is NOT a guarantee that the response equals the row just written. get_option() runs
+		// the option_{$key} filters, so whatever is hooked there decides what comes back. That is
+		// the whole bound, and it holds for any filtered option. A translation layer is the case
+		// that turns up in practice.
+		//
+		// DOCUMENTED by the vendor, not inferred from our own reproduction: WPML String
+		// Translation "filters theme/plugin setting options in order to return translations of
+		// their values in the current language", and its own docs name a site's tagline as one of
+		// the strings it handles. So on such a site this reports the current language's
+		// translation. WPML also documents wpml_unfiltered_admin_string as the supported way to
+		// read past its filters; this ability deliberately does not reach for it, because the
+		// bound above is not one vendor's to answer for, and a read-back that special-cases a
+		// vendor is a worse promise than one that admits its limit. See
+		// wpml.org/documentation/support/wpml-coding-api/wpml-hooks-reference and
+		// wpml.org/documentation/support/wpml-tables.
+		//
+		// OBSERVED ONLY, on one clone running String Translation 3.5.3 with SitePress 4.9.6:
+		// blogname and blogdescription come back one write behind, and the next request reads the
+		// new value. The one-write-behind sequencing is measured here, not promised by WPML.
 		$updated[ $key ] = get_option( $key );
 	}
 

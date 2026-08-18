@@ -321,6 +321,28 @@ function aafm_acf_flat_container_field_types(): array {
  * @return array<string,mixed>|null The sub-field definition, or null when not found.
  */
 function aafm_acf_sub_field_def( array $parent_def, string $name, string $layout = '' ): ?array {
+	foreach ( aafm_acf_sub_field_defs( $parent_def, $layout ) as $sub ) {
+		$sub_name  = isset( $sub['name'] ) ? (string) $sub['name'] : '';
+		$sub_alias = isset( $sub['_name'] ) ? (string) $sub['_name'] : '';
+		if ( $name === $sub_name || ( '' !== $sub_alias && $name === $sub_alias ) ) {
+			return $sub;
+		}
+	}
+	return null;
+}
+
+/**
+ * Every sub-field definition a container declares at the depth a row of $layout sits at.
+ *
+ * Extracted verbatim from aafm_acf_sub_field_def() so the name lookup and the effective-meta-key
+ * derivation share ONE copy of the layout-descent rule. A second copy is how this project's
+ * documented "fixed at one call site, never swept" archetype starts.
+ *
+ * @param array<string,mixed> $parent_def The parent field definition.
+ * @param string              $layout     The row's `acf_fc_layout` layout name, when known.
+ * @return array<int,array<string,mixed>> The sub-field definitions, in declaration order.
+ */
+function aafm_acf_sub_field_defs( array $parent_def, string $layout = '' ): array {
 	$sub_fields = isset( $parent_def['sub_fields'] ) && is_array( $parent_def['sub_fields'] ) ? $parent_def['sub_fields'] : array();
 	if ( isset( $parent_def['layouts'] ) && is_array( $parent_def['layouts'] ) ) {
 		foreach ( $parent_def['layouts'] as $candidate ) {
@@ -333,17 +355,13 @@ function aafm_acf_sub_field_def( array $parent_def, string $name, string $layout
 			$sub_fields = array_merge( $sub_fields, $candidate['sub_fields'] );
 		}
 	}
+	$out = array();
 	foreach ( $sub_fields as $sub ) {
-		if ( ! is_array( $sub ) ) {
-			continue;
-		}
-		$sub_name  = isset( $sub['name'] ) ? (string) $sub['name'] : '';
-		$sub_alias = isset( $sub['_name'] ) ? (string) $sub['_name'] : '';
-		if ( $name === $sub_name || ( '' !== $sub_alias && $name === $sub_alias ) ) {
-			return $sub;
+		if ( is_array( $sub ) ) {
+			$out[] = $sub;
 		}
 	}
-	return null;
+	return $out;
 }
 
 /**
@@ -460,6 +478,186 @@ function aafm_acf_meta_key_hard_blocked( string $key, string $selector_type ): b
 		return aafm_hard_blocked_user_meta_key( $key );
 	}
 	return aafm_hard_blocked_meta_key( $key );
+}
+
+/**
+ * The prefix ACF puts in front of a clone's sub-field names before writing them.
+ *
+ * Mirrors ACF's own class-acf-field-clone.php::prepare_field_for_db(), which is the ONLY place a
+ * clone's sub-field names are rewritten at write time: it computes the prefix by stripping the
+ * clone's own `_name` off the end of its effective `name`, and it BAILS ENTIRELY when the two are
+ * equal. They are equal for a top-level clone - which is exactly why a top-level clone writes its
+ * sub-fields under their own bare names and why the hard block used to miss them.
+ *
+ * Note this is independent of the clone's `display` setting. ACF's acf_clone_field() rewrites a
+ * sub-field's `name` under `prefix_name` only; the seamless branch touches `key`, `prefix`,
+ * `parent` and `label` and never `name`. Measured against ACF Pro 6.8.7, both display modes with
+ * `prefix_name => 0` land on the bare sub-field name.
+ *
+ * @param array<string,mixed> $def  The clone field definition.
+ * @param string              $name The clone's EFFECTIVE name at this depth (its own name at top
+ *                                  level; the parent-prefixed one when it is nested).
+ * @return string The prefix, or '' when ACF adds none.
+ */
+function aafm_acf_clone_sub_prefix( array $def, string $name ): string {
+	$own = isset( $def['_name'] ) && '' !== (string) $def['_name'] ? (string) $def['_name'] : (string) ( $def['name'] ?? '' );
+	if ( '' === $own || $name === $own ) {
+		return ''; // prepare_field_for_db() bails: a top-level clone prefixes nothing.
+	}
+	$prefix = (string) substr( $name, 0, - strlen( $own ) );
+	// ACF bails the same way when _name is not the tail of name ("unknown potential error").
+	return $prefix . $own === $name ? $prefix : '';
+}
+
+/**
+ * Every meta key a write of $sent to $def would actually land on.
+ *
+ * The hard block used to test the TOP-LEVEL field's key and name only. That is the whole key for a
+ * scalar field, but a container writes one meta row per sub-field under a key ACF derives, and for
+ * one container shape that derived key is the sub-field's own bare name - so a sub-field named
+ * `wp_capabilities` inside a top-level unprefixed clone reached a protected key the block exists to
+ * stop. This derives the real key set instead of reasoning about which shapes "cannot collide";
+ * that reasoning was also wrong in the other direction, because the denylist is not only bare names
+ * (it covers any `_`-prefixed key via is_protected_meta(), and `{$wpdb->prefix}\d*_?capabilities`),
+ * so a group literally named `wp` holding a sub-field named `capabilities` composes to a blocked key
+ * as well.
+ *
+ * The four container types are NOT handled uniformly, because ACF does not handle them uniformly.
+ * Each rule below is read off the vendor's own write path and confirmed by a zero-write probe that
+ * drives the production `update_value()` methods with `acf/pre_update_metadata` short-circuited:
+ *
+ *   - `clone`             `{clone prefix}{sub name}` - and the prefix is EMPTY at top level.
+ *                         class-acf-field-clone.php::prepare_field_for_db(). The defect.
+ *   - `group`             `{name}_{sub _name}` - class-acf-field-group.php::prepare_field_for_db().
+ *                         Note `_name`, not `name`: an asymmetry the other three do not share.
+ *   - `repeater`          `{name}_{row index}_{sub name}` - class-acf-field-repeater.php::update_row().
+ *   - `flexible_content`  `{name}_{row index}_{sub name}` - the flexible-content update_row().
+ *   - anything else       the field's own effective name; nothing further is written.
+ *
+ * A container's own effective name is always included, because ACF writes it too (a repeater stores
+ * its row count there, a group and a clone an empty string).
+ *
+ * Sub-fields are addressed the way ACF itself addresses them - by the sub-field KEY first, then by
+ * its name. Resolving names alone would have left a one-line bypass: send the sub-field's key
+ * instead of its name and the derivation would find nothing to check while ACF wrote the row.
+ *
+ * What this does NOT claim, stated as measured rather than intended. It walks the caller's own
+ * structure, so it enumerates keys for the sub-fields the caller actually addressed and no others -
+ * which is the point, since an unaddressed sub-field is never written.
+ *
+ * Two families of ACF-internal row are deliberately excluded, and the second one is not an
+ * omission but a requirement:
+ *
+ *   - The reference rows `_{name}`, written through acf_update_metadata_by_field()'s hidden branch
+ *     to record which field key owns a value.
+ *   - A flexible-content field's `_{name}_layout_meta` bookkeeping row (the disabled/renamed layout
+ *     record, written by that field type's update_layout_meta()). Deriving it would REFUSE EVERY
+ *     FLEXIBLE-CONTENT WRITE, because its leading underscore makes is_protected_meta() true. It is
+ *     safe to exclude for the same reason it is not a vector: its name is `_` plus the flex field's
+ *     own name, which the site owner chose and which this same floor pass already checks, and no
+ *     part of it is caller-controlled.
+ *
+ * A definition carrying no `_name` at all falls back to `name`; real ACF always sets `_name` in
+ * acf_validate_field(), so that branch is reachable only with a hand-built definition.
+ *
+ * Measured coverage, from a mutation pass over the corpus rather than asserted: fourteen mutants,
+ * twelve killed. The two that survive are named rather than counted as proof.
+ *
+ *   - Removing the `acf_fc_layout` skip changes nothing, because no sub-field resolves under that
+ *     address anyway. It is EQUIVALENT unless a layout declares a sub-field literally named
+ *     `acf_fc_layout`, which ACF's own row format could not survive. Kept because it mirrors the
+ *     identical skip in aafm_acf_rekey_row_to_names() and says what the marker is.
+ *   - Removing the empty-`$own` guards likewise changes no row: a definition with no name at all
+ *     would make the derivation emit the bare prefix, and no prefix in the corpus is protected.
+ *     DEFENSIVE, not demonstrated load-bearing.
+ *
+ * @param array<string,mixed> $def  The field definition, from acf_get_field().
+ * @param mixed               $sent The raw value the caller asked to write at this depth.
+ * @param string              $name The field's effective name at this depth. Defaults to the
+ *                                  definition's own name, which is correct at top level.
+ * @return array<int,string> The meta keys, in no particular order and possibly with duplicates.
+ */
+function aafm_acf_effective_meta_keys( array $def, $sent, string $name = '' ): array {
+	$name = '' !== $name ? $name : (string) ( $def['name'] ?? '' );
+	if ( '' === $name ) {
+		return array();
+	}
+	$keys = array( $name );
+	$type = (string) ( $def['type'] ?? '' );
+	if ( ! is_array( $sent ) || ! in_array( $type, aafm_acf_container_field_types(), true ) ) {
+		return $keys;
+	}
+
+	// group and clone: ONE flat map of sub-field values, no row indices.
+	if ( in_array( $type, aafm_acf_flat_container_field_types(), true ) ) {
+		$prefix = 'clone' === $type ? aafm_acf_clone_sub_prefix( $def, $name ) : $name . '_';
+		foreach ( $sent as $address => $sub_value ) {
+			$sub = aafm_acf_sub_field_by_address( $def, (string) $address );
+			if ( null === $sub ) {
+				continue; // ACF skips a value that matches no sub-field; nothing is written for it.
+			}
+			// Clone reads the sub-field's own `name` (already prefix_name-rewritten); group reads
+			// `_name` and composes the prefix itself. Following the vendor exactly matters here:
+			// under prefix_name the two differ, and picking the wrong one derives a key ACF never
+			// writes, which would refuse a legitimate write.
+			$own = 'clone' === $type
+				? (string) ( $sub['name'] ?? '' )
+				: ( isset( $sub['_name'] ) && '' !== (string) $sub['_name'] ? (string) $sub['_name'] : (string) ( $sub['name'] ?? '' ) );
+			if ( '' === $own ) {
+				continue;
+			}
+			$keys = array_merge( $keys, aafm_acf_effective_meta_keys( $sub, $sub_value, $prefix . $own ) );
+		}
+		return $keys;
+	}
+
+	// repeater and flexible_content: a numeric-indexed list of rows. ACF re-indexes the rows it
+	// writes from zero in the order they arrive, so the index is the position, not the sent key.
+	$row_index = -1;
+	foreach ( $sent as $row ) {
+		++$row_index;
+		if ( ! is_array( $row ) ) {
+			continue;
+		}
+		$layout = isset( $row['acf_fc_layout'] ) && is_scalar( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+		foreach ( $row as $address => $sub_value ) {
+			if ( 'acf_fc_layout' === $address ) {
+				continue; // The layout marker is not a sub-field and is not stored as one.
+			}
+			$sub = aafm_acf_sub_field_by_address( $def, (string) $address, $layout );
+			if ( null === $sub ) {
+				continue;
+			}
+			$own = (string) ( $sub['name'] ?? '' );
+			if ( '' === $own ) {
+				continue;
+			}
+			$keys = array_merge( $keys, aafm_acf_effective_meta_keys( $sub, $sub_value, $name . '_' . $row_index . '_' . $own ) );
+		}
+	}
+	return $keys;
+}
+
+/**
+ * Resolve a sub-field definition the way ACF's own container write path resolves one.
+ *
+ * Every container's update_value()/update_row() looks the sent value up by the sub-field's `key`
+ * first and falls back to its name. aafm_acf_sub_field_def() only ever matched names, which is
+ * right for the sanitizer and the re-keyer (both work in names by then) but not for a derivation
+ * that has to see everything ACF will write.
+ *
+ * @param array<string,mixed> $parent_def The parent container definition.
+ * @param string              $address    The key the caller used: a sub-field key or a sub-field name.
+ * @param string              $layout     The row's `acf_fc_layout` layout name, when known.
+ * @return array<string,mixed>|null The sub-field definition, or null when nothing matches.
+ */
+function aafm_acf_sub_field_by_address( array $parent_def, string $address, string $layout = '' ): ?array {
+	foreach ( aafm_acf_sub_field_defs( $parent_def, $layout ) as $sub ) {
+		if ( isset( $sub['key'] ) && $address === (string) $sub['key'] ) {
+			return $sub;
+		}
+	}
+	return aafm_acf_sub_field_def( $parent_def, $address, $layout );
 }
 
 /**
@@ -785,16 +983,25 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 	}
 
 	// Floor pass: reject the whole request before writing anything if any key is not a defined ACF
-	// field, or its effective meta key is hard-blocked. Fail-closed - if acf_get_field() is somehow
-	// unavailable while update_field() exists, no key can resolve and every write is refused.
+	// field, or any meta key the write would land on is hard-blocked. Fail-closed - if
+	// acf_get_field() is somehow unavailable while update_field() exists, no key can resolve and
+	// every write is refused.
+	//
+	// The key set comes from aafm_acf_effective_meta_keys(), which walks the caller's own value
+	// against the definition and derives every key ACF would write, sub-fields included. Testing
+	// the top-level name alone was not enough: a container writes one row per sub-field, and a
+	// top-level clone with prefix_name off writes them under their own bare names, so a sub-field
+	// named after a protected key reached it. Every key refused here is a key this same block
+	// already refuses when the field carrying that name is addressed directly, so this closes a
+	// hole rather than inventing a new class of refusal.
 	foreach ( $fields as $field_key => $raw ) {
-		unset( $raw );
 		$field_key = (string) $field_key;
 		$def       = function_exists( 'acf_get_field' ) ? acf_get_field( $field_key ) : false;
 		if ( ! is_array( $def ) || empty( $def['key'] ) ) {
 			return aafm_generic_error(); // Unresolved key - the update_field() raw-meta fallback path.
 		}
-		foreach ( array( $field_key, (string) ( $def['name'] ?? '' ) ) as $candidate ) {
+		$candidates = array_merge( array( $field_key ), aafm_acf_effective_meta_keys( $def, $raw ) );
+		foreach ( $candidates as $candidate ) {
 			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
 				return aafm_generic_error(); // Defense in depth: protected meta key.
 			}

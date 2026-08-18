@@ -927,10 +927,16 @@ function aafm_acf_unresolved_in_row( array $def, array $row, string $path, array
  * Named rather than generic, and it echoes the offending addresses back, unlike the hard-block
  * refusal one line above it. The two are not the same kind of secret. The hard block stays generic
  * because saying which meta key was protected tells a caller something about the site it did not
- * supply; an unrecognised sub-field address is the caller's own string handed straight back, and
- * the declared sub-field names are already readable through aafm-acf-list-field-groups. Naming it
- * is what turns "the request could not be completed" into something an agent can correct on its
- * next turn, which is most of the point of refusing early.
+ * supply; an unrecognised sub-field address is the caller's own string handed straight back, so it
+ * discloses nothing the caller did not already have. Naming it is what turns "the request could not
+ * be completed" into something an agent can correct on its next turn, which is most of the point of
+ * refusing early.
+ *
+ * An earlier version of this note also argued the names were public anyway, through
+ * aafm-acf-list-field-groups. That was wrong: that ability returns key, label and type per TOP-LEVEL
+ * field only, so no ability exposes sub-field or layout names. The reason above does not rest on it,
+ * because echoing the caller's own input reveals nothing either way, but the claim was untrue and a
+ * caveat asserting more than it can support is how this file grew two of its worst defects.
  *
  * The addresses are capped and sanitized before they reach the message. That step now lives in
  * aafm_acf_safe_address_list(), shared with the sibling layout refusal so the bound cannot drift

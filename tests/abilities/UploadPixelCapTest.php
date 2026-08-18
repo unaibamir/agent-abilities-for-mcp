@@ -319,8 +319,19 @@ final class UploadPixelCapTest extends TestCase {
 	/**
 	 * The refusal has to be actionable. An unexplained error on a legitimate-looking upload is its
 	 * own defect, so the message names the size, the ceiling, and what to do about it.
+	 *
+	 * This row drives a FILTER-SET ceiling, so it also pins the half that was wrong until now: the
+	 * message must not attribute the ceiling to memory here. It used to, unconditionally, by
+	 * back-computing size_format( $max_pixels * 4 ) from whatever the filter returned. Measured on
+	 * this container, where memory_limit is -1 and the decoder does not spend PHP memory at all, a
+	 * ceiling of 4 pixels produced "The ceiling comes from the 16 B of memory available for image
+	 * work" - an amount that was never the reason for the refusal and does not exist on the host.
+	 *
+	 * The assertNotContains is the guard for that, and it is deliberately a bare 'memory': the
+	 * filter-set wording says nothing about memory at all, so the word appearing anywhere in this
+	 * branch means the memory sentence has come back.
 	 */
-	public function test_the_refusal_explains_the_limit_and_the_remedy(): void {
+	public function test_a_filter_set_refusal_names_the_filter_and_claims_no_memory_figure(): void {
 		$this->acting_as( 'author' );
 
 		$cap = static function () {
@@ -346,8 +357,62 @@ final class UploadPixelCapTest extends TestCase {
 		$this->assertStringContainsString( '2000', $message );
 		// What the limit was, and that it is expressed in the same unit as the image.
 		$this->assertStringContainsString( 'megapixels', $message );
-		// Why the limit exists.
+		// How to get past it, which here is also why the limit exists.
+		$this->assertStringContainsString( 'aafm_upload_max_pixels', $message );
+		// And the false attribution this branch used to carry.
+		$this->assertStringNotContainsString(
+			'memory',
+			$message,
+			'a ceiling the filter set must not be explained as a memory bound; there is no such figure to report.'
+		);
+	}
+
+	/**
+	 * The other half of the same question: where the ceiling really WAS derived from memory, the
+	 * message still says so, with the figure it was derived from.
+	 *
+	 * Without this row the fix above is only half pinned - deleting the memory branch outright, or
+	 * making the provenance test always take the filter-set path, would leave the suite green while
+	 * removing the explanation from every host that actually has a memory-derived ceiling.
+	 *
+	 * The finite budget is installed through core's image_memory_limit filter for the reason spelled
+	 * out on test_the_decode_cost_gate_decides_whether_a_cap_exists: WP_MAX_MEMORY_LIMIT is a
+	 * constant fixed at bootstrap, so ini_set cannot make this container's budget finite. 512M is
+	 * the same figure those rows use and is already proven here to derive a positive ceiling; the
+	 * image declares 400 megapixels, which is over the ceiling on any in-use reading of that budget.
+	 */
+	public function test_a_memory_derived_refusal_still_explains_itself_as_a_memory_bound(): void {
+		$this->acting_as( 'author' );
+
+		$budget = static function () {
+			return '512M';
+		};
+		$gd     = static function () {
+			return true;
+		};
+		add_filter( 'image_memory_limit', $budget );
+		add_filter( 'aafm_upload_decode_costs_php_memory', $gd );
+
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 's4-derived.png',
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding this test's own fixture for the ability's base64 input.
+				'data_base64' => base64_encode( $this->png_declaring( 20000, 20000 ) ),
+			)
+		);
+
+		remove_filter( 'aafm_upload_decode_costs_php_memory', $gd );
+		remove_filter( 'image_memory_limit', $budget );
+
+		$this->assertInstanceOf( WP_Error::class, $out );
+		$this->assertSame( 'aafm_too_many_pixels', $out->get_error_code() );
+		$message = $out->get_error_message();
+
+		$this->assertStringContainsString( '20000', $message );
+		$this->assertStringContainsString( 'megapixels', $message );
+		// Why this particular limit exists, and the model it rests on.
 		$this->assertStringContainsString( 'memory', $message );
+		$this->assertStringContainsString( 'four bytes per pixel', $message );
 		// How to get past it.
 		$this->assertStringContainsString( 'aafm_upload_max_pixels', $message );
 	}

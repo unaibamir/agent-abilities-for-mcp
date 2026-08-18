@@ -760,9 +760,19 @@ function aafm_derive_max_pixels( int $budget_bytes, int $in_use_bytes ): int {
  * Returns 0 to mean "no ceiling" - unlimited memory, an unreadable limit, or a host whose decoder
  * does not spend PHP memory in the first place.
  *
+ * $derived reports the ceiling as it stood BEFORE the aafm_upload_max_pixels filter, so a caller
+ * can tell a memory-derived ceiling from one a site owner set. The refusal message needs that
+ * distinction: it explains the ceiling as a memory bound, and that explanation is only true when
+ * the derivation is what produced the number. Reported through this parameter rather than a second
+ * function because a second call would re-read memory_get_usage(), so the two answers could
+ * disagree by a chunk and the message would pick its wording on an accident. One call, one
+ * measurement, exact.
+ *
+ * @param int|null $derived Receives the ceiling the memory derivation produced; 0 when none was.
+ * @param-out int  $derived
  * @return int Maximum pixel count, or 0 for no cap.
  */
-function aafm_upload_max_pixels(): int {
+function aafm_upload_max_pixels( &$derived = null ): int {
 	$budget     = -1;
 	$max_pixels = 0;
 
@@ -782,6 +792,8 @@ function aafm_upload_max_pixels(): int {
 
 		$max_pixels = aafm_derive_max_pixels( (int) $budget, memory_get_usage( true ) );
 	}
+
+	$derived = $max_pixels;
 
 	/**
 	 * Filters the maximum pixel count aafm/upload-media will decode in one request.
@@ -867,7 +879,8 @@ function aafm_exec_upload_media( array $input ) {
 	// Unreadable or zero dimensions do NOT refuse. A file that got this far already passed the
 	// byte sniff, so the honest reading is that this check cannot answer, not that the file is
 	// hostile, and the rule when there is no bound is to allow.
-	$max_pixels = aafm_upload_max_pixels();
+	$derived_pixels = 0;
+	$max_pixels     = aafm_upload_max_pixels( $derived_pixels );
 	if ( $max_pixels > 0 ) {
 		$dimensions = @getimagesizefromstring( $decoded ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a malformed header is answered by the false return, not by a notice reaching the caller.
 		$width      = is_array( $dimensions ) ? (int) $dimensions[0] : 0;
@@ -879,16 +892,37 @@ function aafm_exec_upload_media( array $input ) {
 		// legible and so a hypothetical pair of negative dimensions cannot multiply into a
 		// positive product.
 		if ( $width > 0 && $height > 0 && ( $width * $height ) > $max_pixels ) {
+			// Explain the ceiling as a memory bound only where the memory derivation is what
+			// produced it. A filter can name any number, on any host, including one where the
+			// derivation declined to run at all - so back-computing size_format( $max_pixels * 4 )
+			// from a filtered ceiling reports an amount of memory that was never the reason for
+			// the refusal and need not exist on the machine. Both branches still name the limit
+			// and how to move it, because refusing a legitimate upload without explaining it is
+			// its own defect.
+			if ( $derived_pixels > 0 && $derived_pixels === $max_pixels ) {
+				return new WP_Error(
+					'aafm_too_many_pixels',
+					sprintf(
+						/* translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling, 5: formatted memory size, for example "256 MB". */
+						__( 'This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The ceiling comes from the %5$s of memory available for image work, at four bytes per pixel for the uncompressed bitmap a decoder builds, so a larger image would run the site out of memory rather than finish. Resize the image before uploading, raise the memory available to PHP, or raise the aafm_upload_max_pixels filter.', 'agent-abilities-for-mcp' ),
+						$width,
+						$height,
+						number_format_i18n( ( $width * $height ) / 1000000, 1 ),
+						number_format_i18n( $max_pixels / 1000000, 1 ),
+						size_format( $max_pixels * 4 )
+					)
+				);
+			}
+
 			return new WP_Error(
 				'aafm_too_many_pixels',
 				sprintf(
-					/* translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling, 5: formatted memory size, for example "256 MB". */
-					__( 'This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The ceiling comes from the %5$s of memory available for image work, at four bytes per pixel for the uncompressed bitmap a decoder builds, so a larger image would run the site out of memory rather than finish. Resize the image before uploading, raise the memory available to PHP, or raise the aafm_upload_max_pixels filter.', 'agent-abilities-for-mcp' ),
+					/* translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling. */
+					__( 'This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The aafm_upload_max_pixels filter sets that ceiling. Resize the image before uploading, or change the filter.', 'agent-abilities-for-mcp' ),
 					$width,
 					$height,
 					number_format_i18n( ( $width * $height ) / 1000000, 1 ),
-					number_format_i18n( $max_pixels / 1000000, 1 ),
-					size_format( $max_pixels * 4 )
+					number_format_i18n( $max_pixels / 1000000, 1 )
 				)
 			);
 		}

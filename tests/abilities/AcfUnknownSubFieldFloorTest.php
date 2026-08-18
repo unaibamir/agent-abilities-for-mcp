@@ -148,6 +148,45 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 										),
 									),
 								),
+								// A DECLARED layout that declares no sub-fields of its own. Legal
+								// in ACF and measured writing correctly on the bench against ACF
+								// Pro 6.8.7. This is the case the layout check must NOT catch: an
+								// undeclared layout and a declared-but-empty one look identical to
+								// aafm_acf_sub_field_defs(), which is exactly why the declared
+								// layout NAMES are read separately from the sub-field defs.
+								array(
+									'key'        => 'layout_blank',
+									'name'       => 'blank',
+									'sub_fields' => array(),
+								),
+							),
+						),
+						// Flexible content nested inside a group: the recursion path for the
+						// layout check, and the shape that proves an offending row is carried back
+						// OUT of a nested container instead of being lost at the depth it was
+						// found. Confirmed a real ACF shape on the bench rather than a stub
+						// invention - ACF wrote grp_inner_flex_0_txt for it with no plugin code in
+						// the path.
+						array(
+							'key'        => 'field_gflex',
+							'name'       => 'gflex',
+							'label'      => 'Group holding flex',
+							'type'       => 'group',
+							'sub_fields' => array(
+								array(
+									'key'     => 'field_gflex_f',
+									'name'    => 'inner',
+									'_name'   => 'inner',
+									'label'   => 'Inner flex',
+									'type'    => 'flexible_content',
+									'layouts' => array(
+										array(
+											'key'        => 'layout_inner',
+											'name'       => 'inner_block',
+											'sub_fields' => array( $this->sub( 'field_gflex_t', 'txt' ) ),
+										),
+									),
+								),
 							),
 						),
 						// A top-level clone with prefix_name off: the sub-field keeps its bare name.
@@ -275,18 +314,18 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			// addresses a sub-field, and refusing any of them would be worse
 			// than the defect being fixed.
 			// ---------------------------------------------------------------
-			'group by name'                     => array(
+			'group by name'                      => array(
 				array( 'field_grp' => array( 'alpha' => 'A' ) ),
 				'accept',
 			),
 			// By-KEY addressing: this floor must stay silent, and it does. It now SUCCEEDS as ACF's
 			// own documented row-by-field-keys form should; see the provider docblock for what
 			// these rows assert instead of the error code they used to.
-			'group by sub-field KEY'            => array(
+			'group by sub-field KEY'             => array(
 				array( 'field_grp' => array( 'field_grp_a' => 'A' ) ),
 				'accept-by-key',
 			),
-			'group, both sub-fields'            => array(
+			'group, both sub-fields'             => array(
 				array(
 					'field_grp' => array(
 						'alpha' => 'A',
@@ -295,11 +334,11 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'repeater row'                      => array(
+			'repeater row'                       => array(
 				array( 'field_rep' => array( array( 'title' => 'T' ) ) ),
 				'accept',
 			),
-			'repeater row, nested group'        => array(
+			'repeater row, nested group'         => array(
 				array(
 					'field_rep' => array(
 						array(
@@ -312,14 +351,14 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			),
 			// By KEY at BOTH depths: the nested container's own address and its sub-field's. A fix
 			// that rewrote only the top level would leave this one failing.
-			'repeater, nested group by KEY'     => array(
+			'repeater, nested group by KEY'      => array(
 				array( 'field_rep' => array( array( 'field_rep_g' => array( 'field_rep_g_x' => 'X' ) ) ) ),
 				'accept-by-key',
 			),
 			// The acf_fc_layout marker resolves to no sub-field by design. Flagging it would refuse
 			// EVERY flexible-content write - the same trap ACF's `_layout_meta` row set for the
 			// effective-key derivation next door.
-			'flex row with layout marker'       => array(
+			'flex row with layout marker'        => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -330,7 +369,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'flex, second layout'               => array(
+			'flex, second layout'                => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -341,7 +380,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'flex, two rows two layouts'        => array(
+			'flex, two rows two layouts'         => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -356,7 +395,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'flex, repeater nested in layout'   => array(
+			'flex, repeater nested in layout'    => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -367,17 +406,59 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'clone prefix=0 by bare name'       => array(
+			// The layout check's over-block direction, and the rows that stop it becoming "refuse
+			// any flexible-content row that looks unusual".
+			//
+			// A DECLARED layout with no sub-fields of its own. It reaches the layout check, passes
+			// it because the NAME is declared, and then falls through the no-declared-shape
+			// softening exactly as before. Measured writing correctly against real ACF Pro 6.8.7.
+			'flex, declared layout with no subs' => array(
+				array( 'field_flex' => array( array( 'acf_fc_layout' => 'blank' ) ) ),
+				'accept',
+			),
+			// A layout name carrying a TRAILING SPACE. Core's sanitize_text_field() trims it before
+			// the floors ever see it, so the cleaned name resolves and the write must land - which
+			// it does against real ACF, measured at the database. This is c07e520's rule reaching
+			// the layout name: the floors judge the post-sanitize value, so a name that only
+			// differs by a transformation the sanitizer performs is not a different layout. A check
+			// written against the RAW marker would refuse this and break an ordinary write.
+			'flex, layout name needing a trim'   => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero ',
+							'heading'       => 'H',
+						),
+					),
+				),
+				'accept',
+			),
+			// Flexible content nested in a group, written correctly. The must-succeed half of the
+			// recursion rows below: the layout check has to reach this depth without refusing it.
+			'flex nested in a group'             => array(
+				array(
+					'field_gflex' => array(
+						'inner' => array(
+							array(
+								'acf_fc_layout' => 'inner_block',
+								'txt'           => 'T',
+							),
+						),
+					),
+				),
+				'accept',
+			),
+			'clone prefix=0 by bare name'        => array(
 				array( 'field_cl0' => array( 'email' => 'e@example.test' ) ),
 				'accept',
 			),
-			'clone prefix=1 by _name'           => array(
+			'clone prefix=1 by _name'            => array(
 				array( 'field_cl1' => array( 'email' => 'e@example.test' ) ),
 				'accept',
 			),
 			// A prefixed clone is where `name` and `_name` diverge, so the key must resolve to the
 			// name ACF accepts on write (`_name`) and to the same name storage reads back under.
-			'clone prefix=1 by sub-field KEY'   => array(
+			'clone prefix=1 by sub-field KEY'    => array(
 				array( 'field_cl1' => array( 'field_cl1_e' => 'e@example.test' ) ),
 				'accept-by-key',
 			),
@@ -389,13 +470,13 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			// own _pingme/_encloseme rows afterwards. So the failure it reports is a true one, and
 			// the fall-through leaves that untouched rather than inventing a refusal on a shape it
 			// cannot judge.
-			'container with no declared shape'  => array(
+			'container with no declared shape'   => array(
 				array( 'field_noshape' => array( 'whatever' => 'W' ) ),
 				'fail-after-write',
 			),
 			// Non-containers whose value is an array. `url`/`title`/`target` are members of a link's
 			// return format, not sub-fields, and a checkbox value is a plain list.
-			'link structured array'             => array(
+			'link structured array'              => array(
 				array(
 					'field_link' => array(
 						'url'    => 'https://example.test/',
@@ -405,16 +486,16 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'accept',
 			),
-			'checkbox list value'               => array(
+			'checkbox list value'                => array(
 				array( 'field_chk' => array( 'a', 'b' ) ),
 				'accept',
 			),
-			'plain scalar field'                => array(
+			'plain scalar field'                 => array(
 				array( 'field_plain' => 'ok' ),
 				'accept',
 			),
 			// A container sent a scalar: there are no addresses to judge.
-			'container sent a scalar'           => array(
+			'container sent a scalar'            => array(
 				array( 'field_grp' => 'not-a-map' ),
 				'accept',
 			),
@@ -422,7 +503,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			// reaches update_field() is the declared name and the write lands normally. Judging
 			// the RAW value instead would refuse a write that succeeds today - a false refusal
 			// invented out of a difference the write itself never sees.
-			'address with a stripped bidi char' => array(
+			'address with a stripped bidi char'  => array(
 				array( 'field_grp' => array( "alpha\u{202E}" => 'A' ) ),
 				'accept',
 			),
@@ -433,7 +514,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			// and ignores the address it does not - which is precisely how the
 			// request came back an error with the data already stored.
 			// ---------------------------------------------------------------
-			'group, undeclared address'         => array(
+			'group, undeclared address'          => array(
 				array(
 					'field_grp' => array(
 						'alpha'     => 'A',
@@ -442,7 +523,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'refuse-before-write',
 			),
-			'repeater, undeclared address'      => array(
+			'repeater, undeclared address'       => array(
 				array(
 					'field_rep' => array(
 						array(
@@ -454,7 +535,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				'refuse-before-write',
 			),
 			// Only the SECOND row carries it, so a walk that stops after row 0 goes red here.
-			'repeater, second row only'         => array(
+			'repeater, second row only'          => array(
 				array(
 					'field_rep' => array(
 						array( 'title' => 'T' ),
@@ -463,13 +544,13 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'refuse-before-write',
 			),
-			'repeater, nested group address'    => array(
+			'repeater, nested group address'     => array(
 				array( 'field_rep' => array( array( 'inner' => array( 'nope' => 'X' ) ) ) ),
 				'refuse-before-write',
 			),
 			// Per-layout resolution: `caption` is declared by the `cards` layout and is genuinely
 			// undeclared in a `hero` row. ACF writes nothing for it.
-			'flex, sub-field of other layout'   => array(
+			'flex, sub-field of other layout'    => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -480,7 +561,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'refuse-before-write',
 			),
-			'flex, undeclared in its layout'    => array(
+			'flex, undeclared in its layout'     => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -491,7 +572,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'refuse-before-write',
 			),
-			'flex, nested repeater address'     => array(
+			'flex, nested repeater address'      => array(
 				array(
 					'field_flex' => array(
 						array(
@@ -502,22 +583,123 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				),
 				'refuse-before-write',
 			),
-			'clone prefix=0, undeclared'        => array(
+			'clone prefix=0, undeclared'         => array(
 				array( 'field_cl0' => array( 'nosuch' => 'X' ) ),
 				'refuse-before-write',
 			),
-			'clone prefix=1, undeclared'        => array(
+			'clone prefix=1, undeclared'         => array(
 				array( 'field_cl1' => array( 'nosuch' => 'X' ) ),
 				'refuse-before-write',
 			),
 			// A second field in the map is enough: the refusal is per REQUEST, so a legitimate
 			// field alongside an offending one must not be written either.
-			'offending field beside a good one' => array(
+			'offending field beside a good one'  => array(
 				array(
 					'field_plain' => 'ok',
 					'field_grp'   => array( 'nosuchsub' => 'X' ),
 				),
 				'refuse-before-write',
+			),
+
+			// ---------------------------------------------------------------
+			// The layout marker. These are the WORST rows in this file, because
+			// letting one through does not merely leave a write unwritten - it
+			// DELETES the field's existing content and then reports failure.
+			//
+			// Measured at the database against real ACF Pro 6.8.7: a field
+			// holding heading='BEFORE-F8' and body='BODY-BEFORE' was sent a
+			// single row marked `no_such_layout`. ACF replaced the whole field
+			// value, BOTH sub-field rows were deleted, the stored value became
+			// one unusable layout name, and the call returned an error. The
+			// agent is told the write failed while the previous content is
+			// already gone, with no recovery path. Present in shipped 1.6.3,
+			// whose floor pass opens with `unset( $raw )` and never looks at
+			// the value at all.
+			//
+			// They carry their own verdict because they carry their own error
+			// code. Sharing `refuse-before-write` would assert the wrong
+			// refusal is acceptable, and the whole point of an early floor is
+			// which one fired.
+			// ---------------------------------------------------------------
+			// The layout is named and the field does not declare it.
+			'flex, undeclared layout'            => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'no_such_layout',
+							'heading'       => 'H',
+						),
+					),
+				),
+				'refuse-unknown-layout',
+			),
+			// The marker is absent entirely. ACF documents it as required
+			// (/resources/rest-api: "arrays of layout objects with a required
+			// 'acf_fc_layout' property"; every row of /resources/update_field's
+			// flex example carries one). Measured, a marker-less row is dropped
+			// and the field is left EMPTY, so this is the same data loss by a
+			// second door. It is a separate row from the one above because the
+			// two are separate INPUTS even though one predicate refuses both:
+			// blinding that predicate to the named case alone leaves this row
+			// as the thing that dies.
+			'flex, no layout marker at all'      => array(
+				array( 'field_flex' => array( array( 'heading' => 'H' ) ) ),
+				'refuse-unknown-layout',
+			),
+			// The layout addressed by its layout KEY. Sub-FIELDS are addressable
+			// by key and ACF documents that, which is why this row is not
+			// obvious - but a layout is NOT. Measured with zero plugin code in
+			// the path: update_field() given `acf_fc_layout => layout_hero`
+			// deleted the sub-field row and stored the key as the layout name,
+			// exactly like a nonsense string. So refusing it is not an
+			// over-block, it is the same destruction under a plausible address.
+			'flex, layout addressed by KEY'      => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'layout_hero',
+							'heading'       => 'H',
+						),
+					),
+				),
+				'refuse-unknown-layout',
+			),
+			// One good row and one bad one. The refusal is per REQUEST, so the
+			// good row must not be written either - and this is the row that
+			// would go red if the walk ever stopped at the first row it liked.
+			'flex, second row bad'               => array(
+				array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'heading'       => 'H',
+						),
+						array(
+							'acf_fc_layout' => 'no_such_layout',
+							'caption'       => 'C',
+						),
+					),
+				),
+				'refuse-unknown-layout',
+			),
+			// A bad layout on a flexible-content field nested inside a group.
+			// The offending row is found one level down, so this is what proves
+			// it is carried back out of the recursion rather than discarded at
+			// the depth it was seen. Driven end to end against real ACF too:
+			// the address came back as `gflex.inner.0` and the nested value
+			// survived untouched.
+			'flex nested in a group, bad layout' => array(
+				array(
+					'field_gflex' => array(
+						'inner' => array(
+							array(
+								'acf_fc_layout' => 'no_such_layout',
+								'txt'           => 'T',
+							),
+						),
+					),
+				),
+				'refuse-unknown-layout',
 			),
 		);
 	}
@@ -564,6 +746,29 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				'aafm_acf_unknown_sub_field',
 				$result->get_error_code(),
 				'The refusal must name its own reason so an agent can correct the address.'
+			);
+			return;
+		}
+
+		if ( 'refuse-unknown-layout' === $verdict ) {
+			$this->assertInstanceOf(
+				WP_Error::class,
+				$result,
+				'A flexible-content row whose layout the field does not declare must be refused.'
+			);
+			// THE ASSERTION THAT MATTERS. Before the fix this request also returned a WP_Error,
+			// so the error proves nothing on its own - it came back AFTER ACF had already replaced
+			// the field value and deleted the row's sub-fields. An empty $written is the claim
+			// that the destruction never happened.
+			$this->assertSame(
+				array(),
+				AcfStubStore::$written,
+				'The refusal must land BEFORE update_field(): reaching it is what destroys the existing rows.'
+			);
+			$this->assertSame(
+				'aafm_acf_unknown_layout',
+				$result->get_error_code(),
+				'The refusal must name the layout as the cause, not read as an unknown sub-field or a generic failure.'
 			);
 			return;
 		}
@@ -793,6 +998,163 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 	}
 
 	/**
+	 * The bad-layout channel, exercised directly, so the ROW that offended is named.
+	 *
+	 * The outcome rows in the provider prove a refusal happens and that nothing was written; they
+	 * cannot show which row produced it, and a walk that flagged every flexible-content row would
+	 * satisfy them just as well. These name the address, and the accept cases at the end are what
+	 * make the flagging discriminate rather than blanket.
+	 *
+	 * @return void
+	 */
+	public function test_the_unresolvable_layout_rows_are_named_by_address(): void {
+		$this->boot();
+		$defs = array();
+		foreach ( $this->config()['groups'][0]['fields'] as $field ) {
+			$defs[ (string) $field['key'] ] = $field;
+		}
+
+		$cases = array(
+			// [ field key, sent value, expected offending row addresses ]
+			array( 'field_flex', array( array( 'acf_fc_layout' => 'nosuch' ) ), array( 'flex.0' ) ),
+			array( 'field_flex', array( array( 'heading' => 'H' ) ), array( 'flex.0' ) ),
+			// The row INDEX has to be the offending row's own position, not zero and not the first
+			// row's. A walk that stopped early, or that reported a fixed index, dies here.
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'heading'       => 'H',
+					),
+					array( 'acf_fc_layout' => 'nosuch' ),
+				),
+				array( 'flex.1' ),
+			),
+			array(
+				'field_flex',
+				array(
+					array( 'acf_fc_layout' => 'nosuch' ),
+					array( 'acf_fc_layout' => 'alsonot' ),
+				),
+				array( 'flex.0', 'flex.1' ),
+			),
+			// Carried back out of a nested container rather than lost at depth.
+			array(
+				'field_gflex',
+				array( 'inner' => array( array( 'acf_fc_layout' => 'nosuch' ) ) ),
+				array( 'gflex.inner.0' ),
+			),
+			// And the cases that must stay silent, or the rows above would be satisfied by a
+			// detector that simply flags every flexible-content row it sees.
+			array(
+				'field_flex',
+				array(
+					array(
+						'acf_fc_layout' => 'hero',
+						'heading'       => 'H',
+					),
+				),
+				array(),
+			),
+			array( 'field_flex', array( array( 'acf_fc_layout' => 'blank' ) ), array() ),
+			array( 'field_gflex', array( 'inner' => array( array( 'acf_fc_layout' => 'inner_block' ) ) ), array() ),
+			// A container with no layouts at all is judged on this ground by nothing.
+			array( 'field_rep', array( array( 'title' => 'T' ) ), array() ),
+			array( 'field_grp', array( 'alpha' => 'A' ), array() ),
+		);
+
+		foreach ( $cases as $case ) {
+			list( $field_key, $sent, $expected ) = $case;
+			$bad                                 = array();
+			aafm_acf_unresolved_sub_addresses( $defs[ $field_key ], $sent, '', $bad );
+			$this->assertSame(
+				$expected,
+				$bad,
+				sprintf( '%s: the rows whose layout cannot resolve are not the ones reported.', $field_key )
+			);
+		}
+	}
+
+	/**
+	 * A row whose layout cannot resolve reports THAT, and does not also report its sub-fields.
+	 *
+	 * Added while chasing a surviving mutant rather than writing it off. Removing the early return
+	 * after a row is flagged left the whole corpus green at full assertion count, because for an
+	 * undeclared layout name the no-shape softening happens to swallow the rest anyway. The one
+	 * shape where it does not is a row with NO marker carrying an address no layout declares: the
+	 * marker-less lookup falls back to every layout, so without the early return that address is
+	 * reported as an unknown sub-field alongside the real problem. Which layout a row belongs to
+	 * decides what its sub-fields even are, so complaining about them first is telling the caller
+	 * to fix the wrong thing.
+	 *
+	 * @return void
+	 */
+	public function test_a_row_with_an_unresolvable_layout_is_not_also_reported_sub_field_by_sub_field(): void {
+		$this->boot();
+		$defs = array();
+		foreach ( $this->config()['groups'][0]['fields'] as $field ) {
+			$defs[ (string) $field['key'] ] = $field;
+		}
+
+		$bad        = array();
+		$unresolved = aafm_acf_unresolved_sub_addresses(
+			$defs['field_flex'],
+			array( array( 'heading_typo' => 'X' ) ),
+			'',
+			$bad
+		);
+
+		$this->assertSame( array( 'flex.0' ), $bad, 'The row itself is what could not be resolved.' );
+		$this->assertSame(
+			array(),
+			$unresolved,
+			'Once the row has no resolvable layout, its addresses are not separately reported.'
+		);
+	}
+
+	/**
+	 * The layout refusal locates the offending row inside the structure the caller sent, and does
+	 * not read as an unknown sub-field.
+	 *
+	 * @return void
+	 */
+	public function test_the_layout_refusal_names_the_row_and_its_own_cause(): void {
+		$post_id = $this->boot();
+
+		$result = wp_get_ability( 'aafm/acf-update-post-fields' )->execute(
+			array(
+				'post_id' => $post_id,
+				'fields'  => array(
+					'field_flex' => array(
+						array(
+							'acf_fc_layout' => 'hero',
+							'heading'       => 'H',
+						),
+						array(
+							'acf_fc_layout' => 'no_such_layout',
+							'heading'       => 'H',
+						),
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_acf_unknown_layout', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'flex.1',
+			$result->get_error_message(),
+			'The message must locate the offending row, so an agent can fix that row rather than the request.'
+		);
+		$this->assertStringNotContainsString(
+			'flex.0',
+			$result->get_error_message(),
+			'The row that was fine must not be named, or the message stops telling the caller anything.'
+		);
+	}
+
+	/**
 	 * The message is bounded: a caller sending many undeclared addresses gets a readable list, not
 	 * an unbounded echo of its own request.
 	 *
@@ -855,6 +1217,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 			),
 			array( 'field_rep', array( array( 'title' => 'T' ) ), array() ),
 			array( 'field_rep', array( array( 'nope' => 'X' ) ), array( 'rep.0.nope' ) ),
+
 			array(
 				'field_rep',
 				array( array( 'title' => 'T' ), array( 'nope' => 'X' ) ),
@@ -1094,6 +1457,7 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				'flex.0.items.0.nope',
 				'detector',
 			),
+
 			array( 'field_cl0', array( 'email' => 'e' ), array(), 'cl0.email', 'derivation' ),
 			array( 'field_cl0', array( 'nosuch' => 'X' ), array(), 'cl0.nosuch', 'detector' ),
 			array( 'field_cl1', array( 'email' => 'e' ), array(), 'cl1.email (_name)', 'derivation' ),
@@ -1188,12 +1552,23 @@ final class AcfUnknownSubFieldFloorTest extends TestCase {
 				'field_grp'     => 2,
 				'field_rep'     => 2,
 				'field_flex'    => 3,
+				'field_gflex'   => 1,
 				'field_cl0'     => 1,
 				'field_cl1'     => 1,
 				'field_noshape' => 0,
 			),
 			$counts,
 			'Every container in the fixture must still declare the sub-fields its rows depend on.'
+		);
+
+		// The sub-field count above cannot see the `blank` layout, because a layout declaring no
+		// sub-fields contributes zero to it. That layout is the entire must-succeed case for the
+		// layout check, so the declared layout NAMES are pinned separately or the fixture could
+		// lose it silently.
+		$this->assertSame(
+			array( 'hero', 'cards', 'blank' ),
+			aafm_acf_declared_layout_names( $this->config()['groups'][0]['fields'][2] ),
+			'The flexible-content fixture must keep declaring an empty layout as well as full ones.'
 		);
 	}
 }

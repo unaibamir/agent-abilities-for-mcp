@@ -677,12 +677,22 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 			// and not the other decides whether the whole projection is abandoned
 			// - and abandoning it is what reinstates the original false failure.
 			// -----------------------------------------------------------------
-			// Stored carries the marker, sent does not: harmlessly dropped by the
-			// projection, so a row written without it still verifies.
+			// Stored carries the marker, sent does not. This row USED TO EXPECT SUCCESS, on the
+			// reasoning that the projection harmlessly drops a stored-only key so a row written
+			// without a marker still verifies. The projection half of that is true and is still
+			// pinned, directly, in test_projection_drops_a_stored_key_the_caller_never_sent().
+			// The row as a whole was not: it demanded that the ability ACCEPT a flexible-content
+			// row carrying no acf_fc_layout, and measured against real ACF Pro 6.8.7 that input
+			// EMPTIES the field. Storage never reaches the state this row overrides it into,
+			// because ACF drops a marker-less row instead of writing it. So the row was pinning a
+			// stub-only shape, and while it stood it protected the data-loss defect: a correct fix
+			// turns it red and reads as a regression. It is flipped rather than deleted, and it
+			// asserts WHICH floor refuses it, so "refused" cannot be satisfied by the downstream
+			// mismatch that used to produce the error AFTER the field had already been emptied.
 			'flex marker: stored only'          => array(
 				'nested',
 				array( 'field_sections' => array( array( 'heading' => 'Top' ) ) ),
-				true,
+				false,
 				array(
 					'field_sections' => array(
 						array(
@@ -691,6 +701,7 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 						),
 					),
 				),
+				'aafm_acf_unknown_layout',
 			),
 			// Sent carries the marker, storage does not. array_key_exists fails,
 			// the projection is abandoned and the write is reported failed - which
@@ -715,6 +726,40 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 	}
 
 	/**
+	 * The projection drops a key storage holds and the caller never sent.
+	 *
+	 * This was the real property behind the `flex marker: stored only` corpus row, which used to
+	 * carry it end to end through the ability. That route no longer exists: the value it drove is a
+	 * flexible-content row with no acf_fc_layout, and an upfront floor now refuses that before any
+	 * write, because real ACF empties the field for it. The property itself is unchanged and worth
+	 * keeping, so it is asserted where it lives instead of through a shape production can no longer
+	 * reach.
+	 *
+	 * Stated honestly: with the floor in place, no flexible-content write can reach the projection
+	 * with the marker on one side only, so for THAT key this branch is now defensive rather than
+	 * demonstrated load-bearing by the write path. It is not decorative in general - the projection
+	 * is type-agnostic and every partial container row depends on the same drop, which is what the
+	 * partial-row rows above exercise.
+	 *
+	 * @return void
+	 */
+	public function test_projection_drops_a_stored_key_the_caller_never_sent(): void {
+		$stored = array(
+			array(
+				'acf_fc_layout' => 'section',
+				'heading'       => 'Top',
+			),
+		);
+		$sent   = array( array( 'heading' => 'Top' ) );
+
+		$this->assertSame(
+			$sent,
+			aafm_acf_project_stored_onto_sent( $stored, $sent ),
+			'A key present in storage but absent from the send must be projected away, not compared.'
+		);
+	}
+
+	/**
 	 * Drive one corpus row through the real ability and check the verdict it reports.
 	 *
 	 * @dataProvider provide_write_shapes
@@ -723,8 +768,9 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 	 * @param array<string,mixed>      $fields         The field map to write.
 	 * @param bool                     $must_succeed   Whether the ability must report success.
 	 * @param array<string,mixed>|null $read_override  Raw read-back override, or null.
+	 * @param string                   $expected_code  Error code a refusal must carry, or '' for any.
 	 */
-	public function test_write_verdict( string $config_name, array $fields, bool $must_succeed, ?array $read_override ): void {
+	public function test_write_verdict( string $config_name, array $fields, bool $must_succeed, ?array $read_override, string $expected_code = '' ): void {
 		if ( 'nested' === $config_name ) {
 			$config = $this->nested_config();
 		} elseif ( 'clone' === $config_name ) {
@@ -751,6 +797,18 @@ final class AcfContainerVerifyCorpusTest extends TestCase {
 				$res,
 				'A write whose read-back disagrees with what was sent must report failure.'
 			);
+			if ( '' !== $expected_code ) {
+				// Naming the code is what stops a row passing for the wrong reason. Most rows here
+				// are refused by the read-back comparison and any error will do; a row refused by
+				// an upfront FLOOR is making a stronger claim - that nothing was written at all -
+				// and the downstream mismatch would satisfy a bare assertInstanceOf while the
+				// database had already been changed.
+				$this->assertSame(
+					$expected_code,
+					$res->get_error_code(),
+					'The refusal must come from the floor this row names, not from a later mismatch.'
+				);
+			}
 			return;
 		}
 

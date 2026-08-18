@@ -303,6 +303,40 @@ function aafm_acf_flat_container_field_types(): array {
 }
 
 /**
+ * Every layout name a flexible-content definition declares.
+ *
+ * Deliberately separate from aafm_acf_sub_field_defs(), which cannot answer this question: that
+ * function skips a layout carrying no `sub_fields` array BEFORE it ever compares the layout name,
+ * so an undeclared layout and a DECLARED layout that happens to declare no sub-fields both come
+ * back as "no sub-fields here" and are indistinguishable to it. Telling those two apart is the
+ * whole point - one is a caller error and the other is an ordinary write that must keep working.
+ * A layout with an empty sub-field list is legal in ACF and was measured succeeding on the bench.
+ *
+ * Returns an empty list for any non-flexible-content definition, and for a flexible-content
+ * definition that declares no layouts at all. Both mean the same thing to the caller: there is
+ * nothing here to judge a row's layout against, so no row may be refused on this ground.
+ *
+ * @param array<string,mixed> $def The field definition, from acf_get_field().
+ * @return array<int,string> The declared layout names, in declaration order.
+ */
+function aafm_acf_declared_layout_names( array $def ): array {
+	$names = array();
+	if ( ! isset( $def['layouts'] ) || ! is_array( $def['layouts'] ) ) {
+		return $names;
+	}
+	foreach ( $def['layouts'] as $candidate ) {
+		if ( ! is_array( $candidate ) || ! isset( $candidate['name'] ) || ! is_scalar( $candidate['name'] ) ) {
+			continue;
+		}
+		$name = (string) $candidate['name'];
+		if ( '' !== $name ) {
+			$names[] = $name;
+		}
+	}
+	return $names;
+}
+
+/**
  * Resolve a sub-field's ACF definition by its name within a parent field definition.
  *
  * ACF repeater/group/clone/flexible-content values are keyed by the sub-field NAME, so a nested
@@ -762,12 +796,23 @@ function aafm_acf_sub_field_by_address( array $parent_def, string $address, stri
  * of the request, and not recursing into nested containers. The one survivor is named where it
  * lives, in aafm_acf_unknown_sub_field_error(), rather than counted as proof.
  *
- * @param array<string,mixed> $def  The field definition, from acf_get_field().
- * @param mixed               $sent The sanitized value the caller asked to write at this depth.
- * @param string              $path The dotted address of $def within the request, for the message.
+ * A flexible-content row can also be unwritable for a reason that is not an address at all: its
+ * `acf_fc_layout` marker naming a layout the field does not declare, or missing entirely. Those
+ * rows come out through the $bad_layouts out-parameter rather than the return value, because they
+ * are a different claim and get a different refusal - see aafm_acf_unknown_layout_error(). It is an
+ * out-parameter rather than a second function so that ONE traversal answers both questions: a
+ * second walk would have to repeat this function's descent rules (which values are rows, which
+ * index a row sits at, which layout a row resolves under), and two copies of a descent rule is
+ * where this project's documented drift starts. aafm_upload_max_pixels() reports its pre-filter
+ * ceiling the same way, for the same reason.
+ *
+ * @param array<string,mixed> $def         The field definition, from acf_get_field().
+ * @param mixed               $sent        The sanitized value the caller asked to write at this depth.
+ * @param string              $path        The dotted address of $def within the request, for the message.
+ * @param array<int,string>   $bad_layouts Out: the dotted addresses of rows whose layout cannot resolve.
  * @return array<int,string> The unresolved addresses, dotted from the top-level field name.
  */
-function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = '' ): array {
+function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = '', array &$bad_layouts = array() ): array {
 	$type = (string) ( $def['type'] ?? '' );
 	if ( ! is_array( $sent ) || ! in_array( $type, aafm_acf_container_field_types(), true ) ) {
 		return array();
@@ -781,7 +826,7 @@ function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = ''
 	// update_row()/add_sub_row() API takes (/resources/update_row: row numbers begin from 1).
 	// Nothing here calls those functions, and the two bases must never meet.
 	if ( in_array( $type, aafm_acf_flat_container_field_types(), true ) ) {
-		return aafm_acf_unresolved_in_row( $def, $sent, $path );
+		return aafm_acf_unresolved_in_row( $def, $sent, $path, $bad_layouts );
 	}
 	$out       = array();
 	$row_index = -1;
@@ -790,7 +835,7 @@ function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = ''
 		if ( ! is_array( $row ) ) {
 			continue; // Not a row shape at all; ACF writes nothing and the verify still catches it.
 		}
-		$out = array_merge( $out, aafm_acf_unresolved_in_row( $def, $row, $path . '.' . $row_index ) );
+		$out = array_merge( $out, aafm_acf_unresolved_in_row( $def, $row, $path . '.' . $row_index, $bad_layouts ) );
 	}
 	return $out;
 }
@@ -799,13 +844,49 @@ function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = ''
  * The per-row half of aafm_acf_unresolved_sub_addresses(): one container row, or a group's or
  * clone's flat sub-field map.
  *
- * @param array<string,mixed>     $def  The parent container definition.
- * @param array<int|string,mixed> $row  The row the caller sent.
- * @param string                  $path The dotted address of $row within the request.
+ * @param array<string,mixed>     $def         The parent container definition.
+ * @param array<int|string,mixed> $row         The row the caller sent.
+ * @param string                  $path        The dotted address of $row within the request.
+ * @param array<int,string>       $bad_layouts Out: row addresses whose flexible-content layout cannot resolve.
  * @return array<int,string> The unresolved addresses within this row.
  */
-function aafm_acf_unresolved_in_row( array $def, array $row, string $path ): array {
+function aafm_acf_unresolved_in_row( array $def, array $row, string $path, array &$bad_layouts = array() ): array {
+	$type   = (string) ( $def['type'] ?? '' );
 	$layout = isset( $row['acf_fc_layout'] ) && is_scalar( $row['acf_fc_layout'] ) ? (string) $row['acf_fc_layout'] : '';
+
+	// A flexible-content row is addressed THROUGH its layout: acf_fc_layout is how ACF decides which
+	// layout's sub-fields the row is made of, and the docs make it a required property of every row
+	// (/resources/rest-api: "arrays of layout objects with a required 'acf_fc_layout' property";
+	// every row of /resources/update_field's flex example carries one). A row naming a layout the
+	// field does not declare, or carrying no marker at all, is therefore a caller error the
+	// definition can SEE - unlike a shape we cannot introspect, which is what the softening below
+	// exists to keep protecting.
+	//
+	// Letting such a row through is not a report-only bug, it DESTROYS DATA. Measured at the
+	// database against real ACF Pro 6.8.7: a field holding heading='BEFORE-F8' and body='BODY-BEFORE'
+	// was sent one row layout-marked `no_such_layout`; ACF replaced the whole field value, BOTH
+	// sub-field rows were deleted, the stored value became a single unusable layout name, and the
+	// request then reported FAILURE because the read-back could not match. Omitting the marker
+	// instead empties the field completely. So the agent is told the write failed, the previous
+	// content is gone, and there is no recovery path. Refusing before update_field() is what makes
+	// the failure report true. Behaviour-change bound: nobody who succeeds today starts failing,
+	// because every shape refused here already came back an error - the only thing that changes is
+	// that the database is now untouched when we say so.
+	//
+	// Deliberately NOT swept to the other container types: repeater, group and clone have no row
+	// selector at all, so there is nothing about their rows the definition could contradict. This
+	// is per-type because the QUESTION is per-type, not because a uniform rule was narrowed.
+	if ( 'flexible_content' === $type ) {
+		$declared = aafm_acf_declared_layout_names( $def );
+		if ( array() !== $declared && ! in_array( $layout, $declared, true ) ) {
+			// '' is never a declared name, so a missing marker and an undeclared one are one
+			// predicate. Both are pinned separately in the corpus, and blinding this to the named
+			// case alone kills the missing-marker row by name.
+			$bad_layouts[] = $path;
+			return array(); // Judging this row's addresses against a layout it cannot have is noise.
+		}
+	}
+
 	if ( array() === aafm_acf_sub_field_defs( $def, $layout ) ) {
 		return array(); // No declared shape to judge against; see the docblock's second exclusion.
 	}
@@ -822,7 +903,7 @@ function aafm_acf_unresolved_in_row( array $def, array $row, string $path ): arr
 		}
 		$out = array_merge(
 			$out,
-			aafm_acf_unresolved_sub_addresses( $sub, $sub_value, ( '' !== $path ? $path . '.' : '' ) . $address )
+			aafm_acf_unresolved_sub_addresses( $sub, $sub_value, ( '' !== $path ? $path . '.' : '' ) . $address, $bad_layouts )
 		);
 	}
 	return $out;
@@ -839,19 +920,44 @@ function aafm_acf_unresolved_in_row( array $def, array $row, string $path ): arr
  * is what turns "the request could not be completed" into something an agent can correct on its
  * next turn, which is most of the point of refusing early.
  *
- * The addresses are capped and sanitized before they reach the message, and the two halves have
- * different standing, measured rather than assumed. The CAP is load-bearing: removing it left the
- * whole corpus green until a row was added for it, so a caller could have had its entire request
- * echoed back. The SANITIZE is DEFENSIVE, not demonstrated load-bearing: removing it changes no
- * row, because the walk runs over the value aafm_acf_sanitize_value() already returned and that
- * sanitizer puts every string key through aafm_sanitize_plain_text() at every depth. It stays
- * because it is the last step before caller-derived text becomes a rendered string, and because
- * that upstream guarantee lives in a different function than this one.
+ * The addresses are capped and sanitized before they reach the message. That step now lives in
+ * aafm_acf_safe_address_list(), shared with the sibling layout refusal so the bound cannot drift
+ * between two messages; its docblock carries the measured standing of each half, including the
+ * labelled survivor for the sanitize.
  *
  * @param array<int,string> $addresses The unresolved addresses.
  * @return \WP_Error
  */
 function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
+	return new WP_Error(
+		'aafm_acf_unknown_sub_field',
+		sprintf(
+			/* translators: %s: comma-separated list of sub-field addresses the caller sent. */
+			__( 'These do not name a sub-field of the field they were sent under, so nothing was written: %s', 'agent-abilities-for-mcp' ),
+			implode( ', ', aafm_acf_safe_address_list( $addresses ) )
+		)
+	);
+}
+
+/**
+ * The bounded, sanitized address list both container refusals put in their message.
+ *
+ * Extracted so the two refusals share ONE copy of the cap and the strip rather than each carrying
+ * its own; a second copy is where this project's "fixed at one call site, never swept" archetype
+ * starts, and a cap that drifted apart between two messages would be invisible.
+ *
+ * The two halves have different standing, measured rather than assumed. The CAP is load-bearing:
+ * removing it left the whole corpus green until a row was added for it, so a caller could have had
+ * its entire request echoed back. The SANITIZE is DEFENSIVE, not demonstrated load-bearing:
+ * removing it changes no row, because both callers walk a value aafm_acf_sanitize_value() already
+ * returned and that sanitizer puts every string key through aafm_sanitize_plain_text() at every
+ * depth. It stays because this is the last step before caller-derived text becomes a rendered
+ * string, and because that upstream guarantee lives in a different function than this one.
+ *
+ * @param array<int,string> $addresses The raw addresses.
+ * @return array<int,string> At most five sanitized, non-empty, de-duplicated addresses.
+ */
+function aafm_acf_safe_address_list( array $addresses ): array {
 	$clean = array();
 	foreach ( array_values( array_unique( $addresses ) ) as $address ) {
 		// Cast the substr: on PHP 7.4 it returns false rather than '' when it cannot cut, and
@@ -865,12 +971,34 @@ function aafm_acf_unknown_sub_field_error( array $addresses ): WP_Error {
 			break; // A bounded message; the caller can fix these and re-send to see any others.
 		}
 	}
+	return $clean;
+}
+
+/**
+ * The refusal for a flexible-content row whose layout the field does not declare, or which carries
+ * no layout marker at all.
+ *
+ * Separate from aafm_acf_unknown_sub_field_error() because it is a different claim, and reusing
+ * that one would have made the message untrue: it says the listed strings do not name a sub-field,
+ * and for a row that simply OMITS its marker the caller sent no such address at all. This release
+ * has already had to correct one user-facing string that asserted something untrue, so a message
+ * that would only be accurate for half its rows is not an option.
+ *
+ * It names the ROW, not the layout the caller sent and not the layouts the field declares. The row
+ * address is the actionable part and is the same kind of string the sibling refusal already echoes;
+ * the declared layout names are site configuration the caller did not supply, and nothing in this
+ * plugin's read surface exposes them, so listing them here would disclose rather than help.
+ *
+ * @param array<int,string> $rows The dotted addresses of the offending rows.
+ * @return \WP_Error
+ */
+function aafm_acf_unknown_layout_error( array $rows ): WP_Error {
 	return new WP_Error(
-		'aafm_acf_unknown_sub_field',
+		'aafm_acf_unknown_layout',
 		sprintf(
-			/* translators: %s: comma-separated list of sub-field addresses the caller sent. */
-			__( 'These do not name a sub-field of the field they were sent under, so nothing was written: %s', 'agent-abilities-for-mcp' ),
-			implode( ', ', $clean )
+			/* translators: %s: comma-separated list of flexible-content row addresses. */
+			__( 'Each flexible content row must name one of the field\'s own layouts in acf_fc_layout. These rows do not, so nothing was written: %s', 'agent-abilities-for-mcp' ),
+			implode( ', ', aafm_acf_safe_address_list( $rows ) )
 		)
 	);
 }
@@ -1347,7 +1475,18 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// declares, because ACF silently ignores one that does not while still writing the rest -
 		// which used to report the whole request as failed AFTER the recognised sub-fields had
 		// already landed.
-		$unresolved = aafm_acf_unresolved_sub_addresses( $def, $clean );
+		//
+		// The same walk also reports flexible-content rows whose layout the field does not declare.
+		// Those are refused FIRST and with their own error, because they are the worse half: an
+		// unresolvable layout does not merely go unwritten, it makes ACF replace the field's whole
+		// value, so the row's existing sub-field content is DELETED on the call that reports
+		// failure. Sub-field complaints about a row whose layout cannot resolve would be noise
+		// anyway, since the layout is what decides which sub-fields the row even has.
+		$bad_layouts = array();
+		$unresolved  = aafm_acf_unresolved_sub_addresses( $def, $clean, '', $bad_layouts );
+		if ( array() !== $bad_layouts ) {
+			return aafm_acf_unknown_layout_error( $bad_layouts );
+		}
 		if ( array() !== $unresolved ) {
 			return aafm_acf_unknown_sub_field_error( $unresolved );
 		}

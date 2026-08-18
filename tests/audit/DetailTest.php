@@ -668,6 +668,22 @@ final class DetailTest extends TestCase {
 	private const PERMANENT_DELETE_FLOOR = 13;
 
 	/**
+	 * The smallest number of arg-bearing map entries the detail map may hold without someone
+	 * deciding to.
+	 *
+	 * Its own constant rather than a reuse of PERMANENT_DELETE_FLOOR, and that reuse was a real
+	 * hole rather than a tidiness point. The map carries far more arg-bearing entries than there
+	 * are permanent deletes, so borrowing 13 left slack for every entry above it: an entry could be
+	 * deleted outright and the count would still clear the floor. Measured, not assumed - deleting
+	 * the aafm/update-user-meta entry left the guard reporting OK on 78 assertions, and only the
+	 * per-ability tests noticed.
+	 *
+	 * Raising it as entries are added is deliberate. A new entry passing without a bump is fine
+	 * (the floor is a minimum), but a removal has to trip it, which is the whole point.
+	 */
+	private const MAPPED_ARG_ENTRY_FLOOR = 26;
+
+	/**
 	 * B2-07's completeness guard, and the guard whose absence let nine of thirteen permanent
 	 * deletes ship writing detail:null.
 	 *
@@ -762,13 +778,16 @@ final class DetailTest extends TestCase {
 			}
 		}
 
-		// Same anti-vacuity guard as the test above, for the same measured reason: an empty map
-		// makes "no unknown keys" true for the emptiest possible reason. Every permanent delete is
-		// an arg-bearing entry, so the floor is the same number.
+		// Same anti-vacuity guard as the test above, and then some. An empty map makes "no unknown
+		// keys" true for the emptiest possible reason, but a floor with slack in it is barely
+		// better: it lets a single entry be deleted silently. This floor tracks the map's actual
+		// arg-bearing size, so losing any one entry trips it.
 		$this->assertGreaterThanOrEqual(
-			self::PERMANENT_DELETE_FLOOR,
+			self::MAPPED_ARG_ENTRY_FLOOR,
 			$checked,
-			'Too few arg-bearing map entries were examined for this result to mean anything.'
+			'An arg-bearing map entry has gone missing, or too few were examined for this result to '
+			. 'mean anything. If an entry was removed on purpose, lower MAPPED_ARG_ENTRY_FLOOR in the '
+			. 'same change and say why.'
 		);
 
 		$this->assertSame(

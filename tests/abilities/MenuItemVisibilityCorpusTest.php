@@ -84,6 +84,7 @@ final class MenuItemVisibilityCorpusTest extends TestCase {
 			// is pinned as its own test below, so nobody re-adds the row and
 			// then loosens the filter to make an impossible fixture pass.
 			'post_type item, dangling id'     => array( 'dangling_post_id', false ),
+			'post_type item, no object id'    => array( 'missing_object_id_meta', false ),
 			'post_type item, unknown type'    => array( 'unknown_post_type', false ),
 			'taxonomy item, dangling id'      => array( 'dangling_term_id', false ),
 			'taxonomy item, unknown taxonomy' => array( 'unknown_taxonomy', false ),
@@ -160,6 +161,35 @@ final class MenuItemVisibilityCorpusTest extends TestCase {
 					wp_trash_post( $post_id );
 					$this->assertSame( 'trash', get_post_status( $post_id ), 'the target must really be in the trash.' );
 				}
+				return $item_id;
+
+			case 'missing_object_id_meta':
+				// The same breakage one step further along: the object id is not merely wrong, it is
+				// absent. get_post_meta() returns '' for it, which casts to 0, and get_post( 0 ) is
+				// null exactly like a deleted target - so core dereferences nothing here too. Found by
+				// a surviving mutant: an earlier draft of the guard excused a zero object id and
+				// nothing in this corpus noticed.
+				$item_id = (int) wp_update_nav_menu_item(
+					$menu_id,
+					0,
+					$publish + array(
+						'menu-item-title'     => 'Meta-less link',
+						'menu-item-type'      => 'post_type',
+						'menu-item-object'    => 'post',
+						'menu-item-object-id' => (int) self::factory()->post->create(
+							array(
+								'post_type'   => 'post',
+								'post_status' => 'publish',
+							)
+						),
+					)
+				);
+				delete_post_meta( $item_id, '_menu_item_object_id' );
+				$this->assertSame(
+					'',
+					get_post_meta( $item_id, '_menu_item_object_id', true ),
+					'the fixture needs the object id meta to really be gone.'
+				);
 				return $item_id;
 
 			case 'dangling_post_id':
@@ -321,12 +351,80 @@ final class MenuItemVisibilityCorpusTest extends TestCase {
 
 		// The exec's docblock claims parity with the reader the front end uses. Test the claim
 		// against that reader rather than restating it.
-		$rendered = wp_get_nav_menu_items( $menu_id );
+		if ( $this->core_reader_can_answer( $kind ) ) {
+			$rendered = wp_get_nav_menu_items( $menu_id );
+			$this->assertSame(
+				is_array( $rendered ) ? array_map( 'intval', wp_list_pluck( $rendered, 'ID' ) ) : array(),
+				$listed,
+				sprintf( 'The listed set must equal what core renders, for a %s.', $kind )
+			);
+		}
+	}
+
+	/**
+	 * Whether core's own reader can be asked about this fixture on the WordPress under test.
+	 *
+	 * Exists for exactly one row, and the cause is core's rather than ours. Before WordPress 7.0
+	 * wp_setup_nav_menu_item() dereferences a post_type item's missing target with no null check,
+	 * and wp_get_nav_menu_items() decorates every item it returns, so on this plugin's 6.9 floor
+	 * that reader cannot be asked about a dangling target at all: the question itself raises the
+	 * warning the ability now steps around. Verified against the shipped sources rather than
+	 * assumed, by fetching wp-includes/nav-menu.php for each tag: 6.9 and 6.9.2 have no guard,
+	 * 7.0, 7.0.1 and 7.0.3 have `if ( $menu_post instanceof WP_Post )`.
+	 *
+	 * Only the comparison is skipped. The ability's own verdict is asserted above on every
+	 * version, so the row still fails if list-menu-items starts returning a dangling item.
+	 *
+	 * @param string $kind Fixture kind.
+	 * @return bool False only where core's reader is known to be defective for that input.
+	 */
+	private function core_reader_can_answer( string $kind ): bool {
+		if ( 'dangling_post_id' !== $kind && 'missing_object_id_meta' !== $kind ) {
+			return true;
+		}
+		return version_compare( (string) get_bloginfo( 'version' ), '7.0', '>=' );
+	}
+
+	/**
+	 * The items that must survive alongside a broken one, in a single menu.
+	 *
+	 * The corpus above walks one item at a time, which cannot catch the failure mode that
+	 * matters most about a skip-before-decoration guard: skipping too much. A guard that dropped
+	 * every item, or every item carrying an object id, would still satisfy every "must not be
+	 * listed" row, and the "must stay listed" rows each run in a menu of their own where a
+	 * whole-menu wipe is indistinguishable from correct filtering.
+	 *
+	 * So this puts a custom link, a live post item and a dangling one in the same menu and pins
+	 * the exact surviving set. A custom link is the one to watch: it has no target object at all,
+	 * so a guard that forgets to check the item type would silently delete legitimate navigation.
+	 *
+	 * Runs identically on both sides of the floor, which is the point. On 7.0 core marks the
+	 * dangling item _invalid and the ability skips it afterwards; on 6.9 the guard skips it
+	 * first. Same answer, so this pins behaviour rather than a version.
+	 */
+	public function test_only_the_broken_item_is_dropped(): void {
+		$this->register_menus();
+		$this->acting_as( 'administrator' );
+		$menu_id = (int) wp_create_nav_menu( 'Mixed menu' );
+
+		$custom_id   = $this->build_fixture( 'custom', $menu_id );
+		$live_id     = $this->build_fixture( 'live_post', $menu_id );
+		$dangling_id = $this->build_fixture( 'dangling_post_id', $menu_id );
+
+		$res    = wp_get_ability( 'aafm/list-menu-items' )->execute( array( 'menu_id' => $menu_id ) );
+		$listed = array_map( 'intval', array_column( $res['items'], 'id' ) );
+		sort( $listed );
+
+		$expected = array( $custom_id, $live_id );
+		sort( $expected );
+
 		$this->assertSame(
-			is_array( $rendered ) ? array_map( 'intval', wp_list_pluck( $rendered, 'ID' ) ) : array(),
+			$expected,
 			$listed,
-			sprintf( 'The listed set must equal what core renders, for a %s.', $kind )
+			'Only the item whose target is gone may be dropped. A custom link has no target object '
+			. 'and a live post item has a working one, so removing either means the guard is too broad.'
 		);
+		$this->assertNotContains( $dangling_id, $listed, 'The dangling item must not be listed.' );
 	}
 
 	/**

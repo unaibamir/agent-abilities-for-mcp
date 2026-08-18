@@ -332,6 +332,14 @@ function aafm_exec_list_menu_items( array $input ): array {
 		if ( 'publish' !== $post->post_status ) {
 			continue;
 		}
+		// An item whose target post is gone is one the site will not render, so it is dropped for
+		// exactly the reason the _invalid check below drops its siblings. It has to be caught
+		// BEFORE decoration because on WordPress 6.9 the decoration is itself what breaks; see
+		// aafm_menu_item_target_is_gone(). On 7.0 core reaches the same verdict by setting
+		// _invalid, so the returned set is identical on both versions.
+		if ( aafm_menu_item_target_is_gone( $post ) ) {
+			continue;
+		}
 		$item = wp_setup_nav_menu_item( $post );
 		// Same parity for core's other filter: an item core marked _invalid is one the site will not
 		// render, so returning it would report a menu entry that does not exist to a visitor.
@@ -1002,6 +1010,55 @@ function aafm_exec_delete_menu_item( array $input ) {
 		'id'      => $item_id,
 		'deleted' => true,
 	);
+}
+
+/**
+ * Whether a nav menu item points at a post that no longer exists.
+ *
+ * Guards a WordPress 6.9 defect that 7.0 fixed. wp_setup_nav_menu_item() enriches a post_type
+ * item using get_post_states(), and on 6.9 it does so without checking that the target resolved:
+ *
+ *     $menu_post   = get_post( $menu_item->object_id );
+ *     $post_states = get_post_states( $menu_post );   // 6.9 wp-includes/nav-menu.php
+ *
+ * get_post_states() reads $post->post_status and several other fields, so a missing target
+ * produces a PHP warning per field. WordPress 7.0 wrapped that call in
+ * `if ( $menu_post instanceof WP_Post )`, which is why the problem is invisible above this
+ * plugin's 6.9 floor, and why the suite only caught it once it was run against a 6.9 library.
+ * The enrichment sits behind function_exists( 'get_post_states' ), an admin-only function, so a
+ * plain REST/MCP request never reaches it; WP-CLI and any plugin that loads
+ * wp-admin/includes/template.php do, and a site whose error handler promotes warnings to
+ * exceptions turns it into a real failure.
+ *
+ * Deliberately narrow, because over-skipping would silently drop legitimate menu entries and
+ * that is the worse bug. Only post_type items resolve object_id to a post: custom links have no
+ * target object at all, while taxonomy and post_type_archive items resolve through different
+ * core branches that do not carry this defect. A trashed target still returns a WP_Post, so it
+ * is not flagged here and stays with core's own _invalid handling.
+ *
+ * Reads post meta rather than a decorated item on purpose, since the entire point is to answer
+ * before wp_setup_nav_menu_item() has run.
+ *
+ * Not used by aafm_menu_item_by_id() below, and that is deliberate rather than an oversight.
+ * Skipping there would make a dangling item unreadable, and update-menu-item would then refuse
+ * to touch it on BOTH 6.9 and 7.0 - which removes the only way to repoint a broken item at a
+ * live post, and changes behaviour on 7.0 where nothing is wrong. A read that feeds a write
+ * needs the item, not a verdict about it.
+ *
+ * @param WP_Post $item_post The nav_menu_item post, before decoration.
+ * @return bool True when this is a post_type item whose target post is gone.
+ */
+function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
+	if ( 'post_type' !== get_post_meta( $item_post->ID, '_menu_item_type', true ) ) {
+		return false;
+	}
+	// A missing or zero object id is deliberately NOT treated as "fine". An item can carry
+	// post_type with its object id meta absent, which reads as 0, and get_post( 0 ) returns null
+	// exactly like a deleted target - so excusing it here would hand core the very input that
+	// breaks it. Calling it gone is also the verdict core reaches by another route: an item
+	// pointing at nothing renders nothing.
+	$object_id = (int) get_post_meta( $item_post->ID, '_menu_item_object_id', true );
+	return ! ( get_post( $object_id ) instanceof WP_Post );
 }
 
 /**

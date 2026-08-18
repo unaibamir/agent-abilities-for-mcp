@@ -673,7 +673,35 @@ function aafm_acf_sub_field_by_address( array $parent_def, string $address, stri
  * a group write carrying `alpha` plus an undeclared `nosuchsub` stores `{name}_alpha` and no
  * `{name}_nosuchsub` row at all.
  *
- * That is what made the address worth refusing up front rather than discovering afterwards. The
+ * WHAT IS DOCUMENTED AND WHAT IS ONLY OBSERVED, because this plugin has already shipped a guard
+ * resting on a vendor contract the vendor never offered, and the difference decides how much this
+ * may safely rely on. Documentation says what ACF INTENDS and may therefore keep; source says only
+ * what 6.3.6 and 6.8.7 happen to do today.
+ *
+ *   DOCUMENTED - the accepted value SHAPE of each container. A repeater or flexible-content value
+ *   is a list of rows keyed by sub-field name, and a flexible-content row carries `acf_fc_layout`
+ *   (advancedcustomfields.com/resources/update_field, whose own examples send it in every row;
+ *   /resources/rest-api calls it a required `acf_fc_layout` property). A group composes its
+ *   storage key from its own name plus the sub-field's (/resources/group: a group `hero` with a
+ *   sub-field `image` saves as `hero_image`). A clone set to Prefix Field Names is addressed at
+ *   TOP level as `{clone}_{original}` (/resources/update_field).
+ *   DOCUMENTED - addressing a sub-field by its field KEY rather than its name. /resources/add_row
+ *   shows a whole row keyed by field keys, and /resources/update_field recommends the key form
+ *   when saving a value that does not yet exist. So aafm_acf_sub_field_by_address() handling keys
+ *   satisfies the documented contract; it is not defensive hardening.
+ *   OBSERVED ONLY - that ACF IGNORES an address matching no declared sub-field. The docs specify
+ *   the accepted shapes and say nothing about a key that is not one of them. True of ACF free
+ *   6.3.6 (driven end to end in the contract suite) and ACF Pro 6.8.7 (zero-write probe on the
+ *   bench), with no documented boundary between them, and free to change in a future release
+ *   without ACF breaking any promise.
+ *
+ * That last line is why this REFUSES up front instead of stripping unknown addresses and reporting
+ * what landed. Stripping would be correct only for as long as ACF keeps ignoring them, which is
+ * exactly the kind of undocumented detail this project has been burned by before. Refusing does
+ * not depend on that behaviour at all, because the undeclared address never reaches ACF and the
+ * outcome is the same whichever way ACF changes it. Do not "simplify" this back.
+ *
+ * That is also what made the address worth refusing up front rather than discovering afterwards. The
  * write of the recognised sub-fields LANDS, the read-back verify then cannot find the undeclared
  * address in storage, and the whole request is reported as a failure - so the caller is told the
  * write failed while the data changed underneath them. Measured end to end against real ACF: a
@@ -732,7 +760,11 @@ function aafm_acf_unresolved_sub_addresses( array $def, $sent, string $path = ''
 	$path = '' !== $path ? $path : (string) ( $def['name'] ?? '' );
 
 	// group and clone: ONE flat map of sub-field values. repeater and flexible_content: a list of
-	// such maps, one per row, so the row's own position joins the address.
+	// such maps, one per row, so the row's own position joins the address. That position is
+	// ZERO-BASED, matching the `{name}_{row}_{sub}` storage key ACF writes and the index the
+	// sibling key derivation uses. It is deliberately NOT the 1-based row number ACF's
+	// update_row()/add_sub_row() API takes (/resources/update_row: row numbers begin from 1).
+	// Nothing here calls those functions, and the two bases must never meet.
 	if ( in_array( $type, aafm_acf_flat_container_field_types(), true ) ) {
 		return aafm_acf_unresolved_in_row( $def, $sent, $path );
 	}
@@ -1090,8 +1122,11 @@ function aafm_acf_canonicalize_for_compare( $value ) {
 }
 
 /**
- * Apply a sanitized field map to an object selector via update_field(), then return the refreshed
- * read shape so the agent sees ground truth after the write.
+ * Apply a sanitized field map to an object selector via update_field(), then return the object's
+ * refreshed values so the agent sees the current state rather than an echo of its own input. Note
+ * that return is ACF's FORMATTED read (aafm_acf_read_fields() -> get_fields()), which is not the
+ * stored shape for image, file, date and relationship fields; the verify below is what compares
+ * against storage, and it reads raw.
  *
  * Every key is gated up front, before any write lands - three floors, all required:
  *
@@ -1125,8 +1160,17 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  * defined fields are written and verified exactly as before.
  *
  * After every field is written its stored value is read back and compared to the sanitized value
- * written, so a failed update_field() that stored nothing is never audited as a success. Two things
- * make that comparison honest. First, it respects ACF's stored typing (aafm_acf_normalize_stored):
+ * written, so a failed update_field() that stored nothing is never audited as a success.
+ *
+ * update_field() DOES have a documented return value and this code deliberately does not use it as
+ * the success signal. ACF documents it as "Meta ID if the field value didn't exist and the field is
+ * not being saved as an option. Otherwise true on successful update, false on failure"
+ * (advancedcustomfields.com/resources/update_field). It cannot answer the question this verify
+ * asks. For a container it reports on the write as a whole, so a row whose recognised sub-fields
+ * all persisted returns success whatever else was in the request, and it says nothing at all about
+ * what storage now holds after ACF's own typing, hydration and re-keying. The read-back is used
+ * because it is the only thing that compares storage against intent, not because no return signal
+ * exists. Two things make that comparison honest. First, it respects ACF's stored typing (aafm_acf_normalize_stored):
  * ACF persists through update_metadata(), so a numeric value reads back a numeric string and a
  * boolean reads back '1'/'' - demanding JSON-exact equality would wrongly fail those type-normalizing
  * writes even though the value did persist, while a no-op write of an unchanged value still matches.
@@ -1172,34 +1216,46 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 	// named after a protected key reached it. Every key refused here is a key this same block
 	// already refuses when the field carrying that name is addressed directly, so this closes a
 	// hole rather than inventing a new class of refusal.
+	$cleaned = array();
 	foreach ( $fields as $field_key => $raw ) {
 		$field_key = (string) $field_key;
 		$def       = function_exists( 'acf_get_field' ) ? acf_get_field( $field_key ) : false;
 		if ( ! is_array( $def ) || empty( $def['key'] ) ) {
 			return aafm_generic_error(); // Unresolved key - the update_field() raw-meta fallback path.
 		}
-		$candidates = array_merge( array( $field_key ), aafm_acf_effective_meta_keys( $def, $raw ) );
+
+		// Sanitize ONCE, here, so every floor below judges the very value the write will use.
+		// The sanitizer rewrites array KEYS as well as values - aafm_acf_sanitize_leaf() puts every
+		// string key through aafm_sanitize_plain_text() at every depth - so deriving keys from $raw
+		// while handing $clean to update_field() checked a different object than it wrote. That gap
+		// was a live escalation, reproduced on a user selector against a top-level unprefixed
+		// clone: an address of `wp_capabilities` carrying a U+202E matched no sub-field while raw,
+		// so the derivation produced no key and the hard block had nothing to refuse, and the strip
+		// then handed ACF the bare protected name. Refused without the character, WRITTEN with it.
+		// Judging $raw instead could only ever over-block, because $raw is never what gets stored.
+		$clean = aafm_acf_sanitize_value( $raw, $field_key );
+
+		$candidates = array_merge( array( $field_key ), aafm_acf_effective_meta_keys( $def, $clean ) );
 		foreach ( $candidates as $candidate ) {
 			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
 				return aafm_generic_error(); // Defense in depth: protected meta key.
 			}
 		}
 
-		// Second floor: every address inside a container must name a sub-field the definition
+		// Third floor: every address inside a container must name a sub-field the definition
 		// declares, because ACF silently ignores one that does not while still writing the rest -
 		// which used to report the whole request as failed AFTER the recognised sub-fields had
-		// already landed. Judged on the SANITIZED value, not $raw: the sanitizer normalises string
-		// keys, so an address that only differs by an invisible character resolves once cleaned and
-		// must not be refused for a difference the write itself would never see.
-		$unresolved = aafm_acf_unresolved_sub_addresses( $def, aafm_acf_sanitize_value( $raw, $field_key ) );
+		// already landed.
+		$unresolved = aafm_acf_unresolved_sub_addresses( $def, $clean );
 		if ( array() !== $unresolved ) {
 			return aafm_acf_unknown_sub_field_error( $unresolved );
 		}
+
+		$cleaned[ $field_key ] = $clean;
 	}
 
 	$failed = array();
-	foreach ( $fields as $field_key => $raw ) {
-		$clean = aafm_acf_sanitize_value( $raw, (string) $field_key );
+	foreach ( $cleaned as $field_key => $clean ) {
 		// update_field() persists through update_metadata()/update_option(), both of which unslash
 		// the value, so a backslash in a value (C:\Users) is stripped one level unless it is slashed
 		// first. Every sibling meta writer (meta.php, terms.php, user-meta.php, the SEO writers)
@@ -1208,7 +1264,9 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// which is exactly what storage holds after the round trip.
 		update_field( (string) $field_key, wp_slash( $clean ), $selector );
 
-		// Verify the write persisted. A failed update_field() stores nothing, so the read-back
+		// Verify the write persisted. update_field()'s documented int|bool return is not the signal
+		// used here: for a container it reports the write as a whole, so it cannot say what storage
+		// actually holds afterwards. A failed update_field() stores nothing, so the read-back
 		// will not equal the value we intended. Read the RAW (unformatted) value - get_field()'s
 		// third arg false - because the formatted read diverges from the stored value for whole
 		// field families (image/file return an array or URL while storing an attachment ID, date

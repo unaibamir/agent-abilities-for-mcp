@@ -394,6 +394,38 @@ final class AcfProtectedMetaFloorTest extends TestCase {
 				array( 'field_bare_seam' => array( 'wp_capabilities' => 'pwned' ) ),
 				true,
 			),
+			// THE CHECKED-VALUE vs WRITTEN-VALUE ROWS. This block used to derive its candidate keys
+			// from the RAW request while update_field() received the SANITIZED one, and the
+			// sanitizer rewrites array KEYS as well as values. So an address of `wp_capabilities`
+			// carrying a U+202E matched no sub-field while raw, the derivation produced no key,
+			// this block had nothing to refuse - and the strip then handed `wp_capabilities` to
+			// ACF. Reproduced end to end on a user selector: refused without the character, WRITTEN
+			// with it. Both floors now judge the value that actually reaches storage.
+			'clone unprefixed, protected address carrying a bidi char, USER' => array(
+				'user',
+				array( 'field_bare_group' => array( "wp_capabilities\u{202E}" => 'pwned' ) ),
+				true,
+			),
+			'clone unprefixed, protected address carrying a C0 control' => array(
+				'post',
+				array( 'field_bare_group' => array( "session_tokens\u{0007}" => 'pwned' ) ),
+				true,
+			),
+			// Not clone-specific: a composing group reaches the same key by the same route.
+			'group named wp, composing address carrying a bidi char' => array(
+				'post',
+				array( 'field_wp' => array( "capabilities\u{202E}" => 'pwned' ) ),
+				true,
+			),
+			// The benign twin, and it is the half that stops this becoming an over-block: an
+			// invisible character in an address composing to a HARMLESS key must still WRITE.
+			// Refusing every address that carries one would be judging the raw value again, from
+			// the other direction.
+			'clone unprefixed, benign address carrying a bidi char' => array(
+				'post',
+				array( 'field_bare_group' => array( "email\u{202E}" => 'ok@example.com' ) ),
+				false,
+			),
 			// Prefixed is not the same as safe: `wp` + `capabilities` composes to a blocked key.
 			'group named wp composing to wp_capabilities' => array(
 				'post',

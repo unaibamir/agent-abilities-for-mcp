@@ -840,7 +840,13 @@ function aafm_agent_call_count( ?string $status = null ): int {
 		$params[] = $status;
 	}
 
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared
+	// The PluginCheck token matches the one on the identical construct in aafm_query_activity().
+	// Plugin Check cannot follow $sql across the conditional append above, so it reports the
+	// prepare() call as carrying an unescaped parameter. It does not: the base string is a literal
+	// whose every value is a placeholder, the only thing ever appended is the constant literal
+	// ' AND status = %s', and all five or six values reach the query through $params - the table
+	// name via %i, and $status, the one caller-influenced value, via %s. Nothing is interpolated.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.NotPrepared, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	$count = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
 	return max( 0, (int) $count );
 }

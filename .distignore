@@ -70,3 +70,12 @@
 # prune non-PHP files from an installed package.
 /vendor/wordpress/mcp-adapter/package.json
 /vendor/wordpress/mcp-adapter/package-lock.json
+
+# Vendor repo metadata that Composer installs alongside the PHP. .gitattributes already
+# excludes these through its `README.md` and `composer.lock` rules, which carry no leading
+# slash and so match at any depth, while the `/README.md` and `/composer.lock` entries above
+# are anchored to the root and never reached the vendor copies. Listed explicitly so the
+# deploy and the zip ship the same set.
+/vendor/wordpress/mcp-adapter/README.md
+/vendor/wordpress/mcp-adapter/composer.lock
+/vendor/wordpress/php-mcp-schema/README.md

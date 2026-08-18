@@ -378,15 +378,30 @@ function aafm_acf_sub_field_defs( array $parent_def, string $layout = '' ): arra
  * its plain-text members (title, target, alt, caption, …) survive intact. Values that are neither
  * scalar nor array are dropped. Caller input is NEVER passed to update_field() unsanitized.
  *
- * @param mixed  $value     Raw caller value.
- * @param string $field_key The top-level field key (to resolve its type).
+ * Pass $def when the caller has already resolved the field. acf_get_field() is NOT a pure function
+ * of its key: it runs the `acf/load_field` filter chain, which third-party plugins are invited to
+ * use, so a stateful filter can return a different definition on a second call. Measured against
+ * real ACF free 6.3.6: with a stateful `acf/load_field` in place, two calls for the same key
+ * returned `text` and then `wysiwyg` once the field store was reset - and a `text` sub-field
+ * re-presented as `wysiwyg` routes to wp_kses_post instead of the plain-text sanitizer, which is a
+ * different set of characters surviving into storage. What stops that today is ACF's per-request
+ * field store, not any property of the function: without the reset the filter ran ONCE across both
+ * calls and the results agreed. That is vendor caching behaviour nobody wrote down, which is this
+ * project's worst shipped defect class, so the write path resolves each field ONCE and hands the
+ * definition down rather than depending on repeated resolutions agreeing.
+ *
+ * @param mixed                    $value     Raw caller value.
+ * @param string                   $field_key The top-level field key (to resolve its type).
+ * @param array<string,mixed>|null $def       The already-resolved definition, or null to resolve here.
  * @return mixed Sanitized value.
  */
-function aafm_acf_sanitize_value( $value, string $field_key ) {
-	$def = array();
-	if ( function_exists( 'acf_get_field' ) ) {
-		$resolved = acf_get_field( $field_key );
-		$def      = is_array( $resolved ) ? $resolved : array();
+function aafm_acf_sanitize_value( $value, string $field_key, ?array $def = null ) {
+	if ( null === $def ) {
+		$def = array();
+		if ( function_exists( 'acf_get_field' ) ) {
+			$resolved = acf_get_field( $field_key );
+			$def      = is_array( $resolved ) ? $resolved : array();
+		}
 	}
 	return aafm_acf_sanitize_leaf( $value, $def );
 }
@@ -1305,7 +1320,13 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 		// than universal: the sanitizer KEEPS it, the address stays unresolvable, and the unknown
 		// sub-field floor below refuses it. A character that survives is caught there; a character
 		// that is transformed away is caught here.
-		$clean = aafm_acf_sanitize_value( $raw, $field_key );
+		//
+		// $def is passed down rather than re-resolved. acf_get_field() runs the `acf/load_field`
+		// filter chain, so it is not a pure function of its key; what makes repeated calls agree is
+		// ACF's per-request field store, measured, not any property of the function. Resolving once
+		// per field removes that dependency entirely - the same move, and the same reason, as
+		// computing $clean once.
+		$clean = aafm_acf_sanitize_value( $raw, $field_key, $def );
 
 		$candidates = array_merge( array( $field_key ), aafm_acf_effective_meta_keys( $def, $clean ) );
 		foreach ( $candidates as $candidate ) {
@@ -1323,11 +1344,18 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			return aafm_acf_unknown_sub_field_error( $unresolved );
 		}
 
-		$cleaned[ $field_key ] = $clean;
+		// Carry the ONE resolved definition forward with the value, so the verify below judges the
+		// same definition the floors did.
+		$cleaned[ $field_key ] = array(
+			'def'   => $def,
+			'value' => $clean,
+		);
 	}
 
 	$failed = array();
-	foreach ( $cleaned as $field_key => $clean ) {
+	foreach ( $cleaned as $field_key => $entry ) {
+		$def   = $entry['def'];
+		$clean = $entry['value'];
 		// update_field() persists through update_metadata()/update_option(), both of which unslash
 		// the value, so a backslash in a value (C:\Users) is stripped one level unless it is slashed
 		// first. Every sibling meta writer (meta.php, terms.php, user-meta.php, the SEO writers)
@@ -1369,8 +1397,6 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			// name that could never match. The projection abandoned, the comparison mismatched, and
 			// the request reported failure AFTER the write had landed. Normalising the sent value
 			// too is what makes the two sides the same name-space; see aafm_acf_rekey_sent_to_names.
-			$def      = function_exists( 'acf_get_field' ) ? acf_get_field( (string) $field_key ) : false;
-			$def      = is_array( $def ) ? $def : null;
 			$expected = aafm_acf_rekey_sent_to_names( $clean, $def );
 			$stored   = aafm_acf_rekey_stored_to_names( $stored, $def );
 			$stored   = aafm_acf_project_stored_onto_sent( $stored, $expected );

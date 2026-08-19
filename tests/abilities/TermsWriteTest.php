@@ -46,9 +46,9 @@ final class TermsWriteTest extends TestCase {
 
 	public function test_create_term_requires_manage_categories(): void {
 		$this->acting_as( 'author' );
-		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array( 'name' => 'Cap probe' ) ) );
 		$this->acting_as( 'editor' );
-		$this->assertTrue( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/create-term' )->check_permissions( array( 'name' => 'Cap probe' ) ) );
 	}
 
 	public function test_create_term_gates_on_the_target_taxonomy_own_cap(): void {
@@ -76,9 +76,23 @@ final class TermsWriteTest extends TestCase {
 
 		$ability = wp_get_ability( 'aafm/create-term' );
 		// Can manage categories...
-		$this->assertTrue( $ability->check_permissions( array( 'taxonomy' => 'category' ) ) );
+		$this->assertTrue(
+			$ability->check_permissions(
+				array(
+					'name'     => 'Cap probe',
+					'taxonomy' => 'category',
+				)
+			)
+		);
 		// ...but lacks manage_aafm_genres, so the custom-taxonomy write is denied.
-		$this->assertFalse( $ability->check_permissions( array( 'taxonomy' => 'aafm_genre' ) ) );
+		$this->assertFalse(
+			$ability->check_permissions(
+				array(
+					'name'     => 'Cap probe',
+					'taxonomy' => 'aafm_genre',
+				)
+			)
+		);
 
 		unregister_taxonomy( 'aafm_genre' );
 	}
@@ -108,7 +122,14 @@ final class TermsWriteTest extends TestCase {
 		wp_set_current_user( $user_id );
 
 		// Executable on the custom taxonomy...
-		$this->assertTrue( wp_get_ability( 'aafm/create-term' )->check_permissions( array( 'taxonomy' => 'aafm_genre' ) ) );
+		$this->assertTrue(
+			wp_get_ability( 'aafm/create-term' )->check_permissions(
+				array(
+					'name'     => 'Cap probe',
+					'taxonomy' => 'aafm_genre',
+				)
+			)
+		);
 		// ...so it must be visible in tools/list too.
 		$this->assertTrue(
 			aafm_user_can_discover_ability( 'aafm/create-term' ),
@@ -151,7 +172,7 @@ final class TermsWriteTest extends TestCase {
 	public function test_low_priv_create_term_denial_is_audited(): void {
 		// A subscriber lacks manage_categories: denied, and the denial is audited.
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-term' )->check_permissions( array( 'name' => 'Cap probe' ) ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );

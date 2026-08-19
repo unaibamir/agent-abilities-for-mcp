@@ -118,8 +118,8 @@ final class PostsWriteTest extends TestCase {
 	public function test_create_draft_needs_only_edit_posts_not_publish(): void {
 		// A contributor can edit_posts but not publish_posts.
 		$this->acting_as( 'contributor' );
-		$this->assertTrue( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
-		$this->assertFalse( wp_get_ability( 'aafm/create-post' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/create-draft' )->check_permissions( array( 'title' => 'Cap probe' ) ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-post' )->check_permissions( array( 'title' => 'Cap probe' ) ) );
 	}
 
 	public function test_create_post_requires_publish_cap_and_publishes(): void {
@@ -192,7 +192,7 @@ final class PostsWriteTest extends TestCase {
 
 	public function test_subscriber_denied_create_draft_is_audited(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'aafm/create-draft' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/create-draft' )->check_permissions( array( 'title' => 'Cap probe' ) ) );
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );
 		$abilities = wp_list_pluck( $denied, 'ability' );

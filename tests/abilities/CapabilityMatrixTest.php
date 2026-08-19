@@ -153,11 +153,42 @@ final class CapabilityMatrixTest extends TestCase {
 		);
 	}
 
+	/**
+	 * A schema-valid minimal input per ability, so each cell measures the CAPABILITY floor.
+	 *
+	 * Every call below used to pass an empty array. That happened to give the right answer, because
+	 * each gate in this matrix is a site-wide capability check that ignores its input, but it made
+	 * every DENY cell satisfiable for two different reasons at once: the role lacking the cap, and
+	 * the argument being absent. A cell that can be red for a reason other than the one it names is
+	 * not measuring what its name claims. Sending the arguments each ability declares required
+	 * leaves exactly one reason.
+	 *
+	 * Abilities with no required properties keep an empty array, which is still their valid input.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function minimal_input( string $ability ): array {
+		$by_ability = array(
+			'aafm/create-draft' => array( 'title' => 'Cap probe' ),
+			'aafm/create-post'  => array( 'title' => 'Cap probe' ),
+			'aafm/create-page'  => array( 'title' => 'Cap probe' ),
+			'aafm/create-term'  => array( 'name' => 'Cap probe' ),
+			'aafm/upload-media' => array(
+				'filename'    => 'probe.txt',
+				// Literal rather than base64_encode(), which the coding standard flags as a possible
+				// obfuscation. This is "probe".
+				'data_base64' => 'cHJvYmU=',
+			),
+		);
+		return $by_ability[ $ability ] ?? array();
+	}
+
 	public function test_capability_matrix_holds_for_every_role_and_ability(): void {
 		foreach ( $this->matrix() as $ability => $by_role ) {
 			foreach ( $by_role as $role => $expected ) {
 				$this->acting_as( $role );
-				$actual = wp_get_ability( $ability )->check_permissions( array() );
+				$actual = wp_get_ability( $ability )->check_permissions( $this->minimal_input( $ability ) );
 				$this->assertSame(
 					$expected,
 					$actual,
@@ -175,7 +206,7 @@ final class CapabilityMatrixTest extends TestCase {
 			foreach ( $by_role as $role => $expected ) {
 				if ( false === $expected ) {
 					$this->acting_as( $role );
-					wp_get_ability( $ability )->check_permissions( array() );
+					wp_get_ability( $ability )->check_permissions( $this->minimal_input( $ability ) );
 					$expected_denials[ $ability ] = true;
 				}
 			}
@@ -204,7 +235,7 @@ final class CapabilityMatrixTest extends TestCase {
 		// permission checks alone (check_permissions does not log success).
 		$this->acting_as( 'administrator' );
 		foreach ( array_keys( $this->matrix() ) as $ability ) {
-			wp_get_ability( $ability )->check_permissions( array() );
+			wp_get_ability( $ability )->check_permissions( $this->minimal_input( $ability ) );
 		}
 		$this->assertCount(
 			0,

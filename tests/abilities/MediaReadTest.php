@@ -223,10 +223,10 @@ final class MediaReadTest extends TestCase {
 
 	public function test_get_media_item_requires_upload_or_edit_cap(): void {
 		$this->acting_as( 'subscriber' );
-		$this->assertFalse( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array() ) );
+		$this->assertFalse( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array( 'attachment_id' => 1 ) ) );
 
 		$this->acting_as( 'author' );
-		$this->assertTrue( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array() ) );
+		$this->assertTrue( wp_get_ability( 'aafm/get-media-item' )->check_permissions( array( 'attachment_id' => 1 ) ) );
 	}
 
 	public function test_get_media_item_returns_rich_shape(): void {

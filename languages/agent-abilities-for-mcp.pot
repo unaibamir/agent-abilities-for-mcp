@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-17T16:17:21+05:00\n"
+"POT-Creation-Date: 2026-08-19T14:56:45+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -97,39 +97,51 @@ msgstr ""
 msgid "Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:764
+#. translators: %s: comma-separated list of sub-field addresses the caller sent.
+#: includes/abilities/acf-integration.php:954
+#, php-format
+msgid "These do not name a sub-field of the field they were sent under, so nothing was written: %s"
+msgstr ""
+
+#. translators: %s: comma-separated list of flexible-content row addresses.
+#: includes/abilities/acf-integration.php:1018
+#, php-format
+msgid "Each flexible content row must name one of the field's own layouts in acf_fc_layout. These rows do not, so nothing was written: %s"
+msgstr ""
+
+#: includes/abilities/acf-integration.php:1614
 msgid "ID of the post whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:835
+#: includes/abilities/acf-integration.php:1685
 msgid "ID of the post whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:840
+#: includes/abilities/acf-integration.php:1690
 msgid "Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field's ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else as plain text."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:937
+#: includes/abilities/acf-integration.php:1787
 msgid "ID of the term whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1002
+#: includes/abilities/acf-integration.php:1852
 msgid "ID of the term whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1007
+#: includes/abilities/acf-integration.php:1857
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules)."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1108
+#: includes/abilities/acf-integration.php:1958
 msgid "ID of the user whose ACF field values to read. The current user must have edit access to this user. A field of the user_email type returns the real email address (PII), governed by the edit-user capability gate rather than being redacted."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1177
+#: includes/abilities/acf-integration.php:2027
 msgid "ID of the user whose ACF field values to write. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1182
+#: includes/abilities/acf-integration.php:2032
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules). The user-scoped hard-block also blocks capability, session, application-password, and 2FA keys even if a field's storage name collides with one."
 msgstr ""
 
@@ -540,51 +552,63 @@ msgstr ""
 msgid "Alt text to set on the uploaded image."
 msgstr ""
 
-#: includes/abilities/media.php:677
+#: includes/abilities/media.php:853
 msgid "Invalid base64 payload."
 msgstr ""
 
-#: includes/abilities/media.php:682
+#: includes/abilities/media.php:858
 msgid "File exceeds the maximum upload size."
 msgstr ""
 
-#: includes/abilities/media.php:686
+#: includes/abilities/media.php:862
 msgid "The server is missing the PHP fileinfo extension, required to verify upload contents."
 msgstr ""
 
-#: includes/abilities/media.php:695
+#: includes/abilities/media.php:871
 msgid "Unsupported or unsafe file type."
 msgstr ""
 
-#: includes/abilities/media.php:715
+#. translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling, 5: formatted memory size, for example "256 MB".
+#: includes/abilities/media.php:907
+#, php-format
+msgid "This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The ceiling comes from the %5$s of memory available for image work, at four bytes per pixel for the uncompressed bitmap a decoder builds, so a larger image would run the site out of memory rather than finish. Resize the image before uploading, raise the memory available to PHP, or raise the aafm_upload_max_pixels filter."
+msgstr ""
+
+#. translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling.
+#: includes/abilities/media.php:921
+#, php-format
+msgid "This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The aafm_upload_max_pixels filter sets that ceiling. Resize the image before uploading, or change the filter."
+msgstr ""
+
+#: includes/abilities/media.php:963
 msgid "File contents did not match an allowed type."
 msgstr ""
 
-#: includes/abilities/media.php:773
+#: includes/abilities/media.php:1021
 msgid "ID of the attachment to update."
 msgstr ""
 
-#: includes/abilities/media.php:777
+#: includes/abilities/media.php:1025
 msgid "New attachment title, sanitized as plain text. At least one of title, alt, caption, or description must be given."
 msgstr ""
 
-#: includes/abilities/media.php:781
+#: includes/abilities/media.php:1029
 msgid "New alt text for the image, sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/media.php:785
+#: includes/abilities/media.php:1033
 msgid "New caption, sanitized as plain text with no HTML."
 msgstr ""
 
-#: includes/abilities/media.php:789
+#: includes/abilities/media.php:1037
 msgid "New description. Basic HTML is allowed and sanitized."
 msgstr ""
 
-#: includes/abilities/media.php:855
+#: includes/abilities/media.php:1103
 msgid "Provide at least one field to update."
 msgstr ""
 
-#: includes/abilities/media.php:911
+#: includes/abilities/media.php:1159
 msgid "ID of the attachment to permanently delete. Both the file and the library entry are removed; there is no undo."
 msgstr ""
 
@@ -670,87 +694,87 @@ msgstr ""
 msgid "ID of the navigation menu whose items to list. An unknown or empty menu returns an empty items list rather than an error."
 msgstr ""
 
-#: includes/abilities/menus.php:385
+#: includes/abilities/menus.php:414
 msgid "Name for the new navigation menu. Sanitized as plain text; a duplicate name is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:446
+#: includes/abilities/menus.php:475
 msgid "ID of the navigation menu to rename. An unknown ID returns a generic error."
 msgstr ""
 
-#: includes/abilities/menus.php:450
+#: includes/abilities/menus.php:479
 msgid "New name for the menu. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/menus.php:517
+#: includes/abilities/menus.php:546
 msgid "ID of the navigation menu to permanently delete, along with every item inside it. Navigation menus have no Trash, so this cannot be undone."
 msgstr ""
 
-#: includes/abilities/menus.php:587
+#: includes/abilities/menus.php:616
 msgid "ID of the navigation menu to add the item to. An unknown ID returns a generic error."
 msgstr ""
 
-#: includes/abilities/menus.php:591
+#: includes/abilities/menus.php:620
 msgid "The item's visible link text. Sanitized as plain text."
 msgstr ""
 
-#: includes/abilities/menus.php:595
+#: includes/abilities/menus.php:624
 msgid "Destination URL for a custom link item. Sanitized with esc_url_raw. Omit when object_id and type point at an existing post, page, or term instead."
 msgstr ""
 
-#: includes/abilities/menus.php:599
+#: includes/abilities/menus.php:628
 msgid "ID of an existing menu item this one should nest under, or omit for a top-level item. Not verified to exist or to belong to this menu before being applied."
 msgstr ""
 
-#: includes/abilities/menus.php:603
+#: includes/abilities/menus.php:632
 msgid "ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Required for the post_type and taxonomy types, and it must exist: an id that resolves to nothing is refused rather than saved as a broken link."
 msgstr ""
 
-#: includes/abilities/menus.php:607
+#: includes/abilities/menus.php:636
 msgid "Menu item type, for example post_type, post_type_archive, taxonomy, or custom. Not validated against a fixed list; an unrecognized value is passed straight through to WordPress."
 msgstr ""
 
-#: includes/abilities/menus.php:611
+#: includes/abilities/menus.php:640
 msgid "Name of the thing the item points at: a post type slug such as page for the post_type and post_type_archive types, or a taxonomy name such as category for the taxonomy type. Omit it for post_type and taxonomy and it is looked up from object_id. Required for post_type_archive, which has no object_id to look up."
 msgstr ""
 
-#: includes/abilities/menus.php:701
+#: includes/abilities/menus.php:730
 msgid "That menu item could not be linked to anything the site can resolve, so it was not created. Check object_id and object against the type you asked for."
 msgstr ""
 
-#: includes/abilities/menus.php:741
+#: includes/abilities/menus.php:770
 msgid "A post_type_archive menu item needs the object parameter set to the post type slug it should link to."
 msgstr ""
 
-#: includes/abilities/menus.php:749
+#: includes/abilities/menus.php:778
 msgid "That menu item type needs object_id, or object naming the post type or taxonomy it points at."
 msgstr ""
 
-#: includes/abilities/menus.php:759
+#: includes/abilities/menus.php:788
 msgid "No post exists with that object_id, so the menu item has nothing to link to."
 msgstr ""
 
-#: includes/abilities/menus.php:770
+#: includes/abilities/menus.php:799
 msgid "No term exists with that object_id, so the menu item has nothing to link to."
 msgstr ""
 
-#: includes/abilities/menus.php:794
+#: includes/abilities/menus.php:823
 msgid "ID of the navigation menu the item belongs to. The item must genuinely belong to this menu or the update is refused."
 msgstr ""
 
-#: includes/abilities/menus.php:798
+#: includes/abilities/menus.php:827
 msgid "ID of the menu item to update. Every field you do not send here (link target, order, CSS classes, and so on) is preserved from its current stored value; only title and url actually change."
 msgstr ""
 
-#: includes/abilities/menus.php:802
+#: includes/abilities/menus.php:831
 msgid "New link text for the item. Sanitized as plain text. Omit to leave the current title unchanged."
 msgstr ""
 
-#: includes/abilities/menus.php:806
+#: includes/abilities/menus.php:835
 msgid "New destination URL for the item. Sanitized with esc_url_raw. Omit to leave the current URL unchanged."
 msgstr ""
 
-#: includes/abilities/menus.php:934
+#: includes/abilities/menus.php:963
 msgid "ID of the menu item to permanently remove. Menu items have no Trash, so this cannot be undone."
 msgstr ""
 
@@ -6106,111 +6130,183 @@ msgid "Clears every plugin setting - enabled abilities, exposed content types an
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:95
+#: includes/audit/detail.php:170
 #, php-format
 msgid "Updated meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the new page's numeric ID.
-#: includes/audit/detail.php:110
+#: includes/audit/detail.php:185
 #, php-format
 msgid "Created page #%s"
 msgstr ""
 
 #. translators: 1: the order's numeric ID. 2: the new order status key.
-#: includes/audit/detail.php:120
+#: includes/audit/detail.php:195
 #, php-format
 msgid "Set order #%1$s to status `%2$s`"
 msgstr ""
 
 #. translators: %s: the new post's numeric ID.
-#: includes/audit/detail.php:141
+#: includes/audit/detail.php:216
 #, php-format
 msgid "Created post #%s"
 msgstr ""
 
 #. translators: %s: the new draft's numeric ID.
-#: includes/audit/detail.php:149
+#: includes/audit/detail.php:224
 #, php-format
 msgid "Created draft #%s"
 msgstr ""
 
 #. translators: %s: the new user's numeric ID.
-#: includes/audit/detail.php:155
+#: includes/audit/detail.php:230
 #, php-format
 msgid "Created user #%s"
 msgstr ""
 
 #. translators: 1: meta key name. 2: the post's numeric ID.
-#: includes/audit/detail.php:163
+#: includes/audit/detail.php:238
 #, php-format
 msgid "Deleted meta key `%1$s` on post #%2$s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:178
+#: includes/audit/detail.php:253
 #, php-format
 msgid "Updated post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:189
+#: includes/audit/detail.php:264
 #, php-format
 msgid "Updated page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:203
+#: includes/audit/detail.php:278
 #, php-format
 msgid "Deleted post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:214
+#: includes/audit/detail.php:289
 #, php-format
 msgid "Deleted page #%s"
 msgstr ""
 
 #. translators: %s: the post's numeric ID.
-#: includes/audit/detail.php:226
+#: includes/audit/detail.php:301
 #, php-format
 msgid "Trashed post #%s"
 msgstr ""
 
 #. translators: %s: the page's numeric ID.
-#: includes/audit/detail.php:237
+#: includes/audit/detail.php:312
 #, php-format
 msgid "Trashed page #%s"
 msgstr ""
 
 #. translators: %s: the restored revision's numeric ID.
-#: includes/audit/detail.php:249
+#: includes/audit/detail.php:324
 #, php-format
 msgid "Restored revision #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:263
+#: includes/audit/detail.php:338
 #, php-format
 msgid "Updated user #%s"
 msgstr ""
 
 #. translators: %s: the user's numeric ID.
-#: includes/audit/detail.php:274
+#: includes/audit/detail.php:349
 #, php-format
 msgid "Deleted user #%s"
 msgstr ""
 
 #. translators: %s: the order's numeric ID.
-#: includes/audit/detail.php:285
+#: includes/audit/detail.php:360
 #, php-format
 msgid "Refunded order #%s"
 msgstr ""
 
 #. translators: %s: the payment gateway's id slug.
-#: includes/audit/detail.php:296
+#: includes/audit/detail.php:371
 #, php-format
 msgid "Updated payment gateway `%s`"
+msgstr ""
+
+#. translators: %s: the comment's numeric ID.
+#: includes/audit/detail.php:410
+#, php-format
+msgid "Deleted comment #%s"
+msgstr ""
+
+#. translators: %s: the attachment's numeric ID.
+#: includes/audit/detail.php:423
+#, php-format
+msgid "Deleted media #%s"
+msgstr ""
+
+#. translators: %s: the navigation menu's numeric ID.
+#: includes/audit/detail.php:435
+#, php-format
+msgid "Deleted menu #%s"
+msgstr ""
+
+#. translators: %s: the menu item's numeric ID.
+#: includes/audit/detail.php:448
+#, php-format
+msgid "Deleted menu item #%s"
+msgstr ""
+
+#. translators: %s: the deleted revision's numeric ID.
+#: includes/audit/detail.php:461
+#, php-format
+msgid "Deleted revision #%s"
+msgstr ""
+
+#. translators: 1: meta key name. 2: the term's numeric ID.
+#: includes/audit/detail.php:493
+#, php-format
+msgid "Updated meta key `%1$s` on term #%2$s"
+msgstr ""
+
+#. translators: 1: meta key name. 2: the user's numeric ID.
+#: includes/audit/detail.php:511
+#, php-format
+msgid "Updated meta key `%1$s` on user #%2$s"
+msgstr ""
+
+#. translators: 1: meta key name. 2: the term's numeric ID.
+#: includes/audit/detail.php:529
+#, php-format
+msgid "Deleted meta key `%1$s` on term #%2$s"
+msgstr ""
+
+#. translators: 1: meta key name. 2: the user's numeric ID.
+#: includes/audit/detail.php:548
+#, php-format
+msgid "Deleted meta key `%1$s` on user #%2$s"
+msgstr ""
+
+#. translators: %s: the product's numeric ID.
+#: includes/audit/detail.php:566
+#, php-format
+msgid "Deleted product #%s"
+msgstr ""
+
+#. translators: %s: comma-separated list of the site setting names that were changed.
+#: includes/audit/detail.php:589
+#, php-format
+msgid "Updated site settings: %s"
+msgstr ""
+
+#. translators: %s: the variation's numeric ID.
+#: includes/audit/detail.php:600
+#, php-format
+msgid "Deleted product variation #%s"
 msgstr ""
 
 #: includes/audit/log.php:231

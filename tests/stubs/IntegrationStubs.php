@@ -762,7 +762,20 @@ class WC_Product {
 	public function get_tag_ids() { return (array) ( $this->data['tag_ids'] ?? array() ); }
 	public function get_gallery_image_ids() { return (array) ( $this->data['gallery_image_ids'] ?? array() ); }
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
-	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
+	// Context-aware, like the real getter. WC_Product::get_attributes( $context = 'view' ) goes
+	// through get_prop(), which runs the woocommerce_product_get_attributes display filter in view
+	// context and skips it in edit. A stub that ignored the argument could not tell a validator
+	// reading the stored set apart from one reading the presented set, so a test written against it
+	// would pass either way. `attributes_view` stands in for what a display filter would present.
+	public function get_attributes( $context = 'view' ) {
+		if ( 'edit' !== $context && isset( $this->data['attributes_view'] ) ) {
+			return (array) $this->data['attributes_view'];
+		}
+		return (array) ( $this->data['attributes'] ?? array() );
+	}
+	// Test-only: stand in for what a woocommerce_product_get_attributes filter would present.
+	// There is no such setter on the real class; a filter is how a real site does this.
+	public function set_attributes_view( $v ) { $this->data['attributes_view'] = (array) $v; }
 	public function get_children() { return (array) ( $this->data['children'] ?? array() ); }
 	private function aafm_stub_merge_attributes( $existing, $v ) {
 		// Mirror WC_Product::set_attributes(): pre-null every existing key, then keep ONLY
@@ -855,7 +868,20 @@ class WC_Product_Variation {
 		return $value;
 	}
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
-	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
+	// Context-aware, like the real getter. WC_Product::get_attributes( $context = 'view' ) goes
+	// through get_prop(), which runs the woocommerce_product_get_attributes display filter in view
+	// context and skips it in edit. A stub that ignored the argument could not tell a validator
+	// reading the stored set apart from one reading the presented set, so a test written against it
+	// would pass either way. `attributes_view` stands in for what a display filter would present.
+	public function get_attributes( $context = 'view' ) {
+		if ( 'edit' !== $context && isset( $this->data['attributes_view'] ) ) {
+			return (array) $this->data['attributes_view'];
+		}
+		return (array) ( $this->data['attributes'] ?? array() );
+	}
+	// Test-only: stand in for what a woocommerce_product_get_attributes filter would present.
+	// There is no such setter on the real class; a filter is how a real site does this.
+	public function set_attributes_view( $v ) { $this->data['attributes_view'] = (array) $v; }
 	public function set_parent_id( $v ) { $this->data['parent_id'] = (int) $v; }
 	public function set_status( $v ) { $this->data['status'] = (string) $v; }
 	public function set_sku( $v ) { $v = (string) $v; if ( \AAFM\Tests\WcStubStore::sku_taken_by_other( $v, $this->get_id() ) ) { throw new \WC_Data_Exception( 'product_invalid_sku', 'Invalid or duplicated SKU.' ); } $this->data['sku'] = $v; }

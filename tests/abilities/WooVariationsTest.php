@@ -1402,4 +1402,88 @@ final class WooVariationsTest extends TestCase {
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'A key that sanitizes to empty must be refused.' );
 	}
+
+	/**
+	 * An attribute only a display filter presents must not be accepted as declared. (R8C-5)
+	 *
+	 * WC_Product::get_attributes() defaults to view context, which runs
+	 * woocommerce_product_get_attributes, so a filter can present an attribute the parent does not
+	 * store. Validating against that lets a variation take an attribute WooCommerce's stored parent
+	 * configuration can never expose or match, and the ability reports success. The product write
+	 * sibling already reads in edit context for this reason; the newer variation validator did not.
+	 *
+	 * `attributes_view` in the stub stands in for the filtered presentation, which is why the stub
+	 * getter had to become context-aware: one that ignored the argument would pass either way.
+	 */
+	public function test_variation_validation_ignores_display_only_parent_attributes(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$parent = aafm_wc_get_product( 500 );
+		$this->assertNotNull( $parent );
+
+		$stored = $parent->get_attributes( 'edit' );
+		$this->assertArrayNotHasKey( 'ghost', $stored, 'The fixture must not really declare `ghost`.' );
+
+		// A filter presenting an extra variation attribute nobody stored.
+		$ghost = new \WC_Product_Attribute();
+		$ghost->set_name( 'ghost' );
+		$ghost->set_options( array( 'phantom' ) );
+		$ghost->set_variation( true );
+		$parent->set_attributes_view( array_merge( $stored, array( 'ghost' => $ghost ) ) );
+
+		$this->assertArrayHasKey(
+			'ghost',
+			$parent->get_attributes(),
+			'The stub must present the display-only attribute in view context, or this test proves nothing.'
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			aafm_wc_unknown_variation_attributes_error( $parent, array( 'ghost' => 'phantom' ) ),
+			'An attribute the parent does not store must be refused however it is presented.'
+		);
+
+		// The other direction: a genuinely stored variation attribute is still accepted while the
+		// same filter is active, so this is not just refusing everything.
+		$this->assertNull(
+			aafm_wc_unknown_variation_attributes_error( $parent, array( 'material' => 'Cotton' ) ),
+			'A stored attribute must still be accepted with a display filter present.'
+		);
+	}
+
+	/**
+	 * Updating attributes on a variation whose parent will not resolve is refused. (R8C-4)
+	 *
+	 * The field's schema promises every key already exists on the parent and is enabled for
+	 * variations. With no parent that promise cannot be kept, so falling through to the setters
+	 * reported success for a write that stored keys no parent declares. The create sibling already
+	 * refuses an unresolved parent; this is the same question with the same answer.
+	 */
+	public function test_update_variation_attributes_refuses_an_unresolvable_parent(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$this->stub_woocommerce(
+			array(
+				array(
+					'id'            => 700,
+					'parent_id'     => 999999,
+					'type'          => 'variation',
+					'sku'           => 'ORPHAN-700',
+					'regular_price' => '9.99',
+					'price'         => '9.99',
+					'status'        => 'publish',
+					'stock_status'  => 'instock',
+				),
+			)
+		);
+
+		$result = aafm_exec_wc_update_product_variation(
+			array(
+				'variation_id' => 700,
+				'attributes'   => array( 'not_a_real_attribute' => 'whatever' ),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'An orphaned variation must not accept an attribute write.' );
+	}
 }

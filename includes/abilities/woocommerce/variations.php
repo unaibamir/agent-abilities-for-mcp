@@ -598,7 +598,14 @@ function aafm_wc_apply_variation_input( \WC_Product_Variation $variation, array 
  *                       is one of that attribute's options (or empty, meaning "Any").
  */
 function aafm_wc_unknown_variation_attributes_error( \WC_Product $parent_product, array $attributes ): ?\WP_Error {
-	$parent_attributes = $parent_product->get_attributes();
+	// 'edit', not the default 'view'. WooCommerce getters run display filters in view context, so
+	// a `woocommerce_product_get_attributes` filter can present an attribute the parent does not
+	// actually store, and both the key check and the value check below would then accept a
+	// variation attribute that WooCommerce's stored parent configuration can never match. The
+	// product write sibling already reads the parent in edit context for exactly this reason
+	// (products.php:722); this validator is newer and did not carry the guard across. Same lesson
+	// as R6-1, one file over.
+	$parent_attributes = $parent_product->get_attributes( 'edit' );
 	$declared          = array_map( 'strval', array_keys( $parent_attributes ) );
 	$for_variations    = array();
 	foreach ( $parent_attributes as $declared_key => $declared_attribute ) {
@@ -985,13 +992,23 @@ function aafm_exec_wc_update_product_variation( array $input ) {
 	// everything while the response reports success.
 	if ( array_key_exists( 'attributes', $input ) ) {
 		$parent = aafm_wc_get_product( (int) $variation->get_parent_id() );
-		// A variation whose parent cannot be resolved has nothing to validate against; leave it to
-		// the setters rather than refuse a write on the strength of a missing parent.
-		if ( null !== $parent ) {
-			$attributes_error = aafm_wc_unknown_variation_attributes_error( $parent, (array) $input['attributes'] );
-			if ( null !== $attributes_error ) {
-				return $attributes_error;
-			}
+		// An unresolvable parent used to fall through to the setters, on the reasoning that there
+		// was nothing to validate against. That reads the wrong way round: the field's schema
+		// promises every key already exists on the parent and is enabled for variations, so with no
+		// parent that promise cannot be kept, and falling through reports success for a write that
+		// stored keys no parent declares. The create sibling already refuses an unresolved parent
+		// outright; this is the same question and now gets the same answer.
+		//
+		// Bound, stated rather than assumed: this does turn some calls from success into a
+		// refusal. All of them are attribute writes onto an orphaned variation, whose stored
+		// attributes cannot be exposed or matched by any parent configuration, so what is lost is
+		// an inert write that was reported as a real one.
+		if ( null === $parent ) {
+			return aafm_generic_error();
+		}
+		$attributes_error = aafm_wc_unknown_variation_attributes_error( $parent, (array) $input['attributes'] );
+		if ( null !== $attributes_error ) {
+			return $attributes_error;
 		}
 	}
 

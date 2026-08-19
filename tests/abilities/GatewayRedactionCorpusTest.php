@@ -254,6 +254,71 @@ final class GatewayRedactionCorpusTest extends TestCase {
 	}
 
 	/**
+	 * No row in this file was silently overwritten by a duplicate name.
+	 *
+	 * PHP collapses duplicate keys in an array literal at PARSE time, keeping the last one and
+	 * discarding the earlier silently. So by the time a test can see the provider's return value the
+	 * evidence is already gone: the row count is simply one lower than the file appears to declare,
+	 * every remaining row still passes, and all four gates stay green. That is a corpus which
+	 * structurally cannot report the one failure it exists to prevent, and it is the same shape as
+	 * B2-02 attempt 2, which deleted attempt 1's protection with everything passing.
+	 *
+	 * So this counts the row names in the SOURCE and compares against what the provider actually
+	 * returns. The source is the only place the duplicate is still visible.
+	 *
+	 * Reading __FILE__ in a test is unusual and deliberate. There is no way to ask PHP after the
+	 * fact which keys it dropped, and an append-only file whose losses are invisible is worth one
+	 * odd test.
+	 */
+	public function test_no_corpus_row_was_silently_overwritten(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading this test's own source from disk; wp_remote_get() is for URLs and cannot do this.
+		$source = file_get_contents( __FILE__ );
+		$this->assertIsString( $source, 'The corpus source must be readable for this guard to mean anything.' );
+
+		// Scope to THIS provider's body before counting. Other tests in this file build nested
+		// settings fixtures that share the row shape (a quoted key, then `=> array( '`), and a
+		// file-wide count silently borrows them: the first version of this guard read 107 against a
+		// provider of 106 and accused a lost row that never existed. The lesson is the guard's own:
+		// a count is only evidence if you know exactly what it counted.
+		$start = strpos( $source, 'function provide_key_classifications' );
+		$this->assertNotFalse( $start, 'Provider not found; fix this guard rather than deleting it.' );
+		$end = strpos( $source, 'return $rows;', $start );
+		$this->assertNotFalse( $end, 'Provider terminator not found; fix this guard rather than deleting it.' );
+
+		$body = substr( $source, $start, $end - $start );
+
+		preg_match_all( "/^[ \t]+'([^']+)'[ \t]*=> array\( '/m", $body, $matches );
+		$declared = $matches[1];
+
+		$this->assertNotEmpty(
+			$declared,
+			'The row pattern matched nothing, so this guard is vacuous. Fix the pattern, do not delete the test.'
+		);
+
+		$duplicates = array_keys(
+			array_filter(
+				array_count_values( $declared ),
+				static function ( $count ) {
+					return $count > 1;
+				}
+			)
+		);
+
+		$this->assertSame(
+			array(),
+			$duplicates,
+			'These row names appear more than once, so the earlier row has been silently discarded: '
+				. implode( ', ', $duplicates )
+		);
+
+		$this->assertCount(
+			count( $declared ),
+			self::provide_key_classifications(),
+			'The provider returns fewer rows than the file declares, which means at least one was dropped.'
+		);
+	}
+
+	/**
 	 * The classifier's own contract, key by key.
 	 *
 	 * @dataProvider provide_key_classifications

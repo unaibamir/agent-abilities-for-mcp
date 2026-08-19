@@ -484,6 +484,24 @@ function aafm_acf_sanitize_leaf( $value, ?array $def, bool $in_url_struct = fals
 		}
 		return $clean;
 	}
+	if ( 'acf_fc_layout' === $key && is_scalar( $value ) ) {
+		// A flexible-content layout marker is a NAME, so it leaves here as a string whatever type
+		// it arrived as. Everything downstream already reads it as one: the layout guard casts it
+		// before its strict membership test, and ACF's own get_layout() compares
+		// $layout['name'] === $name with no cast at all. Leaving a JSON number as an int made those
+		// two disagree - our guard saw "5", matched a layout genuinely named "5", and let the row
+		// through, while ACF compared 'p5' === 5, failed to resolve it, and took the destructive
+		// branch: the row's stored sub-field values deleted, the unusable marker written in their
+		// place, and a generic read-back failure reported afterwards. Same shape as R5-1, one type
+		// away. Casting here rather than widening the guard is the smaller change and the one that
+		// makes us agree with ACF instead of second-guessing it.
+		//
+		// A cast only. Deliberately NOT aafm_sanitize_plain_text(): trimming or stripping the name
+		// would start ACCEPTING markers that are refused today, and a fix for a destructive write
+		// has no business widening what gets through. `false` casts to '', which the guard already
+		// treats as a missing marker and refuses.
+		return (string) $value;
+	}
 	if ( is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
 		return $value; // Numeric / boolean leaves carry no markup; keep their type.
 	}

@@ -204,6 +204,41 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'camel sharedSecret'              => array( 'sharedSecret', true ),
 			'camel routingNumber'             => array( 'routingNumber', true ),
 
+			// -----------------------------------------------------------------
+			// Leading ACRONYMS, from the round 8 follow-up. Splitting only the
+			// lower-to-upper hump leaves `SSLCertificate` untouched, so an
+			// anchored-only token never sees a boundary and the key goes out in
+			// full. `APIKey` and `APIToken` masked how bad this was: they
+			// survive on the LOOSE `api[_-]?key` and bare `token`, so the hole
+			// only shows on tokens that are anchored-only.
+			// -----------------------------------------------------------------
+			'acronym SSLCertificate'          => array( 'SSLCertificate', true ),
+			'acronym MIDValue'                => array( 'MIDValue', true ),
+			'acronym IBANNumber'              => array( 'IBANNumber', true ),
+			'acronym APIKey'                  => array( 'APIKey', true ),
+			'acronym APIToken'                => array( 'APIToken', true ),
+			'acronym XAuthToken'              => array( 'XAuthToken', true ),
+			'acronym OAuthClientID'           => array( 'OAuthClientID', true ),
+			'acronym PINCode'                 => array( 'PINCode', true ),
+			'acronym IVSeed'                  => array( 'IVSeed', true ),
+
+			// The acronym pass must not start withholding presentation either.
+			// `ssl` is in neither group, so this row moves if and only if the
+			// split has begun over-matching.
+			'acronym benign SSLEnabled'       => array( 'SSLEnabled', false ),
+
+			// Deliberately WITHHELD, and not an over-block: `api` is an anchored
+			// token, so `api_endpoint_label` is withheld today by the same rule.
+			// Pinned so nobody later reads this as collateral from the acronym
+			// pass and "fixes" it into a hole. Narrowing `api` is a separate
+			// argument to have on its own merits, for both spellings at once.
+			'acronym APIEndpointLabel'        => array( 'APIEndpointLabel', true ),
+
+			// Released, and consistent: `https_proxy_url` is released today too,
+			// because none of https, proxy or url is in either group. Here so a
+			// future reader can tell a considered release from an oversight.
+			'acronym benign HTTPSProxyURL'    => array( 'HTTPSProxyURL', false ),
+
 			// The other direction, and it is the half that keeps the split
 			// honest. Splitting humps must not start withholding presentation.
 			'camel benign checkoutTitle'      => array( 'checkoutTitle', false ),

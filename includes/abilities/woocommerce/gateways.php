@@ -222,36 +222,91 @@ function aafm_wc_redaction_marker(): string {
  * hump has been split into an underscore boundary. Half the tokens below are boundary-anchored, and
  * a camelCase transition is not a boundary, so `accessKey` and `apiLoginID` walked straight past a
  * denylist that stops `access_key` and `api_login_id` dead. Authorize.Net alone ships both of those
- * names. Running both forms is one-directional by construction: it can only ever ADD a withhold,
- * never release something the single-form check caught, because the raw form is still tested first
- * and unchanged.
+ * names. Authorize.Net alone ships `apiLoginID` and `transactionKey`.
+ *
+ * THREE spellings are tested, not two, and the third is not belt-and-braces. A camelCase split has
+ * to handle acronym runs, which needs a second pattern: `([A-Z]+)([A-Z][a-z])` splits before the
+ * LAST capital of a run, so `SSLCertificate` becomes `SSL_Certificate` and `APIKey` becomes
+ * `API_Key` rather than the `AP_I_Key` a naive upper-to-upper split would produce (measured, both
+ * spellings). Without it a leading acronym defeats every anchored-only token: `SSLCertificate`,
+ * `MIDValue` and `IBANNumber` all walked past a list that stops `ssl_certificate`, `mid_value` and
+ * `iban_number` dead. `APIKey` and `APIToken` survived only because `api[_-]?key` and bare `token`
+ * happen to be in the LOOSE group.
+ *
+ * But the acronym pass can also SPLIT a token apart: `OAuthClientID` becomes `O_Auth_Client_ID`,
+ * destroying `oauth`. That is harmless today only because `oauth` is loose and the raw form catches
+ * it anyway, which is an accident of where one token currently sits rather than a property. So the
+ * single-pass spelling is kept as its own candidate instead of being superseded, which makes
+ * "adding the acronym pass can never lose a catch the simpler split had" structural rather than an
+ * argument a future retuning of the groups could quietly invalidate.
+ *
+ * STATED BOUND, measured rather than asserted: NOTHING CURRENTLY DEPENDS ON THAT THIRD SPELLING.
+ * Removing it and keeping only the raw key and the acronym form leaves the whole corpus green,
+ * because the acronym form already runs the hump pass on top of itself and the one key where the
+ * two genuinely differ is caught on the raw form regardless. It is kept as a guard against a
+ * future token move, not because any row demonstrates a need for it. If that ever stops being
+ * true, a row will start depending on it and this paragraph should be rewritten, not deleted.
+ *
+ * One-directional by construction: the raw key is tested first and unchanged, and the two derived
+ * spellings can only add matches on top of it. A key that is withheld today cannot become released
+ * by any of this. The only movement available is from released to withheld.
  *
  * @param string $key Settings key.
  * @return bool
  */
 function aafm_wc_settings_key_is_secret( string $key ): bool {
-	if ( aafm_wc_settings_key_matches_secret( $key ) ) {
-		return true;
+	foreach ( aafm_wc_settings_key_spellings( $key ) as $spelling ) {
+		if ( aafm_wc_settings_key_matches_secret( $spelling ) ) {
+			return true;
+		}
 	}
 
-	$split = aafm_wc_split_camel_case_key( $key );
-
-	return $split !== $key && aafm_wc_settings_key_matches_secret( $split );
+	return false;
 }
 
 /**
- * Insert an underscore at every camelCase hump so boundary-anchored tokens can see it.
+ * Every spelling of a key the denylist should be judged against, the key itself first.
  *
- * Deliberately only the lower-to-upper transition. Splitting an upper-to-upper run as well would
- * turn `APIKey` into `AP_I_Key`, breaking the very token it is meant to expose; the acronym case is
- * already handled because the FINAL hump of `apiLoginID` still yields `api_Login_ID`, and matching
- * is case-insensitive throughout.
+ * Duplicates are dropped so an all-lowercase key costs exactly one match, which is the common case.
+ *
+ * @param string $key Settings key.
+ * @return array<int,string>
+ */
+function aafm_wc_settings_key_spellings( string $key ): array {
+	$humps   = aafm_wc_split_camel_humps( $key );
+	$acronym = aafm_wc_split_camel_humps( aafm_wc_split_acronym_run( $key ) );
+
+	return array_values( array_unique( array( $key, $humps, $acronym ) ) );
+}
+
+/**
+ * Insert an underscore at every lower-to-upper camelCase hump.
+ *
+ * `accessKey` becomes `access_Key`, which is what lets the boundary-anchored half of the denylist
+ * see a token that carries no underscore or hyphen of its own. Matching is case-insensitive
+ * throughout, so the capital that survives the split does not matter.
  *
  * @param string $key Settings key.
  * @return string
  */
-function aafm_wc_split_camel_case_key( string $key ): string {
+function aafm_wc_split_camel_humps( string $key ): string {
 	$split = preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $key );
+
+	return null === $split ? $key : $split;
+}
+
+/**
+ * Break a run of capitals just before the last one, so an acronym keeps its own boundary.
+ *
+ * `SSLCertificate` becomes `SSL_Certificate`; `APIKey` becomes `API_Key`. The split lands before
+ * the FINAL capital of the run because that capital belongs to the following word, not the
+ * acronym. Splitting between every pair instead would produce `AP_I_Key` and destroy the token.
+ *
+ * @param string $key Settings key.
+ * @return string
+ */
+function aafm_wc_split_acronym_run( string $key ): string {
+	$split = preg_replace( '/([A-Z]+)([A-Z][a-z])/', '$1_$2', $key );
 
 	return null === $split ? $key : $split;
 }

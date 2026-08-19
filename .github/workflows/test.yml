@@ -240,6 +240,37 @@ jobs:
           fi
           echo "All shipped PHP files parse on PHP 7.4."
 
+      # Parsing is not loading. `php -l` never executes a require, so a shipped
+      # autoloader pointing at packages that do not ship lints perfectly clean and
+      # still fatals the moment WordPress activates the plugin. That happened once:
+      # a dev-regenerated vendor/composer was committed by accident and every gate,
+      # including this job, stayed green over a zip that was dead on arrival.
+      #
+      # The require is the load-bearing assertion, proved in both directions against
+      # a real broken export and a real good one. The class_exists check below is
+      # DEFENSIVE, not demonstrated load-bearing: hollowing the PSR-4 map still left
+      # the adapter resolvable through the classmap, so no mutant has yet made it the
+      # only thing that fires. It is kept because it costs nothing and pins the
+      # autoloader to a class that must exist, not because anything depends on it.
+      - name: Load the shipped autoloader
+        run: |
+          set -euo pipefail
+          if ! output=$(php -r 'require "/tmp/shipped/vendor/autoload.php";' 2>&1); then
+            echo "$output"
+            echo "::error::The shipped autoloader does not load. The zip would fatal on activation."
+            echo "::error::Most likely vendor/composer was regenerated with dev dependencies and committed."
+            echo "::error::Fix with: composer install --no-dev && composer dump-autoload --no-dev"
+            exit 1
+          fi
+          php -r '
+            require "/tmp/shipped/vendor/autoload.php";
+            if ( ! class_exists( "WP\\MCP\\Core\\McpAdapter" ) ) {
+                fwrite( STDERR, "McpAdapter did not resolve from the shipped autoloader.\n" );
+                exit( 1 );
+            }
+            echo "Shipped autoloader loads and resolves the adapter.\n";
+          '
+
   # PHPUnit across the supported PHP (>= 7.4) and WordPress (>= 6.9) range.
   phpunit:
     name: PHP ${{ matrix.php }} · WP ${{ matrix.wp }}

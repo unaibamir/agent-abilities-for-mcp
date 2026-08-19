@@ -129,11 +129,12 @@ final class AcfLayoutMarkerTypeTest extends TestCase {
 	}
 
 	/**
-	 * The cast must not start letting through markers that are refused today.
+	 * Normalising the type must not start letting through markers that are refused today.
 	 *
-	 * The obvious over-fix is to normalise the marker with the plain-text sanitizer, which would
-	 * trim a trailing space and turn an undeclared name into a declared one. A fix for a
-	 * destructive write has no business widening what gets through, so this pins the direction.
+	 * A number is now spelled as a string, so the risk is that a number the field does not declare
+	 * finds some declared name to land on. It must not: a fix for a destructive write has no
+	 * business widening what gets through, and an undeclared marker is still an undeclared marker
+	 * whatever type it arrived as.
 	 */
 	public function test_an_undeclared_numeric_marker_is_still_refused(): void {
 		$def   = $this->def();
@@ -155,14 +156,16 @@ final class AcfLayoutMarkerTypeTest extends TestCase {
 	}
 
 	/**
-	 * A declared name plus trailing whitespace stays refused, and this is the row that bites.
+	 * A declared name with a trailing space is still trimmed and ACCEPTED.
 	 *
-	 * It is the only shape that can tell a plain cast apart from a trim or a plain-text pass, so it
-	 * is what stops the next person from "tidying" the cast into a normaliser. ACF would not resolve
-	 * '2024 ' either, so accepting it would hand back the same destructive write under a name that
-	 * merely looks right.
+	 * This is the direction that keeps the fix honest, and it is not a free choice: an append-only
+	 * corpus row (AcfUnknownSubFieldFloorTest, "flex, layout name needing a trim") already pins it.
+	 * The first version of this fix returned the cast marker early and skipped the plain-text
+	 * normalisation that row depends on, which turned a working write into a refusal. The suite
+	 * caught it. Keeping the row here as well means a future rewrite of the marker handling fails
+	 * against the type case and the trim case together, rather than trading one for the other.
 	 */
-	public function test_a_declared_name_with_trailing_space_is_still_refused(): void {
+	public function test_a_declared_name_with_trailing_space_is_still_accepted(): void {
 		$def   = $this->def();
 		$clean = aafm_acf_sanitize_value(
 			array(
@@ -175,11 +178,11 @@ final class AcfLayoutMarkerTypeTest extends TestCase {
 			$def
 		);
 
-		$this->assertSame( '2024 ', $clean[0]['acf_fc_layout'] );
+		$this->assertSame( '2024', $clean[0]['acf_fc_layout'], 'The existing plain-text pass must still trim the marker.' );
 
 		$bad = array();
 		aafm_acf_unresolved_sub_addresses( $def, $clean, 'steps', $bad );
 
-		$this->assertSame( array( 'steps.0' ), $bad );
+		$this->assertSame( array(), $bad );
 	}
 }

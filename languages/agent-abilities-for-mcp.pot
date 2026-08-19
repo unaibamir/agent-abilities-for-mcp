@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-19T14:56:45+05:00\n"
+"POT-Creation-Date: 2026-08-19T20:57:22+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -97,51 +97,57 @@ msgstr ""
 msgid "Writes ACF field values on a user by field key, each value sanitized for its field type. Requires edit access to that user."
 msgstr ""
 
+#. translators: %s: the field address the caller sent.
+#: includes/abilities/acf-integration.php:1018
+#, php-format
+msgid "This does not exactly name a field, so nothing was written. Send the field's exact name or its field key: %s"
+msgstr ""
+
 #. translators: %s: comma-separated list of sub-field addresses the caller sent.
-#: includes/abilities/acf-integration.php:954
+#: includes/abilities/acf-integration.php:1054
 #, php-format
 msgid "These do not name a sub-field of the field they were sent under, so nothing was written: %s"
 msgstr ""
 
 #. translators: %s: comma-separated list of flexible-content row addresses.
-#: includes/abilities/acf-integration.php:1018
+#: includes/abilities/acf-integration.php:1118
 #, php-format
 msgid "Each flexible content row must name one of the field's own layouts in acf_fc_layout. These rows do not, so nothing was written: %s"
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1614
+#: includes/abilities/acf-integration.php:1754
 msgid "ID of the post whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1685
+#: includes/abilities/acf-integration.php:1825
 msgid "ID of the post whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1690
+#: includes/abilities/acf-integration.php:1830
 msgid "Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field's ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else as plain text."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1787
+#: includes/abilities/acf-integration.php:1927
 msgid "ID of the term whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1852
+#: includes/abilities/acf-integration.php:1992
 msgid "ID of the term whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1857
+#: includes/abilities/acf-integration.php:1997
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules)."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1958
+#: includes/abilities/acf-integration.php:2098
 msgid "ID of the user whose ACF field values to read. The current user must have edit access to this user. A field of the user_email type returns the real email address (PII), governed by the edit-user capability gate rather than being redacted."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2027
+#: includes/abilities/acf-integration.php:2167
 msgid "ID of the user whose ACF field values to write. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2032
+#: includes/abilities/acf-integration.php:2172
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules). The user-scoped hard-block also blocks capability, session, application-password, and 2FA keys even if a field's storage name collides with one."
 msgstr ""
 
@@ -6751,23 +6757,29 @@ msgstr ""
 msgid "Guarded write abilities exposed to AI agents."
 msgstr ""
 
+#. translators: 1: ability name, 2: comma-separated list of required property names.
+#: includes/register.php:274
+#, php-format
+msgid "Ability \"%1$s\" has invalid input. These required properties are missing: %2$s"
+msgstr ""
+
 #. translators: %s: ability name
-#: includes/register.php:208
+#: includes/register.php:295
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:223
+#: includes/register.php:310
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:441
+#: includes/register.php:561
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 
-#: includes/register.php:470
+#: includes/register.php:590
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 

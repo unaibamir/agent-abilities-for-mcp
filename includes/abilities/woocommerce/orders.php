@@ -1361,6 +1361,33 @@ function aafm_wc_apply_tax_row_snapshot( \WC_Order_Item_Tax $tax_item, array $ro
 }
 
 /**
+ * Load an order, treating the lookup itself as something that can fail.
+ *
+ * A lookup through wc_get_order() can THROW as well as return false, because the factory, the
+ * data store and the filters around them are all third-party surface. Callers that only check `instanceof WC_Order` handle the
+ * false and wrong-class cases and are blind to the throw. That matters most inside a rollback,
+ * which is already the exception recovery path and has already mutated state by the time it looks
+ * an order up, so an escaping Throwable there replaces a structured result with a raw crash and
+ * abandons the recovery half-done. aafm_wc_order_still_exists() has always treated the lookup this
+ * way; this is the same treatment where a null answer is the useful one.
+ *
+ * @param int $order_id Order id.
+ * @return \WC_Order|null The order, or null when it cannot be loaded for any reason.
+ */
+function aafm_wc_load_order_or_null( int $order_id ): ?\WC_Order {
+	if ( $order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	try {
+		$order = wc_get_order( $order_id );
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return null;
+	}
+
+	return $order instanceof \WC_Order ? $order : null;
+}
+
+/**
  * Undo a request whose totals recalculation threw, and report exactly what survived.
  *
  * WooCommerce's calculate_totals() is not a single atomic step. It runs calculate_taxes() first, and
@@ -1394,11 +1421,18 @@ function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, ar
 	$unconfirmed = aafm_wc_delete_added_order_items( $item_ids );
 	$kept        = aafm_wc_surviving_order_items( $unconfirmed );
 
+	// Both lookups go through the throwing-safe loader. `false` and an unexpected class were
+	// already handled by the instanceof checks, but a THROW from the order factory, a data store
+	// or a filter went straight past them and out of this function, which is the exception
+	// recovery path and has already deleted the request's items by this point. The caller would
+	// then get a raw Throwable instead of any of the three results below, with the added rows gone
+	// and the recalculation's tax changes never put back. The create rollback beside this one
+	// already treats a lookup as fallible (aafm_wc_order_still_exists); this is the same question.
 	$restored = false;
 	if ( array() !== $snapshot && $order_id > 0 && function_exists( 'wc_get_order' ) ) {
-		$order = wc_get_order( $order_id );
+		$order = aafm_wc_load_order_or_null( $order_id );
 		if ( $order instanceof \WC_Order && aafm_wc_restore_order_money( $order, $snapshot ) ) {
-			$reread   = wc_get_order( $order_id );
+			$reread   = aafm_wc_load_order_or_null( $order_id );
 			$restored = $reread instanceof \WC_Order
 				&& aafm_wc_money_signature( aafm_wc_order_money_snapshot( $reread ) ) === aafm_wc_money_signature( $snapshot );
 		}

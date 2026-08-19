@@ -445,7 +445,7 @@ PHP;
 			// regular order, or false when the id is unknown. Mirrors real WooCommerce behaviour
 			// where shop_order_refund posts return WC_Order_Refund from wc_get_order().
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
+			eval( 'function wc_get_order( $id = false ) { if ( \AAFM\Tests\WcOrderStubStore::$throw_on_get ) { throw new \RuntimeException( "stub order factory failure" ); } $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
 		$this->stub_wc_order_statuses();
 

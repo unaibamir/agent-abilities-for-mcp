@@ -187,12 +187,25 @@ class WcOrderStubStore {
 	public static array $last_refund_args = array();
 
 	/**
+	 * When true, wc_get_order() THROWS instead of returning.
+	 *
+	 * The real function can: the order factory, the data store and the filters around them are all
+	 * third-party surface. A stub that could only return false or an object could not tell a caller
+	 * that handles a throw apart from one that does not, so a test of that branch would pass either
+	 * way.
+	 *
+	 * @var bool
+	 */
+	public static $throw_on_get = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
 		self::$orders                    = array();
+		self::$throw_on_get              = false;
 		self::$next_id                   = 5000;
 		self::$order_statuses            = array(
 			'wc-pending'    => 'Pending',

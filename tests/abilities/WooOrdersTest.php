@@ -1616,4 +1616,68 @@ final class WooOrdersTest extends TestCase {
 			'An order still being assembled should get a full recalculation, taxes included.'
 		);
 	}
+	/**
+	 * A throwing order lookup inside the rollback is contained, not propagated. (R8C-6)
+	 *
+	 * A lookup through wc_get_order() can throw as well as return false, and the two in the update
+	 * rollback were unwrapped while the adjacent create rollback already treats a lookup as fallible. That
+	 * matters more here than anywhere: this function IS the exception recovery path and has already
+	 * deleted the request's item rows by the time it looks the order up, so an escaping Throwable
+	 * hands the caller a raw crash in place of any of the three structured results, with the rows
+	 * gone and the recalculation's tax changes never put back.
+	 */
+	public function test_rollback_survives_a_throwing_order_lookup(): void {
+		$this->seed_orders_for_rollback_probe();
+
+		\AAFM\Tests\WcOrderStubStore::$throw_on_get = true;
+		try {
+			$result = aafm_wc_rollback_recalculated_order( 4001, array(), array( 'total' => '10.00' ) );
+		} finally {
+			\AAFM\Tests\WcOrderStubStore::$throw_on_get = false;
+		}
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$result,
+			'A throwing lookup must still yield a structured rollback result, not escape.'
+		);
+		$this->assertSame(
+			'aafm_wc_order_totals_not_restored',
+			$result->get_error_code(),
+			'With the order unreadable the restore cannot be confirmed, so the honest verdict is the weak one, not the strong one.'
+		);
+	}
+
+	/**
+	 * The loader answers null for every way a lookup can fail, and only for those.
+	 */
+	public function test_order_loader_returns_null_rather_than_throwing(): void {
+		$this->seed_orders_for_rollback_probe();
+
+		$this->assertNull( aafm_wc_load_order_or_null( 0 ), 'A zero id is not a lookup.' );
+		$this->assertNull( aafm_wc_load_order_or_null( 987654 ), 'A missing order is null, not false.' );
+		$this->assertInstanceOf( \WC_Order::class, aafm_wc_load_order_or_null( 4001 ), 'A real order still loads.' );
+
+		\AAFM\Tests\WcOrderStubStore::$throw_on_get = true;
+		try {
+			$this->assertNull( aafm_wc_load_order_or_null( 4001 ), 'A throwing factory is null, not an escaping Throwable.' );
+		} finally {
+			\AAFM\Tests\WcOrderStubStore::$throw_on_get = false;
+		}
+	}
+
+	/**
+	 * Seed one plain order for the rollback probes above.
+	 */
+	private function seed_orders_for_rollback_probe(): void {
+		WcOrderStubStore::reset();
+		WcOrderStubStore::seed(
+			4001,
+			array(
+				'number' => '4001',
+				'status' => 'processing',
+				'total'  => '10.00',
+			)
+		);
+	}
 }

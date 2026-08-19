@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-19T20:57:22+05:00\n"
+"POT-Creation-Date: 2026-08-20T02:23:06+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -98,56 +98,56 @@ msgid "Writes ACF field values on a user by field key, each value sanitized for 
 msgstr ""
 
 #. translators: %s: the field address the caller sent.
-#: includes/abilities/acf-integration.php:1018
+#: includes/abilities/acf-integration.php:1030
 #, php-format
 msgid "This does not exactly name a field, so nothing was written. Send the field's exact name or its field key: %s"
 msgstr ""
 
 #. translators: %s: comma-separated list of sub-field addresses the caller sent.
-#: includes/abilities/acf-integration.php:1054
+#: includes/abilities/acf-integration.php:1066
 #, php-format
 msgid "These do not name a sub-field of the field they were sent under, so nothing was written: %s"
 msgstr ""
 
 #. translators: %s: comma-separated list of flexible-content row addresses.
-#: includes/abilities/acf-integration.php:1118
+#: includes/abilities/acf-integration.php:1130
 #, php-format
 msgid "Each flexible content row must name one of the field's own layouts in acf_fc_layout. These rows do not, so nothing was written: %s"
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1754
+#: includes/abilities/acf-integration.php:1766
 msgid "ID of the post whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1825
+#: includes/abilities/acf-integration.php:1837
 msgid "ID of the post whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1830
+#: includes/abilities/acf-integration.php:1842
 msgid "Map of ACF field name or field key to its new value. Each key must resolve to a real, defined ACF field (an unresolved key is refused rather than falling back to a raw meta write) and must clear the same protected-key hard-block the meta abilities enforce. Each value is sanitized per the field's ACF type: URL-typed fields via esc_url_raw, wysiwyg/textarea via wp_kses_post, everything else as plain text."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1927
+#: includes/abilities/acf-integration.php:1939
 msgid "ID of the term whose ACF field values to read. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1992
+#: includes/abilities/acf-integration.php:2004
 msgid "ID of the term whose ACF field values to write. The current user must have edit access to it."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:1997
+#: includes/abilities/acf-integration.php:2009
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules)."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2098
+#: includes/abilities/acf-integration.php:2110
 msgid "ID of the user whose ACF field values to read. The current user must have edit access to this user. A field of the user_email type returns the real email address (PII), governed by the edit-user capability gate rather than being redacted."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2167
+#: includes/abilities/acf-integration.php:2179
 msgid "ID of the user whose ACF field values to write. The current user must have edit access to this user."
 msgstr ""
 
-#: includes/abilities/acf-integration.php:2172
+#: includes/abilities/acf-integration.php:2184
 msgid "Map of ACF field name or field key to its new value, sanitized and gated exactly like acf-update-post-fields (see that ability for the per-key resolution and hard-block rules). The user-scoped hard-block also blocks capability, session, application-password, and 2FA keys even if a field's storage name collides with one."
 msgstr ""
 
@@ -1094,7 +1094,7 @@ msgid "You do not have permission to set that status."
 msgstr ""
 
 #: includes/abilities/posts.php:732
-#: includes/helpers.php:1242
+#: includes/helpers.php:1264
 msgid "Unsupported or unauthorized post status."
 msgstr ""
 
@@ -2214,39 +2214,39 @@ msgstr ""
 msgid "Updates a WooCommerce payment gateway by id, changing only the fields you send: enabled state, title, description, or display order. Returns the updated gateway shape with secrets redacted. Requires the manage-WooCommerce capability."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:454
+#: includes/abilities/woocommerce/gateways.php:553
 msgid "The payment gateway's id slug (e.g. \"bacs\", \"cod\", \"stripe\"), from wc-list-payment-gateways."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:498
-#: includes/abilities/woocommerce/gateways.php:630
+#: includes/abilities/woocommerce/gateways.php:597
+#: includes/abilities/woocommerce/gateways.php:729
 msgid "Payment gateway not found."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:524
+#: includes/abilities/woocommerce/gateways.php:623
 msgid "The payment gateway's id slug (e.g. \"bacs\", \"cod\", \"stripe\"), from wc-list-payment-gateways. Must reference an existing gateway or the request fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:532
+#: includes/abilities/woocommerce/gateways.php:631
 msgid "Customer-facing gateway name shown at checkout, overriding the gateway's default title."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:536
+#: includes/abilities/woocommerce/gateways.php:635
 msgid "Customer-facing text shown under the gateway's title at checkout, describing the payment method."
 msgstr ""
 
-#: includes/abilities/woocommerce/gateways.php:541
+#: includes/abilities/woocommerce/gateways.php:640
 msgid "This gateway's raw position in the store's checkout gateway ordering. Lower values sort earlier. Stored directly as given, not validated against other gateways' order values, so two gateways can end up sharing the same position. Reading the gateway back afterwards does not return this number: the read reports the gateway's resolved zero-based rank among all gateways, so a value of 5 written here can come back as 2. Both are correct, they answer different questions."
 msgstr ""
 
 #. translators: %s: comma-separated list of gateway fields that failed to save.
-#: includes/abilities/woocommerce/gateways.php:590
+#: includes/abilities/woocommerce/gateways.php:689
 #, php-format
 msgid "The gateway settings could not be saved (%s failed to persist). Nothing was changed."
 msgstr ""
 
 #. translators: 1: comma-separated gateway fields that saved, 2: comma-separated gateway fields that failed.
-#: includes/abilities/woocommerce/gateways.php:601
+#: includes/abilities/woocommerce/gateways.php:700
 #, php-format
 msgid "Only part of the gateway update persisted: %1$s saved, but %2$s failed. Read the gateway to see its current state."
 msgstr ""
@@ -2343,7 +2343,7 @@ msgid "The order's post ID. Must reference an existing order or the request fail
 msgstr ""
 
 #: includes/abilities/woocommerce/orders.php:470
-#: includes/abilities/woocommerce/orders.php:1572
+#: includes/abilities/woocommerce/orders.php:1606
 msgid "The order's own line item id - the value wc-create-order-refund's line_items[].line_item_id expects. Not a product id."
 msgstr ""
 
@@ -2386,133 +2386,133 @@ msgid "Adding the line items failed. No line items from this request were kept a
 msgstr ""
 
 #. translators: %s: comma-separated list of order item ids that could not be removed.
-#: includes/abilities/woocommerce/orders.php:1412
+#: includes/abilities/woocommerce/orders.php:1446
 #, php-format
 msgid "Recalculating the order failed, and the items already written could not all be removed. Order item ids still persisted: %s. The order's totals and taxes may also have been changed. Read the order before acting on it."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1421
+#: includes/abilities/woocommerce/orders.php:1455
 msgid "Recalculating the order failed after WooCommerce had already saved new tax figures, and those figures could not be confirmed as restored. The line items from this request were removed, but the order's totals and taxes may no longer match its line items. Read the order before acting on it."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1427
+#: includes/abilities/woocommerce/orders.php:1461
 msgid "Recalculating the order failed. The line items from this request were removed and the order's totals and taxes were put back to the values they had before the request."
 msgstr ""
 
 #. translators: %d: the id of the order that was created and could not be removed.
-#: includes/abilities/woocommerce/orders.php:1506
+#: includes/abilities/woocommerce/orders.php:1540
 #, php-format
 msgid "Creating the order failed while its totals were being calculated, and the part-built order could not be removed. Order %d exists and its totals may be wrong. Read or delete it before trying again; do not simply retry, or you will end up with two."
 msgstr ""
 
 #. translators: %s: comma-separated list of order item ids that could not be removed.
-#: includes/abilities/woocommerce/orders.php:1517
+#: includes/abilities/woocommerce/orders.php:1551
 #, php-format
 msgid "Creating the order failed while its totals were being calculated. No order was kept, but these order item ids could not be removed: %s. They belong to no order."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1525
+#: includes/abilities/woocommerce/orders.php:1559
 msgid "Creating the order failed while its totals were being calculated. No order was created and nothing from this request was kept, so it is safe to try again."
 msgstr ""
 
 #. translators: %s: comma-separated list of product IDs that could not be found.
-#: includes/abilities/woocommerce/orders.php:1544
+#: includes/abilities/woocommerce/orders.php:1578
 #, php-format
 msgid "One or more line item products could not be found: %s"
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1728
+#: includes/abilities/woocommerce/orders.php:1762
 msgid "The order's post ID to update. Must reference an existing order or the request fails."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1737
+#: includes/abilities/woocommerce/orders.php:1771
 msgid "Products to add as NEW line items on the existing order, each given as a product_id and quantity pair. Items are always ADDED; this ability has no way to modify, replace, or remove an existing line item. If any product_id cannot be resolved to a real product, the whole request fails with no partial write. Sending the deprecated line_items field at the same time combines both lists -- every item in either is added."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1744
+#: includes/abilities/woocommerce/orders.php:1778
 msgid "Deprecated alias for add_line_items: items sent here are ADDED as new line items on the existing order, exactly like add_line_items, never replacing or editing what is already there. Kept for backward compatibility with existing callers; prefer add_line_items in new integrations. If both line_items and add_line_items are sent, every item in both lists is added."
 msgstr ""
 
 #. translators: %s: the order's current status, e.g. "completed".
-#: includes/abilities/woocommerce/orders.php:1828
+#: includes/abilities/woocommerce/orders.php:1862
 #, php-format
 msgid "Line items cannot be added to this order because WooCommerce no longer treats an order with status \"%s\" as editable. Adding goods to it would either record them with no tax, understating what the customer is charged, or rewrite the tax already recorded against the existing items. Add the goods to a new order instead, or move this one back to an editable status first."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1924
+#: includes/abilities/woocommerce/orders.php:1958
 msgid "The order's post ID whose status to change."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:1928
+#: includes/abilities/woocommerce/orders.php:1962
 msgid "New order status. Accepts either the short slug (e.g. \"completed\") or the wc- prefixed form (e.g. \"wc-completed\"); must match a status registered with wc_get_order_statuses(). No transition is blocked based on the order's current status."
 msgstr ""
 
 #. translators: %s: the requested order status.
-#: includes/abilities/woocommerce/orders.php:1984
+#: includes/abilities/woocommerce/orders.php:2018
 #, php-format
 msgid "The order status could not be changed to \"%s\". The order keeps its previous status."
 msgstr ""
 
 #. translators: 1: the requested order status, 2: the status the order actually holds.
-#: includes/abilities/woocommerce/orders.php:2002
+#: includes/abilities/woocommerce/orders.php:2036
 #, php-format
 msgid "The order status did not persist as \"%1$s\"; it currently reads \"%2$s\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2129
+#: includes/abilities/woocommerce/orders.php:2163
 msgid "The order's post ID whose notes to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2199
+#: includes/abilities/woocommerce/orders.php:2233
 msgid "The order's post ID to attach the note to."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2204
+#: includes/abilities/woocommerce/orders.php:2238
 msgid "The note text to add to the order."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2208
+#: includes/abilities/woocommerce/orders.php:2242
 msgid "When true, the note is customer-facing and appears in the customer's My Account order view and order emails. When false (the default), it is a private, admin-only note."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2334
+#: includes/abilities/woocommerce/orders.php:2368
 msgid "The order's post ID whose refunds to list."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2406
+#: includes/abilities/woocommerce/orders.php:2440
 msgid "The refund's own post ID (not the order id). Get it from wc-list-order-refunds or the id returned by wc-create-order-refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2464
+#: includes/abilities/woocommerce/orders.php:2498
 msgid "The order's post ID to refund."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2469
+#: includes/abilities/woocommerce/orders.php:2503
 msgid "Total refund amount as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Required even when line_items is also sent."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2473
+#: includes/abilities/woocommerce/orders.php:2507
 msgid "Optional free-text reason recorded on the refund and returned verbatim under the Integrations security disclaimer."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2477
+#: includes/abilities/woocommerce/orders.php:2511
 msgid "Optional per-line-item refund breakdown, each with line_item_id (the order's own line item id), refund_total, and refund_tax as decimal strings. When omitted, the refund is recorded against the order as a whole with no per-line allocation. A non-numeric or negative refund_total or refund_tax on any line, or a line_item_id that does not exist on the order, fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2483
+#: includes/abilities/woocommerce/orders.php:2517
 msgid "The order's own line item id, from the id field of the line_items returned by wc-get-order. This is not a product id. An id that does not exist on the order fails the entire request."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2487
+#: includes/abilities/woocommerce/orders.php:2521
 msgid "Amount to refund against this line, as a decimal string, e.g. \"12.50\" (no currency symbol or thousands separator). Unlike the top-level amount this is not constrained by the schema, so it is checked when the refund runs: a non-numeric or negative value fails the whole request before any refund is created."
 msgstr ""
 
-#: includes/abilities/woocommerce/orders.php:2491
+#: includes/abilities/woocommerce/orders.php:2525
 msgid "Tax portion to refund against this line, as a decimal string. Same validation as refund_total: non-numeric or negative fails the whole request before any refund is created."
 msgstr ""
 
 #. translators: %d: the line item id that does not exist on the order.
-#: includes/abilities/woocommerce/orders.php:2564
+#: includes/abilities/woocommerce/orders.php:2598
 #, php-format
 msgid "Line item %d does not exist on this order. Use an id from the line_items returned by reading the order."
 msgstr ""
@@ -3077,50 +3077,50 @@ msgid "stock_status cannot be set while this variation manages or inherits stock
 msgstr ""
 
 #. translators: %s: comma-separated list of the rejected attribute keys.
-#: includes/abilities/woocommerce/variations.php:641
+#: includes/abilities/woocommerce/variations.php:648
 #, php-format
 msgid "The parent product declares no attributes, so no attribute can be set on its variations. Rejected: %s. Add the attributes to the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of every attribute key the parent declares.
-#: includes/abilities/woocommerce/variations.php:650
+#: includes/abilities/woocommerce/variations.php:657
 #, php-format
 msgid "The parent product uses none of its attributes for variations, so no attribute can be set on its variations. Rejected: %1$s. It declares %2$s for display only; turn on \"Used for variations\" for one of those on the parent product first."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:662
+#: includes/abilities/woocommerce/variations.php:669
 #, php-format
 msgid "The parent product does not declare these attributes: %1$s. Its variation attribute keys are: %2$s. Use those exactly (a global attribute is prefixed pa_)."
 msgstr ""
 
 #. translators: 1: comma-separated list of the rejected attribute keys. 2: comma-separated list of the parent's variation attribute keys.
-#: includes/abilities/woocommerce/variations.php:673
+#: includes/abilities/woocommerce/variations.php:680
 #, php-format
 msgid "The parent product declares these attributes but does not use them for variations, so setting them would apply nothing: %1$s. Its variation attribute keys are: %2$s. Use one of those, or turn on \"Used for variations\" for the attribute on the parent product first."
 msgstr ""
 
 #. translators: 1: attribute key. 2: the rejected value. 3: comma-separated list of the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:733
+#: includes/abilities/woocommerce/variations.php:740
 #, php-format
 msgid "%1$s=%2$s (its options are: %3$s)"
 msgstr ""
 
 #. translators: %s: semicolon-separated list of rejected key=value pairs, each with the parent's options for that attribute.
-#: includes/abilities/woocommerce/variations.php:748
+#: includes/abilities/woocommerce/variations.php:755
 #, php-format
 msgid "These attribute values are not options the parent product declares, so setting them would apply nothing: %s. Use one of the listed options exactly (the match is case-sensitive), or send an empty string to leave the attribute as \"Any\"."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:935
+#: includes/abilities/woocommerce/variations.php:942
 msgid "The variation id to update."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:942
+#: includes/abilities/woocommerce/variations.php:949
 msgid "A flat map of attribute name to the chosen value (strings only). Every key must be one the PARENT product already declares, in the parent's own form: a global attribute uses its pa_-prefixed taxonomy slug (pa_size), a custom one its sanitized name (size). A key the parent does not declare is rejected, and the error names the keys that would have worked. Unlike every other field on this ability, this replaces the variation's entire attribute map: any attribute not included here is cleared, not preserved."
 msgstr ""
 
-#: includes/abilities/woocommerce/variations.php:1091
+#: includes/abilities/woocommerce/variations.php:1108
 msgid "The variation id to permanently delete."
 msgstr ""
 
@@ -6429,74 +6429,74 @@ msgstr ""
 msgid "This content type is not exposed to agents."
 msgstr ""
 
-#: includes/helpers.php:264
+#: includes/helpers.php:275
 msgid "This meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:507
+#: includes/helpers.php:518
 msgid "Some removals are permanent."
 msgstr ""
 
-#: includes/helpers.php:508
+#: includes/helpers.php:519
 msgid "Abilities that bypass the Trash say so in their own description."
 msgstr ""
 
-#: includes/helpers.php:509
+#: includes/helpers.php:520
 msgid "Some removals are permanent"
 msgstr ""
 
-#: includes/helpers.php:514
+#: includes/helpers.php:525
 msgid "Deletes go to Trash."
 msgstr ""
 
-#: includes/helpers.php:515
+#: includes/helpers.php:526
 msgid "Removals are recoverable, not permanent."
 msgstr ""
 
-#: includes/helpers.php:516
+#: includes/helpers.php:527
 msgid "Deletes go to Trash"
 msgstr ""
 
-#: includes/helpers.php:536
-#: includes/helpers.php:543
+#: includes/helpers.php:547
+#: includes/helpers.php:554
 msgid "Only text, number, or boolean meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:651
+#: includes/helpers.php:662
 msgid "This term meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:668
-#: includes/helpers.php:675
+#: includes/helpers.php:679
+#: includes/helpers.php:686
 msgid "Only text, number, or boolean term meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:870
+#: includes/helpers.php:892
 msgid "This user meta key is not available to agents."
 msgstr ""
 
-#: includes/helpers.php:890
-#: includes/helpers.php:897
+#: includes/helpers.php:912
+#: includes/helpers.php:919
 msgid "Only text, number, or boolean user meta values are supported."
 msgstr ""
 
-#: includes/helpers.php:1029
+#: includes/helpers.php:1051
 msgid "Unsupported taxonomy."
 msgstr ""
 
-#: includes/helpers.php:1355
+#: includes/helpers.php:1377
 msgid "WPML language code of this item. Present only when WPML is active."
 msgstr ""
 
-#: includes/helpers.php:1370
+#: includes/helpers.php:1392
 msgid "Present on single-post reads and when include_content=true; omitted for password-protected posts."
 msgstr ""
 
-#: includes/helpers.php:1853
+#: includes/helpers.php:1875
 msgid "The request could not be completed."
 msgstr ""
 
-#: includes/helpers.php:1885
+#: includes/helpers.php:1907
 msgid "Trash is disabled on this site, so this content cannot be moved to the Trash. Refusing to permanently delete it."
 msgstr ""
 
@@ -6698,17 +6698,17 @@ msgstr ""
 msgid "The authorization grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:646
+#: includes/oauth/rest.php:649
 #: includes/oauth/tokens.php:100
 msgid "The access token could not be issued."
 msgstr ""
 
-#: includes/oauth/rest.php:690
-#: includes/oauth/rest.php:706
+#: includes/oauth/rest.php:693
+#: includes/oauth/rest.php:709
 msgid "The refresh token grant is invalid."
 msgstr ""
 
-#: includes/oauth/rest.php:761
+#: includes/oauth/rest.php:764
 msgid "Too many revocation requests. Try again shortly."
 msgstr ""
 
@@ -6721,7 +6721,7 @@ msgid "Agent Abilities for MCP could not finish setting up its OAuth database ta
 msgstr ""
 
 #: includes/oauth/tokens.php:179
-#: includes/oauth/tokens.php:261
+#: includes/oauth/tokens.php:274
 msgid "The refresh token is invalid."
 msgstr ""
 

@@ -129,6 +129,17 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
+	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
+	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
+	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
+	// candidate carrying trailing whitespace missed every check here and still landed on the real
+	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
+	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
+	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
+	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
+	// only expose, and both the membership test and the anchored regex can only gain matches. No
+	// key that is blocked today becomes allowed.
+	$key = trim( $key );
 	if ( is_protected_meta( $key, 'post' ) ) {
 		return true;
 	}
@@ -698,6 +709,17 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
+	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
+	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
+	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
+	// candidate carrying trailing whitespace missed every check here and still landed on the real
+	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
+	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
+	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
+	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
+	// only expose, and both the membership test and the anchored regex can only gain matches. No
+	// key that is blocked today becomes allowed.
+	$key = trim( $key );
 	if ( is_protected_meta( $key, 'user' ) ) {
 		return true;
 	}

@@ -218,10 +218,54 @@ function aafm_wc_redaction_marker(): string {
  * Split out from the walk so the pattern has one home and can be exercised directly by a test.
  * See aafm_wc_redact_settings_deep() for why the two groups are anchored differently.
  *
+ * The classification runs TWICE: once on the key as sent, and once on a copy where every camelCase
+ * hump has been split into an underscore boundary. Half the tokens below are boundary-anchored, and
+ * a camelCase transition is not a boundary, so `accessKey` and `apiLoginID` walked straight past a
+ * denylist that stops `access_key` and `api_login_id` dead. Authorize.Net alone ships both of those
+ * names. Running both forms is one-directional by construction: it can only ever ADD a withhold,
+ * never release something the single-form check caught, because the raw form is still tested first
+ * and unchanged.
+ *
  * @param string $key Settings key.
  * @return bool
  */
 function aafm_wc_settings_key_is_secret( string $key ): bool {
+	if ( aafm_wc_settings_key_matches_secret( $key ) ) {
+		return true;
+	}
+
+	$split = aafm_wc_split_camel_case_key( $key );
+
+	return $split !== $key && aafm_wc_settings_key_matches_secret( $split );
+}
+
+/**
+ * Insert an underscore at every camelCase hump so boundary-anchored tokens can see it.
+ *
+ * Deliberately only the lower-to-upper transition. Splitting an upper-to-upper run as well would
+ * turn `APIKey` into `AP_I_Key`, breaking the very token it is meant to expose; the acronym case is
+ * already handled because the FINAL hump of `apiLoginID` still yields `api_Login_ID`, and matching
+ * is case-insensitive throughout.
+ *
+ * @param string $key Settings key.
+ * @return string
+ */
+function aafm_wc_split_camel_case_key( string $key ): string {
+	$split = preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $key );
+
+	return null === $split ? $key : $split;
+}
+
+/**
+ * The denylist itself, applied to one spelling of a key.
+ *
+ * Kept separate from aafm_wc_settings_key_is_secret() so that function can apply it to more than
+ * one spelling without the pattern gaining a second home.
+ *
+ * @param string $key Settings key, in whichever spelling is being tested.
+ * @return bool
+ */
+function aafm_wc_settings_key_matches_secret( string $key ): bool {
 	$loose = 'secret|token|passphrase|passcode|password|passwd|pwd|private|credential|signature|hmac|oauth|bearer|api[_-]?key|client[_-]?id';
 	// Longer alternatives first, so "certificate" is not shadowed by "cert". Bare "pass" is here
 	// rather than in the loose group for the reason the original docblock recorded: anchored, it

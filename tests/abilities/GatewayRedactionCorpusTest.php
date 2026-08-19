@@ -178,6 +178,41 @@ final class GatewayRedactionCorpusTest extends TestCase {
 			'ordinary enabled'                => array( 'enabled', false ),
 			'ordinary description'            => array( 'description', false ),
 			'ordinary sandbox'                => array( 'sandbox', false ),
+
+			// -----------------------------------------------------------------
+			// camelCase, from Codex round 8 (R8C-8). Until then this whole file
+			// held not one camelCase row, which is exactly why a rewrite could
+			// move bare `key`, `api`, `auth` and `sign` behind an underscore or
+			// hyphen boundary with every gate green: a camelCase hump is not a
+			// boundary, so twelve names that 1.6.3 withheld came back exposed.
+			// Authorize.Net's own field names are in here for a reason.
+			// -----------------------------------------------------------------
+			'camel accessKey'                 => array( 'accessKey', true ),
+			'camel publicKey'                 => array( 'publicKey', true ),
+			'camel merchantKey'               => array( 'merchantKey', true ),
+			'camel storeKey'                  => array( 'storeKey', true ),
+			'camel liveKey'                   => array( 'liveKey', true ),
+			'camel testKey'                   => array( 'testKey', true ),
+			'camel publishableKey'            => array( 'publishableKey', true ),
+			'camel transactionKey'            => array( 'transactionKey', true ),
+			'camel apiLoginID'                => array( 'apiLoginID', true ),
+			'camel authKey'                   => array( 'authKey', true ),
+			'camel xAuthValue'                => array( 'xAuthValue', true ),
+			'camel mySignValue'               => array( 'mySignValue', true ),
+			'camel restApiUrl'                => array( 'restApiUrl', true ),
+			'camel apiEndpoint'               => array( 'apiEndpoint', true ),
+			'camel sharedSecret'              => array( 'sharedSecret', true ),
+			'camel routingNumber'             => array( 'routingNumber', true ),
+
+			// The other direction, and it is the half that keeps the split
+			// honest. Splitting humps must not start withholding presentation.
+			'camel benign checkoutTitle'      => array( 'checkoutTitle', false ),
+			'camel benign displayName'        => array( 'displayName', false ),
+			'camel benign buttonText'         => array( 'buttonText', false ),
+			'camel benign bankLogo'           => array( 'bankLogo', false ),
+			'camel benign loginButtonLabel'   => array( 'loginButtonLabel', false ),
+			'camel benign iconUrl'            => array( 'iconUrl', false ),
+			'camel benign taxStatus'          => array( 'taxStatus', false ),
 		);
 
 		return $rows;

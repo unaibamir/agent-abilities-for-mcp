@@ -588,8 +588,11 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 	// PKCE verifier) deliberately COMMITs the burn so the code cannot be replayed or brute-forced;
 	// a token-mint failure ROLLBACKs so a transient DB error does not permanently burn an
 	// otherwise-valid, unexpired code and force the user back through the browser. This mirrors
-	// aafm_oauth_rotate_refresh(). The test harness already wraps each test in its own transaction,
-	// so this nested START/COMMIT is a no-op there and does not break isolation.
+	// aafm_oauth_rotate_refresh(), including the nesting bound that function's comment now states
+	// in full: START TRANSACTION implicitly commits an already-open transaction rather than
+	// nesting inside it, so the claim that used to sit here about it being a harmless no-op under
+	// the test harness was false. Read that comment before changing either site; both carry the
+	// same shape and the fix, if one is ever worth making, belongs to both at once.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( 'START TRANSACTION' );
 

@@ -321,4 +321,195 @@ final class AcfContractTest extends TestCase {
 			'The refusal still leaves storage untouched.'
 		);
 	}
+
+	/**
+	 * Create a DB-STORED field group, the shape acf_add_local_field_group() cannot produce.
+	 *
+	 * ACF keeps a field group as an `acf-field-group` post and each field as an `acf-field` child,
+	 * with the field's NAME in post_excerpt and its KEY in post_name. That matters here and nowhere
+	 * else in this file: a local (PHP-registered) field is resolved out of an in-memory store by
+	 * exact key, while a DB-stored one is resolved by a database query whose column carries a
+	 * collation. The whole asymmetry under test only exists on the second kind.
+	 *
+	 * The stores are reset afterwards because ACF memoizes both fields and groups per request.
+	 *
+	 * @param string $name Field name.
+	 * @param string $key  Field key.
+	 * @return void
+	 */
+	private function make_db_stored_field( string $name, string $key ): void {
+		$group = wp_insert_post(
+			array(
+				'post_title'   => 'AAFM Contract DB Group',
+				'post_name'    => 'group_aafm_db',
+				'post_type'    => 'acf-field-group',
+				'post_status'  => 'publish',
+				'post_excerpt' => 'aafm-db-group',
+				'post_content' => wp_slash(
+					maybe_serialize(
+						array(
+							'location' => array(
+								array(
+									array(
+										'param'    => 'post_type',
+										'operator' => '==',
+										'value'    => 'post',
+									),
+								),
+							),
+							'active'   => true,
+						)
+					)
+				),
+			)
+		);
+
+		wp_insert_post(
+			array(
+				'post_title'   => 'AAFM Contract DB Field',
+				'post_name'    => $key,
+				'post_type'    => 'acf-field',
+				'post_status'  => 'publish',
+				'post_parent'  => (int) $group,
+				'post_excerpt' => $name,
+				'post_content' => wp_slash( maybe_serialize( array( 'type' => 'text' ) ) ),
+			)
+		);
+
+		foreach ( array( 'fields', 'field-groups' ) as $store ) {
+			if ( function_exists( 'acf_get_store' ) && acf_get_store( $store ) ) {
+				acf_get_store( $store )->reset();
+			}
+		}
+		wp_cache_flush();
+	}
+
+	/**
+	 * R6-1, the vendor half, with ZERO plugin code in the path.
+	 *
+	 * ACF resolves a field DEFINITION for a write through a database query and reads the VALUE back
+	 * through an exact meta read, so an address that merely collates equal writes successfully and
+	 * then reads back as null. This is the fact the fourth write floor exists for, and it is pinned
+	 * here rather than described in a comment because a sentence cannot go red if ACF changes it.
+	 */
+	public function test_acf_resolves_a_name_fuzzily_for_the_write_and_exactly_for_the_read(): void {
+		$this->make_db_stored_field( 'aafm_db_text', 'field_aafm_db_text' );
+		$post_id = self::factory()->post->create();
+
+		$exact = acf_get_field( 'aafm_db_text' );
+		$this->assertIsArray( $exact, 'The DB-stored field resolves under its exact name.' );
+		$this->assertSame( 'field_aafm_db_text', $exact['key'] );
+
+		// A trailing space is the cheapest variant and needs no unusual character at all.
+		$fuzzy = acf_get_field( 'aafm_db_text ' );
+		$this->assertIsArray( $fuzzy, 'A trailing space still resolves the DEFINITION, via the DB collation.' );
+		$this->assertSame( 'field_aafm_db_text', $fuzzy['key'], 'And it resolves to the very same field.' );
+
+		update_field( 'aafm_db_text ', 'LANDED', $post_id );
+
+		$this->assertSame(
+			'LANDED',
+			get_post_meta( $post_id, 'aafm_db_text', true ),
+			'The write LANDED, under the canonical name the caller never sent.'
+		);
+		$this->assertNull(
+			get_field( 'aafm_db_text ', $post_id, false ),
+			'And the read under the same address returns null: the read is exact, the write was not.'
+		);
+		$this->assertSame(
+			'LANDED',
+			get_field( 'aafm_db_text', $post_id, false ),
+			'Read under the canonical name, the value is plainly there.'
+		);
+	}
+
+	/**
+	 * R6-1, our half: the write is refused BEFORE it lands, so the failure report is true.
+	 *
+	 * The assertion that matters is not the error, it is that storage is byte-identical afterwards.
+	 * Before the fourth floor this same call reported failure with the new value already stored.
+	 */
+	public function test_an_inexact_field_address_is_refused_before_anything_is_written(): void {
+		$this->make_db_stored_field( 'aafm_db_text', 'field_aafm_db_text' );
+		$post_id = self::factory()->post->create();
+
+		$seed = aafm_acf_write_fields( array( 'aafm_db_text' => 'BEFORE' ), $post_id, 'post' );
+		$this->assertIsArray( $seed, 'Control: the exact name writes and verifies.' );
+		$this->assertSame( 'BEFORE', get_post_meta( $post_id, 'aafm_db_text', true ) );
+
+		foreach ( array( ' ', "\xe2\x80\xae", "\xe2\x80\x8b", "\x07" ) as $suffix ) {
+			$result = aafm_acf_write_fields(
+				array( 'aafm_db_text' . $suffix => 'MUST-NOT-LAND' ),
+				$post_id,
+				'post'
+			);
+
+			$this->assertInstanceOf(
+				\WP_Error::class,
+				$result,
+				'An address ACF cannot read back is refused: ' . bin2hex( $suffix )
+			);
+			// Storage first, deliberately. The pre-fix behaviour also returned a WP_Error, so a
+			// regression that reports failure AFTER writing would otherwise be diagnosed as a
+			// mismatched error code, which reads like a wording problem rather than the data
+			// problem it is.
+			$this->assertSame(
+				'BEFORE',
+				get_post_meta( $post_id, 'aafm_db_text', true ),
+				'Nothing was written, which is what makes the failure report true: ' . bin2hex( $suffix )
+			);
+			$this->assertSame(
+				'aafm_acf_inexact_field_address',
+				$result->get_error_code(),
+				'Refused by the address floor by name, not by a downstream mismatch: ' . bin2hex( $suffix )
+			);
+		}
+	}
+
+	/**
+	 * The behaviour change stated plainly, and pinned so nobody has to rediscover it.
+	 *
+	 * Clearing a field through an inexact address used to DELETE the stored value and then report
+	 * failure. It is now refused and the value survives. This is the only thing the fourth floor
+	 * changes about what ends up stored, and it changes it in the direction of the report.
+	 */
+	public function test_clearing_through_an_inexact_address_no_longer_destroys_the_value(): void {
+		$this->make_db_stored_field( 'aafm_db_text', 'field_aafm_db_text' );
+		$post_id = self::factory()->post->create();
+		update_field( 'aafm_db_text', 'KEEP-ME', $post_id );
+
+		foreach ( array( null, '' ) as $cleared ) {
+			$result = aafm_acf_write_fields( array( 'aafm_db_text ' => $cleared ), $post_id, 'post' );
+			$this->assertInstanceOf( \WP_Error::class, $result, 'Still reported as a failure, as it was before.' );
+			$this->assertSame(
+				'KEEP-ME',
+				get_post_meta( $post_id, 'aafm_db_text', true ),
+				'But the value is still there. It used to be gone on the call that reported failure.'
+			);
+		}
+	}
+
+	/**
+	 * The over-block direction, and the reason the floor is not byte equality.
+	 *
+	 * A KEY-shaped address goes through acf_is_field_key() on BOTH sides, so it round-trips whatever
+	 * the database lookup does with it - including a fuzzy one. It succeeded before the floor and
+	 * must still succeed, or the fix breaks a working call while looking more thorough.
+	 */
+	public function test_a_field_key_address_still_writes_even_when_the_key_collates_fuzzily(): void {
+		$this->make_db_stored_field( 'aafm_db_text', 'field_aafm_db_text' );
+		$post_id = self::factory()->post->create();
+
+		$exact = aafm_acf_write_fields( array( 'field_aafm_db_text' => 'BY-KEY-EXACT' ), $post_id, 'post' );
+		$this->assertIsArray( $exact, 'The exact field key writes.' );
+		$this->assertSame( 'BY-KEY-EXACT', get_post_meta( $post_id, 'aafm_db_text', true ) );
+
+		$fuzzy = aafm_acf_write_fields( array( 'field_aafm_db_text ' => 'BY-KEY-FUZZY' ), $post_id, 'post' );
+		$this->assertIsArray( $fuzzy, 'A key address that only collates equal still writes, exactly as it did before.' );
+		$this->assertSame(
+			'BY-KEY-FUZZY',
+			get_post_meta( $post_id, 'aafm_db_text', true ),
+			'And it really wrote; a success over an unwritten value would be the worse defect.'
+		);
+	}
 }

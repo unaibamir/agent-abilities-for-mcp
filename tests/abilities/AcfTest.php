@@ -1766,4 +1766,78 @@ final class AcfTest extends TestCase {
 			'An admin (edit_users) must discover the user-field ability.'
 		);
 	}
+
+	/**
+	 * R6-1: the address floor's predicate, pinned directly.
+	 *
+	 * The OUTCOME of this floor cannot be reached from the unit suite, and that is deliberate rather
+	 * than an omission. The stub resolves a definition by exact array key (AcfStubStore::field_def),
+	 * so it cannot produce the collation-fuzzy resolution the floor exists for, and teaching it to
+	 * fake one would be a stub modelling a vendor nobody had measured - the archetype this file's
+	 * own history warns about. The outcome is pinned against REAL ACF instead, in
+	 * AcfContractTest::test_an_inexact_field_address_is_refused_before_anything_is_written(), which
+	 * also pins the vendor asymmetry itself. What is pinned here is the rule.
+	 *
+	 * Note that acf_is_field_key() is NOT stubbed, so under this suite the predicate answers from
+	 * the two equality comparisons alone. That is the same code path a fork or an older ACF without
+	 * that function would take, so these rows are the only coverage that branch has.
+	 */
+	public function test_only_an_exact_name_or_a_field_key_reads_back(): void {
+		// _name is carried deliberately. acf_validate_field() sets _name = name for every ordinary
+		// field, so a fixture omitting it would let a mutant that read _name instead of name die on
+		// the omission rather than on any behavioural difference: red for a reason adjacent to the
+		// one being claimed. With it present the two are the same string here exactly as they are in
+		// real ACF, and that mutant survives honestly.
+		$def = array(
+			'key'   => 'field_r6_addr',
+			'name'  => 'r6_addr',
+			'_name' => 'r6_addr',
+			'type'  => 'text',
+		);
+
+		$this->assertTrue(
+			aafm_acf_address_reads_back( 'r6_addr', $def ),
+			'The definition\'s own name is what update_field() writes the reference under.'
+		);
+		$this->assertTrue(
+			aafm_acf_address_reads_back( 'field_r6_addr', $def ),
+			'The exact field key reads back, and this comparison is what covers an ACF without acf_is_field_key().'
+		);
+
+		// The doors, illustrative rather than exhaustive: what they have in common is that ACF
+		// resolves them for the write and cannot find them on the read. A trailing space is the
+		// cheapest of them and needs no unusual character at all.
+		foreach ( array( ' ', "\t", "\n", "\xe2\x80\xae", "\xe2\x80\x8b", "\x07" ) as $suffix ) {
+			$this->assertFalse(
+				aafm_acf_address_reads_back( 'r6_addr' . $suffix, $def ),
+				'A name carrying a trailing ' . bin2hex( $suffix ) . ' is not the name the value reads back under.'
+			);
+			$this->assertFalse(
+				aafm_acf_address_reads_back( $suffix . 'r6_addr', $def ),
+				'And neither is a leading one; a check that only looked at the tail would pass this.'
+			);
+		}
+
+		$this->assertFalse(
+			aafm_acf_address_reads_back( 'r6_addr_other', $def ),
+			'A plainly different name is refused too, so this is not a rule about invisible characters.'
+		);
+		$this->assertFalse(
+			aafm_acf_address_reads_back( '', $def ),
+			'And an empty address does not match a definition carrying a name.'
+		);
+	}
+
+	/**
+	 * The empty-definition direction, so the predicate cannot answer true by accident.
+	 *
+	 * A definition missing both name and key must not make every address acceptable, which is what
+	 * a naive `$address === ( $def['name'] ?? '' )` would do for the empty address. Floor 1 already
+	 * refuses a definition with no key before this runs, so this is defence in depth rather than a
+	 * reachable case, and it is labelled that way rather than counted as coverage of a live path.
+	 */
+	public function test_a_shapeless_definition_does_not_make_every_address_acceptable(): void {
+		$this->assertFalse( aafm_acf_address_reads_back( '', array() ), 'An empty address against an empty definition.' );
+		$this->assertFalse( aafm_acf_address_reads_back( 'anything', array() ), 'And a real-looking one.' );
+	}
 }

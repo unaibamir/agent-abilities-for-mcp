@@ -922,6 +922,106 @@ function aafm_acf_unresolved_in_row( array $def, array $row, string $path, array
 }
 
 /**
+ * Whether ACF will read a value back under the address the caller wrote it under.
+ *
+ * This mirrors the branch ACF itself takes, rather than modelling it. acf_maybe_get_field()
+ * (api-template.php:300-324) tries three things in order: acf_is_field_key(), which short-circuits
+ * to acf_get_field(); then acf_get_meta_field(), an EXACT read of the '_' . $address reference
+ * meta; and only when the caller passed $strict false, acf_get_field() on the name. get_field()
+ * passes $strict TRUE and update_field() passes FALSE, which is the whole asymmetry: the write can
+ * reach the name lookup and the read cannot.
+ *
+ * So an address reads back in exactly two shapes.
+ *
+ *   - KEY-SHAPED. acf_is_field_key() is the first branch on both sides, and it leads to the same
+ *     acf_get_field() either way, so a key address round-trips whatever that lookup does with it.
+ *     Measured on ACF Pro 6.8.7: `field_63f89ebc53c27` with a trailing space still resolves, still
+ *     writes, and still reads back, because the value read uses the resolved definition's own name.
+ *     Refusing it would have broken a call that works today, which is why this is not simply a
+ *     byte-equality check.
+ *   - THE DEFINITION'S OWN NAME. update_field() writes the value under $field['name'] and the
+ *     reference under '_' . $field['name'], so the exact-read branch finds it only for that string.
+ *
+ * Anything else resolves for the write and reads back null. On a DB-stored field that set is not
+ * empty, because acf_get_field() resolves a name through a database query and the column carries a
+ * collation: measured on this site's wp_posts (utf8mb4_unicode_520_ci), `icon` also matches `icon`
+ * followed by a space, U+202E, U+200B or BEL, though not by a tab. A PHP-registered (local) field
+ * is looked up in an in-memory store by exact key, so none of this reaches it - the trigger is
+ * DB-stored versus PHP-registered, not the selector type.
+ *
+ * The exact-key comparison is not redundant with acf_is_field_key(): it is what keeps a key address
+ * working on a fork or an older ACF that does not ship that function, where the function_exists
+ * guard would otherwise answer false for every key.
+ *
+ * Compared against `name` and not `_name` deliberately. acf_validate_field() sets _name = name
+ * (acf-field-functions.php), and a top-level clone is the one place the two could diverge except
+ * that class-acf-field-clone.php's prepare_field_for_db() bails when name === _name, which is
+ * exactly a top-level clone. Both are top-level facts; this function is only ever asked about a
+ * top-level address.
+ *
+ * DOCUMENTED versus OBSERVED, per this project's grounding rule. Documented: field-key addressing
+ * is first-class in ACF's own resources (/resources/update_field recommends the key form when
+ * saving a value that does not yet exist). OBSERVED ONLY, measured against ACF Pro 6.8.7 and ACF
+ * free 6.3.6: that a name resolves collation-fuzzily for the write while the read is exact. ACF
+ * documents neither half of that, which is the reason this refuses rather than trying to be clever
+ * about it - refusing needs no promise from the vendor at all.
+ *
+ * The measured standing of each part, so nothing here reads as more load-bearing than it is. The
+ * name comparison and the key-shaped branch are both demonstrated: blinding the name comparison
+ * reds the exact-name control in both suites, and blinding the key-shaped branch reds the
+ * fuzzy-key row against real ACF, which is the over-block direction. The exact-key comparison is
+ * demonstrated too, by the unit suite, where acf_is_field_key() is not stubbed and every existing
+ * ACF write addresses its field by key: removing it turns 103 passing writes into refusals. Reading
+ * _name instead of name SURVIVES both suites and is named EQUIVALENT rather than counted, because
+ * the two are the same string for a top-level field and the fixture carries both. The empty-string
+ * guards are killed only by a row that floor 1 makes unreachable, so they are DEFENSIVE.
+ *
+ * @param string              $address The caller's top-level address.
+ * @param array<string,mixed> $def     The definition acf_get_field() resolved for it.
+ * @return bool True when a write under this address will read back under it.
+ */
+function aafm_acf_address_reads_back( string $address, array $def ): bool {
+	// Both halves are guarded against the empty string on purpose. Without that guard a definition
+	// carrying no name would make the EMPTY address acceptable, because '' === '' - the comparison
+	// answering true from an absent value rather than from a match. Floor 1 has already refused a
+	// definition with no key by the time this runs, so it is defence in depth rather than a
+	// reachable case, and it is labelled that way rather than counted as coverage of a live path.
+	$name = (string) ( $def['name'] ?? '' );
+	$key  = (string) ( $def['key'] ?? '' );
+	if ( ( '' !== $name && $address === $name ) || ( '' !== $key && $address === $key ) ) {
+		return true;
+	}
+	return function_exists( 'acf_is_field_key' ) && acf_is_field_key( $address );
+}
+
+/**
+ * The refusal for a top-level address ACF resolves for the write but cannot read back.
+ *
+ * Named rather than generic, on the same reasoning as the sub-field refusal below: the echoed
+ * string is the caller's own, so it discloses nothing the caller did not supply, and naming it is
+ * what lets an agent drop the stray character and retry instead of escalating a bare failure to a
+ * human. It runs after the hard block, so a protected key is still refused generically and is never
+ * named back here.
+ *
+ * The message says what to do rather than describing ACF's internals, because the caller cannot act
+ * on the collation and can act on "use the field's exact name or its key". It goes through the same
+ * bounded, sanitized address list as the two container refusals so there is one copy of that cap.
+ *
+ * @param string $address The address that resolved inexactly.
+ * @return \WP_Error
+ */
+function aafm_acf_inexact_address_error( string $address ): WP_Error {
+	return new WP_Error(
+		'aafm_acf_inexact_field_address',
+		sprintf(
+			/* translators: %s: the field address the caller sent. */
+			__( 'This does not exactly name a field, so nothing was written. Send the field\'s exact name or its field key: %s', 'agent-abilities-for-mcp' ),
+			implode( ', ', aafm_acf_safe_address_list( array( $address ) ) )
+		)
+	);
+}
+
+/**
  * The refusal for a container write addressing sub-fields the field definition does not declare.
  *
  * Named rather than generic, and it echoes the offending addresses back, unlike the hard-block
@@ -1339,7 +1439,7 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  * stored shape for image, file, date and relationship fields; the verify below is what compares
  * against storage, and it reads raw.
  *
- * Every key is gated up front, before any write lands - three floors, all required:
+ * Every key is gated up front, before any write lands - four floors, all required:
  *
  *   1. The key MUST resolve to a real, defined ACF field (acf_get_field() returns an array, not
  *      false). This is the privilege-escalation fix: for an UNRESOLVED key, ACF's update_field()
@@ -1362,13 +1462,21 @@ function aafm_acf_canonicalize_for_compare( $value ) {
  *      already landed. Refusing before any write is what makes the report true, and it makes the
  *      sub-field level behave the way an unresolved top-level key already behaves. See
  *      aafm_acf_unresolved_sub_addresses() for what is deliberately not flagged.
+ *   4. The top-level address must be one ACF will READ BACK, not merely one it resolves for the
+ *      write. Listed fourth because it was added last; it RUNS between floors 2 and 3, so the hard
+ *      block still refuses a protected key generically first. ACF looks a name up for the write
+ *      through a database query and reads the value back through an exact meta read, so on a
+ *      DB-stored field an address that merely collates equal (a trailing space is enough) wrote
+ *      successfully and then read back as null, and the verify below reported failure on a write
+ *      that had landed. See aafm_acf_address_reads_back() for the two shapes that do read back and
+ *      for why this is not byte equality.
  *
  * A single offending key rejects the whole request with a WP_Error before any update_field()
  * runs - matching this function's single-error convention (the verify step below likewise
  * collapses any non-persisting write to one generic error) and avoiding a partial write when any key
  * in the map is rejected. Floors 1 and 2 refuse generically, because what they refuse says something
- * about the site; floor 3 names the caller's own addresses so an agent can correct them. Legitimate,
- * defined fields are written and verified exactly as before.
+ * about the site; floors 3 and 4 name the caller's own addresses so an agent can correct them.
+ * Legitimate, defined fields are written and verified exactly as before.
  *
  * After every field is written its stored value is read back and compared to the sanitized value
  * written, so a failed update_field() that stored nothing is never audited as a success.
@@ -1487,6 +1595,38 @@ function aafm_acf_write_fields( array $fields, $selector, string $selector_type 
 			if ( '' !== $candidate && aafm_acf_meta_key_hard_blocked( $candidate, $selector_type ) ) {
 				return aafm_generic_error(); // Defense in depth: protected meta key.
 			}
+		}
+
+		// Fourth floor, numbered fourth because it was added last but running HERE, between the hard
+		// block and the sub-address walk: a protected key is still refused generically before
+		// anything names the caller's address back, and a problem with the outer address is
+		// reported before any complaint about what was inside it.
+		//
+		// The address must be one ACF will READ BACK, not merely one it will resolve for the write.
+		// Those are different questions, and ACF answers them with different machinery:
+		// update_field() calls acf_maybe_get_field() with $strict false, which falls through to
+		// acf_get_field() and a DATABASE lookup on the field's name, while get_field() calls it with
+		// $strict true, which stops at acf_get_meta_field() and an EXACT postmeta read of
+		// '_' . $address (api-template.php:300-324). A database lookup inherits the column's
+		// collation; a meta read does not. So on a DB-stored field an address that merely collates
+		// equal - a trailing space is enough - resolves for the write and reads back as null, and
+		// this function's verify-after-write then reported failure on a write that had landed.
+		//
+		// Refusing before the write is what makes that report true. Nothing that succeeds today
+		// starts failing, and this is provable rather than enumerated: for an address that is not
+		// the definition's own name, get_field() returns null, so the comparison below is against
+		// the JSON `null`, and aafm_acf_sanitize_value() never yields null - it drops null, objects
+		// and resources to an empty string (aafm_acf_sanitize_leaf(), :491). The two sides could
+		// therefore never match, so every such call already reported failure. What changes is only
+		// what is left behind: the database is now untouched when we say the write did not happen.
+		//
+		// The alternative - reading back through the definition ACF resolved, so the fuzzy write is
+		// reported as the success it was - was rejected. It would make our success verdict depend on
+		// the site's database collation, so the same request would succeed or be refused according
+		// to how wp_posts was created, and it would report success without telling the caller which
+		// field actually changed. Never handing ACF the inexact address is robust either way.
+		if ( ! aafm_acf_address_reads_back( $field_key, $def ) ) {
+			return aafm_acf_inexact_address_error( $field_key );
 		}
 
 		// Third floor: every address inside a container must name a sub-field the definition

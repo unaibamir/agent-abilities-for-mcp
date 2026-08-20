@@ -279,6 +279,139 @@ function aafm_missing_input_error( string $name, array $missing ): WP_Error {
 }
 
 /**
+ * The WordPress-reserved post-meta keys an agent reaches for by name, and the ability that
+ * actually does the job for each operation.
+ *
+ * Every key here is protected meta in stock WordPress, so aafm_hard_blocked_meta_key() refuses
+ * it for an administrator exactly as it refuses it for a subscriber. That is what makes naming
+ * the alternative safe: the answer depends on the key alone, never on who asked or on how the
+ * site is configured.
+ *
+ * A route is only listed once the named ability has been read and confirmed to write the same
+ * storage. `_wp_attachment_image_alt` is aafm/update-media's `alt` parameter
+ * (includes/abilities/media.php:1129) and is a plain `alt` field on aafm/get-media-item's payload
+ * (includes/helpers.php:1693). `_thumbnail_id` is what aafm/set-featured-image's
+ * set_post_thumbnail() writes (includes/abilities/media.php:550) and what the post/page write
+ * bundle's `featured_media` writes (includes/helpers.php:1229); it is read back as
+ * `featured_image` (includes/helpers.php:1500).
+ *
+ * The empty delete route for `_thumbnail_id` is deliberate and load-bearing: nothing in this
+ * plugin calls delete_post_thumbnail(), and set_post_thumbnail() with the bundle's 0 is a no-op,
+ * so there is no ability that removes a featured image. An empty string means the refusal stops
+ * after saying the key is unreachable rather than inventing a route, which is the same rule the
+ * tool descriptions follow.
+ *
+ * @return array<string, array<string, string>> Canonical key => operation => sentence naming the route.
+ */
+function aafm_reserved_post_meta_routes(): array {
+	return array(
+		'_wp_attachment_image_alt' => array(
+			'read'   => __( 'Call aafm-get-media-item, which returns the alt text as a plain "alt" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-update-media and pass its "alt" parameter.', 'agent-abilities-for-mcp' ),
+			'delete' => __( 'Call aafm-update-media with an empty "alt" to clear it.', 'agent-abilities-for-mcp' ),
+		),
+		'_thumbnail_id'            => array(
+			'read'   => __( 'Call aafm-get-post or aafm-get-page, which return the "featured_image" object.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-set-featured-image, or pass "featured_media" to aafm-update-post or aafm-update-page.', 'agent-abilities-for-mcp' ),
+			'delete' => '',
+		),
+	);
+}
+
+/**
+ * Answer a post-meta call that names a WordPress-reserved key with the route that does the job,
+ * rather than letting it fall through to the adapter's bare "Permission denied".
+ *
+ * THE DEFECT. `_wp_attachment_image_alt` is where WordPress stores image alt text, so an agent
+ * asked to fix alt text calls aafm-update-post-meta on it. It is protected meta, so
+ * aafm_can_access_post_meta() returns a bare false, and the adapter turns any non-true into the
+ * literal string "Permission denied" (ToolsHandler.php:150) before this plugin's own error
+ * handling is ever reached. The agent concludes it lacks privileges, and stops. It does not lack
+ * privileges; the key is not reachable through that tool at all, by anyone, and there is a
+ * different tool that does exactly what it was asked to do.
+ *
+ * WHY THIS MESSAGE IS SAFE WHERE A CAPABILITY MESSAGE WOULD NOT BE. There are two reasons a meta
+ * call gets refused, and only one of them may be explained. A hard-blocked key is refused
+ * identically for every caller and tells the agent nothing it could not read in the tool's own
+ * published inputSchema. A missing capability, or a key the operator simply has not allowlisted,
+ * depends on who is asking and on this site's configuration; those keep the bare refusal they
+ * have today and are not touched here. This function can only ever fire on the first kind: the
+ * ability must be one of the three named below, the key must be one of the two literals in the
+ * map, and aafm_hard_blocked_meta_key() must ALSO say so at call time. Nothing it reads varies by
+ * caller, so the message cannot vary by caller either - pinned as byte equality across roles in
+ * ReservedMetaKeyRouteTest rather than argued here.
+ *
+ * WHY THE HARD-BLOCK IS RE-CHECKED rather than trusted from the map. is_protected_meta() is a
+ * filter, so a site can genuinely unprotect one of these keys and allowlist it, and on that site
+ * the write works. Re-checking keeps the message truthful there instead of refusing a call that
+ * would otherwise have succeeded: when the key is not blocked, this returns null and the path is
+ * byte-identical to today's.
+ *
+ * FAIL-CLOSED, for the same reason aafm_missing_input_error() is. A WP_Error is a denial
+ * everywhere it can be seen - the Abilities API admits only a strict true - so the worst this can
+ * do is refuse something, never allow it. It returns BEFORE the permission callback for the same
+ * reason R6-2 does: an answer that never consults the callback provably cannot depend on it, and
+ * for a hard-blocked key the callback's answer is false anyway.
+ *
+ * WHERE THE MESSAGE ACTUALLY LANDS, and where it does not. The MCP path stops at the permission
+ * verdict and renders it (ToolsHandler.php:149-166), which is the path the report came from and the
+ * one this fixes. The direct and REST paths go through WP_Ability::execute(), which deliberately
+ * refuses to relay a permission WP_Error - it _doing_it_wrong()s over one and returns its own
+ * generic 'ability_invalid_permissions' instead. So a REST caller's answer is byte-for-byte what it
+ * was before this existed, and the only difference on that path is a WP_DEBUG-only notice. That is
+ * unlike R6-2, which core never reaches because core validates input before permissions; a reserved
+ * key is valid input, so it does reach the gate. Accepted rather than dodged: giving the REST path
+ * the same message would mean a second choke point inside execute(), which is more surface on this
+ * plugin's most regression-sensitive code for a path nobody reported a problem with.
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input Call arguments.
+ * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
+ */
+function aafm_unreachable_meta_key_error( string $name, array $input ) {
+	$operations = array(
+		'aafm/get-post-meta'    => 'read',
+		'aafm/update-post-meta' => 'write',
+		'aafm/delete-post-meta' => 'delete',
+	);
+	if ( ! isset( $operations[ $name ] ) ) {
+		return null;
+	}
+
+	// Guarded against a non-scalar, because this runs on raw caller input and a meta_key sent as
+	// an array would fatal on the cast. Trimmed to match aafm_hard_blocked_meta_key(), which
+	// compares on a trimmed copy for the PAD SPACE reason documented there.
+	$raw = $input['meta_key'] ?? null; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- reading a call argument, not a meta query.
+	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+	if ( '' === $key ) {
+		return null;
+	}
+
+	// Matched case-insensitively so a mixed-case spelling gets the same help, but the CANONICAL
+	// spelling from the map is what goes into the message. Caller input never reaches the wire.
+	$routes    = aafm_reserved_post_meta_routes();
+	$canonical = '';
+	foreach ( array_keys( $routes ) as $candidate ) {
+		if ( 0 === strcasecmp( $candidate, $key ) ) {
+			$canonical = $candidate;
+			break;
+		}
+	}
+	if ( '' === $canonical || ! aafm_hard_blocked_meta_key( $key ) ) {
+		return null;
+	}
+
+	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
+	$lead  = sprintf(
+		/* translators: %s: the WordPress-reserved meta key the call named. */
+		__( 'The meta key "%s" is protected by WordPress, so no user can reach it through this tool.', 'agent-abilities-for-mcp' ),
+		$canonical
+	);
+
+	return new WP_Error( 'aafm_meta_key_unreachable', '' === $route ? $lead : $lead . ' ' . $route );
+}
+
+/**
  * Register one ability through the audited, guarded, rate-limited choke point.
  *
  * @param string              $name Ability name.
@@ -412,12 +545,23 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				$missing[] = $property;
 			}
 		}
+		// A call naming a WordPress-reserved meta key is answered the same way and for the same
+		// reason: the refusal is structural, identical for every caller, and there is a different
+		// tool that does the job. Ordered AFTER the missing-argument branch so R6-2's answer is
+		// unchanged when a call is both malformed and reserved, and evaluated only on that branch
+		// so a malformed call is never asked about its key. See aafm_unreachable_meta_key_error()
+		// for why this discloses nothing a capability message would.
+		$unreachable = array() === $missing ? aafm_unreachable_meta_key_error( $name, $call_args ) : null;
+
 		if ( array() !== $missing ) {
 			// No try/catch around this one: building the refusal cannot crash, and it falls through
 			// to the shared non-true branch below, so the denial is audited, announced and has its
 			// rate memo released exactly as every other refusal does rather than growing a second
 			// copy of that bookkeeping.
 			$allowed = aafm_missing_input_error( $name, $missing );
+		} elseif ( null !== $unreachable ) {
+			// Same bookkeeping route as the branch above, and for the same reason.
+			$allowed = $unreachable;
 		} else {
 			try {
 				$allowed = $original_permission( $input );

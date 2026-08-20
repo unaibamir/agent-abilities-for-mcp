@@ -9,7 +9,7 @@ WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission 
 | **Requires at least** | 6.9 |
 | **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.6.3 |
+| **Stable tag** | 1.7.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -263,6 +263,21 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+### 1.7.0
+
+* **Feature:** Image uploads are now bounded by pixel count, not only by file size. A small compressed file that declares enormous dimensions is refused before anything decodes it. The ceiling comes from the memory the host can actually spare, which lands near 51 megapixels on a 256M host, and the aafm_upload_max_pixels filter moves it in either direction.
+* **Feature:** The audit log says more about what a call did. Permanent deletes now record what they removed instead of leaving the row blank, and updates to term meta, user meta and site settings record which keys they wrote. What lands in the log is names and identifiers, not the free text a call carried.
+* **Fix:** A flexible content write whose row layout ACF could not resolve reported failure and wiped the field's existing rows on the same call. The row is refused before anything is written, so the stored content stays put.
+* **Fix:** Clearing an ACF field through an address that only nearly matched the field's own name deleted the stored value and then reported failure. Those addresses are now refused up front.
+* **Fix:** The ACF protected-meta floor checked the address the caller sent rather than the one ACF would store under, so a trailing space was enough to reach a protected meta key.
+* **Fix:** Payment gateway settings came back with camelCase credential keys in full, and listed none of them as redacted. Authorize.Net's apiLoginID and transactionKey are the real-world case. Earlier releases withheld those.
+* **Fix:** Over MCP, a call missing a required argument came back as "Permission denied". An agent reads that as a reason to stop and fetch a human, when the real fix is to correct the call and try again. It now gets the schema error naming what is missing. This changes the log too: those refusals write a denied row where before they wrote none, so malformed traffic is more visible than it used to be.
+* **Fix:** WooCommerce product variations were validated against whatever a display filter showed rather than against what the parent product stores. An order lookup that threw during a recalculation also escaped the rollback instead of being contained by it.
+* **Fix:** Uploaded file names carried bidi and control characters into the media library, so a name could render reversed in a listing. Those characters are stripped now, and uploading a file agrees with updating its title about that field.
+* **Fix:** A batch of smaller fixes across menu listings on WordPress 6.9, ACF container writes, WooCommerce attributes, and several refusal messages that named the wrong cause.
+* **Chore:** Tested against WordPress 7.1.
+* **Chore:** Repository metadata inside vendor no longer rides along to wordpress.org, and the zip and the SVN deploy now exclude the same files by the same rule.
+
 ### 1.6.3
 
 * **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.

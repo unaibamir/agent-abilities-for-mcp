@@ -373,6 +373,13 @@ jobs:
             tar --strip-components=1 -zxmf /tmp/wp.tgz -C "$WP_CORE_DIR"
           fi
 
+          # Record which WordPress this leg actually installed. The resolved string is what we
+          # ASKED for; version.php is what we GOT, and only the second one is evidence. Without
+          # this the log carries no version at all, so "Tested up to" could never be backed by a
+          # CI run - it had to be inferred from when the job happened to start.
+          echo "Requested WP_VERSION=${WP_VERSION}"
+          echo "Installed  $(grep -o "\$wp_version = '[^']*'" "$WP_CORE_DIR/wp-includes/version.php")"
+
           mkdir -p "$WP_TESTS_DIR"
           svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/includes/" "${WP_TESTS_DIR}/includes"
           svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/data/" "${WP_TESTS_DIR}/data"

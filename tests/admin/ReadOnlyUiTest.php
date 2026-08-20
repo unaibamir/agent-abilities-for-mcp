@@ -491,6 +491,130 @@ final class ReadOnlyUiTest extends TestCase {
 		$this->assertStringContainsString( '.aafm-subject-panel, .aafm-integration-card', $js );
 	}
 
+	// ---------------------------------------------------------------------------------------
+	// The bulk "Enable all writes" control.
+	// ---------------------------------------------------------------------------------------
+
+	/**
+	 * The write-side counterpart. Same shape of pin as the reads control above: the behaviour
+	 * itself is JS, so what is fixed here is the contract the JS binds to.
+	 *
+	 * It is not rendered in every section - a section with no ordinary write has nothing to
+	 * offer - so this asserts it appears at all and never outnumbers the sections, rather than
+	 * matching the enable/disable-all count the way the reads test can.
+	 */
+	public function test_the_abilities_tab_offers_enable_all_writes(): void {
+		$this->acting_as( 'administrator' );
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'aafm-enable-writes', $html );
+		$this->assertStringContainsString( 'Enable all writes', $html );
+		$this->assertLessThanOrEqual(
+			substr_count( $html, 'aafm-section-toggle-all' ),
+			substr_count( $html, 'aafm-enable-writes' ),
+			'The writes control renders at most once per section, beside the other bulk controls.'
+		);
+		// The label alone reads as "everything that changes the site". The caveat is what stops
+		// that, and it is the button's aria-describedby target, so losing it costs a sighted
+		// reader the disclosure and a screen reader user the announcement.
+		$this->assertStringContainsString( 'this leaves deletes and high-risk abilities switched off', $html );
+		$this->assertMatchesRegularExpression(
+			'/<button[^>]*aafm-enable-writes[^>]*aria-describedby="aafm-write-note-[a-z0-9_-]+"/',
+			$html,
+			'The caveat has to be wired to the button, not just printed near it.'
+		);
+	}
+
+	/**
+	 * Read-only mode locks every write, so every write row renders a padlock and no checkbox.
+	 * A button offered there could not tick anything - the silent no-op that looks like success.
+	 */
+	public function test_no_write_control_renders_while_read_only_mode_is_on(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_read_only_mode', true );
+		ob_start();
+		aafm_render_abilities_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'aafm-enable-writes', $html );
+		// The reads control is unaffected - reads are exactly what the mode still allows.
+		$this->assertStringContainsString( 'aafm-enable-reads', $html );
+	}
+
+	/**
+	 * The reason the control needs a second axis at all. Every built-in high-risk ability is
+	 * risk="write", so a data-risk="write" sweep would tick refunds, order-status changes,
+	 * coupons and tax rates the moment the operator unlocked the category. If someone ever
+	 * reclassifies one of these to "destructive" this test says so out loud rather than letting
+	 * the exclusion quietly become belt-and-braces.
+	 */
+	public function test_every_high_risk_builtin_is_a_write_so_risk_alone_cannot_exclude_them(): void {
+		$catalog = aafm_get_abilities_registry_full();
+
+		foreach ( aafm_high_risk_abilities_builtin() as $name ) {
+			$this->assertArrayHasKey( $name, $catalog, "High-risk ability missing from the catalog: $name" );
+			$this->assertSame(
+				'write',
+				(string) ( $catalog[ $name ]['risk'] ?? '' ),
+				"$name is high-risk and risk=write, which is exactly why the write sweep needs data-high-risk."
+			);
+		}
+	}
+
+	/**
+	 * The row marks its own high-risk membership, so the binding reads a server-rendered fact
+	 * instead of inferring one. Exercised through the public filter because that is the widest
+	 * door into the set - if the attribute tracks the filter it tracks the built-ins too.
+	 */
+	public function test_a_high_risk_row_is_marked_so_the_write_sweep_can_exclude_it(): void {
+		$this->assertStringNotContainsString( 'data-high-risk', $this->render_row( 'aafm/create-post' ) );
+
+		add_filter(
+			'aafm_high_risk_abilities',
+			static function (): array {
+				return array( 'aafm/create-post' );
+			}
+		);
+
+		$marked = $this->render_row( 'aafm/create-post' );
+		$this->assertStringContainsString( 'data-risk="write"', $marked );
+		$this->assertStringContainsString( 'data-high-risk="1"', $marked );
+	}
+
+	public function test_the_write_bulk_control_selector_matches_the_rendered_markup(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a local plugin asset off disk, never a remote URL.
+		$js = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/admin/assets/admin.js' );
+
+		$this->assertStringContainsString( "querySelectorAll( '.aafm-enable-writes' )", $js );
+		$this->assertStringContainsString(
+			'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])',
+			$js,
+			'The write sweep must scope to non-destructive, non-high-risk writes through the attributes the renderer emits.'
+		);
+		// Additive, never a toggle: it may tick a box, it may never untick one. An operator who
+		// clicks it must not lose a write they had already enabled by hand.
+		$this->assertStringNotContainsString( 'b.checked = enabling', $this->write_binding_body( $js ) );
+		$this->assertStringContainsString( 'b.checked = true', $this->write_binding_body( $js ) );
+	}
+
+	/**
+	 * The source of #bindEnableWrites, so the additive assertions above cannot accidentally pass
+	 * by matching one of the toggle bindings elsewhere in the same file.
+	 *
+	 * @param string $js The admin.js source.
+	 * @return string
+	 */
+	private function write_binding_body( string $js ): string {
+		$start = strpos( $js, '#bindEnableWrites() {' );
+		$this->assertNotFalse( $start, 'admin.js no longer defines #bindEnableWrites().' );
+		$end = strpos( $js, '#bindSectionToggles() {', $start );
+		$this->assertNotFalse( $end, 'Could not bound the #bindEnableWrites() body.' );
+
+		return substr( $js, $start, $end - $start );
+	}
+
 	/**
 	 * Render one bridge group and return its markup.
 	 *

@@ -940,6 +940,14 @@
 		.aafm-section-toggle {
 			padding-inline: 20px;
 			margin-block: 12px 0;
+
+			/* Caveat for "Enable all writes". Sits inline after the buttons and wraps below them
+			   on a narrow screen; it is the button's aria-describedby target, so it must stay
+			   rendered and readable rather than being hidden at any breakpoint. */
+			> .aafm-section-toggle-note {
+				font-size: 12px;
+				color: var(--aafm-text-subtle);
+			}
 		}
 
 		/* Each card is a native <details> accordion. The <summary> is the card head; clicking

@@ -1549,12 +1549,45 @@ function aafm_render_abilities_tab(): void {
 				break;
 			}
 		}
+		// "Enable all writes" only renders where it can actually do something. A section with no
+		// ordinary write row, or one where every write is currently locked (read-only mode on, or
+		// the high-risk category shut), would render a button guaranteed to tick nothing - the
+		// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
+		// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
+		// predicate lets through but this control still refuses to touch.
+		$has_enableable_write = false;
+		foreach ( $tab_rows as $ability ) {
+			$write_name = (string) ( $ability['name'] ?? '' );
+			if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
+				continue;
+			}
+			if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+				continue;
+			}
+			$has_enableable_write = true;
+			break;
+		}
+
+		// The note is not decoration: "writes" on its own reads as "everything that changes the
+		// site", and this control deliberately stops short of deletes and the high-risk category.
+		// aria-describedby hangs it off the button so a screen reader announces the caveat with the
+		// control rather than only sighted users seeing it.
+		$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
+
 		printf(
-			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button></p>',
+			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
 			esc_attr( $slug ),
 			$has_destructive ? ' data-has-destructive="1"' : '',
 			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' )
+			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
+			$has_enableable_write
+				? sprintf(
+					' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
+					esc_attr( $write_note_id ),
+					esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
+					esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+				)
+				: ''
 		);
 
 		if ( 'content' === $slug ) {
@@ -1648,7 +1681,19 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 
 	// data-risk is what the "Enable all reads" bulk control scopes on, and it mirrors the attribute
 	// the Integrations rows already carry so one JS binding serves both tabs.
-	printf( '<div class="aafm-ability-row" data-risk="%s">', esc_attr( $risk ) );
+	//
+	// data-high-risk is the second axis "Enable all writes" has to scope on, and it exists because
+	// risk alone cannot express it: every one of the nine built-in high-risk abilities is
+	// risk="write" (see aafm_high_risk_abilities_builtin()), so a plain data-risk="write" sweep
+	// would tick refunds, order-status changes, coupons and tax rates the moment the operator
+	// unlocked the category. While the category is locked there is no checkbox to sweep at all;
+	// this attribute covers the unlocked window, which is a supported configuration. Emitted as a
+	// server-rendered fact for the same reason data-risk is, rather than guessed from the badge.
+	printf(
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
+		esc_attr( $risk ),
+		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : ''
+	);
 
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
 	// this just stops the screen offering a switch that the registration walk would ignore. Native

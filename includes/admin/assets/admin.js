@@ -50,6 +50,7 @@
 			this.#bindSubjectTabs();
 			this.#bindSectionToggles();
 			this.#bindEnableReads();
+			this.#bindEnableWrites();
 			this.#bindIntegrationToggles();
 			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
@@ -513,6 +514,48 @@
 					}
 					const boxes = scope.querySelectorAll(
 						'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]:not([disabled]), .aafm-ability-row[data-risk="read"] input[type="checkbox"][name="bridged_abilities[]"]:not([disabled])'
+					);
+					boxes.forEach( ( b ) => {
+						b.checked = true;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * "Enable all writes" on the Abilities tab.
+		 *
+		 * The write-side counterpart to #bindEnableReads, and it exists because the bulk
+		 * affordance used to cover only the safe half: an operator who wanted reads plus a
+		 * couple of writes had to tick each write by hand, which is how a site ends up with
+		 * "Upload media" on and "Update media" off and an agent that cannot set alt text.
+		 *
+		 * Scoped the same way and additive the same way - it ticks, never unticks, so it can
+		 * never silently switch off a working configuration, and unticking undoes it.
+		 *
+		 * What counts as a write is read off the server-rendered row, never guessed: data-risk
+		 * is exactly "write", so destructive rows are excluded by class, and data-high-risk is
+		 * absent, so the nine money-and-identity abilities stay out even after the operator
+		 * unlocks that category (all nine are risk="write", so risk alone would sweep them in).
+		 * A locked row emits no checkbox at all, so read-only mode and a shut high-risk floor
+		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
+		 * which is why this control needs no confirm where "Enable all" does.
+		 *
+		 * Only the Abilities tab renders the button today, so only aafm_abilities[] is matched;
+		 * the scope roots mirror #bindEnableReads so the binding still works if the control is
+		 * ever placed on an integration card.
+		 */
+		#bindEnableWrites() {
+			document.querySelectorAll( '.aafm-enable-writes' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const scope = btn.closest(
+						'.aafm-subject-panel, .aafm-integration-card'
+					);
+					if ( ! scope ) {
+						return;
+					}
+					const boxes = scope.querySelectorAll(
+						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
 					);
 					boxes.forEach( ( b ) => {
 						b.checked = true;

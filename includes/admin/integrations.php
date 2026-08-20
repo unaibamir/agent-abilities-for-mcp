@@ -484,9 +484,16 @@ function aafm_render_integration_ability_row( array $ability, array $enabled, ar
 	// "checkbox". sanitize_key keeps the slug DOM-safe (ability names hold a slash).
 	$title_id = 'aafm-int-ability-title-' . sanitize_key( $name );
 
+	// data-high-risk mirrors the Abilities tab so one JS binding can scope on it. It matters most
+	// here: all nine built-in high-risk abilities are WooCommerce writes and render on this tab, so
+	// this is the attribute that keeps a write-scoped bulk control off refunds, order status,
+	// coupons and tax rates once the operator unlocks the category. See the fuller note in
+	// aafm_render_ability_row(). Bridge rows deliberately carry no equivalent: the high-risk floor
+	// is native-only and never enforced against a bridged slug.
 	printf(
-		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s%3$s>',
 		esc_attr( $risk ),
+		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : '',
 		$disabled ? ' aria-disabled="true"' : ''
 	);
 

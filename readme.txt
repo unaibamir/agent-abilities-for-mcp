@@ -8,7 +8,7 @@ Stable tag: 1.6.3
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-WordPress MCP server for Claude and ChatGPT. Per-capability permission controls, everything off by default, and a full audit log.
+WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
 
 == Description ==
 
@@ -23,6 +23,12 @@ Prefer to watch first? Here is a short walkthrough of the plugin in action.
 [youtube https://www.youtube.com/watch?v=Raih7X4QgP0]
 
 **Quick links:** [Website](https://agentabilitieswp.com/) | [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [Prompt Library](https://agentabilitieswp.com/prompts/) | [GitHub](https://github.com/unaibamir/agent-abilities-for-mcp)
+
+= What is a WordPress MCP server? =
+
+A WordPress MCP server lets an AI assistant work on your site directly, instead of you copying text back and forth between a chat window and wp-admin. The Model Context Protocol (MCP) is an open standard that tells an AI client which tools a service offers and how to call them. Put an MCP server on WordPress and Claude, ChatGPT, or any other MCP client can list your posts, draft one, sort your media library, or update a WooCommerce order.
+
+An MCP server hands a language model the ability to change your live site, so how far it can reach and whether you can audit it afterwards both matter. Agent Abilities for MCP ships its whole catalog switched off, re-checks the bound user's capabilities before each call, and writes every call to an audit log in your own database.
 
 = 🛡️ Permission controls and an audit log on every call =
 
@@ -76,6 +82,18 @@ One limit worth knowing, because it is the other plugin's code doing the work an
 
 So you are not limited to the integrations shipped here. Any plugin that speaks the Abilities API can be handed to your agent on your terms, and you can flip a whole plugin's set on or off at once. For fleets or record-keeping, the bundled WP-CLI command `wp aafm catalog export` prints a site's discoverable abilities as JSON.
 
+= Connect Claude to WordPress =
+
+To connect Claude to WordPress, install the plugin, switch on the abilities you want Claude to have, then copy your site's MCP endpoint from the Connection tab and add it to Claude as a custom connector. You approve the sign-in once in the browser over OAuth. There is no API key to paste into a config file and nothing to install on your machine.
+
+The claude.ai web app and Claude Desktop share that one connector flow. Claude Code connects from the command line instead. Either way Claude acts as the WordPress user who approved it, so it can only do what that account could do on its own, and every call it makes is written to the audit log before it runs.
+
+= Connect ChatGPT to WordPress =
+
+To connect ChatGPT to WordPress, turn on Developer Mode in ChatGPT under Settings, then Connectors, then Advanced. Add your site's MCP endpoint as a custom connector and approve it once over OAuth. Custom connectors are a beta feature on ChatGPT's paid plans, which is ChatGPT's limit and not the plugin's.
+
+After that, ChatGPT reaches only the abilities you switched on, acting as the WordPress user that approved the connection. Switch one off and it is gone from what ChatGPT can see on its next call.
+
 = 🔌 Supported AI platforms =
 
 Your AI client connects in to your site over MCP. The plugin never calls out to any AI provider, so there is no model API key to add and nothing extra to pay for.
@@ -120,6 +138,10 @@ For a full walkthrough, see the [getting started guide](https://agentabilitieswp
 = How do I connect an AI agent to my WordPress site? =
 
 Install and activate the plugin, then open the Agent Abilities for MCP screen and turn on the abilities you want, since everything starts off. Copy your site's MCP endpoint from the Connection tab and add it to your AI client. The simplest path is OAuth: paste the endpoint and approve the connection once in the browser. If your client cannot use OAuth, point a dedicated low-privilege user at an Application Password instead. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI all connect today, some directly and some through the mcp-remote bridge that runs on your own machine.
+
+= How do I connect Claude to WordPress? =
+
+Install the plugin, enable the abilities you want on the Abilities tab, then copy your MCP endpoint from the Connection tab and add it to Claude as a custom connector. Approve the sign-in once in the browser. The claude.ai web app and Claude Desktop use that same flow; Claude Code connects from the command line.
 
 = Does the agent get admin access? =
 
@@ -184,6 +206,10 @@ Any MCP client that can reach your site's endpoint. With OAuth you paste the end
 = Does it work with ChatGPT? =
 
 Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the mcp-remote bridge that runs on your own machine.
+
+= Can ChatGPT edit my WordPress site? =
+
+Only the parts you allow. ChatGPT reaches your site through a custom connector you add yourself, it acts as the WordPress user that approved the connection, and it sees nothing beyond the abilities you switched on. Every write is capability-checked before it runs and recorded in the audit log, and you can stop all writes at once with read-only mode.
 
 = I'm on Windows and the config won't start. =
 

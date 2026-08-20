@@ -1,0 +1,24 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.unaibamir/agent-abilities-for-mcp",
+  "title": "Agent Abilities for MCP",
+  "description": "Self-hosted WordPress MCP server with per-capability permission controls and a full audit log.",
+  "version": "1.7.0",
+  "websiteUrl": "https://agentabilitieswp.com",
+  "repository": {
+    "url": "https://github.com/unaibamir/agent-abilities-for-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{hostname}/wp-json/agent-abilities-for-mcp/mcp",
+      "variables": {
+        "hostname": {
+          "description": "Your WordPress site host, e.g. example.com. The plugin exposes its MCP endpoint at /wp-json/agent-abilities-for-mcp/mcp. Authenticate over OAuth (approve once in the browser, no secret in your config file) or an Application Password. Nothing is exposed until you enable abilities in wp-admin.",
+          "isRequired": true
+        }
+      }
+    }
+  ]
+}

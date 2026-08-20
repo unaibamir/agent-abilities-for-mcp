@@ -579,15 +579,51 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 		return $invalid_grant;
 	}
 
+	global $wpdb;
+
+	// Consume the code and mint the token pair as one atomic unit. aafm_oauth_redeem_code()'s
+	// single UPDATE still enforces one-time use under concurrency - its row lock blocks a second
+	// redeemer until this transaction resolves - so the transaction only governs whether a LATER
+	// failure keeps or releases the consumption. An invalid presentation (revoked consent, wrong
+	// PKCE verifier) deliberately COMMITs the burn so the code cannot be replayed or brute-forced;
+	// a token-mint failure ROLLBACKs so a transient DB error does not permanently burn an
+	// otherwise-valid, unexpired code and force the user back through the browser. This mirrors
+	// aafm_oauth_rotate_refresh(), including the nesting bound that function's comment now states
+	// in full: START TRANSACTION implicitly commits an already-open transaction rather than
+	// nesting inside it, so the claim that used to sit here about it being a harmless no-op under
+	// the test harness was false. Read that comment before changing either site; both carry the
+	// same shape and the fix, if one is ever worth making, belongs to both at once.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( 'START TRANSACTION' );
+
 	// Atomic one-time redemption, with the client_id + redirect_uri binding
 	// enforced inside aafm_oauth_redeem_code().
 	$row = aafm_oauth_redeem_code( $code, $client_id, $redirect_uri );
 	if ( is_wp_error( $row ) ) {
+		// Nothing was consumed (0 rows affected), so rolling back is a clean no-op.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'ROLLBACK' );
 		return $invalid_grant;
 	}
 
-	// PKCE: a failed verifier burns the (already-consumed) code, which is safe.
+	// Re-check that the user still consents to this client at REDEMPTION, not only at authorize
+	// time. An admin can revoke the grant in the window between the authorize GET (which minted
+	// this code after passing the consent check) and this token call, and the revoke handler can
+	// only delete codes that already exist - a code minted just after its aafm_oauth_delete_consent()
+	// step slips through. Without this, that orphaned code would redeem into a usable token after
+	// the UI reported the revoke landed. The code is already consumed above (a legitimate one-time
+	// use), so COMMIT the burn and yield invalid_grant.
+	if ( ! aafm_oauth_has_consent( (int) $row['wp_user_id'], (string) $row['client_id'] ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'COMMIT' );
+		return $invalid_grant;
+	}
+
+	// PKCE: a failed verifier burns the (already-consumed) code, which is safe and stops a verifier
+	// brute-force, so COMMIT the consumption before rejecting.
 	if ( ! aafm_pkce_verify( $code_verifier, (string) $row['code_challenge'] ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'COMMIT' );
 		return $invalid_grant;
 	}
 
@@ -602,14 +638,22 @@ function aafm_oauth_rest_token_authorization_code( WP_REST_Request $request ): W
 		)
 	);
 
-	// A mint failure (the row never persisted) is a server_error, not a fake token response.
+	// A mint failure (the row never persisted) is a server_error, not a fake token response. Roll
+	// back so the consumption is undone and an unexpired code stays redeemable on a retry rather
+	// than being permanently burned by a transient error.
 	if ( is_wp_error( $tokens ) ) {
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		$wpdb->query( 'ROLLBACK' );
 		return aafm_oauth_rest_protocol_error(
 			'server_error',
 			__( 'The access token could not be issued.', 'agent-abilities-for-mcp' ),
 			500
 		);
 	}
+
+	// The token pair persisted: commit the consumption + mint together.
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$wpdb->query( 'COMMIT' );
 
 	// Audit the mint: an access token now exists for this user + client. The raw token is never
 	// logged - only the actor and client, so the token's life is traceable from here.

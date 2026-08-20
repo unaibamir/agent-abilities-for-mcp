@@ -129,6 +129,17 @@ function aafm_hard_blocked_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
+	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
+	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
+	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
+	// candidate carrying trailing whitespace missed every check here and still landed on the real
+	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
+	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
+	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
+	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
+	// only expose, and both the membership test and the anchored regex can only gain matches. No
+	// key that is blocked today becomes allowed.
+	$key = trim( $key );
 	if ( is_protected_meta( $key, 'post' ) ) {
 		return true;
 	}
@@ -267,6 +278,257 @@ function aafm_validate_meta_key( string $key ) {
 }
 
 /**
+ * Native abilities whose removals bypass the Trash and cannot be undone.
+ *
+ * The registry's own risk annotation cannot answer this. Every ability here is
+ * risk "destructive", but so are aafm/trash-post, aafm/trash-page and
+ * aafm/delete-block, whose removals ARE recoverable, and so are two abilities
+ * that delete nothing at all. Recoverability is a separate axis from risk, and
+ * this is where it is recorded.
+ *
+ * aafm/delete-* and aafm/trash-* are a deliberate two-ability split, so this
+ * list is a description of what the plugin already does, never a licence to
+ * change it. DeleteGuaranteeTest fails if a destructive ability is ever added
+ * without being classified on this axis, so a new permanent delete cannot
+ * quietly inherit the recoverable side.
+ *
+ * Deliberately NOT filterable. Anything destructive that this list does not name
+ * already resolves to permanent (see aafm_enabled_can_delete_permanently), so a
+ * hook to add to it would buy nothing; the two filters that exist are on the
+ * lists that soften the warning, where silence has to mean the safe answer.
+ *
+ * @return list<string>
+ */
+function aafm_permanent_delete_abilities(): array {
+	return array(
+		'aafm/delete-post',
+		'aafm/delete-page',
+		'aafm/delete-comment',
+		'aafm/delete-media',
+		'aafm/delete-user',
+		'aafm/delete-revision',
+		'aafm/delete-menu',
+		'aafm/delete-menu-item',
+		'aafm/delete-post-meta',
+		'aafm/delete-term-meta',
+		'aafm/delete-user-meta',
+		'aafm/wc-delete-product',
+		'aafm/wc-delete-product-variation',
+	);
+}
+
+/**
+ * Destructive abilities whose removals are recoverable.
+ *
+ * Kept beside aafm_permanent_delete_abilities() so the classification test can
+ * prove every destructive ability sits on exactly one side.
+ *
+ * @return list<string>
+ */
+function aafm_recoverable_delete_abilities(): array {
+	$slugs = array(
+		'aafm/trash-post',
+		'aafm/trash-page',
+		'aafm/delete-block',
+	);
+
+	/**
+	 * Filters the abilities whose removals are recoverable.
+	 *
+	 * The escape hatch for a destructive ability added through the
+	 * aafm_abilities_registry filter. Without it such an ability resolves to
+	 * permanent, because that is the only honest default for an implementation
+	 * this plugin did not write. Declaring it here is a claim about that
+	 * ability's own behaviour, and it softens what the consent screen tells a
+	 * site owner, so only add a slug whose removals really are undoable.
+	 *
+	 * @param list<string> $slugs Ability names whose removals are recoverable.
+	 */
+	return array_values( array_unique( array_map( 'strval', (array) apply_filters( 'aafm_recoverable_delete_abilities', $slugs ) ) ) );
+}
+
+/**
+ * Destructive abilities that remove nothing at all.
+ *
+ * Risk and removal are not the same question. aafm/create-user is destructive
+ * because it can overwrite an existing account's password, and
+ * aafm/update-site-settings because it overwrites options; neither deletes
+ * anything, so recoverability does not apply to either and neither should make
+ * the consent screen warn about permanent removals.
+ *
+ * This used to live only inside DeleteGuaranteeTest, which was fine while the
+ * test was the only reader. The runtime classifier needs the same answer now,
+ * and two copies of one fact drift, so the list moved here and the test reads
+ * it back.
+ *
+ * @return list<string>
+ */
+function aafm_non_removal_destructive_abilities(): array {
+	$slugs = array(
+		'aafm/create-user',
+		'aafm/update-site-settings',
+	);
+
+	/**
+	 * Filters the destructive abilities that remove nothing.
+	 *
+	 * The companion escape hatch to aafm_recoverable_delete_abilities: same
+	 * purpose, for an ability that performs no removal in the first place rather
+	 * than a reversible one.
+	 *
+	 * @param list<string> $slugs Ability names that delete nothing.
+	 */
+	return array_values( array_unique( array_map( 'strval', (array) apply_filters( 'aafm_non_removal_destructive_abilities', $slugs ) ) ) );
+}
+
+/**
+ * The risk annotations that mean "this ability removes nothing".
+ *
+ * The registry's whole vocabulary is three values - read, write, destructive -
+ * verified against every literal in includes/ and against all 153 rows of the
+ * live catalog. These are the two that do not remove.
+ *
+ * The delete guarantee tests membership of THIS list rather than testing for
+ * 'destructive', and the direction is the point. Matching the dangerous value
+ * was a denylist, and a denylist only covers what its author thought of: a
+ * third party who writes 'destrutive', or invents 'permanent-delete' because it
+ * sounds stronger, sailed straight through it and kept the Trash promise while
+ * deleting for good. Naming the safe values instead means a typo, an invented
+ * word, a case difference and a stray space all land on the safe side of the
+ * question, which is the permanent side.
+ *
+ * Deliberately not filterable. A hook here would let a third party re-open the
+ * hole this closes by declaring its own value safe wholesale; the two
+ * slug-scoped filters above are the sanctioned way for an author to say
+ * something weaker about one specific ability.
+ *
+ * @return list<string>
+ */
+function aafm_non_destructive_risk_values(): array {
+	return array( 'read', 'write' );
+}
+
+/**
+ * Whether anything the operator has switched on can remove content for good.
+ *
+ * Reads the ENABLED set, not the catalog, so the answer describes this site as
+ * configured right now. aafm_get_enabled_abilities() has already applied the
+ * read-only and high-risk floors, so a site in read-only mode correctly answers
+ * false: nothing there can delete anything at all.
+ *
+ * A bridged ability counts whenever the host plugin annotates it destructive.
+ * Its implementation belongs to that plugin, so we cannot promise its removals
+ * land anywhere recoverable, and claiming otherwise is the defect this guards.
+ *
+ * The same rule now covers a native ability added through the
+ * aafm_abilities_registry filter (R2-11). The three classification lists name
+ * abilities this plugin ships, so a third-party destructive one appeared in none
+ * of them, and reading that silence as "not a permanent delete" reproduced the
+ * original false promise through a door the lists cannot see. Unknown plus
+ * destructive therefore resolves to permanent, and the two filters above are how
+ * an author who knows better says so.
+ *
+ * The risk check is an ALLOWLIST: only a recognised non-destructive annotation
+ * (aafm_non_destructive_risk_values) clears the warning. Everything else lands
+ * on permanent together - 'destructive', a blank value, no annotation at all, a
+ * typo like 'destrutive', an invented word like 'permanent-delete'. Asking
+ * whether the value is known-safe rather than whether it is known-dangerous is
+ * what stops a misspelling from reading as a promise (R3-4).
+ *
+ * All of those resolve the same way for one reason: the two ways of being wrong
+ * are not worth the same. Promising "removals are recoverable" about an ability
+ * that deletes for good is a false reassurance, while warning about permanence
+ * on a site where nothing permanent is enabled is a false alarm. On the screen
+ * where someone is about to hand over an access token, the reassurance is the
+ * far more expensive mistake, and it is the reason B-08 exists. The remedy for
+ * the false alarm is also good: annotate risk with a recognised value, which the
+ * Abilities API expects anyway, or use one of the two filters. Every ability
+ * this plugin ships declares one, so this can only ever fire for a third-party
+ * row.
+ *
+ * Deliberately scoped to this one question. catalog.php defaults a missing risk
+ * to 'write' and the integration manifest defaults it to 'read', which does not
+ * agree with failing closed here - those feed different decisions, and
+ * rationalising all three is its own job, not a thing to do on the way past.
+ *
+ * @return bool
+ */
+function aafm_enabled_can_delete_permanently(): bool {
+	$permanent   = aafm_permanent_delete_abilities();
+	$recoverable = aafm_recoverable_delete_abilities();
+	$non_removal = aafm_non_removal_destructive_abilities();
+	$registry    = aafm_get_abilities_registry();
+
+	foreach ( aafm_get_enabled_abilities() as $name ) {
+		// Checked before the risk annotation rather than folded into it: these thirteen are
+		// classified by hand precisely because the annotation cannot answer this question, so a
+		// wrong or missing risk on one of them must not be able to drop it off the permanent side.
+		if ( in_array( $name, $permanent, true ) ) {
+			return true;
+		}
+		if ( in_array( $name, $recoverable, true ) || in_array( $name, $non_removal, true ) ) {
+			continue;
+		}
+		// Membership of the safe list, not absence from a dangerous one. Only a recognised
+		// non-destructive annotation clears the warning; 'destructive', a blank, a missing key, a
+		// typo and an invented value all fall through to permanent together, because none of them
+		// is positive evidence that the ability removes nothing.
+		$risk = (string) ( $registry[ $name ]['risk'] ?? '' );
+		if ( ! in_array( $risk, aafm_non_destructive_risk_values(), true ) ) {
+			return true;
+		}
+	}
+
+	if ( ! function_exists( 'aafm_get_enabled_bridged_abilities' ) || ! function_exists( 'wp_has_ability' ) ) {
+		return false;
+	}
+
+	foreach ( aafm_get_enabled_bridged_abilities() as $slug ) {
+		// wp_has_ability() first: an enabled slug whose host plugin is inactive is an ordinary
+		// state, and wp_get_ability() would raise _doing_it_wrong for it on every consent render.
+		if ( ! wp_has_ability( $slug ) ) {
+			continue;
+		}
+		$ability = wp_get_ability( $slug );
+		if ( ! $ability instanceof WP_Ability ) {
+			continue;
+		}
+		if ( ! empty( aafm_bridge_risk( $ability )['destructive'] ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * The delete guarantee, worded to match what this site can actually do.
+ *
+ * The consent screen and the Quick Connect wizard both used to state "Deletes go
+ * to Trash. Removals are recoverable, not permanent" unconditionally, while
+ * thirteen native abilities and any destructive bridged one delete outright. A
+ * site owner reading that sentence is forty seconds from approving a token, so
+ * it has to be true of the configuration they are approving.
+ *
+ * @return array{0:string,1:string,2:string} Bold lead, description, short chip label.
+ */
+function aafm_delete_guarantee(): array {
+	if ( aafm_enabled_can_delete_permanently() ) {
+		return array(
+			__( 'Some removals are permanent.', 'agent-abilities-for-mcp' ),
+			__( 'Abilities that bypass the Trash say so in their own description.', 'agent-abilities-for-mcp' ),
+			__( 'Some removals are permanent', 'agent-abilities-for-mcp' ),
+		);
+	}
+
+	return array(
+		__( 'Deletes go to Trash.', 'agent-abilities-for-mcp' ),
+		__( 'Removals are recoverable, not permanent.', 'agent-abilities-for-mcp' ),
+		__( 'Deletes go to Trash', 'agent-abilities-for-mcp' ),
+	);
+}
+
+/**
  * Coerce + sanitize a meta value for writing. Scalar-only: arrays/objects are refused so
  * the agent can never store a serialized structure. Strings are plain-text sanitized (meta
  * is not rendered as post content); the result is then run through sanitize_meta so any
@@ -285,7 +547,7 @@ function aafm_sanitize_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_meta_value_invalid', __( 'Only text, number, or boolean meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'post', 'post' );
 	if ( ! is_scalar( $value ) ) {
@@ -417,7 +679,7 @@ function aafm_sanitize_term_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_term_meta_value_invalid', __( 'Only text, number, or boolean term meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'term', 'term' );
 	if ( ! is_scalar( $value ) ) {
@@ -447,6 +709,17 @@ function aafm_hard_blocked_user_meta_key( string $key ): bool {
 	if ( '' === trim( $key ) ) {
 		return true;
 	}
+	// Every check below is byte-exact or end-anchored; MySQL's meta_key comparison is neither.
+	// Under the PAD SPACE, case-insensitive collation WordPress gives that column, update_metadata's
+	// `WHERE meta_key = %s` treats 'wp_capabilities ' and 'wp_capabilities' as the same row, so a
+	// candidate carrying trailing whitespace missed every check here and still landed on the real
+	// capability row. Candidates are derived from a field DEFINITION rather than from caller input,
+	// so this needs a site-side field named with stray whitespace, which is why it is not remotely
+	// reachable. Comparing on the trimmed copy is one-directional by construction: the blank case
+	// has already returned above, is_protected_meta() reads a LEADING underscore that trimming can
+	// only expose, and both the membership test and the anchored regex can only gain matches. No
+	// key that is blocked today becomes allowed.
+	$key = trim( $key );
 	if ( is_protected_meta( $key, 'user' ) ) {
 		return true;
 	}
@@ -639,7 +912,7 @@ function aafm_sanitize_user_meta_value( string $key, $value ) {
 		return new WP_Error( 'aafm_user_meta_value_invalid', __( 'Only text, number, or boolean user meta values are supported.', 'agent-abilities-for-mcp' ) );
 	}
 	if ( is_string( $value ) ) {
-		$value = sanitize_text_field( $value );
+		$value = aafm_sanitize_plain_text( $value );
 	}
 	$value = sanitize_meta( $key, $value, 'user', 'user' );
 	if ( ! is_scalar( $value ) ) {
@@ -1472,9 +1745,9 @@ function aafm_media_item_payload( WP_Post $attachment ): array {
 			// wp_get_attachment_image_src() never returns a truthy value for a non-image
 			// attachment (PDF, zip, audio), so $sizes stays array() and encodes as [] for every
 			// non-image while an image encodes as {} - the same class as issue #81. Nothing
-			// rejects this today because media.php:248 and :780 declare 'media' as a bare
-			// type:object with no nested properties, but fix it anyway: the moment anyone adds
-			// a 'sizes' property to that schema, this becomes a live violation.
+			// rejects this today because the three 'media' => object output schemas in media.php
+			// declare it as a bare type:object with no nested properties, but fix it anyway: the
+			// moment anyone adds a 'sizes' property to that schema, this becomes a live violation.
 			'sizes'       => array() === $sizes ? (object) $sizes : $sizes,
 		)
 	);

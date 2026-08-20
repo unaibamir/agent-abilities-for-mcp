@@ -192,6 +192,226 @@ function aafm_release_rate_memo_on_aborted_tool_call( $args, $tool_name = '', $m
 }
 
 /**
+ * The property names an ability's own input schema marks required.
+ *
+ * Read off the ability's declared schema, never from a list kept here, so this cannot drift from
+ * what the ability actually asks for and cannot be wrong for one ability while right for the rest.
+ * Only the JSON Schema draft-4 form is read - a `required` array on the object - which is the form
+ * every ability in this plugin uses and the same one core reads first at rest-api.php:2387. The
+ * older per-property `required => true` spelling is deliberately not read: no ability here uses it,
+ * and a bridged wrapper carrying a foreign schema that does simply gets today's behaviour rather
+ * than a rule nobody has measured against that vendor.
+ *
+ * @param array<string,mixed> $args Ability args as registered.
+ * @return array<int,string> Required property names, possibly empty.
+ */
+function aafm_required_input_properties( array $args ): array {
+	$schema = isset( $args['input_schema'] ) && is_array( $args['input_schema'] ) ? $args['input_schema'] : array();
+	if ( ! isset( $schema['required'] ) || ! is_array( $schema['required'] ) ) {
+		return array();
+	}
+
+	$required = array();
+	foreach ( $schema['required'] as $property ) {
+		$property = is_string( $property ) ? $property : '';
+		if ( '' !== $property ) {
+			$required[] = $property;
+		}
+	}
+	return $required;
+}
+
+/**
+ * The refusal for a call that omitted an argument the ability's schema requires.
+ *
+ * A WP_Error rather than false, which is the whole point and is worth being precise about, because
+ * one line down the crash path deliberately returns false for the opposite reason.
+ *
+ * WHAT THIS FIXES. Core runs the two checks in the right order already: WP_Ability::execute()
+ * validates input and only then checks permissions (class-wp-ability.php), and
+ * rest_validate_object_value_from_schema() does enforce `required` (rest-api.php:2387-2396). The
+ * MCP adapter does not. ToolsHandler calls the tool's check_permission() BEFORE execute() and turns
+ * any non-true into the literal string "Permission denied", so a call that simply forgot an
+ * argument never reaches validation and is answered as though it were a capability decision. Fifty
+ * two of this plugin's abilities did that, measured by calling each raw permission callback with an
+ * empty input while acting as an administrator, so that a denial could only come from the missing
+ * argument. They are the ones whose callback resolves the object it is asked about: no post_id
+ * means get_post( 0 ), which is null, which is false.
+ *
+ * WHY THAT IS WORTH FIXING AT ALL, given it moves no data. This plugin's whole proposition is that
+ * an agent reads the error and corrects itself. "Permission denied" tells an agent to stop and
+ * fetch a human. "post_id is required" tells it to fix the call and retry. One of those burns a
+ * loop that would otherwise heal.
+ *
+ * FAIL-CLOSED. A WP_Error is a denial on every path that can see it: the Abilities API admits only
+ * a strict true, the adapter treats anything else as a refusal, and this returns before the
+ * permission callback is consulted at all, so it can never turn into an allow. It also cannot reach
+ * core's execute(), which refuses to leak a permission error and would _doing_it_wrong() over one -
+ * core validates first, so a call missing a required property is already rejected there before
+ * permissions are consulted.
+ *
+ * WHY THE MESSAGE IS SAFE, unlike the crashed-callback message a few lines below. That one is
+ * vendor text of unknown provenance and is deliberately swallowed so the adapter substitutes its
+ * own wording. This one is built here out of property NAMES taken from the ability's own declared
+ * schema. Those are plugin constants: identical on every install, published in the plugin source
+ * and in the tool's advertised inputSchema, and independent of anything about the site. Nothing
+ * about the caller's data, the site's configuration, or the reason they lack a capability can reach
+ * it. That is the same distinction the ACF floors draw between a protected meta key, which says
+ * something about the site and is refused generically, and a caller's own address, which does not.
+ *
+ * The error CODE matches the one core uses for the same condition, so a client keying on codes sees
+ * one answer whichever path answered it.
+ *
+ * @param string            $name    Ability name.
+ * @param array<int,string> $missing The required properties the call omitted.
+ * @return \WP_Error
+ */
+function aafm_missing_input_error( string $name, array $missing ): WP_Error {
+	return new WP_Error(
+		'ability_invalid_input',
+		sprintf(
+			/* translators: 1: ability name, 2: comma-separated list of required property names. */
+			__( 'Ability "%1$s" has invalid input. These required properties are missing: %2$s', 'agent-abilities-for-mcp' ),
+			$name,
+			implode( ', ', $missing )
+		)
+	);
+}
+
+/**
+ * The WordPress-reserved post-meta keys an agent reaches for by name, and the ability that
+ * actually does the job for each operation.
+ *
+ * Every key here is protected meta in stock WordPress, so aafm_hard_blocked_meta_key() refuses
+ * it for an administrator exactly as it refuses it for a subscriber. That is what makes naming
+ * the alternative safe: the answer depends on the key alone, never on who asked or on how the
+ * site is configured.
+ *
+ * A route is only listed once the named ability has been read and confirmed to write the same
+ * storage. `_wp_attachment_image_alt` is aafm/update-media's `alt` parameter
+ * (includes/abilities/media.php:1129) and is a plain `alt` field on aafm/get-media-item's payload
+ * (includes/helpers.php:1693). `_thumbnail_id` is what aafm/set-featured-image's
+ * set_post_thumbnail() writes (includes/abilities/media.php:550) and what the post/page write
+ * bundle's `featured_media` writes (includes/helpers.php:1229); it is read back as
+ * `featured_image` (includes/helpers.php:1500).
+ *
+ * The empty delete route for `_thumbnail_id` is deliberate and load-bearing: nothing in this
+ * plugin calls delete_post_thumbnail(), and set_post_thumbnail() with the bundle's 0 is a no-op,
+ * so there is no ability that removes a featured image. An empty string means the refusal stops
+ * after saying the key is unreachable rather than inventing a route, which is the same rule the
+ * tool descriptions follow.
+ *
+ * @return array<string, array<string, string>> Canonical key => operation => sentence naming the route.
+ */
+function aafm_reserved_post_meta_routes(): array {
+	return array(
+		'_wp_attachment_image_alt' => array(
+			'read'   => __( 'Call aafm-get-media-item, which returns the alt text as a plain "alt" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-update-media and pass its "alt" parameter.', 'agent-abilities-for-mcp' ),
+			'delete' => __( 'Call aafm-update-media with an empty "alt" to clear it.', 'agent-abilities-for-mcp' ),
+		),
+		'_thumbnail_id'            => array(
+			'read'   => __( 'Call aafm-get-post or aafm-get-page, which return the "featured_image" object.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-set-featured-image, or pass "featured_media" to aafm-update-post or aafm-update-page.', 'agent-abilities-for-mcp' ),
+			'delete' => '',
+		),
+	);
+}
+
+/**
+ * Answer a post-meta call that names a WordPress-reserved key with the route that does the job,
+ * rather than letting it fall through to the adapter's bare "Permission denied".
+ *
+ * THE DEFECT. `_wp_attachment_image_alt` is where WordPress stores image alt text, so an agent
+ * asked to fix alt text calls aafm-update-post-meta on it. It is protected meta, so
+ * aafm_can_access_post_meta() returns a bare false, and the adapter turns any non-true into the
+ * literal string "Permission denied" (ToolsHandler.php:150) before this plugin's own error
+ * handling is ever reached. The agent concludes it lacks privileges, and stops. It does not lack
+ * privileges; the key is not reachable through that tool at all, by anyone, and there is a
+ * different tool that does exactly what it was asked to do.
+ *
+ * WHY THIS MESSAGE IS SAFE WHERE A CAPABILITY MESSAGE WOULD NOT BE. There are two reasons a meta
+ * call gets refused, and only one of them may be explained. A hard-blocked key is refused
+ * identically for every caller and tells the agent nothing it could not read in the tool's own
+ * published inputSchema. A missing capability, or a key the operator simply has not allowlisted,
+ * depends on who is asking and on this site's configuration; those keep the bare refusal they
+ * have today and are not touched here. This function can only ever fire on the first kind: the
+ * ability must be one of the three named below, the key must be one of the two literals in the
+ * map, and aafm_hard_blocked_meta_key() must ALSO say so at call time. Nothing it reads varies by
+ * caller, so the message cannot vary by caller either - pinned as byte equality across roles in
+ * ReservedMetaKeyRouteTest rather than argued here.
+ *
+ * WHY THE HARD-BLOCK IS RE-CHECKED rather than trusted from the map. is_protected_meta() is a
+ * filter, so a site can genuinely unprotect one of these keys and allowlist it, and on that site
+ * the write works. Re-checking keeps the message truthful there instead of refusing a call that
+ * would otherwise have succeeded: when the key is not blocked, this returns null and the path is
+ * byte-identical to today's.
+ *
+ * FAIL-CLOSED, for the same reason aafm_missing_input_error() is. A WP_Error is a denial
+ * everywhere it can be seen - the Abilities API admits only a strict true - so the worst this can
+ * do is refuse something, never allow it. It returns BEFORE the permission callback for the same
+ * reason R6-2 does: an answer that never consults the callback provably cannot depend on it, and
+ * for a hard-blocked key the callback's answer is false anyway.
+ *
+ * WHERE THE MESSAGE ACTUALLY LANDS, and where it does not. The MCP path stops at the permission
+ * verdict and renders it (ToolsHandler.php:149-166), which is the path the report came from and the
+ * one this fixes. The direct and REST paths go through WP_Ability::execute(), which deliberately
+ * refuses to relay a permission WP_Error - it _doing_it_wrong()s over one and returns its own
+ * generic 'ability_invalid_permissions' instead. So a REST caller's answer is byte-for-byte what it
+ * was before this existed, and the only difference on that path is a WP_DEBUG-only notice. That is
+ * unlike R6-2, which core never reaches because core validates input before permissions; a reserved
+ * key is valid input, so it does reach the gate. Accepted rather than dodged: giving the REST path
+ * the same message would mean a second choke point inside execute(), which is more surface on this
+ * plugin's most regression-sensitive code for a path nobody reported a problem with.
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input Call arguments.
+ * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
+ */
+function aafm_unreachable_meta_key_error( string $name, array $input ) {
+	$operations = array(
+		'aafm/get-post-meta'    => 'read',
+		'aafm/update-post-meta' => 'write',
+		'aafm/delete-post-meta' => 'delete',
+	);
+	if ( ! isset( $operations[ $name ] ) ) {
+		return null;
+	}
+
+	// Guarded against a non-scalar, because this runs on raw caller input and a meta_key sent as
+	// an array would fatal on the cast. Trimmed to match aafm_hard_blocked_meta_key(), which
+	// compares on a trimmed copy for the PAD SPACE reason documented there.
+	$raw = $input['meta_key'] ?? null; // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- reading a call argument, not a meta query.
+	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+	if ( '' === $key ) {
+		return null;
+	}
+
+	// Matched case-insensitively so a mixed-case spelling gets the same help, but the CANONICAL
+	// spelling from the map is what goes into the message. Caller input never reaches the wire.
+	$routes    = aafm_reserved_post_meta_routes();
+	$canonical = '';
+	foreach ( array_keys( $routes ) as $candidate ) {
+		if ( 0 === strcasecmp( $candidate, $key ) ) {
+			$canonical = $candidate;
+			break;
+		}
+	}
+	if ( '' === $canonical || ! aafm_hard_blocked_meta_key( $key ) ) {
+		return null;
+	}
+
+	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
+	$lead  = sprintf(
+		/* translators: %s: the WordPress-reserved meta key the call named. */
+		__( 'The meta key "%s" is protected by WordPress, so no user can reach it through this tool.', 'agent-abilities-for-mcp' ),
+		$canonical
+	);
+
+	return new WP_Error( 'aafm_meta_key_unreachable', '' === $route ? $lead : $lead . ' ' . $route );
+}
+
+/**
  * Register one ability through the audited, guarded, rate-limited choke point.
  *
  * @param string              $name Ability name.
@@ -239,6 +459,9 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 	// shape is never guessed at. Read before the closures below capture it, so a plain scalar
 	// is what gets captured rather than the whole (still-mutating) $args array.
 	$is_read_ability = 'aafm-reads' === (string) ( $args['category'] ?? '' );
+	// Read here, for the same reason and at the same moment as the line above: the closure captures
+	// a plain array taken from the ability's OWN schema rather than the still-mutating $args.
+	$required_input = aafm_required_input_properties( $args );
 
 	// Stash the undecorated permission callback so list-time capability checks
 	// (e.g. the MCP tools/list filter) can test visibility WITHOUT writing a
@@ -253,7 +476,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		);
 	};
 
-	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal ) {
+	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal, $required_input ) {
 		// Per-principal rate gate. Discovery (tools/list) is exempt automatically: it
 		// uses the raw permission stored above, which never enters this decorated closure
 		// and so never consumes a token. With the limit off (default) aafm_rate_limit_consume()
@@ -300,27 +523,68 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// leak a permission error (the permission branch of WP_Ability::execute()); the MCP path
 		// never reaches that gate.
 		$crash_detail = null;
-		try {
-			$allowed = $original_permission( $input );
-		} catch ( \Throwable $e ) {
-			// Same operator switch as the execute-side catch, so one setting governs both phases.
-			// Re-throwing here deliberately writes NO row: there is no 'started' row on this path,
-			// so the absent row is this phase's version of the stuck row the execute side leaves.
-			/** This filter is documented in includes/register.php, at the execute-side catch. */
-			if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
-				// The consume above may have memoized an allow before the callback crashed, and this
-				// throw skips the non-true reset below - release the memo here or the dead call's
-				// allow pays for the next same-ability fire (the B12 leak, on its crash path).
-				aafm_rate_limit_call_reset( $name );
-				throw $e;
-			}
 
-			// Deny. The Abilities API admits only a strict true, so false is a denial on both the
-			// 6.9 floor and 7.0+; and because it is NOT a WP_Error the adapter substitutes its own
-			// generic 'Permission denied' (ToolsHandler.php:149) instead of echoing any string of
-			// ours - the leak is closed by construction, not by careful wording.
-			$crash_detail = aafm_build_activity_detail_from_exception( $e );
-			$allowed      = false;
+		// A call that omitted a required argument is a schema failure, and it is answered as one
+		// here rather than handed to the permission callback that would answer it as a capability
+		// decision. Ordered AFTER the rate gate on purpose, so a flood of malformed calls still
+		// costs a token, and BEFORE the callback so a malformed call is never asked "may you?" at
+		// all. See aafm_missing_input_error() for the mechanism, the fail-closed argument, and why
+		// this message is safe where the crashed-callback message below is not.
+		//
+		// The check is array_key_exists against the ability's own required list, and nothing wider.
+		// Running the full schema validator here would be tidier and is the trap: the adapter and
+		// core normalize input differently, so a wider check could refuse a call core would accept,
+		// which is a real regression bought for a cosmetic gain. A required key that is absent is
+		// absent under either normalization - AbilityArgumentNormalizer injects nothing and core's
+		// normalize_input() applies no per-property defaults - so this is the one part that is safe
+		// to answer early. Nothing that would have been executed is refused: core rejects every
+		// input this refuses, at validate_input(), before permissions are consulted.
+		$missing = array();
+		foreach ( $required_input as $property ) {
+			if ( ! array_key_exists( $property, $call_args ) ) {
+				$missing[] = $property;
+			}
+		}
+		// A call naming a WordPress-reserved meta key is answered the same way and for the same
+		// reason: the refusal is structural, identical for every caller, and there is a different
+		// tool that does the job. Ordered AFTER the missing-argument branch so R6-2's answer is
+		// unchanged when a call is both malformed and reserved, and evaluated only on that branch
+		// so a malformed call is never asked about its key. See aafm_unreachable_meta_key_error()
+		// for why this discloses nothing a capability message would.
+		$unreachable = array() === $missing ? aafm_unreachable_meta_key_error( $name, $call_args ) : null;
+
+		if ( array() !== $missing ) {
+			// No try/catch around this one: building the refusal cannot crash, and it falls through
+			// to the shared non-true branch below, so the denial is audited, announced and has its
+			// rate memo released exactly as every other refusal does rather than growing a second
+			// copy of that bookkeeping.
+			$allowed = aafm_missing_input_error( $name, $missing );
+		} elseif ( null !== $unreachable ) {
+			// Same bookkeeping route as the branch above, and for the same reason.
+			$allowed = $unreachable;
+		} else {
+			try {
+				$allowed = $original_permission( $input );
+			} catch ( \Throwable $e ) {
+				// Same operator switch as the execute-side catch, so one setting governs both phases.
+				// Re-throwing here deliberately writes NO row: there is no 'started' row on this path,
+				// so the absent row is this phase's version of the stuck row the execute side leaves.
+				/** This filter is documented in includes/register.php, at the execute-side catch. */
+				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+					// The consume above may have memoized an allow before the callback crashed, and this
+					// throw skips the non-true reset below - release the memo here or the dead call's
+					// allow pays for the next same-ability fire (the B12 leak, on its crash path).
+					aafm_rate_limit_call_reset( $name );
+					throw $e;
+				}
+
+				// Deny. The Abilities API admits only a strict true, so false is a denial on both the
+				// 6.9 floor and 7.0+; and because it is NOT a WP_Error the adapter substitutes its own
+				// generic 'Permission denied' (ToolsHandler.php:149) instead of echoing any string of
+				// ours - the leak is closed by construction, not by careful wording.
+				$crash_detail = aafm_build_activity_detail_from_exception( $e );
+				$allowed      = false;
+			}
 		}
 
 		// The WP Abilities API admits ONLY a strict true; every other return (false, WP_Error,

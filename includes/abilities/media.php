@@ -422,11 +422,18 @@ function aafm_exec_count_media( array $input ) {
  */
 function aafm_query_attachment_counts_by_mime( ?int $author_id = null ): array {
 	$args = array(
-		'post_type'        => 'attachment',
-		'post_status'      => 'inherit',
-		'posts_per_page'   => -1,
-		'no_found_rows'    => true,
-		'suppress_filters' => false,
+		'post_type'              => 'attachment',
+		'post_status'            => 'inherit',
+		'posts_per_page'         => -1,
+		'no_found_rows'          => true,
+		'suppress_filters'       => false,
+		// The loop reads only post_mime_type, a wp_posts column already on the hydrated
+		// WP_Post. Leaving these at WP_Query's defaults (both true) would fire a large
+		// postmeta and term IN-scan per invocation that nothing here ever reads, which on a
+		// big library is the dominant cost. suppress_filters stays false so WPML's language
+		// filter still applies and the tally is byte-identical.
+		'update_post_meta_cache' => false,
+		'update_post_term_cache' => false,
 	);
 	if ( null !== $author_id ) {
 		$args['author'] = $author_id;
@@ -637,6 +644,173 @@ function aafm_fileinfo_available(): bool {
 }
 
 /**
+ * Whether decoding this upload will be paid for out of PHP's own memory_limit.
+ *
+ * This decides whether the pixel cap below applies at all, and it matters more than it looks.
+ * GD decodes into PHP's heap, so a large image really does come out of memory_limit and a
+ * memory-derived bound models it. ImageMagick does not: it allocates through its own resource
+ * limits and spills to its disk cache, so PHP's peak stays small no matter how big the image is.
+ * That was measured, not assumed - a fully valid 30000x30000 payload fired in isolation used a
+ * 2 MB PHP peak while ImageMagick's stock `area` policy (256 MP) refused the 900 MP decode by
+ * itself.
+ *
+ * So applying a PHP-memory bound on an ImageMagick host would refuse images that host handles
+ * perfectly well. A 48 MP phone photo on a 256M site is the concrete case: ImageMagick takes it,
+ * a PHP-memory cap would not. Refusing a legitimate upload is its own defect, so the cap stays
+ * out of the way where its cost model does not hold.
+ *
+ * The test is a proxy for WordPress's own editor choice, not that choice itself.
+ * wp_get_image_editor() would answer exactly, but it loads the image to do so, which is the very
+ * work this guard exists to avoid; _wp_image_editor_choose() answers without loading but is
+ * private API.
+ *
+ * Both halves of the proxy are deliberate, and they are the two things core's own
+ * WP_Image_Editor_Imagick::test() cares about. class_exists('Imagick') is what core actually
+ * checks, so checking it here keeps the two aligned. extension_loaded('imagick') is checked as
+ * well because the editor classes are not autoloaded - core requires them inside
+ * _wp_image_editor_choose(), so on a request that has not reached an image editor yet the class
+ * may not be in memory even though the extension is. Either one being true is treated as
+ * ImageMagick being available.
+ *
+ * KNOWN IMPRECISION, stated rather than hidden: a site that filters wp_image_editors to force GD
+ * while ImageMagick is present gets no cap. Every divergence here resolves the same way, toward
+ * not capping, so the imprecision fails OPEN. That is the correct direction for this to be wrong,
+ * since the cost of a false refusal is a legitimate upload rejected and the cost of a missed cap
+ * is the behaviour that shipped in 1.6.3 anyway.
+ *
+ * @return bool True when GD will pay for the decode out of PHP memory.
+ */
+function aafm_upload_decode_costs_php_memory(): bool {
+	$imagick_available = extension_loaded( 'imagick' ) || class_exists( 'Imagick' );
+
+	return (bool) apply_filters( 'aafm_upload_decode_costs_php_memory', ! $imagick_available );
+}
+
+/**
+ * Derive how many pixels this request can afford to decode, from a memory budget.
+ *
+ * Kept pure - it takes the two numbers and returns the bound - so both branches can be tested
+ * without touching the runtime's real memory limit.
+ *
+ * THE DERIVATION, so nobody has to reverse-engineer it from the arithmetic:
+ *
+ * GD holds a decoded truecolor image as one packed integer per pixel, four bytes, regardless of
+ * how small the compressed file was. That is the whole decompression-bomb mechanism: a 187 KB PNG
+ * can declare 8000x8000 and cost 256 MB the moment it is decoded. Four is the floor of the real
+ * cost rather than a padded estimate, and it is deliberately the permissive end of the 4-to-5
+ * range, because the failure mode of a too-small number here is refusing somebody's real photo.
+ *
+ * The budget is what WordPress will actually have in hand during image work, not the current
+ * memory_limit. Core raises the limit before it decodes anything (wp_raise_memory_limit('image'),
+ * called from both image editors), so the ceiling is the larger of memory_limit and
+ * WP_MAX_MEMORY_LIMIT, after the image_memory_limit filter. Anything already allocated is
+ * subtracted, because that memory is not available to the decode either.
+ *
+ * WHAT THIS DOES NOT DO, stated precisely, because a guard is not a proof and a caveat that
+ * overclaims is worse than no caveat at all.
+ *
+ * Passing this check does NOT mean the decode will fit. Four bytes per pixel is the floor of the
+ * cost, not the whole of it: a real GD decode also pays for scanline buffers and the row-pointer
+ * table, an image editor may hold a source and a destination bitmap at the same time, and nothing
+ * here models the sub-size generation that follows. So an image just under the ceiling can still
+ * exhaust memory. This excludes the clearly impossible; it does not certify the possible, and the
+ * upload path is not memory-safe because this exists.
+ *
+ * What it does do is convert a decode that was going to exhaust PHP's memory and die without
+ * explanation into a refusal that names the limit. The asymmetry is deliberate. Because four is
+ * the permissive end of the range, an image this refuses would have failed on any reading of the
+ * cost, so the refusals are sound even though the acceptances are not a guarantee.
+ *
+ * It is also not a rate limit, and it does not stop a determined caller from tying up a worker.
+ *
+ * @param int $budget_bytes Total memory the decode may use, or -1 for unlimited.
+ * @param int $in_use_bytes Memory already allocated to this request.
+ * @return int Maximum pixel count, or 0 for "no bound could be determined; do not refuse".
+ */
+function aafm_derive_max_pixels( int $budget_bytes, int $in_use_bytes ): int {
+	// Four bytes per pixel: one packed truecolor integer, GD's in-memory representation.
+	$bytes_per_pixel = 4;
+
+	// -1 is PHP's "unlimited", and a zero or negative budget means the value could not be read.
+	// Neither yields a bound, and the instruction when there is no bound is to allow, not guess.
+	//
+	// Mutation testing showed this guard alone is NOT load-bearing: with it removed the subtraction
+	// below goes negative and the next guard catches the same cases. It stays because it states the
+	// intent at the point the caller cares about, and because "allow" must not depend on an
+	// arithmetic accident. Removing BOTH does change the answer (the function starts returning a
+	// negative pixel count), which is what the no-bound rows in UploadPixelCapTest pin.
+	if ( $budget_bytes <= 0 ) {
+		return 0;
+	}
+
+	$available = $budget_bytes - max( 0, $in_use_bytes );
+
+	// Already at or over budget. A determinate answer, but "refuse everything" is a far worse
+	// failure than "refuse nothing", so this also declines to bound.
+	if ( $available <= 0 ) {
+		return 0;
+	}
+
+	return intdiv( $available, $bytes_per_pixel );
+}
+
+/**
+ * The pixel ceiling for this request, gathering the environment around aafm_derive_max_pixels().
+ *
+ * Returns 0 to mean "no ceiling" - unlimited memory, an unreadable limit, or a host whose decoder
+ * does not spend PHP memory in the first place.
+ *
+ * $derived reports the ceiling as it stood BEFORE the aafm_upload_max_pixels filter, so a caller
+ * can tell a memory-derived ceiling from one a site owner set. The refusal message needs that
+ * distinction: it explains the ceiling as a memory bound, and that explanation is only true when
+ * the derivation is what produced the number. Reported through this parameter rather than a second
+ * function because a second call would re-read memory_get_usage(), so the two answers could
+ * disagree by a chunk and the message would pick its wording on an accident. One call, one
+ * measurement, exact.
+ *
+ * @param int|null $derived Receives the ceiling the memory derivation produced; 0 when none was.
+ * @param-out int  $derived
+ * @return int Maximum pixel count, or 0 for no cap.
+ */
+function aafm_upload_max_pixels( &$derived = null ): int {
+	$budget     = -1;
+	$max_pixels = 0;
+
+	// The derivation only runs where its cost model holds. The filter below runs either way, so a
+	// site owner can still impose a ceiling on a host this declines to derive one for - an
+	// override that could only ever relax the guard would be half a filter.
+	if ( aafm_upload_decode_costs_php_memory() ) {
+		$current = wp_convert_hr_to_bytes( (string) ini_get( 'memory_limit' ) );
+		$wp_max  = defined( 'WP_MAX_MEMORY_LIMIT' ) ? wp_convert_hr_to_bytes( (string) WP_MAX_MEMORY_LIMIT ) : 0;
+
+		// Either one being unlimited makes the effective ceiling unlimited, because core raises to
+		// the larger of the two. Mirrors wp_raise_memory_limit()'s own -1 handling.
+		$budget = ( -1 === $current || -1 === $wp_max ) ? -1 : max( $current, $wp_max );
+
+		/** This filter is documented in wp-includes/functions.php */
+		$budget = wp_convert_hr_to_bytes( (string) apply_filters( 'image_memory_limit', $budget ) ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core owns this hook; we apply it so the estimate matches the limit wp_raise_memory_limit('image') will actually install.
+
+		$max_pixels = aafm_derive_max_pixels( (int) $budget, memory_get_usage( true ) );
+	}
+
+	$derived = $max_pixels;
+
+	/**
+	 * Filters the maximum pixel count aafm/upload-media will decode in one request.
+	 *
+	 * The default is derived from the memory the host can actually spare, so it scales with the
+	 * site instead of guessing for it. Return 0 to remove the ceiling entirely, or a pixel count
+	 * to set your own - useful on a site that handles genuinely large photography, or one whose
+	 * decoder does not spend PHP memory the way this estimate assumes. It runs even where no
+	 * ceiling could be derived, so it can impose one as well as relax one.
+	 *
+	 * @param int $max_pixels   Derived ceiling in pixels; 0 means no ceiling.
+	 * @param int $budget_bytes The memory budget the ceiling was derived from; -1 for unlimited.
+	 */
+	return max( 0, (int) apply_filters( 'aafm_upload_max_pixels', $max_pixels, (int) $budget ) );
+}
+
+/**
  * Execute aafm/upload-media - base64 only, byte-sniffed, allow-listed, SVG
  * rejected, size-capped, filename sanitized, WordPress owns the path.
  *
@@ -649,13 +823,22 @@ function aafm_fileinfo_available(): bool {
  * - fileinfo availability is guarded (aafm_fileinfo_available) before finfo is
  *   ever instantiated, so a host without the extension errors instead of
  *   fataling on a missing class.
- * - The filename is sanitized (sanitize_file_name) and rebuilt with the canonical
- *   extension for the real type; traversal segments cannot survive.
+ * - The filename is sanitized (sanitize_file_name, then aafm_sanitize_plain_text for
+ *   the control and bidi characters core keeps) and rebuilt with the canonical
+ *   extension for the real type; traversal segments cannot survive. The same
+ *   sanitized base becomes the attachment title, so neither can be used to spoof
+ *   how a name renders in the media library.
  * - wp_upload_bits() writes the bytes inside the uploads dir under WordPress's
  *   control - never a raw file_put_contents to a caller-chosen path.
  * - A second wp_check_filetype_and_ext() check on the written file guards against
  *   ext<->contents disagreement; a mismatch deletes the file and errors.
  * - The decoded size is capped at wp_max_upload_size() before any write.
+ * - The PIXEL count is capped too, read from the header before any pixel is decoded. The byte cap
+ *   cannot see this, because compression is the whole point of a decompression bomb: a small file
+ *   may declare dimensions that cost hundreds of megabytes to decode. The ceiling is derived from
+ *   the host's own memory rather than a fixed number, and is inert where the decode does not spend
+ *   PHP memory - see aafm_upload_max_pixels() and aafm_derive_max_pixels() for the derivation and
+ *   for what it does and does not protect against.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -688,10 +871,82 @@ function aafm_exec_upload_media( array $input ) {
 		return new WP_Error( 'aafm_disallowed_type', __( 'Unsupported or unsafe file type.', 'agent-abilities-for-mcp' ) );
 	}
 
+	// Pixel ceiling, checked from the HEADER before any pixel is decoded and before any byte is
+	// written. The byte cap above does not cover this: compression is exactly what a decompression
+	// bomb exploits, so a file well inside wp_max_upload_size() can still declare dimensions that
+	// cost hundreds of megabytes to decode. getimagesizefromstring() reads only the header.
+	//
+	// Unreadable or zero dimensions do NOT refuse. A file that got this far already passed the
+	// byte sniff, so the honest reading is that this check cannot answer, not that the file is
+	// hostile, and the rule when there is no bound is to allow.
+	$derived_pixels = 0;
+	$max_pixels     = aafm_upload_max_pixels( $derived_pixels );
+	if ( $max_pixels > 0 ) {
+		$dimensions = @getimagesizefromstring( $decoded ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a malformed header is answered by the false return, not by a notice reaching the caller.
+		$width      = is_array( $dimensions ) ? (int) $dimensions[0] : 0;
+		$height     = is_array( $dimensions ) ? (int) $dimensions[1] : 0;
+
+		// The positivity test is belt-and-braces, not the thing that makes an unreadable header
+		// safe: an unreadable header gives 0, and 0 is never greater than a positive ceiling, so
+		// removing it changes no outcome (confirmed by mutation). It is kept so the intent is
+		// legible and so a hypothetical pair of negative dimensions cannot multiply into a
+		// positive product.
+		if ( $width > 0 && $height > 0 && ( $width * $height ) > $max_pixels ) {
+			// Explain the ceiling as a memory bound only where the memory derivation is what
+			// produced it. A filter can name any number, on any host, including one where the
+			// derivation declined to run at all - so back-computing size_format( $max_pixels * 4 )
+			// from a filtered ceiling reports an amount of memory that was never the reason for
+			// the refusal and need not exist on the machine. Both branches still name the limit
+			// and how to move it, because refusing a legitimate upload without explaining it is
+			// its own defect.
+			if ( $derived_pixels > 0 && $derived_pixels === $max_pixels ) {
+				return new WP_Error(
+					'aafm_too_many_pixels',
+					sprintf(
+						/* translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling, 5: formatted memory size, for example "256 MB". */
+						__( 'This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The ceiling comes from the %5$s of memory available for image work, at four bytes per pixel for the uncompressed bitmap a decoder builds, so a larger image would run the site out of memory rather than finish. Resize the image before uploading, raise the memory available to PHP, or raise the aafm_upload_max_pixels filter.', 'agent-abilities-for-mcp' ),
+						$width,
+						$height,
+						number_format_i18n( ( $width * $height ) / 1000000, 1 ),
+						number_format_i18n( $max_pixels / 1000000, 1 ),
+						size_format( $max_pixels * 4 )
+					)
+				);
+			}
+
+			return new WP_Error(
+				'aafm_too_many_pixels',
+				sprintf(
+					/* translators: 1: image width in pixels, 2: image height in pixels, 3: the image's megapixel count, 4: the site's megapixel ceiling. */
+					__( 'This image is %1$d by %2$d pixels (%3$s megapixels), and this site can decode at most %4$s megapixels in one request. The aafm_upload_max_pixels filter sets that ceiling. Resize the image before uploading, or change the filter.', 'agent-abilities-for-mcp' ),
+					$width,
+					$height,
+					number_format_i18n( ( $width * $height ) / 1000000, 1 ),
+					number_format_i18n( $max_pixels / 1000000, 1 )
+				)
+			);
+		}
+	}
+
 	// Build a safe filename with the canonical extension for the real type. The
 	// supplied name is reduced to its basename and sanitized, so '../' segments
 	// and the client-declared extension cannot influence where the file lands.
-	$base      = sanitize_file_name( wp_basename( (string) ( $input['filename'] ?? '' ), '.' . pathinfo( (string) ( $input['filename'] ?? '' ), PATHINFO_EXTENSION ) ) );
+	//
+	// sanitize_file_name() alone is not enough for what gets STORED. It handles the
+	// path- and shell-hostile punctuation, but it keeps every C0 control except tab,
+	// LF and CR, and it keeps the whole Trojan Source bidi set - so a name carrying
+	// U+202E lands intact. aafm_sanitize_plain_text() runs on top and has the last
+	// word, which is the same rule aafm-update-media already applies to a title on
+	// this very object; without it the two abilities disagree about the same field.
+	// Ordering is deliberate: the plain-text strip runs last so nothing can
+	// reintroduce a bidi override after it, and the path guarantee does not weaken,
+	// because wp_upload_bits() -> wp_unique_filename() re-applies sanitize_file_name()
+	// to the name that actually reaches disk.
+	//
+	// $base feeds BOTH consumers - the stored file name below and post_title at the
+	// wp_insert_attachment() call - so one strip covers both. The corpus test pins
+	// each of them separately, so decoupling them later fails loudly.
+	$base      = aafm_sanitize_plain_text( sanitize_file_name( wp_basename( (string) ( $input['filename'] ?? '' ), '.' . pathinfo( (string) ( $input['filename'] ?? '' ), PATHINFO_EXTENSION ) ) ) );
 	$base      = '' !== $base ? $base : 'upload';
 	$safe_name = $base . '.' . $allow[ $real_mime ];
 
@@ -729,7 +984,7 @@ function aafm_exec_upload_media( array $input ) {
 	if ( isset( $input['alt'] ) ) {
 		// update_post_meta() unslashes the value, so a backslash in the alt text is stripped unless
 		// it is slashed first, exactly like the sibling meta writers.
-		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
+		update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
 	}
 
 	$attachment = get_post( $attachment_id );
@@ -850,10 +1105,10 @@ function aafm_exec_update_media( array $input ) {
 
 	$postarr = array( 'ID' => $att_id );
 	if ( $has_title ) {
-		$postarr['post_title'] = sanitize_text_field( (string) $input['title'] );
+		$postarr['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( $has_caption ) {
-		$postarr['post_excerpt'] = sanitize_textarea_field( (string) $input['caption'] );
+		$postarr['post_excerpt'] = aafm_sanitize_multiline_text( (string) $input['caption'] );
 	}
 	if ( $has_description ) {
 		$postarr['post_content'] = wp_kses_post( (string) $input['description'] );
@@ -871,7 +1126,7 @@ function aafm_exec_update_media( array $input ) {
 	if ( $has_alt ) {
 		// update_post_meta() unslashes its value, so slash here too (matches
 		// aafm_exec_update_post_meta) to preserve literal backslashes in alt text.
-		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( sanitize_text_field( (string) $input['alt'] ) ) );
+		update_post_meta( $att_id, '_wp_attachment_image_alt', wp_slash( aafm_sanitize_plain_text( (string) $input['alt'] ) ) );
 	}
 
 	$fresh = get_post( $att_id );

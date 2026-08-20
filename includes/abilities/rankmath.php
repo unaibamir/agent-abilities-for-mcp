@@ -503,7 +503,7 @@ function aafm_exec_rankmath_update_post( array $input ) {
 			continue;
 		}
 		$raw   = (string) $input[ $field ];
-		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : sanitize_text_field( $raw );
+		$clean = in_array( $field, $url_fields, true ) ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
 		// update_post_meta() unslashes the value, so a backslash in a title/description (C:\Users)
 		// is stripped unless it is slashed first. Every sibling meta writer (meta.php, terms.php,
 		// user-meta.php) slashes; these SEO writers must too.

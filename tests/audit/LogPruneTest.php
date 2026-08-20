@@ -61,6 +61,36 @@ final class LogPruneTest extends TestCase {
 		$this->assertNotContains( $old, $remaining, 'A row older than the window should be pruned.' );
 	}
 
+	/**
+	 * The review notice's heading quotes a five-minute memo of the success count, and its render
+	 * guard reads the same memo to refuse an ask the log can no longer back. A prune that takes
+	 * rows out has to drop it, or shortening the retention window leaves both of them reading a
+	 * number from before the cron ran.
+	 */
+	public function test_prune_drops_the_review_notice_count_memo(): void {
+		update_option( 'aafm_log_retention_days', 30 );
+		$this->seed_row_at( gmdate( 'Y-m-d H:i:s', time() - 60 * DAY_IN_SECONDS ) );
+		set_transient( 'aafm_review_request_count', 12, 5 * MINUTE_IN_SECONDS );
+
+		aafm_prune_activity_log();
+
+		$this->assertFalse( get_transient( 'aafm_review_request_count' ) );
+	}
+
+	/**
+	 * A run that deletes nothing leaves the memo alone: the number it holds is still the number
+	 * the log holds, and dropping it would buy a full table scan for no change.
+	 */
+	public function test_a_prune_with_nothing_to_delete_leaves_the_memo_alone(): void {
+		update_option( 'aafm_log_retention_days', 30 );
+		$this->seed_row_at( gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS ) );
+		set_transient( 'aafm_review_request_count', 12, 5 * MINUTE_IN_SECONDS );
+
+		aafm_prune_activity_log();
+
+		$this->assertSame( 12, (int) get_transient( 'aafm_review_request_count' ) );
+	}
+
 	public function test_prune_keeps_everything_when_retention_is_zero(): void {
 		update_option( 'aafm_log_retention_days', 0 );
 

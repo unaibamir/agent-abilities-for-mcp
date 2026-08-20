@@ -148,7 +148,7 @@ function aafm_diagnostic_checks(): array {
  * by the subscriber role - least privilege by construction, no custom auth code.
  *
  * @param string $login Desired login.
- * @return array{user_id:int}|WP_Error
+ * @return array{user_id:int,login:string}|WP_Error
  */
 function aafm_create_agent_user( string $login ) {
 	$login = sanitize_user( $login, true );
@@ -210,7 +210,14 @@ function aafm_create_agent_user( string $login ) {
 	update_user_meta( $user_id, aafm_agent_user_marker_meta_key(), 1 );
 	update_user_meta( $user_id, 'aafm_agent_user_created', time() );
 
-	return array( 'user_id' => $user_id );
+	// Hand back the sanitized login too, not just the id: on the same-session create the JS rewrites
+	// the App-Password config snippets to name this account, and it must use the login the server
+	// actually created (sanitize_user() may have changed what the admin typed), which is exactly what
+	// the next page render resolves as $existing_agent_login.
+	return array(
+		'user_id' => $user_id,
+		'login'   => $login,
+	);
 }
 
 /**
@@ -722,7 +729,20 @@ function aafm_render_oauth_management(): void {
 	wp_nonce_field( 'aafm_admin', 'aafm_oauth_admin_nonce' );
 
 	// ---- Registered clients ----
-	echo '<h3>' . esc_html__( 'Registered clients', 'agent-abilities-for-mcp' ) . '</h3>';
+	// The count rides in the heading only when there is something to count: the zero case already
+	// has its own empty state below, and "Registered clients (0)" above "No clients have registered
+	// yet" says the same thing twice.
+	echo '<h3>';
+	if ( empty( $clients ) ) {
+		echo esc_html__( 'Registered clients', 'agent-abilities-for-mcp' );
+	} else {
+		printf(
+			/* translators: %s: number of registered OAuth clients. */
+			esc_html( _n( 'Registered clients (%s)', 'Registered clients (%s)', count( $clients ), 'agent-abilities-for-mcp' ) ),
+			esc_html( number_format_i18n( count( $clients ) ) )
+		);
+	}
+	echo '</h3>';
 	echo '<p class="sub">' . esc_html__( 'Apps that have registered to connect over OAuth. Revoking a client turns it off and ends its active sessions right away.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $clients ) ) {
@@ -790,7 +810,17 @@ function aafm_render_oauth_management(): void {
 	}
 
 	// ---- Active grants ----
-	echo '<h3>' . esc_html__( 'Active grants', 'agent-abilities-for-mcp' ) . '</h3>';
+	echo '<h3>';
+	if ( empty( $grants ) ) {
+		echo esc_html__( 'Active grants', 'agent-abilities-for-mcp' );
+	} else {
+		printf(
+			/* translators: %s: number of active OAuth grants. */
+			esc_html( _n( 'Active grants (%s)', 'Active grants (%s)', count( $grants ), 'agent-abilities-for-mcp' ) ),
+			esc_html( number_format_i18n( count( $grants ) ) )
+		);
+	}
+	echo '</h3>';
 	echo '<p class="sub">' . esc_html__( 'People who have approved an app to act as them. Revoking a grant ends that connection; they would need to approve again to reconnect.', 'agent-abilities-for-mcp' ) . '</p>';
 
 	if ( empty( $grants ) ) {
@@ -912,7 +942,7 @@ function aafm_render_connection_tab(): void {
 	echo '</div>';
 
 	if ( $oauth_on ) {
-		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to copy or store.', 'agent-abilities-for-mcp' ) . '</p>';
+		echo '<p class="sub">' . esc_html__( 'Paste your site\'s MCP endpoint URL into your agent. It opens a browser tab for approval - no secret to put in your config file.', 'agent-abilities-for-mcp' ) . '</p>';
 
 		// REST-lockdown diagnostic. The OAuth /register and /token endpoints must answer BEFORE a
 		// client has any credential, so a security or membership plugin that restricts the whole
@@ -950,13 +980,17 @@ function aafm_render_connection_tab(): void {
 		echo '<div class="aafm-client-grid" id="aafm-oauth-clients">';
 		$first = true;
 		foreach ( aafm_quickstart_clients() as $slug => $label ) {
+			// A real <button> with aria-pressed, not a click-only div: this picker is the
+			// only route to the OAuth instructions, so it has to be reachable by keyboard
+			// and announce its selected state. admin.js keeps aria-pressed and .on in step.
 			echo wp_kses(
 				sprintf(
-					'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
+					'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
 					$first ? ' on' : '',
 					esc_attr( $slug ),
 					aafm_icon( 'client-' . $slug ),
-					esc_html( $label )
+					esc_html( $label ),
+					$first ? 'true' : 'false'
 				),
 				aafm_admin_allowed_html()
 			);
@@ -1169,7 +1203,9 @@ function aafm_render_connection_tab(): void {
 		}
 		echo '</p>';
 	} else {
-		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
+		// The field has no visible label, so it carries its own accessible name; the
+		// wizard's equivalent input (quickconnect.php) is labelled the same way.
+		echo '<p><input type="text" id="aafm-agent-login" value="' . esc_attr( $default_agent_login ) . '" class="regular-text" aria-label="' . esc_attr__( 'Agent username', 'agent-abilities-for-mcp' ) . '"> <button type="button" class="aafm-btn aafm-btn-secondary" id="aafm-create-user">' . esc_html__( 'Create agent user', 'agent-abilities-for-mcp' ) . '</button> <span class="aafm-user-status" aria-live="polite"></span></p>';
 	}
 	echo '</div></div>';
 	echo '</div>';
@@ -1207,13 +1243,16 @@ function aafm_render_connection_tab(): void {
 	echo '<div class="aafm-client-grid" id="aafm-clients">';
 	$first = true;
 	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
+		// Same contract as the OAuth picker above: a focusable <button> carrying its own
+		// pressed state, so the card is operable without a mouse.
 		echo wp_kses(
 			sprintf(
-				'<div class="aafm-client%1$s" data-client="%2$s"><span class="ci">%3$s</span>%4$s</div>',
+				'<button type="button" class="aafm-client%1$s" data-client="%2$s" aria-pressed="%5$s"><span class="ci">%3$s</span>%4$s</button>',
 				$first ? ' on' : '',
 				esc_attr( $slug ),
 				aafm_icon( 'client-' . $slug ),
-				esc_html( $label )
+				esc_html( $label ),
+				$first ? 'true' : 'false'
 			),
 			aafm_admin_allowed_html()
 		);
@@ -1227,9 +1266,12 @@ function aafm_render_connection_tab(): void {
 	// Primary config block: the default (first) client, one .aafm-codeblock per OS.
 	echo '<div class="aafm-card-pad">';
 
-	// Use the first client in the config-snippet grid (claude-code) for the default block.
-	$unix_snippet    = aafm_client_snippet( 'claude-code', 'mcp-agent', 'unix' );
-	$windows_snippet = aafm_client_snippet( 'claude-code', 'mcp-agent', 'windows' );
+	// Use the first client in the config-snippet grid (claude-code) for the default block. Seed the
+	// username from the actual marked agent login when one exists (the admin may have created the
+	// agent user under a different name than the 'mcp-agent' default), falling back to the default
+	// on a fresh install, so the copied config never names a user that does not exist.
+	$unix_snippet    = aafm_client_snippet( 'claude-code', $existing_agent_login, 'unix' );
+	$windows_snippet = aafm_client_snippet( 'claude-code', $existing_agent_login, 'windows' );
 
 	echo '<div class="aafm-codeblock aafm-snippet" data-os="unix">';
 	printf( '<pre>%s</pre>', esc_html( $unix_snippet ) );
@@ -1278,7 +1320,8 @@ function aafm_render_connection_tab(): void {
 	echo '<p><button type="button" class="button aafm-quickstart-toggle" aria-expanded="false" aria-controls="aafm-quickstart-grid">' . esc_html__( 'Show config for a specific client', 'agent-abilities-for-mcp' ) . '</button></p>';
 	echo '<div class="aafm-quickstart-grid" id="aafm-quickstart-grid" hidden>';
 	foreach ( aafm_config_snippet_clients() as $slug => $label ) {
-		$snippet = aafm_client_snippet( $slug, 'mcp-agent', 'unix' );
+		// Same as the default block above: name the real marked agent login when one exists.
+		$snippet = aafm_client_snippet( $slug, $existing_agent_login, 'unix' );
 		echo '<div class="aafm-quickstart-card" data-client="' . esc_attr( $slug ) . '" data-config="' . esc_attr( $snippet ) . '">';
 		echo '<h4 class="aafm-quickstart-name">' . esc_html( $label ) . '</h4>';
 		echo '<p class="aafm-quickstart-where">' . esc_html( aafm_quickstart_note( $slug ) ) . '</p>';

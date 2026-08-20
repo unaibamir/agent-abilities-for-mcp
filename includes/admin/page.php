@@ -491,7 +491,7 @@ function aafm_ajax_save_post_types(): void {
  * Sanitize the posted "exposed meta keys" textarea into a clean, de-duplicated allowlist.
  *
  * Splits on newlines, trims each line (meta keys are case-sensitive, so case is preserved;
- * only surrounding whitespace and control chars are stripped via sanitize_text_field), drops
+ * only surrounding whitespace and control chars are stripped via aafm_sanitize_plain_text), drops
  * empties, drops any hard-blocked key so a blocked key can never even be stored, de-duplicates,
  * and re-indexes. The read path (aafm_allowed_meta_keys) re-floors anyway; this is best-effort.
  *
@@ -502,7 +502,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_meta_keys'] ) ? (string) $posted['aafm_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || aafm_hard_blocked_meta_key( $key ) ) {
 			continue;
 		}
@@ -517,7 +517,7 @@ function aafm_sanitize_allowed_meta_keys_input( array $posted ): array {
  * Mirrors aafm_sanitize_allowed_meta_keys_input() but for the DENY list: it KEEPS the `*`
  * wildcard sentinel (deny-all) and does NOT strip hard-blocked keys - denying an already
  * hard-blocked key is a harmless no-op, and the deny list must be able to name anything an
- * admin wants refused. Splits on newlines, trims, sanitize_text_field (never sanitize_key,
+ * admin wants refused. Splits on newlines, trims, aafm_sanitize_plain_text (never sanitize_key,
  * which would strip `*`), drops empties, and de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -527,7 +527,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_deny_meta_keys'] ) ? (string) $posted['aafm_deny_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}
@@ -540,7 +540,7 @@ function aafm_sanitize_denied_meta_keys_input( array $posted ): array {
  * Parse the exposed-user-meta textarea into a clean list.
  *
  * Mirrors the allow-list sanitizer but for user meta and KEEPS the `*` wildcard. Splits on
- * newlines, trims, sanitize_text_field (never sanitize_key, which would strip `*`), drops
+ * newlines, trims, aafm_sanitize_plain_text (never sanitize_key, which would strip `*`), drops
  * empties and any hard-blocked user key (best-effort - aafm_allowed_user_meta_keys() re-floors
  * anyway), and de-duplicates.
  *
@@ -551,7 +551,7 @@ function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_exposed_user_meta_keys'] ) ? (string) $posted['aafm_exposed_user_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_user_meta_key( $key ) ) ) {
 			continue;
 		}
@@ -564,7 +564,7 @@ function aafm_sanitize_exposed_user_meta_keys_input( array $posted ): array {
  * Parse the denied-user-meta textarea into a clean list.
  *
  * Like aafm_sanitize_denied_meta_keys_input() but user-scoped: KEEPS `*` (deny-all) and does
- * NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops empties,
+ * NOT strip hard-blocked keys. Splits on newlines, trims, aafm_sanitize_plain_text, drops empties,
  * de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -574,7 +574,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_denied_user_meta_keys'] ) ? (string) $posted['aafm_denied_user_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}
@@ -587,7 +587,7 @@ function aafm_sanitize_denied_user_meta_keys_input( array $posted ): array {
  * Parse the exposed-term-meta textarea into a clean list.
  *
  * Mirrors aafm_sanitize_exposed_user_meta_keys_input() but term-scoped (the term/post-meta
- * hard-block applies). KEEPS the `*` wildcard, splits on newlines, trims, sanitize_text_field
+ * hard-block applies). KEEPS the `*` wildcard, splits on newlines, trims, aafm_sanitize_plain_text
  * (never sanitize_key, which would strip `*`), drops empties and any hard-blocked key
  * (best-effort - aafm_allowed_term_meta_keys() re-floors anyway), and de-duplicates.
  *
@@ -598,7 +598,7 @@ function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_exposed_term_meta_keys'] ) ? (string) $posted['aafm_exposed_term_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key || ( '*' !== $key && aafm_hard_blocked_meta_key( $key ) ) ) {
 			continue;
 		}
@@ -611,7 +611,7 @@ function aafm_sanitize_exposed_term_meta_keys_input( array $posted ): array {
  * Parse the denied-term-meta textarea into a clean list.
  *
  * Like aafm_sanitize_denied_user_meta_keys_input() but term-scoped: KEEPS `*` (deny-all) and
- * does NOT strip hard-blocked keys. Splits on newlines, trims, sanitize_text_field, drops
+ * does NOT strip hard-blocked keys. Splits on newlines, trims, aafm_sanitize_plain_text, drops
  * empties, de-duplicates.
  *
  * @param array<string,mixed> $posted Raw $_POST payload (slashes handled by the caller).
@@ -621,7 +621,7 @@ function aafm_sanitize_denied_term_meta_keys_input( array $posted ): array {
 	$raw  = isset( $posted['aafm_denied_term_meta_keys'] ) ? (string) $posted['aafm_denied_term_meta_keys'] : '';
 	$keys = array();
 	foreach ( (array) preg_split( '/\r\n|\r|\n/', $raw ) as $line ) {
-		$key = sanitize_text_field( trim( (string) $line ) );
+		$key = aafm_sanitize_plain_text( trim( (string) $line ) );
 		if ( '' === $key ) {
 			continue;
 		}
@@ -635,8 +635,10 @@ function aafm_sanitize_denied_term_meta_keys_input( array $posted ): array {
  * types - the "Detected on your exposed types" chip source for the selector.
  *
  * One read-only, prepared query (dynamic IN of bound %s placeholders for the exposed types),
- * filtered against the hard-block, sliced to 50, cached 5 minutes in a best-effort transient.
- * Purely cosmetic: the cache is advisory and the allowlist gate never trusts this list.
+ * scoped to the most recent posts of those types via a bounded derived table so the postmeta
+ * scan stays bounded on a very large site, filtered against the hard-block, sliced to 50, cached
+ * 5 minutes in a best-effort transient. Purely cosmetic: the cache is advisory and the allowlist
+ * gate never trusts this list.
  *
  * @return list<string>
  */
@@ -652,8 +654,16 @@ function aafm_detected_meta_keys(): array {
 	}
 	$ph = implode( ',', array_fill( 0, count( $types ), '%s' ) );
 	// $ph is a list of %s placeholders, the type values are bound via prepare() below.
+	// Join postmeta against a bounded derived table of the most recent posts of the exposed types
+	// rather than every such post. Without the bound, DISTINCT + ORDER BY on postmeta materialise
+	// the whole set before the outer LIMIT can trim it, so the LIMIT never bounds the work and the
+	// scan is proportional to the entire postmeta table on a very large site. The derived table's
+	// own LIMIT caps that scan; on any normal site (far fewer than 5000 posts of the exposed types)
+	// the result is identical, matching the "sample" this list has always been. A derived table is
+	// used, not an IN (... LIMIT), because a LIMIT inside an IN subquery is not portable across the
+	// supported MySQL/MariaDB versions.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
-	$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id WHERE p.post_type IN ($ph) ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
+	$rows = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT pm.meta_key FROM {$wpdb->postmeta} pm INNER JOIN ( SELECT ID FROM {$wpdb->posts} WHERE post_type IN ($ph) ORDER BY ID DESC LIMIT 5000 ) p ON p.ID = pm.post_id ORDER BY pm.meta_key ASC LIMIT 200", $types ) );
 	$keys = array_map( 'strval', (array) $rows );
 	$keys = array_values( array_filter( $keys, static fn( string $k ): bool => ! aafm_hard_blocked_meta_key( $k ) ) );
 	$keys = array_slice( $keys, 0, 50 );
@@ -1539,12 +1549,45 @@ function aafm_render_abilities_tab(): void {
 				break;
 			}
 		}
+		// "Enable all writes" only renders where it can actually do something. A section with no
+		// ordinary write row, or one where every write is currently locked (read-only mode on, or
+		// the high-risk category shut), would render a button guaranteed to tick nothing - the
+		// failure mode that looks exactly like success. aafm_ability_lock_reason() covers both lock
+		// causes; the explicit high-risk test covers the UNLOCKED high-risk ability, which the lock
+		// predicate lets through but this control still refuses to touch.
+		$has_enableable_write = false;
+		foreach ( $tab_rows as $ability ) {
+			$write_name = (string) ( $ability['name'] ?? '' );
+			if ( 'write' !== (string) ( $ability['risk'] ?? '' ) ) {
+				continue;
+			}
+			if ( aafm_ability_is_high_risk( $write_name ) || null !== aafm_ability_lock_reason( $write_name ) ) {
+				continue;
+			}
+			$has_enableable_write = true;
+			break;
+		}
+
+		// The note is not decoration: "writes" on its own reads as "everything that changes the
+		// site", and this control deliberately stops short of deletes and the high-risk category.
+		// aria-describedby hangs it off the button so a screen reader announces the caveat with the
+		// control rather than only sighted users seeing it.
+		$write_note_id = 'aafm-write-note-' . sanitize_key( $slug );
+
 		printf(
-			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button></p>',
+			'<p class="aafm-section-toggle"><button type="button" class="aafm-btn aafm-btn-secondary aafm-section-toggle-all" data-subject="%1$s"%2$s>%3$s</button> <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-reads">%4$s</button>%5$s</p>',
 			esc_attr( $slug ),
 			$has_destructive ? ' data-has-destructive="1"' : '',
 			esc_html__( 'Enable all / Disable all', 'agent-abilities-for-mcp' ),
-			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' )
+			esc_html__( 'Enable all reads', 'agent-abilities-for-mcp' ),
+			$has_enableable_write
+				? sprintf(
+					' <button type="button" class="aafm-btn aafm-btn-secondary aafm-enable-writes" aria-describedby="%1$s">%2$s</button> <span class="aafm-section-toggle-note" id="%1$s">%3$s</span>',
+					esc_attr( $write_note_id ),
+					esc_html__( 'Enable all writes', 'agent-abilities-for-mcp' ),
+					esc_html__( 'Writes only - this leaves deletes and high-risk abilities switched off.', 'agent-abilities-for-mcp' )
+				)
+				: ''
 		);
 
 		if ( 'content' === $slug ) {
@@ -1638,7 +1681,19 @@ function aafm_render_ability_row( array $ability, array $enabled, array $disclos
 
 	// data-risk is what the "Enable all reads" bulk control scopes on, and it mirrors the attribute
 	// the Integrations rows already carry so one JS binding serves both tabs.
-	printf( '<div class="aafm-ability-row" data-risk="%s">', esc_attr( $risk ) );
+	//
+	// data-high-risk is the second axis "Enable all writes" has to scope on, and it exists because
+	// risk alone cannot express it: every one of the nine built-in high-risk abilities is
+	// risk="write" (see aafm_high_risk_abilities_builtin()), so a plain data-risk="write" sweep
+	// would tick refunds, order-status changes, coupons and tax rates the moment the operator
+	// unlocked the category. While the category is locked there is no checkbox to sweep at all;
+	// this attribute covers the unlocked window, which is a supported configuration. Emitted as a
+	// server-rendered fact for the same reason data-risk is, rather than guessed from the badge.
+	printf(
+		'<div class="aafm-ability-row" data-risk="%1$s"%2$s>',
+		esc_attr( $risk ),
+		aafm_ability_is_high_risk( $name ) ? ' data-high-risk="1"' : ''
+	);
 
 	// Presentation only. The security boundary is the subtraction in aafm_get_enabled_abilities();
 	// this just stops the screen offering a switch that the registration walk would ignore. Native
@@ -1797,10 +1852,10 @@ function aafm_render_post_types_selector(): void {
 	echo '<p class="description">' . esc_html__( 'Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id.', 'agent-abilities-for-mcp' ) . '</p>';
 	echo '<div class="aafm-table-wrap">';
 	echo '<table class="widefat striped aafm-post-types-table"><thead><tr>';
-	echo '<th>' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'Writes', 'agent-abilities-for-mcp' ) . '</th>';
-	echo '<th>' . esc_html__( 'REST', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Expose', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Type', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'Writes', 'agent-abilities-for-mcp' ) . '</th>';
+	echo '<th scope="col">' . esc_html__( 'REST', 'agent-abilities-for-mcp' ) . '</th>';
 	echo '</tr></thead><tbody>';
 
 	foreach ( $eligible as $type ) {
@@ -2091,7 +2146,7 @@ function aafm_render_activity_tab(): void {
 	);
 	echo '<table class="widefat striped aafm-log-table"><thead><tr>';
 	foreach ( aafm_activity_log_headers() as $header_label ) {
-		echo '<th>' . esc_html( $header_label ) . '</th>';
+		echo '<th scope="col">' . esc_html( $header_label ) . '</th>';
 	}
 	echo '</tr></thead><tbody>';
 

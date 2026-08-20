@@ -69,6 +69,28 @@ class ConnectionRenderTest extends TestCase {
 	}
 
 	/**
+	 * When the admin created the agent user under a login other than the 'mcp-agent' default, the
+	 * copy-paste client config must carry that real login, not the literal seed. Otherwise the
+	 * copied JSON names a user that does not exist and the client authenticates as the wrong or an
+	 * absent account. The escaped JSON fragment `"ai-bot"` comes only from the snippet's
+	 * WP_API_USERNAME value (the step-1 "done" prose shows the login unquoted), so it pins the fix.
+	 */
+	public function test_client_snippets_use_the_real_agent_login(): void {
+		$user_id = self::factory()->user->create(
+			array(
+				'user_login' => 'ai-bot',
+				'role'       => 'subscriber',
+			)
+		);
+		update_user_meta( $user_id, aafm_agent_user_marker_meta_key(), 1 );
+
+		$html = $this->render_connection_tab();
+
+		$this->assertStringContainsString( '&quot;ai-bot&quot;', $html, 'The config snippet must name the real agent login.' );
+		$this->assertStringNotContainsString( '&quot;mcp-agent&quot;', $html, 'The config snippet must not fall back to the mcp-agent seed once a real agent exists.' );
+	}
+
+	/**
 	 * With OAuth disabled, the card shows a notice instead of the picker, and the
 	 * App Password fallback renders open so it is immediately visible.
 	 */

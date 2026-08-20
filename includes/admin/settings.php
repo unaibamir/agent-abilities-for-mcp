@@ -257,6 +257,10 @@ function aafm_config_option_names(): array {
 		'aafm_quickconnect_finished',
 		'aafm_quickconnect_dismissed',
 		'aafm_menu_pointer_active',
+		// The review-request notice's whole state (status, first-success stamp, snooze bookkeeping).
+		// Clearing it on reset re-arms the ask, but only after a fresh 7 days plus 10 new successful
+		// calls, because reset also empties the activity log; uninstall-with-delete-data removes it.
+		'aafm_review_request',
 		// The one-time agent-user marker backfill guard. Listed so a reset clears it (letting the
 		// backfill re-run against a legacy install) and uninstall-with-delete-data removes the row
 		// rather than orphaning it. The marker USER META is intentionally NOT touched here - uninstall
@@ -507,8 +511,9 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Rate limit', 'agent-abilities-for-mcp' ),
 			'opt'     => __( 'Per minute', 'agent-abilities-for-mcp' ),
 			'control' => sprintf(
-				'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%s">',
-				esc_attr( (string) aafm_rate_limit_per_min() )
+				'<input type="number" id="aafm-rate-limit" name="aafm_rate_limit_per_min" class="small-text" min="0" step="1" value="%1$s" aria-label="%2$s">',
+				esc_attr( (string) aafm_rate_limit_per_min() ),
+				esc_attr__( 'Rate limit, per minute', 'agent-abilities-for-mcp' )
 			),
 			'help'    => __( 'How many agent calls one connection can make per minute. Off by default (0), so nothing is capped until you set a number here. If you are not sure where to start, 60 is a reasonable limit for a single connected agent. Developers can also set this with the aafm_rate_limit_per_min filter.', 'agent-abilities-for-mcp' ),
 		)
@@ -526,8 +531,9 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'IP allowlist', 'agent-abilities-for-mcp' ),
 			'opt'     => __( 'One per line', 'agent-abilities-for-mcp' ),
 			'control' => sprintf(
-				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code">%s</textarea>',
-				esc_textarea( implode( "\n", aafm_ip_allowlist() ) )
+				'<textarea id="aafm-ip-allowlist" name="aafm_ip_allowlist" rows="5" class="large-text code" aria-label="%2$s">%1$s</textarea>',
+				esc_textarea( implode( "\n", aafm_ip_allowlist() ) ),
+				esc_attr__( 'IP allowlist, one per line', 'agent-abilities-for-mcp' )
 			) . '<p class="help">' . esc_html__( 'One IP address or CIDR range per line. Leave it empty to allow connections from anywhere. When you save, any line that is not a valid IP or range is dropped.', 'agent-abilities-for-mcp' ) . '</p>' . $ip_notice,
 		)
 	);
@@ -560,8 +566,9 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Maximum title length', 'agent-abilities-for-mcp' ),
 			'opt'     => __( 'Characters', 'agent-abilities-for-mcp' ),
 			'control' => sprintf(
-				'<input type="number" id="aafm-max-title" name="aafm_max_title_len" class="small-text" min="0" step="1" value="%s">',
-				esc_attr( (string) aafm_max_title_len() )
+				'<input type="number" id="aafm-max-title" name="aafm_max_title_len" class="small-text" min="0" step="1" value="%1$s" aria-label="%2$s">',
+				esc_attr( (string) aafm_max_title_len() ),
+				esc_attr__( 'Maximum title length, in characters', 'agent-abilities-for-mcp' )
 			),
 			'help'    => __( 'The longest title, in characters, an agent can set. Set it to 0 to leave the limit off.', 'agent-abilities-for-mcp' ),
 		)
@@ -573,8 +580,9 @@ function aafm_render_settings_tab(): void {
 			'label'   => __( 'Keep activity log for', 'agent-abilities-for-mcp' ),
 			'opt'     => __( 'Days', 'agent-abilities-for-mcp' ),
 			'control' => sprintf(
-				'<input type="number" id="aafm-log-retention" name="aafm_log_retention_days" class="small-text" min="0" max="3650" step="1" value="%s">',
-				esc_attr( (string) aafm_log_retention_days() )
+				'<input type="number" id="aafm-log-retention" name="aafm_log_retention_days" class="small-text" min="0" max="3650" step="1" value="%1$s" aria-label="%2$s">',
+				esc_attr( (string) aafm_log_retention_days() ),
+				esc_attr__( 'Keep activity log for, in days', 'agent-abilities-for-mcp' )
 			),
 			'help'    => __( 'How many days of activity to keep. A daily cleanup removes anything older. Set it to 0 to keep every entry.', 'agent-abilities-for-mcp' ),
 		)

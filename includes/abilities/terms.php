@@ -844,7 +844,7 @@ function aafm_validate_term_parent( int $parent_id, string $taxonomy ) {
  *
  * Default-deny: the taxonomy is validated against the public allow-list, so an
  * unknown or internal taxonomy (nav_menu, link_category, etc.) is rejected before
- * any write. The name is sanitized with sanitize_text_field and the description
+ * any write. The name is sanitized with aafm_sanitize_plain_text and the description
  * with wp_kses_post, so script can never be stored. The closed input schema rejects
  * any undeclared field before this runs. A parent, if given, must belong to this
  * same hierarchical taxonomy (aafm_validate_term_parent).
@@ -864,7 +864,7 @@ function aafm_exec_create_term( array $input ) {
 	}
 
 	$result = wp_insert_term(
-		sanitize_text_field( (string) $input['name'] ),
+		aafm_sanitize_plain_text( (string) $input['name'] ),
 		$taxonomy,
 		array(
 			'description' => isset( $input['description'] ) ? wp_kses_post( (string) $input['description'] ) : '',
@@ -946,7 +946,8 @@ function aafm_args_update_term(): array {
  * different taxonomy, so a tag ID claimed as a category is rejected (the term/
  * taxonomy-confusion guard). A reparent target is confined to the same
  * hierarchical taxonomy the same way (aafm_validate_term_parent), then guarded
- * against cycles with term_is_ancestor_of before the update runs.
+ * against cycles - the term itself, or any descendant of it - before the update
+ * runs.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -965,7 +966,7 @@ function aafm_exec_update_term( array $input ) {
 
 	$args = array();
 	if ( isset( $input['name'] ) ) {
-		$args['name'] = sanitize_text_field( (string) $input['name'] );
+		$args['name'] = aafm_sanitize_plain_text( (string) $input['name'] );
 	}
 	if ( isset( $input['description'] ) ) {
 		$args['description'] = wp_kses_post( (string) $input['description'] );
@@ -975,9 +976,12 @@ function aafm_exec_update_term( array $input ) {
 		if ( is_wp_error( $parent ) ) {
 			return $parent;
 		}
-		// Circular-hierarchy guard: the requested parent must not be a descendant
-		// of the term being edited (which would make the term its own ancestor).
-		if ( $parent && term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) {
+		// Circular-hierarchy guard: the requested parent must not be the term
+		// itself, nor a descendant of it (either would make the term its own
+		// ancestor). term_is_ancestor_of() is false for the self case, and core
+		// then quietly resolves the loop by writing parent 0 - which reads as a
+		// success while destroying whatever parent the term already had.
+		if ( $parent && ( $parent === $term_id || term_is_ancestor_of( $term_id, $parent, $taxonomy ) ) ) {
 			return new WP_Error( 'aafm_circular_term', __( 'That parent would create a circular hierarchy.', 'agent-abilities-for-mcp' ) );
 		}
 		$args['parent'] = $parent;

@@ -384,58 +384,58 @@ function aafm_rich_wc_customer( \WC_Customer $customer ): array {
  */
 function aafm_wc_apply_customer_input( \WC_Customer $customer, array $input ): void {
 	if ( array_key_exists( 'first_name', $input ) ) {
-		$customer->set_first_name( sanitize_text_field( (string) $input['first_name'] ) );
+		$customer->set_first_name( aafm_sanitize_plain_text( (string) $input['first_name'] ) );
 	}
 	if ( array_key_exists( 'last_name', $input ) ) {
-		$customer->set_last_name( sanitize_text_field( (string) $input['last_name'] ) );
+		$customer->set_last_name( aafm_sanitize_plain_text( (string) $input['last_name'] ) );
 	}
 
 	if ( isset( $input['billing'] ) && is_array( $input['billing'] ) ) {
 		$b = $input['billing'];
 		if ( array_key_exists( 'first_name', $b ) ) {
-			$customer->set_billing_first_name( sanitize_text_field( (string) $b['first_name'] ) ); }
+			$customer->set_billing_first_name( aafm_sanitize_plain_text( (string) $b['first_name'] ) ); }
 		if ( array_key_exists( 'last_name', $b ) ) {
-			$customer->set_billing_last_name( sanitize_text_field( (string) $b['last_name'] ) ); }
+			$customer->set_billing_last_name( aafm_sanitize_plain_text( (string) $b['last_name'] ) ); }
 		if ( array_key_exists( 'company', $b ) ) {
-			$customer->set_billing_company( sanitize_text_field( (string) $b['company'] ) ); }
+			$customer->set_billing_company( aafm_sanitize_plain_text( (string) $b['company'] ) ); }
 		if ( array_key_exists( 'address_1', $b ) ) {
-			$customer->set_billing_address_1( sanitize_text_field( (string) $b['address_1'] ) ); }
+			$customer->set_billing_address_1( aafm_sanitize_plain_text( (string) $b['address_1'] ) ); }
 		if ( array_key_exists( 'address_2', $b ) ) {
-			$customer->set_billing_address_2( sanitize_text_field( (string) $b['address_2'] ) ); }
+			$customer->set_billing_address_2( aafm_sanitize_plain_text( (string) $b['address_2'] ) ); }
 		if ( array_key_exists( 'city', $b ) ) {
-			$customer->set_billing_city( sanitize_text_field( (string) $b['city'] ) ); }
+			$customer->set_billing_city( aafm_sanitize_plain_text( (string) $b['city'] ) ); }
 		if ( array_key_exists( 'state', $b ) ) {
-			$customer->set_billing_state( sanitize_text_field( (string) $b['state'] ) ); }
+			$customer->set_billing_state( aafm_sanitize_plain_text( (string) $b['state'] ) ); }
 		if ( array_key_exists( 'postcode', $b ) ) {
-			$customer->set_billing_postcode( sanitize_text_field( (string) $b['postcode'] ) ); }
+			$customer->set_billing_postcode( aafm_sanitize_plain_text( (string) $b['postcode'] ) ); }
 		if ( array_key_exists( 'country', $b ) ) {
-			$customer->set_billing_country( sanitize_text_field( (string) $b['country'] ) ); }
+			$customer->set_billing_country( aafm_sanitize_plain_text( (string) $b['country'] ) ); }
 		if ( array_key_exists( 'email', $b ) ) {
 			$customer->set_billing_email( sanitize_email( (string) $b['email'] ) ); }
 		if ( array_key_exists( 'phone', $b ) ) {
-			$customer->set_billing_phone( sanitize_text_field( (string) $b['phone'] ) ); }
+			$customer->set_billing_phone( aafm_sanitize_plain_text( (string) $b['phone'] ) ); }
 	}
 
 	if ( isset( $input['shipping'] ) && is_array( $input['shipping'] ) ) {
 		$s = $input['shipping'];
 		if ( array_key_exists( 'first_name', $s ) ) {
-			$customer->set_shipping_first_name( sanitize_text_field( (string) $s['first_name'] ) ); }
+			$customer->set_shipping_first_name( aafm_sanitize_plain_text( (string) $s['first_name'] ) ); }
 		if ( array_key_exists( 'last_name', $s ) ) {
-			$customer->set_shipping_last_name( sanitize_text_field( (string) $s['last_name'] ) ); }
+			$customer->set_shipping_last_name( aafm_sanitize_plain_text( (string) $s['last_name'] ) ); }
 		if ( array_key_exists( 'company', $s ) ) {
-			$customer->set_shipping_company( sanitize_text_field( (string) $s['company'] ) ); }
+			$customer->set_shipping_company( aafm_sanitize_plain_text( (string) $s['company'] ) ); }
 		if ( array_key_exists( 'address_1', $s ) ) {
-			$customer->set_shipping_address_1( sanitize_text_field( (string) $s['address_1'] ) ); }
+			$customer->set_shipping_address_1( aafm_sanitize_plain_text( (string) $s['address_1'] ) ); }
 		if ( array_key_exists( 'address_2', $s ) ) {
-			$customer->set_shipping_address_2( sanitize_text_field( (string) $s['address_2'] ) ); }
+			$customer->set_shipping_address_2( aafm_sanitize_plain_text( (string) $s['address_2'] ) ); }
 		if ( array_key_exists( 'city', $s ) ) {
-			$customer->set_shipping_city( sanitize_text_field( (string) $s['city'] ) ); }
+			$customer->set_shipping_city( aafm_sanitize_plain_text( (string) $s['city'] ) ); }
 		if ( array_key_exists( 'state', $s ) ) {
-			$customer->set_shipping_state( sanitize_text_field( (string) $s['state'] ) ); }
+			$customer->set_shipping_state( aafm_sanitize_plain_text( (string) $s['state'] ) ); }
 		if ( array_key_exists( 'postcode', $s ) ) {
-			$customer->set_shipping_postcode( sanitize_text_field( (string) $s['postcode'] ) ); }
+			$customer->set_shipping_postcode( aafm_sanitize_plain_text( (string) $s['postcode'] ) ); }
 		if ( array_key_exists( 'country', $s ) ) {
-			$customer->set_shipping_country( sanitize_text_field( (string) $s['country'] ) ); }
+			$customer->set_shipping_country( aafm_sanitize_plain_text( (string) $s['country'] ) ); }
 	}
 }
 
@@ -690,15 +690,15 @@ function aafm_exec_wc_get_customer( array $input ) {
  * This ability calls wc_create_new_customer(), which creates a real WordPress user account, so
  * manage_woocommerce alone is the wrong gate: it would turn a shop-manager grant into
  * account-creation authority. Requires create_users on top, matching aafm/create-user
- * (users.php:403-405), which is the same operation reached through a different door.
+ * (aafm_perm_create_user() in users.php), which is the same operation reached through a different door.
  *
  * Deliberately NOT folded into aafm_wc_perm() (_shared.php:27-29): that callback is shared by every
  * WooCommerce ability, and adding create_users there would gate reading an order list on a
- * user-management capability. Follows the aafm_perm_wc_delete_product precedent
- * (products.php:1029-1043) of a per-ability callback where the flat cap is not the right floor.
+ * user-management capability. Follows the aafm_perm_wc_delete_product() precedent in products.php,
+ * a per-ability callback where the flat cap is not the right floor.
  *
- * No default_role floor is needed here, unlike aafm/create-user (users.php:441-453): the new
- * account's role is hardcoded to 'customer' by WooCommerce itself
+ * No default_role floor is needed here, unlike aafm/create-user (the default_role clamp in
+ * aafm_exec_create_user() in users.php): the new account's role is hardcoded to 'customer' by WooCommerce itself
  * (woocommerce/includes/wc-user-functions.php:146), never read from the site's default_role option.
  *
  * Takes no object id, so the ability stays object-independent and still falls through to this

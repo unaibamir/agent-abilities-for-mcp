@@ -189,27 +189,66 @@ function aafm_rich_wc_product( \WC_Product $product ): array {
 }
 
 /**
- * Reduce one WC product attribute to a JSON-safe shape (name + options), tolerating either a
- * WC_Product_Attribute object or a plain array. Never returns a path.
+ * Reduce one WC product attribute to a JSON-safe shape, tolerating either a WC_Product_Attribute
+ * object or a plain array. Never returns a path.
+ *
+ * The `options` array used to be whatever WC_Product_Attribute::get_options() held, which is TWO
+ * different vocabularies wearing one field name: term IDS for a global/taxonomy attribute, literal
+ * strings for a custom one. Nothing in the response said which, so a caller could not tell, and the
+ * ids were not merely unhelpful -- they were unusable by this plugin's own write paths. An agent
+ * that read a product to learn the valid options and fed one to wc-create-product-variation was
+ * refused, by an error that then printed the slugs it should have been given in the first place.
+ * The variation read reports the same field AS a slug, so the two reads contradicted each other.
+ *
+ * So a taxonomy attribute's options are resolved to term SLUGS here, which is the form every write
+ * path in this plugin accepts, and a `taxonomy` flag says which kind of attribute produced them so
+ * a caller never has to guess.
+ *
+ * Resolution is READ-ONLY, through aafm_wc_find_attribute_term(). Read that function's docblock
+ * before reaching for WC_Product_Attribute::get_slugs() here: it looks like exactly the right call
+ * and it can create terms.
+ *
+ * An option that cannot be resolved read-only is omitted rather than emitted in a form no write
+ * path accepts. That is safe precisely because the write path compares against THIS function's
+ * output: an option missing from both sides of the round trip cannot cause a spurious mismatch.
  *
  * @param mixed $attribute Attribute (object or array).
  * @return array<string,mixed>
  */
 function aafm_wc_attribute_shape( $attribute ): array {
+	$attribute_id = 0;
 	if ( is_object( $attribute ) && method_exists( $attribute, 'get_name' ) ) {
-		$name    = (string) $attribute->get_name();
-		$options = method_exists( $attribute, 'get_options' ) ? (array) $attribute->get_options() : array();
+		$name         = (string) $attribute->get_name();
+		$options      = method_exists( $attribute, 'get_options' ) ? (array) $attribute->get_options() : array();
+		$attribute_id = method_exists( $attribute, 'get_id' ) ? (int) $attribute->get_id() : 0;
 	} elseif ( is_array( $attribute ) ) {
-		$name    = (string) ( $attribute['name'] ?? '' );
-		$options = (array) ( $attribute['options'] ?? array() );
+		$name         = (string) ( $attribute['name'] ?? '' );
+		$options      = (array) ( $attribute['options'] ?? array() );
+		$attribute_id = (int) ( $attribute['id'] ?? 0 );
 	} else {
 		$name    = '';
 		$options = array();
 	}
 
+	// WooCommerce's own definition of a taxonomy attribute is a non-zero attribute id; the
+	// taxonomy_exists() half keeps a product whose attribute taxonomy has been unregistered from
+	// resolving against nothing and reporting an empty option set as if it were the truth.
+	$is_taxonomy = $attribute_id > 0 && taxonomy_exists( $name );
+	if ( $is_taxonomy ) {
+		$slugs = array();
+		foreach ( $options as $option ) {
+			$term = aafm_wc_find_attribute_term( $option, $name );
+			if ( $term instanceof \WP_Term ) {
+				$slugs[] = (string) $term->slug;
+			}
+		}
+		$options = $slugs;
+	}
+
 	return array(
-		'name'    => $name,
-		'options' => array_values( array_map( 'sanitize_text_field', array_map( 'strval', $options ) ) ),
+		'name'     => $name,
+		'taxonomy' => $is_taxonomy,
+		'options'  => array_values( array_map( 'sanitize_text_field', array_map( 'strval', $options ) ) ),
 	);
 }
 
@@ -252,15 +291,20 @@ function aafm_wc_product_output_properties(): array {
 		),
 		'attributes'        => array(
 			'type'                 => 'object',
-			// Keys are attribute slugs; each value is a {name, options[]} pair. The key set is
-			// product-defined, so the map is open and the value shape is declared here (A3).
+			// Keys are attribute slugs; each value is a {name, taxonomy, options[]} triple. The key
+			// set is product-defined, so the map is open and the value shape is declared here (A3).
 			'additionalProperties' => array(
 				'type'       => 'object',
 				'properties' => array(
-					'name'    => array( 'type' => 'string' ),
-					'options' => array(
-						'type'  => 'array',
-						'items' => array( 'type' => 'string' ),
+					'name'     => array( 'type' => 'string' ),
+					'taxonomy' => array(
+						'type'        => 'boolean',
+						'description' => 'True when this is a global (taxonomy-backed) attribute shared across products, false when it is a custom attribute defined on this product alone. The two behave differently on write: a custom attribute\'s options can be edited through wc-update-product, a global one\'s cannot.',
+					),
+					'options'  => array(
+						'type'        => 'array',
+						'items'       => array( 'type' => 'string' ),
+						'description' => 'The attribute\'s declared values, always in the form every write path here accepts. For a global attribute these are term SLUGS (the form wc-create-product-variation expects), not term ids or display names; for a custom attribute they are the literal option strings.',
 					),
 				),
 			),
@@ -594,7 +638,7 @@ function aafm_wc_product_write_properties(): array {
  */
 function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP_Error {
 	if ( array_key_exists( 'name', $input ) ) {
-		$product->set_name( sanitize_text_field( (string) $input['name'] ) );
+		$product->set_name( aafm_sanitize_plain_text( (string) $input['name'] ) );
 	}
 	if ( array_key_exists( 'status', $input ) ) {
 		$status = sanitize_key( (string) $input['status'] );
@@ -608,7 +652,7 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 		$product->set_status( $status );
 	}
 	if ( array_key_exists( 'sku', $input ) ) {
-		$sku = sanitize_text_field( (string) $input['sku'] );
+		$sku = aafm_sanitize_plain_text( (string) $input['sku'] );
 		try {
 			$product->set_sku( $sku );
 		} catch ( \WC_Data_Exception $e ) {
@@ -672,11 +716,191 @@ function aafm_wc_apply_product_input( \WC_Product $product, array $input ): ?\WP
 	}
 	if ( array_key_exists( 'attributes', $input ) ) {
 		$sanitized = aafm_wc_sanitize_attributes( (array) $input['attributes'] );
-		$product->set_attributes(
-			aafm_wc_build_product_attributes( $sanitized, (array) $product->get_attributes() )
-		);
+
+		// TWO collections, and the difference between them is the entire fix.
+		//
+		// get_attributes() defaults to 'view', which runs woocommerce_product_get_attributes, so
+		// what it returns is what an extension wants DISPLAYED. Carrying those objects into
+		// set_attributes() persists presentation as state, and for a taxonomy attribute that is not
+		// merely untidy: saving one routes through WC_Product_Attribute::get_terms(), which resolves
+		// each option by name and calls wp_insert_term() on a miss, so a display-only string becomes
+		// a real term. Measured: an unchanged echo created a "display-swatch" term.
+		//
+		// So $shown answers exactly one question, did the caller send back what we showed them, and
+		// $stored answers every other, which attributes are really global and which objects are
+		// safe to write.
+		//
+		// WHAT THIS CANNOT FIX, stated so nobody claims more for it later. WooCommerce's own data
+		// store re-reads $product->get_attributes() in VIEW context while saving
+		// (WC_Product_Data_Store_CPT::update_attributes()), so once an attribute change is recorded,
+		// the vendor persists whatever the display filter returns and creates terms for it. Verified
+		// with zero plugin code: a plain WC_Product::save() after an ordinary attribute edit, with
+		// such a filter active, creates the term by itself. What this fix does is make the UNCHANGED
+		// echo record no change at all, which is why the vendor's save path is never entered for it.
+		// A request that genuinely edits some other attribute still goes through WooCommerce, and
+		// that outcome is WooCommerce's to define, not this plugin's to override.
+		$shown  = (array) $product->get_attributes();
+		$stored = (array) $product->get_attributes( 'edit' );
+
+		$attribute_error = aafm_wc_global_attribute_change_error( $sanitized, $stored, $shown );
+		if ( null !== $attribute_error ) {
+			return $attribute_error;
+		}
+		$product->set_attributes( aafm_wc_build_product_attributes( $sanitized, $stored ) );
 	}
 	return null;
+}
+
+/**
+ * Index a product's attributes by slug, dropping anything that cannot become a WC_Product_Attribute.
+ *
+ * @param array<int|string,mixed> $attributes A product's attribute collection.
+ * @return array<string,\WC_Product_Attribute>
+ */
+function aafm_wc_attributes_by_slug( array $attributes ): array {
+	$by_slug = array();
+	foreach ( $attributes as $attribute ) {
+		$object = aafm_wc_coerce_product_attribute( $attribute );
+		if ( null === $object || '' === (string) $object->get_name() ) {
+			continue;
+		}
+		$by_slug[ sanitize_title( (string) $object->get_name() ) ] = $object;
+	}
+	return $by_slug;
+}
+
+/**
+ * Refuse an attempt to change a GLOBAL attribute's options through a field that cannot express one.
+ *
+ * The `attributes` input models a custom attribute and nothing else: a name and a list of literal
+ * option strings. A global attribute's options are not strings, they are terms in a taxonomy shared
+ * across every product that uses it, so the field has no way to say what the caller means. The old
+ * behaviour was to accept the write anyway and rebuild the attribute with set_id( 0 ), which
+ * silently DEMOTED it to a local attribute: `_product_attributes` flipped `is_taxonomy` 1 to 0, the
+ * product stopped being connected to the shared taxonomy, and every existing variation keyed on it
+ * was left holding a value the product no longer declared. Nothing in the response said so.
+ *
+ * Resending an attribute UNCHANGED is not refused. That is the ordinary read-modify-write turn --
+ * read a product, change the price, send the body back -- and it has to stay lossless, so an echo
+ * whose options are already the STORED set is accepted and applied as a no-op by
+ * aafm_wc_build_product_attributes(). Only a genuine attempted CHANGE is refused, because that is
+ * the one this field cannot carry out.
+ *
+ * The comparison runs against aafm_wc_attribute_shape(), the same function the read path emits
+ * from, so the two halves cannot drift into disagreeing about what "unchanged" means. Order is not
+ * significant: a taxonomy attribute's option order is not stored on the product at all (its
+ * `value` is empty and the terms live in the object-term relationship), so a reordered echo is the
+ * same set and refusing it would be pedantry.
+ *
+ * STORED IS THE ONLY REFERENCE A WRITE CAN BE JUDGED AGAINST, and getting that wrong is what R7B-1
+ * was. This comparison used to run against $shown, on the reasoning that $shown is what the caller
+ * echoed. It is, but that reasoning silently assumes they were echoing. When a display filter hides
+ * a stored term the two readings of the same request are indistinguishable from the request alone:
+ * the caller may be handing back the view unchanged, or asking for exactly that set and so for the
+ * hidden term's removal. Guessing "echo" turned the second one into a no-op against stored state,
+ * so the edit was dropped while the same filter shaped a response that looked like it had worked.
+ * Comparing against $stored guesses nothing: a request that already IS the stored set changes
+ * nothing whichever it meant, and everything else is refused.
+ *
+ * $shown still answers two narrower questions, both about the conversation rather than the state. A
+ * slug that is global in $shown but absent from $stored is a filter's invention, and there is no
+ * honest write for it: creating it would promote a display artefact into stored state, so it is
+ * refused with the rest. And a refused set that matches $shown is refused with a different message,
+ * because "send its current options back unchanged" is useless advice to a caller who just did
+ * exactly that; they need to be told a filter is standing between them and the stored state.
+ *
+ * WHAT THIS DOES NOT COVER, so nobody claims more for it later. It is a guard on this one field, not
+ * on display filtering generally. The response to an accepted no-op is still built in view context,
+ * so a filtered product still reads back filtered here exactly as it does through wc-get-product;
+ * what can no longer happen is the combination that made that dangerous, a response confirming the
+ * set the caller ASKED for while storage holds something else, because any set that differs from
+ * stored is now refused before anything is written. Nothing here addresses WooCommerce's own
+ * view-context re-read during a genuine attribute save (see aafm_wc_apply_product_input()).
+ *
+ * THE RULE THIS FUNCTION IS AN INSTANCE OF, worth more than the function: a safety claim resting on
+ * two functions agreeing needs a test on the AGREEMENT, not on each function. The previous version
+ * of this comparison was correct, the shaper it compared against was correct, and the defect lived
+ * in the join between them, where nothing looked.
+ *
+ * @param array<int,array<string,mixed>> $sanitized Sanitized {name, options[]} items from the input.
+ * @param array<int|string,mixed>        $stored    The product's PERSISTED attributes (edit context).
+ * @param array<int|string,mixed>        $shown     The product's attributes as the caller was shown them.
+ * @return \WP_Error|null Null when nothing global is being changed.
+ */
+function aafm_wc_global_attribute_change_error( array $sanitized, array $stored, array $shown ): ?\WP_Error {
+	$stored_by_slug = aafm_wc_attributes_by_slug( $stored );
+	$shown_by_slug  = aafm_wc_attributes_by_slug( $shown );
+
+	$refused = array();
+	$masked  = array();
+	foreach ( $sanitized as $item ) {
+		$name = (string) ( $item['name'] ?? '' );
+		if ( '' === $name ) {
+			continue;
+		}
+		$slug            = sanitize_title( $name );
+		$stored_previous = $stored_by_slug[ $slug ] ?? null;
+		$shown_previous  = $shown_by_slug[ $slug ] ?? null;
+
+		$stored_is_global = $stored_previous instanceof \WC_Product_Attribute && ! empty( aafm_wc_attribute_shape( $stored_previous )['taxonomy'] );
+		$shown_is_global  = $shown_previous instanceof \WC_Product_Attribute && ! empty( aafm_wc_attribute_shape( $shown_previous )['taxonomy'] );
+
+		if ( ! $stored_is_global ) {
+			if ( $shown_is_global ) {
+				// Displayed as global, stored as nothing. A filter made it up.
+				$refused[] = $slug;
+			}
+			continue; // Otherwise a custom attribute, or a genuinely new name: both editable here.
+		}
+
+		// Compare against what is STORED, because that is the only thing a write changes.
+		$sent           = array_map( 'strval', array_values( (array) ( $item['options'] ?? array() ) ) );
+		$stored_options = array_map( 'strval', array_values( (array) aafm_wc_attribute_shape( $stored_previous )['options'] ) );
+		sort( $sent );
+		sort( $stored_options );
+		if ( $sent === $stored_options ) {
+			continue; // Already the stored set: allowed, and applied as a no-op against it.
+		}
+
+		// Refused either way. Which message the caller gets depends on whether a display filter is
+		// what put them in this position, because that changes what they can usefully do next.
+		$reference = $shown_previous instanceof \WC_Product_Attribute ? $shown_previous : $stored_previous;
+		$displayed = array_map( 'strval', array_values( (array) aafm_wc_attribute_shape( $reference )['options'] ) );
+		sort( $displayed );
+		if ( $sent === $displayed ) {
+			$masked[] = $slug;
+			continue;
+		}
+
+		$refused[] = $slug;
+	}
+
+	// A masked attribute is reported first and on its own. Its cause is the surprising one and its
+	// remedy is different, and the whole request is refused either way, so a genuine change sent
+	// alongside one is simply refused again, with its own message, on the next attempt.
+	if ( array() !== $masked ) {
+		return new \WP_Error(
+			'aafm_wc_global_attribute_display_masked',
+			sprintf(
+				/* translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones. */
+				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. To change the attribute itself, use wc-update-product-attribute.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $masked )
+			)
+		);
+	}
+
+	if ( array() === $refused ) {
+		return null;
+	}
+
+	return new \WP_Error(
+		'aafm_wc_global_attribute_not_editable',
+		sprintf(
+			/* translators: %s: comma-separated list of global attribute slugs the request tried to change. */
+			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Use wc-update-product-attribute to change the attribute itself, or send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
+			implode( ', ', $refused )
+		)
+	);
 }
 
 /**
@@ -724,6 +948,16 @@ function aafm_wc_build_product_attributes( array $sanitized, array $existing ): 
 		}
 		$slug     = sanitize_title( $name );
 		$previous = $by_slug[ $slug ] ?? null;
+
+		// A GLOBAL attribute resent unchanged. Anything else global was already refused by
+		// aafm_wc_global_attribute_change_error(), so the only correct action left is to leave the
+		// existing object exactly as it is. Rebuilding it is what caused the damage: the fresh
+		// object below pins set_id( 0 ), and the attribute id IS the taxonomy binding, so a rebuild
+		// demotes a shared attribute to a local one and strands every variation keyed on it.
+		if ( $previous instanceof \WC_Product_Attribute && (int) $previous->get_id() > 0 ) {
+			$by_slug[ $slug ] = $previous;
+			continue;
+		}
 
 		$object = new \WC_Product_Attribute();
 		$object->set_id( 0 );
@@ -791,10 +1025,10 @@ function aafm_wc_sanitize_attributes( array $attributes ): array {
 		}
 		$options = array();
 		foreach ( (array) ( $attribute['options'] ?? array() ) as $option ) {
-			$options[] = sanitize_text_field( (string) $option );
+			$options[] = aafm_sanitize_plain_text( (string) $option );
 		}
 		$clean[] = array(
-			'name'    => sanitize_text_field( (string) ( $attribute['name'] ?? '' ) ),
+			'name'    => aafm_sanitize_plain_text( (string) ( $attribute['name'] ?? '' ) ),
 			'options' => $options,
 		);
 	}
@@ -854,7 +1088,7 @@ function aafm_exec_wc_create_product( array $input ) {
 	if ( ! class_exists( 'WC_Product' ) ) {
 		return aafm_generic_error();
 	}
-	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	if ( '' === $name ) {
 		return aafm_generic_error();
 	}

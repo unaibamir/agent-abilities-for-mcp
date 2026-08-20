@@ -445,7 +445,7 @@ PHP;
 			// regular order, or false when the id is unknown. Mirrors real WooCommerce behaviour
 			// where shop_order_refund posts return WC_Order_Refund from wc_get_order().
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
-			eval( 'function wc_get_order( $id = false ) { $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
+			eval( 'function wc_get_order( $id = false ) { if ( \AAFM\Tests\WcOrderStubStore::$throw_on_get ) { throw new \RuntimeException( "stub order factory failure" ); } $id = (int) $id; if ( null !== \AAFM\Tests\WcOrderStubStore::get_refund_by_id( $id ) ) { return new \WC_Order_Refund( $id ); } if ( ! \AAFM\Tests\WcOrderStubStore::exists( $id ) ) { return false; } return new \WC_Order( $id ); }' );
 		}
 		$this->stub_wc_order_statuses();
 
@@ -609,6 +609,10 @@ class WC_Order {
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
 	public function get_order_number() { return (string) ( $this->data['number'] ?? (string) $this->get_id() ); }
 	public function get_status() { return (string) ( $this->data['status'] ?? 'processing' ); }
+	// Mirrors WC_Order::is_editable(): pending, on-hold and auto-draft only. That is the line
+	// WooCommerce itself draws for editing an order's items, and the order abilities now use it to
+	// decide whether recalculating totals may also recompute tax.
+	public function is_editable() { return in_array( $this->get_status(), array( 'pending', 'on-hold', 'auto-draft' ), true ); }
 	public function get_total() { return (string) ( $this->data['total'] ?? '0.00' ); }
 	public function get_currency() { return (string) ( $this->data['currency'] ?? 'USD' ); }
 	public function get_date_created() { return $this->data['date_created'] ?? null; }
@@ -686,6 +690,8 @@ class WC_Order {
 		return $item['id'];
 	}
 	public function calculate_totals( $and_taxes = true ) {
+		// Recorded so a test can assert WHETHER taxes were recomputed, not just that a total moved.
+		\AAFM\Tests\WcOrderStubStore::$last_calculate_totals_and_taxes = (bool) $and_taxes;
 		$subtotal = 0.0;
 		foreach ( (array) ( $this->data['items'] ?? array() ) as $item ) {
 			$subtotal += (float) ( $item['total'] ?? 0 );
@@ -756,7 +762,20 @@ class WC_Product {
 	public function get_tag_ids() { return (array) ( $this->data['tag_ids'] ?? array() ); }
 	public function get_gallery_image_ids() { return (array) ( $this->data['gallery_image_ids'] ?? array() ); }
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
-	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
+	// Context-aware, like the real getter. WC_Product::get_attributes( $context = 'view' ) goes
+	// through get_prop(), which runs the woocommerce_product_get_attributes display filter in view
+	// context and skips it in edit. A stub that ignored the argument could not tell a validator
+	// reading the stored set apart from one reading the presented set, so a test written against it
+	// would pass either way. `attributes_view` stands in for what a display filter would present.
+	public function get_attributes( $context = 'view' ) {
+		if ( 'edit' !== $context && isset( $this->data['attributes_view'] ) ) {
+			return (array) $this->data['attributes_view'];
+		}
+		return (array) ( $this->data['attributes'] ?? array() );
+	}
+	// Test-only: stand in for what a woocommerce_product_get_attributes filter would present.
+	// There is no such setter on the real class; a filter is how a real site does this.
+	public function set_attributes_view( $v ) { $this->data['attributes_view'] = (array) $v; }
 	public function get_children() { return (array) ( $this->data['children'] ?? array() ); }
 	private function aafm_stub_merge_attributes( $existing, $v ) {
 		// Mirror WC_Product::set_attributes(): pre-null every existing key, then keep ONLY
@@ -849,7 +868,20 @@ class WC_Product_Variation {
 		return $value;
 	}
 	public function get_image_id() { return (int) ( $this->data['image_id'] ?? 0 ); }
-	public function get_attributes() { return (array) ( $this->data['attributes'] ?? array() ); }
+	// Context-aware, like the real getter. WC_Product::get_attributes( $context = 'view' ) goes
+	// through get_prop(), which runs the woocommerce_product_get_attributes display filter in view
+	// context and skips it in edit. A stub that ignored the argument could not tell a validator
+	// reading the stored set apart from one reading the presented set, so a test written against it
+	// would pass either way. `attributes_view` stands in for what a display filter would present.
+	public function get_attributes( $context = 'view' ) {
+		if ( 'edit' !== $context && isset( $this->data['attributes_view'] ) ) {
+			return (array) $this->data['attributes_view'];
+		}
+		return (array) ( $this->data['attributes'] ?? array() );
+	}
+	// Test-only: stand in for what a woocommerce_product_get_attributes filter would present.
+	// There is no such setter on the real class; a filter is how a real site does this.
+	public function set_attributes_view( $v ) { $this->data['attributes_view'] = (array) $v; }
 	public function set_parent_id( $v ) { $this->data['parent_id'] = (int) $v; }
 	public function set_status( $v ) { $this->data['status'] = (string) $v; }
 	public function set_sku( $v ) { $v = (string) $v; if ( \AAFM\Tests\WcStubStore::sku_taken_by_other( $v, $this->get_id() ) ) { throw new \WC_Data_Exception( 'product_invalid_sku', 'Invalid or duplicated SKU.' ); } $this->data['sku'] = $v; }
@@ -863,7 +895,16 @@ class WC_Product_Variation {
 	public function set_image_id( $v ) { $this->data['image_id'] = (int) $v; }
 	public function set_attributes( $v ) { $this->data['attributes'] = (array) $v; }
 	public function save() { $this->data['type'] = 'variation'; $id = \AAFM\Tests\WcStubStore::save( $this->data ); $this->data['id'] = $id; return $id; }
-	public function delete( $force = false ) { return \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) ); }
+	// Mirrors WC_Product_Data_Store_CPT::delete() (which the variation data store inherits): on the
+	// force path it deletes the post and then zeroes the product's OWN id, and it never calls
+	// clear_caches(). That missing cache clear is why a wc_get_product() after a variation delete can
+	// still hand back an object for a row that is gone, so the zeroed id is the signal that survives.
+	// When the store reports outright failure the vendor never reached set_id( 0 ) either.
+	public function delete( $force = false ) {
+		$result = \AAFM\Tests\WcStubStore::delete( (int) ( $this->data['id'] ?? 0 ) );
+		if ( $force && false !== $result ) { $this->data['id'] = 0; }
+		return $result;
+	}
 }
 PHP;
 	}

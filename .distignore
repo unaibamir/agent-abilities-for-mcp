@@ -14,9 +14,9 @@
 /build
 /release-notes.md
 /node_modules
-/CLAUDE.md
-/CONTRIBUTING.md
-/.mcp.json
+CLAUDE.md
+CONTRIBUTING.md
+.mcp.json
 .DS_Store
 /.phpunit.cache
 /.playwright-cli
@@ -27,19 +27,20 @@
 /.scratch
 /scratchpad
 /project-state
-/.distignore
-/.gitattributes
-/.gitignore
+.distignore
+.gitattributes
+.gitignore
 /.editorconfig
-/README.md
-/glama.json
-/composer.lock
-/phpcs.xml.dist
-/phpstan.neon.dist
-/phpstan-baseline.neon
-/phpstan-polyfill-stubs.stub
-/phpunit.xml.dist
-/phpunit-contract.xml.dist
+README.md
+glama.json
+server.json
+composer.lock
+phpcs.xml.dist
+phpstan.neon.dist
+phpstan-baseline.neon
+phpstan-polyfill-stubs.stub
+phpunit.xml.dist
+phpunit-contract.xml.dist
 
 # Dev-only Composer dependencies. The release build runs `composer install --no-dev`,
 # so these are normally absent when the tree is deployed; listed here as a backstop in
@@ -69,3 +70,13 @@
 # prune non-PHP files from an installed package.
 /vendor/wordpress/mcp-adapter/package.json
 /vendor/wordpress/mcp-adapter/package-lock.json
+
+# Pattern anchoring, and why several entries above have no leading slash. rsync reads a
+# leading slash as anchored to the transfer root and a bare filename as matching at any
+# depth. .gitattributes draws the same distinction, and it writes README.md, composer.lock
+# and the dev config files unanchored, so git drops the copies Composer installs under
+# vendor/ as well as the ones at the root. The entries above match that, which keeps the
+# deploy and the zip on the same file set. Do not add the slashes back for tidiness: two
+# vendor READMEs and a lock file shipped to wordpress.org that way, in a payload no gate
+# had scanned. Directory names stay anchored on purpose, because a bare tests or bin would
+# start excluding vendor/*/tests and vendor/*/bin, which git ships.

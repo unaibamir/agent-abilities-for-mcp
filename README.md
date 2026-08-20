@@ -1,15 +1,15 @@
 # Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
 
-WordPress MCP server for Claude and ChatGPT. Per-capability permission controls, everything off by default, and a full audit log.
+WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
 
 | | |
 |---|---|
 | **Contributors** | unaibamir |
 | **Tags** | chatgpt, claude, mcp, mcp-server, woocommerce |
 | **Requires at least** | 6.9 |
-| **Tested up to** | 7.0 |
+| **Tested up to** | 7.1 |
 | **Requires PHP** | 7.4 |
-| **Stable tag** | 1.6.3 |
+| **Stable tag** | 1.7.0 |
 | **License** | [GPL-2.0-or-later](https://www.gnu.org/licenses/gpl-2.0.html) |
 
 ## Description
@@ -28,6 +28,12 @@ Model Context Protocol (MCP) is an open specification originally developed by An
 
 **Quick links:** [Documentation](https://agentabilitieswp.com/docs/) | [Getting started](https://agentabilitieswp.com/docs/getting-started/) | [Supported clients](https://agentabilitieswp.com/clients/) | [Prompt Library](https://agentabilitieswp.com/prompts/) | [Website](https://agentabilitieswp.com/)
 
+### What is a WordPress MCP server?
+
+A WordPress MCP server lets an AI assistant work on your site directly, instead of you copying text back and forth between a chat window and wp-admin. The Model Context Protocol (MCP) is an open standard that tells an AI client which tools a service offers and how to call them. Put an MCP server on WordPress and Claude, ChatGPT, or any other MCP client can list your posts, draft one, sort your media library, or update a WooCommerce order.
+
+An MCP server hands a language model the ability to change your live site, so how far it can reach and whether you can audit it afterwards both matter. Agent Abilities for MCP ships its whole catalog switched off, re-checks the bound user's capabilities before each call, and writes every call to an audit log in your own database.
+
 ### 🛡️ Permission controls and an audit log on every call
 
 * **Least privilege by design.** The AI agent connects as a real, scoped WordPress user through OAuth or an Application Password, never an admin-equivalent key.
@@ -38,7 +44,7 @@ Model Context Protocol (MCP) is an open specification originally developed by An
 * **Bounded by construction.** No arbitrary option or meta access, no remote URL fetch, no code execution. Uploads are decoded from inline data and checked by their real bytes against an image allow-list, never fetched from a URL. A created user gets the site default role, never admin, and the last administrator can never be removed. Anything destructive is off by default and capability-gated, and deletes go to Trash where the ability supports it.
 * **Optional safety controls.** Switch on a per-minute rate limit, an IP allowlist, a force-to-draft mode, or a title-length cap. All four stay off until you set them.
 * **No data leaves your site.** The plugin contacts no AI provider and no external service. Your AI client connects in; the plugin never reaches out.
-* **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to store, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you. An Application Password is a whole-site WordPress credential bounded only by that user's role, not something this plugin can scope down, so the allowlist, the high-risk floor, and the audit log below apply to calls made through this plugin's MCP endpoint only. OAuth does not have that limit, since a token this plugin issues only ever authenticates this one endpoint.
+* **Two ways to connect.** Approve an agent in the browser over OAuth, with no secret to put in your config file, or point a dedicated low-privilege user at an Application Password. A guided screen builds the client config and checks the endpoint for you. An Application Password is a whole-site WordPress credential bounded only by that user's role, not something this plugin can scope down, so the allowlist, the high-risk floor, and the audit log below apply to calls made through this plugin's MCP endpoint only. OAuth does not have that limit, since a token this plugin issues only ever authenticates this one endpoint.
 
 ### 🤖 Built on the WordPress Abilities API and MCP Adapter
 
@@ -80,6 +86,18 @@ One limit worth knowing, because it is the other plugin's code doing the work an
 
 So you are not limited to the integrations shipped here. Any plugin that speaks the Abilities API can be handed to your agent on your terms, and you can flip a whole plugin's set on or off at once. For fleets or record-keeping, the bundled WP-CLI command `wp aafm catalog export` prints a site's discoverable abilities as JSON.
 
+### Connect Claude to WordPress
+
+To connect Claude to WordPress, install the plugin, switch on the abilities you want Claude to have, then copy your site's MCP endpoint from the Connection tab and add it to Claude as a custom connector. You approve the sign-in once in the browser over OAuth. There is no API key to paste into a config file and nothing to install on your machine.
+
+The claude.ai web app and Claude Desktop share that one connector flow. Claude Code connects from the command line instead. Either way Claude acts as the WordPress user who approved it, so it can only do what that account could do on its own, and every call it makes is written to the audit log before it runs.
+
+### Connect ChatGPT to WordPress
+
+To connect ChatGPT to WordPress, turn on Developer Mode in ChatGPT under Settings, then Connectors, then Advanced. Add your site's MCP endpoint as a custom connector and approve it once over OAuth. Custom connectors are a beta feature on ChatGPT's paid plans, which is ChatGPT's limit and not the plugin's.
+
+After that, ChatGPT reaches only the abilities you switched on, acting as the WordPress user that approved the connection. Switch one off and it is gone from what ChatGPT can see on its next call.
+
 ### 🔌 Connect ChatGPT, Claude, Cursor and other MCP clients
 
 Connect any MCP client that can reach your endpoint. Hosted cloud apps (ChatGPT, Claude, and Manus) connect by URL: you add your endpoint as a custom connector and approve the sign-in once over OAuth, with no config file to edit and no bridge to install. ChatGPT needs developer mode turned on, which requires a paid plan. The single Claude entry covers both the Claude web app and Claude Desktop, since they share the same connector flow. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect either directly or through the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge that runs on your own machine. You can also connect with an Application Password instead of OAuth, pointing a low-privilege user at the endpoint. The hosted Gemini app is not supported yet.
@@ -93,9 +111,54 @@ Connect any MCP client that can reach your endpoint. Hosted cloud apps (ChatGPT,
 5. Prefer not to use OAuth, or on a client that can't? Create the dedicated low-privilege agent user the Connection tab offers, generate an Application Password for it, and connect with that instead.
 6. Use the connection check on the Connection tab to confirm the endpoint is reachable from your server.
 
+## Configuration
+
+Your site's MCP endpoint lives at a fixed path under your REST API (replace `example.com` with your own domain):
+
+```
+https://example.com/wp-json/agent-abilities-for-mcp/mcp
+```
+
+Hosted apps (ChatGPT, Claude, and Manus) take that URL directly: add it as a custom connector and approve the connection once over OAuth. Editors and command-line clients use a config file instead. The standard block runs the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge on your own machine, which walks you through the same one-time OAuth approval in the browser, so the config file holds no secret. The bridge keeps the tokens it is issued on your own machine, under `~/.mcp-auth`:
+
+```json
+{
+  "mcpServers": {
+    "agent-abilities": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://example.com/wp-json/agent-abilities-for-mcp/mcp"]
+    }
+  }
+}
+```
+
+VS Code keys the same block as `servers` in `.vscode/mcp.json` rather than `mcpServers`. Prefer an Application Password over OAuth? Create the dedicated low-privilege agent user the Connection tab offers, then connect through the [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote) bridge with the credentials in its `env` block:
+
+```json
+{
+  "mcpServers": {
+    "agent-abilities": {
+      "command": "npx",
+      "args": ["-y", "@automattic/mcp-wordpress-remote@latest"],
+      "env": {
+        "WP_API_URL": "https://example.com/wp-json/agent-abilities-for-mcp/mcp",
+        "WP_API_USERNAME": "your-agent-user",
+        "WP_API_PASSWORD": "PASTE-APPLICATION-PASSWORD-HERE"
+      }
+    }
+  }
+}
+```
+
+You do not have to write either block by hand: the Connection tab generates both, filled in with your real endpoint, with a Windows variant and a reachability check.
+
 ## Frequently Asked Questions
 
 **More help:** [Documentation](https://agentabilitieswp.com/docs/) | [Connecting a client](https://agentabilitieswp.com/docs/connecting-a-client/) | [Security and disclosure](https://agentabilitieswp.com/security/) | [Support forum](https://wordpress.org/support/plugin/agent-abilities-for-mcp/)
+
+### How do I connect Claude to WordPress?
+
+Install the plugin, enable the abilities you want on the Abilities tab, then copy your MCP endpoint from the Connection tab and add it to Claude as a custom connector. Approve the sign-in once in the browser. The claude.ai web app and Claude Desktop use that same flow; Claude Code connects from the command line.
 
 ### Does the agent get admin access?
 
@@ -157,6 +220,10 @@ Any MCP client that can reach your site's endpoint. With OAuth you paste the end
 
 Yes. In ChatGPT, turn on developer mode, then add your site as a custom connector using your MCP endpoint URL and approve the connection once over OAuth. This needs a ChatGPT plan that allows custom connectors. Claude Desktop, Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI also work, some directly and some through the `mcp-remote` bridge that runs on your own machine.
 
+### Can ChatGPT edit my WordPress site?
+
+Only the parts you allow. ChatGPT reaches your site through a custom connector you add yourself, it acts as the WordPress user that approved the connection, and it sees nothing beyond the abilities you switched on. Every write is capability-checked before it runs and recorded in the audit log, and you can stop all writes at once with read-only mode.
+
 ### I'm on Windows and the config won't start.
 
 Windows MCP clients can't launch the npx shim by name. Wrap it in cmd: set `command` to `cmd` and put `/c`, `npx` at the front of `args`. The Connection tab has a Windows tab that generates this for you.
@@ -196,6 +263,18 @@ This plugin does not contact any external or third-party service. It registers a
 Connecting an AI client to your site is done by the client, not by this plugin. Some MCP clients reach your endpoint directly; others use a small bridge program that runs on your own computer, such as the open-source [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) tool or [`@automattic/mcp-wordpress-remote`](https://www.npmjs.com/package/@automattic/mcp-wordpress-remote). Neither bridge is bundled with this plugin or run by it. You install and run it yourself, and it talks only to your site and your local AI client.
 
 ## Changelog
+### 1.7.0
+
+* **Feature:** Sections on the Abilities tab now have an "Enable all writes" button beside "Enable all reads". It ticks the ordinary writes and leaves deletes and high-risk abilities alone.
+* **Feature:** The audit log records more. Permanent deletes name what they removed, and term meta, user meta and site settings updates name the keys they wrote. It logs names and identifiers, not the free text a call carried.
+* **Fix:** An authorize request in flight when you revoked a grant could still mint a code, and the token endpoint never re-checked consent, so that code redeemed into a working token after the screen said the revoke had succeeded. Consent is checked again at redemption.
+* **Fix:** Payment gateway settings returned camelCase credential keys in full and marked none of them redacted. Authorize.Net's apiLoginID and transactionKey are the real case.
+* **Fix:** Four ACF writes destroyed stored content and then reported failure: an unresolvable flexible content layout, clearing through a near-matching address, a protected-meta check that read the caller's address instead of ACF's, and a sub-field write landing under an undeclared name. All are refused before anything is written.
+* **Fix:** WooCommerce counted refunds as orders, so a store with six orders and three refunds reported nine. Variations were validated against a display filter rather than the parent product, a variation delete reported failure on success, and an order lookup that threw escaped its rollback.
+* **Fix:** Two refusals over MCP said "Permission denied" when that was not the problem. Setting alt text hit it because WordPress stores alt under a protected key, and the refusal now names aafm-update-media instead. A call missing a required argument hit it too, and now gets the schema error naming what is missing.
+* **Fix:** Invisible characters are stripped from text on its way into storage, covering WooCommerce, SEO and ACF fields, order addresses and stored post text. Permanent deletes stop offering recovery the site cannot deliver, and an ability declaring no risk is treated as a permanent delete. Plus smaller fixes across shipping zones, menu listings on WordPress 6.9, ACF container writes, the first-run wizard, and refusal messages that named the wrong cause.
+* **Chore:** Tested against WordPress 7.1. An accessibility pass over the admin screens covers keyboard operation, focus rings under forced colors, and proper names on toggles and table headers. OAuth housekeeping is sturdier, with InnoDB tables so token work rolls back and a cleanup cron that heals itself on subsites. A notice now asks for a wordpress.org review once the plugin has been carrying traffic for a while, and it can be dismissed for good. Vendor repository metadata no longer ships to wordpress.org.
+
 ### 1.6.3
 
 * **Chore:** Condensed the changelog so the full release history fits within the wordpress.org listing's length limit, in both readmes. Same releases, fewer lines, with the security and data-integrity fixes still called out one by one.

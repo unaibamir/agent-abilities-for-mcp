@@ -360,6 +360,58 @@ final class HelpersTest extends TestCase {
 		$this->assertTrue( aafm_hard_blocked_user_meta_key( 'WP_User_Level' ), 'mixed-case user_level key must be blocked (user meta).' );
 	}
 
+	/**
+	 * Whitespace around a protected key must not walk past the floor.
+	 *
+	 * Every check in both denylists is byte-exact or end-anchored. MySQL's meta_key comparison is
+	 * neither: under the PAD SPACE, case-insensitive collation WordPress gives that column,
+	 * update_metadata's `WHERE meta_key = %s` finds the canonical row for a key that merely has
+	 * trailing space. So the unfixed floor returned false for a name that could still overwrite the
+	 * real capabilities row. Leading whitespace is here too because trimming exposes a leading
+	 * underscore that is_protected_meta() then catches.
+	 */
+	public function test_hard_block_ignores_surrounding_whitespace(): void {
+		global $wpdb;
+
+		// The multisite per-blog row is built from the real prefix: the test suite runs on
+		// `wptests_`, so a literal `wp_2_capabilities` would not match the anchored pattern even
+		// untrimmed and would pin nothing.
+		$padded = array(
+			'wp_capabilities ',
+			' wp_capabilities',
+			"wp_capabilities\t",
+			"wp_capabilities\n",
+			'wp_user_level ',
+			'session_tokens ',
+			' _application_passwords',
+			$wpdb->prefix . '2_capabilities ',
+		);
+
+		// Collected rather than asserted in the loop, so the two floors fail INDEPENDENTLY. Asserting
+		// both inside one loop makes the whole test die on the first row, and deleting the fix from
+		// one floor then reads identically to deleting it from both. This project's documented
+		// archetype is "fixed at one call site, never swept", so the test has to be able to see the
+		// difference.
+		$missed_user = array();
+		$missed_post = array();
+		foreach ( $padded as $key ) {
+			if ( ! aafm_hard_blocked_user_meta_key( $key ) ) {
+				$missed_user[] = $key;
+			}
+			if ( ! aafm_hard_blocked_meta_key( $key ) ) {
+				$missed_post[] = $key;
+			}
+		}
+
+		$this->assertSame( array(), $missed_user, 'User-meta floor let a padded protected key through.' );
+		$this->assertSame( array(), $missed_post, 'Post-meta floor let a padded protected key through.' );
+
+		// The other direction, so the trim is not quietly a blanket block. An ordinary key with
+		// stray whitespace is still an ordinary key.
+		$this->assertFalse( aafm_hard_blocked_user_meta_key( 'nickname ' ) );
+		$this->assertFalse( aafm_hard_blocked_meta_key( ' subtitle' ) );
+	}
+
 	public function test_hard_block_filter_can_add_but_not_remove(): void {
 		add_filter( 'aafm_hard_blocked_meta_keys', static fn( $k ) => array_merge( $k, array( 'company_revenue' ) ) );
 		$this->assertTrue( aafm_hard_blocked_meta_key( 'company_revenue' ) );

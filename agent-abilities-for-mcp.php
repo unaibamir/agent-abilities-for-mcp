@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       Agent Abilities for MCP - MCP Server with Permission Controls and Audit Log
  * Plugin URI:        https://agentabilitieswp.com
- * Description:       WordPress MCP server for Claude and ChatGPT. Per-capability permission controls, everything off by default, and a full audit log.
- * Version:           1.6.3
+ * Description:       WordPress MCP server. Connect Claude, ChatGPT, or any AI agent, with permission controls, off by default, and a full audit log.
+ * Version:           1.7.0
  * Requires at least: 6.9
  * Requires PHP:      7.4
  * Author:            Unaib Amir
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AAFM_VERSION', '1.6.3' );
+define( 'AAFM_VERSION', '1.7.0' );
 define( 'AAFM_PLUGIN_FILE', __FILE__ );
 define( 'AAFM_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AAFM_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -47,6 +47,11 @@ require_once AAFM_PLUGIN_DIR . 'includes/adapter-loader.php';
 aafm_register_adapter_autoloader();
 aafm_eager_load_adapter();
 
+// Stored plain-text sanitizing. First, because the audit log and the OAuth client registration
+// below both sanitize text they store, and both are required before aafm_bootstrap() runs. It
+// depends on nothing else the plugin defines, so there is no ordering cost to putting it here.
+require_once AAFM_PLUGIN_DIR . 'includes/text.php';
+
 // Audit log is required early so the activation hook can install its table.
 require_once AAFM_PLUGIN_DIR . 'includes/audit/log.php';
 require_once AAFM_PLUGIN_DIR . 'includes/audit/detail.php';
@@ -61,8 +66,14 @@ require_once AAFM_PLUGIN_DIR . 'includes/audit/read-only.php';
  * Schedule the daily activity-log prune event, if not already scheduled.
  *
  * The event fires `aafm_prune_activity_log_daily`, which trims entries older than the
- * configured retention window. Runs on activation and self-heals on admin_init so an
- * install that predates this event still picks it up without a reactivation.
+ * configured retention window. Runs on activation and self-heals on both admin_init
+ * and rest_api_init. A network activation fires the activation hook once, on the
+ * activation blog only, so a subsite serving only REST/MCP traffic would otherwise
+ * write audit rows forever with the retention prune never scheduled; the rest_api_init
+ * heal schedules it on the path that actually carries that traffic, matching the
+ * activity-log schema's own self-heal. The admin_init heal also covers a single-site
+ * install that predates this event and was updated in place without a reactivation.
+ * wp_next_scheduled() keeps every path idempotent.
  *
  * @return void
  */
@@ -73,6 +84,7 @@ function aafm_schedule_log_prune(): void {
 }
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_schedule_log_prune' );
 add_action( 'admin_init', 'aafm_schedule_log_prune' );
+add_action( 'rest_api_init', 'aafm_schedule_log_prune' );
 
 /**
  * Clear the scheduled activity-log prune event on deactivation.
@@ -161,8 +173,18 @@ add_action( 'wp_initialize_site', 'aafm_initialize_new_site_tables', 100 );
 /**
  * Schedule the daily OAuth cleanup event on activation, if not already scheduled.
  *
- * The event fires the `aafm_oauth_cleanup` action (wired in aafm_bootstrap()),
- * which prunes expired codes and dead tokens.
+ * The event fires the `aafm_oauth_cleanup` action (wired at file scope below via
+ * add_action( 'aafm_oauth_cleanup', … )), which prunes expired codes and dead
+ * tokens and reaps abandoned DCR clients.
+ *
+ * Runs on activation and self-heals on admin_init and rest_api_init. A network
+ * activation fires the activation hook once, on the activation blog only, so
+ * subsites would otherwise never schedule this event; WP-Cron is per-site, and
+ * without the reaper the public DCR endpoint could grow the clients table
+ * without bound on any subsite that turns on OAuth. The admin_init heal also
+ * covers a single-site install that predates this event and was updated in
+ * place without a reactivation; the rest_api_init heal covers a subsite serving
+ * only REST/MCP traffic. wp_next_scheduled() keeps every path idempotent.
  *
  * @return void
  */
@@ -172,6 +194,8 @@ function aafm_oauth_schedule_cleanup(): void {
 	}
 }
 register_activation_hook( AAFM_PLUGIN_FILE, 'aafm_oauth_schedule_cleanup' );
+add_action( 'admin_init', 'aafm_oauth_schedule_cleanup' );
+add_action( 'rest_api_init', 'aafm_oauth_schedule_cleanup' );
 
 /**
  * Clear the scheduled OAuth cleanup event on deactivation.
@@ -364,6 +388,7 @@ function aafm_bootstrap() {
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/connection.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/quickconnect.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/onboarding-pointer.php';
+	require_once AAFM_PLUGIN_DIR . 'includes/admin/review-request.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/disclosures.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/page.php';
 	require_once AAFM_PLUGIN_DIR . 'includes/admin/settings.php';
@@ -393,6 +418,10 @@ function aafm_bootstrap() {
 		add_action( 'wp_ajax_aafm_quickconnect_oauth', 'aafm_ajax_quickconnect_oauth' );
 		add_action( 'wp_ajax_aafm_quickconnect_finish', 'aafm_ajax_quickconnect_finish' );
 		add_action( 'wp_ajax_aafm_quickconnect_dismiss', 'aafm_ajax_quickconnect_dismiss' );
+		add_action( 'wp_ajax_aafm_review_request', 'aafm_ajax_review_request' );
+		// The same answer, arriving as a plain link when the notice's footer script never ran.
+		add_action( 'admin_post_aafm_review_request', 'aafm_handle_review_request_post' );
+		add_action( 'admin_notices', 'aafm_render_review_request_notice' );
 		add_action( 'admin_enqueue_scripts', 'aafm_maybe_enqueue_menu_pointer' );
 	}
 

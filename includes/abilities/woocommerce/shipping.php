@@ -269,7 +269,7 @@ function aafm_wc_shipping_zone_write_properties(): array {
  */
 function aafm_wc_apply_shipping_zone_input( \WC_Shipping_Zone $zone, array $input ): void {
 	if ( array_key_exists( 'zone_name', $input ) ) {
-		$zone->set_zone_name( sanitize_text_field( (string) $input['zone_name'] ) );
+		$zone->set_zone_name( aafm_sanitize_plain_text( (string) $input['zone_name'] ) );
 	}
 	if ( array_key_exists( 'zone_order', $input ) ) {
 		$zone->set_zone_order( absint( $input['zone_order'] ) );
@@ -492,8 +492,12 @@ function aafm_args_wc_update_shipping_zone(): array {
 	$write_props            = aafm_wc_shipping_zone_write_properties();
 	$write_props['zone_id'] = array(
 		'type'        => 'integer',
-		'minimum'     => 0,
-		'description' => __( "The shipping zone's id to update. Must reference an existing zone or the request fails.", 'agent-abilities-for-mcp' ),
+		// Minimum 1, not 0: zone 0 is WooCommerce's always-present "Rest of the World" pseudo-zone,
+		// which has no stored row to update. Calling save() on it takes the data store's CREATE
+		// branch and inserts a stray duplicate zone instead of editing anything, so it is rejected
+		// here (and again in the executor) rather than accepted as a no-op edit.
+		'minimum'     => 1,
+		'description' => __( "The shipping zone's id to update. Must reference an existing editable zone (1 or higher); zone 0 is the Rest of the World zone and cannot be edited.", 'agent-abilities-for-mcp' ),
 	);
 
 	return array(
@@ -529,7 +533,20 @@ function aafm_args_wc_update_shipping_zone(): array {
  */
 function aafm_exec_wc_update_shipping_zone( array $input ) {
 	$zone_id = isset( $input['zone_id'] ) ? (int) $input['zone_id'] : -1;
-	$zone    = aafm_wc_get_shipping_zone_object( $zone_id );
+
+	// Zone 0 is the always-present "Rest of the World" pseudo-zone. WC_Shipping_Zone::save()
+	// branches on a falsy id and takes the data store's CREATE path, so saving zone 0 inserts a
+	// brand-new zone (id >= 1) instead of editing anything; the executor would then re-read the
+	// untouched zone 0 and wrongly report it as updated. WooCommerce's own REST API forbids this
+	// for the same reason. Reject it with an actionable error rather than minting a stray duplicate.
+	if ( 0 === $zone_id ) {
+		return new \WP_Error(
+			'aafm_zone_not_editable',
+			__( 'The Rest of the World zone (zone 0) cannot be renamed or reordered. Pass the id of a zone you created (1 or higher).', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	$zone = aafm_wc_get_shipping_zone_object( $zone_id );
 	if ( null === $zone ) {
 		return aafm_wc_shipping_zone_not_found();
 	}
@@ -599,18 +616,22 @@ function aafm_rich_wc_shipping_method( \WC_Shipping_Method $method ): array {
 	// tax_status) lives in instance_settings, which is also where our own write path
 	// stores it. Reading the legacy bucket returned {"type":"class"} for flat_rate and []
 	// for free_shipping/local_pickup, so a write never showed up in its own response.
-	$settings = aafm_wc_redact_settings_deep( aafm_wc_instance_settings( $method ) );
+	$report   = aafm_wc_redact_settings_report( (array) aafm_wc_instance_settings( $method ) );
+	$settings = (array) $report['settings'];
 	// Cast only the empty case so it encodes to "{}" per the declared object schema; a
 	// populated map is already string-keyed, encodes correctly as-is, and stays
 	// array-accessible for callers (same convention as aafm_rich_post()'s terms/meta).
 	$settings_out = array() === $settings ? (object) array() : $settings;
 
 	return array(
-		'instance_id'  => (int) $method->instance_id,
-		'id'           => (string) $method->id,
-		'method_title' => $display_title,
-		'enabled'      => (string) $method->enabled,
-		'settings'     => $settings_out,
+		'instance_id'     => (int) $method->instance_id,
+		'id'              => (string) $method->id,
+		'method_title'    => $display_title,
+		'enabled'         => (string) $method->enabled,
+		'settings'        => $settings_out,
+		// Authoritative list of withheld paths, each an array of key segments; see the gateway
+		// shape for why the in-place marker cannot carry this on its own.
+		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
 
@@ -635,14 +656,15 @@ function aafm_wc_instance_settings( \WC_Shipping_Method $method ): array {
  */
 function aafm_wc_shipping_method_output_properties(): array {
 	return array(
-		'instance_id'  => array( 'type' => 'integer' ),
-		'id'           => array( 'type' => 'string' ),
-		'method_title' => array( 'type' => 'string' ),
-		'enabled'      => array(
+		'instance_id'     => array( 'type' => 'integer' ),
+		'id'              => array( 'type' => 'string' ),
+		'method_title'    => array( 'type' => 'string' ),
+		'enabled'         => array(
 			'type' => 'string',
 			'enum' => array( 'yes', 'no' ),
 		),
-		'settings'     => array( 'type' => 'object' ),
+		'settings'        => array( 'type' => 'object' ),
+		'redacted_fields' => aafm_wc_redacted_fields_schema(),
 	);
 }
 
@@ -990,7 +1012,7 @@ function aafm_exec_wc_update_shipping_method( array $input ) {
 	// instance settings are written by update_option() on the method's instance option
 	// key, mirroring WC core's WC_REST_Shipping_Zone_Methods_V2_Controller::update_fields().
 	if ( array_key_exists( 'method_title', $input ) ) {
-		$title = sanitize_text_field( (string) $input['method_title'] );
+		$title = aafm_sanitize_plain_text( (string) $input['method_title'] );
 
 		$method->init_instance_settings();
 		$instance_settings          = is_array( $method->instance_settings ) ? $method->instance_settings : array();

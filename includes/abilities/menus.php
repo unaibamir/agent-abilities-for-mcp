@@ -292,10 +292,25 @@ function aafm_args_list_menu_items(): array {
  * directly, so the list is language-agnostic and works the same with or without WPML. An unknown
  * or empty menu yields an empty items list.
  *
- * get_objects_in_term() applies no post_status filter, whereas wp_get_nav_menu_items() defaulted to
- * post_status => 'publish'. We restore that filter here so the returned SET matches the pre-fix
- * behaviour exactly on a non-WPML site (published items only, drafts excluded) while keeping the
- * language-agnostic resolution that is the actual WPML fix.
+ * Resolving the items ourselves also means core's own two filters have to be reapplied by hand, and
+ * both are:
+ *
+ *   1. get_objects_in_term() applies no post_status filter, whereas wp_get_nav_menu_items() defaults
+ *      to post_status => 'publish'. Restored below, so drafts stay excluded.
+ *   2. wp_get_nav_menu_items() drops every item wp_setup_nav_menu_item() marked _invalid - an item
+ *      whose target no longer resolves, most commonly because the linked post was trashed or deleted
+ *      after the item was created (nav-menu.php, _is_valid_nav_menu_item()). Without this the ability
+ *      answers with links the site will not render, which is the same lie the create path goes to
+ *      real lengths to avoid. Restored below.
+ *
+ * The exact bound on that second filter: core applies it only when ! is_admin(), keeping invalid
+ * items visible on the wp-admin Menus screen so they can be removed there. This ability applies it
+ * unconditionally, because a read served over MCP should not return a different set depending on
+ * which PHP entry point happened to invoke it. Two consequences worth knowing. The returned set
+ * equals what the site renders, which is the point. But an invalid item is no longer DISCOVERABLE
+ * here, so an agent cannot learn its id from this ability in order to clean it up - delete-menu-item
+ * still removes it by id, and wp-admin still shows it. The contiguous 1..N `order` is numbered over
+ * the returned set, so skipped items leave no gap.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>
@@ -313,11 +328,25 @@ function aafm_exec_list_menu_items( array $input ): array {
 			continue;
 		}
 		// Publish-only parity with the old wp_get_nav_menu_items() default: skip any item that is not
-		// published so the returned list is byte-identical to the pre-fix behaviour.
+		// published so drafts stay out of the returned list.
 		if ( 'publish' !== $post->post_status ) {
 			continue;
 		}
-		$decorated[] = wp_setup_nav_menu_item( $post );
+		// An item whose target post is gone is one the site will not render, so it is dropped for
+		// exactly the reason the _invalid check below drops its siblings. It has to be caught
+		// BEFORE decoration because on WordPress 6.9 the decoration is itself what breaks; see
+		// aafm_menu_item_target_is_gone(). On 7.0 core reaches the same verdict by setting
+		// _invalid, so the returned set is identical on both versions.
+		if ( aafm_menu_item_target_is_gone( $post ) ) {
+			continue;
+		}
+		$item = wp_setup_nav_menu_item( $post );
+		// Same parity for core's other filter: an item core marked _invalid is one the site will not
+		// render, so returning it would report a menu entry that does not exist to a visitor.
+		if ( ! empty( $item->_invalid ) ) {
+			continue;
+		}
+		$decorated[] = $item;
 	}
 
 	// usort() only became stable in PHP 8.0. Programmatic nav menus commonly carry menu_order 0
@@ -414,7 +443,7 @@ function aafm_args_create_menu(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_menu( array $input ) {
-	$name = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$id   = wp_update_nav_menu_object( 0, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $id ) || 0 === (int) $id ) {
 		return aafm_generic_error();
@@ -484,7 +513,7 @@ function aafm_exec_update_menu( array $input ) {
 	if ( ! $menu instanceof WP_Term ) {
 		return aafm_generic_error();
 	}
-	$name   = sanitize_text_field( (string) ( $input['name'] ?? '' ) );
+	$name   = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
 	$result = wp_update_nav_menu_object( $menu_id, array( 'menu-name' => $name ) );
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
@@ -600,11 +629,15 @@ function aafm_args_create_menu_item(): array {
 				),
 				'object_id' => array(
 					'type'        => 'integer',
-					'description' => __( 'ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Not verified to exist before being applied.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'ID of the linked post, page, or term when this item points at existing content instead of a custom URL. Required for the post_type and taxonomy types, and it must exist: an id that resolves to nothing is refused rather than saved as a broken link.', 'agent-abilities-for-mcp' ),
 				),
 				'type'      => array(
 					'type'        => 'string',
 					'description' => __( 'Menu item type, for example post_type, post_type_archive, taxonomy, or custom. Not validated against a fixed list; an unrecognized value is passed straight through to WordPress.', 'agent-abilities-for-mcp' ),
+				),
+				'object'    => array(
+					'type'        => 'string',
+					'description' => __( 'Name of the thing the item points at: a post type slug such as page for the post_type and post_type_archive types, or a taxonomy name such as category for the taxonomy type. Omit it for post_type and taxonomy and it is looked up from object_id. Required for post_type_archive, which has no object_id to look up.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'menu_id', 'title' ),
@@ -643,7 +676,7 @@ function aafm_exec_create_menu_item( array $input ) {
 	}
 
 	$args = array(
-		'menu-item-title'  => sanitize_text_field( (string) ( $input['title'] ?? '' ) ),
+		'menu-item-title'  => aafm_sanitize_plain_text( (string) ( $input['title'] ?? '' ) ),
 		'menu-item-status' => 'publish',
 	);
 	if ( isset( $input['url'] ) ) {
@@ -652,11 +685,27 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( isset( $input['parent'] ) ) {
 		$args['menu-item-parent-id'] = (int) $input['parent'];
 	}
+	$object_id = isset( $input['object_id'] ) ? (int) $input['object_id'] : 0;
 	if ( isset( $input['object_id'] ) ) {
-		$args['menu-item-object-id'] = (int) $input['object_id'];
+		$args['menu-item-object-id'] = $object_id;
 	}
-	if ( isset( $input['type'] ) ) {
-		$args['menu-item-type'] = sanitize_key( (string) $input['type'] );
+	$type = isset( $input['type'] ) ? sanitize_key( (string) $input['type'] ) : '';
+	if ( '' !== $type ) {
+		$args['menu-item-type'] = $type;
+	}
+
+	// menu-item-object is not optional for anything but a custom link, and leaving it out is not
+	// a cosmetic omission: wp_setup_nav_menu_item() looks the object up by name and flags the item
+	// _invalid when the lookup fails, and wp_get_nav_menu_items() then drops every _invalid item.
+	// So an item saved without it does not appear in the menu at all, while a direct re-read of the
+	// post row still finds it - the plugin ends up reporting a link that the site will never render.
+	// Resolve it from object_id where it can be resolved, take it from the caller where it cannot.
+	$object = aafm_resolve_menu_item_object( $type, $object_id, isset( $input['object'] ) ? sanitize_key( (string) $input['object'] ) : '' );
+	if ( is_wp_error( $object ) ) {
+		return $object;
+	}
+	if ( '' !== $object ) {
+		$args['menu-item-object'] = $object;
 	}
 
 	$item_id = wp_update_nav_menu_item( $menu_id, 0, $args );
@@ -670,7 +719,88 @@ function aafm_exec_create_menu_item( array $input ) {
 	if ( null === $saved ) {
 		return aafm_generic_error();
 	}
+	// Belt and braces over the resolution above: whatever the reason, an item core marks _invalid
+	// is one wp_get_nav_menu_items() will hide, so reporting it as created would be a lie. Remove
+	// the row we just wrote - it is ours, created in this call, and nothing else can be relying on
+	// it yet - and answer with an error instead of a menu item that does not exist to the site.
+	if ( ! empty( $saved->_invalid ) ) {
+		wp_delete_post( (int) $item_id, true );
+		return new WP_Error(
+			'aafm_invalid_menu_item',
+			__( 'That menu item could not be linked to anything the site can resolve, so it was not created. Check object_id and object against the type you asked for.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
 	return aafm_redact_menu_item( $saved );
+}
+
+/**
+ * Work out the `menu-item-object` value for a menu item core will accept.
+ *
+ * Core stores the item's target as a (type, object, object_id) triple and resolves it by NAME:
+ * a post_type item carries the post type slug, a taxonomy item the taxonomy name, and a
+ * post_type_archive item the post type slug with no id at all. Get the name wrong or leave it
+ * blank and wp_setup_nav_menu_item() marks the item _invalid, which makes it invisible in the
+ * rendered menu while the underlying post row still exists.
+ *
+ * Callers may pass the name explicitly; when they do not, it is looked up from object_id, which
+ * is what an agent can reasonably be expected to know. A lookup that resolves to nothing is an
+ * error rather than a blank, so the caller hears about a bad id instead of getting a dead link.
+ *
+ * @param string $type      Menu item type, already sanitized ('' when the caller omitted it).
+ * @param int    $object_id Linked object id, 0 when the caller omitted it.
+ * @param string $requested Explicit object name from the caller, already sanitized ('' when absent).
+ * @return string|WP_Error The object name ('' when the type needs none), or an error.
+ */
+function aafm_resolve_menu_item_object( string $type, int $object_id, string $requested ) {
+	if ( '' !== $requested ) {
+		return $requested;
+	}
+
+	// 'custom' and the empty default are plain URLs: core fills object in itself and there is
+	// nothing to look up. Anything else we do not recognise is passed through untouched, the same
+	// way the type is - a third party may register its own nav-menu item types.
+	if ( 'post_type' !== $type && 'taxonomy' !== $type && 'post_type_archive' !== $type ) {
+		return '';
+	}
+
+	if ( 'post_type_archive' === $type ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'A post_type_archive menu item needs the object parameter set to the post type slug it should link to.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	if ( $object_id <= 0 ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'That menu item type needs object_id, or object naming the post type or taxonomy it points at.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+
+	if ( 'post_type' === $type ) {
+		$post_type = get_post_type( $object_id );
+		if ( ! is_string( $post_type ) || '' === $post_type ) {
+			return new WP_Error(
+				'aafm_menu_item_object_required',
+				__( 'No post exists with that object_id, so the menu item has nothing to link to.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+		return $post_type;
+	}
+
+	$term = get_term( $object_id );
+	if ( ! $term instanceof WP_Term ) {
+		return new WP_Error(
+			'aafm_menu_item_object_required',
+			__( 'No term exists with that object_id, so the menu item has nothing to link to.', 'agent-abilities-for-mcp' ),
+			array( 'status' => 400 )
+		);
+	}
+	return (string) $term->taxonomy;
 }
 
 /**
@@ -757,12 +887,13 @@ function aafm_exec_update_menu_item( array $input ) {
 	// Position is read straight from the stored post row so the item keeps its exact saved
 	// menu_order. $existing is now decorated from a directly-loaded post (via aafm_menu_item_by_id())
 	// so its menu_order is the stored value too, but reading the row keeps the source unambiguous.
-	$stored_post = get_post( $item_id );
-	$args        = array(
+	$stored_post    = get_post( $item_id );
+	$original_order = $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0;
+	$args           = array(
 		'menu-item-object-id'   => isset( $existing->object_id ) ? (int) $existing->object_id : 0,
 		'menu-item-object'      => isset( $existing->object ) ? (string) $existing->object : '',
 		'menu-item-parent-id'   => isset( $existing->menu_item_parent ) ? (int) $existing->menu_item_parent : 0,
-		'menu-item-position'    => $stored_post instanceof WP_Post ? (int) $stored_post->menu_order : 0,
+		'menu-item-position'    => $original_order,
 		'menu-item-type'        => isset( $existing->type ) ? (string) $existing->type : 'custom',
 		'menu-item-title'       => isset( $existing->post_title ) ? wp_slash( (string) $existing->post_title ) : '',
 		'menu-item-url'         => isset( $existing->url ) ? (string) $existing->url : '',
@@ -774,7 +905,7 @@ function aafm_exec_update_menu_item( array $input ) {
 		'menu-item-status'      => isset( $existing->post_status ) ? (string) $existing->post_status : 'publish',
 	);
 	if ( isset( $input['title'] ) ) {
-		$args['menu-item-title'] = wp_slash( sanitize_text_field( (string) $input['title'] ) );
+		$args['menu-item-title'] = wp_slash( aafm_sanitize_plain_text( (string) $input['title'] ) );
 	}
 	if ( isset( $input['url'] ) ) {
 		$args['menu-item-url'] = esc_url_raw( (string) $input['url'] );
@@ -784,6 +915,24 @@ function aafm_exec_update_menu_item( array $input ) {
 	if ( is_wp_error( $result ) || 0 === (int) $result ) {
 		return aafm_generic_error();
 	}
+
+	// Passing the stored position back is not enough to keep it. wp_update_nav_menu_item() treats
+	// position 0 as "no position given" (nav-menu.php:460) and reassigns it to the end of the menu,
+	// and 0 is exactly what the FIRST item in a menu stores - our own create path leaves it there,
+	// because core does. So a title-only edit of the first item silently moved it last, which is
+	// the opposite of what this ability promises. Put the saved order back when core changed it.
+	if ( 0 === $original_order ) {
+		$after = get_post( $item_id );
+		if ( $after instanceof WP_Post && $original_order !== (int) $after->menu_order ) {
+			wp_update_post(
+				array(
+					'ID'         => $item_id,
+					'menu_order' => $original_order,
+				)
+			);
+		}
+	}
+
 	// Same B9 guard as create-menu-item: a null re-fetch must not be redacted into an empty
 	// object that violates the output schema.
 	$saved = aafm_menu_item_by_id( $menu_id, $item_id );
@@ -861,6 +1010,55 @@ function aafm_exec_delete_menu_item( array $input ) {
 		'id'      => $item_id,
 		'deleted' => true,
 	);
+}
+
+/**
+ * Whether a nav menu item points at a post that no longer exists.
+ *
+ * Guards a WordPress 6.9 defect that 7.0 fixed. wp_setup_nav_menu_item() enriches a post_type
+ * item using get_post_states(), and on 6.9 it does so without checking that the target resolved:
+ *
+ *     $menu_post   = get_post( $menu_item->object_id );
+ *     $post_states = get_post_states( $menu_post );   // 6.9 wp-includes/nav-menu.php
+ *
+ * get_post_states() reads $post->post_status and several other fields, so a missing target
+ * produces a PHP warning per field. WordPress 7.0 wrapped that call in
+ * `if ( $menu_post instanceof WP_Post )`, which is why the problem is invisible above this
+ * plugin's 6.9 floor, and why the suite only caught it once it was run against a 6.9 library.
+ * The enrichment sits behind function_exists( 'get_post_states' ), an admin-only function, so a
+ * plain REST/MCP request never reaches it; WP-CLI and any plugin that loads
+ * wp-admin/includes/template.php do, and a site whose error handler promotes warnings to
+ * exceptions turns it into a real failure.
+ *
+ * Deliberately narrow, because over-skipping would silently drop legitimate menu entries and
+ * that is the worse bug. Only post_type items resolve object_id to a post: custom links have no
+ * target object at all, while taxonomy and post_type_archive items resolve through different
+ * core branches that do not carry this defect. A trashed target still returns a WP_Post, so it
+ * is not flagged here and stays with core's own _invalid handling.
+ *
+ * Reads post meta rather than a decorated item on purpose, since the entire point is to answer
+ * before wp_setup_nav_menu_item() has run.
+ *
+ * Not used by aafm_menu_item_by_id() below, and that is deliberate rather than an oversight.
+ * Skipping there would make a dangling item unreadable, and update-menu-item would then refuse
+ * to touch it on BOTH 6.9 and 7.0 - which removes the only way to repoint a broken item at a
+ * live post, and changes behaviour on 7.0 where nothing is wrong. A read that feeds a write
+ * needs the item, not a verdict about it.
+ *
+ * @param WP_Post $item_post The nav_menu_item post, before decoration.
+ * @return bool True when this is a post_type item whose target post is gone.
+ */
+function aafm_menu_item_target_is_gone( WP_Post $item_post ): bool {
+	if ( 'post_type' !== get_post_meta( $item_post->ID, '_menu_item_type', true ) ) {
+		return false;
+	}
+	// A missing or zero object id is deliberately NOT treated as "fine". An item can carry
+	// post_type with its object id meta absent, which reads as 0, and get_post( 0 ) returns null
+	// exactly like a deleted target - so excusing it here would hand core the very input that
+	// breaks it. Calling it gone is also the verdict core reaches by another route: an item
+	// pointing at nothing renders nothing.
+	$object_id = (int) get_post_meta( $item_post->ID, '_menu_item_object_id', true );
+	return ! ( get_post( $object_id ) instanceof WP_Post );
 }
 
 /**

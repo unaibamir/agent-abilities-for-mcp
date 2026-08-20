@@ -201,6 +201,40 @@ final class WooOrdersTest extends TestCase {
 		$this->assertSame( 3, $res['total'] );
 	}
 
+	/**
+	 * The list total must count orders, not refunds.
+	 *
+	 * Under HPOS a refund is a row in wc_orders with type shop_order_refund and a status of its
+	 * own, so an untyped query returns it. The rows themselves were already dropped by the
+	 * WC_Order instanceof guard, which made this worse rather than better: the store reported
+	 * "total 3" over an empty rows array, and paging walked pages that held nothing.
+	 */
+	public function test_list_orders_does_not_count_refunds_in_the_total(): void {
+		WcOrderStubStore::reset();
+		WcOrderStubStore::seed(
+			5030,
+			array(
+				'number' => '5030',
+				'status' => 'completed',
+			)
+		);
+		WcOrderStubStore::seed(
+			5031,
+			array(
+				'number' => '5031',
+				'status' => 'completed',
+				'type'   => 'shop_order_refund',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-list-orders' )->execute( array( 'status' => 'completed' ) );
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 1, $res['total'], 'the refund must not inflate the total.' );
+		$this->assertCount( 1, $res['orders'] );
+		$this->assertSame( 5030, $res['orders'][0]['id'] );
+	}
+
 	public function test_list_orders_empty_store_returns_empty(): void {
 		// With no orders in the store the ability must return orders:[] and total:0.
 		// This pins both the plain-array fallback path and the paginate object path on an empty result.
@@ -468,6 +502,19 @@ final class WooOrdersTest extends TestCase {
 	/**
 	 * Enable + register the full order ability set including writes.
 	 */
+	/**
+	 * Put the seeded order into a status WooCommerce still treats as editable.
+	 *
+	 * The fixture seeds 5001 as `processing` (IntegrationStubs), which is the normal state of a
+	 * PAID order and one WooCommerce does NOT treat as editable. Since R3-1 the update ability
+	 * refuses to add line items to such an order, so every test that exercises a successful add has
+	 * to state which kind of order it is adding to. That precondition used to be incidental; it is
+	 * load-bearing now, which is why it is spelled rather than left to the fixture default.
+	 */
+	private function make_seeded_order_editable(): void {
+		WcOrderStubStore::$orders[5001]['status'] = 'on-hold';
+	}
+
 	private function register_wc_order_writes(): void {
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
 		update_option(
@@ -712,6 +759,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_mid_loop_add_failure_leaves_no_partial_write(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		// Order 5001 seeds exactly one line item. Throw on the SECOND add of this request.
@@ -880,6 +928,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_add_line_items_adds_a_new_item(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
@@ -907,12 +956,105 @@ final class WooOrdersTest extends TestCase {
 	}
 
 	/**
+	 * Adding a line item must move the order's TOTAL, not just its items and subtotal.
+	 *
+	 * WC_Abstract_Order::add_product() writes the item row and leaves the order total alone, so
+	 * before the fix an order that gained 19.99 of goods still billed the figure it had before.
+	 * Order 5001 seeds one item at
+	 * 39.98 with tax 4.00 and shipping 5.99 against a stored total of 49.99; adding product 101
+	 * (19.99) once takes the goods to 59.97 and the order to 69.96.
+	 */
+	public function test_update_order_add_line_items_recalculates_the_order_total(): void {
+		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
+		$this->acting_as( 'administrator' );
+
+		$before = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertNotInstanceOf( \WP_Error::class, $before );
+		$this->assertSame( '49.99', $before['totals']['total'] );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame(
+			'69.96',
+			$res['totals']['total'],
+			'The order total must follow the line items it now holds, not stay at the pre-update figure.'
+		);
+		$this->assertSame( '59.97', $res['totals']['subtotal'], 'The goods subtotal covers both items.' );
+
+		// Persisted, not just shaped into the response: a fresh read sees the same total.
+		$after = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+		$this->assertSame( '69.96', $after['totals']['total'] );
+	}
+
+	/**
+	 * The other half of the same fix: an update that does not touch the line items must leave the
+	 * total exactly as it was. WooCommerce lets a shop owner set an order total by hand, and a
+	 * postcode or customer-note correction is no reason to recompute it out from under them. Order
+	 * 5001's seeded total (49.99) deliberately does not equal its own items plus tax and shipping
+	 * (49.97), so a stray recalculation would be visible here.
+	 */
+	public function test_update_order_without_line_items_leaves_the_total_untouched(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'      => 5001,
+				'customer_note' => 'Leave with the neighbour.',
+				'billing'       => array( 'postcode' => '62702' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertSame( 'Leave with the neighbour.', $res['customer_note'] );
+		$this->assertSame( '62702', $res['billing']['postcode'] );
+		$this->assertSame(
+			'49.99',
+			$res['totals']['total'],
+			'An update that adds no line items must not rewrite a total someone set by hand.'
+		);
+	}
+
+	/**
+	 * An empty add_line_items array asks for nothing to be added, so it is not a line-item change
+	 * and must not trigger a recalculation either.
+	 */
+	public function test_update_order_with_an_empty_line_items_array_leaves_the_total_untouched(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(),
+			)
+		);
+
+		$this->assertNotInstanceOf( \WP_Error::class, $res );
+		$this->assertCount( 1, $res['line_items'], 'Nothing was added.' );
+		$this->assertSame( '49.99', $res['totals']['total'] );
+	}
+
+	/**
 	 * Line_items is kept as a deprecated alias with IDENTICAL additive behaviour to
 	 * add_line_items -- an existing caller that already sends line_items on update must keep
 	 * getting the same (additive) result after this fix, never a silent switch to replace.
 	 */
 	public function test_update_order_line_items_deprecated_alias_still_adds(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
@@ -940,6 +1082,7 @@ final class WooOrdersTest extends TestCase {
 	 */
 	public function test_update_order_add_line_items_and_line_items_combine_when_both_sent(): void {
 		$this->register_wc_order_writes();
+		$this->make_seeded_order_editable();
 		$this->acting_as( 'administrator' );
 
 		$res = wp_get_ability( 'aafm/wc-update-order' )->execute(
@@ -1275,6 +1418,266 @@ final class WooOrdersTest extends TestCase {
 				'register_wc_order_status_write',
 				'editor',
 			),
+		);
+	}
+
+	/**
+	 * R3-1: adding a line item to an order WooCommerce no longer treats as editable is REFUSED.
+	 *
+	 * This replaces a test that asserted calculate_totals() was called with false for a completed
+	 * order. That assertion encoded the defect instead of detecting it: passing false does protect
+	 * the historical tax on the existing items, but it also means the NEW item keeps the empty tax
+	 * map it was created with, so a taxable line was recorded at its net price and the order
+	 * under-billed. Confirmed against real WooCommerce on the DDEV clone, 20% rate, price 100:
+	 * a completed order came out at total 100 / tax 0 while the identical pending order came out at
+	 * total 120 / tax 20.
+	 *
+	 * Neither branch was safe, so the write is refused. The assertion is deliberately on the
+	 * OUTCOME (an error, and no item written) rather than on which argument reached a stub, because
+	 * asserting the argument is what let the original defect through.
+	 */
+	public function test_adding_an_item_to_a_completed_order_is_refused(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status'] = 'completed';
+		$items_before                             = WcOrderStubStore::$add_product_calls;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'Adding goods to a non-editable order must be refused, not recorded without tax.'
+		);
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+		$this->assertStringContainsString(
+			'completed',
+			$result->get_error_message(),
+			'The error names the status that blocked the write so the caller can act on it.'
+		);
+		$this->assertSame(
+			$items_before,
+			WcOrderStubStore::$add_product_calls,
+			'The refusal must happen BEFORE add_product(), which writes each item row immediately.'
+		);
+	}
+
+	/**
+	 * R3-1: a PROCESSING order refuses the add, and this is the case worth doubting.
+	 *
+	 * It has its own named test rather than only a data-provider row because it is the one a future
+	 * reader will question. processing is the normal state of a paid order, so refusing it looks at
+	 * first glance like this plugin inventing a restriction. It is not: WC_Order::is_editable()
+	 * (class-wc-order.php:1715) returns true only for pending, on-hold and auto-draft, and
+	 * WooCommerce's own order screen gates its "Add item(s)" button on that same call. A processing
+	 * order gives you no way to add an item in WooCommerce's own UI either.
+	 *
+	 * This is also where the old defect fired most often. Adding a taxable line to a processing
+	 * order recorded it with no tax at all, which understated what the customer was charged.
+	 */
+	public function test_adding_an_item_to_a_processing_order_is_refused(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status'] = 'processing';
+		$items_before                             = WcOrderStubStore::$add_product_calls;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'A paid, processing order is not editable, so the add is refused.' );
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+		$this->assertStringContainsString( 'processing', $result->get_error_message(), 'The error names the status so the caller knows why.' );
+		$this->assertSame( $items_before, WcOrderStubStore::$add_product_calls, 'Nothing was written before the refusal.' );
+	}
+
+	/**
+	 * R3-1: the refusal covers every non-editable status, not just completed. processing is the one
+	 * that matters most in practice -- it is the normal state of a paid order, and it is NOT
+	 * editable, so this is where the old code silently recorded untaxed goods most often.
+	 *
+	 * @dataProvider provide_non_editable_statuses
+	 *
+	 * @param string $status A status WooCommerce does not treat as editable.
+	 */
+	public function test_adding_an_item_is_refused_for_every_non_editable_status( string $status ): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status'] = $status;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, $status . ' is not editable, so the add must be refused.' );
+		$this->assertSame( 'aafm_wc_order_not_editable', $result->get_error_code() );
+	}
+
+	/**
+	 * Cases: the WooCommerce order statuses that is_editable() excludes.
+	 *
+	 * @return array<string,array{0:string}>
+	 */
+	public function provide_non_editable_statuses(): array {
+		return array(
+			'processing' => array( 'processing' ),
+			'completed'  => array( 'completed' ),
+			'refunded'   => array( 'refunded' ),
+			'cancelled'  => array( 'cancelled' ),
+			'failed'     => array( 'failed' ),
+		);
+	}
+
+	/**
+	 * R3-1: a request that adds items AND completes the order in one call still taxes the goods.
+	 *
+	 * Editability is judged against the status the order HAD when the request arrived, and the
+	 * recalculation then runs with taxes on unconditionally. Re-reading editability at the
+	 * recalculation would consult the status this same request just applied, and take the untaxed
+	 * branch for goods it had already accepted.
+	 */
+	public function test_adding_an_item_while_completing_the_order_still_recomputes_taxes(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status']          = 'pending';
+		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+
+		$result = wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'status'         => 'completed',
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $result, 'The order was editable when the request arrived, so the add is allowed.' );
+		$this->assertTrue(
+			WcOrderStubStore::$last_calculate_totals_and_taxes,
+			'Taxes must be computed for the goods this request added, whatever status the same request went on to set.'
+		);
+	}
+
+	public function test_adding_an_item_to_an_editable_order_does_recompute_taxes(): void {
+		$this->register_wc_order_writes();
+		$this->acting_as( 'administrator' );
+
+		WcOrderStubStore::$orders[5001]['status']          = 'pending';
+		WcOrderStubStore::$last_calculate_totals_and_taxes = null;
+
+		wp_get_ability( 'aafm/wc-update-order' )->execute(
+			array(
+				'order_id'       => 5001,
+				'add_line_items' => array(
+					array(
+						'product_id' => 101,
+						'quantity'   => 1,
+					),
+				),
+			)
+		);
+
+		$this->assertTrue(
+			WcOrderStubStore::$last_calculate_totals_and_taxes,
+			'An order still being assembled should get a full recalculation, taxes included.'
+		);
+	}
+	/**
+	 * A throwing order lookup inside the rollback is contained, not propagated. (R8C-6)
+	 *
+	 * A lookup through wc_get_order() can throw as well as return false, and the two in the update
+	 * rollback were unwrapped while the adjacent create rollback already treats a lookup as fallible. That
+	 * matters more here than anywhere: this function IS the exception recovery path and has already
+	 * deleted the request's item rows by the time it looks the order up, so an escaping Throwable
+	 * hands the caller a raw crash in place of any of the three structured results, with the rows
+	 * gone and the recalculation's tax changes never put back.
+	 */
+	public function test_rollback_survives_a_throwing_order_lookup(): void {
+		$this->seed_orders_for_rollback_probe();
+
+		\AAFM\Tests\WcOrderStubStore::$throw_on_get = true;
+		try {
+			$result = aafm_wc_rollback_recalculated_order( 4001, array(), array( 'total' => '10.00' ) );
+		} finally {
+			\AAFM\Tests\WcOrderStubStore::$throw_on_get = false;
+		}
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			$result,
+			'A throwing lookup must still yield a structured rollback result, not escape.'
+		);
+		$this->assertSame(
+			'aafm_wc_order_totals_not_restored',
+			$result->get_error_code(),
+			'With the order unreadable the restore cannot be confirmed, so the honest verdict is the weak one, not the strong one.'
+		);
+	}
+
+	/**
+	 * The loader answers null for every way a lookup can fail, and only for those.
+	 */
+	public function test_order_loader_returns_null_rather_than_throwing(): void {
+		$this->seed_orders_for_rollback_probe();
+
+		$this->assertNull( aafm_wc_load_order_or_null( 0 ), 'A zero id is not a lookup.' );
+		$this->assertNull( aafm_wc_load_order_or_null( 987654 ), 'A missing order is null, not false.' );
+		$this->assertInstanceOf( \WC_Order::class, aafm_wc_load_order_or_null( 4001 ), 'A real order still loads.' );
+
+		\AAFM\Tests\WcOrderStubStore::$throw_on_get = true;
+		try {
+			$this->assertNull( aafm_wc_load_order_or_null( 4001 ), 'A throwing factory is null, not an escaping Throwable.' );
+		} finally {
+			\AAFM\Tests\WcOrderStubStore::$throw_on_get = false;
+		}
+	}
+
+	/**
+	 * Seed one plain order for the rollback probes above.
+	 */
+	private function seed_orders_for_rollback_probe(): void {
+		WcOrderStubStore::reset();
+		WcOrderStubStore::seed(
+			4001,
+			array(
+				'number' => '4001',
+				'status' => 'processing',
+				'total'  => '10.00',
+			)
 		);
 	}
 }

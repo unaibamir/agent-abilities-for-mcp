@@ -69,6 +69,87 @@ final class WooVariationsTest extends TestCase {
 			);
 		}
 		$this->stub_woocommerce( $products );
+		$this->seed_parent_attributes();
+	}
+
+	/**
+	 * Give parent 500 the four attribute shapes a real variable product can hold.
+	 *
+	 * Runs AFTER stub_woocommerce(), because that is what eval's the WC_Product_Attribute class this
+	 * builds instances of. A live parent's attribute map holds those objects, never plain values, and
+	 * the variation write validation reads four things off each one: the key, the id (which is how
+	 * WooCommerce itself decides whether an attribute is taxonomy-backed), the "used for variations"
+	 * flag, and the options. The four entries cover every branch of that read:
+	 *
+	 *   pa_color, pa_size -- global/taxonomy attributes (id > 0). Their options are TERM IDS, which
+	 *                        the validator resolves to term slugs, so the taxonomies and the terms
+	 *                        here are real WordPress ones rather than faked. That resolution runs
+	 *                        against real WP term functions, which is the point: the stub supplies
+	 *                        the attribute shape, never the lookup behaviour under test.
+	 *   material          -- a custom/local attribute (id 0). Its options are the option strings
+	 *                        themselves, unslugified ("Cotton"), and need no resolution.
+	 *   brand             -- declared for display only (variation flag off). WooCommerce never keys a
+	 *                        variation on one of these.
+	 */
+	private function seed_parent_attributes(): void {
+		$parent = (array) WcStubStore::get( 500 );
+
+		$parent['attributes'] = array(
+			'pa_color' => $this->wc_product_attribute( 1, 'pa_color', $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ) ), true ),
+			'pa_size'  => $this->wc_product_attribute( 2, 'pa_size', $this->seed_attribute_terms( 'pa_size', array( 'small', 'large' ) ), true ),
+			'material' => $this->wc_product_attribute( 0, 'material', array( 'Cotton', 'Wool' ), true ),
+			'brand'    => $this->wc_product_attribute( 0, 'brand', array( 'Acme' ), false ),
+		);
+
+		WcStubStore::seed( 500, $parent );
+	}
+
+	/**
+	 * Register an attribute taxonomy and its terms, returning the term ids in the order given.
+	 *
+	 * Both are guarded so the seed is idempotent: one test re-seeds the parent mid-method, and
+	 * WP_UnitTestCase rolls the terms back per test while leaving a registered taxonomy in place.
+	 *
+	 * @param string        $taxonomy Attribute taxonomy name (pa_*).
+	 * @param array<string> $slugs    Term slugs to create.
+	 * @return array<int> Term ids, in the order of $slugs.
+	 */
+	private function seed_attribute_terms( string $taxonomy, array $slugs ): array {
+		if ( ! taxonomy_exists( $taxonomy ) ) {
+			register_taxonomy( $taxonomy, 'product', array( 'public' => false ) );
+		}
+
+		$ids = array();
+		foreach ( $slugs as $slug ) {
+			$existing = get_term_by( 'slug', $slug, $taxonomy );
+			if ( $existing instanceof \WP_Term ) {
+				$ids[] = (int) $existing->term_id;
+				continue;
+			}
+			$created = wp_insert_term( ucfirst( $slug ), $taxonomy, array( 'slug' => $slug ) );
+			$ids[]   = (int) $created['term_id'];
+		}
+		return $ids;
+	}
+
+	/**
+	 * Build one WC_Product_Attribute the way a live parent product holds it.
+	 *
+	 * @param int               $id        Global attribute id; 0 for a custom/local attribute.
+	 * @param string            $name      Attribute name (the pa_ taxonomy, or the local name).
+	 * @param array<int|string> $options   Term ids for a taxonomy attribute, option strings for a custom one.
+	 * @param bool              $variation Whether the attribute is used for variations.
+	 * @return \WC_Product_Attribute
+	 */
+	private function wc_product_attribute( int $id, string $name, array $options, bool $variation ): \WC_Product_Attribute {
+		$attribute = new \WC_Product_Attribute();
+		$attribute->set_id( $id );
+		$attribute->set_name( $name );
+		$attribute->set_options( $options );
+		$attribute->set_position( 0 );
+		$attribute->set_visible( true );
+		$attribute->set_variation( $variation );
+		return $attribute;
 	}
 
 	/**
@@ -479,6 +560,478 @@ final class WooVariationsTest extends TestCase {
 		$this->assertSame( 'small', $attributes['pa_size'] ?? null );
 	}
 
+	/**
+	 * An attribute key the parent does not declare must be refused, not accepted and dropped.
+	 *
+	 * WC_Product_Variation::set_attributes() takes whatever map it is given, so `size` (the key a
+	 * human writes) instead of `pa_size` (the key the parent actually declares) used to come back
+	 * isError:false with a variation whose real attributes all read empty, plus an orphan
+	 * attribute_size postmeta row WooCommerce never looks at. The agent has no reason to re-inspect
+	 * a variation it was just told it had configured, so the store owner finds out at checkout.
+	 */
+	public function test_create_variation_rejects_an_attribute_key_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+		$before = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '24.99',
+				'attributes'    => array( 'size' => 'Large' ),
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'An attribute key the parent does not declare must be an error, not a success that applied nothing.'
+		);
+		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $res->get_error_code() );
+
+		// The error names the rejected key AND the keys that would have worked, so an agent can
+		// correct itself from the response alone.
+		$message = $res->get_error_message();
+		$this->assertStringContainsString( 'size', $message );
+		$this->assertStringContainsString( 'pa_color', $message );
+		$this->assertStringContainsString( 'pa_size', $message );
+
+		// Nothing was written.
+		$after = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$this->assertSame( $before['total'], $after['total'], 'A rejected create must not leave a variation behind.' );
+	}
+
+	/**
+	 * The same key check on update, where the replace semantics make an unknown key worse: the sent
+	 * key applies nothing AND clears every attribute the variation already had.
+	 */
+	public function test_update_variation_rejects_an_attribute_key_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array( 'colour' => 'blue' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'An undeclared key must be refused on update too.' );
+		$this->assertSame( 'aafm_wc_unknown_variation_attribute', $res->get_error_code() );
+
+		// The variation's real attributes survive the rejected write untouched.
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame(
+			'red',
+			( (array) $read['attributes'] )['pa_color'] ?? null,
+			'A rejected update must not clear the attributes it refused to replace.'
+		);
+	}
+
+	/**
+	 * An empty value is WooCommerce's "Any" and stays legitimate -- only unknown KEYS are refused.
+	 */
+	public function test_create_variation_accepts_a_declared_key_with_an_empty_value(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array(
+					'pa_color' => 'blue',
+					'pa_size'  => '',
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An empty value on a declared key means "Any" and is valid.' );
+		$attributes = (array) $res['attributes'];
+		$this->assertSame( 'blue', $attributes['pa_color'] ?? null );
+		$this->assertSame( '', $attributes['pa_size'] ?? null );
+	}
+
+	/**
+	 * R2-9: an attribute the parent declares for DISPLAY only must be refused too.
+	 *
+	 * WooCommerce carries a "used for variations" flag per attribute, and its own variation REST
+	 * controller skips any attribute whose flag is off before writing. Nothing ever matches a
+	 * variation on a display-only attribute, so accepting the key stores an attribute_brand row that
+	 * does nothing -- the same silent no-op as an undeclared key, only harder to spot because the
+	 * key really is on the parent.
+	 */
+	public function test_create_variation_rejects_an_attribute_the_parent_does_not_use_for_variations(): void {
+		$this->acting_as( 'administrator' );
+		$before = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'brand' => 'Acme' ),
+			)
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$res,
+			'An attribute declared for display only must be an error, not a success that applied nothing.'
+		);
+		$this->assertSame( 'aafm_wc_attribute_not_used_for_variations', $res->get_error_code() );
+
+		// The error separates this failure from an undeclared key, names the rejected attribute, and
+		// lists the keys that would have worked so an agent can correct itself from the response.
+		$message = $res->get_error_message();
+		$this->assertStringContainsString( 'brand', $message );
+		$this->assertStringContainsString( 'pa_color', $message );
+		$this->assertStringContainsString( 'material', $message );
+
+		$after = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$this->assertSame( $before['total'], $after['total'], 'A rejected create must not leave a variation behind.' );
+	}
+
+	/**
+	 * R2-9 on update, where the replace semantics make it worse: the display-only key applies
+	 * nothing AND every real attribute the variation had is cleared.
+	 */
+	public function test_update_variation_rejects_an_attribute_the_parent_does_not_use_for_variations(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array( 'brand' => 'Acme' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A display-only attribute must be refused on update too.' );
+		$this->assertSame( 'aafm_wc_attribute_not_used_for_variations', $res->get_error_code() );
+
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame(
+			'red',
+			( (array) $read['attributes'] )['pa_color'] ?? null,
+			'A rejected update must not clear the attributes it refused to replace.'
+		);
+	}
+
+	/**
+	 * R2-9: the keys the error offers as alternatives are the parent's VARIATION attributes. Naming
+	 * a display-only key there would send the agent straight into the rejection above.
+	 */
+	public function test_unknown_attribute_error_does_not_offer_a_display_only_key_as_an_alternative(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'size' => 'Large' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$message = $res->get_error_message();
+		$this->assertStringContainsString( 'pa_size', $message, 'The usable keys are still listed.' );
+		$this->assertStringNotContainsString( 'brand', $message, 'A display-only key is not a key that would have worked.' );
+	}
+
+	/**
+	 * R2-9: a parent that declares attributes but uses none of them for variations gets its own
+	 * message, because "declares no attributes" would be a lie and the fix is a different one.
+	 */
+	public function test_create_variation_rejects_every_attribute_when_the_parent_uses_none_for_variations(): void {
+		WcStubStore::seed(
+			700,
+			array(
+				'id'         => 700,
+				'name'       => 'Display Only Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'brand' => $this->wc_product_attribute( 0, 'brand', array( 'Acme' ), false ),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 700,
+				'attributes' => array( 'brand' => 'Acme' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_attribute_not_used_for_variations', $res->get_error_code() );
+		$this->assertStringContainsString( 'brand', $res->get_error_message() );
+	}
+
+	/**
+	 * R2-10: a value outside the parent's option list must be refused.
+	 *
+	 * The option list is the only thing WooCommerce ever matches a variation against, so a value
+	 * outside it is stored and then matched by nothing. The key is right, which is what makes this
+	 * one harder to catch than an unusable key.
+	 */
+	public function test_create_variation_rejects_a_value_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+		$before = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'pa_color' => 'purple' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A value outside the parent\'s options must be an error.' );
+		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $res->get_error_code() );
+
+		// The error names the rejected value and lists the options that would have worked.
+		$message = $res->get_error_message();
+		$this->assertStringContainsString( 'purple', $message );
+		$this->assertStringContainsString( 'red', $message );
+		$this->assertStringContainsString( 'blue', $message );
+
+		$after = wp_get_ability( 'aafm/wc-list-product-variations' )->execute( array( 'product_id' => 500 ) );
+		$this->assertSame( $before['total'], $after['total'], 'A rejected create must not leave a variation behind.' );
+	}
+
+	/**
+	 * R2-10: a TAXONOMY attribute's options are term slugs, resolved from the term ids the parent
+	 * stores. Comparing against the raw options would put a slug up against a list of numeric ids.
+	 */
+	public function test_create_variation_accepts_a_taxonomy_term_slug(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'pa_color' => 'blue' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A declared term slug must be accepted.' );
+		$this->assertSame( 'blue', ( (array) $res['attributes'] )['pa_color'] ?? null );
+	}
+
+	/**
+	 * R2-10: a CUSTOM attribute stores its option strings, unslugified, and a variation stores the
+	 * same string. "Cotton" is the real option here, so it has to be accepted with its capital
+	 * intact rather than slugified into something the parent never declared.
+	 */
+	public function test_create_variation_accepts_a_custom_attribute_option_verbatim(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'material' => 'Cotton' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'A custom attribute\'s own option must be accepted as written.' );
+		$this->assertSame( 'Cotton', ( (array) $res['attributes'] )['material'] ?? null );
+	}
+
+	public function test_create_variation_rejects_a_value_the_custom_attribute_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'material' => 'Silk' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $res->get_error_code() );
+		$this->assertStringContainsString( 'Cotton', $res->get_error_message(), 'The real options are listed.' );
+	}
+
+	/**
+	 * R2-10: the match is case-sensitive on purpose. This plugin stores the value verbatim, and
+	 * WooCommerce matches the stored string against the parent's option, so "Blue" is the
+	 * silently-never-matches case rather than a harmless spelling of "blue".
+	 */
+	public function test_create_variation_rejects_a_value_that_differs_only_in_case(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'pa_color' => 'Blue' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'A value that only matches case-insensitively must be refused.' );
+		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $res->get_error_code() );
+		$this->assertStringContainsString( 'blue', $res->get_error_message(), 'The error shows the option in its real spelling.' );
+	}
+
+	/**
+	 * R2-10: the value checked is the SANITIZED one, the string that actually reaches storage, so a
+	 * value differing only by surrounding whitespace is accepted rather than refused for a
+	 * difference the writer was about to remove anyway.
+	 */
+	public function test_create_variation_accepts_a_value_that_only_needs_trimming(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array( 'pa_color' => '  blue  ' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'Whitespace the sanitizer strips must not fail the value check.' );
+		$this->assertSame( 'blue', ( (array) $res['attributes'] )['pa_color'] ?? null );
+	}
+
+	/**
+	 * R2-10 against trap: an EMPTY value is WooCommerce's "Any <attribute>", a real and common
+	 * configuration. Refusing it would break valid variations, so it is exempt from the value check
+	 * on every attribute kind, not just the one the earlier empty-value test happens to use.
+	 */
+	public function test_create_variation_accepts_an_empty_value_on_every_attribute_kind(): void {
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 500,
+				'attributes' => array(
+					'pa_color' => '',
+					'pa_size'  => '',
+					'material' => '',
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, '"Any" on every attribute is a valid variation.' );
+		$attributes = (array) $res['attributes'];
+		$this->assertSame( '', $attributes['pa_color'] ?? null );
+		$this->assertSame( '', $attributes['pa_size'] ?? null );
+		$this->assertSame( '', $attributes['material'] ?? null );
+	}
+
+	/**
+	 * R2-10: an attribute declared with no options constrains nothing, so there is no list to judge
+	 * a value against and the write goes through.
+	 */
+	public function test_create_variation_accepts_any_value_for_an_attribute_with_no_options(): void {
+		WcStubStore::seed(
+			702,
+			array(
+				'id'         => 702,
+				'name'       => 'Optionless Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'finish' => $this->wc_product_attribute( 0, 'finish', array(), true ),
+				),
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 702,
+				'attributes' => array( 'finish' => 'Matte' ),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res, 'An attribute with no options places no constraint.' );
+		$this->assertSame( 'Matte', ( (array) $res['attributes'] )['finish'] ?? null );
+	}
+
+	/**
+	 * R2-10: an option the PARENT's own data cannot resolve read-only must not cost the caller a
+	 * write, and must not cost the site a term.
+	 *
+	 * Parent 704 declares a taxonomy attribute whose options are one resolvable term id and one
+	 * unresolved STRING. That second shape is exactly what makes real WooCommerce's
+	 * WC_Product_Attribute::get_slugs() reach wp_insert_term() and CREATE the term, which is why the
+	 * validator resolves options itself rather than calling it.
+	 *
+	 * Two things are asserted, and they are NOT equally strong evidence.
+	 *
+	 * The write going through is a real red-to-green pin. Resolving what can be resolved and judging
+	 * against the PARTIAL list that survives rejects "chartreuse" -- and "chartreuse" is exactly what
+	 * the parent's unresolved "Chartreuse" option licenses, because WooCommerce materializes that
+	 * option into a term the moment anything asks it to. The honest position is that an option we
+	 * cannot resolve read-only tells us nothing about which values it permits, so we must not judge
+	 * any value on that attribute at all.
+	 *
+	 * The term count is a GUARD, not a proof. No faithful stub may write, so this assertion passes
+	 * against the get_slugs() version too and cannot go red here. The read-only guarantee rests on
+	 * the production code never calling get_slugs(), argued in that function's docblock, not on this
+	 * line going green.
+	 */
+	public function test_an_unresolvable_parent_option_neither_blocks_the_write_nor_creates_a_term(): void {
+		$ids = $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ) );
+		WcStubStore::seed(
+			704,
+			array(
+				'id'         => 704,
+				'name'       => 'Half Broken Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'pa_color' => $this->wc_product_attribute( 1, 'pa_color', array( $ids[1], 'Chartreuse' ), true ),
+				),
+			)
+		);
+
+		$before = get_terms(
+			array(
+				'taxonomy'   => 'pa_color',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		);
+
+		$this->acting_as( 'administrator' );
+		$res = wp_get_ability( 'aafm/wc-create-product-variation' )->execute(
+			array(
+				'product_id' => 704,
+				'attributes' => array( 'pa_color' => 'chartreuse' ),
+			)
+		);
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A value licensed by an option the parent product cannot resolve must not be rejected on the strength of the partial list that remains.'
+		);
+
+		$after = get_terms(
+			array(
+				'taxonomy'   => 'pa_color',
+				'hide_empty' => false,
+				'fields'     => 'ids',
+			)
+		);
+		$this->assertSame(
+			count( (array) $before ),
+			count( (array) $after ),
+			'Validating a variation write must never create a term.'
+		);
+	}
+
+	/**
+	 * R2-10 on update, where a rejected write would otherwise have cleared the variation's real
+	 * attributes as well as applying nothing.
+	 */
+	public function test_update_variation_rejects_a_value_the_parent_does_not_declare(): void {
+		$this->acting_as( 'administrator' );
+
+		$res = wp_get_ability( 'aafm/wc-update-product-variation' )->execute(
+			array(
+				'variation_id' => 601,
+				'attributes'   => array( 'pa_color' => 'purple' ),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'An undeclared value must be refused on update too.' );
+		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $res->get_error_code() );
+
+		$read = wp_get_ability( 'aafm/wc-get-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		$this->assertSame(
+			'red',
+			( (array) $read['attributes'] )['pa_color'] ?? null,
+			'A rejected update must not clear the attributes it refused to replace.'
+		);
+	}
+
 	public function test_create_variation_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(
@@ -660,6 +1213,36 @@ final class WooVariationsTest extends TestCase {
 		$this->assertTrue( WcStubStore::exists( 601 ), 'The variation must still exist after a failed delete.' );
 	}
 
+	/**
+	 * A variation delete that SUCCEEDED must report success even though a following wc_get_product()
+	 * still hands back an object for it.
+	 *
+	 * WC_Product_Data_Store_CPT::delete() (which the variation data store inherits) deletes the post
+	 * and zeroes the product's own id, but never calls clear_caches(), so WooCommerce's per-product
+	 * caches outlive the delete. Re-reading through wc_get_product() therefore finds a row that is
+	 * already gone, and the ability used to turn that into a generic error: the variation was deleted
+	 * from the store and the agent was told the request had failed. Every recovery it can then pick is
+	 * wrong, including escalating to deleting the whole parent product.
+	 *
+	 * $delete_returns_true_but_keeps models that state exactly: the stub variation zeroes its own id
+	 * (the vendor's set_id( 0 )) while the row stays visible to wc_get_product().
+	 */
+	public function test_delete_variation_reports_success_when_the_wc_read_is_stale(): void {
+		$this->acting_as( 'administrator' );
+
+		WcStubStore::$delete_returns_true_but_keeps = true;
+		$res                                        = wp_get_ability( 'aafm/wc-delete-product-variation' )->execute( array( 'variation_id' => 601 ) );
+		WcStubStore::$delete_returns_true_but_keeps = false;
+
+		$this->assertNotInstanceOf(
+			WP_Error::class,
+			$res,
+			'A delete the data store carried out must not report failure just because the WC read is stale.'
+		);
+		$this->assertTrue( $res['deleted'] );
+		$this->assertSame( 601, $res['id'] );
+	}
+
 	public function test_delete_variation_is_annotated_destructive(): void {
 		$annotations = wp_get_ability( 'aafm/wc-delete-product-variation' )->get_meta_item( 'annotations' );
 		$this->assertTrue( $annotations['destructive'] ?? false, 'wc-delete-product-variation must be destructive.' );
@@ -799,5 +1382,108 @@ final class WooVariationsTest extends TestCase {
 			'create-product-variation' => array( 'aafm/wc-create-product-variation', array( 'product_id' => 500 ), 'editor' ),
 			'delete-product-variation' => array( 'aafm/wc-delete-product-variation', array( 'variation_id' => 601 ), 'editor' ),
 		);
+	}
+
+	/**
+	 * Found by the Codex review pass: an attribute key that sanitizes away to nothing used to be
+	 * waved through, so the writer stored an attribute under the empty key. That is the same silent
+	 * no-op the validation exists to stop.
+	 */
+	public function test_create_variation_rejects_an_attribute_key_that_sanitizes_to_nothing(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$result = aafm_exec_wc_create_product_variation(
+			array(
+				'product_id'    => 500,
+				'regular_price' => '24.99',
+				'attributes'    => array( '---' => 'large' ),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'A key that sanitizes to empty must be refused.' );
+	}
+
+	/**
+	 * An attribute only a display filter presents must not be accepted as declared. (R8C-5)
+	 *
+	 * WC_Product::get_attributes() defaults to view context, which runs
+	 * woocommerce_product_get_attributes, so a filter can present an attribute the parent does not
+	 * store. Validating against that lets a variation take an attribute WooCommerce's stored parent
+	 * configuration can never expose or match, and the ability reports success. The product write
+	 * sibling already reads in edit context for this reason; the newer variation validator did not.
+	 *
+	 * `attributes_view` in the stub stands in for the filtered presentation, which is why the stub
+	 * getter had to become context-aware: one that ignored the argument would pass either way.
+	 */
+	public function test_variation_validation_ignores_display_only_parent_attributes(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$parent = aafm_wc_get_product( 500 );
+		$this->assertNotNull( $parent );
+
+		$stored = $parent->get_attributes( 'edit' );
+		$this->assertArrayNotHasKey( 'ghost', $stored, 'The fixture must not really declare `ghost`.' );
+
+		// A filter presenting an extra variation attribute nobody stored.
+		$ghost = new \WC_Product_Attribute();
+		$ghost->set_name( 'ghost' );
+		$ghost->set_options( array( 'phantom' ) );
+		$ghost->set_variation( true );
+		$parent->set_attributes_view( array_merge( $stored, array( 'ghost' => $ghost ) ) );
+
+		$this->assertArrayHasKey(
+			'ghost',
+			$parent->get_attributes(),
+			'The stub must present the display-only attribute in view context, or this test proves nothing.'
+		);
+
+		$this->assertInstanceOf(
+			\WP_Error::class,
+			aafm_wc_unknown_variation_attributes_error( $parent, array( 'ghost' => 'phantom' ) ),
+			'An attribute the parent does not store must be refused however it is presented.'
+		);
+
+		// The other direction: a genuinely stored variation attribute is still accepted while the
+		// same filter is active, so this is not just refusing everything.
+		$this->assertNull(
+			aafm_wc_unknown_variation_attributes_error( $parent, array( 'material' => 'Cotton' ) ),
+			'A stored attribute must still be accepted with a display filter present.'
+		);
+	}
+
+	/**
+	 * Updating attributes on a variation whose parent will not resolve is refused. (R8C-4)
+	 *
+	 * The field's schema promises every key already exists on the parent and is enabled for
+	 * variations. With no parent that promise cannot be kept, so falling through to the setters
+	 * reported success for a write that stored keys no parent declares. The create sibling already
+	 * refuses an unresolved parent; this is the same question with the same answer.
+	 */
+	public function test_update_variation_attributes_refuses_an_unresolvable_parent(): void {
+		$this->seed_variable_parent_with_variations();
+
+		$this->stub_woocommerce(
+			array(
+				array(
+					'id'            => 700,
+					'parent_id'     => 999999,
+					'type'          => 'variation',
+					'sku'           => 'ORPHAN-700',
+					'regular_price' => '9.99',
+					'price'         => '9.99',
+					'status'        => 'publish',
+					'stock_status'  => 'instock',
+				),
+			)
+		);
+
+		$result = aafm_exec_wc_update_product_variation(
+			array(
+				'variation_id' => 700,
+				'attributes'   => array( 'not_a_real_attribute' => 'whatever' ),
+			)
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result, 'An orphaned variation must not accept an attribute write.' );
 	}
 }

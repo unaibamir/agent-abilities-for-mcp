@@ -50,10 +50,77 @@ function aafm_quickconnect_is_dismissed(): bool {
 }
 
 /**
+ * Whether the site shows evidence that someone has already set this plugin up.
+ *
+ * The wizard is a FIRST-RUN screen, but the two flags above only ever record what the operator did
+ * inside the wizard itself. Someone who closes it with the X and then configures the plugin through
+ * the normal tabs has done the whole job and set neither flag, so the wizard used to greet them on
+ * every visit forever with no way out short of finding the one exact "Don't show this again".
+ *
+ * So ask the site instead. Any one of these means setup has happened somewhere:
+ *
+ *   - an ability is switched on (the option ships empty, so anything at all is a deliberate act)
+ *   - an OAuth client is registered
+ *   - a grant is live
+ *   - an agent has actually called something
+ *
+ * That last one counts real agent calls through aafm_agent_call_count(), never raw log rows. A
+ * plugin reset clears the log and then writes its own "activity log cleared" marker, so counting
+ * rows would leave a freshly reset site looking configured and suppress the very first-run screen
+ * the reset exists to bring back. The same helper backs the review-request notice, so both features
+ * agree on what an agent call is rather than keeping two definitions that can drift apart.
+ *
+ * Read in that order: the option is autoloaded and answers for almost every configured site, so the
+ * three table reads below it rarely run. Nothing here WRITES, deliberately. The flags keep meaning
+ * exactly what they meant ("the operator finished the wizard" and "the operator opted out"), the
+ * onboarding checklist can still tell those apart, and a render still changes no state, which is
+ * the promise made at page.php's dashboard notice.
+ *
+ * Deliberately NOT memoized. aafm_quickconnect_apply_abilities() writes the enabled-abilities option
+ * partway through a request, so a cached answer could outlive the state it describes and report a
+ * site as unconfigured after the wizard had just configured it. The option read below is autoloaded
+ * and settles the common case before any table is touched, which is cheaper than the staleness
+ * would be to reason about.
+ *
+ * @return bool
+ */
+function aafm_quickconnect_site_looks_configured(): bool {
+	// Native and bridged abilities are stored in two separate options and either one on its own is
+	// a deliberate act of configuration. A site running purely on bridged integrations has no
+	// native ability enabled at all, so reading only the native option would keep calling it a
+	// first-run site.
+	foreach ( array( 'aafm_enabled_abilities', 'aafm_enabled_bridged_abilities' ) as $option ) {
+		$stored = get_option( $option, array() );
+		if ( is_array( $stored ) && array() !== array_filter( array_map( 'strval', $stored ) ) ) {
+			return true;
+		}
+	}
+	// An active client is the OAuth evidence. The consent (grant) table deliberately is NOT
+	// consulted as a second signal, and that is worth stating because reading it looks obviously
+	// right: revoking a client deactivates the client row and its tokens but LEAVES the consent
+	// row, and aafm_oauth_list_grants() does not filter on the client being active (shipped 1.6.3
+	// behaviour, which the admin grant listing still depends on and which is not changed here). A
+	// grant against a client that is still active is already covered by the check above, since such
+	// a grant implies an active client. So the only thing a grants check can add is the case where
+	// no client is active, where every row it can match belongs to a revoked or deleted client. It
+	// would suppress the first-run wizard for an administrator who had revoked their only client
+	// and left them no way to get it back.
+	if ( function_exists( 'aafm_oauth_count_active_clients' ) && aafm_oauth_count_active_clients() > 0 ) {
+		return true;
+	}
+	if ( function_exists( 'aafm_agent_call_count' ) && aafm_agent_call_count() > 0 ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Whether the wizard should render on the plugin page for the current request.
  *
- * True only for a capable admin who has neither finished nor permanently dismissed it. A manual
- * close leaves both flags untouched, so this keeps returning true and the wizard reopens.
+ * True only for a capable admin who has neither finished it, nor permanently dismissed it, nor
+ * already set the plugin up some other way. A manual close still leaves both flags untouched, so on
+ * a genuinely untouched site the wizard does reopen, which is the point of a first-run screen.
  *
  * @return bool
  */
@@ -61,7 +128,10 @@ function aafm_quickconnect_should_render(): bool {
 	if ( ! current_user_can( 'manage_options' ) ) {
 		return false;
 	}
-	return ! aafm_quickconnect_is_finished() && ! aafm_quickconnect_is_dismissed();
+	if ( aafm_quickconnect_is_finished() || aafm_quickconnect_is_dismissed() ) {
+		return false;
+	}
+	return ! aafm_quickconnect_site_looks_configured();
 }
 
 /**
@@ -294,6 +364,8 @@ function aafm_quickconnect_render(): void {
 	$brandmark = '<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" aria-hidden="true" focusable="false"><path d="M16 5 7 8.4v6.9c0 5.4 3.7 9.6 9 11.2 5.3-1.6 9-5.8 9-11.2V8.4L16 5Z" stroke-width="1.9" stroke-linejoin="round"/><path d="m11.6 15.6 3 3 6-6.4" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 	?>
+	<?php // With page JS off, every close path (X, scrim, Escape, Continue, opt-out) is dead, so hide the overlay and let the server-rendered admin behind it show through. ?>
+	<noscript><style>.aafm-qc-overlay{display:none !important;}</style></noscript>
 	<div class="aafm-qc-overlay" id="aafm-qc" role="dialog" aria-modal="true" aria-labelledby="aafm-qc-title" data-endpoint="<?php echo esc_attr( $endpoint ); ?>">
 		<div class="aafm-qc-scrim" data-qc-close="temporary"></div>
 		<div class="aafm-qc-modal">
@@ -306,7 +378,8 @@ function aafm_quickconnect_render(): void {
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>
 					</button>
 				</div>
-				<h1 id="aafm-qc-title"><?php esc_html_e( 'Connect an AI agent to this site', 'agent-abilities-for-mcp' ); ?></h1>
+				<?php // tabindex="-1" so admin.js can put the opening focus on the dialog's own title. ?>
+				<h1 id="aafm-qc-title" tabindex="-1"><?php esc_html_e( 'Connect an AI agent to this site', 'agent-abilities-for-mcp' ); ?></h1>
 				<p class="aafm-qc-lede"><?php esc_html_e( 'Give an AI agent a governed way in. Turn the connection on, choose what it can touch, and you are done. Everything else lives in Settings.', 'agent-abilities-for-mcp' ); ?></p>
 				<div class="aafm-qc-meter" aria-hidden="true">
 					<div class="aafm-qc-meter-top">
@@ -337,7 +410,7 @@ function aafm_quickconnect_render(): void {
 
 						<div class="aafm-qc-control">
 							<label class="aafm-qc-toggle">
-								<input type="checkbox" data-qc-oauth checked>
+								<input type="checkbox" data-qc-oauth checked aria-label="<?php esc_attr_e( 'Enable OAuth', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">
@@ -370,7 +443,8 @@ function aafm_quickconnect_render(): void {
 								<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
 								<span><?php echo wp_kses( __( 'Not using ChatGPT or Claude? <b>Connect with a username and application password instead</b>', 'agent-abilities-for-mcp' ), array( 'b' => array() ) ); ?></span>
 							</button>
-							<div class="aafm-qc-altpanel"><div><div class="aafm-qc-altbody">
+							<?php // Collapsed panels stay in the layout at zero height, so they ship inert: without it every control inside is still tabbable. admin.js flips it with the disclosure. ?>
+							<div class="aafm-qc-altpanel" inert><div><div class="aafm-qc-altbody">
 
 								<div class="aafm-qc-substep" data-qc-substep="a">
 									<span class="sn">1</span>
@@ -452,11 +526,12 @@ function aafm_quickconnect_render(): void {
 						</div>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
 					</div>
-					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
+					<?php // Steps that are not the current one ship inert; admin.js moves it as the wizard advances. ?>
+					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 
 						<div class="aafm-qc-control">
 							<label class="aafm-qc-toggle">
-								<input type="checkbox" checked disabled>
+								<input type="checkbox" checked disabled aria-label="<?php esc_attr_e( 'Read content', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">
@@ -467,7 +542,7 @@ function aafm_quickconnect_render(): void {
 
 						<div class="aafm-qc-control is-write">
 							<label class="aafm-qc-toggle amber">
-								<input type="checkbox" data-qc-write>
+								<input type="checkbox" data-qc-write aria-label="<?php esc_attr_e( 'Create and edit content', 'agent-abilities-for-mcp' ); ?>">
 								<span class="aafm-qc-track"></span>
 							</label>
 							<div class="cx">
@@ -490,7 +565,9 @@ function aafm_quickconnect_render(): void {
 									__( 'Off by default', 'agent-abilities-for-mcp' ),
 									__( 'Capped to your role', 'agent-abilities-for-mcp' ),
 									__( 'Every action is logged', 'agent-abilities-for-mcp' ),
-									__( 'Deletes go to Trash', 'agent-abilities-for-mcp' ),
+									// Reads the enabled set rather than asserting recoverability the
+									// permanent-delete abilities do not have. See aafm_delete_guarantee().
+									aafm_delete_guarantee()[2],
 								) as $chip
 							) {
 								echo '<span class="aafm-qc-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>' . esc_html( $chip ) . '</span>';
@@ -521,7 +598,7 @@ function aafm_quickconnect_render(): void {
 						</div>
 						<span class="aafm-qc-tag todo" data-qc-tag><?php esc_html_e( 'Not started', 'agent-abilities-for-mcp' ); ?></span>
 					</div>
-					<div class="aafm-qc-job-body"><div><div class="aafm-qc-job-inner">
+					<div class="aafm-qc-job-body" inert><div><div class="aafm-qc-job-inner">
 						<p class="aafm-qc-finishcopy"><?php esc_html_e( 'You are set. Approve the connection in the agent when it asks, and it will see exactly what you allowed here, nothing more.', 'agent-abilities-for-mcp' ); ?></p>
 						<div class="aafm-qc-btnrow">
 							<button type="button" class="aafm-btn aafm-btn-primary" id="aafm-qc-finish">

@@ -50,6 +50,7 @@
 			this.#bindSubjectTabs();
 			this.#bindSectionToggles();
 			this.#bindEnableReads();
+			this.#bindEnableWrites();
 			this.#bindIntegrationToggles();
 			this.#bindIntegrationFilters();
 			this.#bindSaveAbilities();
@@ -120,6 +121,83 @@
 			);
 		}
 
+		/**
+		 * Rewrite the WP_API_USERNAME value in a rendered snippet to a new agent login.
+		 *
+		 * The App-Password config snippets are rendered server-side naming the agent login known
+		 * at page load (the 'mcp-agent' seed on a fresh install). After the operator creates the
+		 * agent user in the same session without reloading, those snippets still name the seed, a
+		 * user that does not exist. This swaps the value in place so a copied config names the real
+		 * account. Only the "WP_API_USERNAME" value is touched, matched by its key role so an
+		 * unrelated value that happens to contain the same text is never rewritten. The login is
+		 * JSON-escaped so a value carrying a quote or backslash cannot break the JSON.
+		 *
+		 * @param {string} text  A rendered snippet (JSON text).
+		 * @param {string} login The agent login to write in.
+		 * @return {string} The snippet with its WP_API_USERNAME value replaced.
+		 */
+		#applyAgentLogin( text, login ) {
+			const value = JSON.stringify( login ).slice( 1, -1 );
+			return text.replace(
+				/("WP_API_USERNAME"\s*:\s*")(?:[^"\\]|\\.)*(")/,
+				( _match, before, after ) => `${ before }${ value }${ after }`
+			);
+		}
+
+		/**
+		 * Repoint every App-Password config snippet at a just-created agent login.
+		 *
+		 * Mirrors the server render's substitution for the same-session create flow: the default
+		 * OS blocks and every quickstart card are rewritten in place (textContent, data-copy, and
+		 * the card's data-config), scoped strictly to the App-Password fallback so no OAuth snippet
+		 * is touched. Both updates touch textContent / dataset only, never innerHTML. A no-op when
+		 * the login is empty or the fallback subtree is not on the page.
+		 *
+		 * @param {string} login The login the server just created and marked.
+		 */
+		#retargetSnippetLogin( login ) {
+			if ( ! login ) {
+				return;
+			}
+			const root = document.querySelector( '.aafm-app-password-fallback' );
+			if ( ! root ) {
+				return;
+			}
+			// Default OS blocks: the <pre> plus its copy button's data-copy.
+			root.querySelectorAll( '.aafm-snippet[data-os]' ).forEach( ( block ) => {
+				const pre = block.querySelector( 'pre' );
+				if ( ! pre ) {
+					return;
+				}
+				const next = this.#applyAgentLogin( pre.textContent, login );
+				pre.textContent = next;
+				const copy = block.querySelector( '.aafm-copy' );
+				if ( copy ) {
+					copy.dataset.copy = next;
+				}
+			} );
+			// Quickstart cards: the data-config payload the client picker reads, plus the card's
+			// own <pre> and copy button.
+			root.querySelectorAll( '.aafm-quickstart-card' ).forEach( ( card ) => {
+				if ( card.dataset.config ) {
+					card.dataset.config = this.#applyAgentLogin(
+						card.dataset.config,
+						login
+					);
+				}
+				const pre = card.querySelector( 'pre' );
+				if ( ! pre ) {
+					return;
+				}
+				const next = this.#applyAgentLogin( pre.textContent, login );
+				pre.textContent = next;
+				const copy = card.querySelector( '.aafm-copy' );
+				if ( copy ) {
+					copy.dataset.copy = next;
+				}
+			} );
+		}
+
 		#bindClientPicker() {
 			// Scope strictly to the App-Password fallback subtree. The OAuth picker has
 			// its own #bindOauthClientPicker and must never be touched here.
@@ -132,7 +210,13 @@
 			}
 			cards.forEach( ( card ) => {
 				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => c.classList.toggle( 'on', c === card ) );
+					cards.forEach( ( c ) => {
+						const on = c === card;
+						c.classList.toggle( 'on', on );
+						// The cards are toggle buttons; aria-pressed carries the same
+						// selected state to assistive tech that .on carries visually.
+						c.setAttribute( 'aria-pressed', String( on ) );
+					} );
 
 					const client = card.dataset.client ?? '';
 					// The matching quickstart card carries the ready-made unix snippet.
@@ -185,7 +269,11 @@
 			}
 			cards.forEach( ( card ) => {
 				card.addEventListener( 'click', () => {
-					cards.forEach( ( c ) => c.classList.toggle( 'on', c === card ) );
+					cards.forEach( ( c ) => {
+						const on = c === card;
+						c.classList.toggle( 'on', on );
+						c.setAttribute( 'aria-pressed', String( on ) );
+					} );
 
 					const client = card.dataset.client ?? '';
 					document
@@ -426,6 +514,48 @@
 					}
 					const boxes = scope.querySelectorAll(
 						'.aafm-ability-row[data-risk="read"] input[type="checkbox"][name="aafm_abilities[]"]:not([disabled]), .aafm-ability-row[data-risk="read"] input[type="checkbox"][name="bridged_abilities[]"]:not([disabled])'
+					);
+					boxes.forEach( ( b ) => {
+						b.checked = true;
+					} );
+				} );
+			} );
+		}
+
+		/**
+		 * "Enable all writes" on the Abilities tab.
+		 *
+		 * The write-side counterpart to #bindEnableReads, and it exists because the bulk
+		 * affordance used to cover only the safe half: an operator who wanted reads plus a
+		 * couple of writes had to tick each write by hand, which is how a site ends up with
+		 * "Upload media" on and "Update media" off and an agent that cannot set alt text.
+		 *
+		 * Scoped the same way and additive the same way - it ticks, never unticks, so it can
+		 * never silently switch off a working configuration, and unticking undoes it.
+		 *
+		 * What counts as a write is read off the server-rendered row, never guessed: data-risk
+		 * is exactly "write", so destructive rows are excluded by class, and data-high-risk is
+		 * absent, so the nine money-and-identity abilities stay out even after the operator
+		 * unlocks that category (all nine are risk="write", so risk alone would sweep them in).
+		 * A locked row emits no checkbox at all, so read-only mode and a shut high-risk floor
+		 * are already unreachable here. That leaves nothing destructive or high-risk in range,
+		 * which is why this control needs no confirm where "Enable all" does.
+		 *
+		 * Only the Abilities tab renders the button today, so only aafm_abilities[] is matched;
+		 * the scope roots mirror #bindEnableReads so the binding still works if the control is
+		 * ever placed on an integration card.
+		 */
+		#bindEnableWrites() {
+			document.querySelectorAll( '.aafm-enable-writes' ).forEach( ( btn ) => {
+				btn.addEventListener( 'click', () => {
+					const scope = btn.closest(
+						'.aafm-subject-panel, .aafm-integration-card'
+					);
+					if ( ! scope ) {
+						return;
+					}
+					const boxes = scope.querySelectorAll(
+						'.aafm-ability-row[data-risk="write"]:not([data-high-risk]) input[type="checkbox"][name="aafm_abilities[]"]:not([disabled])'
 					);
 					boxes.forEach( ( b ) => {
 						b.checked = true;
@@ -1282,6 +1412,10 @@
 						),
 						json.data.user_id
 					);
+					// Point the already-rendered App-Password snippets at the login just
+					// created, so a config copied in this same session (no reload) names the
+					// real account rather than the seed the server printed at page load.
+					this.#retargetSnippetLogin( json.data.login ?? '' );
 				} else {
 					// On a duplicate username the server returns the existing user's edit URL;
 					// show the friendly message plus a real "Edit user" link built via the DOM
@@ -1761,6 +1895,10 @@
 			const reduce = window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches;
 			const state = { step: 1, oauth: true, write: false, method: 'oauth' };
 
+			const modal = root.querySelector( '.aafm-qc-modal' );
+			const qcTitle = root.querySelector( '#aafm-qc-title' );
+			const { isOpen, landFocus } = this.#quickConnectFocus( root, modal );
+
 			const jobs = {
 				1: root.querySelector( '[data-qc-job="1"]' ),
 				2: root.querySelector( '[data-qc-job="2"]' ),
@@ -1781,6 +1919,14 @@
 			const render = () => {
 				[ 1, 2, 3 ].forEach( ( i ) => {
 					const job = jobs[ i ];
+					// A collapsed step is zero-height but still laid out, so without inert
+					// its controls stay tabbable and in the accessibility tree: a keyboard
+					// user tabbing through step 1 could reach - and fire - "Finish setup".
+					// inert takes the whole subtree out of both. Browsers without it behave
+					// as the wizard did before, so this can only improve matters.
+					// Driven as an attribute, not the property, so the markup and the focus
+					// trap's [inert] filter agree even on an engine that does not implement it.
+					job.querySelector( '.aafm-qc-job-body' )?.toggleAttribute( 'inert', i !== state.step );
 					job.classList.remove( 'is-current', 'is-done', 'is-todo' );
 					if ( i < state.step ) {
 						job.classList.add( 'is-done' );
@@ -1814,9 +1960,22 @@
 				}
 			};
 
+			// Advancing collapses the step the user was standing in, and the control they just
+			// pressed goes inert with it, which would drop focus on <body> and strand the
+			// keyboard outside the dialog. Move focus to the new step's title instead: it
+			// names where they have landed, and there is nothing there to fire by accident.
+			const focusStep = () => {
+				const heading = jobs[ state.step ]?.querySelector( '.aafm-qc-job-titles .jt' );
+				if ( heading ) {
+					heading.setAttribute( 'tabindex', '-1' );
+					heading.focus();
+				}
+			};
+
 			const goStep = ( n ) => {
 				state.step = Math.max( 1, Math.min( 3, n ) );
 				render();
+				focusStep();
 			};
 
 			// Re-open a completed step by clicking its header.
@@ -1862,9 +2021,14 @@
 			// ---- Job 1: app-password disclosure ----
 			const alt = root.querySelector( '[data-qc-altauth]' );
 			const altTrigger = root.querySelector( '[data-qc-alttrigger]' );
+			const altPanel = alt.querySelector( '.aafm-qc-altpanel' );
 			altTrigger.addEventListener( 'click', () => {
 				const open = alt.classList.toggle( 'is-open' );
 				altTrigger.setAttribute( 'aria-expanded', String( open ) );
+				// Same collapse trick as the steps, same fix: the closed panel's Create-user
+				// button, profile link, and copy control must not be tabbable while the
+				// trigger reports aria-expanded="false".
+				altPanel?.toggleAttribute( 'inert', ! open );
 			} );
 
 			// Create the dedicated agent user (reuses the real aafm_create_agent_user action,
@@ -1944,6 +2108,7 @@
 			root.querySelector( '#aafm-qc-dismiss' ).addEventListener( 'click', async () => {
 				await this.#post( 'aafm_quickconnect_dismiss' );
 				root.classList.add( 'is-closed' );
+				landFocus();
 			} );
 
 			// ---- Go to dashboard from the success screen ----
@@ -1955,18 +2120,107 @@
 			}
 
 			// ---- Temporary close: X, scrim, Esc. Sets no flag, so it reopens next visit. ----
-			const closeTemp = () => root.classList.add( 'is-closed' );
+			const closeTemp = () => {
+				root.classList.add( 'is-closed' );
+				landFocus();
+			};
 			root.querySelectorAll( '[data-qc-close]' ).forEach( ( el ) => {
 				el.addEventListener( 'click', closeTemp );
 			} );
 			document.addEventListener( 'keydown', ( e ) => {
-				if ( 'Escape' === e.key && ! root.classList.contains( 'is-closed' ) ) {
+				if ( 'Escape' === e.key && isOpen() ) {
 					closeTemp();
 				}
 			} );
 
 			render();
 			applyOauth();
+
+			// Opening focus goes to the dialog's own title, so a screen reader starts by
+			// announcing what this thing is rather than reading from wherever the page
+			// happened to leave focus.
+			qcTitle?.focus();
+		}
+
+		/**
+		 * Keep keyboard focus inside the Quick Connect dialog while it is open, and hand it
+		 * somewhere sensible when it closes.
+		 *
+		 * The overlay is aria-modal="true", which tells assistive tech the rest of the page
+		 * does not exist, so focus has to honour that claim. The trap is scoped to the modal
+		 * rather than applying `inert` to the page behind it because the overlay is rendered
+		 * inside .aafm-wrap: inerting an ancestor would inert the dialog with it.
+		 *
+		 * @param {HTMLElement} root  The wizard root (.aafm-qc-overlay).
+		 * @param {HTMLElement} modal The dialog itself (.aafm-qc-modal).
+		 * @return {{isOpen: () => boolean, landFocus: () => void}} Open test + close-time focus handoff.
+		 */
+		#quickConnectFocus( root, modal ) {
+			const FOCUSABLE = [
+				'a[href]',
+				'button:not([disabled])',
+				'input:not([disabled])',
+				'select:not([disabled])',
+				'textarea:not([disabled])',
+				'[tabindex]:not([tabindex="-1"])',
+			].join( ',' );
+
+			const isOpen = () => ! root.classList.contains( 'is-closed' );
+
+			// What can actually be tabbed to right now: rendered, and not sitting inside a
+			// collapsed step or a closed disclosure (both of which are marked inert).
+			const tabbables = () =>
+				Array.from( modal.querySelectorAll( FOCUSABLE ) ).filter(
+					( el ) => ! el.closest( '[inert]' ) && el.getClientRects().length > 0
+				);
+
+			modal.addEventListener( 'keydown', ( e ) => {
+				if ( 'Tab' !== e.key ) {
+					return;
+				}
+				const list = tabbables();
+				if ( ! list.length ) {
+					return;
+				}
+				const first = list[ 0 ];
+				const last = list[ list.length - 1 ];
+				const inside = modal.contains( document.activeElement );
+				if ( e.shiftKey && ( ! inside || document.activeElement === first ) ) {
+					e.preventDefault();
+					last.focus();
+				} else if ( ! e.shiftKey && ( ! inside || document.activeElement === last ) ) {
+					e.preventDefault();
+					first.focus();
+				}
+			} );
+
+			// Tab is not the only way out: find-in-page, a browser extension, or a control
+			// disappearing under focus can all land it on the page behind. Pull it back.
+			document.addEventListener( 'focusin', ( e ) => {
+				if ( ! isOpen() || modal.contains( e.target ) ) {
+					return;
+				}
+				const list = tabbables();
+				if ( list.length ) {
+					list[ 0 ].focus();
+				}
+			} );
+
+			// On close, focus the plugin page's own heading rather than dropping it on <body>,
+			// which would restart tabbing from the top of the admin chrome.
+			const landFocus = () => {
+				// The h1 sits inside .aafm-page-head > .title-wrap, so a child combinator off
+				// .aafm-wrap misses it. Descendant match, with the wrap itself as the fallback.
+				const heading = document.querySelector( '.aafm-wrap .aafm-page-head h1' )
+					|| document.querySelector( '.aafm-wrap h1' );
+				if ( ! heading ) {
+					return;
+				}
+				heading.setAttribute( 'tabindex', '-1' );
+				heading.focus();
+			};
+
+			return { isOpen, landFocus };
 		}
 
 		/**
@@ -1997,6 +2251,9 @@
 				meter.style.display = 'none';
 			}
 			root.querySelector( '[data-qc-success]' ).classList.add( 'is-shown' );
+			// The button that was focused just went display:none with the step list, so put
+			// focus on the receipt's only control instead of letting it fall to <body>.
+			root.querySelector( '#aafm-qc-godash' )?.focus();
 			if ( ! reduce ) {
 				this.#quickConnectConfetti( root );
 			}

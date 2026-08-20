@@ -64,13 +64,46 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      # See the note in test.yml's PHPCS job: the direct composer install lost
+      # ramsey/composer-install's caching, and the runs after that change died on HTTP 429 from
+      # codeload. Same key shape as test.yml on purpose, so this workflow and that one warm each
+      # other's cache instead of each keeping its own copy.
+      - name: Resolve the Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-dev-php${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-dev-php${{ matrix.php }}-
+            ${{ runner.os }}-composer-dev-
+
       - name: Install Composer dependencies
-        uses: ramsey/composer-install@65e4f84970763564f46a70b8a54b90d033b3bdda # v4.0.0
+        # See the note in test.yml: ramsey/composer-install looks for Composer in a tool-cache path
+        # setup-php no longer writes to, so it cannot find the Composer setup-php just installed.
+        # vendor/ is committed and its installed.json lists the dev packages while their
+        # directories are not tracked, so a plain install skips downloading them and then dies
+        # generating an autoloader that requires files that are not there. Install clean.
+        run: |
+          rm -rf vendor
+          composer install --no-interaction --no-progress
 
       - name: Provision WordPress core + PHPUnit test suite
         run: |
           set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y subversion
+          # The runner's default mirror (azure.archive.ubuntu.com) intermittently stalls, and
+          # apt keeps retrying it until the job hits timeout-minutes. It cost three runs in one
+          # day, each dying at exactly 20 minutes on this line with no other symptom. Point apt
+          # at the canonical mirror, which stays responsive when azure does not, and cap the
+          # update so a bad mirror costs seconds instead of the whole run. The update is allowed
+          # to fail: the install is what has to succeed, and it is the step that reports.
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list 2>/dev/null || true
+          sudo timeout 180 apt-get update -o Acquire::Retries=2 || true
+          sudo apt-get install -y --no-install-recommends subversion
           WP_VERSION='${{ matrix.wp }}'
           if [ "$WP_VERSION" = "latest" ]; then
             WP_VERSION="$(curl -fsSL https://api.wordpress.org/core/version-check/1.7/ \
@@ -81,6 +114,13 @@ jobs:
           mkdir -p "$WP_CORE_DIR"
           curl -fsSL "https://wordpress.org/wordpress-${WP_VERSION}.tar.gz" -o /tmp/wp.tgz
           tar --strip-components=1 -zxmf /tmp/wp.tgz -C "$WP_CORE_DIR"
+
+          # Record which WordPress this leg actually installed. The resolved string is what we
+          # ASKED for; version.php is what we GOT, and only the second one is evidence. Without
+          # this the log carries no version at all, so "Tested up to" could never be backed by a
+          # CI run - it had to be inferred from when the job happened to start.
+          echo "Requested WP_VERSION=${WP_VERSION}"
+          echo "Installed  $(grep -o "\$wp_version = '[^']*'" "$WP_CORE_DIR/wp-includes/version.php")"
 
           mkdir -p "$WP_TESTS_DIR"
           svn export --quiet --force "https://develop.svn.wordpress.org/${TAG}/tests/phpunit/includes/" "${WP_TESTS_DIR}/includes"

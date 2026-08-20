@@ -89,55 +89,300 @@ function aafm_wc_gateways_registry_definitions(): array {
 // =============================================================================
 
 /**
- * Recursively strip secret/credential fields from an arbitrary settings array.
+ * Recursively MARK secret/credential fields in an arbitrary settings array.
  *
- * Deny-by-default at every depth: any key whose name matches the secret pattern is dropped,
- * and the walk recurses into nested arrays so a credential hidden under a benign parent key
- * (or several levels down) can't slip through. The pattern covers the obvious credential
- * tokens (key, secret, token, password/pwd, api, private, auth, credential, signature/sign,
- * client_id) plus a second, boundary-anchored group (passphrase, passwd/pass, salt, pin,
- * certificate/cert, pem, account, merchant, license, username/user, number). The group started
- * as (passphrase, salt, pin, certificate/cert, pem), added after an audit found the official
- * PayFast gateway storing its IPN-signing secret under the literal field name "passphrase"
- * (which the original pattern misses - it matches "password", not "pass") and PayU-style
- * gateways using "salt". Those two field names are live, not hypothetical: they are reachable
- * today through wc-get-payment-gateway, which is a read and is not in the high-risk locked set.
- * The 1.6.2 additions (passwd, pass, account, merchant, license, username, user, number) close
- * the gaps a security review found: the loose group's "pwd" does not match "passwd" (no
- * contiguous p-w-d), and nothing caught account_number, merchant_id, license, or username -
- * names carrier and gateway plugins actually use for credentials. Note the anchoring means the
- * longer forms are not redundant: anchored "pass" does not match "passwd" (the next character
- * is "w", not a separator), and anchored "user" does not match "username".
+ * Marks, rather than removes. That distinction is the whole point of this function's current shape.
+ * Dropping a matched key meant a caller could not tell "this setting is not configured" from "this
+ * setting is withheld", so a benign field caught by a loose pattern simply vanished and the agent
+ * answered questions about it wrongly: asked whether a carrier method required a signature on
+ * delivery, it saw no signature_required key and said there was no such setting, when the setting
+ * existed and was set. Silent data loss dressed as an absent field. A fixed marker keeps the key
+ * visible and its value withheld, which is the honest shape and is what makes the widening below
+ * safe -- once a false positive is recoverable rather than invisible, breadth costs the caller
+ * clarity instead of costing them the truth.
  *
- * The second group is boundary-anchored (start/end of the key, or an underscore/hyphen) rather
- * than a loose substring match, because "pin" as a bare substring also matches "shipping"
- * (s-h-i-PIN-g) and would silently strip a benign field on every shipping-method settings row
- * that reuses this same redactor. The original token group stays a loose substring match on
- * purpose: over-redacting a benign field is the safe direction, so it is left as-is rather than
- * risk narrowing it and un-redacting something a wp.org reviewer or a past audit already relied
- * on being caught.
+ * The walk recurses into nested arrays so a credential under a benign parent is still caught. A
+ * secret-NAMED key whose value is an array is marked whole rather than recursed into: the name
+ * already says the subtree is credential material.
  *
- * Honesty about the limit: this is a denylist over field NAMES chosen by third-party gateway and
- * shipping-method plugins this codebase has no visibility into, so it cannot be exhaustive - a
- * plugin that stores a live secret under a name outside this list still leaks it through. An
- * allowlist of "known-safe" field names was considered instead and rejected: a gateway or
- * shipping method's settings array has no fixed schema, so a safe allowlist would have to
- * enumerate every WooCommerce extension ever installed, and would go stale the moment a new one
- * ships. Treat this as best-effort, expanded as new gaps are found, not a completeness guarantee.
+ * The pattern has two groups and the split is deliberate.
+ *
+ * The LOOSE group matches anywhere in the key, and holds only words that mean "secret" wherever
+ * they appear: secret, token, password/passwd/passphrase/passcode/pwd, private, credential,
+ * signature, hmac, oauth, bearer, api_key/apikey, client_id.
+ *
+ * The ANCHORED group needs a start/end or underscore/hyphen boundary, because each of these is a
+ * common substring of an ordinary word. This is where key, api, sign and auth now live, moved out
+ * of the loose group because unanchored they matched monkey_bars, rapid_dispatch, design_template
+ * and author -- absurd on their face, and formerly a silent delete of each. Anchoring keeps
+ * api_key and account_number while letting capital_city_only through.
+ *
+ * The 1.7.0 additions close what two sim lanes proved leaks on a REAL gateway: iban, bic and
+ * sort_code are WooCommerce core's OWN bacs fields, present on a default install, and cvv,
+ * security_code, routing and bank are the ordinary vocabulary of card and bank data. hmac, seed and
+ * iv are cryptographic material by name. passcode is the exact miss the docblock already recorded
+ * for passphrase: anchored "pass" does not match "passcode" because the next character is "c", so
+ * the earlier fix never generalised.
+ *
+ * TWO HONEST LIMITS, both proven rather than theoretical.
+ *
+ * First, a name denylist cannot catch a secret carried in a VALUE. The sim found notify_url holding
+ * "https://psp.example.com/hook?token=...": the key is benign, the query string is not. Nothing
+ * here will ever catch that shape.
+ *
+ * Second, and this corrects a caveat that used to overstate its own coverage: the old docblock
+ * excused misses as coming from "third-party gateway plugins this codebase has no visibility
+ * into". That is not what failed. iban and sort_code are core WooCommerce's own field names, so
+ * they were visible all along. The genuinely uncatchable names are the ones that carry no signal
+ * AT ALL -- custom_field_3, vendor_code, store_hash, partner_code, entity_id, shopper_reference --
+ * and no denylist over names can be expected to know those hold credentials. Treat this as
+ * best-effort over names, widened as real gaps are proven, never a completeness guarantee.
  *
  * @param array<int|string,mixed> $settings Raw settings array (may be nested).
  * @return array<int|string,mixed>
  */
 function aafm_wc_redact_settings_deep( array $settings ): array {
-	$secret_pattern = '/(?:key|secret|token|password|pwd|api|private|auth|credential|signature|sign|client[_-]?id)|(?:^|[_-])(?:passphrase|passwd|pass|salt|pin|certificate|cert|pem|account|merchant|license|username|user|number)(?:[_-]|$)/i';
-	$redacted       = array();
+	$result = aafm_wc_redact_settings_report( $settings );
+	return (array) $result['settings'];
+}
+
+/**
+ * Redact a settings array AND report, out of band, exactly which paths were withheld.
+ *
+ * The marker alone cannot carry this signal, and that is not a detail. A gateway may legitimately
+ * store the literal string "[redacted]" in a benign field, so a marker living inside the same
+ * arbitrary-string value domain as real data can always be forged by accident. The claim that it was
+ * "impossible to mistake for a real configured value" was not achievable as written.
+ *
+ * So the authoritative answer moves outside the values: a list of paths. Each path is an ARRAY OF
+ * SEGMENTS, not a joined string, and the difference is the whole point. A settings key is an
+ * arbitrary array key, so it may contain any character including whatever separator a joined path
+ * would use; "a.b" then reads identically as the nested key b under a and as a single key literally
+ * named "a.b". Escaping the separator would work, but segments cannot be ambiguous in the first
+ * place: every element is exactly one key, verbatim, so a caller reconstructs the exact key by
+ * indexing rather than by parsing.
+ *
+ * @param array<int|string,mixed> $settings Raw settings array (may be nested).
+ * @param array<int,string>       $prefix   Segments of the parent's path, used by the recursion.
+ * @return array{settings:array<int|string,mixed>,redacted:array<int,array<int,string>>}
+ */
+function aafm_wc_redact_settings_report( array $settings, array $prefix = array() ): array {
+	$redacted = array();
+	$paths    = array();
+
 	foreach ( $settings as $key => $value ) {
-		if ( preg_match( $secret_pattern, (string) $key ) ) {
+		$path   = $prefix;
+		$path[] = (string) $key;
+
+		if ( aafm_wc_settings_key_is_secret( (string) $key ) ) {
+			$redacted[ $key ] = aafm_wc_redaction_marker();
+			$paths[]          = $path;
 			continue;
 		}
-		$redacted[ $key ] = is_array( $value ) ? aafm_wc_redact_settings_deep( $value ) : $value;
+
+		if ( is_array( $value ) ) {
+			$nested           = aafm_wc_redact_settings_report( $value, $path );
+			$redacted[ $key ] = $nested['settings'];
+			$paths            = array_merge( $paths, $nested['redacted'] );
+			continue;
+		}
+
+		$redacted[ $key ] = $value;
 	}
-	return $redacted;
+
+	return array(
+		'settings' => $redacted,
+		'redacted' => $paths,
+	);
+}
+
+/**
+ * The value a withheld setting is replaced with, in place.
+ *
+ * A convenience, NOT the signal. It cannot be the signal: this is an arbitrary string sitting in a
+ * field whose real values are also arbitrary strings, so a setting genuinely holding "[redacted]" is
+ * indistinguishable from a withheld one by value alone. The `redacted_fields` segment-path list
+ * returned alongside the settings is the authoritative answer; read that, not this.
+ *
+ * Deliberately not translated: an agent parses it, so it has to be stable across locales.
+ *
+ * @return string
+ */
+function aafm_wc_redaction_marker(): string {
+	return '[redacted]';
+}
+
+/**
+ * Whether a settings key names something that must not be returned.
+ *
+ * Split out from the walk so the pattern has one home and can be exercised directly by a test.
+ * See aafm_wc_redact_settings_deep() for why the two groups are anchored differently.
+ *
+ * The classification runs TWICE: once on the key as sent, and once on a copy where every camelCase
+ * hump has been split into an underscore boundary. Half the tokens below are boundary-anchored, and
+ * a camelCase transition is not a boundary, so `accessKey` and `apiLoginID` walked straight past a
+ * denylist that stops `access_key` and `api_login_id` dead. Authorize.Net alone ships both of those
+ * names. Authorize.Net alone ships `apiLoginID` and `transactionKey`.
+ *
+ * THREE spellings are tested, not two, and the third is not belt-and-braces. A camelCase split has
+ * to handle acronym runs, which needs a second pattern: `([A-Z]+)([A-Z][a-z])` splits before the
+ * LAST capital of a run, so `SSLCertificate` becomes `SSL_Certificate` and `APIKey` becomes
+ * `API_Key` rather than the `AP_I_Key` a naive upper-to-upper split would produce (measured, both
+ * spellings). Without it a leading acronym defeats every anchored-only token: `SSLCertificate`,
+ * `MIDValue` and `IBANNumber` all walked past a list that stops `ssl_certificate`, `mid_value` and
+ * `iban_number` dead. `APIKey` and `APIToken` survived only because `api[_-]?key` and bare `token`
+ * happen to be in the LOOSE group.
+ *
+ * But the acronym pass can also SPLIT a token apart: `OAuthClientID` becomes `O_Auth_Client_ID`,
+ * destroying `oauth`. That is harmless today only because `oauth` is loose and the raw form catches
+ * it anyway, which is an accident of where one token currently sits rather than a property. So the
+ * single-pass spelling is kept as its own candidate instead of being superseded, which makes
+ * "adding the acronym pass can never lose a catch the simpler split had" structural rather than an
+ * argument a future retuning of the groups could quietly invalidate.
+ *
+ * STATED BOUND, measured rather than asserted: NOTHING CURRENTLY DEPENDS ON THAT THIRD SPELLING.
+ * Removing it and keeping only the raw key and the acronym form leaves the whole corpus green,
+ * because the acronym form already runs the hump pass on top of itself and the one key where the
+ * two genuinely differ is caught on the raw form regardless. It is kept as a guard against a
+ * future token move, not because any row demonstrates a need for it. If that ever stops being
+ * true, a row will start depending on it and this paragraph should be rewritten, not deleted.
+ *
+ * One-directional by construction: the raw key is tested first and unchanged, and the two derived
+ * spellings can only add matches on top of it. A key that is withheld today cannot become released
+ * by any of this. The only movement available is from released to withheld.
+ *
+ * @param string $key Settings key.
+ * @return bool
+ */
+function aafm_wc_settings_key_is_secret( string $key ): bool {
+	foreach ( aafm_wc_settings_key_spellings( $key ) as $spelling ) {
+		if ( aafm_wc_settings_key_matches_secret( $spelling ) ) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/**
+ * Every spelling of a key the denylist should be judged against, the key itself first.
+ *
+ * Duplicates are dropped so an all-lowercase key costs exactly one match, which is the common case.
+ *
+ * @param string $key Settings key.
+ * @return array<int,string>
+ */
+function aafm_wc_settings_key_spellings( string $key ): array {
+	$humps   = aafm_wc_split_camel_humps( $key );
+	$acronym = aafm_wc_split_camel_humps( aafm_wc_split_acronym_run( $key ) );
+
+	return array_values( array_unique( array( $key, $humps, $acronym ) ) );
+}
+
+/**
+ * Insert an underscore at every lower-to-upper camelCase hump.
+ *
+ * `accessKey` becomes `access_Key`, which is what lets the boundary-anchored half of the denylist
+ * see a token that carries no underscore or hyphen of its own. Matching is case-insensitive
+ * throughout, so the capital that survives the split does not matter.
+ *
+ * @param string $key Settings key.
+ * @return string
+ */
+function aafm_wc_split_camel_humps( string $key ): string {
+	$split = preg_replace( '/([a-z0-9])([A-Z])/', '$1_$2', $key );
+
+	return null === $split ? $key : $split;
+}
+
+/**
+ * Break a run of capitals just before the last one, so an acronym keeps its own boundary.
+ *
+ * `SSLCertificate` becomes `SSL_Certificate`; `APIKey` becomes `API_Key`. The split lands before
+ * the FINAL capital of the run because that capital belongs to the following word, not the
+ * acronym. Splitting between every pair instead would produce `AP_I_Key` and destroy the token.
+ *
+ * @param string $key Settings key.
+ * @return string
+ */
+function aafm_wc_split_acronym_run( string $key ): string {
+	$split = preg_replace( '/([A-Z]+)([A-Z][a-z])/', '$1_$2', $key );
+
+	return null === $split ? $key : $split;
+}
+
+/**
+ * The denylist itself, applied to one spelling of a key.
+ *
+ * Kept separate from aafm_wc_settings_key_is_secret() so that function can apply it to more than
+ * one spelling without the pattern gaining a second home.
+ *
+ * @param string $key Settings key, in whichever spelling is being tested.
+ * @return bool
+ */
+function aafm_wc_settings_key_matches_secret( string $key ): bool {
+	$loose = 'secret|token|passphrase|passcode|password|passwd|pwd|private|credential|signature|hmac|oauth|bearer|api[_-]?key|client[_-]?id';
+	// Longer alternatives first, so "certificate" is not shadowed by "cert". Bare "pass" is here
+	// rather than in the loose group for the reason the original docblock recorded: anchored, it
+	// catches a field literally named "pass" without matching every word containing those letters.
+	// "security" and "terminal" are compounds ONLY. Bare, they marked security_badge and
+	// terminal_display, which are ordinary UI configuration. Both were added by this release, so
+	// narrowing them corrects this release's own overreach.
+	//
+	// Two tokens are deliberately LEFT broad: user and number. They predate this release and the
+	// docblock records a considered decision to keep them wide rather than risk un-redacting
+	// something an earlier review relied on being caught; reversing that on a review's say-so trades
+	// a withheld benign value for a possible leak, and those are not symmetric.
+	$anchored = 'certificate|cert|security[_-]?(?:code|key|token|question|answer|pin|hash)|sort[_-]?code|terminal[_-]?(?:id|key|password|token|secret)|username|user|account|merchant|license|number|routing|swift|iban|epin|seed|salt|pass|auth|sign|key|api|pem|pin|cvv|cvc|bic|mid|iv';
+
+	if ( 1 === preg_match( '/(?:' . $loose . ')|(?:^|[_-])(?:' . $anchored . ')(?:[_-]|$)/i', $key ) ) {
+		return true;
+	}
+
+	// "bank" and "login" are SOFT: broad enough to be worth keeping, broad enough to be wrong on
+	// their own. This release added them to catch bank_details and x_login, two of the names the
+	// traffic sim read back in full off a real gateway, and they do still catch those. But bare they
+	// also marked bank_logo and login_button_label, which are a picture and a piece of button copy.
+	//
+	// The carve-out below is SUBTRACTIVE rather than a narrowing, and that is deliberate. Rewriting
+	// these into a compound list the way security and terminal were rewritten would flip the default
+	// from "caught unless proven benign" to "missed unless enumerated", and every credential-shaped
+	// bank_* or *_login name nobody thought to enumerate would go out in full. Instead the tokens
+	// stay as broad as they were, and a name is released ONLY when its last segment is one of a
+	// closed list of words that name how a thing is displayed, not what it holds. So bank_details,
+	// bank_account, bank_iban, x_login and login_token are all still withheld, unchanged, and only
+	// bank_logo, login_button_label and their kind come back.
+	//
+	// The strong pattern above is checked FIRST and wins outright, so a key that carries any other
+	// credential signal is never released by this rule: bank_account_label is still withheld, on
+	// "account". This rule can only ever release a name whose sole credential signal was bank or
+	// login. A future finding that wants these narrowed further needs to argue with this paragraph.
+	if ( 1 !== preg_match( '/(?:^|[_-])(?:bank|login)(?:[_-]|$)/i', $key ) ) {
+		return false;
+	}
+
+	return ! aafm_wc_settings_key_is_presentational( $key );
+}
+
+/**
+ * Whether a key's last segment names how something is DISPLAYED rather than what it holds.
+ *
+ * Only consulted for the two soft tokens in aafm_wc_settings_key_is_secret(); see the reasoning
+ * there for why the release is subtractive and why this list is closed rather than open-ended.
+ *
+ * The list is deliberately short and deliberately excludes url and link. A logo is a picture and a
+ * label is a caption, so neither can be a credential whatever the surrounding words say; a URL can
+ * be, because a secret carried in a query string is the one failure mode the whole name denylist is
+ * already documented as unable to see. Releasing login_url would put a name-shaped hole exactly
+ * where the value-shaped hole already is.
+ *
+ * @param string $key Settings key.
+ * @return bool
+ */
+function aafm_wc_settings_key_is_presentational( string $key ): bool {
+	$suffixes = 'logo|label|title|subtitle|text|icon|image|img|heading|subheading|description|desc|placeholder|tooltip|caption|banner|badge|colou?r|position|display|style|class|width|height|message|note|notice|instructions|button|alt|enabled|visible|visibility';
+
+	return 1 === preg_match( '/(?:^|[_-])(?:' . $suffixes . ')$/i', $key );
 }
 
 /**
@@ -186,20 +431,26 @@ function aafm_wc_gateway_order( string $gateway_id, array $gateways ): int {
 function aafm_wc_gateway_shape( \WC_Payment_Gateway $gateway, int $order ): array {
 	// Strip credential fields before the settings ever reach the shape (denylist walk, see
 	// aafm_wc_redact_settings_deep()'s docblock above).
-	$settings = aafm_wc_redact_gateway_settings( $gateway->settings );
+	$report   = aafm_wc_redact_settings_report( (array) $gateway->settings );
+	$settings = (array) $report['settings'];
 	return array(
-		'id'          => $gateway->id,
+		'id'              => $gateway->id,
 		// WC_Payment_Gateway declares $title and $description with no default; a gateway that
 		// never assigns them (a third-party gateway that skips the usual __construct wiring) reads
 		// back as null, which would violate the declared string schema. Cast defensively.
-		'title'       => (string) $gateway->title,
-		'description' => (string) $gateway->description,
-		'enabled'     => 'yes' === $gateway->enabled,
-		'order'       => $order,
+		'title'           => (string) $gateway->title,
+		'description'     => (string) $gateway->description,
+		'enabled'         => 'yes' === $gateway->enabled,
+		'order'           => $order,
 		// A gateway that never calls init_settings() (again, a non-conforming third-party
 		// gateway) leaves $settings as an empty array, which encodes as [] rather than the {}
 		// the declared object schema needs.
-		'settings'    => array() === $settings ? (object) $settings : $settings,
+		'settings'        => array() === $settings ? (object) $settings : $settings,
+		// The AUTHORITATIVE list of what was withheld, each entry an array of key segments. The
+		// marker inside `settings` is a convenience; it lives in the same string domain as real
+		// values, so only this list can distinguish a withheld field from one that holds that
+		// string. Segments rather than a joined path because a key may contain any separator.
+		'redacted_fields' => array_values( (array) $report['redacted'] ),
 	);
 }
 
@@ -306,12 +557,13 @@ function aafm_args_wc_get_payment_gateway(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'id'          => array( 'type' => 'string' ),
-				'title'       => array( 'type' => 'string' ),
-				'description' => array( 'type' => 'string' ),
-				'enabled'     => array( 'type' => 'boolean' ),
-				'order'       => array( 'type' => 'integer' ),
-				'settings'    => array( 'type' => 'object' ),
+				'id'              => array( 'type' => 'string' ),
+				'title'           => array( 'type' => 'string' ),
+				'description'     => array( 'type' => 'string' ),
+				'enabled'         => array( 'type' => 'boolean' ),
+				'order'           => array( 'type' => 'integer' ),
+				'settings'        => array( 'type' => 'object' ),
+				'redacted_fields' => aafm_wc_redacted_fields_schema(),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_get_payment_gateway',
@@ -392,12 +644,13 @@ function aafm_args_wc_update_payment_gateway(): array {
 		'output_schema'       => array(
 			'type'       => 'object',
 			'properties' => array(
-				'id'          => array( 'type' => 'string' ),
-				'title'       => array( 'type' => 'string' ),
-				'description' => array( 'type' => 'string' ),
-				'enabled'     => array( 'type' => 'boolean' ),
-				'order'       => array( 'type' => 'integer' ),
-				'settings'    => array( 'type' => 'object' ),
+				'id'              => array( 'type' => 'string' ),
+				'title'           => array( 'type' => 'string' ),
+				'description'     => array( 'type' => 'string' ),
+				'enabled'         => array( 'type' => 'boolean' ),
+				'order'           => array( 'type' => 'integer' ),
+				'settings'        => array( 'type' => 'object' ),
+				'redacted_fields' => aafm_wc_redacted_fields_schema(),
 			),
 		),
 		'execute_callback'    => 'aafm_exec_wc_update_payment_gateway',
@@ -492,10 +745,10 @@ function aafm_exec_wc_update_payment_gateway( array $input ) {
 		$desired['enabled'] = $input['enabled'] ? 'yes' : 'no';
 	}
 	if ( isset( $input['title'] ) ) {
-		$desired['title'] = sanitize_text_field( (string) $input['title'] );
+		$desired['title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( isset( $input['description'] ) ) {
-		$desired['description'] = sanitize_textarea_field( (string) $input['description'] );
+		$desired['description'] = aafm_sanitize_multiline_text( (string) $input['description'] );
 	}
 
 	foreach ( $desired as $key => $value ) {

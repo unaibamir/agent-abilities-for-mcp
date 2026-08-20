@@ -111,14 +111,14 @@ final class PagesWriteTest extends TestCase {
 		// by publish_pages, so the contributor is denied.
 		$this->acting_as( 'contributor' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/create-page' )->check_permissions( array() )
+			wp_get_ability( 'aafm/create-page' )->check_permissions( array( 'title' => 'Cap probe' ) )
 		);
 	}
 
 	public function test_subscriber_denied_create_page_is_audited(): void {
 		$this->acting_as( 'subscriber' );
 		$this->assertFalse(
-			wp_get_ability( 'aafm/create-page' )->check_permissions( array() )
+			wp_get_ability( 'aafm/create-page' )->check_permissions( array( 'title' => 'Cap probe' ) )
 		);
 
 		$denied    = aafm_query_activity( array( 'status' => 'denied' ) );

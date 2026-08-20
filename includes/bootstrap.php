@@ -12,6 +12,32 @@ defined( 'ABSPATH' ) || exit;
 use WP\MCP\Core\McpAdapter;
 
 /**
+ * The longest client name or version this plugin will persist from an initialize handshake.
+ *
+ * Real values are short - "claude-code", "1.2.3" - and the field exists so an operator can tell
+ * one connection from another on the Connections screen, where anything past a hundred characters
+ * is unreadable anyway. 128 leaves generous room for a descriptive name while making the field
+ * useless as storage.
+ */
+if ( ! defined( 'AAFM_MCP_CLIENT_FIELD_MAX' ) ) {
+	define( 'AAFM_MCP_CLIENT_FIELD_MAX', 128 );
+}
+
+/**
+ * The largest initialize params object this plugin will hand to the adapter, in bytes.
+ *
+ * SessionManager::create_session() stores the WHOLE params array in user meta, not just the parts
+ * it understands, so a bound on clientInfo alone would leave any other key just as unbounded. A
+ * real handshake is a few hundred bytes; 64 KB is far beyond anything a client legitimately sends
+ * and still far below a payload that can bloat a meta row. Refused rather than trimmed, because
+ * silently dropping half of a client's capabilities object would break negotiation in a way that
+ * is very hard to debug from the client side.
+ */
+if ( ! defined( 'AAFM_MCP_INITIALIZE_PARAMS_MAX' ) ) {
+	define( 'AAFM_MCP_INITIALIZE_PARAMS_MAX', 65536 );
+}
+
+/**
  * The MCP server's REST namespace. Single source for the four sites that need the route
  * literal (discovery, validator, connection, server). Splitting namespace from route keeps
  * the value byte-identical to what create_server() registers and what aafm_endpoint_url()
@@ -287,3 +313,115 @@ function aafm_resolve_adapter_owner_plugin(): string {
 
 	return '';
 }
+
+/**
+ * Bound the initialize params before the MCP adapter turns them into a session row.
+ *
+ * SessionManager::create_session() writes the entire params array into the calling user's
+ * `mcp_adapter_sessions` meta, verbatim and unvalidated, up to the per-user session cap. A
+ * subscriber - sixteen read-only tools, no write ability anywhere - sent a two-million-character
+ * clientInfo.name, repeated it to the cap, and grew their own usermeta row from 288 bytes to 64 MB.
+ * Every call answered 200, and their next ordinary handshake took nearly four times as long,
+ * because that row is unserialised on every request that primes their meta (B2-12).
+ *
+ * The storage belongs to the vendored adapter, but the gate belongs here: this plugin is the
+ * governance layer in front of it, and "the library wrote it" is not a defence a governance layer
+ * gets to use. Bounding at the request is also the only place the fix can live without patching
+ * vendor code that composer will replace.
+ *
+ * Two different treatments, deliberately:
+ *
+ * - clientInfo is REWRITTEN. It is descriptive metadata, the protocol defines exactly two fields
+ *   for it, and truncating an absurd name still leaves a usable label. Unknown fields are dropped
+ *   rather than shortened, since nothing downstream reads them. The name goes through the same
+ *   plain-text helper every other stored, operator-visible name does.
+ * - Everything else is REFUSED when the whole params object is oversized. Trimming an unknown key
+ *   risks silently mangling a capabilities negotiation, and a client that sends 64 KB of handshake
+ *   deserves a clear error rather than a quiet, partial success.
+ *
+ * @param mixed $result  Existing short-circuit result, or null.
+ * @param mixed $server  The REST server (unused).
+ * @param mixed $request The request being dispatched.
+ * @return mixed A 400 WP_Error for an oversized params object, otherwise $result unchanged.
+ */
+function aafm_bound_mcp_initialize_params( $result, $server = null, $request = null ) {
+	unset( $server );
+
+	if ( null !== $result || ! $request instanceof \WP_REST_Request || 'POST' !== $request->get_method() ) {
+		return $result;
+	}
+	// Case-insensitive, matching core's own route matching and the sibling checks in server.php.
+	if ( 0 !== strcasecmp( rtrim( (string) $request->get_route(), '/' ), rtrim( aafm_mcp_rest_route(), '/' ) ) ) {
+		return $result;
+	}
+
+	$body = $request->get_json_params();
+	if ( ! is_array( $body ) || array() === $body ) {
+		return $result;
+	}
+
+	// A JSON-RPC batch is a list of call objects. Handling only the single-object form let the same
+	// oversized handshake through simply by wrapping it in brackets (R6-3), so both shapes walk the
+	// same path and every element is bounded on its own.
+	$is_batch = array_keys( $body ) === range( 0, count( $body ) - 1 );
+	$calls    = $is_batch ? $body : array( $body );
+	$changed  = false;
+
+	foreach ( $calls as $index => $call ) {
+		if ( ! is_array( $call ) || 'initialize' !== ( $call['method'] ?? '' ) || ! isset( $call['params'] ) || ! is_array( $call['params'] ) ) {
+			continue;
+		}
+
+		$bounded = aafm_bound_initialize_params_array( $call['params'] );
+		if ( null === $bounded ) {
+			return new WP_Error(
+				'aafm_initialize_params_too_large',
+				__( 'The initialize parameters are too large. Send a normal handshake: a protocol version, your capabilities, and a short client name and version.', 'agent-abilities-for-mcp' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		if ( $bounded !== $call['params'] ) {
+			$calls[ $index ]['params'] = $bounded;
+			$changed                   = true;
+		}
+	}
+
+	if ( $changed ) {
+		// set_body() clears the parsed-JSON cache, so the adapter reads the bounded version.
+		$request->set_body( (string) wp_json_encode( $is_batch ? $calls : $calls[0] ) );
+	}
+
+	return $result;
+}
+
+/**
+ * Bound one initialize params object, or report that it is too large to accept at all.
+ *
+ * @param array<string,mixed> $params Params from a single initialize call.
+ * @return array<string,mixed>|null The bounded params, or null when the object exceeds the cap.
+ */
+function aafm_bound_initialize_params_array( array $params ): ?array {
+	if ( isset( $params['clientInfo'] ) && is_array( $params['clientInfo'] ) ) {
+		$client = array();
+		foreach ( array( 'name', 'version' ) as $field ) {
+			if ( ! isset( $params['clientInfo'][ $field ] ) || ! is_scalar( $params['clientInfo'][ $field ] ) ) {
+				continue;
+			}
+			$value = aafm_sanitize_plain_text( (string) $params['clientInfo'][ $field ] );
+			if ( strlen( $value ) > AAFM_MCP_CLIENT_FIELD_MAX ) {
+				$value = substr( $value, 0, AAFM_MCP_CLIENT_FIELD_MAX );
+			}
+			$client[ $field ] = $value;
+		}
+		$params['clientInfo'] = $client;
+	}
+
+	if ( strlen( (string) wp_json_encode( $params ) ) > AAFM_MCP_INITIALIZE_PARAMS_MAX ) {
+		return null;
+	}
+
+	return $params;
+}
+
+add_filter( 'rest_pre_dispatch', 'aafm_bound_mcp_initialize_params', 10, 3 );

@@ -940,6 +940,14 @@
 		.aafm-section-toggle {
 			padding-inline: 20px;
 			margin-block: 12px 0;
+
+			/* Caveat for "Enable all writes". Sits inline after the buttons and wraps below them
+			   on a narrow screen; it is the button's aria-describedby target, so it must stay
+			   rendered and readable rather than being hidden at any breakpoint. */
+			> .aafm-section-toggle-note {
+				font-size: 12px;
+				color: var(--aafm-text-subtle);
+			}
 		}
 
 		/* Each card is a native <details> accordion. The <summary> is the card head; clicking
@@ -1610,20 +1618,37 @@
 		gap: 10px;
 	}
 
+	/* Each card is a <button>, so the browser defaults it would otherwise inherit
+	   (centred text, Arial, its own margin box) are reset back to the card design. */
 	.aafm-client {
+		appearance: none;
 		display: flex;
 		align-items: center;
 		gap: 9px;
+		inline-size: 100%;
+		margin: 0;
 		padding-block: 11px;
 		padding-inline: 13px;
 		cursor: pointer;
 		background: var(--aafm-surface);
 		border: 1px solid var(--aafm-border-strong);
 		border-radius: var(--aafm-radius-sm);
+		font-family: inherit;
 		font-size: 13px;
 		font-weight: 600;
+		line-height: 1.4;
+		text-align: start;
 		color: var(--aafm-text);
 		transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+		&:focus-visible {
+			outline: none;
+			box-shadow: var(--aafm-ring);
+		}
+
+		&.on:focus-visible {
+			box-shadow: inset 0 0 0 1px var(--aafm-accent), var(--aafm-ring);
+		}
 
 		&:hover {
 			border-color: var(--aafm-accent);
@@ -2880,4 +2905,44 @@
 	.aafm-qc-bigshield { animation: none; }
 	.aafm-qc-confetti { display: none; }
 	.aafm-qc-success.is-shown .aafm-qc-confetti-svg { display: block; }
+}
+
+/* Forced colors (Windows High Contrast and the OS equivalents).
+
+   The house focus style is `outline: none` plus `box-shadow: var(--aafm-ring)`, seven times
+   over inside .aafm-wrap. Forced colors throws author box-shadows away and would normally substitute its own
+   outline, except `outline: none` already removed the thing it substitutes into, so those
+   controls focus invisibly. This restores an outline in the system Highlight colour for every
+   focusable element in the plugin's admin UI, wherever it is, except the two toggles whose
+   real input is hidden; those are handled separately at the end of the block.
+
+   !important is deliberate rather than lazy: the rules being corrected are scoped selectors
+   like `.aafm-client-grid button:focus-visible`, which outrank a bare `:focus-visible` on
+   specificity. This is the narrowest override that reaches all of them.
+
+   The client pickers get a second cue as well. Selection there is carried by border and
+   background colour, both of which forced colors flattens, so the chosen card is marked with
+   a dashed border that survives. */
+@media (forced-colors: active) {
+	.aafm-wrap :focus-visible,
+	.aafm-qc-overlay :focus-visible {
+		outline: 2px solid Highlight !important;
+		outline-offset: 2px;
+	}
+
+	.aafm-wrap .aafm-client.on,
+	.aafm-qc-overlay .aafm-client.on {
+		border-style: dashed;
+	}
+
+	/* The ability switches and the wizard's write-access toggle hide their real input
+	   (opacity 0, and 0x0 for the wizard's) and paint focus as a box-shadow on the track
+	   beside it. The rule above lands its outline on the input, which is exactly the element
+	   nobody can see, so the toggle would still focus invisibly. Put the outline on the
+	   track, which is the thing being looked at. */
+	.aafm-wrap .aafm-switch input:focus-visible + .aafm-switch-track,
+	.aafm-qc-toggle input:focus-visible + .aafm-qc-track {
+		outline: 2px solid Highlight;
+		outline-offset: 2px;
+	}
 }

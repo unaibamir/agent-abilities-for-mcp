@@ -315,9 +315,15 @@ final class SafetyEnforcementTest extends TestCase {
 		$ability = wp_get_ability( 'aafm/rl-leak-probe' );
 
 		// Call 1, malformed: the adapter-phase permission fire passes and consumes the only token...
-		$this->assertTrue( $ability->check_permissions( array( 'extra' => true ) ) );
+		//
+		// The malformed value satisfies `required` and fails on TYPE, deliberately. A call that
+		// omits a required property is now refused at the permission fire itself and releases its
+		// memo inline, which is a different route to the same guarantee and is pinned in its own
+		// test below. This row has to keep exercising the ORIGINAL path, where the permission fire
+		// passes and core is what rejects the input, or B12's actual regression stops being covered.
+		$this->assertTrue( $ability->check_permissions( array( 'ok' => 'not-a-boolean' ) ) );
 		// ...then core refuses the input on schema grounds before the execute wrapper ever runs.
-		$this->assertInstanceOf( \WP_Error::class, $ability->execute( array( 'extra' => true ) ) );
+		$this->assertInstanceOf( \WP_Error::class, $ability->execute( array( 'ok' => 'not-a-boolean' ) ) );
 		$this->assertSame( 0, $executed, 'The malformed call must die at input validation, never reaching the execute callback.' );
 
 		// Call 2, valid, same ability, same request: the only token is already spent, so this must
@@ -325,6 +331,57 @@ final class SafetyEnforcementTest extends TestCase {
 		$this->assertFalse(
 			$ability->check_permissions( array( 'ok' => true ) ),
 			'A schema-invalid call must not gift its rate token to the next same-ability call in the batch.'
+		);
+		$this->assertSame( 0, $executed );
+	}
+
+	/**
+	 * The same B12 guarantee for the other route: a call that OMITS a required argument.
+	 *
+	 * This one is refused at the permission fire rather than by core, because the fire now answers
+	 * a missing required property as the schema failure it is instead of handing it to the
+	 * permission callback. It consumes a token first, exactly as before, so a flood of malformed
+	 * calls still costs something, and then releases its memo through the shared non-true branch.
+	 * If that release were ever lost the dead call would pay for the next one, which is the leak
+	 * B12 was.
+	 */
+	public function test_a_call_missing_a_required_argument_releases_its_rate_memo(): void {
+		$uid = self::factory()->user->create( array( 'role' => 'editor' ) );
+		wp_set_current_user( $uid );
+		update_option( 'aafm_rate_limit_per_min', 1 );
+
+		$executed = 0;
+		$this->register(
+			'aafm/rl-missing-arg-probe',
+			array(
+				'label'               => 'RL Missing Arg Probe',
+				'description'         => 'Throwaway ability for the missing-argument refusal path.',
+				'category'            => 'aafm-reads',
+				'input_schema'        => array(
+					'type'                 => 'object',
+					'required'             => array( 'ok' ),
+					'properties'           => array( 'ok' => array( 'type' => 'boolean' ) ),
+					'additionalProperties' => false,
+				),
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static function () use ( &$executed ) {
+					++$executed;
+					return array( 'ok' => true );
+				},
+				'permission_callback' => '__return_true',
+			)
+		);
+		$ability = wp_get_ability( 'aafm/rl-missing-arg-probe' );
+
+		$refused = $ability->check_permissions( array() );
+		$this->assertInstanceOf( \WP_Error::class, $refused, 'A missing required argument is answered as a schema failure.' );
+		$this->assertSame( 'ability_invalid_input', $refused->get_error_code() );
+
+		// The token was still spent, and then released: the next valid call is denied by the limit,
+		// not gifted the dead call's allow.
+		$this->assertFalse(
+			$ability->check_permissions( array( 'ok' => true ) ),
+			'A malformed call must not gift its rate token to the next same-ability call.'
 		);
 		$this->assertSame( 0, $executed );
 	}

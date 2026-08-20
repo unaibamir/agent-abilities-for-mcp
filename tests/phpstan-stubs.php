@@ -78,8 +78,14 @@ if ( ! class_exists( 'WC_Product' ) ) {
 		public function get_image_id(): int {
 			return 0;
 		}
-		/** @return array<int|string,mixed> */
-		public function get_attributes(): array {
+		/**
+		 * Real WooCommerce takes $context = 'view' here, and view context runs
+		 * woocommerce_product_get_attributes. The write path passes 'edit' deliberately.
+		 *
+		 * @param string $context
+		 * @return array<int|string,mixed>
+		 */
+		public function get_attributes( $context = 'view' ): array {
 			return array();
 		}
 		/** @return int[] */
@@ -360,6 +366,45 @@ if ( ! function_exists( 'wc_delete_attribute' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Order_Item_Tax' ) ) {
+	/**
+	 * Minimal WooCommerce order tax-line signature for static analysis only.
+	 */
+	class WC_Order_Item_Tax {
+		// Real WooCommerce gives every one of these a $context param defaulting to 'view', and view
+		// context runs the property's display filter. The snapshot passes 'edit' deliberately.
+		/** @param string $context */
+		public function get_rate_id( $context = 'view' ): int { return 0; }
+		/** @param string $context */
+		public function get_rate_code( $context = 'view' ): string { return ''; }
+		/** @param string $context */
+		public function get_label( $context = 'view' ): string { return ''; }
+		/** @param string $context */
+		public function get_compound( $context = 'view' ): bool { return false; }
+		/** @param string $context @return int|float|string|null */
+		public function get_rate_percent( $context = 'view' ) { return null; }
+		/** @param string $context */
+		public function get_tax_total( $context = 'view' ): string { return '0.00'; }
+		/** @param string $context */
+		public function get_shipping_tax_total( $context = 'view' ): string { return '0.00'; }
+		/** @param mixed $value @return void */
+		public function set_rate_id( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_rate_code( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_label( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_compound( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_rate_percent( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_tax_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_tax_total( $value ) {}
+		public function save(): int { return 0; }
+	}
+}
+
 if ( ! class_exists( 'WC_Order' ) ) {
 	/**
 	 * Stub WC_Order for PHPStan - mirrors the getters the order abilities call.
@@ -370,14 +415,15 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		 * @return string
 		 */
 		public function calculate_totals( $and_taxes = true ) { return '0.00'; }
+		public function is_editable() { return true; }
 		/** @return int */
 		public function get_id() { return 0; }
 		/** @return string */
 		public function get_order_number() { return ''; }
 		/** @return string */
 		public function get_status() { return ''; }
-		/** @return string */
-		public function get_total() { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_total( $context = 'view' ) { return '0.00'; }
 		/** @return string */
 		public function get_currency() { return 'USD'; }
 		/** @return string|object|null */
@@ -389,16 +435,45 @@ if ( ! class_exists( 'WC_Order' ) ) {
 		/** @return string */
 		public function get_customer_note() { return ''; }
 		/**
-		 * @param string $types
+		 * Real WooCommerce runs `array_filter( (array) $types )`, so a list of types is as valid as
+		 * a single one (abstract-wc-order.php:1068). The old string-only hint was a stub inaccuracy.
+		 *
+		 * @param string|array<int,string> $types
 		 * @return array<mixed>
 		 */
 		public function get_items( $types = 'line_item' ) { return array(); }
+		/** @return array<int,\WC_Order_Item_Tax> */
+		public function get_taxes() { return array(); }
 		/** @return string */
 		public function get_total_tax() { return '0.00'; }
 		/** @return string */
 		public function get_subtotal() { return '0.00'; }
-		/** @return string */
-		public function get_shipping_total() { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_shipping_total( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_cart_tax( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_shipping_tax( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_discount_total( $context = 'view' ) { return '0.00'; }
+		/** @param string $context @return string */
+		public function get_discount_tax( $context = 'view' ) { return '0.00'; }
+		/** @param int $item_id @return void */
+		public function remove_item( $item_id ) {}
+		/** @param object $item @return void */
+		public function add_item( $item ) {}
+		/** @param mixed $value @return void */
+		public function set_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_cart_tax( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_tax( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_shipping_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_discount_total( $value ) {}
+		/** @param mixed $value @return void */
+		public function set_discount_tax( $value ) {}
 		/** @return string */
 		public function get_billing_first_name() { return ''; }
 		/** @return string */

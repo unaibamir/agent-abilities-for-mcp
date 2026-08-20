@@ -218,4 +218,56 @@ final class LogInternalsTest extends TestCase {
 		$this->assertSame( 'success', $rows[0]['status'] );
 		$this->assertSame( $user_id, (int) $rows[0]['principal_user_id'] );
 	}
+
+	/**
+	 * The verify predicate reports the real state of the table (set_up already installed it).
+	 */
+	public function test_schema_verify_true_when_installed_false_when_table_missing(): void {
+		global $wpdb;
+
+		$this->assertTrue( aafm_activity_log_schema_verify(), 'A fully installed schema must verify.' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_activity_log" );
+		$this->assertFalse( aafm_activity_log_schema_verify(), 'A missing table must fail verify.' );
+
+		// Restore the table so later tests on this connection keep a healthy schema.
+		aafm_install_activity_log();
+	}
+
+	/**
+	 * A healthy install stamps the version and clears any prior failure flag.
+	 */
+	public function test_finalize_stamps_and_clears_error_on_healthy_schema(): void {
+		set_transient( 'aafm_activity_log_schema_error', time(), DAY_IN_SECONDS );
+
+		aafm_install_activity_log();
+
+		$this->assertSame( AAFM_ACTIVITY_LOG_SCHEMA_VERSION, get_option( 'aafm_activity_log_schema_version' ) );
+		$this->assertFalse( get_transient( 'aafm_activity_log_schema_error' ), 'A healthy verify must clear the error flag.' );
+	}
+
+	/**
+	 * The core of F2: a failed migration must NOT advance the version, and must flag a bounded
+	 * error, so the admin_init / rest_api_init self-heal keeps retrying instead of going quiet
+	 * and losing the security trail.
+	 */
+	public function test_finalize_does_not_advance_version_on_broken_schema(): void {
+		global $wpdb;
+
+		update_option( 'aafm_activity_log_schema_version', '1' );
+		delete_transient( 'aafm_activity_log_schema_error' );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_activity_log" );
+
+		aafm_activity_log_finalize_schema();
+
+		$this->assertSame( '1', get_option( 'aafm_activity_log_schema_version' ), 'A failed verify must leave the prior version so the self-heal retries.' );
+		$this->assertNotFalse( get_transient( 'aafm_activity_log_schema_error' ), 'A failed verify must raise the bounded error flag.' );
+
+		// Restore the healthy table and version.
+		aafm_install_activity_log();
+		$this->assertSame( AAFM_ACTIVITY_LOG_SCHEMA_VERSION, get_option( 'aafm_activity_log_schema_version' ) );
+	}
 }

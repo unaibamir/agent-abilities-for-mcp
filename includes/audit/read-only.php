@@ -115,8 +115,9 @@ function aafm_ability_is_read( string $name ): bool {
  * this return 'high_risk' for it. The high-risk floor only subtracts inside
  * aafm_get_enabled_abilities(), which walks the native registry and never touches the bridge, so the
  * caller would draw a padlock over an ability that still registers. Bridged callers evaluate the
- * read-only clause on its own instead: see includes/admin/bridge-directory.php:500 for the worked
- * example and the tests that hold it.
+ * read-only clause on its own instead: see the $lock_reason clause in
+ * aafm_render_bridge_ability_row() (includes/admin/bridge-directory.php) for the worked example,
+ * pinned by ReadOnlyUiTest::test_a_bridge_row_never_renders_a_high_risk_lock.
  *
  * @param string $name Native ability name (aafm/*).
  * @return string|null 'read_only', 'high_risk', or null when the ability is freely toggleable.

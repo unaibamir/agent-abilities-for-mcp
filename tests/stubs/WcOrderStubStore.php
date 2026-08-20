@@ -39,6 +39,16 @@ class WcOrderStubStore {
 	public static int $next_id = 5000;
 
 	/**
+	 * The $and_taxes argument of the most recent calculate_totals() call, or null if none.
+	 *
+	 * Lets a test prove that a completed order's historical taxes were left alone rather than
+	 * rebuilt at today's rates.
+	 *
+	 * @var bool|null
+	 */
+	public static ?bool $last_calculate_totals_and_taxes = null;
+
+	/**
 	 * Order notes keyed by order_id, then by note_id.
 	 *
 	 * @var array<int,array<int,array<string,mixed>>>
@@ -177,12 +187,25 @@ class WcOrderStubStore {
 	public static array $last_refund_args = array();
 
 	/**
+	 * When true, wc_get_order() THROWS instead of returning.
+	 *
+	 * The real function can: the order factory, the data store and the filters around them are all
+	 * third-party surface. A stub that could only return false or an object could not tell a caller
+	 * that handles a throw apart from one that does not, so a test of that branch would pass either
+	 * way.
+	 *
+	 * @var bool
+	 */
+	public static $throw_on_get = false;
+
+	/**
 	 * Clear all state.
 	 *
 	 * @return void
 	 */
 	public static function reset(): void {
 		self::$orders                    = array();
+		self::$throw_on_get              = false;
 		self::$next_id                   = 5000;
 		self::$order_statuses            = array(
 			'wc-pending'    => 'Pending',
@@ -354,6 +377,19 @@ class WcOrderStubStore {
 		self::$last_query_args = $args;
 		$status                = $args['status'] ?? '';
 		$rows                  = self::all();
+
+		// wc_get_orders() defaults to the shop_order type; pass no type and WooCommerce hands back
+		// every order-ish record, refunds included. Model that faithfully so a caller that omits
+		// 'type' sees the same over-counting here that it would see against a real HPOS store.
+		if ( isset( $args['type'] ) ) {
+			$wanted_types = array_map( 'strval', (array) $args['type'] );
+			$rows         = array_values(
+				array_filter(
+					$rows,
+					static fn( array $row ): bool => in_array( (string) ( $row['type'] ?? 'shop_order' ), $wanted_types, true )
+				)
+			);
+		}
 
 		if ( '' !== $status && 'any' !== $status ) {
 			$wanted = (array) $status;
@@ -650,6 +686,10 @@ class WcOrderStubStore {
 			array(
 				'id'             => 0,
 				'number'         => '',
+				// HPOS keeps refunds in the same table as orders, distinguished only by this
+				// column, so the stub carries it too - otherwise a query that forgets to filter
+				// on it looks correct here and counts refunds as orders in production.
+				'type'           => 'shop_order',
 				'status'         => 'processing',
 				'total'          => '0.00',
 				'currency'       => 'USD',

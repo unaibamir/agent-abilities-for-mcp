@@ -320,7 +320,7 @@ function aafm_args_create_block(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_create_block( array $input ) {
-	$title   = isset( $input['title'] ) ? sanitize_text_field( (string) $input['title'] ) : '';
+	$title   = isset( $input['title'] ) ? aafm_sanitize_plain_text( (string) $input['title'] ) : '';
 	$content = isset( $input['content'] ) ? wp_kses_post( (string) $input['content'] ) : '';
 
 	// Guard the final markup: strict mode blocks the write, warn mode rides on the response.
@@ -439,7 +439,7 @@ function aafm_exec_update_block( array $input ) {
 	);
 	$update = array( 'ID' => $id );
 	if ( isset( $input['title'] ) ) {
-		$update['post_title'] = sanitize_text_field( (string) $input['title'] );
+		$update['post_title'] = aafm_sanitize_plain_text( (string) $input['title'] );
 	}
 	if ( isset( $input['content'] ) ) {
 		$update['post_content'] = wp_kses_post( (string) $input['content'] );

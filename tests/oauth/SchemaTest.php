@@ -174,7 +174,7 @@ class SchemaTest extends TestCase {
 		aafm_install_oauth_tables();
 
 		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
-		$this->assertSame( '6', AAFM_OAUTH_SCHEMA_VERSION );
+		$this->assertSame( '7', AAFM_OAUTH_SCHEMA_VERSION );
 	}
 
 	/**
@@ -253,5 +253,201 @@ class SchemaTest extends TestCase {
 			AAFM_OAUTH_SCHEMA_VERSION,
 			get_option( 'aafm_oauth_schema_version' )
 		);
+	}
+
+	/**
+	 * A healthy install stamps the version and clears any prior failure flag.
+	 */
+	public function test_finalize_stamps_and_clears_error_on_healthy_schema(): void {
+		set_transient( 'aafm_oauth_schema_error', time(), DAY_IN_SECONDS );
+
+		aafm_install_oauth_tables();
+
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+		$this->assertFalse( get_transient( 'aafm_oauth_schema_error' ), 'A healthy verify must clear the error flag.' );
+	}
+
+	/**
+	 * The verify predicate reports the real state of the tables.
+	 */
+	public function test_schema_verify_true_when_installed_false_when_a_table_is_missing(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+		$this->assertTrue( aafm_oauth_schema_verify(), 'A fully installed schema must verify.' );
+
+		// Drop one table (harness TEMPORARY form) so the schema is genuinely incomplete.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+		$this->assertFalse( aafm_oauth_schema_verify(), 'A missing table must fail verify.' );
+
+		// Restore the healthy schema for any later assertions on this connection.
+		aafm_install_oauth_tables();
+	}
+
+	/**
+	 * The core of F1: a failed migration must NOT advance the version, and must flag a bounded error,
+	 * so the admin_init / rest_api_init self-heal keeps retrying instead of early-returning forever.
+	 */
+	public function test_finalize_does_not_advance_version_on_broken_schema(): void {
+		global $wpdb;
+
+		aafm_install_oauth_tables();
+
+		// Pretend the install is still on an older version, and that no error is outstanding.
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		// Break the schema the way a refused ALTER would, then run only the finalize step (no dbDelta
+		// re-heal) so the stamp decision sees the broken state. The engine gate is passed true here so
+		// this asserts the table-shape failure alone withholds the stamp.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TEMPORARY TABLE IF EXISTS {$wpdb->prefix}aafm_oauth_codes" );
+
+		aafm_oauth_finalize_schema( true );
+
+		$this->assertSame( '1', get_option( 'aafm_oauth_schema_version' ), 'A failed verify must leave the prior version so the self-heal retries.' );
+		$this->assertNotFalse( get_transient( 'aafm_oauth_schema_error' ), 'A failed verify must raise the bounded error flag.' );
+
+		// Restore the healthy schema and version.
+		aafm_install_oauth_tables();
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+	}
+
+	/**
+	 * The CREATE statement (F3) of the two lifecycle tables declares InnoDB, so a fresh install is
+	 * transactional. SHOW CREATE TABLE reveals the engine even for the harness's TEMPORARY tables.
+	 *
+	 * @param string $suffix Lifecycle table suffix.
+	 * @return string The table's CREATE statement.
+	 */
+	private function show_create( string $suffix ): string {
+		global $wpdb;
+		$table = $wpdb->prefix . $suffix;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( "SHOW CREATE TABLE {$table}", ARRAY_N );
+		return is_array( $row ) && isset( $row[1] ) ? (string) $row[1] : '';
+	}
+
+	/**
+	 * F3: new installs put the lifecycle tables on InnoDB so consume+mint can actually roll back.
+	 */
+	public function test_lifecycle_tables_are_created_on_innodb(): void {
+		aafm_install_oauth_tables();
+
+		foreach ( array( 'aafm_oauth_codes', 'aafm_oauth_access_tokens' ) as $suffix ) {
+			$this->assertMatchesRegularExpression(
+				'/ENGINE=InnoDB/i',
+				$this->show_create( $suffix ),
+				"{$suffix} must be created on InnoDB for the token transactions to roll back."
+			);
+		}
+	}
+
+	/**
+	 * Enforcement is a safe no-op after a normal install: the lifecycle table is already InnoDB
+	 * (some servers list it in information_schema even in its TEMPORARY form, others report the
+	 * engine as unreadable), so either way there is nothing to ALTER and no warning to raise.
+	 */
+	public function test_engine_enforce_is_a_safe_noop_after_install(): void {
+		global $wpdb;
+		aafm_install_oauth_tables();
+
+		$engine = aafm_oauth_table_engine( $wpdb->prefix . 'aafm_oauth_access_tokens' );
+		$this->assertTrue(
+			'' === $engine || 0 === strcasecmp( $engine, 'InnoDB' ),
+			'A freshly installed lifecycle table must be InnoDB (or its engine unreadable), never a non-transactional engine.'
+		);
+
+		delete_transient( 'aafm_oauth_engine_warning' );
+		$this->assertTrue(
+			aafm_oauth_enforce_lifecycle_engine(),
+			'Enforcement must report success when every lifecycle table is InnoDB or its engine is unverifiable (the TEMPORARY harness case), or the harness could never stamp its schema version.'
+		);
+		$this->assertFalse( get_transient( 'aafm_oauth_engine_warning' ), 'Enforcement must not warn for an InnoDB (or unreadable) table.' );
+	}
+
+	/**
+	 * The core of this fix: a confirmed non-transactional lifecycle table (engine_ok = false) must NOT
+	 * stamp v7 even though the table shape verifies, so both self-heal hooks keep retrying the
+	 * conversion instead of early-returning on a version match forever. The false is injected directly
+	 * because a real ALTER cannot be made to fail deterministically on a dev server that supports
+	 * InnoDB; the gate's decision is what this asserts. The schema-error notice must stay clear here -
+	 * the table shape is fine, and aafm_oauth_enforce_lifecycle_engine() owns the engine warning.
+	 */
+	public function test_finalize_withholds_stamp_when_engine_not_transactional(): void {
+		aafm_install_oauth_tables();
+
+		// Healthy tables, but pretend the install is still behind and no error is outstanding.
+		update_option( 'aafm_oauth_schema_version', '1' );
+		delete_transient( 'aafm_oauth_schema_error' );
+
+		aafm_oauth_finalize_schema( false );
+
+		$this->assertSame(
+			'1',
+			get_option( 'aafm_oauth_schema_version' ),
+			'A confirmed non-InnoDB lifecycle table must leave the prior version so the conversion retries.'
+		);
+		$this->assertFalse(
+			get_transient( 'aafm_oauth_schema_error' ),
+			'An engine-only failure must not raise the schema-shape notice; the engine warning covers it.'
+		);
+
+		// Restore the healthy schema and version.
+		aafm_install_oauth_tables();
+		$this->assertSame( AAFM_OAUTH_SCHEMA_VERSION, get_option( 'aafm_oauth_schema_version' ) );
+	}
+
+	/**
+	 * The harness guard: an unverifiable engine (the TEMPORARY tables read '' from information_schema)
+	 * is treated as "allowed" so a verified schema still stamps its version. Without this, every
+	 * PHPUnit install that reaches finalize would fail to record its schema version.
+	 */
+	public function test_finalize_stamps_when_schema_ok_and_engine_verified(): void {
+		aafm_install_oauth_tables();
+
+		update_option( 'aafm_oauth_schema_version', '1' );
+
+		aafm_oauth_finalize_schema( true );
+
+		$this->assertSame(
+			AAFM_OAUTH_SCHEMA_VERSION,
+			get_option( 'aafm_oauth_schema_version' ),
+			'A verified schema with a transactional-or-unverifiable engine must stamp the current version.'
+		);
+	}
+
+	/**
+	 * F3: a pre-existing non-InnoDB lifecycle table is converted by the guarded one-time ALTER that
+	 * dbDelta cannot do. Uses a real (non-TEMPORARY) throwaway table, since information_schema does
+	 * not list temporary tables; the harness's temporary-table rewrite is lifted only for this
+	 * probe and always restored, and the throwaway table is always dropped.
+	 */
+	public function test_non_innodb_table_is_converted_to_innodb(): void {
+		global $wpdb;
+		$table = $wpdb->prefix . 'aafm_engine_probe';
+
+		remove_filter( 'query', array( $this, '_create_temporary_tables' ) );
+		remove_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+		$created = $wpdb->query( "CREATE TABLE {$table} ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, PRIMARY KEY (id) ) ENGINE=MyISAM" );
+
+		try {
+			if ( false === $created || 'MyISAM' !== aafm_oauth_table_engine( $table ) ) {
+				$this->markTestSkipped( 'This server would not create a MyISAM table to convert.' );
+			}
+
+			$this->assertTrue( aafm_oauth_convert_table_to_innodb( $table ), 'The guarded ALTER must land the table on InnoDB.' );
+			$this->assertSame( 'InnoDB', aafm_oauth_table_engine( $table ) );
+		} finally {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange
+			$wpdb->query( "DROP TABLE IF EXISTS {$table}" );
+			add_filter( 'query', array( $this, '_create_temporary_tables' ) );
+			add_filter( 'query', array( $this, '_drop_temporary_tables' ) );
+		}
 	}
 }

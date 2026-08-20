@@ -691,14 +691,20 @@ final class AbilityCrashSafetyTest extends TestCase {
 		$this->assertCount( 1, $rows, 'And it must leave a record, since the audited tools/call path is never reached.' );
 		$this->assertSame( 'denied', $rows[0]['status'] );
 		$this->assertStringStartsWith( 'RuntimeException at ', (string) $rows[0]['detail'] );
+		$this->assertSame(
+			'permission_check_crashed',
+			$rows[0]['event_type'],
+			'The record carries its own event_type: it names a real ability, so under the ability_call default it read as an agent call.'
+		);
 	}
 
 	/**
 	 * Repeated checks of the SAME ability record one row, not one per check. That is the whole of
 	 * the bound and this test measures exactly it: the key is ability plus failure, so a pass over
 	 * the catalogue still writes a row per affected ability, and only the repeat passes collapse.
-	 * An MCP request makes two passes (aafm_build_server_tools() on init, then tools/list), and
-	 * aafm_build_server_tools() runs on init for every logged-in page view, so without this the
+	 * An MCP request makes two passes (aafm_build_server_tools() on rest_api_init, then
+	 * tools/list), and aafm_build_server_tools() walks the callbacks on every REST request that
+	 * arrives with a logged-in user, so without this the
 	 * count multiplies by passes as well as by abilities with nothing to stop it:
 	 * aafm_prune_activity_log() is retention-day based rather than size based.
 	 *

@@ -289,6 +289,133 @@ final class DashboardTest extends TestCase {
 		$this->assertFalse( $steps[1]['done'] );
 	}
 
+	/**
+	 * The whole point of the fix: completing step [0] (enable an ability) writes an
+	 * ability_enabled audit row, and through the unfiltered total count that row used to flip
+	 * step [2] ("Make your first call") to done - a false Done on the one step that exists to
+	 * prove a real call landed, before any MCP request had ever been made.
+	 */
+	public function test_first_call_step_not_done_from_enabling_an_ability(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_ability_toggle_diff( array(), array( 'aafm/get-post' ) );
+
+		// The toggle row IS in the log...
+		$this->assertGreaterThan( 0, aafm_activity_count() );
+		// ...but it is not an agent call, so the step stays "To do".
+		$this->assertSame( 0, aafm_agent_call_count() );
+		$steps = aafm_setup_steps();
+		$this->assertFalse( $steps[2]['done'] );
+	}
+
+	public function test_first_call_step_done_from_a_real_tool_call_row(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/get-post',
+				'status'  => 'success',
+			)
+		);
+
+		$this->assertSame( 1, aafm_agent_call_count() );
+		$steps = aafm_setup_steps();
+		$this->assertTrue( $steps[2]['done'] );
+	}
+
+	/**
+	 * A denied call is still a call: the agent authenticated, spoke MCP, and invoked a real
+	 * tool by name - the refusal is governance working, and the connection provably does too.
+	 * Rate-limited denials write the same row shape, so this covers both.
+	 */
+	public function test_first_call_step_done_from_a_denied_tool_call(): void {
+		$this->acting_as( 'administrator' );
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/trash-post',
+				'status'  => 'denied',
+			)
+		);
+
+		$steps = aafm_setup_steps();
+		$this->assertTrue( $steps[2]['done'] );
+	}
+
+	/**
+	 * Every non-call writer of the activity log, exercised through its real logging function
+	 * where one exists: none of them may count as an agent call. Covers both exclusion layers
+	 * in aafm_agent_call_count() - the event_type filter (toggles, blocked enables, setting
+	 * changes, the modern cleared marker, crashed discovery checks) and the synthetic-name
+	 * filter for rows that land under the default 'ability_call' type (OAuth ceremony,
+	 * transport refusals, a pre-v5 cleared marker).
+	 */
+	public function test_agent_call_count_ignores_every_non_call_writer(): void {
+		$this->acting_as( 'administrator' );
+
+		// Admin-side events carrying their own event_type since schema v5.
+		aafm_log_ability_toggle_diff( array( 'aafm/get-post' ), array() );
+		aafm_log_blocked_ability_enables( array( 'aafm/wc-create-order-refund' ), 'high_risk' );
+		aafm_log_read_only_switch_change( false, true );
+		aafm_log_activity_cleared_marker();
+
+		// A permission callback that crashes during a discovery check. This was the writer this
+		// test claimed to enumerate but never exercised: aafm_deny_crashed_permission_check()
+		// logs a REAL ability name with status 'denied', its callers run on every REST request
+		// that carries a logged-in user with zero MCP traffic, and under the default event_type
+		// the row passed every synthetic-name exclusion and flipped step [2]. Exercised through the real
+		// path - a throwing user_has_cap filter under aafm_user_can_discover_ability()'s
+		// short-circuit branch. aafm/get-block is deliberately an ability no other crash test
+		// uses: the guard's dedupe (`static $seen`) lives for the whole PHPUnit process while
+		// the database rolls back per test (see AbilityCrashSafetyTest), so reusing one would
+		// record nothing here.
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_false' );
+		$thrower = static function ( $allcaps, $caps ) {
+			if ( in_array( 'edit_posts', (array) $caps, true ) ) {
+				throw new \RuntimeException( 'a membership plugin exploded during discovery' );
+			}
+			return $allcaps;
+		};
+		add_filter( 'user_has_cap', $thrower, 10, 2 );
+		try {
+			$this->assertFalse(
+				aafm_user_can_discover_ability( 'aafm/get-block' ),
+				'A crashed discovery check fails closed.'
+			);
+		} finally {
+			remove_filter( 'user_has_cap', $thrower, 10 );
+		}
+		$crash_rows = aafm_query_activity( array( 'ability' => 'aafm/get-block' ) );
+		$this->assertCount( 1, $crash_rows, 'Guard on the guard: the crash must really have written its row.' );
+		$this->assertSame( 'denied', $crash_rows[0]['status'] );
+		$this->assertSame(
+			'permission_check_crashed',
+			$crash_rows[0]['event_type'],
+			'The row carries its own type, so exclusion never depends on enumerating ability-name shapes.'
+		);
+
+		// Rows that default to event_type 'ability_call' but are not tool calls.
+		aafm_oauth_log_event( 'authorize', 'success', array( 'user_id' => get_current_user_id() ) );
+		aafm_log_activity(
+			array(
+				'ability' => '(transport)',
+				'status'  => 'denied',
+			)
+		);
+		// A pre-v5 log-cleared marker: same synthetic name, no event_type, so it reads as the
+		// column default exactly as the ALTER backfilled old rows.
+		aafm_log_activity(
+			array(
+				'ability' => 'aafm/activity-log-cleared',
+				'status'  => 'success',
+			)
+		);
+
+		// All eight rows landed in the log...
+		$this->assertSame( 8, aafm_activity_count() );
+		// ...and none of them reads as an agent call, so step [2] stays "To do".
+		$this->assertSame( 0, aafm_agent_call_count() );
+		$steps = aafm_setup_steps();
+		$this->assertFalse( $steps[2]['done'] );
+	}
+
 	public function test_created_agent_user_helpers_track_the_marker(): void {
 		$this->assertFalse( aafm_has_created_agent_user() );
 		$this->assertSame( array(), aafm_created_agent_users() );

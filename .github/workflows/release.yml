@@ -19,11 +19,19 @@ name: Release
 #                  wordpress.org login password. Set/retrieve it at
 #                  https://profiles.wordpress.org/me/profile/edit/group/3/?screen=svn-password
 # Without SVN_PASSWORD the SVN step is skipped (the tag, zip, and GitHub Release
-# still happen), so nothing breaks before the secret is added.
+# still happen), so nothing breaks before the secret is added. The run says so in
+# a warning annotation, and the MCP registry publish is held back until a deploy
+# actually succeeds, because a registry version cannot be unpublished.
 #
 # workflow_dispatch is a typed escape hatch for the FIRST launch (1.0.0 is already
 # tagged, so the push path would skip it) or a re-deploy: run it and type the
 # already-tagged version to ship it by hand.
+#
+# After the release publishes, a separate mcp-registry job pushes the root
+# server.json to the official MCP registry (registry.modelcontextprotocol.io)
+# over GitHub OIDC - no stored secret. It is deliberately isolated and allowed
+# to fail: a registry outage must never make a shipped wordpress.org release
+# look broken.
 
 on:
   push:
@@ -51,6 +59,10 @@ jobs:
     env:
       SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
       SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    outputs:
+      version: ${{ steps.rel.outputs.version }}
+      skip: ${{ steps.rel.outputs.skip }}
+      svn: ${{ steps.svn.outcome }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,6 +100,17 @@ jobs:
           # (Use workflow_dispatch to intentionally re-deploy an existing tag.)
           if [ "${{ github.event_name }}" = "push" ] && git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
             echo "Tag $VERSION already exists; nothing to publish on push."
+            # Say so in an annotation as well, but only on a replay. This branch is exactly what a
+            # "Re-run failed jobs" click lands on after a run that tagged and deployed before
+            # failing, and every step below it is gated on skip != 'true', so without this line
+            # the replay finishes green having republished nothing at all. Every ordinary push to
+            # main after a release lands here too - the header still reads the shipped version and
+            # its changelog block never goes away - and annotating all of those would train the
+            # eye to skip the one run this exists for. A re-run repeats the same run at attempt 2
+            # or higher; a fresh push always starts at 1.
+            if [ "${{ github.run_attempt }}" -gt 1 ]; then
+              echo "::notice::Tag $VERSION already exists, so this run republished nothing: no zip, no SVN deploy, no GitHub Release, no registry publish. To re-ship an already-tagged version, run this workflow from the Actions tab and type the version."
+            fi
             echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -116,6 +139,23 @@ jobs:
             git push origin "$VERSION"
           fi
 
+      # Pin the working tree to the exact released tag before anything reads it.
+      # The GitHub Release zip is already built from `git archive <tag>` (immutable),
+      # but the SVN deploy below runs 10up/action-wordpress-plugin-deploy with
+      # generate-zip:false, which publishes the CHECKED-OUT tree, not the tag. On the
+      # push path the workspace is already the tag commit (the tag is cut from this
+      # same HEAD), so this is a no-op. On a workflow_dispatch re-deploy the workspace
+      # is whatever branch was selected at launch (default main), which may have moved
+      # past the tag while still carrying the same header version - checking out the
+      # tag here guarantees the SVN tree, the zip, and the tag are provably one tree.
+      - name: Pin the working tree to the released tag
+        if: steps.rel.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.rel.outputs.version }}"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git checkout -f "refs/tags/$VERSION"
+
       - name: Build versioned zip
         if: steps.rel.outputs.skip != 'true'
         run: |
@@ -130,6 +170,7 @@ jobs:
             -o "build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip"
 
       - name: Deploy to WordPress.org SVN
+        id: svn
         if: ${{ steps.rel.outputs.skip != 'true' && env.SVN_PASSWORD != '' }}
         uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2 # 2.3.0
         env:
@@ -138,6 +179,14 @@ jobs:
           ASSETS_DIR: .wordpress-org
         with:
           generate-zip: false
+
+      # The SVN step skips silently when the secret is absent, which is the right behaviour
+      # for the tag and the GitHub Release but not something to leave quiet: wordpress.org
+      # has not received this version, and the registry publish downstream is irreversible.
+      - name: Warn when the SVN deploy did not run
+        if: ${{ steps.rel.outputs.skip != 'true' && steps.svn.outcome != 'success' }}
+        run: |
+          echo "::warning::The wordpress.org SVN deploy did not run (outcome: ${{ steps.svn.outcome }}). Check that SVN_USERNAME and SVN_PASSWORD are still set. The MCP registry publish is held back until wordpress.org actually has this version."
 
       - name: Create the GitHub Release
         if: steps.rel.outputs.skip != 'true'
@@ -149,3 +198,76 @@ jobs:
           files: build/agent-abilities-for-mcp-${{ steps.rel.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Push server.json to the official MCP registry so the listing tracks every
+  # release instead of drifting until someone republishes by hand. Runs only
+  # after the release job has fully published (tag, zip, SVN, GitHub Release),
+  # so nothing here can affect the wordpress.org deploy. The SVN deploy really
+  # has to have run: it skips itself when SVN_PASSWORD is missing, and a
+  # registry entry cannot be taken back once published, so publishing off a
+  # skipped deploy would leave the registry permanently claiming a version
+  # wordpress.org never received. continue-on-error
+  # keeps the run green if the registry rejects or is down; the failed job and
+  # its annotations stay visible in the run summary. Recovery depends on which
+  # way it went. If this job RAN and failed, re-running it is enough. If it was
+  # SKIPPED because the publish job failed after the deploy, "Re-run failed
+  # jobs" is the wrong lever: the replayed push finds the tag already there and
+  # skips everything, so the rerun goes green with nothing republished. Ship it
+  # by running this workflow from the Actions tab with the already-tagged
+  # version, or publish from a workstation with `mcp-publisher login github` +
+  # `mcp-publisher publish`.
+  # Note: re-dispatching an already-published version will be refused by the
+  # registry as a duplicate - that is expected, not a defect.
+  mcp-registry:
+    name: Publish to the MCP registry
+    needs: publish
+    if: ${{ needs.publish.outputs.skip != 'true' && needs.publish.outputs.svn == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      id-token: write   # OIDC login to the registry; no stored secret or PAT
+      contents: read
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.publish.outputs.version }}
+          persist-credentials: false
+
+      - name: Sync server.json to the released version
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.publish.outputs.version }}"
+          MANIFEST="$(jq -r '.version' server.json)"
+          if [ "$MANIFEST" != "$VERSION" ]; then
+            echo "::warning::server.json says $MANIFEST but the release is $VERSION; publishing as $VERSION. Bump server.json alongside the other version pins."
+          fi
+          jq --arg v "$VERSION" '.version = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          # Pinned to a release tag plus the sha256 of its linux_amd64 asset, mirroring the
+          # commit-pinned `uses:` actions above; the old latest/download URL ran whatever the
+          # registry shipped most recently, unverified. The asset name is fixed because the
+          # runs-on above fixes the platform. To bump: change both variables together - the
+          # hash is the mcp-publisher_linux_amd64.tar.gz line of registry_<ver>_checksums.txt
+          # on the release page, and each asset also carries a .sigstore.json bundle if a
+          # stronger provenance check is ever wanted.
+          MCP_PUBLISHER_VERSION="v1.8.1"
+          MCP_PUBLISHER_SHA256="a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc"
+          # Retried because this job is continue-on-error: a single CDN timeout would fail the
+          # download, leave the workflow green, and quietly strand the registry listing on the
+          # previous version until someone opened the run graph. The sha256 check below still
+          # validates whatever finally arrived, so retrying cannot weaken the pin.
+          curl -fsSL --retry 3 --retry-connrefused -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          tar xzf mcp-publisher.tar.gz mcp-publisher
+
+      - name: Publish to registry.modelcontextprotocol.io
+        run: |
+          set -euo pipefail
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

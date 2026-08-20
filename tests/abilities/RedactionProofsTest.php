@@ -218,19 +218,25 @@ final class RedactionProofsTest extends TestCase {
 	// =========================================================================
 	// aafm_wc_redact_settings_deep() - the denylist behind every gateway
 	// settings shape and every shipping-method instance-settings row. A pure
-	// array walk: no WooCommerce stub needed. The redactor DROPS a matching
-	// key entirely (it does not mask the value), so the assertions are
-	// assertArrayNotHasKey, never a value comparison.
+	// array walk: no WooCommerce stub needed.
+	//
+	// The redactor MARKS a matching key, it no longer drops it. Dropping meant a
+	// caller could not tell "not configured" from "withheld", so a benign field
+	// caught by a loose pattern simply vanished and the agent answered questions
+	// about it wrongly. These assertions therefore check BOTH halves - the key
+	// survives AND its value is gone - which is strictly stronger than the
+	// assertArrayNotHasKey they replaced, since absence alone never proved the
+	// secret had not been returned somewhere else in the shape.
 	// =========================================================================
 
 	/**
-	 * Every key in the provider must be dropped, at any depth.
+	 * Every key in the provider must be withheld, at any depth, and still be visible as a key.
 	 *
 	 * @dataProvider sensitive_setting_keys
 	 *
 	 * @param string $key The settings key expected to be redacted.
 	 */
-	public function test_sensitive_settings_keys_are_dropped( string $key ): void {
+	public function test_sensitive_settings_keys_are_redacted( string $key ): void {
 		$redacted = aafm_wc_redact_settings_deep(
 			array(
 				$key    => 'super-secret-value',
@@ -238,7 +244,9 @@ final class RedactionProofsTest extends TestCase {
 			)
 		);
 
-		$this->assertArrayNotHasKey( $key, $redacted, sprintf( 'The key "%s" must be redacted.', $key ) );
+		$this->assertArrayHasKey( $key, $redacted, sprintf( 'The key "%s" must still be visible, so the caller can tell withheld from absent.', $key ) );
+		$this->assertSame( aafm_wc_redaction_marker(), $redacted[ $key ], sprintf( 'The value of "%s" must be the marker.', $key ) );
+		$this->assertNotSame( 'super-secret-value', $redacted[ $key ] );
 	}
 
 	/**
@@ -271,7 +279,7 @@ final class RedactionProofsTest extends TestCase {
 		$this->assertSame( $settings, aafm_wc_redact_settings_deep( $settings ) );
 	}
 
-	public function test_nested_sensitive_keys_are_dropped(): void {
+	public function test_nested_sensitive_keys_are_redacted(): void {
 		$redacted = aafm_wc_redact_settings_deep(
 			array(
 				'carrier' => array(
@@ -281,7 +289,225 @@ final class RedactionProofsTest extends TestCase {
 			)
 		);
 
-		$this->assertArrayNotHasKey( 'passwd', $redacted['carrier'] );
+		$this->assertSame( aafm_wc_redaction_marker(), $redacted['carrier']['passwd'] );
 		$this->assertSame( 'DHL', $redacted['carrier']['label'] );
+	}
+
+	/**
+	 * The names two sim lanes proved leak on a REAL gateway. iban, bic and sort_code are core
+	 * WooCommerce's own bacs fields, present on a default install before anything is touched.
+	 *
+	 * @dataProvider newly_covered_secret_keys
+	 *
+	 * @param string $key The settings key that used to be returned in full.
+	 */
+	public function test_credential_shaped_keys_proven_to_leak_are_now_redacted( string $key ): void {
+		$redacted = aafm_wc_redact_settings_deep( array( $key => 'SENTINEL-LIVE-VALUE' ) );
+
+		$this->assertSame(
+			aafm_wc_redaction_marker(),
+			$redacted[ $key ],
+			sprintf( 'The key "%s" was returned in full by the shipped redactor.', $key )
+		);
+	}
+
+	/**
+	 * Cases: credential-shaped field names the sim seeded and read back intact.
+	 *
+	 * @return array<string,array{string}>
+	 */
+	public function newly_covered_secret_keys(): array {
+		$keys  = array(
+			'passcode',
+			'hmac',
+			'seed',
+			'iv',
+			'cvv',
+			'security_code',
+			'iban',
+			'bic',
+			'swift',
+			'sort_code',
+			'routing',
+			'bank_details',
+			'epin',
+			'terminal_id',
+			'mid',
+			'x_login',
+		);
+		$cases = array();
+		foreach ( $keys as $key ) {
+			$cases[ $key ] = array( $key );
+		}
+		return $cases;
+	}
+
+	/**
+	 * The over-redaction half: a benign key caught by the loose pattern must never VANISH.
+	 *
+	 * Losing the key is what produced a concrete wrong answer. Asked whether a carrier method
+	 * required a signature on delivery, the agent saw no signature_required key and reported that
+	 * no such setting existed, when it existed and was set to yes.
+	 *
+	 * @dataProvider benign_keys_that_used_to_vanish
+	 *
+	 * @param string $key A benign settings key.
+	 */
+	public function test_benign_keys_are_never_dropped( string $key ): void {
+		$redacted = aafm_wc_redact_settings_deep( array( $key => 'benign-value' ) );
+
+		$this->assertArrayHasKey(
+			$key,
+			$redacted,
+			sprintf( 'The benign key "%s" must survive; dropping it tells the caller the setting does not exist.', $key )
+		);
+	}
+
+	/**
+	 * Cases: benign names the shipped pattern silently deleted.
+	 *
+	 * @return array<string,array{string}>
+	 */
+	public function benign_keys_that_used_to_vanish(): array {
+		$keys  = array(
+			'signature_required',
+			'consignment_note',
+			'requires_signoff',
+			'design_template',
+			'rapid_dispatch',
+			'capital_city_only',
+			'author',
+			'monkey_bars',
+		);
+		$cases = array();
+		foreach ( $keys as $key ) {
+			$cases[ $key ] = array( $key );
+		}
+		return $cases;
+	}
+
+	/**
+	 * The tightened words must no longer fire on an ordinary English word that merely contains
+	 * them, which is what made the loose group delete benign settings.
+	 *
+	 * @return void
+	 */
+	/**
+	 * R6-6: a real setting whose value IS the marker must be distinguishable from a withheld one.
+	 *
+	 * The marker lives in the same arbitrary-string domain as real values, so it can always be
+	 * forged by accident. The out-of-band path list is the authoritative signal, and this is the
+	 * assertion that proves it: both fields read "[redacted]", and only one is listed.
+	 */
+	public function test_a_real_redacted_string_is_distinguishable_from_a_withheld_field(): void {
+		$report = aafm_wc_redact_settings_report(
+			array(
+				'instructions' => '[redacted]',
+				'api_key'      => 'live_sk_real_secret',
+			)
+		);
+
+		$this->assertSame( '[redacted]', $report['settings']['instructions'], 'The real value is returned untouched.' );
+		$this->assertSame( aafm_wc_redaction_marker(), $report['settings']['api_key'], 'The secret is withheld.' );
+
+		$this->assertNotContains(
+			array( 'instructions' ),
+			$report['redacted'],
+			'A benign field that merely holds the marker string must NOT be reported as withheld.'
+		);
+		$this->assertContains( array( 'api_key' ), $report['redacted'], 'The withheld field must be reported.' );
+	}
+
+	/**
+	 * R6-6: nested withheld fields are reported by their full path, and benign siblings survive.
+	 *
+	 * Round 7: the path is an array of key SEGMENTS, not a joined string. A settings key may itself
+	 * contain a separator, so a joined path could not be parsed back to the exact key.
+	 */
+	public function test_nested_withheld_fields_are_reported_by_path(): void {
+		$report = aafm_wc_redact_settings_report(
+			array(
+				'advanced' => array(
+					'live' => array(
+						'passcode' => 'x',
+						'label'    => 'Live',
+					),
+				),
+			)
+		);
+
+		$this->assertSame( array( array( 'advanced', 'live', 'passcode' ) ), $report['redacted'] );
+		$this->assertSame( 'Live', $report['settings']['advanced']['live']['label'] );
+	}
+
+	/**
+	 * R6-6: the two tokens this release added and got wrong are compounds only now.
+	 *
+	 * The names security_badge and terminal_display are ordinary UI configuration. Marking them
+	 * withheld an answer the operator actually wanted. The credential compounds those tokens exist for must
+	 * still be caught, which is the other half of the assertion.
+	 *
+	 * @dataProvider provide_tightened_token_cases
+	 *
+	 * @param string $key    Settings key.
+	 * @param bool   $secret Whether it must be treated as a secret.
+	 */
+	public function test_security_and_terminal_are_compounds_only( string $key, bool $secret ): void {
+		$this->assertSame(
+			$secret,
+			aafm_wc_settings_key_is_secret( $key ),
+			sprintf( '"%s" should %sbe treated as a secret.', $key, $secret ? '' : 'NOT ' )
+		);
+	}
+
+	/**
+	 * Cases: benign UI names versus the credential compounds.
+	 *
+	 * @return array<string,array{0:string,1:bool}>
+	 */
+	public function provide_tightened_token_cases(): array {
+		return array(
+			'security_badge'   => array( 'security_badge', false ),
+			'terminal_display' => array( 'terminal_display', false ),
+			'security_code'    => array( 'security_code', true ),
+			'security_key'     => array( 'security_key', true ),
+			'terminal_id'      => array( 'terminal_id', true ),
+			'terminal_secret'  => array( 'terminal_secret', true ),
+		);
+	}
+
+	/**
+	 * The broad tokens stay broad.
+	 *
+	 * The tokens user and number predate this release, and a considered decision keeps them wide
+	 * rather than risk un-redacting something an earlier review relied on being caught. bank and
+	 * login stay broad too, but round 7 released the names whose last segment says how a thing is
+	 * displayed - see GatewayRedactionCorpusTest, which holds both directions of that carve-out.
+	 * Pinned here so a later narrowing has to argue with a test rather than slip through as tidying.
+	 *
+	 * @return void
+	 */
+	public function test_the_deliberately_broad_tokens_stay_broad(): void {
+		foreach ( array( 'user', 'account_number', 'bank_details', 'x_login' ) as $key ) {
+			$this->assertTrue(
+				aafm_wc_settings_key_is_secret( $key ),
+				sprintf( '"%s" is deliberately caught; narrowing it trades a withheld benign value for a possible leak.', $key )
+			);
+		}
+	}
+
+	public function test_tightened_words_no_longer_match_mid_word(): void {
+		foreach ( array( 'monkey_bars', 'rapid_dispatch', 'design_template', 'author', 'capital_city_only' ) as $benign ) {
+			$this->assertFalse(
+				aafm_wc_settings_key_is_secret( $benign ),
+				sprintf( '"%s" is not a secret; key/api/sign/auth are anchored now precisely so it does not match.', $benign )
+			);
+		}
+		foreach ( array( 'api_key', 'apikey', 'account_number', 'auth_token', 'sign_key' ) as $secret ) {
+			$this->assertTrue(
+				aafm_wc_settings_key_is_secret( $secret ),
+				sprintf( 'Anchoring must not have cost us "%s".', $secret )
+			);
+		}
 	}
 }

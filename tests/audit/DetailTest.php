@@ -244,7 +244,7 @@ final class DetailTest extends TestCase {
 			foreach ( $entry['args'] ?? array() as $field ) {
 				$this->assertContains(
 					$field['type'],
-					array( 'id', 'key', 'slug', 'enum', 'count' ),
+					array( 'id', 'key', 'slug', 'enum', 'count', 'keys' ),
 					"{$ability} declares field type '{$field['type']}', which is not identifier-safe."
 				);
 			}
@@ -640,6 +640,613 @@ final class DetailTest extends TestCase {
 			aafm_build_activity_detail( 'aafm/wc-update-payment-gateway', array( 'gateway_id' => 'stripe' ) )
 		);
 		$this->assertNull( aafm_activity_detail_link_type( 'aafm/wc-update-payment-gateway' ) );
+	}
+
+	/**
+	 * The value every probe below is built from. Distinctive on purpose: asserting that the
+	 * rendered detail CONTAINS it is what makes these tests check the outcome (an identifier
+	 * reached the row) rather than the mechanism (a map entry exists).
+	 */
+	private const PROBE_ID = '424242';
+
+	/**
+	 * The smallest number of permanent-delete abilities this plugin may ship without someone
+	 * deciding to.
+	 *
+	 * Not a roster and not a restatement of the classification: membership still comes entirely
+	 * from aafm_permanent_delete_abilities(), so a fourteenth ability is still caught without
+	 * touching this number. It is a floor on CARDINALITY, and it exists because both completeness
+	 * guards below iterate a derived set, and an empty derived set makes an "I found no problems"
+	 * assertion pass for the emptiest possible reason. Mutation testing confirmed that: with the
+	 * classification stubbed to array(), the guard reported OK on ONE assertion instead of its
+	 * usual forty-three, so the whole test could have been deleted with the suite still green.
+	 *
+	 * Lowering it is a deliberate, security-relevant act rather than routine maintenance. Dropping
+	 * an ability off the permanent side also softens what the OAuth consent screen promises a site
+	 * owner about recoverability, which is the false reassurance B-08 exists to prevent.
+	 */
+	private const PERMANENT_DELETE_FLOOR = 13;
+
+	/**
+	 * The smallest number of arg-bearing map entries the detail map may hold without someone
+	 * deciding to.
+	 *
+	 * Its own constant rather than a reuse of PERMANENT_DELETE_FLOOR, and that reuse was a real
+	 * hole rather than a tidiness point. The map carries far more arg-bearing entries than there
+	 * are permanent deletes, so borrowing 13 left slack for every entry above it: an entry could be
+	 * deleted outright and the count would still clear the floor. Measured, not assumed - deleting
+	 * the aafm/update-user-meta entry left the guard reporting OK on 78 assertions, and only the
+	 * per-ability tests noticed.
+	 *
+	 * Raising it as entries are added is deliberate. A new entry passing without a bump is fine
+	 * (the floor is a minimum), but a removal has to trip it, which is the whole point.
+	 */
+	private const MAPPED_ARG_ENTRY_FLOOR = 26;
+
+	/**
+	 * B2-07's completeness guard, and the guard whose absence let nine of thirteen permanent
+	 * deletes ship writing detail:null.
+	 *
+	 * The destructive set is DERIVED, never restated: aafm_permanent_delete_abilities() is the
+	 * plugin's own hand-classified list of removals that bypass the Trash, and
+	 * DeleteGuaranteeTest already fails if a destructive ability is missing from it. So a
+	 * fourteenth permanent delete is forced into that list by one test and forced into
+	 * aafm_activity_detail_map() by this one. A hardcoded roster here would only restate today's
+	 * answer and could not fail on tomorrow's ability, which is the whole defect being closed.
+	 *
+	 * There is deliberately NO allowlist. An allowlist naming the known-blind abilities was the
+	 * weaker option considered and rejected: an empty assertion set means the next gap is a
+	 * failure rather than an entry someone adds to make the build pass. Adding one back is the
+	 * change a reviewer should refuse.
+	 *
+	 * The arguments come from each ability's OWN input schema, not from the map entry, and that
+	 * asymmetry is the point. A map entry that names a key the ability does not actually take -
+	 * aafm/delete-user-meta takes `key`, its post-meta siblings take `meta_key` - gets no value
+	 * for it, and aafm_build_activity_detail()'s all-or-nothing rule collapses the whole detail
+	 * to null. That is a silent-wrong-answer bug in production and a red assertion here.
+	 *
+	 * Bound, stated rather than implied: this proves every permanent delete CAN render an
+	 * identifier from a schema-valid call. It does not prove the identifier is the right object's
+	 * - only that the key exists, is populated, and reaches the row. The per-ability tests below
+	 * pin the exact rendered string for each.
+	 */
+	public function test_every_permanent_delete_ability_records_an_identifier(): void {
+		$destructive = aafm_permanent_delete_abilities();
+
+		// Prove the derived set is real BEFORE trusting a "nothing was blind" result, because an
+		// empty set makes that result meaningless. The canary is a spot check against a derivation
+		// that returns something non-empty but wrong; the floor catches silent shrinkage.
+		$this->assertContains(
+			'aafm/delete-post',
+			$destructive,
+			'The permanent-delete classification no longer contains a known permanent delete, so '
+			. 'nothing below is being checked against the set it claims to check.'
+		);
+		$this->assertGreaterThanOrEqual(
+			self::PERMANENT_DELETE_FLOOR,
+			count( $destructive ),
+			'The permanent-delete classification has shrunk. If that was deliberate, lower '
+			. 'PERMANENT_DELETE_FLOOR in the same change and say why.'
+		);
+
+		$blind   = array();
+		$checked = 0;
+
+		foreach ( $destructive as $ability ) {
+			++$checked;
+			$detail = aafm_build_activity_detail( $ability, $this->identifier_probe_args( $ability ) );
+			if ( null === $detail || false === strpos( $detail, self::PROBE_ID ) ) {
+				$blind[] = $ability;
+			}
+		}
+
+		$this->assertSame(
+			array(),
+			$blind,
+			'A permanent-delete ability logs no identifier, so its audit row cannot say what it '
+			. 'destroyed. Add an entry to aafm_activity_detail_map(), reading the key from that '
+			. "ability's own args builder rather than from a sibling."
+		);
+		// The loop really ran over the whole set. Without this, an early return or a filtered
+		// iteration could leave $blind empty for a reason that has nothing to do with the mapping.
+		$this->assertSame( count( $destructive ), $checked, 'The guard did not examine every derived ability.' );
+	}
+
+	/**
+	 * Every key the map declares must be a real property of that ability's input schema.
+	 *
+	 * Scoped to the WHOLE map rather than to the destructive set, because the failure it catches
+	 * is not specific to deletes: a key that does not exist can never be supplied, so the entry
+	 * silently renders nothing while every gate stays green. Separate from the test above for the
+	 * diagnostics - this one names the offending key, where all-or-nothing only yields a null.
+	 */
+	public function test_every_mapped_arg_key_is_a_real_property_of_its_ability(): void {
+		$unknown = array();
+		$checked = 0;
+
+		foreach ( aafm_activity_detail_map() as $ability => $entry ) {
+			if ( empty( $entry['args'] ) ) {
+				continue;
+			}
+			++$checked;
+			$properties = $this->ability_input_properties( $ability );
+			foreach ( $entry['args'] as $field ) {
+				$key = (string) $field['key'];
+				if ( ! array_key_exists( $key, $properties ) ) {
+					$unknown[] = $ability . ' declares `' . $key . '`';
+				}
+			}
+		}
+
+		// Same anti-vacuity guard as the test above, and then some. An empty map makes "no unknown
+		// keys" true for the emptiest possible reason, but a floor with slack in it is barely
+		// better: it lets a single entry be deleted silently. This floor tracks the map's actual
+		// arg-bearing size, so losing any one entry trips it.
+		$this->assertGreaterThanOrEqual(
+			self::MAPPED_ARG_ENTRY_FLOOR,
+			$checked,
+			'An arg-bearing map entry has gone missing, or too few were examined for this result to '
+			. 'mean anything. If an entry was removed on purpose, lower MAPPED_ARG_ENTRY_FLOOR in the '
+			. 'same change and say why.'
+		);
+
+		$this->assertSame(
+			array(),
+			$unknown,
+			'A map entry names an argument its ability does not accept. The value can never arrive, '
+			. 'so the row logs no detail at all.'
+		);
+	}
+
+	/**
+	 * Fill every property an ability declares with a probe value carrying PROBE_ID.
+	 *
+	 * Read from the ability's own args builder so the call is schema-valid. An unreachable builder
+	 * or an unhandled property type fails loudly rather than skipping: a probe that quietly
+	 * produced no arguments would make the caller's assertion pass for the wrong reason.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function identifier_probe_args( string $ability ): array {
+		$args = array();
+		foreach ( $this->ability_input_properties( $ability ) as $name => $spec ) {
+			$type = (string) ( $spec['type'] ?? '' );
+			if ( 'integer' === $type || 'number' === $type ) {
+				$args[ $name ] = (int) self::PROBE_ID;
+			} elseif ( 'string' === $type ) {
+				// Passes the `key` type's own character check, so a string-typed identifier such as
+				// delete-user-meta's `key` renders instead of being rejected on its charset.
+				$args[ $name ] = 'probe' . self::PROBE_ID;
+			} else {
+				$this->fail( $ability . ' declares property `' . $name . '` of unhandled type `' . $type . '`; teach this probe about it rather than letting it be skipped.' );
+			}
+		}
+		return $args;
+	}
+
+	/**
+	 * The input-schema properties an ability really accepts, read from its own args builder.
+	 *
+	 * @param string $ability Ability name.
+	 * @return array<string,mixed>
+	 */
+	private function ability_input_properties( string $ability ): array {
+		$registry = aafm_get_abilities_registry_full();
+		$this->assertArrayHasKey( $ability, $registry, $ability . ' is not in the full registry.' );
+
+		$builder = (string) ( $registry[ $ability ]['args_builder'] ?? '' );
+		$this->assertTrue( function_exists( $builder ), $ability . " declares args builder '{$builder}', which does not exist." );
+
+		$spec       = call_user_func( $builder );
+		$properties = $spec['input_schema']['properties'] ?? array();
+		// assertIsArray() passes on an empty array, which would hand the callers a probe with no
+		// arguments in it and turn a real check into a hollow one.
+		$this->assertNotEmpty( $properties, $ability . ' declares no input schema properties.' );
+
+		return $properties;
+	}
+
+	public function test_delete_comment_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted comment #61',
+			aafm_build_activity_detail( 'aafm/delete-comment', array( 'comment_id' => 61 ) )
+		);
+		// No comment link type exists in aafm_activity_detail_link(), so the entry declares none.
+		$this->assertNull( aafm_activity_detail_link_type( 'aafm/delete-comment' ) );
+	}
+
+	/**
+	 * The key is attachment_id, not media_id and not post_id - read from aafm_args_delete_media().
+	 */
+	public function test_delete_media_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted media #712',
+			aafm_build_activity_detail( 'aafm/delete-media', array( 'attachment_id' => 712 ) )
+		);
+	}
+
+	public function test_delete_menu_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted menu #33',
+			aafm_build_activity_detail( 'aafm/delete-menu', array( 'menu_id' => 33 ) )
+		);
+		// A navigation menu is a nav_menu term, not a post.
+		$this->assertSame( 'term', aafm_activity_detail_link_type( 'aafm/delete-menu' ) );
+	}
+
+	/**
+	 * The key is item_id, NOT the menu_id its sibling takes. The two menu abilities name their
+	 * differently, which is exactly the pair a sibling-shaped guess gets wrong.
+	 */
+	public function test_delete_menu_item_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted menu item #34',
+			aafm_build_activity_detail( 'aafm/delete-menu-item', array( 'item_id' => 34 ) )
+		);
+		$this->assertSame( 'post', aafm_activity_detail_link_type( 'aafm/delete-menu-item' ) );
+	}
+
+	/**
+	 * Declares revision_id only, matching aafm/restore-revision: post_id is required by the ability
+	 * not the thing that was destroyed, and a second id field would break the one-linkable-id rule.
+	 */
+	public function test_delete_revision_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted revision #502',
+			aafm_build_activity_detail(
+				'aafm/delete-revision',
+				array(
+					'post_id'     => 310,
+					'revision_id' => 502,
+				)
+			)
+		);
+	}
+
+	public function test_delete_term_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted meta key `colour` on term #21',
+			aafm_build_activity_detail(
+				'aafm/delete-term-meta',
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => 21,
+					'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
+			)
+		);
+	}
+
+	/**
+	 * The trap this whole sweep is written around. delete-user-meta names its parameter `key`
+	 * while every post-meta ability names theirs `meta_key`, and the ability's own description
+	 * says the two are not interchangeable. A sibling-shaped `meta_key` here would log nothing.
+	 */
+	public function test_delete_user_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted meta key `nickname` on user #14',
+			aafm_build_activity_detail(
+				'aafm/delete-user-meta',
+				array(
+					'user_id' => 14,
+					'key'     => 'nickname',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The same call sent with the post-meta spelling must log NOTHING, which is what makes the
+	 * assertion above a statement about the right key rather than about any key.
+	 */
+	public function test_delete_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+		$this->assertNull(
+			aafm_build_activity_detail(
+				'aafm/delete-user-meta',
+				array(
+					'user_id'  => 14,
+					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				)
+			)
+		);
+	}
+
+	/**
+	 * The hardest case for the keys type, so it comes first: a name the caller invented must not
+	 * reach the column. Membership of the ability's own allowlist is what makes this type safe,
+	 * and a character filter alone would have let every one of these through.
+	 */
+	public function test_the_keys_type_drops_a_name_the_caller_invented(): void {
+		$allowed = array( 'blogname', 'posts_per_page' );
+
+		$this->assertSame(
+			'blogname',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'blogname'    => 'Whatever',
+					'admin_email' => 'attacker@example.com',
+					'siteurl'     => 'https://example.com',
+					'notasetting' => 1,
+				),
+				$allowed
+			)
+		);
+
+		// Nothing recognisable at all renders nothing, rather than an empty template.
+		$this->assertNull(
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'admin_email' => 'x',
+					'siteurl'     => 'y',
+				),
+				$allowed
+			)
+		);
+	}
+
+	/**
+	 * The second hardest case: a setting VALUE must never reach the column, which is the promise
+	 * this file's header makes about every field type.
+	 */
+	public function test_the_keys_type_never_renders_a_value(): void {
+		$rendered = aafm_activity_detail_field(
+			'keys',
+			array( 'blogname' => 'CONFIDENTIAL PAYLOAD' ),
+			array( 'blogname' )
+		);
+
+		$this->assertSame( 'blogname', $rendered );
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $rendered );
+	}
+
+	public function test_the_keys_type_sorts_so_caller_order_does_not_change_the_row(): void {
+		$allowed = array( 'blogname', 'blogdescription', 'posts_per_page' );
+
+		$this->assertSame(
+			'blogdescription, blogname, posts_per_page',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'posts_per_page'  => 5,
+					'blogname'        => 'a',
+					'blogdescription' => 'b',
+				),
+				$allowed
+			)
+		);
+		$this->assertSame(
+			'blogdescription, blogname, posts_per_page',
+			aafm_activity_detail_field(
+				'keys',
+				array(
+					'blogname'        => 'a',
+					'blogdescription' => 'b',
+					'posts_per_page'  => 5,
+				),
+				$allowed
+			)
+		);
+	}
+
+	public function test_the_keys_type_rejects_everything_that_is_not_a_settings_object(): void {
+		$allowed = array( 'blogname' );
+
+		$this->assertNull( aafm_activity_detail_field( 'keys', 'blogname', $allowed ), 'A bare string is not a settings object.' );
+		$this->assertNull( aafm_activity_detail_field( 'keys', 42, $allowed ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', null, $allowed ) );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array(), $allowed ), 'An empty object changed nothing.' );
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( 'blogname' ), $allowed ), 'A list has integer keys and names nothing.' );
+		// An empty allowlist fails closed, the same direction aafm_activity_detail_enum() fails.
+		$this->assertNull( aafm_activity_detail_field( 'keys', array( 'blogname' => 'a' ), array() ) );
+	}
+
+	/**
+	 * The allowlist is filterable through aafm_allowed_site_settings(), so a site could introduce a
+	 * name this column has no business holding. Membership alone would admit it; the charset check
+	 * is why it does not.
+	 */
+	public function test_the_keys_type_still_filters_a_punctuated_allowlist_member(): void {
+		$this->assertNull(
+			aafm_activity_detail_field( 'keys', array( 'a name; DROP' => 'x' ), array( 'a name; DROP' ) )
+		);
+	}
+
+	/**
+	 * S-5, end to end on the real call path. Before this, the row said an agent had changed site
+	 * settings and could not say which: detail was null and arg_keys held only the wrapper name.
+	 */
+	public function test_update_site_settings_records_which_settings_changed(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_enabled( array( 'aafm/update-site-settings' ) );
+		aafm_clear_activity_log();
+
+		$result = wp_get_ability( 'aafm/update-site-settings' )->execute(
+			array(
+				'settings' => array(
+					'blogname'       => 'CONFIDENTIAL PAYLOAD',
+					'posts_per_page' => 7,
+				),
+			)
+		);
+		$this->assertIsArray( $result, 'update-site-settings returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'CONFIDENTIAL PAYLOAD', get_option( 'blogname' ), 'The write must really have happened, or this asserts nothing.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( 'Updated site settings: blogname, posts_per_page', $row['detail'] );
+		// The wrapper is all arg_keys ever saw, which is why the detail had to carry the names.
+		$this->assertSame( 'settings', (string) $row['arg_keys'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	public function test_update_term_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated meta key `colour` on term #21',
+			aafm_build_activity_detail(
+				'aafm/update-term-meta',
+				array(
+					'taxonomy' => 'category',
+					'term_id'  => 21,
+					'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'blue',
+				)
+			)
+		);
+		$this->assertSame( 'term', aafm_activity_detail_link_type( 'aafm/update-term-meta' ) );
+	}
+
+	/**
+	 * The same spelling trap as the delete sibling: BOTH user-meta abilities name their parameter
+	 * `key` while the whole post-meta family names theirs `meta_key`.
+	 */
+	public function test_update_user_meta_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Updated meta key `nickname` on user #14',
+			aafm_build_activity_detail(
+				'aafm/update-user-meta',
+				array(
+					'user_id' => 14,
+					'key'     => 'nickname',
+					'value'   => 'Bob',
+				)
+			)
+		);
+		$this->assertSame( 'user', aafm_activity_detail_link_type( 'aafm/update-user-meta' ) );
+	}
+
+	public function test_update_user_meta_ignores_the_post_meta_spelling_of_its_key(): void {
+		$this->assertNull(
+			aafm_build_activity_detail(
+				'aafm/update-user-meta',
+				array(
+					'user_id'  => 14,
+					'meta_key' => 'nickname', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+					'value'    => 'Bob',
+				)
+			)
+		);
+	}
+
+	/**
+	 * The hardest case for these two entries, and genuinely new coverage: unlike their delete
+	 * siblings, both update abilities carry a `value`, which is the one thing this column exists
+	 * to keep out. Asserted for both, because a per-ability slip would only show on one.
+	 *
+	 * The payload is deliberately charset-CLEAN (underscores, no space). Mutation testing proved
+	 * why: with the map mutated to name `value`, a spaced payload renders as null because the
+	 * `key` type's charset rejects it, so a spaced fixture would make this test pass for a reason
+	 * that has nothing to do with the map omitting `value`. A charset-clean value really does
+	 * render under that mutant - measured, `Updated meta key `SECRET_TOKEN_123` on user #14` - and
+	 * charset-clean is exactly the shape of the values worth protecting: tokens, hashes, ids.
+	 * The spaced case is kept below as the second assertion, documenting the charset as defence in
+	 * depth rather than as the thing under test.
+	 */
+	public function test_a_meta_update_value_never_reaches_the_detail(): void {
+		$term = aafm_build_activity_detail(
+			'aafm/update-term-meta',
+			array(
+				'term_id'  => 21,
+				'meta_key' => 'colour', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- test fixture: ability-input array key, not a meta query.
+				'value'    => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$user = aafm_build_activity_detail(
+			'aafm/update-user-meta',
+			array(
+				'user_id' => 14,
+				'key'     => 'nickname',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+
+		// Leak assertions FIRST, deliberately. Under a map mutated to name `value` the assertSame
+		// below also fails, but it reports "two strings are identical" - a wrong-string diagnostic
+		// for what is actually a value disclosure. Ordering these first makes the failure say so.
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $term, 'A term-meta VALUE reached the audit detail.' );
+		$this->assertStringNotContainsString( 'CONFIDENTIAL', (string) $user, 'A user-meta VALUE reached the audit detail.' );
+		$this->assertSame( 'Updated meta key `colour` on term #21', $term );
+		$this->assertSame( 'Updated meta key `nickname` on user #14', $user );
+
+		// Defence in depth, not the thing under test: even if the map named `value`, a value
+		// carrying a space could not clear the key charset. Kept so the distinction stays visible.
+		$this->assertNull( aafm_activity_detail_field( 'key', 'CONFIDENTIAL PAYLOAD' ) );
+	}
+
+	/**
+	 * The real call path. Before this entry existed a successful write logged detail:null while
+	 * arg_keys held only the parameter NAMES, so the row named neither the user nor the key.
+	 */
+	public function test_update_user_meta_records_what_it_wrote_end_to_end(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname' ) );
+		$this->register_enabled( array( 'aafm/update-user-meta' ) );
+		aafm_clear_activity_log();
+
+		$user_id = get_current_user_id();
+		$result  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $user_id,
+				'key'     => 'nickname',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$this->assertIsArray( $result, 'update-user-meta returned an error; fix the input before asserting on detail.' );
+		$this->assertSame( 'CONFIDENTIAL_TOKEN_123', get_user_meta( $user_id, 'nickname', true ), 'The write must really have happened, or this asserts nothing.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'success', $row['status'] );
+		$this->assertSame( "Updated meta key `nickname` on user #{$user_id}", $row['detail'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	/**
+	 * A hard-blocked key is refused by the PERMISSION callback, not inside execute, so the row is
+	 * built from the caller's arguments and the attempted key name is recorded. That is deliberate:
+	 * an attempted privilege escalation is the row an operator most wants. The half that matters
+	 * for safety is the other one - the write must not have happened, and the row must not say
+	 * 'success'.
+	 */
+	public function test_a_refused_user_meta_key_is_recorded_and_not_logged_as_success(): void {
+		$this->acting_as( 'administrator' );
+		update_option( 'aafm_exposed_user_meta_keys', array( 'nickname' ) );
+		$this->register_enabled( array( 'aafm/update-user-meta' ) );
+		aafm_clear_activity_log();
+
+		$user_id = get_current_user_id();
+		$result  = wp_get_ability( 'aafm/update-user-meta' )->execute(
+			array(
+				'user_id' => $user_id,
+				'key'     => 'session_tokens',
+				'value'   => 'CONFIDENTIAL_TOKEN_123',
+			)
+		);
+		$this->assertWPError( $result, 'A hard-blocked key must be refused, or this is not testing the refusal.' );
+
+		$row = $this->latest_row();
+		$this->assertSame( 'denied', $row['status'], 'A refused write must never read as a successful one.' );
+		$this->assertSame( "Updated meta key `session_tokens` on user #{$user_id}", $row['detail'] );
+		$this->assertRowIsFreeOfTheValue( $row );
+	}
+
+	public function test_wc_delete_product_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted product #808',
+			aafm_build_activity_detail( 'aafm/wc-delete-product', array( 'product_id' => 808 ) )
+		);
+	}
+
+	/**
+	 * The key is variation_id, not product_id: a variation is its own post, so the row must name the
+	 * variation that was destroyed rather than the parent that survived.
+	 */
+	public function test_wc_delete_product_variation_detail_renders_the_template(): void {
+		$this->assertSame(
+			'Deleted product variation #909',
+			aafm_build_activity_detail( 'aafm/wc-delete-product-variation', array( 'variation_id' => 909 ) )
+		);
 	}
 
 	// -------------------------------------------------------------------------

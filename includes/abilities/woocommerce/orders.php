@@ -393,8 +393,13 @@ function aafm_exec_wc_list_orders( array $input ): array {
 		}
 	}
 
+	// 'type' is not optional. wc_get_orders() without it returns every order-ish record the store
+	// holds, and under HPOS a refund is a row in wc_orders with type shop_order_refund carrying its
+	// own status - a refund against a completed order is itself 'wc-completed'. So an untyped query
+	// counts refunds as orders and reports a list total nobody can reconcile with the store.
 	$query = wc_get_orders(
 		array(
+			'type'     => 'shop_order',
 			'limit'    => $per_page,
 			'page'     => $page,
 			'status'   => $status,
@@ -734,7 +739,7 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * keys present in $input are applied; unsent fields are left untouched).
  *
  * Sanitize policy: billing.email -> sanitize_email; all other address leaves ->
- * sanitize_text_field; customer_note -> sanitize_textarea_field; customer_id -> absint.
+ * aafm_sanitize_plain_text; customer_note -> aafm_sanitize_multiline_text; customer_id -> absint.
  * The nested billing/shipping arrays are sanitized leaf-by-leaf so structured data
  * is never flattened or corrupted.
  *
@@ -743,13 +748,16 @@ function aafm_wc_order_status_valid( string $status ): bool {
  * one combined list and every item in it is added via add_product(). Neither field can edit,
  * replace, or remove an existing line item.
  *
- * @param \WC_Order           $order The order to mutate.
- * @param array<string,mixed> $input Validated input (already schema-checked).
+ * @param \WC_Order           $order          The order to mutate.
+ * @param array<string,mixed> $input          Validated input (already schema-checked).
+ * @param array<int,int>      $added_item_ids Out-param: receives the order-item ids this call
+ *                                            wrote, so a caller that keeps working on the order
+ *                                            afterwards can undo them if its own step fails.
  * @return array<int,int>|\WP_Error Requested product IDs that could not be resolved to a product
  *                                  (empty when all resolved), or a WP_Error when adding threw
  *                                  mid-loop (already-written items rolled back; see B27 note below).
  */
-function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
+function aafm_wc_apply_order_input( \WC_Order $order, array $input, array &$added_item_ids = array() ) {
 	if ( array_key_exists( 'status', $input ) ) {
 		// Normalise to short form before handing to set_status() -- strip any 'wc-' prefix so
 		// both 'processing' and 'wc-processing' produce the same stored/returned value (matching
@@ -762,44 +770,44 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 		$order->set_customer_id( absint( $input['customer_id'] ) );
 	}
 	if ( array_key_exists( 'customer_note', $input ) ) {
-		$order->set_customer_note( sanitize_textarea_field( (string) $input['customer_note'] ) );
+		$order->set_customer_note( aafm_sanitize_multiline_text( (string) $input['customer_note'] ) );
 	}
 
 	// Billing address -- sanitize each leaf individually (never flatten the map).
 	if ( array_key_exists( 'billing', $input ) && is_array( $input['billing'] ) ) {
 		$billing = $input['billing'];
 		if ( array_key_exists( 'first_name', $billing ) ) {
-			$order->set_billing_first_name( sanitize_text_field( (string) $billing['first_name'] ) );
+			$order->set_billing_first_name( aafm_sanitize_plain_text( (string) $billing['first_name'] ) );
 		}
 		if ( array_key_exists( 'last_name', $billing ) ) {
-			$order->set_billing_last_name( sanitize_text_field( (string) $billing['last_name'] ) );
+			$order->set_billing_last_name( aafm_sanitize_plain_text( (string) $billing['last_name'] ) );
 		}
 		if ( array_key_exists( 'company', $billing ) ) {
-			$order->set_billing_company( sanitize_text_field( (string) $billing['company'] ) );
+			$order->set_billing_company( aafm_sanitize_plain_text( (string) $billing['company'] ) );
 		}
 		if ( array_key_exists( 'address_1', $billing ) ) {
-			$order->set_billing_address_1( sanitize_text_field( (string) $billing['address_1'] ) );
+			$order->set_billing_address_1( aafm_sanitize_plain_text( (string) $billing['address_1'] ) );
 		}
 		if ( array_key_exists( 'address_2', $billing ) ) {
-			$order->set_billing_address_2( sanitize_text_field( (string) $billing['address_2'] ) );
+			$order->set_billing_address_2( aafm_sanitize_plain_text( (string) $billing['address_2'] ) );
 		}
 		if ( array_key_exists( 'city', $billing ) ) {
-			$order->set_billing_city( sanitize_text_field( (string) $billing['city'] ) );
+			$order->set_billing_city( aafm_sanitize_plain_text( (string) $billing['city'] ) );
 		}
 		if ( array_key_exists( 'state', $billing ) ) {
-			$order->set_billing_state( sanitize_text_field( (string) $billing['state'] ) );
+			$order->set_billing_state( aafm_sanitize_plain_text( (string) $billing['state'] ) );
 		}
 		if ( array_key_exists( 'postcode', $billing ) ) {
-			$order->set_billing_postcode( sanitize_text_field( (string) $billing['postcode'] ) );
+			$order->set_billing_postcode( aafm_sanitize_plain_text( (string) $billing['postcode'] ) );
 		}
 		if ( array_key_exists( 'country', $billing ) ) {
-			$order->set_billing_country( sanitize_text_field( (string) $billing['country'] ) );
+			$order->set_billing_country( aafm_sanitize_plain_text( (string) $billing['country'] ) );
 		}
 		if ( array_key_exists( 'email', $billing ) ) {
 			$order->set_billing_email( sanitize_email( (string) $billing['email'] ) );
 		}
 		if ( array_key_exists( 'phone', $billing ) ) {
-			$order->set_billing_phone( sanitize_text_field( (string) $billing['phone'] ) );
+			$order->set_billing_phone( aafm_sanitize_plain_text( (string) $billing['phone'] ) );
 		}
 	}
 
@@ -807,31 +815,31 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 	if ( array_key_exists( 'shipping', $input ) && is_array( $input['shipping'] ) ) {
 		$shipping = $input['shipping'];
 		if ( array_key_exists( 'first_name', $shipping ) ) {
-			$order->set_shipping_first_name( sanitize_text_field( (string) $shipping['first_name'] ) );
+			$order->set_shipping_first_name( aafm_sanitize_plain_text( (string) $shipping['first_name'] ) );
 		}
 		if ( array_key_exists( 'last_name', $shipping ) ) {
-			$order->set_shipping_last_name( sanitize_text_field( (string) $shipping['last_name'] ) );
+			$order->set_shipping_last_name( aafm_sanitize_plain_text( (string) $shipping['last_name'] ) );
 		}
 		if ( array_key_exists( 'company', $shipping ) ) {
-			$order->set_shipping_company( sanitize_text_field( (string) $shipping['company'] ) );
+			$order->set_shipping_company( aafm_sanitize_plain_text( (string) $shipping['company'] ) );
 		}
 		if ( array_key_exists( 'address_1', $shipping ) ) {
-			$order->set_shipping_address_1( sanitize_text_field( (string) $shipping['address_1'] ) );
+			$order->set_shipping_address_1( aafm_sanitize_plain_text( (string) $shipping['address_1'] ) );
 		}
 		if ( array_key_exists( 'address_2', $shipping ) ) {
-			$order->set_shipping_address_2( sanitize_text_field( (string) $shipping['address_2'] ) );
+			$order->set_shipping_address_2( aafm_sanitize_plain_text( (string) $shipping['address_2'] ) );
 		}
 		if ( array_key_exists( 'city', $shipping ) ) {
-			$order->set_shipping_city( sanitize_text_field( (string) $shipping['city'] ) );
+			$order->set_shipping_city( aafm_sanitize_plain_text( (string) $shipping['city'] ) );
 		}
 		if ( array_key_exists( 'state', $shipping ) ) {
-			$order->set_shipping_state( sanitize_text_field( (string) $shipping['state'] ) );
+			$order->set_shipping_state( aafm_sanitize_plain_text( (string) $shipping['state'] ) );
 		}
 		if ( array_key_exists( 'postcode', $shipping ) ) {
-			$order->set_shipping_postcode( sanitize_text_field( (string) $shipping['postcode'] ) );
+			$order->set_shipping_postcode( aafm_sanitize_plain_text( (string) $shipping['postcode'] ) );
 		}
 		if ( array_key_exists( 'country', $shipping ) ) {
-			$order->set_shipping_country( sanitize_text_field( (string) $shipping['country'] ) );
+			$order->set_shipping_country( aafm_sanitize_plain_text( (string) $shipping['country'] ) );
 		}
 	}
 
@@ -889,6 +897,8 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 	// each new item id and, on a throw, delete the already-written rows so the "whole request
 	// fails with no partial write" promise the schema documents stays true.
 	$added_item_ids = array();
+	// The ids are also reported to the caller (out-param) because add_product() is not the last
+	// thing that can fail after these rows exist -- see aafm_exec_wc_update_order()'s recalculation.
 	try {
 		foreach ( $resolved as $to_add ) {
 			$added_item_ids[] = (int) $order->add_product( $to_add['product'], $to_add['qty'] );
@@ -901,6 +911,32 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
 }
 
 /**
+ * Whether an order write request actually asks for at least one line item to be added.
+ *
+ * Mirrors the collection aafm_wc_apply_order_input() does -- both accepted fields, and the same
+ * "skip anything that is not an item map" rule -- so the two can never disagree about whether a
+ * request touched the order's items. Used by aafm_exec_wc_update_order() to decide whether the
+ * order's totals have to be recalculated; see the comment at that call site for why the answer is
+ * not simply "always".
+ *
+ * @param array<string,mixed> $input Validated input (order_id already removed).
+ * @return bool
+ */
+function aafm_wc_input_adds_line_items( array $input ): bool {
+	foreach ( array( 'line_items', 'add_line_items' ) as $field ) {
+		if ( ! array_key_exists( $field, $input ) || ! is_array( $input[ $field ] ) ) {
+			continue;
+		}
+		foreach ( $input[ $field ] as $item ) {
+			if ( is_array( $item ) ) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/**
  * Delete order-item rows that were written before a mid-loop add_product() failure, and report
  * the outcome honestly.
  *
@@ -909,21 +945,19 @@ function aafm_wc_apply_order_input( \WC_Order $order, array $input ) {
  * states exactly which order-item ids persisted, so the caller is never told "failed" about
  * state that actually changed (B27).
  *
+ * The deletion helper reports an id it could not CONFIRM removing, which is not the same as an id
+ * that survived: WooCommerce fires woocommerce_delete_order_item AFTER the row is gone, so an
+ * extension throwing from there produces a caught exception over a row that no longer exists.
+ * Naming it here would send the caller after an id it cannot find, so the list is narrowed to what
+ * is genuinely still there before the message is chosen. The narrowing stays in the CALLERS rather
+ * than moving into the deletion helper, because the create rollback has to defer the same check
+ * until after its order-level delete, which removes items of its own.
+ *
  * @param array<int,int> $item_ids Order-item ids written before the failure.
  * @return \WP_Error
  */
 function aafm_wc_rollback_added_order_items( array $item_ids ): \WP_Error {
-	$kept = array();
-	foreach ( $item_ids as $item_id ) {
-		$item_id = absint( $item_id );
-		if ( $item_id < 1 ) {
-			continue;
-		}
-		$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
-		if ( ! $deleted ) {
-			$kept[] = $item_id;
-		}
-	}
+	$kept = aafm_wc_surviving_order_items( aafm_wc_delete_added_order_items( $item_ids ) );
 
 	if ( array() !== $kept ) {
 		return new \WP_Error(
@@ -939,6 +973,590 @@ function aafm_wc_rollback_added_order_items( array $item_ids ): \WP_Error {
 	return new \WP_Error(
 		'aafm_wc_line_items_not_applied',
 		__( 'Adding the line items failed. No line items from this request were kept and the order is unchanged.', 'agent-abilities-for-mcp' )
+	);
+}
+
+/**
+ * Delete the order-item rows a failed request wrote, returning the ids that survived.
+ *
+ * Shared by both rollback paths so they can never disagree about what "removed" means.
+ *
+ * @param array<int,int> $item_ids Order-item ids written before the failure.
+ * @return array<int,int> The ids that could NOT be removed. Empty when every row went.
+ */
+function aafm_wc_delete_added_order_items( array $item_ids ): array {
+	$kept = array();
+	foreach ( $item_ids as $item_id ) {
+		$item_id = absint( $item_id );
+		if ( $item_id < 1 ) {
+			continue;
+		}
+		// wc_delete_order_item() fires woocommerce_before_delete_order_item before it removes the
+		// row, so an extension listening there can throw straight out of this loop. Uncaught, that
+		// exception escaped the whole rollback: on create it meant the order-level delete never ran,
+		// a raw Throwable left the ability, and the part-built order stayed -- both halves of the
+		// defect the create fix was written to close, reappearing precisely when an extension
+		// misbehaves during cleanup. A rollback that can itself crash is not a rollback.
+		//
+		// So a throw is recorded as an UNCONFIRMED survivor and the loop keeps going. Unconfirmed is
+		// the honest word: the throw says the delete did not complete, not that the row is still
+		// there, and the caller re-checks with aafm_wc_surviving_order_items() once the rest of the
+		// cleanup has had its turn.
+		$deleted = false;
+		try {
+			$deleted = function_exists( 'wc_delete_order_item' ) ? wc_delete_order_item( $item_id ) : false;
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			$deleted = false;
+		}
+		if ( ! $deleted ) {
+			$kept[] = $item_id;
+		}
+	}
+	return $kept;
+}
+
+/**
+ * Narrow a list of unconfirmed survivors to the rows that are genuinely still there.
+ *
+ * Two things make the re-check necessary rather than tidy. A delete that threw may still have
+ * removed the row, because woocommerce_delete_order_item fires AFTER the deletion; and on create the
+ * order-level delete that runs afterwards takes its own items with it, so a row whose direct
+ * deletion failed can be gone by the time the message is chosen. Reporting either as a survivor
+ * would name ids the caller cannot find, which is its own kind of lie.
+ *
+ * @param array<int,int> $item_ids Ids whose deletion was not confirmed.
+ * @return array<int,int> The subset that still exists.
+ */
+function aafm_wc_surviving_order_items( array $item_ids ): array {
+	if ( array() === $item_ids || ! class_exists( 'WC_Order_Factory' ) ) {
+		return $item_ids;
+	}
+
+	$surviving = array();
+	foreach ( $item_ids as $item_id ) {
+		try {
+			if ( false !== \WC_Order_Factory::get_order_item( (int) $item_id ) ) {
+				$surviving[] = (int) $item_id;
+			}
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			// Cannot tell: keep reporting it, since the honest failure is to over-report a survivor
+			// the caller can check, never to quietly drop one.
+			$surviving[] = (int) $item_id;
+		}
+	}
+	return $surviving;
+}
+
+/**
+ * Capture everything about an order that a totals recalculation moves, in a form that can be both
+ * compared and written back.
+ *
+ * Taken BEFORE the request touches the order, so it describes the order as the caller found it.
+ *
+ * EVERY read here passes 'edit' explicitly, and that is not a style choice. A WooCommerce getter
+ * defaults to 'view' context, and view context runs the property's display filter
+ * (WC_Data::get_prop applies woocommerce_{object_type}_get_{prop} only when the context is view).
+ * So a getter called with no argument is a DISPLAY read, and a snapshot built from display reads
+ * records what an extension wants shown rather than what is stored. The restore then writes that
+ * presentation value into order history, and the verification, re-reading through the same filter,
+ * agrees with itself and hands back the strong "totals and taxes were put back" message.
+ *
+ * That was not hypothetical: an extension filtering only the tax label for display had its label
+ * written into the stored row, on an order whose rate had not changed at all, and the strong
+ * message was still returned. get_label() does the same thing without any extension involved,
+ * substituting a translated "Tax" for an empty stored label in view context only.
+ *
+ * The rule worth carrying past this function: a snapshot must represent PERSISTENCE, NOT
+ * PRESENTATION. Any WooCommerce getter here without an explicit 'edit' is a bug waiting to be
+ * written back.
+ *
+ * Coupon items are deliberately absent: calculate_totals() reads a coupon's recorded discount to
+ * work out the order's totals, it does not rewrite the coupon row itself, so there is nothing there
+ * to put back.
+ *
+ * @param \WC_Order $order The order, freshly read.
+ * @return array<string,mixed>
+ */
+function aafm_wc_order_money_snapshot( \WC_Order $order ): array {
+	// Every read is guarded, and the whole thing is wrapped. An order object that cannot answer
+	// these questions yields NO snapshot, and a missing snapshot makes the rollback report the
+	// weaker "could not be confirmed as restored" error rather than claiming a restore it never
+	// performed. Failing honest is the point; a partial snapshot restored as if it were complete
+	// would be the same class of lie this whole fix exists to remove.
+	try {
+		$items = array();
+		foreach ( $order->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $item_id => $item ) {
+			if ( ! is_object( $item ) || ! method_exists( $item, 'get_total' ) || ! method_exists( $item, 'get_taxes' ) ) {
+				return array();
+			}
+			$items[ (int) $item_id ] = array(
+				'total'        => (string) $item->get_total( 'edit' ),
+				'subtotal'     => method_exists( $item, 'get_subtotal' ) ? (string) $item->get_subtotal( 'edit' ) : null,
+				'total_tax'    => method_exists( $item, 'get_total_tax' ) ? (string) $item->get_total_tax( 'edit' ) : null,
+				'subtotal_tax' => method_exists( $item, 'get_subtotal_tax' ) ? (string) $item->get_subtotal_tax( 'edit' ) : null,
+				'taxes'        => (array) $item->get_taxes( 'edit' ),
+			);
+		}
+
+		$order_reads = array(
+			'total'          => 'get_total',
+			'cart_tax'       => 'get_cart_tax',
+			'shipping_tax'   => 'get_shipping_tax',
+			'shipping_total' => 'get_shipping_total',
+			'discount_total' => 'get_discount_total',
+			'discount_tax'   => 'get_discount_tax',
+		);
+		$order_money = array();
+		foreach ( $order_reads as $key => $getter ) {
+			if ( ! method_exists( $order, $getter ) ) {
+				return array();
+			}
+			$order_money[ $key ] = (string) $order->{$getter}( 'edit' );
+		}
+
+		$taxes = array();
+		foreach ( $order->get_taxes() as $tax_item ) {
+			if ( ! is_object( $tax_item ) || ! method_exists( $tax_item, 'get_rate_id' ) ) {
+				return array();
+			}
+			// update_taxes() rewrites a tax row's rate_code, label, compound flag and rate_percent
+			// from the CURRENT rate, not just its amounts (abstract-wc-order.php, the existing-taxes
+			// loop). All of it therefore has to be captured, or a restore puts the old money back
+			// under the new rate's identity.
+			$taxes[ (int) $tax_item->get_rate_id( 'edit' ) ] = array(
+				'rate_code'          => (string) $tax_item->get_rate_code( 'edit' ),
+				'label'              => (string) $tax_item->get_label( 'edit' ),
+				'compound'           => (bool) $tax_item->get_compound( 'edit' ),
+				'rate_percent'       => $tax_item->get_rate_percent( 'edit' ),
+				'tax_total'          => (string) $tax_item->get_tax_total( 'edit' ),
+				'shipping_tax_total' => (string) $tax_item->get_shipping_tax_total( 'edit' ),
+			);
+		}
+
+		return array(
+			'order' => $order_money,
+			'items' => $items,
+			'taxes' => $taxes,
+		);
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return array();
+	}
+}
+
+/**
+ * Normalize one money figure for COMPARISON only.
+ *
+ * Deliberately not applied when the snapshot is taken. A snapshot holds the exact strings
+ * WooCommerce handed over, so restoring writes back byte-for-byte what was there; normalizing at
+ * capture would store "20" back as "20.0000", which is the same money but not the same stored
+ * value, and this rollback has no business reformatting a figure it was only meant to preserve.
+ *
+ * Four decimal places, independent of the shop's own display precision: this is only ever compared,
+ * never read by anyone.
+ *
+ * @param mixed $value Raw figure off a WooCommerce getter.
+ * @return string
+ */
+function aafm_wc_money_figure( $value ): string {
+	return number_format( (float) $value, 4, '.', '' );
+}
+
+/**
+ * Canonicalize an order item's tax map so two of them can be compared without their key TYPES
+ * deciding the answer.
+ *
+ * WooCommerce hands this map back with rate ids as ints from one code path and numeric strings from
+ * another, and the amounts as floats or strings depending on where they came from. Comparing the
+ * raw arrays would report a perfectly good restore as a failure. Casting the keys to int, running
+ * the amounts through the same normalizer as every other figure, and sorting removes all three
+ * sources of noise while keeping every semantic value.
+ *
+ * The map used to be left out of the comparison for exactly that noise, which meant the strong
+ * message covered less than it sounded like it did. Canonicalizing is the way to include it
+ * honestly rather than exclude it quietly.
+ *
+ * @param mixed $taxes A WC_Order_Item::get_taxes() map.
+ * @return array<string,array<int,string>>
+ */
+function aafm_wc_canonical_tax_map( $taxes ): array {
+	$canonical = array();
+	foreach ( array( 'total', 'subtotal' ) as $bucket ) {
+		$rates    = ( is_array( $taxes ) && isset( $taxes[ $bucket ] ) && is_array( $taxes[ $bucket ] ) ) ? $taxes[ $bucket ] : array();
+		$bucketed = array();
+		foreach ( $rates as $rate_id => $amount ) {
+			$bucketed[ (int) $rate_id ] = aafm_wc_money_figure( $amount );
+		}
+		ksort( $bucketed );
+		$canonical[ $bucket ] = $bucketed;
+	}
+	return $canonical;
+}
+
+/**
+ * Flatten a money snapshot into one comparable string.
+ *
+ * This is what decides whether the caller is told the money was put back, so it has to cover
+ * everything the restore claims to have restored. It covers the order's own figures, each item's
+ * amounts AND its canonicalized tax map, and each tax row's amounts AND its rate identity: rate
+ * code, label, compound flag and rate percent.
+ *
+ * The rate identity is in here because leaving it out was a real defect. update_taxes() rewrites a
+ * tax row's rate metadata from the current rate, so a shop that edited a rate between the order
+ * being placed and this request could get its old tax AMOUNT restored under the NEW rate's percent
+ * and label, and the signature, comparing only amounts, would still hand back the strong
+ * "totals and taxes were put back" message over a row that was internally inconsistent. A
+ * verification that checks less than the message asserts is the same false promise in a new place.
+ *
+ * Nothing is excluded from this comparison. If that changes, say here what is left out and why.
+ *
+ * @param array<string,mixed> $snapshot A snapshot from aafm_wc_order_money_snapshot().
+ * @return string
+ */
+function aafm_wc_money_signature( array $snapshot ): string {
+	$parts = array();
+
+	$order = (array) ( $snapshot['order'] ?? array() );
+	ksort( $order );
+	foreach ( $order as $key => $value ) {
+		$parts[] = 'o.' . $key . '=' . aafm_wc_money_figure( $value );
+	}
+
+	$items = (array) ( $snapshot['items'] ?? array() );
+	ksort( $items );
+	foreach ( $items as $item_id => $row ) {
+		$map     = aafm_wc_canonical_tax_map( $row['taxes'] ?? array() );
+		$parts[] = 'i.' . $item_id . '='
+			. aafm_wc_money_figure( $row['total'] ) . '/'
+			. aafm_wc_money_figure( $row['subtotal'] ) . '/'
+			. aafm_wc_money_figure( $row['total_tax'] ) . '/'
+			. aafm_wc_money_figure( $row['subtotal_tax'] )
+			. '/map:' . (string) wp_json_encode( $map );
+	}
+
+	$taxes = (array) ( $snapshot['taxes'] ?? array() );
+	ksort( $taxes );
+	foreach ( $taxes as $rate_id => $row ) {
+		$parts[] = 't.' . $rate_id . '='
+			. aafm_wc_money_figure( $row['tax_total'] ) . '/'
+			. aafm_wc_money_figure( $row['shipping_tax_total'] )
+			. '/code:' . (string) ( $row['rate_code'] ?? '' )
+			. '/label:' . (string) ( $row['label'] ?? '' )
+			. '/compound:' . ( empty( $row['compound'] ) ? '0' : '1' )
+			. '/percent:' . aafm_wc_money_figure( $row['rate_percent'] ?? 0 );
+	}
+
+	return implode( ';', $parts );
+}
+
+/**
+ * Write a money snapshot back onto an order.
+ *
+ * Must be handed a FRESHLY READ order, never the half-recalculated object the exception came out
+ * of: that one still holds the items this request added in its own item collection, and saving it
+ * would write them straight back after they had been deleted.
+ *
+ * Tax rows are matched on RATE ID rather than order-item id, because update_taxes() is free to drop
+ * a rate's row and create a new one with a different item id for the same rate. Matching on rate id
+ * means a row the recalculation added is removed, a row it dropped is recreated, and a row it
+ * merely rewrote is set back.
+ *
+ * @param \WC_Order           $order    A freshly read order.
+ * @param array<string,mixed> $snapshot Snapshot from aafm_wc_order_money_snapshot().
+ * @return bool True when every write went through, false when anything threw.
+ */
+function aafm_wc_restore_order_money( \WC_Order $order, array $snapshot ): bool {
+	try {
+		foreach ( $order->get_items( array( 'line_item', 'shipping', 'fee' ) ) as $item_id => $item ) {
+			if ( ! is_object( $item ) || ! isset( $snapshot['items'][ (int) $item_id ] ) ) {
+				continue;
+			}
+			// Every type this iterates (line_item, shipping, fee) declares set_total/set_taxes/save in
+			// real WooCommerce; only set_subtotal is product-only. An item that cannot be written
+			// back leaves the restore incomplete, so it fails the whole thing rather than being
+			// quietly skipped -- the caller then gets the weaker, truthful error.
+			if ( ! method_exists( $item, 'set_total' ) || ! method_exists( $item, 'set_taxes' ) || ! method_exists( $item, 'save' ) ) {
+				return false;
+			}
+			$row = $snapshot['items'][ (int) $item_id ];
+			$item->set_total( $row['total'] );
+			if ( null !== $row['subtotal'] && method_exists( $item, 'set_subtotal' ) ) {
+				$item->set_subtotal( $row['subtotal'] );
+			}
+			$item->set_taxes( $row['taxes'] );
+			$item->save();
+		}
+
+		$seen_rates = array();
+		foreach ( $order->get_taxes() as $tax_item_id => $tax_item ) {
+			// 'edit' for the same reason the snapshot uses it, and specifically so the two AGREE:
+			// the snapshot keys its tax map by the edit-context rate id, so looking up here in view
+			// context would let a woocommerce_order_item_get_rate_id filter make the two disagree.
+			// A row that is in the snapshot would then read as one that is not, take the removal
+			// branch below, and be deleted and recreated under a different item id.
+			$rate_id = (int) $tax_item->get_rate_id( 'edit' );
+			if ( ! isset( $snapshot['taxes'][ $rate_id ] ) ) {
+				$order->remove_item( $tax_item_id );
+				continue;
+			}
+			// A SURVIVING row gets every captured field back, not just its amounts. update_taxes()
+			// rewrote its rate code, label, compound flag and percent from the current rate before
+			// the throw, so restoring the amounts alone leaves the old money sitting under the new
+			// rate's identity: a row that is internally inconsistent and matches nothing the caller
+			// started with. Recreated rows below get the same treatment, for the same reason.
+			$row = $snapshot['taxes'][ $rate_id ];
+			aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
+			$tax_item->save();
+			$seen_rates[ $rate_id ] = true;
+		}
+
+		if ( class_exists( 'WC_Order_Item_Tax' ) ) {
+			foreach ( $snapshot['taxes'] as $rate_id => $row ) {
+				if ( isset( $seen_rates[ (int) $rate_id ] ) ) {
+					continue;
+				}
+				$tax_item = new \WC_Order_Item_Tax();
+				$tax_item->set_rate_id( (int) $rate_id );
+				aafm_wc_apply_tax_row_snapshot( $tax_item, $row );
+				$order->add_item( $tax_item );
+			}
+		}
+
+		$order->set_shipping_total( $snapshot['order']['shipping_total'] );
+		$order->set_discount_total( $snapshot['order']['discount_total'] );
+		$order->set_discount_tax( $snapshot['order']['discount_tax'] );
+		$order->set_cart_tax( $snapshot['order']['cart_tax'] );
+		$order->set_shipping_tax( $snapshot['order']['shipping_tax'] );
+		$order->set_total( $snapshot['order']['total'] );
+		$order->save();
+
+		return true;
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return false;
+	}
+}
+
+/**
+ * Write one captured tax row back onto a tax item, identity and all.
+ *
+ * Shared by the surviving-row and recreated-row branches so the two can never drift into restoring
+ * different field sets, which is exactly how the amounts-only version came to be right in one place
+ * and wrong in the other.
+ *
+ * rate_id is not set here: a surviving row already carries it, and the recreated branch sets it
+ * before calling, because that is the key it was matched on in the first place.
+ *
+ * @param \WC_Order_Item_Tax  $tax_item The tax row to write to.
+ * @param array<string,mixed> $row      One entry from a snapshot's `taxes` map.
+ * @return void
+ */
+function aafm_wc_apply_tax_row_snapshot( \WC_Order_Item_Tax $tax_item, array $row ): void {
+	$tax_item->set_rate_code( (string) ( $row['rate_code'] ?? '' ) );
+	$tax_item->set_label( (string) ( $row['label'] ?? '' ) );
+	$tax_item->set_compound( ! empty( $row['compound'] ) );
+	if ( null !== ( $row['rate_percent'] ?? null ) ) {
+		$tax_item->set_rate_percent( $row['rate_percent'] );
+	}
+	$tax_item->set_tax_total( $row['tax_total'] );
+	$tax_item->set_shipping_tax_total( $row['shipping_tax_total'] );
+}
+
+/**
+ * Load an order, treating the lookup itself as something that can fail.
+ *
+ * A lookup through wc_get_order() can THROW as well as return false, because the factory, the
+ * data store and the filters around them are all third-party surface. Callers that only check `instanceof WC_Order` handle the
+ * false and wrong-class cases and are blind to the throw. That matters most inside a rollback,
+ * which is already the exception recovery path and has already mutated state by the time it looks
+ * an order up, so an escaping Throwable there replaces a structured result with a raw crash and
+ * abandons the recovery half-done. aafm_wc_order_still_exists() has always treated the lookup this
+ * way; this is the same treatment where a null answer is the useful one.
+ *
+ * @param int $order_id Order id.
+ * @return \WC_Order|null The order, or null when it cannot be loaded for any reason.
+ */
+function aafm_wc_load_order_or_null( int $order_id ): ?\WC_Order {
+	if ( $order_id <= 0 || ! function_exists( 'wc_get_order' ) ) {
+		return null;
+	}
+	try {
+		$order = wc_get_order( $order_id );
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return null;
+	}
+
+	return $order instanceof \WC_Order ? $order : null;
+}
+
+/**
+ * Undo a request whose totals recalculation threw, and report exactly what survived.
+ *
+ * WooCommerce's calculate_totals() is not a single atomic step. It runs calculate_taxes() first, and
+ * WooCommerce's own comment on that call says "Note; this also triggers save()" -- so every item's tax map and
+ * every order-level tax row is already ON DISK by the time the woocommerce_order_after_calculate_totals
+ * hook fires. An extension throwing from that hook therefore leaves rewritten money behind, and
+ * deleting the added item rows does not touch any of it. Reproduced against real WooCommerce: an
+ * order went from tax 20 to a persisted tax 40 on a single unchanged 100 line while the response
+ * said the order was unchanged.
+ *
+ * So this deletes the added rows, then writes the pre-request money state back, then RE-READS the
+ * order and compares before deciding which error to return. The order of those steps matters: the
+ * restore runs on a fresh read taken after the deletes, so it cannot resurrect the deleted rows.
+ *
+ * The re-read goes through wc_get_order(), which an object cache may serve. That confirms the
+ * restore was applied and accepted rather than that the bytes reached MySQL, which is why the
+ * message it unlocks says the totals were put back rather than making any broader claim about the
+ * order as a whole. A third-party hook that wrote its own data before throwing is beyond anything
+ * this can see or undo.
+ *
+ * @param int                 $order_id The order being updated.
+ * @param array<int,int>      $item_ids Order-item ids this request wrote.
+ * @param array<string,mixed> $snapshot Pre-request money snapshot.
+ * @return \WP_Error
+ */
+function aafm_wc_rollback_recalculated_order( int $order_id, array $item_ids, array $snapshot ): \WP_Error {
+	// An item deletion that throws is recorded, not propagated, and the money restore below still
+	// runs. Letting cleanup crash here would abandon the restore entirely and hand the caller a raw
+	// Throwable in place of any of these errors, which is strictly worse than a partial rollback
+	// reported honestly.
+	$unconfirmed = aafm_wc_delete_added_order_items( $item_ids );
+	$kept        = aafm_wc_surviving_order_items( $unconfirmed );
+
+	// Both lookups go through the throwing-safe loader. `false` and an unexpected class were
+	// already handled by the instanceof checks, but a THROW from the order factory, a data store
+	// or a filter went straight past them and out of this function, which is the exception
+	// recovery path and has already deleted the request's items by this point. The caller would
+	// then get a raw Throwable instead of any of the three results below, with the added rows gone
+	// and the recalculation's tax changes never put back. The create rollback beside this one
+	// already treats a lookup as fallible (aafm_wc_order_still_exists); this is the same question.
+	$restored = false;
+	if ( array() !== $snapshot && $order_id > 0 && function_exists( 'wc_get_order' ) ) {
+		$order = aafm_wc_load_order_or_null( $order_id );
+		if ( $order instanceof \WC_Order && aafm_wc_restore_order_money( $order, $snapshot ) ) {
+			$reread   = aafm_wc_load_order_or_null( $order_id );
+			$restored = $reread instanceof \WC_Order
+				&& aafm_wc_money_signature( aafm_wc_order_money_snapshot( $reread ) ) === aafm_wc_money_signature( $snapshot );
+		}
+	}
+
+	if ( array() !== $kept ) {
+		return new \WP_Error(
+			'aafm_wc_line_items_partially_applied',
+			sprintf(
+				/* translators: %s: comma-separated list of order item ids that could not be removed. */
+				__( 'Recalculating the order failed, and the items already written could not all be removed. Order item ids still persisted: %s. The order\'s totals and taxes may also have been changed. Read the order before acting on it.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $kept )
+			)
+		);
+	}
+
+	if ( ! $restored ) {
+		return new \WP_Error(
+			'aafm_wc_order_totals_not_restored',
+			__( 'Recalculating the order failed after WooCommerce had already saved new tax figures, and those figures could not be confirmed as restored. The line items from this request were removed, but the order\'s totals and taxes may no longer match its line items. Read the order before acting on it.', 'agent-abilities-for-mcp' )
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_line_items_not_applied',
+		__( 'Recalculating the order failed. The line items from this request were removed and the order\'s totals and taxes were put back to the values they had before the request.', 'agent-abilities-for-mcp' )
+	);
+}
+
+/**
+ * Whether an order row is still in the database.
+ *
+ * Used instead of trusting what delete() returned, because the whole point of this rollback is to
+ * report what is actually there rather than what an API said it did.
+ *
+ * A lookup that throws is reported as "still exists": over-reporting a leftover the caller can go
+ * and check is recoverable, while claiming a clean rollback that did not happen is exactly the
+ * false promise this code exists to stop making.
+ *
+ * @param int $order_id Order id.
+ * @return bool
+ */
+function aafm_wc_order_still_exists( int $order_id ): bool {
+	if ( $order_id < 1 || ! function_exists( 'wc_get_order' ) ) {
+		return false;
+	}
+	try {
+		return wc_get_order( $order_id ) instanceof \WC_Order;
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return true;
+	}
+}
+
+/**
+ * Undo a CREATE whose totals recalculation threw, and report what survived.
+ *
+ * Deliberately not the update path's rollback, because the two failures are not the same shape.
+ * An update has an order that existed before the request and has to be put back the way it was. A
+ * create has no earlier state at all: the right answer is not to restore anything but to remove
+ * everything the request brought into being, so the caller's "no order was created" is true.
+ *
+ * There IS an order to remove, which is the part that surprises. `new WC_Order()` persists nothing,
+ * but calculate_totals() runs calculate_taxes() and WooCommerce saves inside it, so an order that
+ * did not exist when the request began exists by the time an after-hook throw is caught. Confirmed
+ * against real WooCommerce: a create that threw left the order table one row heavier while a raw
+ * Throwable escaped the ability entirely.
+ *
+ * Items are deleted before the order. Deleting the order takes its own items with it, but a row
+ * written by add_product() while the order id was still 0 belongs to nothing and would outlive it.
+ *
+ * Every step here assumes cleanup can fail, including the cleanup of the cleanup. Item deletion no
+ * longer throws out of the helper, the order delete is wrapped, and neither is believed on its own
+ * word: what gets reported is what a fresh look at the database finds. That ordering matters for
+ * accuracy as well as safety, because deleting the order removes items whose own deletion failed,
+ * so "the item delete threw" does not mean "the item is still there".
+ *
+ * @param \WC_Order      $order    The part-built order.
+ * @param array<int,int> $item_ids Order-item ids this request wrote.
+ * @return \WP_Error
+ */
+function aafm_wc_rollback_created_order( \WC_Order $order, array $item_ids ): \WP_Error {
+	$unconfirmed = aafm_wc_delete_added_order_items( $item_ids );
+	$order_id    = (int) $order->get_id();
+
+	if ( $order_id > 0 ) {
+		try {
+			$order->delete( true );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a throw here is answered by the existence check below, which is the authority.
+			unset( $e );
+		}
+	}
+
+	// Deliberately NOT the return value of delete(). The question is whether the order is gone, and
+	// the only answer worth reporting comes from looking.
+	$removed = 0 === $order_id || ! aafm_wc_order_still_exists( $order_id );
+
+	// Re-check the survivors only now, after the order delete has had its chance to take them.
+	$kept = aafm_wc_surviving_order_items( $unconfirmed );
+
+	if ( ! $removed ) {
+		return new \WP_Error(
+			'aafm_wc_order_partially_created',
+			sprintf(
+				/* translators: %d: the id of the order that was created and could not be removed. */
+				__( 'Creating the order failed while its totals were being calculated, and the part-built order could not be removed. Order %d exists and its totals may be wrong. Read or delete it before trying again; do not simply retry, or you will end up with two.', 'agent-abilities-for-mcp' ),
+				$order_id
+			)
+		);
+	}
+
+	if ( array() !== $kept ) {
+		return new \WP_Error(
+			'aafm_wc_order_partially_created',
+			sprintf(
+				/* translators: %s: comma-separated list of order item ids that could not be removed. */
+				__( 'Creating the order failed while its totals were being calculated. No order was kept, but these order item ids could not be removed: %s. They belong to no order.', 'agent-abilities-for-mcp' ),
+				implode( ', ', $kept )
+			)
+		);
+	}
+
+	return new \WP_Error(
+		'aafm_wc_order_not_created',
+		__( 'Creating the order failed while its totals were being calculated. No order was created and nothing from this request was kept, so it is safe to try again.', 'agent-abilities-for-mcp' )
 	);
 }
 
@@ -1098,8 +1716,9 @@ function aafm_exec_wc_create_order( array $input ) {
 		return $email_error;
 	}
 
-	$order      = new \WC_Order();
-	$unresolved = aafm_wc_apply_order_input( $order, $input );
+	$order          = new \WC_Order();
+	$added_item_ids = array();
+	$unresolved     = aafm_wc_apply_order_input( $order, $input, $added_item_ids );
 	if ( is_wp_error( $unresolved ) ) {
 		return $unresolved;
 	}
@@ -1108,7 +1727,19 @@ function aafm_exec_wc_create_order( array $input ) {
 	}
 	// Recalculate line + cart totals so the order total reflects its items. Without this the order
 	// total stays at 0.00 even when line_items were added (downstream refunds depend on it).
-	$order->calculate_totals();
+	//
+	// Guarded for the same reason the update path is, and the create case is worse in one respect.
+	// With no catch at all an extension throwing from woocommerce_order_after_calculate_totals sent
+	// a raw Throwable straight out of the ability: not a wrong answer but an unhandled crash, so the
+	// agent got no structured error to act on. That is exactly what AbilityCrashSafetyTest exists to
+	// prevent, and fixing the update path while leaving its sibling uncaught is this project's
+	// signature archetype. The rollback differs from the update path's because a create has no
+	// earlier state to restore -- see aafm_wc_rollback_created_order().
+	try {
+		$order->calculate_totals();
+	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+		return aafm_wc_rollback_created_order( $order, $added_item_ids );
+	}
 	$id = (int) $order->save();
 
 	$saved = aafm_wc_get_order_object( $id );
@@ -1203,12 +1834,93 @@ function aafm_exec_wc_update_order( array $input ) {
 	$fields = $input;
 	unset( $fields['order_id'] );
 
-	$unresolved = aafm_wc_apply_order_input( $order, $fields );
+	// Whether this request adds line items has to be read from the input BEFORE it is applied,
+	// because add_product() writes each item row immediately and leaves nothing to compare against
+	// afterwards.
+	$adds_line_items = aafm_wc_input_adds_line_items( $fields );
+
+	// Goods can only be added while WooCommerce still considers the order editable, and the check
+	// has to happen HERE, before aafm_wc_apply_order_input() runs, because add_product() writes each
+	// item row the moment it is called.
+	//
+	// The reason is tax. A new order item is created with an empty tax map, and add_product() sets
+	// price, quantity and tax class but calculates nothing; the tax only appears when
+	// calculate_totals() is allowed to run calculate_taxes(). On an order that is no longer
+	// editable, running it would restate the historical tax on every EXISTING item at today's
+	// rates and rewrite what the customer was actually charged, so it must not run -- and without
+	// it the new goods are recorded with zero tax and the order under-bills. Neither answer is
+	// acceptable, so the request is refused instead of being silently half-applied.
+	//
+	// WooCommerce draws exactly this line itself: its order screen gates the "Add item(s)" and
+	// "Recalculate" buttons on is_editable() (html-order-items.php), so a status this refuses is a
+	// status where WooCommerce's own UI offers no way to add an item either.
+	if ( $adds_line_items && ! $order->is_editable() ) {
+		return new \WP_Error(
+			'aafm_wc_order_not_editable',
+			sprintf(
+				/* translators: %s: the order's current status, e.g. "completed". */
+				__( 'Line items cannot be added to this order because WooCommerce no longer treats an order with status "%s" as editable. Adding goods to it would either record them with no tax, understating what the customer is charged, or rewrite the tax already recorded against the existing items. Add the goods to a new order instead, or move this one back to an editable status first.', 'agent-abilities-for-mcp' ),
+				$order->get_status()
+			)
+		);
+	}
+
+	// Snapshot the order's money BEFORE anything is applied, so it records the order as the caller
+	// found it. It is only needed if the recalculation below can run at all.
+	$money_snapshot = $adds_line_items ? aafm_wc_order_money_snapshot( $order ) : array();
+
+	$added_item_ids = array();
+	$unresolved     = aafm_wc_apply_order_input( $order, $fields, $added_item_ids );
 	if ( is_wp_error( $unresolved ) ) {
 		return $unresolved;
 	}
 	if ( array() !== $unresolved ) {
 		return aafm_wc_unresolved_line_items_error( $unresolved );
+	}
+
+	// Recalculate ONLY when the request actually added line items. add_product() writes the item
+	// rows but never touches the order's own total, so without this an order that gained 14.99 of
+	// goods still bills the old figure -- the store ships the item and never charges for it, every
+	// report that sums order totals is understated, and WooCommerce caps any later refund at the
+	// stale total. Create has the same need and does the same thing (see aafm_exec_wc_create_order).
+	//
+	// Deliberately NOT unconditional. WooCommerce lets a shop owner override an order's total by
+	// hand, and calculate_totals() throws that away and recomputes from the line items. A request
+	// that only corrects a postcode or a customer note must not silently rewrite a figure someone
+	// set on purpose; WooCommerce's own order screen takes the same position, offering Recalculate
+	// as an explicit action rather than running it on every save. Line items are the only thing
+	// aafm_wc_apply_order_input() can change that moves the money, so they are the only trigger.
+	//
+	// Taxes are always recomputed here, and can be, because the not-editable refusal above means
+	// this line is only ever reached for an order WooCommerce still considers editable -- one that
+	// has not been paid, whose tax is provisional rather than historical. Recomputing every item at
+	// today's rates is the right answer for such an order and is exactly what WooCommerce's own
+	// Recalculate button does.
+	//
+	// Passing true UNCONDITIONALLY rather than $order->is_editable() is deliberate. A single request
+	// may both add items and set a status, and by this point the status field has already been
+	// applied, so re-reading editability here would consult the NEW status: a request that added
+	// goods and completed the order in one call would take the false branch and record those goods
+	// with no tax at all. The question "may items be added to this order" is about the order as it
+	// stood when the request arrived, and it has already been answered above.
+	//
+	// The recalculation is its own failure point, and it runs AFTER add_product() has already
+	// written each item row. B27's rollback wraps the add loop only, so a throw here used to leave
+	// the new item on the order, the total still at the old figure, and a raw Throwable escaping
+	// the ability -- goods the order carries but never bills for, which is the exact harm this
+	// recalculation was added to stop.
+	//
+	// Deleting the added rows is not enough on its own, because calculate_totals() is not atomic.
+	// It runs calculate_taxes() first, which persists as it goes, and only fires
+	// woocommerce_order_after_calculate_totals afterwards. An extension throwing from that later
+	// hook leaves rewritten tax already on disk, so the rollback has to put the money back too --
+	// and say so honestly when it cannot. See aafm_wc_rollback_recalculated_order().
+	if ( $adds_line_items ) {
+		try {
+			$order->calculate_totals( true );
+		} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
+			return aafm_wc_rollback_recalculated_order( (int) $order->get_id(), $added_item_ids, $money_snapshot );
+		}
 	}
 	$order->save();
 
@@ -1564,7 +2276,7 @@ function aafm_exec_wc_create_order_note( array $input ) {
 	$order_id = (int) ( $input['order_id'] ?? 0 );
 	// B58: textarea sanitizer, matching the customer_note sibling - sanitize_text_field() would
 	// collapse the newlines out of a multi-line note.
-	$note_text     = sanitize_textarea_field( (string) ( $input['note'] ?? '' ) );
+	$note_text     = aafm_sanitize_multiline_text( (string) ( $input['note'] ?? '' ) );
 	$customer_note = ! empty( $input['customer_note'] );
 
 	$order = aafm_wc_get_order_object( $order_id );
@@ -1851,7 +2563,7 @@ function aafm_exec_wc_create_order_refund( array $input ) {
 	$amount   = sanitize_text_field( (string) ( $input['amount'] ?? '0.00' ) );
 	// B58 sweep: the refund reason is the same class of free-form text as an order note, so it
 	// gets the textarea sanitizer too - line breaks survive.
-	$reason = sanitize_textarea_field( (string) ( $input['reason'] ?? '' ) );
+	$reason = aafm_sanitize_multiline_text( (string) ( $input['reason'] ?? '' ) );
 
 	$order = aafm_wc_get_order_object( $order_id );
 	if ( null === $order ) {

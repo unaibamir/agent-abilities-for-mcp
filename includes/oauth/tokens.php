@@ -223,10 +223,27 @@ function aafm_oauth_rotate_refresh( string $raw, string $client_id ) {
 	//
 	// Wrap both in a transaction so a crash between consume and mint can't leave
 	// the row consumed without a persisted successor (which would lock the user
-	// out). The InnoDB engine is implied by the table's get_charset_collate().
-	// The WP test harness already wraps each test in its own transaction, so this
-	// nested START/COMMIT is effectively a no-op there - it does not break test
-	// isolation.
+	// out). This relies on the access-tokens table being InnoDB: get_charset_collate()
+	// sets only charset/collation, so the engine is pinned separately - the CREATE
+	// declares ENGINE=InnoDB and aafm_oauth_enforce_lifecycle_engine() (schema.php)
+	// converts a pre-existing MyISAM table and warns if it cannot. On a non-transactional
+	// engine START/ROLLBACK is a no-op and the atomicity below would be lost.
+	// KNOWN BOUND, and the sentence that used to sit here claimed the opposite. It said the WP
+	// test harness wraps each test in its own transaction so this nested START/COMMIT is
+	// "effectively a no-op there". It is not. MySQL and MariaDB have no nested transactions:
+	// issuing START TRANSACTION while one is open IMPLICITLY COMMITS the open one
+	// (dev.mysql.com/doc/refman/8.4/en/commit.html, "Statements That Cause an Implicit Commit").
+	// So under the harness this commits the harness's wrapper, and in production it would commit
+	// any transaction another component happens to be holding on the shared $wpdb connection,
+	// leaving that component's later ROLLBACK with nothing to undo.
+	//
+	// Not fixed here on purpose. A correct fix needs to know whether a transaction is already
+	// open, and neither MySQL nor $wpdb exposes that portably, so it would mean this plugin
+	// growing its own transaction-nesting manager on top of a platform that deliberately has
+	// none. That is the reimplementing-platform-mechanics habit the delegation audit exists to
+	// stop, and the trigger needs another component to hold an open transaction across a REST
+	// dispatch. Stating the bound is the honest half; building the manager is not this
+	// release's change to make.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	$wpdb->query( 'START TRANSACTION' );
 

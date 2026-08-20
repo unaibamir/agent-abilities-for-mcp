@@ -399,9 +399,9 @@ function aafm_exec_create_user( array $input ) {
 		'user_email'   => $email,
 		'user_pass'    => $password,
 		'role'         => $default_role,
-		'display_name' => sanitize_text_field( (string) ( $input['display_name'] ?? $username ) ),
-		'first_name'   => sanitize_text_field( (string) ( $input['first_name'] ?? '' ) ),
-		'last_name'    => sanitize_text_field( (string) ( $input['last_name'] ?? '' ) ),
+		'display_name' => aafm_sanitize_plain_text( (string) ( $input['display_name'] ?? $username ) ),
+		'first_name'   => aafm_sanitize_plain_text( (string) ( $input['first_name'] ?? '' ) ),
+		'last_name'    => aafm_sanitize_plain_text( (string) ( $input['last_name'] ?? '' ) ),
 	);
 
 	$result = wp_insert_user( $userdata );
@@ -579,7 +579,7 @@ function aafm_exec_update_user( array $input ) {
 	$data = array( 'ID' => $id );
 	foreach ( array( 'display_name', 'first_name', 'last_name' ) as $field ) {
 		if ( isset( $input[ $field ] ) ) {
-			$data[ $field ] = sanitize_text_field( (string) $input[ $field ] );
+			$data[ $field ] = aafm_sanitize_plain_text( (string) $input[ $field ] );
 		}
 	}
 	if ( isset( $input['email'] ) ) {

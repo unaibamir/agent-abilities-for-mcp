@@ -32,8 +32,8 @@ final class MetadataTest extends TestCase {
 		$this->assertSame( $this->plugin_headers()['Version'], AAFM_VERSION );
 	}
 
-	public function test_release_version_is_one_six_three(): void {
-		$this->assertSame( '1.6.3', AAFM_VERSION );
+	public function test_release_version_is_one_seven_zero(): void {
+		$this->assertSame( '1.7.0', AAFM_VERSION );
 	}
 
 	public function test_readme_stable_tag_matches_version(): void {
@@ -42,6 +42,32 @@ final class MetadataTest extends TestCase {
 		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'readme.txt' );
 		$this->assertSame( 1, preg_match( '/^Stable tag:\s*(.+)$/m', $readme, $matches ) );
 		$this->assertSame( AAFM_VERSION, trim( $matches[1] ) );
+	}
+
+	/**
+	 * README.md's Stable tag row is the GitHub-facing half of the same fact readme.txt carries,
+	 * and README.md is the file that has actually drifted before: it was still calling ChatGPT
+	 * unsupported two releases after that shipped, which is what forced 1.2.1.
+	 */
+	public function test_readme_md_stable_tag_matches_version(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$readme = (string) file_get_contents( AAFM_PLUGIN_DIR . 'README.md' );
+		$this->assertSame( 1, preg_match( '/^\|\s*\*\*Stable tag\*\*\s*\|\s*(.+?)\s*\|$/m', $readme, $matches ) );
+		$this->assertSame( AAFM_VERSION, trim( $matches[1] ) );
+	}
+
+	/**
+	 * The MCP registry manifest, server.json, is the other unguarded pin. The release workflow
+	 * rewrites the published value with jq at publish time, so the registry itself is never
+	 * wrong, but the repo literal only earns a non-failing ::warning:: when it drifts, which
+	 * means it can sit stale for a whole release cycle with nothing stopping it.
+	 */
+	public function test_server_json_version_matches_version(): void {
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$manifest = json_decode( (string) file_get_contents( AAFM_PLUGIN_DIR . 'server.json' ), true );
+		$this->assertIsArray( $manifest );
+		$this->assertArrayHasKey( 'version', $manifest );
+		$this->assertSame( AAFM_VERSION, $manifest['version'] );
 	}
 
 	/**

@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-20T03:28:04+05:00\n"
+"POT-Creation-Date: 2026-08-21T00:45:17+05:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: agent-abilities-for-mcp\n"
@@ -821,7 +821,7 @@ msgid "ID of the post whose meta to read. The current user must have edit access
 msgstr ""
 
 #: includes/abilities/meta.php:96
-msgid "The post-meta key to read. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the read runs, not returned empty."
+msgid "The post-meta key to read. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the read runs, not returned empty. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it is never readable here. Call aafm-get-media-item, which returns alt as a plain field."
 msgstr ""
 
 #: includes/abilities/meta.php:109
@@ -838,7 +838,7 @@ msgid "ID of the post whose meta to write. The current user must have edit acces
 msgstr ""
 
 #: includes/abilities/meta.php:291
-msgid "The post-meta key to write. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the write runs, never silently ignored."
+msgid "The post-meta key to write. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the write runs, never silently ignored. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be written here. Call aafm-update-media and pass its alt parameter instead."
 msgstr ""
 
 #: includes/abilities/meta.php:295
@@ -850,7 +850,7 @@ msgid "ID of the post whose meta to delete. The current user must have edit acce
 msgstr ""
 
 #: includes/abilities/meta.php:388
-msgid "The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs."
+msgid "The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator's post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be deleted here. Call aafm-update-media with an empty alt to clear it."
 msgstr ""
 
 #: includes/abilities/pages.php:22
@@ -3230,7 +3230,7 @@ msgstr ""
 
 #: includes/admin/bridge-directory.php:101
 #: includes/admin/integrations.php:305
-#: includes/admin/page.php:1620
+#: includes/admin/page.php:1653
 msgid "Save changes"
 msgstr ""
 
@@ -3261,7 +3261,7 @@ msgstr ""
 
 #: includes/admin/bridge-directory.php:169
 #: includes/admin/integrations.php:397
-#: includes/admin/page.php:2049
+#: includes/admin/page.php:2094
 msgid "All"
 msgstr ""
 
@@ -3320,7 +3320,7 @@ msgstr ""
 
 #: includes/admin/bridge-directory.php:325
 #: includes/admin/integrations.php:449
-#: includes/admin/page.php:1557
+#: includes/admin/page.php:1582
 msgid "Enable all reads"
 msgstr ""
 
@@ -3665,7 +3665,7 @@ msgstr ""
 #: includes/admin/connection.php:1296
 #: includes/admin/connection.php:1335
 #: includes/admin/dashboard.php:532
-#: includes/admin/page.php:2416
+#: includes/admin/page.php:2461
 #: includes/admin/quickconnect.php:432
 #: includes/admin/quickconnect.php:496
 msgid "Copy"
@@ -4540,17 +4540,17 @@ msgid "Not installed. Install and activate the plugin to expose its abilities he
 msgstr ""
 
 #: includes/admin/integrations.php:448
-#: includes/admin/page.php:1556
+#: includes/admin/page.php:1581
 msgid "Enable all / Disable all"
 msgstr ""
 
-#: includes/admin/integrations.php:508
-#: includes/admin/page.php:1670
+#: includes/admin/integrations.php:515
+#: includes/admin/page.php:1715
 msgid "read-only"
 msgstr ""
 
-#: includes/admin/integrations.php:514
-#: includes/admin/page.php:1677
+#: includes/admin/integrations.php:521
+#: includes/admin/page.php:1722
 msgid "high-risk"
 msgstr ""
 
@@ -4655,7 +4655,7 @@ msgstr ""
 
 #. translators: 1: current page number, 2: total number of pages.
 #: includes/admin/page.php:178
-#: includes/admin/page.php:2121
+#: includes/admin/page.php:2166
 #, php-format
 msgid "Page %1$s of %2$s"
 msgstr ""
@@ -4665,7 +4665,7 @@ msgid "Loading…"
 msgstr ""
 
 #: includes/admin/page.php:180
-#: includes/admin/page.php:2271
+#: includes/admin/page.php:2316
 msgid "No activity recorded yet."
 msgstr ""
 
@@ -4953,7 +4953,7 @@ msgid "Reads"
 msgstr ""
 
 #: includes/admin/page.php:1474
-#: includes/admin/page.php:1812
+#: includes/admin/page.php:1857
 msgid "Writes"
 msgstr ""
 
@@ -4965,669 +4965,677 @@ msgstr ""
 msgid "enabled"
 msgstr ""
 
-#: includes/admin/page.php:1796
-#: includes/admin/page.php:1806
+#: includes/admin/page.php:1587
+msgid "Enable all writes"
+msgstr ""
+
+#: includes/admin/page.php:1588
+msgid "Writes only - this leaves deletes and high-risk abilities switched off."
+msgstr ""
+
+#: includes/admin/page.php:1841
+#: includes/admin/page.php:1851
 msgid "Exposed content types"
 msgstr ""
 
-#: includes/admin/page.php:1797
-#: includes/admin/page.php:1807
+#: includes/admin/page.php:1842
+#: includes/admin/page.php:1852
 msgid "Posts and pages are always available. Any custom content type is off until you turn it on here. The agent can read only these fields of an exposed type: title, slug, excerpt, status, link, dates, author id."
 msgstr ""
 
-#: includes/admin/page.php:1798
+#: includes/admin/page.php:1843
 msgid "No custom content types on this site are eligible to expose. Only public, non-internal types can be offered here."
 msgstr ""
 
-#: includes/admin/page.php:1810
+#: includes/admin/page.php:1855
 msgid "Expose"
 msgstr ""
 
-#: includes/admin/page.php:1811
+#: includes/admin/page.php:1856
 msgid "Type"
 msgstr ""
 
-#: includes/admin/page.php:1813
+#: includes/admin/page.php:1858
 msgid "REST"
 msgstr ""
 
-#: includes/admin/page.php:1830
+#: includes/admin/page.php:1875
 msgid "Allowed"
 msgstr ""
 
-#: includes/admin/page.php:1831
+#: includes/admin/page.php:1876
 msgid "read-only - writes need map_meta_cap"
 msgstr ""
 
-#: includes/admin/page.php:1832
+#: includes/admin/page.php:1877
 msgid "yes"
 msgstr ""
 
-#: includes/admin/page.php:1832
+#: includes/admin/page.php:1877
 msgid "no"
 msgstr ""
 
 #. translators: %s: the content type's singular label, e.g. "Product".
-#: includes/admin/page.php:1836
+#: includes/admin/page.php:1881
 #, php-format
 msgid "Expose %s to agents"
 msgstr ""
 
-#: includes/admin/page.php:1845
+#: includes/admin/page.php:1890
 msgid "Exposed types are still gated by that type's capabilities and your low-privilege agent user. Only expose types whose title, slug, and excerpt are not sensitive - for example, a type that stores a person's name in the title would make that name readable."
 msgstr ""
 
-#: includes/admin/page.php:1846
+#: includes/admin/page.php:1891
 msgid "Save content types"
 msgstr ""
 
-#: includes/admin/page.php:1879
+#: includes/admin/page.php:1924
 msgid "Exposed meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1880
+#: includes/admin/page.php:1925
 msgid "One meta key per line. These are the only meta keys an agent can read or write on a post it can already edit. Everything else stays hidden."
 msgstr ""
 
-#: includes/admin/page.php:1881
+#: includes/admin/page.php:1926
 msgid "Meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and can't be added."
 msgstr ""
 
-#: includes/admin/page.php:1890
-#: includes/admin/page.php:1958
-#: includes/admin/page.php:2009
+#: includes/admin/page.php:1935
+#: includes/admin/page.php:2003
+#: includes/admin/page.php:2054
 msgid "One key per line. * matches any key."
 msgstr ""
 
-#: includes/admin/page.php:1892
+#: includes/admin/page.php:1937
 msgid "Detected on your exposed types"
 msgstr ""
 
-#: includes/admin/page.php:1894
+#: includes/admin/page.php:1939
 msgid "Nothing detected yet on the types you expose."
 msgstr ""
 
-#: includes/admin/page.php:1909
+#: includes/admin/page.php:1954
 msgid "Denied meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1917
-#: includes/admin/page.php:1968
-#: includes/admin/page.php:2019
+#: includes/admin/page.php:1962
+#: includes/admin/page.php:2013
+#: includes/admin/page.php:2064
 msgid "Denied keys win over exposed, even with *. One per line."
 msgstr ""
 
-#: includes/admin/page.php:1919
+#: includes/admin/page.php:1964
 msgid "Save meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1947
+#: includes/admin/page.php:1992
 msgid "Exposed user meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1948
+#: includes/admin/page.php:1993
 msgid "These are the only user meta keys an agent can read or write on a user it can already edit. Denied keys always win, even when the exposed list uses *."
 msgstr ""
 
-#: includes/admin/page.php:1949
+#: includes/admin/page.php:1994
 msgid "User meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Authentication keys, capabilities, and password keys are blocked for good and cannot be added."
 msgstr ""
 
-#: includes/admin/page.php:1960
+#: includes/admin/page.php:2005
 msgid "Denied user meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1970
+#: includes/admin/page.php:2015
 msgid "Save user meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1998
+#: includes/admin/page.php:2043
 msgid "Exposed term meta keys"
 msgstr ""
 
-#: includes/admin/page.php:1999
+#: includes/admin/page.php:2044
 msgid "These are the only term meta keys an agent can read or write on a term it can already edit. Denied keys always win, even when the exposed list uses *."
 msgstr ""
 
-#: includes/admin/page.php:2000
+#: includes/admin/page.php:2045
 msgid "Term meta can hold private data. Only expose keys whose values are safe for an agent to read and write. Protected keys (anything starting with an underscore) and authentication keys are blocked for good and cannot be added."
 msgstr ""
 
-#: includes/admin/page.php:2011
+#: includes/admin/page.php:2056
 msgid "Denied term meta keys"
 msgstr ""
 
-#: includes/admin/page.php:2021
+#: includes/admin/page.php:2066
 msgid "Save term meta keys"
 msgstr ""
 
-#: includes/admin/page.php:2048
+#: includes/admin/page.php:2093
 msgid "Filter by status"
 msgstr ""
 
-#: includes/admin/page.php:2050
+#: includes/admin/page.php:2095
 msgid "Success"
 msgstr ""
 
-#: includes/admin/page.php:2051
+#: includes/admin/page.php:2096
 msgid "Errors"
 msgstr ""
 
-#: includes/admin/page.php:2052
+#: includes/admin/page.php:2097
 msgid "Denied"
 msgstr ""
 
-#: includes/admin/page.php:2053
+#: includes/admin/page.php:2098
 msgid "Started"
 msgstr ""
 
 #. translators: %s: number of days of activity the log keeps.
-#: includes/admin/page.php:2060
+#: includes/admin/page.php:2105
 #, php-format
 msgid "entries, keeping the last %s day"
 msgid_plural "entries, keeping the last %s days"
 msgstr[0] ""
 msgstr[1] ""
 
-#: includes/admin/page.php:2069
+#: includes/admin/page.php:2114
 msgid "entries, keeping everything"
 msgstr ""
 
-#: includes/admin/page.php:2093
+#: includes/admin/page.php:2138
 msgid "Export CSV"
 msgstr ""
 
-#: includes/admin/page.php:2095
+#: includes/admin/page.php:2140
 msgid "Clear log"
 msgstr ""
 
-#: includes/admin/page.php:2115
+#: includes/admin/page.php:2160
 msgid "Previous"
 msgstr ""
 
-#: includes/admin/page.php:2130
+#: includes/admin/page.php:2175
 msgid "Next"
 msgstr ""
 
-#: includes/admin/page.php:2455
+#: includes/admin/page.php:2500
 msgid "Common connection and permission problems, with the fix for each. Cross-references the Connection tab where a built-in check or generated config already covers the case."
 msgstr ""
 
-#: includes/admin/page.php:2459
+#: includes/admin/page.php:2504
 msgid "Connecting"
 msgstr ""
 
-#: includes/admin/page.php:2463
+#: includes/admin/page.php:2508
 msgid "My client won't connect, or the endpoint looks unreachable"
 msgstr ""
 
-#: includes/admin/page.php:2465
+#: includes/admin/page.php:2510
 msgid "Start on the Connection tab: run Step 3 \"Check the endpoint is reachable\". If that fails, open Diagnostics on the same tab and confirm \"MCP adapter active and compatible\" and \"MCP REST endpoint registered\" both show green."
 msgstr ""
 
-#: includes/admin/page.php:2466
+#: includes/admin/page.php:2511
 msgid "The endpoint URL depends on your permalink mode. With pretty permalinks it is the /wp-json/ form; with plain permalinks it is the index.php?rest_route= form. Always copy whatever the Connection tab shows under \"Endpoint\" rather than typing it by hand:"
 msgstr ""
 
-#: includes/admin/page.php:2468
-#: includes/admin/page.php:2484
+#: includes/admin/page.php:2513
+#: includes/admin/page.php:2529
 msgid "Pretty:"
 msgstr ""
 
-#: includes/admin/page.php:2469
-#: includes/admin/page.php:2485
+#: includes/admin/page.php:2514
+#: includes/admin/page.php:2530
 msgid "Plain:"
 msgstr ""
 
-#: includes/admin/page.php:2477
+#: includes/admin/page.php:2522
 msgid "The client connects but the AI backend gets blocked (403 / 406 / 429)"
 msgstr ""
 
-#: includes/admin/page.php:2479
+#: includes/admin/page.php:2524
 msgid "This is the most common failure, and it is not an auth problem: the JSON-RPC POST never reaches WordPress at all. A CDN, WAF, or managed-host security rule sees automated traffic and rejects it before PHP runs, so you get a 403 (blocked), 406 (request looks like a bot), or 429 (rate limited) instead of a real MCP reply."
 msgstr ""
 
-#: includes/admin/page.php:2480
+#: includes/admin/page.php:2525
 msgid "Cloudflare:"
 msgstr ""
 
-#: includes/admin/page.php:2480
+#: includes/admin/page.php:2525
 msgid "turn off \"Block AI Bots\" / Bot Fight Mode for this site, and add a WAF skip (allow) rule for the MCP route so it is never challenged or blocked. If the site is behind Cloudflare Zero Trust / Access, exempt the route there too."
 msgstr ""
 
-#: includes/admin/page.php:2481
+#: includes/admin/page.php:2526
 msgid "ModSecurity / managed-host rules:"
 msgstr ""
 
-#: includes/admin/page.php:2481
+#: includes/admin/page.php:2526
 msgid "a generic rule returning 406 or 429 on POSTs from HTTP libraries is common on managed WordPress hosts. Ask the host to allow the MCP route, or add the path to the firewall allowlist."
 msgstr ""
 
-#: includes/admin/page.php:2482
+#: includes/admin/page.php:2527
 msgid "Add the allow / skip rule for whichever endpoint form your site uses (copy the exact one from the Connection tab):"
 msgstr ""
 
-#: includes/admin/page.php:2487
+#: includes/admin/page.php:2532
 msgid "To confirm it is the edge and not WordPress, run the curl probe below: if curl from your own machine gets a 200 but the AI client still fails, the block is on the proxy or IP path the AI backend uses, not on your endpoint."
 msgstr ""
 
-#: includes/admin/page.php:2494
+#: includes/admin/page.php:2539
 msgid "A page cache or CDN is intercepting the endpoint"
 msgstr ""
 
-#: includes/admin/page.php:2496
+#: includes/admin/page.php:2541
 msgid "Full-page caching (a caching plugin) or edge caching (the CDN) can serve a cached or empty response for the MCP route instead of letting the request hit PHP. The symptom is a stale, blank, or HTML response where JSON-RPC was expected."
 msgstr ""
 
-#: includes/admin/page.php:2497
+#: includes/admin/page.php:2542
 msgid "Exclude the MCP endpoint path from both full-page cache and edge cache. REST routes are dynamic and must never be cached:"
 msgstr ""
 
-#: includes/admin/page.php:2499
+#: includes/admin/page.php:2544
 msgid "(pretty permalinks)"
 msgstr ""
 
-#: includes/admin/page.php:2500
+#: includes/admin/page.php:2545
 msgid "(plain permalinks)"
 msgstr ""
 
-#: includes/admin/page.php:2508
+#: includes/admin/page.php:2553
 msgid "A redirect is breaking the request (trailing slash or http to https)"
 msgstr ""
 
-#: includes/admin/page.php:2510
+#: includes/admin/page.php:2555
 msgid "A 301 redirect - adding or removing a trailing slash, or forcing http to https - can drop the POST body or the Authorization header on the way through, so the request that finally reaches WordPress is empty or unauthenticated. This is the request not arriving intact, not a credentials problem."
 msgstr ""
 
-#: includes/admin/page.php:2511
+#: includes/admin/page.php:2556
 msgid "Use the exact endpoint URL the Connection tab shows, with the right scheme (https) and no extra trailing slash, so no redirect is triggered. If your server force-redirects http to https, make sure the config URL already starts with https so the POST is never redirected."
 msgstr ""
 
-#: includes/admin/page.php:2518
+#: includes/admin/page.php:2563
 msgid "Test the endpoint yourself with curl"
 msgstr ""
 
-#: includes/admin/page.php:2520
+#: includes/admin/page.php:2565
 msgid "This one-liner sends a real MCP \"initialize\" call to your endpoint with the agent user's Application Password. It tells you in one shot whether the endpoint is reachable, whether auth works, and - if it fails - which layer to blame. Replace the host, the username, and the Application Password (the password is the one shown once when you created it; keep its spaces):"
 msgstr ""
 
-#: includes/admin/page.php:2522
+#: includes/admin/page.php:2567
 msgid "If your permalinks are plain, use the index.php form instead:"
 msgstr ""
 
-#: includes/admin/page.php:2524
+#: includes/admin/page.php:2569
 msgid "How to read the result (the HTTP status on the first line):"
 msgstr ""
 
-#: includes/admin/page.php:2526
+#: includes/admin/page.php:2571
 msgid "200"
 msgstr ""
 
-#: includes/admin/page.php:2526
+#: includes/admin/page.php:2571
 msgid "reachable and authenticated; the body is a JSON-RPC result. Everything is working - if the AI client still fails, the block is on its side (see the 403/406/429 entry above)."
 msgstr ""
 
-#: includes/admin/page.php:2527
+#: includes/admin/page.php:2572
 msgid "401"
 msgstr ""
 
-#: includes/admin/page.php:2527
+#: includes/admin/page.php:2572
 msgid "reached WordPress but auth failed: wrong or expired Application Password, or the Authorization header is being stripped (see the Authentication section)."
 msgstr ""
 
-#: includes/admin/page.php:2528
+#: includes/admin/page.php:2573
 msgid "403 / 406 / 429"
 msgstr ""
 
-#: includes/admin/page.php:2528
+#: includes/admin/page.php:2573
 msgid "a WAF, CDN, or host security rule is blocking the request before WordPress (see the 403/406/429 entry above)."
 msgstr ""
 
-#: includes/admin/page.php:2529
+#: includes/admin/page.php:2574
 msgid "404"
 msgstr ""
 
-#: includes/admin/page.php:2529
+#: includes/admin/page.php:2574
 msgid "the route is not registered for this URL: flush permalinks (Settings → Permalinks → Save) and confirm you copied the endpoint exactly from the Connection tab."
 msgstr ""
 
-#: includes/admin/page.php:2530
+#: includes/admin/page.php:2575
 msgid "5xx"
 msgstr ""
 
-#: includes/admin/page.php:2530
+#: includes/admin/page.php:2575
 msgid "a server-side error: check your PHP error log and the host status."
 msgstr ""
 
-#: includes/admin/page.php:2538
+#: includes/admin/page.php:2583
 msgid "Windows: my client config won't start"
 msgstr ""
 
-#: includes/admin/page.php:2540
+#: includes/admin/page.php:2585
 msgid "Windows MCP clients cannot spawn the npx shim by its name alone. The launcher has to be wrapped so the command resolves:"
 msgstr ""
 
-#: includes/admin/page.php:2541
+#: includes/admin/page.php:2586
 msgid "You do not need to hand-edit anything - switch to the \"Windows\" tab in Connection → Step 2 and copy the config it generates. It already wraps the launcher correctly."
 msgstr ""
 
-#: includes/admin/page.php:2548
+#: includes/admin/page.php:2593
 msgid "My local or staging site won't connect (self-signed certificate)"
 msgstr ""
 
-#: includes/admin/page.php:2550
+#: includes/admin/page.php:2595
 msgid "Local stacks (DDEV, Local, Valet) serve a certificate Node does not trust, so the proxy refuses the TLS handshake. For local testing only, you can tell Node to accept it. The Connection tab already adds this for you when it detects a local site."
 msgstr ""
 
-#: includes/admin/page.php:2551
+#: includes/admin/page.php:2596
 msgid "Quick (least safe) - add this to the config env block:"
 msgstr ""
 
-#: includes/admin/page.php:2553
+#: includes/admin/page.php:2598
 msgid "Better - point Node at your local CA instead of disabling verification entirely (for example mkcert's rootCA.pem):"
 msgstr ""
 
-#: includes/admin/page.php:2556
+#: includes/admin/page.php:2601
 msgid "Never use any of these on a production site."
 msgstr ""
 
-#: includes/admin/page.php:2563
+#: includes/admin/page.php:2608
 msgid "Connecting a browser or OAuth client"
 msgstr ""
 
-#: includes/admin/page.php:2565
+#: includes/admin/page.php:2610
 msgid "There are two ways for an agent to authenticate. Most desktop clients use an Application Password: create one for the agent user under Users → Profile → Application Passwords, then paste the generated config from Connection → Step 2. Keep the password's spaces when you copy it."
 msgstr ""
 
-#: includes/admin/page.php:2566
+#: includes/admin/page.php:2611
 msgid "OAuth is the other way, and it is off by default. Turn it on under Settings and the agent connects by browser approval instead of a copied secret: you paste your site URL into the client and approve the request in your browser. The Connection tab shows the OAuth card and the endpoint to use once it is enabled."
 msgstr ""
 
-#: includes/admin/page.php:2567
+#: includes/admin/page.php:2612
 msgid "For browser-based clients, the plugin already exposes the session and approval headers a browser needs to read across origins (the MCP session id, the protocol version, and the OAuth challenge), so a web client can complete the handshake. If a browser client still cannot read the session header, check that nothing in front of WordPress is stripping CORS response headers."
 msgstr ""
 
-#: includes/admin/page.php:2576
+#: includes/admin/page.php:2621
 msgid "Authentication"
 msgstr ""
 
-#: includes/admin/page.php:2580
+#: includes/admin/page.php:2625
 msgid "The \"Authorization header reaches WordPress\" diagnostic fails"
 msgstr ""
 
-#: includes/admin/page.php:2582
+#: includes/admin/page.php:2627
 msgid "Some hosts and reverse proxies strip the Authorization header before it reaches PHP, so the Application Password never arrives and auth silently fails. Forward the header at the web-server layer."
 msgstr ""
 
-#: includes/admin/page.php:2583
+#: includes/admin/page.php:2628
 msgid "Apache (.htaccess) - either of these:"
 msgstr ""
 
-#: includes/admin/page.php:2586
+#: includes/admin/page.php:2631
 msgid "Nginx / FastCGI:"
 msgstr ""
 
-#: includes/admin/page.php:2588
+#: includes/admin/page.php:2633
 msgid "After applying, reload the web server and re-run Connection → Diagnostics."
 msgstr ""
 
-#: includes/admin/page.php:2595
+#: includes/admin/page.php:2640
 msgid "The Application Passwords option is missing from my profile"
 msgstr ""
 
-#: includes/admin/page.php:2597
+#: includes/admin/page.php:2642
 msgid "WordPress core only offers Application Passwords over a secure (https) connection. Behind a TLS-terminating proxy or load balancer, WordPress can see the request as plain HTTP even though the browser is on https - so it hides the option."
 msgstr ""
 
-#: includes/admin/page.php:2598
+#: includes/admin/page.php:2643
 msgid "Fix the proxy or HTTPS headers (or your site URL) so WordPress correctly detects https. Forwarding the standard X-Forwarded-Proto header from the proxy is the usual fix."
 msgstr ""
 
-#: includes/admin/page.php:2599
+#: includes/admin/page.php:2644
 msgid "Do not enable Application Passwords over genuine plaintext HTTP in production - the credential would travel unencrypted."
 msgstr ""
 
-#: includes/admin/page.php:2608
+#: includes/admin/page.php:2653
 msgid "Abilities & permissions"
 msgstr ""
 
-#: includes/admin/page.php:2612
+#: includes/admin/page.php:2657
 msgid "My agent sees fewer tools than I expected"
 msgstr ""
 
-#: includes/admin/page.php:2614
+#: includes/admin/page.php:2659
 msgid "This is intentional least-privilege behaviour. Each connection is filtered by the agent user's own capabilities, so the agent only ever sees abilities its role allows: reads need read capabilities; writes need the matching edit, publish, moderate, or manage capabilities."
 msgstr ""
 
-#: includes/admin/page.php:2615
+#: includes/admin/page.php:2660
 msgid "To expose more tools, grant the agent user the role or capabilities those abilities require. Granting more, of course, widens what the agent can do - keep it to what the agent genuinely needs."
 msgstr ""
 
-#: includes/admin/page.php:2622
+#: includes/admin/page.php:2667
 msgid "An ability is enabled but the agent still can't use it"
 msgstr ""
 
-#: includes/admin/page.php:2624
+#: includes/admin/page.php:2669
 msgid "Two things both have to be true for an ability to work:"
 msgstr ""
 
-#: includes/admin/page.php:2626
+#: includes/admin/page.php:2671
 msgid "The ability is turned ON on the Abilities tab. Everything is OFF by default."
 msgstr ""
 
-#: includes/admin/page.php:2627
+#: includes/admin/page.php:2672
 msgid "The agent user holds the WordPress capability that ability requires."
 msgstr ""
 
-#: includes/admin/page.php:2629
+#: includes/admin/page.php:2674
 msgid "If the toggle is on but the agent still gets refused, it is almost always the capability. Check the agent user's role."
 msgstr ""
 
-#: includes/admin/page.php:2636
+#: includes/admin/page.php:2681
 msgid "How the exposed and denied meta key lists work (and what * does)"
 msgstr ""
 
-#: includes/admin/page.php:2638
+#: includes/admin/page.php:2683
 msgid "Meta is locked down by default: until you list a key under \"Exposed meta keys\" on the Abilities tab, an agent cannot read or write any post meta. Two keys are always off limits no matter what you list: keys starting with an underscore (protected meta) and authentication keys. Those stay blocked even if you try to add them."
 msgstr ""
 
-#: includes/admin/page.php:2639
+#: includes/admin/page.php:2684
 msgid "A single * in the exposed list means \"allow every key except the ones that are blocked or denied\". The order the plugin checks is fixed: blocked keys lose first, then the denied list, then the exposed list (or the * wildcard). So the deny list always wins. A key in \"Denied meta keys\" stays hidden even when the exposed list is set to *."
 msgstr ""
 
-#: includes/admin/page.php:2640
+#: includes/admin/page.php:2685
 msgid "One thing to know about * and reading all of a post's meta at once: a single-key read works for any key * covers, but the \"read all meta\" ability only returns the keys you spelled out by name. Under a bare *, with no named keys, it returns an empty set. List the keys you want returned in bulk."
 msgstr ""
 
-#: includes/admin/page.php:2647
+#: includes/admin/page.php:2692
 msgid "Exposing term (category and tag) meta"
 msgstr ""
 
-#: includes/admin/page.php:2649
+#: includes/admin/page.php:2694
 msgid "Term meta is off by default. Turn it on under the Taxonomies & Terms panel on the Abilities tab: list the key names you want an agent to read or write in the \"Exposed term meta keys\" field. A \"Denied term meta keys\" field is also there if you need to carve out an exception."
 msgstr ""
 
-#: includes/admin/page.php:2650
+#: includes/admin/page.php:2695
 msgid "If you would rather set this in code, the same list runs through a filter you can add to (a site-specific plugin or your theme's functions.php):"
 msgstr ""
 
-#: includes/admin/page.php:2652
+#: includes/admin/page.php:2697
 msgid "The same protections apply either way: underscore-prefixed and authentication keys are stripped out even if the field or the filter tries to add them."
 msgstr ""
 
-#: includes/admin/page.php:2659
+#: includes/admin/page.php:2704
 msgid "My custom post type is not available to the agent"
 msgstr ""
 
-#: includes/admin/page.php:2661
+#: includes/admin/page.php:2706
 msgid "Out of the box an agent can only touch posts and pages. Every other content type is off until you turn it on under \"Exposed content types\" on the Abilities tab. Only public, non-internal types show up there to choose from."
 msgstr ""
 
-#: includes/admin/page.php:2662
+#: includes/admin/page.php:2707
 msgid "If you would rather set this in code, the same list runs through a filter you can add to:"
 msgstr ""
 
-#: includes/admin/page.php:2664
+#: includes/admin/page.php:2709
 msgid "After exposing a type, the agent still needs the WordPress capabilities for that type, and the relevant abilities still have to be turned on."
 msgstr ""
 
-#: includes/admin/page.php:2673
+#: includes/admin/page.php:2718
 msgid "Clients, privacy & limits"
 msgstr ""
 
-#: includes/admin/page.php:2677
+#: includes/admin/page.php:2722
 msgid "Which AI clients work, and how do I set each one up?"
 msgstr ""
 
-#: includes/admin/page.php:2679
+#: includes/admin/page.php:2724
 msgid "Clients connect in one of two ways. Browser and hosted apps (ChatGPT, Claude, and Manus) connect over OAuth: you paste the site's MCP endpoint URL into the app as a custom connector and approve the sign-in, with no config file to edit. Editors and command-line clients (Claude Code, Cursor, VS Code, Windsurf, and Gemini CLI) connect through the @automattic/mcp-wordpress-remote proxy, the package the Connection tab puts in the generated config. The proxy reads your endpoint URL and the agent user's Application Password and builds the auth itself."
 msgstr ""
 
-#: includes/admin/page.php:2681
+#: includes/admin/page.php:2726
 msgid "ChatGPT:"
 msgstr ""
 
-#: includes/admin/page.php:2681
+#: includes/admin/page.php:2726
 msgid "turn on Developer mode (it needs a paid plan), add a custom connector, paste the endpoint URL, and approve the sign-in. ChatGPT calls this a connector rather than MCP."
 msgstr ""
 
-#: includes/admin/page.php:2682
+#: includes/admin/page.php:2727
 msgid "Claude:"
 msgstr ""
 
-#: includes/admin/page.php:2682
+#: includes/admin/page.php:2727
 msgid "in Settings → Connectors, add a custom connector, paste the endpoint URL, and approve the sign-in. The claude.ai web app and Claude Desktop use the same flow."
 msgstr ""
 
-#: includes/admin/page.php:2683
+#: includes/admin/page.php:2728
 msgid "Claude Code:"
 msgstr ""
 
-#: includes/admin/page.php:2683
+#: includes/admin/page.php:2728
 msgid "add the server to its MCP config (claude mcp add, or the .mcp.json in your project)."
 msgstr ""
 
-#: includes/admin/page.php:2684
+#: includes/admin/page.php:2729
 msgid "Cursor:"
 msgstr ""
 
-#: includes/admin/page.php:2684
+#: includes/admin/page.php:2729
 msgid "add the block to its MCP config (~/.cursor/mcp.json, or Settings → MCP) and reload."
 msgstr ""
 
-#: includes/admin/page.php:2685
+#: includes/admin/page.php:2730
 msgid "VS Code:"
 msgstr ""
 
-#: includes/admin/page.php:2685
+#: includes/admin/page.php:2730
 msgid "save it as .vscode/mcp.json in your workspace (the key is \"servers\", not \"mcpServers\")."
 msgstr ""
 
-#: includes/admin/page.php:2686
+#: includes/admin/page.php:2731
 msgid "Windsurf:"
 msgstr ""
 
-#: includes/admin/page.php:2686
+#: includes/admin/page.php:2731
 msgid "add it under its MCP config (mcp_config.json) and refresh the server list."
 msgstr ""
 
-#: includes/admin/page.php:2687
+#: includes/admin/page.php:2732
 msgid "Gemini CLI:"
 msgstr ""
 
-#: includes/admin/page.php:2687
+#: includes/admin/page.php:2732
 msgid "add it to the mcpServers block in your settings.json."
 msgstr ""
 
-#: includes/admin/page.php:2689
+#: includes/admin/page.php:2734
 msgid "For the proxy clients, copy the config straight from Connection → Step 2 - do not hand-build it. On Windows, use that tab's \"Windows\" view (it wraps the launcher in cmd /c); for a local or staging site, it adds the certificate handling. Both are covered in the Connecting section above."
 msgstr ""
 
-#: includes/admin/page.php:2690
+#: includes/admin/page.php:2735
 msgid "The hosted Gemini app cannot connect in this release."
 msgstr ""
 
-#: includes/admin/page.php:2690
+#: includes/admin/page.php:2735
 msgid "Its web connector expects a native streamable HTTP/SSE MCP transport, which the bundled adapter does not serve yet. Gemini CLI is the exception: it runs as a proxy client, like Claude Code, so it works today, and the Connection tab has a ready-made quickstart for it."
 msgstr ""
 
-#: includes/admin/page.php:2697
+#: includes/admin/page.php:2742
 msgid "What can and can't this plugin do? (the security model in plain language)"
 msgstr ""
 
-#: includes/admin/page.php:2699
+#: includes/admin/page.php:2744
 msgid "The plugin is built to be safe by default. In plain terms:"
 msgstr ""
 
-#: includes/admin/page.php:2701
+#: includes/admin/page.php:2746
 msgid "No external calls."
 msgstr ""
 
-#: includes/admin/page.php:2701
+#: includes/admin/page.php:2746
 msgid "It never phones home. Your credentials and your content never leave the site - the AI client connects in to you, not the other way round."
 msgstr ""
 
-#: includes/admin/page.php:2702
+#: includes/admin/page.php:2747
 msgid "A dedicated low-privilege user."
 msgstr ""
 
-#: includes/admin/page.php:2702
+#: includes/admin/page.php:2747
 msgid "The agent authenticates as its own separate WordPress user via an Application Password - not as you, and not as an administrator. You choose that user's role, so you set its ceiling."
 msgstr ""
 
-#: includes/admin/page.php:2703
+#: includes/admin/page.php:2748
 msgid "Two locks on every ability."
 msgstr ""
 
-#: includes/admin/page.php:2703
+#: includes/admin/page.php:2748
 msgid "An ability works only if you explicitly enabled it on the Abilities tab AND the agent user's capabilities allow it. The default is nothing enabled - the agent starts with zero abilities until you turn them on."
 msgstr ""
 
-#: includes/admin/page.php:2704
+#: includes/admin/page.php:2749
 msgid "Trash and permanent delete are different abilities."
 msgstr ""
 
-#: includes/admin/page.php:2704
+#: includes/admin/page.php:2749
 msgid "Trash abilities (trash a post or page) move content to the Trash, where you can restore it. Delete abilities erase for good and cannot be undone: deleting a post or page outright, and every media or user deletion, is permanent."
 msgstr ""
 
-#: includes/admin/page.php:2705
+#: includes/admin/page.php:2750
 msgid "Everything is logged, values are not."
 msgstr ""
 
-#: includes/admin/page.php:2705
+#: includes/admin/page.php:2750
 msgid "Every call - including denied ones - is recorded on the Activity Log tab with the argument KEYS only, never the values. You can see what was attempted without leaking what was in it."
 msgstr ""
 
-#: includes/admin/page.php:2706
+#: includes/admin/page.php:2751
 msgid "Optional extra guardrails."
 msgstr ""
 
-#: includes/admin/page.php:2706
+#: includes/admin/page.php:2751
 msgid "The Settings tab adds a per-minute rate limit, an IP allowlist, a force-to-draft switch, and a maximum title length. All four are off by default, so you turn on only the ones you want."
 msgstr ""
 
-#: includes/admin/page.php:2714
+#: includes/admin/page.php:2759
 msgid "What does the plugin log, and does it call out to anything?"
 msgstr ""
 
-#: includes/admin/page.php:2716
+#: includes/admin/page.php:2761
 msgid "The plugin makes no external calls - nothing about your site or its content is sent anywhere."
 msgstr ""
 
-#: includes/admin/page.php:2717
+#: includes/admin/page.php:2762
 msgid "The activity log records only the argument KEYS of each call (never the values) plus the source IP address of the request. You can clear it any time from the Activity Log tab."
 msgstr ""
 
-#: includes/admin/page.php:2724
+#: includes/admin/page.php:2769
 msgid "Is there rate limiting?"
 msgstr ""
 
-#: includes/admin/page.php:2726
+#: includes/admin/page.php:2771
 msgid "Yes. The Settings tab has a \"Rate limit (per minute)\" field. Set it to a number and each agent user can make at most that many calls per minute; set it to 0 to turn the limit off. The cap is counted per agent user, not per connection, so two connections signed in as the same agent user share one budget between them."
 msgstr ""
 
-#: includes/admin/page.php:2727
+#: includes/admin/page.php:2772
 msgid "Calls that go over the limit are denied, and each denial is written to the Activity Log like any other blocked call, so you can see when a connection is hitting the ceiling."
 msgstr ""
 
@@ -6763,23 +6771,49 @@ msgstr ""
 msgid "Ability \"%1$s\" has invalid input. These required properties are missing: %2$s"
 msgstr ""
 
+#: includes/register.php:309
+msgid "Call aafm-get-media-item, which returns the alt text as a plain \"alt\" field."
+msgstr ""
+
+#: includes/register.php:310
+msgid "Call aafm-update-media and pass its \"alt\" parameter."
+msgstr ""
+
+#: includes/register.php:311
+msgid "Call aafm-update-media with an empty \"alt\" to clear it."
+msgstr ""
+
+#: includes/register.php:314
+msgid "Call aafm-get-post or aafm-get-page, which return the \"featured_image\" object."
+msgstr ""
+
+#: includes/register.php:315
+msgid "Call aafm-set-featured-image, or pass \"featured_media\" to aafm-update-post or aafm-update-page."
+msgstr ""
+
+#. translators: %s: the WordPress-reserved meta key the call named.
+#: includes/register.php:407
+#, php-format
+msgid "The meta key \"%s\" is protected by WordPress, so no user can reach it through this tool."
+msgstr ""
+
 #. translators: %s: ability name
-#: includes/register.php:295
+#: includes/register.php:428
 #, php-format
 msgid "Ability \"%s\" was not registered: a permission_callback is required."
 msgstr ""
 
 #. translators: %s: ability name
-#: includes/register.php:310
+#: includes/register.php:443
 #, php-format
 msgid "Ability \"%s\" was not registered: an execute_callback is required."
 msgstr ""
 
-#: includes/register.php:561
+#: includes/register.php:705
 msgid "This ability could not complete because of an unexpected error. The site administrator can find the details in the activity log."
 msgstr ""
 
-#: includes/register.php:590
+#: includes/register.php:734
 msgid "This ability returned an unexpected result. Please try again or contact the site administrator."
 msgstr ""
 

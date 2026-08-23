@@ -2474,25 +2474,35 @@ function aafm_help_copy_line( string $code ): string {
  */
 function aafm_render_help_tab(): void {
 	// Tight allow-lists for the inline markup used inside accordion bodies.
-	$inline = array(
-		'p'      => array(),
-		'code'   => array(),
-		'strong' => array(),
-		'em'     => array(),
-		'ul'     => array(),
-		'ol'     => array(),
-		'li'     => array(),
-		'a'      => array(
-			'href'   => array(),
-			'target' => array(),
-			'rel'    => array(),
-		),
-		'div'    => array( 'class' => array() ),
-		'button' => array(
-			'type'      => array(),
-			'class'     => array(),
-			'data-copy' => array(),
-		),
+	// Merges in aafm_svg_allowed_html() (includes/admin/kses.php) rather than
+	// hand-rolling a second svg/path/rect list: aafm_help_copy_line()'s icon
+	// (aafm_icon('copy')) and the <summary> icons this same tab already renders
+	// via that function need the identical allowlist, and a second, divergent
+	// copy is exactly how PR #52's gap happened - span and svg/path/rect were
+	// simply never added here when the copy button was built.
+	$inline = array_merge(
+		aafm_svg_allowed_html(),
+		array(
+			'p'      => array(),
+			'code'   => array(),
+			'strong' => array(),
+			'em'     => array(),
+			'ul'     => array(),
+			'ol'     => array(),
+			'li'     => array(),
+			'a'      => array(
+				'href'   => array(),
+				'target' => array(),
+				'rel'    => array(),
+			),
+			'div'    => array( 'class' => array() ),
+			'span'   => array( 'class' => array() ),
+			'button' => array(
+				'type'      => array(),
+				'class'     => array(),
+				'data-copy' => array(),
+			),
+		)
 	);
 
 	echo '<div class="aafm-help">';

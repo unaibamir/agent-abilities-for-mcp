@@ -181,6 +181,24 @@ final class HelpTabTest extends TestCase {
 		$this->assertStringContainsString( 'data-copy="SetEnvIf Authorization', $html );
 	}
 
+	/**
+	 * PR #52 follow-up (LESSONS-LEARNED, 2026-06-29): the Help tab's local $inline
+	 * wp_kses allowlist has no svg/path/rect or span entries, so aafm_help_copy_line()'s
+	 * icon is stripped outright and its label span loses its wrapper (the bare word
+	 * survives unwrapped - wp_kses keeps a disallowed tag's inner text - but the icon
+	 * and the .aafm-copy-label hook are both gone).
+	 */
+	public function test_help_copy_lines_keep_the_icon_svg_and_label_span(): void {
+		$this->acting_as( 'administrator' );
+
+		ob_start();
+		aafm_render_help_tab();
+		$html = (string) ob_get_clean();
+
+		$this->assertStringContainsString( '<svg', $html );
+		$this->assertStringContainsString( 'aafm-copy-label', $html );
+	}
+
 	public function test_help_entry_escapes_summary_and_filters_body(): void {
 		ob_start();
 		aafm_render_help_entry( '<script>x</script>', '<p>ok</p><iframe src="x"></iframe>' );

@@ -271,7 +271,7 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 == Screenshots ==
 
 1. The first run walks you through connecting an agent in three steps. Turn the connection on, choose what it can touch, then hand the endpoint to your AI client.
-2. Nothing is exposed until you switch it on. Nine of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
+2. Nothing is exposed until you switch it on. Three of this site's 153 abilities are enabled here, all of them reads, using the button that turns on a section's reads and leaves its writes alone.
 3. Read-only mode in force. Every ability that writes loses its checkbox completely and says which switch is holding it down, so a bulk enable cannot sweep one back in by accident.
 4. Read-only mode is a single switch on the Settings tab. While it is on, the high-risk category underneath is held as well, and says so instead of sitting there looking live.
 5. The WooCommerce abilities that move money or grant authority stay padlocked behind a second switch of their own, sitting among ordinary writes you can turn on one at a time.

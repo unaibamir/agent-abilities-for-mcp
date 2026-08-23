@@ -434,6 +434,10 @@ Connecting an AI client to your site is done by the client, not by this plugin. 
 
 == Upgrade Notice ==
 
+= 1.7.0 =
+
+Tested up to WordPress 7.1. On hosts without ImageMagick, an upload that would need more memory to decode than the site has now gets refused up front instead of risking a crash. The Abilities tab gained an "Enable all writes" bulk button beside "Enable all reads"; it only ticks the ordinary writes, so deletes and high risk abilities still need turning on by hand.
+
 = 1.6.1 =
 
 Fixes a crash: calling a bridged ability with arguments could take the site down on 1.6.0. Empty term, meta, and settings maps now encode as objects, so strict clients stop rejecting page reads. The activity log no longer stores raw error text, which could quote your data.

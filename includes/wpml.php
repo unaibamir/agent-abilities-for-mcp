@@ -193,27 +193,38 @@ function aafm_wpml_count_posts_by_status( string $type, ?string $lang, string $p
 		$counts = (array) wp_count_posts( $type, $perm );
 		return array_map( 'intval', $counts );
 	}
-	$statuses = get_post_stati();
-	return aafm_with_language(
-		'all' === $lang ? 'all' : $lang,
-		static function () use ( $type, $statuses ): array {
-			$out = array();
-			foreach ( $statuses as $status ) {
-				$q              = new WP_Query(
-					array(
-						'post_type'        => $type,
-						'post_status'      => $status,
-						'posts_per_page'   => 1,
-						'fields'           => 'ids',
-						'no_found_rows'    => false,
-						'suppress_filters' => false,
-					)
-				);
-				$out[ $status ] = (int) $q->found_posts;
-			}
-			return $out;
+	$statuses       = get_post_stati();
+	$count_for_lang = static function () use ( $type, $statuses ): array {
+		$out = array();
+		foreach ( $statuses as $status ) {
+			$q              = new WP_Query(
+				array(
+					'post_type'        => $type,
+					'post_status'      => $status,
+					'posts_per_page'   => 1,
+					'fields'           => 'ids',
+					'no_found_rows'    => false,
+					'suppress_filters' => false,
+				)
+			);
+			$out[ $status ] = (int) $q->found_posts;
 		}
-	);
+		return $out;
+	};
+
+	if ( 'all' === $lang ) {
+		// Sum per status across every active language - safe because each language's matching
+		// posts are DISTINCT rows (a translation is its own post), never double-counted.
+		$totals = array_fill_keys( $statuses, 0 );
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			foreach ( aafm_with_language( $code, $count_for_lang ) as $status => $n ) {
+				$totals[ $status ] += $n;
+			}
+		}
+		return $totals;
+	}
+
+	return aafm_with_language( $lang, $count_for_lang );
 }
 
 /**

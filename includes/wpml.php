@@ -107,6 +107,20 @@ function aafm_resolve_lang( array $input ) {
 }
 
 /**
+ * The set of language codes an `aafm_resolve_lang()` result of 'all' should iterate: every
+ * WPML active language code, or - the degenerate case where WPML reports itself loaded but
+ * names no active languages - a single null entry, so the caller runs its query exactly once,
+ * unscoped, rather than silently returning nothing. aafm_with_language() already treats null
+ * as "no switch", so every element of this array can be passed straight to it.
+ *
+ * @return array<int,string|null>
+ */
+function aafm_wpml_all_language_codes_for_iteration(): array {
+	$codes = aafm_wpml_active_language_codes();
+	return array() === $codes ? array( null ) : $codes;
+}
+
+/**
  * Run $fn inside a WPML language scope, then restore the original language.
  * Snapshot-switch-restore per the house wordpress-safety rule; restores even
  * when $fn throws. When $lang is null or WPML is off, $fn runs unscoped.

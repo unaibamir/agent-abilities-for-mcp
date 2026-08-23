@@ -252,27 +252,39 @@ function aafm_exec_get_posts( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$query = aafm_with_language(
-		$lang,
-		static function () use ( $type, $status, $input, $paging ): WP_Query {
-			return new WP_Query(
-				array(
-					'post_type'        => $type,
-					'post_status'      => $status,
-					's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-					'posts_per_page'   => $paging['per_page'],
-					'paged'            => $paging['page'],
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
-				)
-			);
-		}
-	);
+	$build_query = static function () use ( $type, $status, $input, $paging ): WP_Query {
+		return new WP_Query(
+			array(
+				'post_type'        => $type,
+				'post_status'      => $status,
+				's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+				'posts_per_page'   => $paging['per_page'],
+				'paged'            => $paging['page'],
+				'no_found_rows'    => false,
+				'suppress_filters' => false,
+			)
+		);
+	};
 
-	$objects = array_filter(
-		$query->posts,
-		static fn( $post ): bool => $post instanceof WP_Post
-	);
+	// 'all' iterates every active language and concatenates: page/per_page apply PER language
+	// (documented on the lang schema fragment), total is the sum of each language's own count.
+	// A single language (the overwhelming majority of calls) is byte-for-byte unchanged below.
+	$objects = array();
+	$total   = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$query   = aafm_with_language( $code, $build_query );
+			$objects = array_merge(
+				$objects,
+				array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+			);
+			$total  += (int) $query->found_posts;
+		}
+	} else {
+		$query   = aafm_with_language( $lang, $build_query );
+		$objects = array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) );
+		$total   = (int) $query->found_posts;
+	}
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$include_content = ! empty( $input['include_content'] );
@@ -283,12 +295,12 @@ function aafm_exec_get_posts( array $input ) {
 
 	$posts = array_map(
 		static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
-		array_values( $objects )
+		$objects
 	);
 
 	return array(
 		'posts'    => $posts,
-		'total'    => (int) $query->found_posts,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }

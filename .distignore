@@ -27,6 +27,7 @@ CONTRIBUTING.md
 /.scratch
 /scratchpad
 /project-state
+/campaign-state
 .distignore
 .gitattributes
 .gitignore

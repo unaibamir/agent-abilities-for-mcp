@@ -4,10 +4,6 @@
 
 Security fixes go onto the current release. Older versions are not patched separately.
 
-| Version | Supported |
-|---------|-----------|
-| 1.0.0   | Yes       |
-
 ## Reporting a vulnerability
 
 Report security issues privately so a fix can go out before the details are public. Please don't open a public GitHub issue or post in the WordPress.org support forum for anything security-related.

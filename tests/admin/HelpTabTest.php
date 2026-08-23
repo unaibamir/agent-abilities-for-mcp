@@ -187,6 +187,14 @@ final class HelpTabTest extends TestCase {
 	 * icon is stripped outright and its label span loses its wrapper (the bare word
 	 * survives unwrapped - wp_kses keeps a disallowed tag's inner text - but the icon
 	 * and the .aafm-copy-label hook are both gone).
+	 *
+	 * The svg assertion is scoped to the copy button's OWN icon, not just any <svg> on
+	 * the page: aafm_render_help_entry() renders roughly 19 unrelated <summary> icons
+	 * through a separate wp_kses() call this fix never touches, so a bare "contains
+	 * <svg" assertion would still pass even with the copy button's icon fully stripped.
+	 * aafm_icon('copy') is the only icon whose inner shape is a rect at x=9,y=9 sized
+	 * 11x11 with a 2px radius (includes/admin/icons.php), so that exact fragment can
+	 * only survive if the copy button's icon specifically made it through kses.
 	 */
 	public function test_help_copy_lines_keep_the_icon_svg_and_label_span(): void {
 		$this->acting_as( 'administrator' );
@@ -195,7 +203,7 @@ final class HelpTabTest extends TestCase {
 		aafm_render_help_tab();
 		$html = (string) ob_get_clean();
 
-		$this->assertStringContainsString( '<svg', $html );
+		$this->assertStringContainsString( '<rect x="9" y="9" width="11" height="11" rx="2"', $html );
 		$this->assertStringContainsString( 'aafm-copy-label', $html );
 	}
 

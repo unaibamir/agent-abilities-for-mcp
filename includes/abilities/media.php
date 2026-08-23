@@ -187,35 +187,43 @@ function aafm_exec_get_media( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$query = aafm_with_language(
-		$lang,
-		static function () use ( $input, $paging, $author_id ): WP_Query {
-			$args = array(
-				'post_type'        => 'attachment',
-				'post_status'      => 'inherit',
-				's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
-				'posts_per_page'   => $paging['per_page'],
-				'paged'            => $paging['page'],
-				'no_found_rows'    => false,
-				'suppress_filters' => false,
-			);
-			if ( null !== $author_id ) {
-				$args['author'] = $author_id;
-			}
-			return new WP_Query( $args );
+	$build_query = static function () use ( $input, $paging, $author_id ): WP_Query {
+		$args = array(
+			'post_type'        => 'attachment',
+			'post_status'      => 'inherit',
+			's'                => isset( $input['search'] ) ? sanitize_text_field( (string) $input['search'] ) : '',
+			'posts_per_page'   => $paging['per_page'],
+			'paged'            => $paging['page'],
+			'no_found_rows'    => false,
+			'suppress_filters' => false,
+		);
+		if ( null !== $author_id ) {
+			$args['author'] = $author_id;
 		}
-	);
+		return new WP_Query( $args );
+	};
 
-	// WP_Query->posts is typed array<int,int|WP_Post>; keep only WP_Post before redacting.
-	$attachments = array_filter(
-		$query->posts,
-		static fn( $post ): bool => $post instanceof WP_Post
-	);
+	$attachments = array();
+	$total       = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$query       = aafm_with_language( $code, $build_query );
+			$attachments = array_merge(
+				$attachments,
+				array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+			);
+			$total      += (int) $query->found_posts;
+		}
+	} else {
+		$query       = aafm_with_language( $lang, $build_query );
+		$attachments = array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) );
+		$total       = (int) $query->found_posts;
+	}
 
 	return array(
 		'media'    => array_values( array_map( 'aafm_redact_media', $attachments ) ),
 		// Full match count for the search filter so an agent can page through the library.
-		'total'    => (int) $query->found_posts,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }
@@ -368,12 +376,19 @@ function aafm_exec_count_media( array $input ) {
 	$author_id = aafm_media_scope_author_id();
 
 	if ( aafm_wpml_active() ) {
-		$counts = aafm_with_language(
-			$lang,
-			static function () use ( $author_id ): array {
-				return aafm_query_attachment_counts_by_mime( $author_id );
+		$build_counts = static function () use ( $author_id ): array {
+			return aafm_query_attachment_counts_by_mime( $author_id );
+		};
+		if ( 'all' === $lang ) {
+			$counts = array();
+			foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+				foreach ( aafm_with_language( $code, $build_counts ) as $mime => $n ) {
+					$counts[ $mime ] = ( $counts[ $mime ] ?? 0 ) + (int) $n;
+				}
 			}
-		);
+		} else {
+			$counts = aafm_with_language( $lang, $build_counts );
+		}
 	} elseif ( null !== $author_id ) {
 		// wp_count_attachments() cannot be author-scoped, so a scoped caller goes
 		// through the same query-based counter the WPML branch uses.

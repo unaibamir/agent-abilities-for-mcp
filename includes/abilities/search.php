@@ -173,24 +173,37 @@ function aafm_exec_search_content( array $input ) {
 		}
 	}
 
-	$paging  = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
-	$query   = aafm_with_language(
-		$lang,
-		static function () use ( $types, $status, $search, $paging ): WP_Query {
-			return new WP_Query(
-				array(
-					'post_type'        => $types,
-					'post_status'      => $status,
-					's'                => $search,
-					'posts_per_page'   => $paging['per_page'],
-					'paged'            => $paging['page'],
-					'no_found_rows'    => false,
-					'suppress_filters' => false,
-				)
+	$paging      = aafm_paginate_args( $input, AAFM_LIST_PER_PAGE_MAX );
+	$build_query = static function () use ( $types, $status, $search, $paging ): WP_Query {
+		return new WP_Query(
+			array(
+				'post_type'        => $types,
+				'post_status'      => $status,
+				's'                => $search,
+				'posts_per_page'   => $paging['per_page'],
+				'paged'            => $paging['page'],
+				'no_found_rows'    => false,
+				'suppress_filters' => false,
+			)
+		);
+	};
+
+	$objects = array();
+	$total   = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$query   = aafm_with_language( $code, $build_query );
+			$objects = array_merge(
+				$objects,
+				array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) )
 			);
+			$total  += (int) $query->found_posts;
 		}
-	);
-	$objects = array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post );
+	} else {
+		$query   = aafm_with_language( $lang, $build_query );
+		$objects = array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) );
+		$total   = (int) $query->found_posts;
+	}
 
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$include_content = ! empty( $input['include_content'] );
@@ -202,9 +215,9 @@ function aafm_exec_search_content( array $input ) {
 	return array(
 		'results'  => array_map(
 			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
-			array_values( $objects )
+			$objects
 		),
-		'total'    => (int) $query->found_posts,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }

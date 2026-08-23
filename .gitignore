@@ -42,6 +42,9 @@ Thumbs.db
 /.github/release-notes.md
 
 # Note: .ddev/ is intentionally committed - it is shareable, version-controlled config.
+# The exception is .ddev/php/, which DDEV generates and rewrites on start; its values are
+# machine-local and nothing in the repo depends on them.
+/.ddev/php/
 
 # QA evidence screenshots - scratch, never part of the plugin
 /public/

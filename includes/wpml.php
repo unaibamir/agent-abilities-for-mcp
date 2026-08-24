@@ -65,7 +65,7 @@ function aafm_lang_schema_fragment(): array {
 	return array(
 		'lang' => array(
 			'type'        => 'string',
-			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. A code that is not an active WPML language is rejected with an error naming the valid codes. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
+			'description' => __( 'WPML language code to scope the query to (for example "en"), or "all" to span every active language. On a paginated list, "all" applies page and per_page separately to EACH active language and concatenates the results in language order, so the response can hold more than per_page items; total is the sum of every language\'s own match count. A code that is not an active WPML language is rejected with an error naming the valid codes. Ignored when WPML is not active. When omitted, the site default language is used.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }

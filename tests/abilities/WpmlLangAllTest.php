@@ -71,6 +71,7 @@ final class WpmlLangAllTest extends TestCase {
 		remove_all_actions( 'pre_get_posts' );
 		remove_all_filters( 'get_terms_args' );
 		remove_all_filters( 'wpml_post_language_details' );
+		remove_all_filters( 'wpml_object_id' );
 		$this->current_lang   = 'is';
 		$this->switch_log     = array();
 		$this->query_lang_log = array();
@@ -427,5 +428,78 @@ final class WpmlLangAllTest extends TestCase {
 			'the language-blind stub returns the same row for each of the 2 active languages, so a correct merge sums to 2.'
 		);
 		$this->assertCount( 2, $out['products'] );
+	}
+
+	/**
+	 * Sweep obligation: the four single-ID lookup sites must NOT try to iterate every language -
+	 * lang:"all" on a single specific id has no "every language" meaning, so the id must be
+	 * returned unresolved (unchanged), which is what get-post/get-page/get-term/get-media-item's
+	 * lang-resolution helpers already do. This is the "decide per call site" proof for those four
+	 * sites: an explicit assertion, not a claim in prose.
+	 */
+	public function test_single_id_lookups_leave_lang_all_as_a_no_op(): void {
+		$this->fake_wpml_with_post_filtering();
+		// Real WPML's wpml_object_id has no defined behavior for a "language" of 'all' - it isn't
+		// a real language code. Without SOME filter attached here, apply_filters() on an unhooked
+		// hook name is a no-op that returns the id unchanged regardless of whether the no-op guard
+		// this test protects is even in place, so removing that guard (Task 7 Step 2's required
+		// red proof) would silently pass instead of failing. This fake returns a deliberately
+		// wrong id (0) for 'all' - the class of wrong answer an unguarded 'all' risks producing on
+		// a real WPML install - so the guard's absence is actually caught.
+		add_filter(
+			'wpml_object_id',
+			static function ( $id, $type, $original, $lang_code ) {
+				return 'all' === $lang_code ? 0 : $id;
+			},
+			10,
+			4
+		);
+		$this->acting_as( 'administrator' );
+
+		$post_id = self::factory()->post->create( array( 'post_status' => 'publish' ) );
+		$this->assertSame(
+			$post_id,
+			aafm_get_post_lang_resolved_id( $post_id, array( 'lang' => 'all' ) ),
+			'get-post must not try to resolve a single id to "every language".'
+		);
+
+		$page_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_status' => 'publish',
+			)
+		);
+		$this->assertSame(
+			$page_id,
+			aafm_get_page_lang_resolved_id( $page_id, array( 'lang' => 'all' ) ),
+			'get-page must not try to resolve a single id to "every language".'
+		);
+
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		$out     = aafm_exec_get_term(
+			array(
+				'term_id' => $term_id,
+				'lang'    => 'all',
+			)
+		);
+		$this->assertIsArray( $out );
+		$this->assertSame( $term_id, $out['term']['id'], 'get-term must not try to resolve a single id to "every language".' );
+
+		$attachment_id = self::factory()->attachment->create_object(
+			'sweep.jpg',
+			0,
+			array(
+				'post_mime_type' => 'image/jpeg',
+				'post_type'      => 'attachment',
+			)
+		);
+		$media_out     = aafm_exec_get_media_item(
+			array(
+				'attachment_id' => $attachment_id,
+				'lang'          => 'all',
+			)
+		);
+		$this->assertIsArray( $media_out );
+		$this->assertSame( $attachment_id, $media_out['media']['id'], 'get-media-item must not try to resolve a single id to "every language".' );
 	}
 }

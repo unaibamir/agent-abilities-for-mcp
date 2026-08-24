@@ -413,27 +413,57 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				|| current_user_can( 'delete_others_posts' )
 				|| current_user_can( 'delete_published_posts' );
 
-		// CPT writes: the type isn't known at discovery time (empty input), so use the
-		// object-independent authoring floor. The execute-time permission_callback still
-		// enforces the exact type's caps + allowlist + per-object edit.
-		//
-		// Deliberately NOT widened the way update-post was just above, even though
-		// update-cpt-item has the identical per-object edit_post shape (aafm_can_edit_post_object).
-		// A CPT's cap object is not guaranteed to reuse the literal 'edit_posts'/'edit_others_posts'
-		// primitive strings the way wp_block and attachment do - a type registered with its own
-		// capability_type (e.g. 'product') gets its own primitive names (edit_products, ...), so
-		// checking the literal core constants here would silently do nothing for exactly the custom
-		// types this ability exists to serve, while ALSO being wrong to widen for create-cpt-item,
-		// which shares this case: create is pre-insert and its floor is only ever the type's bare
-		// edit_posts-equivalent (aafm_perm_create_cpt_item checks nothing else), so adding
-		// edit_others/edit_published arms here would incorrectly loosen discovery for a create-only
-		// capability that never needs them. Getting update-cpt-item right would need its own case,
-		// split from create-cpt-item, that loops every allowlisted post type's OWN cap object the
-		// way the term-meta case below loops taxonomies - real work, not named by this round's
-		// findings, and left for a dedicated pass rather than folded in here.
+		// CPT creation: the type isn't known at discovery time (empty input), and
+		// aafm_perm_create_cpt_item checks nothing beyond the type's own bare
+		// edit_posts-equivalent cap (create is pre-insert - no author/status branching, no
+		// map_meta_cap gate). Previously this checked the literal core 'edit_posts' string,
+		// which is wrong for any allowlisted CPT registered with its own capability_type (e.g.
+		// 'product' -> edit_products): a role holding edit_products but not literal edit_posts
+		// could genuinely create a draft product, yet was hidden from the tool. Fixed by looping
+		// every type aafm_validate_post_type() would actually accept (aafm_allowed_post_types() -
+		// post/page always-on plus whatever the operator has allowlisted) and checking each
+		// type's OWN cap->edit_posts, the same "loop the exposed set" shape create-term/
+		// update-term and the term-meta/ACF-term-fields cases below already use for taxonomies.
 		case 'aafm/create-cpt-item':
+			return static function (): bool {
+				foreach ( aafm_allowed_post_types() as $type ) {
+					$pto = get_post_type_object( $type );
+					if ( $pto instanceof WP_Post_Type && current_user_can( $pto->cap->edit_posts ) ) {
+						return true;
+					}
+				}
+				return false;
+			};
+
+		// CPT updates: per-object edit (aafm_can_edit_post_object / aafm_writable_type_caps),
+		// the identical shape to update-post above, but resolved through EACH exposed type's
+		// OWN cap object rather than the literal core primitive names, for the same
+		// custom-capability_type reason as create-cpt-item just above. Previously this shared
+		// create-cpt-item's bare literal edit_posts check, which was wrong twice over: wrong for
+		// a custom capability_type, AND missing the edit_others_posts/edit_published_posts
+		// widening every sibling per-object case already got in round 2. aafm_writable_type_caps
+		// additionally requires map_meta_cap===true before it will return a cap object at all
+		// (a non-mapped type's per-object edit_post check degrades to a bare singular primitive
+		// with no author/status containment and is refused outright), so the loop below skips
+		// any type that fails that same gate - matching the execute-time floor exactly rather
+		// than approximating it.
 		case 'aafm/update-cpt-item':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static function (): bool {
+				foreach ( aafm_allowed_post_types() as $type ) {
+					$caps = aafm_type_caps( $type );
+					if ( ! $caps['mapped'] || ! $caps['object'] instanceof WP_Post_Type ) {
+						continue;
+					}
+					$pto = $caps['object'];
+					if ( current_user_can( $pto->cap->edit_posts )
+						|| current_user_can( $pto->cap->edit_others_posts )
+						|| current_user_can( $pto->cap->edit_published_posts )
+					) {
+						return true;
+					}
+				}
+				return false;
+			};
 
 		// Governed post-meta (get/update/delete + bulk read): all gate on per-object
 		// edit_post (reads included - meta can hold private data), so discovery uses the

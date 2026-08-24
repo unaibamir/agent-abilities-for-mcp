@@ -840,6 +840,95 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
+	 * Fix round 3, ITEM 1 (MEDIUM): create-cpt-item previously checked the literal core
+	 * 'edit_posts' string only, which is wrong for a CPT registered with its own
+	 * capability_type - a role holding that type's own edit_posts-equivalent cap (e.g.
+	 * edit_aafm_widgets) but not literal edit_posts could genuinely create a draft item of that
+	 * type, yet was hidden from the tool.
+	 */
+	public function test_create_cpt_item_discoverable_with_custom_capability_type_alone(): void {
+		register_post_type(
+			'aafm_widget',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => true,
+				'capability_type' => array( 'aafm_widget', 'aafm_widgets' ),
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'aafm_widget' ) );
+
+		add_role(
+			'aafm_widget_author',
+			'AAFM Widget Author',
+			array(
+				'read'              => true,
+				'edit_aafm_widgets' => true,
+			)
+		);
+		$this->acting_as( 'aafm_widget_author' );
+
+		$this->assertFalse( current_user_can( 'edit_posts' ), 'sanity: this role holds no literal edit_posts, only the CPT\'s own cap.' );
+		$this->assertTrue(
+			aafm_perm_create_cpt_item( array( 'post_type' => 'aafm_widget' ) ),
+			'sanity: the CPT\'s own edit_posts-equivalent cap genuinely clears the EXECUTE-time gate.'
+		);
+
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/create-cpt-item' ),
+			'discovery must not hide create-cpt-item from a role that can genuinely create an item of an allowlisted CPT.'
+		);
+
+		unregister_post_type( 'aafm_widget' );
+		delete_option( 'aafm_allowed_post_types' );
+	}
+
+	/**
+	 * Fix round 3, ITEM 1 (MEDIUM): update-cpt-item has the identical per-object edit_post shape
+	 * as update-post (aafm_can_edit_post_object), but was sharing create-cpt-item's bare literal
+	 * edit_posts check - wrong for the same custom-capability_type reason, and additionally
+	 * missing the edit_others/edit_published widening every sibling per-object case already got
+	 * in round 2.
+	 */
+	public function test_update_cpt_item_discoverable_with_custom_capability_type_others_cap_alone(): void {
+		register_post_type(
+			'aafm_widget',
+			array(
+				'public'          => true,
+				'map_meta_cap'    => true,
+				'capability_type' => array( 'aafm_widget', 'aafm_widgets' ),
+			)
+		);
+		update_option( 'aafm_allowed_post_types', array( 'aafm_widget' ) );
+
+		add_role(
+			'aafm_widget_others_editor',
+			'AAFM Widget Others Editor',
+			array(
+				'read'                     => true,
+				'edit_others_aafm_widgets' => true,
+			)
+		);
+
+		$other_widget_id = $this->foreign_authored_post( 'aafm_widget' );
+
+		$this->acting_as( 'aafm_widget_others_editor' );
+
+		$this->assertFalse( current_user_can( 'edit_aafm_widgets' ), 'sanity: this role lacks the CPT\'s bare edit cap.' ); // phpcs:ignore WordPress.WP.Capabilities.Unknown -- test-only custom cap, registered above via capability_type, not a WP core capability.
+		$this->assertTrue(
+			aafm_can_edit_post_object( get_post( $other_widget_id ) ),
+			'sanity: the CPT\'s own edit_others-equivalent cap genuinely passes the EXECUTE-time per-object gate.'
+		);
+
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/update-cpt-item' ),
+			'discovery must not hide update-cpt-item from a role that can genuinely edit someone else\'s item of an allowlisted CPT.'
+		);
+
+		unregister_post_type( 'aafm_widget' );
+		delete_option( 'aafm_allowed_post_types' );
+	}
+
+	/**
 	 * Fix round 3, ITEM 3 (LOW): aafm_perm_acf_term() accepts any EXISTING term and checks
 	 * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
 	 * restriction (unlike term-meta, which routes through aafm_validate_term_meta_request() and

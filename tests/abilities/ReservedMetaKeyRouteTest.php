@@ -33,12 +33,15 @@ declare( strict_types=1 );
 
 namespace AAFM\Tests\Abilities;
 
+use AAFM\Tests\IntegrationStubs;
 use AAFM\Tests\TestCase;
 use WP\MCP\Domain\Tools\McpTool;
 use WP\MCP\Domain\Utils\ContentBlockHelper;
 use WP\McpSchema\Server\Tools\DTO\CallToolResult;
 
 final class ReservedMetaKeyRouteTest extends TestCase {
+
+	use IntegrationStubs;
 
 	/**
 	 * The exact string the adapter substitutes when a permission check returns a non-WP_Error
@@ -57,6 +60,11 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 		aafm_install_activity_log();
 		aafm_clear_activity_log();
 		$this->in_action( 'wp_abilities_api_categories_init', 'aafm_register_categories' );
+	}
+
+	public function tear_down(): void {
+		$this->reset_integration_stubs();
+		parent::tear_down();
 	}
 
 	/**
@@ -232,6 +240,59 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
+	 * B-price-and-metadesc-routing: _regular_price/_price (WooCommerce) and _yoast_wpseo_metadesc
+	 * (Yoast) are protected meta with real, already-shipped alternative tools, exactly like
+	 * _wp_attachment_image_alt. Refusing them with a bare "Permission denied" sent an agent
+	 * asked to update a price or a meta description down the same dead end alt-text used to.
+	 */
+	public function test_the_price_and_metadesc_keys_are_routed_too(): void {
+		$this->acting_as( 'administrator' );
+		$this->register_meta_abilities();
+		$post_id = self::factory()->post->create();
+
+		$price_write = $this->wire_text(
+			$this->wire_body(
+				'aafm/update-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => '_regular_price',
+					'value'    => '19.99',
+				)
+			)
+		);
+		$this->assertStringContainsString( '_regular_price', $price_write );
+		$this->assertStringContainsString( 'aafm-wc-update-product', $price_write );
+		$this->assertStringContainsString( '"regular_price"', $price_write );
+
+		$computed_write = $this->wire_text(
+			$this->wire_body(
+				'aafm/update-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => '_price',
+					'value'    => '19.99',
+				)
+			)
+		);
+		$this->assertStringContainsString( '_price', $computed_write );
+		$this->assertStringContainsString( 'aafm-wc-update-product', $computed_write );
+
+		$metadesc_write = $this->wire_text(
+			$this->wire_body(
+				'aafm/update-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => '_yoast_wpseo_metadesc',
+					'value'    => 'A description',
+				)
+			)
+		);
+		$this->assertStringContainsString( '_yoast_wpseo_metadesc', $metadesc_write );
+		$this->assertStringContainsString( 'aafm-yoast-update-post', $metadesc_write );
+		$this->assertStringContainsString( '"description"', $metadesc_write );
+	}
+
+	/**
 	 * Every message a client can receive from this path uses the DASH tool name.
 	 *
 	 * The transform is aafm_mcp_tool_name(), str_replace( '/', '-', ... ) at includes/server.php:24, so the slash
@@ -262,7 +323,7 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 			}
 		}
 
-		$this->assertSame( 6, $seen, 'Three abilities times two mapped keys; a shrunk map must not pass this quietly.' );
+		$this->assertSame( 15, $seen, 'Three abilities times five mapped keys; a shrunk map must not pass this quietly.' );
 	}
 
 	/**
@@ -572,6 +633,12 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	 * ability.
 	 */
 	public function test_every_route_the_map_names_resolves_to_a_registered_ability(): void {
+		// The map now names WooCommerce and Yoast tools too, and both are host-gated out of the
+		// live registry unless their plugin is detected active; force detection on so this sweep
+		// walks the same registry a real site with those plugins installed would have.
+		$this->force_integration( 'woocommerce' );
+		$this->force_integration( 'yoast' );
+
 		$registry = array_keys( aafm_get_abilities_registry() );
 		$dash     = array_map( 'aafm_mcp_tool_name', $registry );
 

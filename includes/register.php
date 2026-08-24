@@ -315,6 +315,21 @@ function aafm_reserved_post_meta_routes(): array {
 			'write'  => __( 'Call aafm-set-featured-image, or pass "featured_media" to aafm-update-post or aafm-update-page.', 'agent-abilities-for-mcp' ),
 			'delete' => '',
 		),
+		'_regular_price'           => array(
+			'read'   => __( 'Call aafm-wc-get-product, which returns it as a "regular_price" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-wc-update-product and pass its "regular_price" parameter.', 'agent-abilities-for-mcp' ),
+			'delete' => __( 'Call aafm-wc-update-product with an empty "regular_price" to clear it.', 'agent-abilities-for-mcp' ),
+		),
+		'_price'                   => array(
+			'read'   => __( 'Call aafm-wc-get-product, which returns the active price as a "price" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'This is WooCommerce\'s own computed cache, not directly settable; call aafm-wc-update-product with "regular_price" and/or "sale_price" instead, and WooCommerce recalculates it.', 'agent-abilities-for-mcp' ),
+			'delete' => '',
+		),
+		'_yoast_wpseo_metadesc'    => array(
+			'read'   => __( 'Call aafm-yoast-get-post, which returns it as a "description" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-yoast-update-post and pass its "description" parameter.', 'agent-abilities-for-mcp' ),
+			'delete' => __( 'Call aafm-yoast-update-post with an empty "description" to clear it.', 'agent-abilities-for-mcp' ),
+		),
 	);
 }
 

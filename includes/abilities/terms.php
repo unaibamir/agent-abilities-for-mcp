@@ -36,7 +36,7 @@ function aafm_register_terms_definitions( array $registry ): array {
 	);
 	$registry['aafm/update-term']      = array(
 		'label'        => __( 'Update term', 'agent-abilities-for-mcp' ),
-		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting.', 'agent-abilities-for-mcp' ),
+		'description'  => __( 'Update a term in a public taxonomy, with a circular-hierarchy guard on reparenting. Requires that taxonomy\'s own manage-terms capability.', 'agent-abilities-for-mcp' ),
 		'group'        => 'writes',
 		'risk'         => 'write',
 		'subject'      => 'taxonomies',
@@ -910,7 +910,7 @@ function aafm_args_update_term(): array {
 				'taxonomy'    => array(
 					'type'        => 'string',
 					'default'     => 'category',
-					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Slug of the public taxonomy the term belongs to. Defaults to category. The term must belong to this taxonomy or the update is rejected. Updating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission.', 'agent-abilities-for-mcp' ),
 				),
 				'term_id'     => array(
 					'type'        => 'integer',

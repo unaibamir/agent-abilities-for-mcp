@@ -379,4 +379,26 @@ final class TermsWriteTest extends TestCase {
 		$this->assertSame( 'After', $out['term']['name'] );
 		$this->assertSame( 'After', get_term( $term, 'category' )->name );
 	}
+
+	/**
+	 * B-update-term-wording: create-term's taxonomy property and top-level description both
+	 * name the taxonomy-specific manage_terms requirement; update-term shares the exact same
+	 * permission_callback (aafm_perm_manage_terms()) but named it nowhere, so a refused agent
+	 * saw a bare "Permission denied" naming no capability and no taxonomy.
+	 */
+	public function test_update_term_documents_its_permission_requirement_like_create_term(): void {
+		$registry = apply_filters( 'aafm_abilities_registry', array() );
+		$this->assertStringContainsString(
+			'manage-terms capability',
+			$registry['aafm/update-term']['description'],
+			'the top-level description must name the requirement, mirroring create-term.'
+		);
+
+		$schema = wp_get_ability( 'aafm/update-term' )->get_input_schema();
+		$this->assertStringContainsString(
+			'manage-terms capability',
+			(string) $schema['properties']['taxonomy']['description'],
+			'the taxonomy property must name the requirement, mirroring create-term.'
+		);
+	}
 }

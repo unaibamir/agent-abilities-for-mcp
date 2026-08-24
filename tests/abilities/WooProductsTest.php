@@ -995,4 +995,19 @@ final class WooProductsTest extends TestCase {
 		wp_delete_post( $foreign_id, true );
 		wp_delete_post( $own_id, true );
 	}
+
+	/**
+	 * B-list-products-filtering-clause: the description didn't say the endpoint returns
+	 * unfiltered rows (beyond status) and that narrowing by price or any other field is the
+	 * caller's job. One model answered NONE on a satisfiable "products under $20" request while
+	 * another got it right - a description-clarity gap, not a missing capability.
+	 */
+	public function test_list_products_description_says_it_does_not_filter_server_side(): void {
+		$registry = apply_filters( 'aafm_abilities_registry', array() );
+		$this->assertStringContainsString(
+			'caller',
+			$registry['aafm/wc-list-products']['description'],
+			'the description must say narrowing results is the caller\'s job.'
+		);
+	}
 }

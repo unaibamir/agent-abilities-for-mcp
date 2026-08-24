@@ -260,16 +260,26 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// update-template, an editor does not).
 
 		// Reusable-block reads/writes: get-block, update-block, and delete-block gate
-		// per-object on edit_post/delete_post on the wp_block id, which is false with empty
-		// input at discovery - so use the object-independent edit_posts/delete_posts floor;
-		// the per-object permission_callback refines at execute. list-blocks and create-block
-		// gate on the object-independent edit_posts floor directly, so they need no case here
-		// (they fall through to aafm_perm_blocks_floor, the correct answer).
+		// per-object on edit_post/delete_post on the wp_block id (aafm_perm_block_object /
+		// aafm_perm_block_delete_object), which is false with empty input at discovery. wp_block is
+		// registered with the SAME literal primitive cap names as the built-in post type
+		// (edit_posts, edit_others_posts, edit_published_posts, delete_posts, delete_others_posts,
+		// delete_published_posts - confirmed in core's create_initial_post_types()), so the floor
+		// mirrors update-post/trash-post below exactly: every OR branch map_meta_cap can resolve
+		// edit_post/delete_post to for wp_block, never a standalone private-posts arm (wp_block has
+		// no author-facing private-status workflow anyway). Refined per-object at execute.
+		// list-blocks and create-block gate on the object-independent edit_posts floor directly, so
+		// they need no case here (they fall through to aafm_perm_blocks_floor, the correct answer).
 		//
 		// Per-plugin SEO integrations (Yoast / Rank Math / AIOSEO): every *-get-post / *-update-post
 		// / *-get-schema / *-update-schema gates per-object on edit_post($id) (SEO data is post
-		// content), false with empty input - so discovery uses the object-independent edit_posts
-		// floor, refined per-object at execute. The *-get-head abilities have their own
+		// content, via aafm_can_edit_post_object -> aafm_perm_seo_post_object) - false with empty
+		// input, so discovery uses the SAME floor that per-object branch can resolve to: edit_posts
+		// (author, draft-shaped), edit_others_posts (any other author's post), or
+		// edit_published_posts (author's own published/scheduled post). Never a standalone
+		// edit_private_posts arm - core only ever pairs that with edit_others_posts, so it adds
+		// nothing edit_others_posts doesn't already cover (see the update-page case below for the
+		// full citation). Refined per-object at execute. The *-get-head abilities have their own
 		// edit_posts-floor permission_callback, so they need no case here: each falls through to that
 		// callback with empty input (the per-object edit_post refinement runs inside its execute).
 		case 'aafm/yoast-get-post':
@@ -280,20 +290,51 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/rankmath-update-schema':
 		case 'aafm/aioseo-get-post':
 		case 'aafm/aioseo-update-post':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 
-		// ACF integration: the post/term field abilities gate per-object on edit_post($id) /
-		// edit_term($term_id), false with empty input, so discovery uses the edit_posts authoring
-		// floor, refined per-object at execute (term meta is gated like post meta in this catalog).
-		// The user field abilities gate per-object on edit_user($id), so discovery uses the
-		// edit_users floor. acf-list-field-groups gates on the object-independent edit_posts floor
-		// directly, so it needs no case here: it falls through to aafm_perm_acf_list_field_groups
-		// with empty input, the correct discovery answer.
+		// ACF integration, post fields: gates per-object on edit_post($id) (aafm_perm_acf_post ->
+		// aafm_can_edit_post_object), false with empty input - same floor as the SEO family above,
+		// for the same reason (both delegate to the identical shared content-edit gate).
+		// acf-list-field-groups gates on the object-independent edit_posts floor directly, so it
+		// needs no case here: it falls through to aafm_perm_acf_list_field_groups with empty input,
+		// the correct discovery answer.
 		case 'aafm/acf-get-post-fields':
 		case 'aafm/acf-update-post-fields':
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
+
+		// ACF integration, term fields: gates per-object on edit_term($term_id)
+		// (aafm_perm_acf_term), NOT edit_post - a genuinely different mechanism from the post-fields
+		// case just above, despite the superficial "ACF integration" family resemblance. edit_term
+		// resolves through map_meta_cap to the TARGET TAXONOMY's own edit_terms capability (default
+		// manage_categories, but a decoupled custom cap on a custom taxonomy), with no
+		// author/published/private branching at all - terms have no author or visibility states the
+		// way posts do. The taxonomy is unknown at discovery (empty input), so this mirrors
+		// create-term/update-term below: manage_terms on ANY public taxonomy the caller can manage.
+		// Previously this shared the acf-post-fields case and checked edit_posts, which is neither
+		// necessary nor sufficient for edit_terms on a real taxonomy (a Contributor holds edit_posts
+		// without manage_categories and would have been shown a tool they can never execute on any
+		// term; a role with a custom taxonomy's own decoupled cap but no edit_posts would have been
+		// hidden from a tool they genuinely can execute).
 		case 'aafm/acf-get-term-fields':
 		case 'aafm/acf-update-term-fields':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static function (): bool {
+				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
+					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
+						return true;
+					}
+				}
+				return false;
+			};
+
+		// ACF integration, user fields: gates per-object on edit_user($id) PLUS the object-
+		// independent edit_users floor (aafm_perm_acf_user requires both, mirroring
+		// aafm_perm_update_user) - and since edit_users is already required, the self-edit branch
+		// of the edit_user meta cap adds nothing beyond it. So edit_users alone is the exact
+		// execute-time floor, not an approximation of it; no widening needed here.
 		case 'aafm/acf-get-user-fields':
 		case 'aafm/acf-update-user-fields':
 			return static fn(): bool => current_user_can( 'edit_users' );
@@ -326,9 +367,13 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		case 'aafm/get-block':
 		case 'aafm/update-block':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 		case 'aafm/delete-block':
-			return static fn(): bool => current_user_can( 'delete_posts' );
+			return static fn(): bool => current_user_can( 'delete_posts' )
+				|| current_user_can( 'delete_others_posts' )
+				|| current_user_can( 'delete_published_posts' );
 
 		// User writes: update/delete gate per-object on edit_user($id)/delete_user($id),
 		// which is false with empty input - so the per-object permission_callback would
@@ -342,30 +387,60 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-user':
 			return static fn(): bool => current_user_can( 'delete_users' );
 
-		// Post writes: the floor cap that the per-object edit_post()/delete_post() refine.
+		// Post writes: the per-object edit_post()/delete_post() (aafm_can_edit_post_object /
+		// aafm_can_delete_post_object) refine one of these OR branches - author + draft-shaped
+		// status -> edit_posts; ANY other author's post -> edit_others_posts; author's own
+		// published/scheduled post -> edit_published_posts (never a standalone edit_private_posts
+		// arm; see the update-page case below for the full citation of why). Previously this
+		// checked edit_posts alone, hiding update-post/replace-in-post/set-featured-image from a
+		// role holding only edit_others_posts or only edit_published_posts even though the
+		// per-object check genuinely passes for them on a real post - the same class of mismatch
+		// Task 8 fixed for update-page, just never carried over to its sibling here.
 		case 'aafm/update-post':
 		case 'aafm/replace-in-post':
 		case 'aafm/set-featured-image':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 		case 'aafm/trash-post':
 		case 'aafm/delete-post':
-			return static fn(): bool => current_user_can( 'delete_posts' );
+			return static fn(): bool => current_user_can( 'delete_posts' )
+				|| current_user_can( 'delete_others_posts' )
+				|| current_user_can( 'delete_published_posts' );
 
 		// CPT writes: the type isn't known at discovery time (empty input), so use the
 		// object-independent authoring floor. The execute-time permission_callback still
 		// enforces the exact type's caps + allowlist + per-object edit.
+		//
+		// Deliberately NOT widened the way update-post was just above, even though
+		// update-cpt-item has the identical per-object edit_post shape (aafm_can_edit_post_object).
+		// A CPT's cap object is not guaranteed to reuse the literal 'edit_posts'/'edit_others_posts'
+		// primitive strings the way wp_block and attachment do - a type registered with its own
+		// capability_type (e.g. 'product') gets its own primitive names (edit_products, ...), so
+		// checking the literal core constants here would silently do nothing for exactly the custom
+		// types this ability exists to serve, while ALSO being wrong to widen for create-cpt-item,
+		// which shares this case: create is pre-insert and its floor is only ever the type's bare
+		// edit_posts-equivalent (aafm_perm_create_cpt_item checks nothing else), so adding
+		// edit_others/edit_published arms here would incorrectly loosen discovery for a create-only
+		// capability that never needs them. Getting update-cpt-item right would need its own case,
+		// split from create-cpt-item, that loops every allowlisted post type's OWN cap object the
+		// way the term-meta case below loops taxonomies - real work, not named by this round's
+		// findings, and left for a dedicated pass rather than folded in here.
 		case 'aafm/create-cpt-item':
 		case 'aafm/update-cpt-item':
 			return static fn(): bool => current_user_can( 'edit_posts' );
 
 		// Governed post-meta (get/update/delete + bulk read): all gate on per-object
 		// edit_post (reads included - meta can hold private data), so discovery uses the
-		// same edit_posts floor as update-post, refined per-object at execute time.
+		// same widened edit_posts/edit_others_posts/edit_published_posts floor as update-post
+		// just above, refined per-object at execute time.
 		case 'aafm/get-post-meta':
 		case 'aafm/get-all-post-meta':
 		case 'aafm/update-post-meta':
 		case 'aafm/delete-post-meta':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 
 		// Governed user-meta (get/update/delete): all gate per-object on edit_user($id) -
 		// reads included, since user meta can hold private data. The user id is unknown at
@@ -413,40 +488,102 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/delete-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
-				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->delete_posts );
+				if ( ! $pto instanceof WP_Post_Type ) {
+					return false;
+				}
+				// Mirrors the update-page floor above, for the delete side: per-object
+				// delete_page (aafm_can_delete_post_object) resolves to delete_posts (author,
+				// draft-shaped), delete_others_posts (any other author's page), or
+				// delete_published_posts (author's own published/scheduled page) - the page
+				// post-type object's own cap names for those primitives. Never a standalone
+				// delete_private_posts arm, for the identical reason edit_private_pages is
+				// excluded above: core only ever pairs it with delete_others_posts. Previously
+				// this checked delete_posts alone, hiding trash-page/delete-page from a role
+				// holding only delete_others_pages or only delete_published_pages even though the
+				// per-object check genuinely passes for them on a real page (the mismatch Codex
+				// found, mirroring update-page's original Task 8 defect one field over).
+				return current_user_can( $pto->cap->delete_posts )
+					|| current_user_can( $pto->cap->delete_others_posts )
+					|| current_user_can( $pto->cap->delete_published_posts );
 			};
 
 		// Comment writes: the site-wide moderate_comments floor the per-object
 		// edit_comment() refines at execute time. The comment id is unknown at
 		// discovery (empty input), so discovery uses the object-independent floor.
+		//
+		// create-comment has NO per-object component at all (aafm_perm_create_comment is a bare
+		// moderate_comments check - the comment doesn't exist yet and its author is forced to the
+		// current user), so moderate_comments is the exact, complete execute-time floor for it.
+		//
+		// moderate-comment/update-comment/delete-comment DO have one beyond moderate_comments:
+		// aafm_perm_moderate_comment_obj / aafm_perm_edit_comment_obj also require
+		// current_user_can('edit_comment', $id), which resolves through edit_post on the
+		// comment's PARENT POST - i.e. the same edit_posts/edit_others_posts/edit_published_posts
+		// floor widened elsewhere in this function. That is a genuine gap, but in the OPPOSITE
+		// direction from every widening fix in this pass: a role holding moderate_comments without
+		// any edit-post floor would be SHOWN these three tools while never able to execute on any
+		// comment, not hidden from a tool it could use. Closing it needs an added AND condition
+		// here, not a widened OR arm, and no built-in WordPress role produces that combination
+		// (Editor and Administrator, the only two with moderate_comments, both already hold
+		// edit_posts and edit_others_posts) - so it is left alone rather than folded into this
+		// widening-only pass; a narrowing fix deserves its own review, not a rider on this one.
 		case 'aafm/moderate-comment':
 		case 'aafm/create-comment':
 		case 'aafm/update-comment':
 		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );
 
-		// Revisions: list/get/restore all gate per-object on edit_post on the parent - reads
-		// included, since a revision can hold content from when the post was private. Discovery
-		// uses the same edit_posts floor as update-post, refined per-object at execute.
+		// Revisions: list/get/restore all gate per-object on edit_post on the parent
+		// (aafm_revision_parent_editable -> aafm_can_edit_post_object) - reads included, since a
+		// revision can hold content from when the post was private. Discovery uses the same
+		// widened edit_posts/edit_others_posts/edit_published_posts floor as update-post above,
+		// refined per-object at execute.
 		case 'aafm/list-revisions':
 		case 'aafm/get-revision':
 		case 'aafm/restore-revision':
 		case 'aafm/delete-revision':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 
 		// Media writes: the attachment id is unknown at discovery (empty input), so use an
-		// object-independent authoring floor. The reads (get-media-item/count-media) need NO
-		// case - like get-media they fall through to their object-independent permission_callback.
-		// The execute-time permission_callback still enforces per-object edit_post/delete_post
-		// on the specific attachment.
+		// object-independent floor. The reads (get-media-item/count-media) need NO case - like
+		// get-media they fall through to their object-independent permission_callback. The
+		// execute-time permission_callback still enforces per-object edit_post/delete_post on the
+		// specific attachment (aafm_perm_update_media / aafm_perm_delete_media check
+		// current_user_can('edit_post'|'delete_post', $att_id) DIRECTLY - attachments are a
+		// _builtin post type, so they never route through the CPT chokepoint at all). Core
+		// registers 'attachment' with capability_type 'post', reusing the same literal primitive
+		// names as the built-in post type for edit_posts/edit_others_posts/edit_published_posts and
+		// delete_posts/delete_others_posts/delete_published_posts (only create_posts is remapped,
+		// to upload_files) - so the floor mirrors update-post/trash-post above, split into its own
+		// edit case and delete case since they need different primitives.
+		//
+		// Previously this checked upload_files as a standalone OR arm. upload_files never appears
+		// anywhere in map_meta_cap's resolution of edit_post/delete_post - it only governs whether
+		// wp_insert_attachment()/media_handle_upload() will accept a NEW upload, a question the
+		// create-side aafm/upload-media ability answers on its own object-independent floor. A role
+		// holding upload_files without also holding edit_posts/edit_others_posts/edit_published_posts
+		// (default roles never produce this split, but a custom role can) would have been SHOWN
+		// update-media/delete-media while genuinely unable to execute either on any attachment - the
+		// same "standalone arm that can never resolve" defect Finding 1 removed from update-page,
+		// just in a different family. Removed rather than widened.
 		case 'aafm/update-media':
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 		case 'aafm/delete-media':
-			return static fn(): bool => current_user_can( 'upload_files' ) || current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'delete_posts' )
+				|| current_user_can( 'delete_others_posts' )
+				|| current_user_can( 'delete_published_posts' );
 
-		// add-post-terms gates per-object on edit_post on the target post; the post id is
-		// unknown at discovery (empty input), so use the object-independent authoring floor.
+		// add-post-terms gates per-object on edit_post on the target post
+		// (aafm_perm_add_post_terms -> aafm_can_edit_post_object); the post id is unknown at
+		// discovery (empty input), so use the same widened floor as update-post above.
 		case 'aafm/add-post-terms':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static fn(): bool => current_user_can( 'edit_posts' )
+				|| current_user_can( 'edit_others_posts' )
+				|| current_user_can( 'edit_published_posts' );
 
 		// Term writes gate on the TARGET taxonomy's own manage_terms cap (aafm_perm_manage_terms),
 		// and the taxonomy is unknown at discovery: with empty input the callback defaults to
@@ -469,12 +606,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
 		// included, since term meta can hold private data) - the term id is unknown at
-		// discovery, so use the edit_posts authoring floor, refined per-object at execute time.
-		// Mirrors the post-meta family (get/update/delete-post-meta).
+		// discovery, so this uses the SAME taxonomy loop as the acf-*-term-fields case above (and
+		// for the identical reason): edit_term resolves through map_meta_cap to the TARGET
+		// TAXONOMY's own edit_terms capability, not edit_posts. Previously this checked edit_posts,
+		// which - exactly as documented on the acf-term-fields case above - is neither necessary
+		// nor sufficient for edit_terms on a real taxonomy.
 		case 'aafm/get-term-meta':
 		case 'aafm/update-term-meta':
 		case 'aafm/delete-term-meta':
-			return static fn(): bool => current_user_can( 'edit_posts' );
+			return static function (): bool {
+				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
+					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
+						return true;
+					}
+				}
+				return false;
+			};
 
 		default:
 			return null;

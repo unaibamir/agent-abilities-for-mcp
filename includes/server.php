@@ -312,17 +312,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		// resolves through map_meta_cap to the TARGET TAXONOMY's own edit_terms capability (default
 		// manage_categories, but a decoupled custom cap on a custom taxonomy), with no
 		// author/published/private branching at all - terms have no author or visibility states the
-		// way posts do. The taxonomy is unknown at discovery (empty input), so this mirrors
-		// create-term/update-term below: manage_terms on ANY public taxonomy the caller can manage.
-		// Previously this shared the acf-post-fields case and checked edit_posts, which is neither
-		// necessary nor sufficient for edit_terms on a real taxonomy (a Contributor holds edit_posts
-		// without manage_categories and would have been shown a tool they can never execute on any
-		// term; a role with a custom taxonomy's own decoupled cap but no edit_posts would have been
-		// hidden from a tool they genuinely can execute).
+		// way posts do. The taxonomy is unknown at discovery (empty input), so this loops the
+		// exposed set, the same shape create-term/update-term and term-meta below use.
+		//
+		// Deliberately its OWN case, split from term-meta below (round 3), rather than sharing
+		// that loop: aafm_perm_acf_term() accepts ANY existing term and checks edit_term($id)
+		// directly, with NO aafm_validate_taxonomy()-style public-taxonomy restriction - unlike
+		// term-meta, which routes every request through aafm_validate_term_meta_request() ->
+		// aafm_validate_taxonomy() and IS restricted to public taxonomies. Sharing term-meta's
+		// public-only loop was too narrow for ACF term-fields specifically: a role holding a
+		// non-public taxonomy's own decoupled edit_terms cap could genuinely execute ACF
+		// term-fields on that taxonomy's terms, yet was hidden from the tool. So this loops EVERY
+		// registered taxonomy, public or not, matching aafm_perm_acf_term()'s real, broader floor.
 		case 'aafm/acf-get-term-fields':
 		case 'aafm/acf-update-term-fields':
 			return static function (): bool {
-				foreach ( get_taxonomies( array( 'public' => true ), 'objects' ) as $tax_object ) {
+				foreach ( get_taxonomies( array(), 'objects' ) as $tax_object ) {
 					if ( $tax_object instanceof WP_Taxonomy && current_user_can( $tax_object->cap->edit_terms ) ) {
 						return true;
 					}
@@ -606,11 +611,17 @@ function aafm_ability_list_permission( string $name ): ?callable {
 
 		// Term-meta read/write/delete gate per-object on the term (edit_term - the read
 		// included, since term meta can hold private data) - the term id is unknown at
-		// discovery, so this uses the SAME taxonomy loop as the acf-*-term-fields case above (and
-		// for the identical reason): edit_term resolves through map_meta_cap to the TARGET
+		// discovery, so this loops the exposed set the same way the acf-*-term-fields case above
+		// does, for the identical reason: edit_term resolves through map_meta_cap to the TARGET
 		// TAXONOMY's own edit_terms capability, not edit_posts. Previously this checked edit_posts,
 		// which - exactly as documented on the acf-term-fields case above - is neither necessary
 		// nor sufficient for edit_terms on a real taxonomy.
+		//
+		// PUBLIC TAXONOMIES ONLY, unlike acf-term-fields' now-broader loop (round 3): every
+		// term-meta request routes through aafm_validate_term_meta_request() ->
+		// aafm_validate_taxonomy(), which genuinely denies a non-public taxonomy at execute time
+		// (aafm_perm_acf_term has no such restriction), so this loop staying public-only still
+		// matches its own real, narrower floor exactly.
 		case 'aafm/get-term-meta':
 		case 'aafm/update-term-meta':
 		case 'aafm/delete-term-meta':

@@ -838,4 +838,47 @@ final class ServerDiscoveryTest extends TestCase {
 		$this->assertTrue( current_user_can( 'delete_post', $att_id ) );
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-media' ) );
 	}
+
+	/**
+	 * Fix round 3, ITEM 3 (LOW): aafm_perm_acf_term() accepts any EXISTING term and checks
+	 * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
+	 * restriction (unlike term-meta, which routes through aafm_validate_term_meta_request() and
+	 * DOES enforce that restriction). So the taxonomy loop ACF term-fields previously shared with
+	 * term-meta was too narrow for it: a user whose only usable taxonomy is non-public can
+	 * genuinely execute ACF term-fields but was hidden from discovering it.
+	 */
+	public function test_acf_term_fields_discoverable_on_non_public_taxonomy(): void {
+		register_taxonomy(
+			'aafm_private_genre',
+			'post',
+			array(
+				'public'       => false,
+				'capabilities' => array( 'edit_terms' => 'edit_aafm_private_genre' ),
+			)
+		);
+
+		$user_id = self::factory()->user->create( array( 'role' => 'subscriber' ) );
+		get_userdata( $user_id )->add_cap( 'edit_aafm_private_genre' );
+		wp_set_current_user( $user_id );
+
+		$term_id = self::factory()->term->create( array( 'taxonomy' => 'aafm_private_genre' ) );
+
+		$this->assertTrue(
+			aafm_perm_acf_term( array( 'term_id' => $term_id ) ),
+			'sanity: aafm_perm_acf_term has no public-taxonomy restriction, so this genuinely passes at execute time.'
+		);
+
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/acf-get-term-fields' ),
+			'discovery must not hide ACF term-fields from a role that can genuinely edit a term in a non-public taxonomy.'
+		);
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/acf-update-term-fields' ) );
+
+		// term-meta stays hidden for the SAME non-public taxonomy: its own execute-time gate
+		// (aafm_validate_term_meta_request -> aafm_validate_taxonomy) genuinely denies a
+		// non-public taxonomy, so discovery correctly disagrees with ACF term-fields here.
+		$this->assertFalse( aafm_user_can_discover_ability( 'aafm/get-term-meta' ) );
+
+		unregister_taxonomy( 'aafm_private_genre' );
+	}
 }

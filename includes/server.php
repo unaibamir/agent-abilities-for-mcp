@@ -380,7 +380,22 @@ function aafm_ability_list_permission( string $name ): ?callable {
 		case 'aafm/update-page':
 			return static function (): bool {
 				$pto = get_post_type_object( 'page' );
-				return $pto instanceof WP_Post_Type && current_user_can( $pto->cap->edit_posts );
+				if ( ! $pto instanceof WP_Post_Type ) {
+					return false;
+				}
+				// The floor here has to be an OR across every primitive capability
+				// map_meta_cap('edit_page', ...) can resolve to for SOME object, not just the
+				// author-editing-their-own-page case (cap->edit_posts, which for the page post
+				// type object IS the edit_pages capability). A role holding only
+				// edit_others_pages can still edit another author's draft/pending page; a role
+				// holding only edit_published_pages or edit_private_pages can still edit a
+				// published/private page they authored. Hiding the tool from any of those roles
+				// was the mismatch: the execute-time check on a real object would have let them
+				// through.
+				return current_user_can( $pto->cap->edit_posts )
+					|| current_user_can( $pto->cap->edit_others_posts )
+					|| current_user_can( $pto->cap->edit_published_posts )
+					|| current_user_can( $pto->cap->edit_private_posts );
 			};
 		case 'aafm/trash-page':
 		case 'aafm/delete-page':

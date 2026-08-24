@@ -294,4 +294,48 @@ final class ServerDiscoveryTest extends TestCase {
 		$this->acting_as( 'subscriber' ); // subscriber has 'read'.
 		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/count-posts' ) );
 	}
+
+	/**
+	 * B-update-page-discovery: a role holding edit_others_pages + edit_published_pages, but NOT
+	 * edit_pages, can genuinely pass aafm_perm_update_page() on someone else's published page
+	 * (WP's own map_meta_cap('edit_post', ...) resolves the "editing someone else's post"
+	 * branch through edit_others_pages + edit_published_pages, never through edit_pages at
+	 * all). The coarse discovery predicate must not hide the tool from that role.
+	 */
+	public function test_discovery_reconciles_update_page_for_a_role_missing_edit_pages(): void {
+		add_role(
+			'aafm_page_editor_no_own',
+			'AAFM Page Editor (no own)',
+			array(
+				'read'                 => true,
+				'edit_others_pages'    => true,
+				'edit_published_pages' => true,
+			)
+		);
+
+		$author_id     = self::factory()->user->create( array( 'role' => 'author' ) );
+		$other_page_id = self::factory()->post->create(
+			array(
+				'post_type'   => 'page',
+				'post_author' => $author_id,
+				'post_status' => 'publish',
+			)
+		);
+
+		$this->acting_as( 'aafm_page_editor_no_own' );
+
+		$this->assertFalse(
+			current_user_can( 'edit_pages' ),
+			'sanity: this role does not hold the generic edit_pages capability.'
+		);
+		$this->assertTrue(
+			aafm_perm_update_page( array( 'page_id' => $other_page_id ) ),
+			'sanity: the EXECUTE-time permission genuinely passes for this role on this page.'
+		);
+
+		$this->assertTrue(
+			aafm_user_can_discover_ability( 'aafm/update-page' ),
+			'discovery must not hide a tool this role can genuinely use, just because it lacks edit_pages specifically.'
+		);
+	}
 }

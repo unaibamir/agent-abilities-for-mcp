@@ -338,4 +338,66 @@ final class ServerDiscoveryTest extends TestCase {
 			'discovery must not hide a tool this role can genuinely use, just because it lacks edit_pages specifically.'
 		);
 	}
+
+	/**
+	 * A post authored by someone else, deliberately DRAFT rather than published:
+	 * map_meta_cap's "editing/deleting someone else's post" branch only adds
+	 * edit_others_posts/delete_others_posts by itself for a draft/pending object - a PUBLISHED
+	 * post by another author additionally requires edit_published_posts/delete_published_posts
+	 * (both ANDed together), so a published fixture would test a different, two-cap combination.
+	 *
+	 * @param string $post_type Post type to create.
+	 * @return int Post id.
+	 */
+	private function foreign_authored_post( string $post_type = 'post' ): int {
+		$author_id = self::factory()->user->create( array( 'role' => 'author' ) );
+		return (int) self::factory()->post->create(
+			array(
+				'post_type'   => $post_type,
+				'post_author' => $author_id,
+				'post_status' => 'draft',
+			)
+		);
+	}
+
+	/**
+	 * FINDING 1 (Codex MEDIUM): the standalone edit_private_pages arm never resolves anything on
+	 * its own (core only ever pairs it with edit_others_pages), so a role holding ONLY
+	 * edit_private_pages was shown update-page despite being unable to execute it on any object.
+	 * Removing the arm must make discovery agree with that reality.
+	 */
+	public function test_update_page_no_longer_discoverable_on_private_pages_cap_alone(): void {
+		add_role(
+			'aafm_private_pages_only',
+			'AAFM Private Pages Only',
+			array(
+				'read'               => true,
+				'edit_private_pages' => true,
+			)
+		);
+
+		$other_page_id = $this->foreign_authored_post( 'page' );
+		wp_update_post(
+			array(
+				'ID'          => $other_page_id,
+				'post_status' => 'private',
+			)
+		);
+
+		$this->acting_as( 'aafm_private_pages_only' );
+
+		$this->assertFalse(
+			current_user_can( 'edit_others_pages' ),
+			'sanity: this role does not hold edit_others_pages.'
+		);
+		$this->assertFalse(
+			aafm_perm_update_page( array( 'page_id' => $other_page_id ) ),
+			'sanity: edit_private_pages alone never satisfies the EXECUTE-time permission, even on a private page.'
+		);
+
+		$this->assertFalse(
+			aafm_user_can_discover_ability( 'aafm/update-page' ),
+			'discovery must not show a tool that edit_private_pages alone can never execute.'
+		);
+	}
 }

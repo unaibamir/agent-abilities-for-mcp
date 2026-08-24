@@ -391,17 +391,23 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				// that branch adds no other required cap. A role holding only
 				// edit_published_pages can still edit a published or scheduled page they
 				// authored themselves, again the only cap map_meta_cap adds for that case.
-				// edit_private_pages never resolves on its own - core only ever pairs it with
-				// edit_others_pages, for someone else's private page - but it stays in the
-				// floor rather than being carved out as a special case: the execute-time check
-				// on the real object is what enforces that pairing, so dropping it here would
-				// only add a special-cased exception without changing what execute allows.
-				// Hiding the tool from either of the first two roles was the original mismatch:
-				// the execute-time check on a real object would have let them through.
+				//
+				// Deliberately NO edit_private_pages arm. Verified against core's
+				// map_meta_cap('edit_page', ...) (wp-includes/capabilities.php, the edit_post/
+				// edit_page branch): a private page the CURRENT USER authored does not get its own
+				// branch - 'private' isn't 'publish'/'future'/'trash', so it falls into the same
+				// else arm as a draft and adds cap->edit_posts (already covered by the first arm
+				// above), never cap->edit_private_posts. edit_private_posts only ever appears
+				// paired with edit_others_posts, for SOMEONE ELSE'S private page - so a role
+				// holding edit_private_pages ALONE (without edit_others_pages) can never satisfy
+				// map_meta_cap for any object, on any branch. Keeping it as a standalone OR arm
+				// would show the tool to a role that can never actually call it - the same class of
+				// defect this comment used to defend keeping, before that was found to be wrong
+				// (Codex, fix round 1) and corrected. Removal is safe: anyone who also holds
+				// edit_others_pages still matches through that arm.
 				return current_user_can( $pto->cap->edit_posts )
 					|| current_user_can( $pto->cap->edit_others_posts )
-					|| current_user_can( $pto->cap->edit_published_posts )
-					|| current_user_can( $pto->cap->edit_private_posts );
+					|| current_user_can( $pto->cap->edit_published_posts );
 			};
 		case 'aafm/trash-page':
 		case 'aafm/delete-page':

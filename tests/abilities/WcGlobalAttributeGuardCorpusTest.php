@@ -445,10 +445,52 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 
 		$this->assertInstanceOf( WP_Error::class, $error );
 		$this->assertStringNotContainsString( 'unchanged', $error->get_error_message() );
-		$this->assertStringContainsString(
+		$this->assertStringNotContainsString(
 			'wc-update-product-attribute',
 			$error->get_error_message(),
-			'It must still name the tool that CAN change the attribute.'
+			'wc-update-product-attribute cannot change an attribute\'s options at all, so it must not be named as a remedy.'
+		);
+	}
+
+	/**
+	 * B-wc-attribute-remedy: neither refusal message may point the caller at
+	 * wc-update-product-attribute as if it could change a global attribute's options - it only
+	 * exposes name/slug/type/order_by/has_archives (aafm_wc_attribute_write_properties()),
+	 * never options/terms. Following that pointer was a guaranteed second refusal.
+	 */
+	public function test_the_not_editable_message_does_not_point_at_a_tool_that_cannot_do_it(): void {
+		$error = aafm_wc_global_attribute_change_error(
+			array(
+				array(
+					'name'    => self::TAXONOMY,
+					'options' => array( 'purple' ),
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertStringNotContainsString(
+			'wc-update-product-attribute',
+			$error->get_error_message(),
+			'wc-update-product-attribute cannot change an attribute\'s options at all, so it must not be named as a remedy.'
 		);
 	}
 

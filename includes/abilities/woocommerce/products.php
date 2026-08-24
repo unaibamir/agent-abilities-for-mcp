@@ -894,7 +894,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 			'aafm_wc_global_attribute_display_masked',
 			sprintf(
 				/* translators: %s: comma-separated list of global attribute slugs whose displayed options differ from the stored ones. */
-				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. To change the attribute itself, use wc-update-product-attribute.', 'agent-abilities-for-mcp' ),
+				__( 'Something on this site is filtering what these global attributes show, so the options you were given for them are not the ones stored: %s. Sending those options back could mean "leave this alone" or it could mean "remove the terms I was not shown", and nothing in the request says which, so it is refused instead of guessed at. To change other fields, leave the attributes field out. Changing a global attribute\'s own options is not available through this plugin; that has to be done in the WooCommerce admin.', 'agent-abilities-for-mcp' ),
 				implode( ', ', $masked )
 			)
 		);
@@ -908,7 +908,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 		'aafm_wc_global_attribute_not_editable',
 		sprintf(
 			/* translators: %s: comma-separated list of global attribute slugs the request tried to change. */
-			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Use wc-update-product-attribute to change the attribute itself, or send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
+			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Changing a global attribute\'s options is not available through this plugin\'s abilities; that has to be done in the WooCommerce admin. Send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
 			implode( ', ', $refused )
 		)
 	);

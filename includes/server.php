@@ -542,28 +542,38 @@ function aafm_ability_list_permission( string $name ): ?callable {
 					|| current_user_can( $pto->cap->delete_published_posts );
 			};
 
-		// Comment writes: the site-wide moderate_comments floor the per-object
-		// edit_comment() refines at execute time. The comment id is unknown at
-		// discovery (empty input), so discovery uses the object-independent floor.
-		//
 		// create-comment has NO per-object component at all (aafm_perm_create_comment is a bare
 		// moderate_comments check - the comment doesn't exist yet and its author is forced to the
 		// current user), so moderate_comments is the exact, complete execute-time floor for it.
-		//
-		// moderate-comment/update-comment/delete-comment DO have one beyond moderate_comments:
-		// aafm_perm_moderate_comment_obj / aafm_perm_edit_comment_obj also require
-		// current_user_can('edit_comment', $id), which resolves through edit_post on the
-		// comment's PARENT POST - i.e. the same edit_posts/edit_others_posts/edit_published_posts
-		// floor widened elsewhere in this function. That is a genuine gap, but in the OPPOSITE
-		// direction from every widening fix in this pass: a role holding moderate_comments without
-		// any edit-post floor would be SHOWN these three tools while never able to execute on any
-		// comment, not hidden from a tool it could use. Closing it needs an added AND condition
-		// here, not a widened OR arm, and no built-in WordPress role produces that combination
-		// (Editor and Administrator, the only two with moderate_comments, both already hold
-		// edit_posts and edit_others_posts) - so it is left alone rather than folded into this
-		// widening-only pass; a narrowing fix deserves its own review, not a rider on this one.
-		case 'aafm/moderate-comment':
+		// Split into its own case (round 3) so it stops sharing a closure with the three
+		// per-object comment tools below, which genuinely need a different floor.
 		case 'aafm/create-comment':
+			return static fn(): bool => current_user_can( 'moderate_comments' );
+
+		// moderate-comment/update-comment/delete-comment additionally require
+		// current_user_can('edit_comment', $id) beyond moderate_comments. Verified directly
+		// against core (wp-includes/capabilities.php, the 'edit_comment' branch of
+		// map_meta_cap()): edit_comment resolves to map_meta_cap('edit_post', user, $post->ID) on
+		// the comment's PARENT POST - or, if the parent post no longer exists (an orphaned
+		// comment), falls back to the single literal primitive map_meta_cap('edit_posts', user)
+		// with NO type-specific or author/status branching at all.
+		//
+		// That parent post is NOT restricted to any allowlist: aafm_exec_create_comment() accepts
+		// comment_post_ID for ANY real post get_post() returns, regardless of post_type - so a
+		// comment's parent could be of a post type this plugin never exposes for content writes at
+		// all. A provably-complete narrowed floor would therefore need to loop EVERY registered
+		// post type site-wide (not just aafm_allowed_post_types()), branch per type on whether
+		// map_meta_cap is enabled (a non-mapped type collapses to a single literal
+		// cap->edit_post primitive, not the edit_posts/edit_others_posts/edit_published_posts OR
+		// used everywhere else in this function), AND separately cover the orphaned-comment
+		// fallback to literal edit_posts - each piece a real, independent way to get the proof
+		// wrong and hide a tool from someone who can genuinely use it, which is a worse defect
+		// than the current over-broad state. No built-in WordPress role produces the gap this
+		// leaves (Editor and Administrator, the only two with moderate_comments, both already
+		// hold edit_posts and edit_others_posts), so this stays a bare moderate_comments check -
+		// left alone deliberately rather than narrowed on an incomplete proof, per the same
+		// "widen freely, narrow only when provably safe" posture as the rest of this function.
+		case 'aafm/moderate-comment':
 		case 'aafm/update-comment':
 		case 'aafm/delete-comment':
 			return static fn(): bool => current_user_can( 'moderate_comments' );

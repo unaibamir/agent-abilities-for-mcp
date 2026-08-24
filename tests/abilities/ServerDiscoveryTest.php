@@ -929,6 +929,59 @@ final class ServerDiscoveryTest extends TestCase {
 	}
 
 	/**
+	 * Fix round 3, ITEM 2 (MEDIUM): create-comment has NO per-object component (the comment
+	 * doesn't exist yet and its author is forced to the current user), so splitting it into its
+	 * own case must not change its behaviour - moderate_comments alone is still the exact,
+	 * complete floor.
+	 */
+	public function test_create_comment_discoverable_on_moderate_comments_alone(): void {
+		add_role(
+			'aafm_comment_creator',
+			'AAFM Comment Creator',
+			array(
+				'read'              => true,
+				'moderate_comments' => true,
+			)
+		);
+		$this->acting_as( 'aafm_comment_creator' );
+
+		$this->assertTrue( aafm_perm_create_comment() );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/create-comment' ) );
+	}
+
+	/**
+	 * Fix round 3, ITEM 2 (MEDIUM, documented as LEFT ALONE): moderate-comment/update-comment/
+	 * delete-comment additionally require edit_comment($id), which resolves through
+	 * map_meta_cap('edit_post', ...) on the comment's PARENT POST (verified directly against
+	 * core, wp-includes/capabilities.php's 'edit_comment' branch) - not restricted to any
+	 * post-type allowlist, since aafm_exec_create_comment accepts any real post regardless of
+	 * type. A role holding moderate_comments with NO edit-post floor at all is still shown these
+	 * three tools; this test pins that documented, over-broad-but-not-narrowed state so a future
+	 * change to the comment-object floor has to touch this test deliberately rather than
+	 * silently.
+	 */
+	public function test_comment_object_tools_still_discoverable_on_bare_moderate_comments(): void {
+		add_role(
+			'aafm_moderate_only',
+			'AAFM Moderate Only',
+			array(
+				'read'              => true,
+				'moderate_comments' => true,
+			)
+		);
+		$this->acting_as( 'aafm_moderate_only' );
+
+		$this->assertFalse(
+			current_user_can( 'edit_posts' ),
+			'sanity: this role holds moderate_comments but no edit-post floor whatsoever.'
+		);
+
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/moderate-comment' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/update-comment' ) );
+		$this->assertTrue( aafm_user_can_discover_ability( 'aafm/delete-comment' ) );
+	}
+
+	/**
 	 * Fix round 3, ITEM 3 (LOW): aafm_perm_acf_term() accepts any EXISTING term and checks
 	 * edit_term($id) directly, with no aafm_validate_taxonomy()-style public-taxonomy
 	 * restriction (unlike term-meta, which routes through aafm_validate_term_meta_request() and

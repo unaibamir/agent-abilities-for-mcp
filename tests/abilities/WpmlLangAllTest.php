@@ -22,9 +22,13 @@ declare( strict_types=1 );
 namespace AAFM\Tests\Abilities;
 
 use AAFM\Tests\TestCase;
+use AAFM\Tests\IntegrationStubs;
+use AAFM\Tests\WcStubStore;
 use WP_Term;
 
 final class WpmlLangAllTest extends TestCase {
+
+	use IntegrationStubs;
 
 	/**
 	 * The only two codes this fake WPML install recognizes as valid switch targets.
@@ -70,6 +74,7 @@ final class WpmlLangAllTest extends TestCase {
 		$this->current_lang   = 'is';
 		$this->switch_log     = array();
 		$this->query_lang_log = array();
+		WcStubStore::reset();
 		parent::tear_down();
 	}
 
@@ -382,5 +387,45 @@ final class WpmlLangAllTest extends TestCase {
 		$this->assertIsArray( $out );
 		$this->assertSame( 5, $out['total'], 'lang:"all" must count terms from every active language.' );
 		$this->assertCount( 5, $out['terms'] );
+	}
+
+	/**
+	 * WcStubStore::query() (the wc_get_products() test double) is language-blind - it returns the
+	 * same rows regardless of ambient WPML language. That makes this test a MECHANICAL proof
+	 * (the loop runs once per active code and correctly sums/concatenates) rather than a
+	 * real-content proof; the real-content guarantee is Task 1's aafm_exec_get_posts() fix,
+	 * which this consumer's fix is structurally identical to.
+	 */
+	public function test_wc_list_products_lang_all_queries_once_per_active_language(): void {
+		$this->fake_wpml_with_post_filtering();
+		// stub_woocommerce() defines the WC_Product class + wc_get_products()/wc_get_products()
+		// stub functions (guarded, so a second definition in the same process never fatals) and
+		// seeds WcStubStore with one publish product (id 101, "Test Widget") - exactly the single
+		// row this test needs the language-blind stub to return twice under lang:"all".
+		$this->stub_woocommerce();
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_wc_list_products( array( 'lang' => 'all' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'all', $out['language'] );
+		// The expected sequence is ['en', 'is'], not the iteration order ['is', 'en']: the ambient
+		// language starts at 'is' (fake_wpml_with_post_filtering()'s default), the FIRST iterated
+		// code, so aafm_with_language() legitimately skips firing the action for it (target already
+		// equals ambient - the same optimization A1's report documents for the post-side fix) and
+		// only switches for 'en', then restores to 'is' in its finally block. Still fully
+		// discriminating: the pre-fix single aafm_with_language('all', ...) call logs ['all', 'is']
+		// instead, so this distinguishes the fix from the defect just as precisely.
+		$this->assertSame(
+			array( 'en', 'is' ),
+			$this->switch_log,
+			'the fix must query once per active language (switch to en, then restore to is; is itself needs no switch since it is already ambient).'
+		);
+		$this->assertSame(
+			2,
+			$out['total'],
+			'the language-blind stub returns the same row for each of the 2 active languages, so a correct merge sums to 2.'
+		);
+		$this->assertCount( 2, $out['products'] );
 	}
 }

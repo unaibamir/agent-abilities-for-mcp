@@ -420,32 +420,43 @@ function aafm_exec_wc_list_products( array $input ) {
 	$page     = isset( $input['page'] ) ? max( 1, (int) $input['page'] ) : 1;
 	$status   = isset( $input['status'] ) ? sanitize_key( (string) $input['status'] ) : 'any';
 
-	// aafm_with_language() returns mixed, so restore the concrete type wc_get_products() promises
-	// (an array of WC_Product, or a stdClass carrying ->products/->total when paginate is true) -
-	// otherwise the is_object() narrowing below loses stdClass's dynamic-property allowance.
-	/**
-	 * The raw WooCommerce product query result.
-	 *
-	 * @var WC_Product[]|\stdClass $query
-	 */
-	$query = aafm_with_language(
-		$lang,
-		static function () use ( $per_page, $page, $status ) {
-			return wc_get_products(
-				array(
-					'limit'    => $per_page,
-					'page'     => $page,
-					'status'   => $status,
-					'paginate' => true,
-				)
-			);
-		}
-	);
+	$build_page = static function () use ( $per_page, $page, $status ) {
+		return wc_get_products(
+			array(
+				'limit'    => $per_page,
+				'page'     => $page,
+				'status'   => $status,
+				'paginate' => true,
+			)
+		);
+	};
 
 	// With paginate => true WooCommerce returns an object carrying ->products (the page) and ->total
 	// (the full matching count); total is the grand total for pagination, not the page row count.
-	$products = is_object( $query ) ? (array) $query->products : (array) $query;
-	$total    = is_object( $query ) ? (int) $query->total : count( $products );
+	$products = array();
+	$total    = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			/**
+			 * The raw WooCommerce product query result.
+			 *
+			 * @var WC_Product[]|\stdClass $query
+			 */
+			$query      = aafm_with_language( $code, $build_page );
+			$page_items = is_object( $query ) ? (array) $query->products : (array) $query;
+			$products   = array_merge( $products, $page_items );
+			$total     += is_object( $query ) ? (int) $query->total : count( $page_items );
+		}
+	} else {
+		/**
+		 * The raw WooCommerce product query result.
+		 *
+		 * @var WC_Product[]|\stdClass $query
+		 */
+		$query    = aafm_with_language( $lang, $build_page );
+		$products = is_object( $query ) ? (array) $query->products : (array) $query;
+		$total    = is_object( $query ) ? (int) $query->total : count( $products );
+	}
 
 	foreach ( $products as $product ) {
 		if ( $product instanceof \WC_Product ) {

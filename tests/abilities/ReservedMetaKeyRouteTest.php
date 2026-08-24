@@ -264,6 +264,24 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 		$this->assertStringContainsString( 'aafm-wc-update-product', $price_write );
 		$this->assertStringContainsString( '"regular_price"', $price_write );
 
+		// The write assertions above are not enough on their own: a delete route with its own
+		// wrong or dead call would pass them silently. WooProductsTest::
+		// test_update_product_can_clear_regular_and_sale_price_with_an_empty_string() is the test
+		// that actually executes this route's call against aafm-wc-update-product's schema; this
+		// half only pins the wording an agent reads.
+		$price_delete = $this->wire_text(
+			$this->wire_body(
+				'aafm/delete-post-meta',
+				array(
+					'post_id'  => $post_id,
+					'meta_key' => '_regular_price',
+				)
+			)
+		);
+		$this->assertStringContainsString( '_regular_price', $price_delete );
+		$this->assertStringContainsString( 'aafm-wc-update-product', $price_delete, 'The delete route names the real clearing call.' );
+		$this->assertStringContainsString( '"regular_price"', $price_delete );
+
 		$computed_write = $this->wire_text(
 			$this->wire_body(
 				'aafm/update-post-meta',

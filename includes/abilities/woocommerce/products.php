@@ -555,13 +555,21 @@ function aafm_wc_product_write_properties(): array {
 		),
 		'regular_price'     => array(
 			'type'        => 'string',
-			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator).',
+			// Empty string is deliberately accepted alongside a decimal: it is WooCommerce's own
+			// way of clearing a price. set_regular_price() runs the value through
+			// wc_format_decimal(), which returns '' unchanged for an empty input rather than
+			// rejecting it, and aafm_reserved_post_meta_routes() tells an agent to clear
+			// `_regular_price` by sending exactly that. A pattern that only matched a populated
+			// decimal made that documented route impossible to call.
+			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "19.99" (no currency symbol or thousands separator), or an empty string to clear the price.',
 		),
 		'sale_price'        => array(
 			'type'        => 'string',
-			'pattern'     => '^\\d+(\\.\\d{1,2})?$',
-			'description' => 'A decimal price as a string, e.g. "14.99". Must be at or below regular_price to take effect.',
+			// Same reasoning as regular_price above: an empty string is the normal way to end a
+			// sale (clear the sale price) rather than an invalid one.
+			'pattern'     => '^$|^\\d+(\\.\\d{1,2})?$',
+			'description' => 'A decimal price as a string, e.g. "14.99" (must be at or below regular_price to take effect), or an empty string to clear the sale price.',
 		),
 		'stock_status'      => array(
 			'type'        => 'string',

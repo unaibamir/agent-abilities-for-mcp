@@ -611,6 +611,44 @@ final class WooProductsTest extends TestCase {
 		$this->assertSame( '9.50', $read['regular_price'], 'The price round-trips on a following read.' );
 	}
 
+	/**
+	 * B-regular-price-delete-route: the reserved-meta routing table
+	 * (aafm_reserved_post_meta_routes() in includes/register.php) tells an agent that clearing
+	 * `_regular_price` is "Call aafm-wc-update-product with an empty 'regular_price' to clear
+	 * it." That call has to actually succeed - an empty regular_price/sale_price is a normal,
+	 * WooCommerce-native way to price nothing, mirrored by WC_Product::set_regular_price()
+	 * running the value through wc_format_decimal(), which passes an empty string straight
+	 * through rather than rejecting it. This pins the route's claim against the ability's own
+	 * schema and execute path, so a route naming a call the schema itself rejects fails here
+	 * instead of only being caught by hand.
+	 */
+	public function test_update_product_can_clear_regular_and_sale_price_with_an_empty_string(): void {
+		$this->acting_as( 'administrator' );
+		$created = wp_get_ability( 'aafm/wc-create-product' )->execute(
+			array(
+				'name'          => 'Clearable Price Product',
+				'regular_price' => '9.50',
+				'sale_price'    => '7.00',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $created );
+
+		$cleared = wp_get_ability( 'aafm/wc-update-product' )->execute(
+			array(
+				'product_id'    => (int) $created['id'],
+				'regular_price' => '',
+				'sale_price'    => '',
+			)
+		);
+		$this->assertNotInstanceOf( WP_Error::class, $cleared, 'An empty regular_price/sale_price is the documented way to clear a price, not a validation error.' );
+		$this->assertSame( '', $cleared['regular_price'], 'regular_price is cleared.' );
+		$this->assertSame( '', $cleared['sale_price'], 'sale_price is cleared.' );
+
+		$read = wp_get_ability( 'aafm/wc-get-product' )->execute( array( 'product_id' => (int) $created['id'] ) );
+		$this->assertSame( '', $read['regular_price'], 'The cleared price round-trips on a following read.' );
+		$this->assertSame( '', $read['sale_price'], 'The cleared sale price round-trips on a following read.' );
+	}
+
 	public function test_create_product_denies_an_editor(): void {
 		$this->acting_as( 'editor' );
 		$this->assertNotTrue(

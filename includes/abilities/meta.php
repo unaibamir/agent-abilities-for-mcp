@@ -93,7 +93,7 @@ function aafm_args_get_post_meta(): array {
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The post-meta key to read. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the read runs, not returned empty. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it is never readable here. Call aafm-get-media-item, which returns alt as a plain field.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The post-meta key to read. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the read runs, not returned empty. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it is never readable here. Call aafm-get-media-item, which returns alt as a plain field. The featured image is stored under _thumbnail_id, also protected; call aafm-get-post or aafm-get-page, which return the "featured_image" object.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key' ),
@@ -288,7 +288,7 @@ function aafm_args_update_post_meta(): array {
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The post-meta key to write. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the write runs, never silently ignored. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be written here. Call aafm-update-media and pass its alt parameter instead.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The post-meta key to write. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the write runs, never silently ignored. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be written here. Call aafm-update-media and pass its alt parameter instead. The featured image is stored under _thumbnail_id, also protected; call aafm-set-featured-image, or pass "featured_media" to aafm-update-post or aafm-update-page.', 'agent-abilities-for-mcp' ),
 				),
 				'value'    => array(
 					'type'        => array( 'string', 'number', 'boolean', 'integer' ),
@@ -385,7 +385,7 @@ function aafm_args_delete_post_meta(): array {
 				'meta_key' => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- schema property key, not a meta query.
 					'type'        => 'string',
 					'minLength'   => 1,
-					'description' => __( 'The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be deleted here. Call aafm-update-media with an empty alt to clear it.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'The post-meta key to delete. Removes every stored value of this key, not just one. Must be on the operator\'s post-meta allowlist (or the allow-all wildcard) and not explicitly denied or hard-blocked; protected (underscore-prefixed), auth, and capability keys can never be exposed. A key that fails any of those checks is rejected before the delete runs. Attachment alt text is stored under _wp_attachment_image_alt, a protected key, so it can never be deleted here. Call aafm-update-media with an empty alt to clear it. The featured image is stored under _thumbnail_id, also protected, and has no delete route: call aafm-set-featured-image to change it instead.', 'agent-abilities-for-mcp' ),
 				),
 			),
 			'required'             => array( 'post_id', 'meta_key' ),

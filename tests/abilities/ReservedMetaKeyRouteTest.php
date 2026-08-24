@@ -293,6 +293,30 @@ final class ReservedMetaKeyRouteTest extends TestCase {
 	}
 
 	/**
+	 * B-thumbnail-in-description: the schema description an agent reads BEFORE ever calling the
+	 * tool only mentioned the alt-text route, not the thumbnail one, even though the runtime
+	 * routing table (aafm_reserved_post_meta_routes()) already has a working _thumbnail_id
+	 * route. An agent discovers the second route only by trial and error otherwise.
+	 */
+	public function test_the_meta_key_descriptions_also_mention_the_thumbnail_route(): void {
+		$this->register_meta_abilities();
+
+		foreach (
+			array(
+				'aafm/get-post-meta'    => 'aafm-get-post or aafm-get-page',
+				'aafm/update-post-meta' => 'aafm-set-featured-image',
+				'aafm/delete-post-meta' => 'aafm-set-featured-image',
+			) as $ability => $expected_mention
+		) {
+			$schema      = wp_get_ability( $ability )->get_input_schema();
+			$description = (string) $schema['properties']['meta_key']['description'];
+
+			$this->assertStringContainsString( '_thumbnail_id', $description, $ability . ' must mention the thumbnail key too.' );
+			$this->assertStringContainsString( $expected_mention, $description, $ability . ' must name the real thumbnail route.' );
+		}
+	}
+
+	/**
 	 * Every message a client can receive from this path uses the DASH tool name.
 	 *
 	 * The transform is aafm_mcp_tool_name(), str_replace( '/', '-', ... ) at includes/server.php:24, so the slash

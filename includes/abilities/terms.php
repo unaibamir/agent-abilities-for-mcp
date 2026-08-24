@@ -176,47 +176,59 @@ function aafm_exec_get_terms( array $input ) {
 	if ( is_wp_error( $lang ) ) {
 		return $lang;
 	}
-	$result = aafm_with_language(
-		$lang,
-		static function () use ( $taxonomy, $search, $paging ): array {
-			$terms = get_terms(
-				array(
-					'taxonomy'   => $taxonomy,
-					'hide_empty' => false,
-					'search'     => $search,
-					'number'     => $paging['per_page'],
-					'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
-				)
-			);
 
-			// total is the full match count for the same taxonomy + search filter (not paged), so
-			// an agent can page through the whole set. wp_count_terms() honors hide_empty/search the
-			// same way the listing query does.
-			$total = wp_count_terms(
-				array(
-					'taxonomy'   => $taxonomy,
-					'hide_empty' => false,
-					'search'     => $search,
-				)
-			);
+	$build_page = static function () use ( $taxonomy, $search, $paging ): array {
+		$terms = get_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'search'     => $search,
+				'number'     => $paging['per_page'],
+				'offset'     => ( $paging['page'] - 1 ) * $paging['per_page'],
+			)
+		);
 
-			return array( $terms, $total );
+		// total is the full match count for the same taxonomy + search filter (not paged), so
+		// an agent can page through the whole set. wp_count_terms() honors hide_empty/search the
+		// same way the listing query does.
+		$total = wp_count_terms(
+			array(
+				'taxonomy'   => $taxonomy,
+				'hide_empty' => false,
+				'search'     => $search,
+			)
+		);
+
+		return array( $terms, $total );
+	};
+
+	$objects = array();
+	$total   = 0;
+	if ( 'all' === $lang ) {
+		// A single language's get_terms() error would repeat identically for every language
+		// (same taxonomy, same args - only the ambient language differs), so skipping a failed
+		// language and merging the rest degrades gracefully rather than discarding everything.
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			list( $terms, $lang_total ) = aafm_with_language( $code, $build_page );
+			if ( is_wp_error( $terms ) ) {
+				continue;
+			}
+			$filtered = array_values( array_filter( (array) $terms, static fn( $term ): bool => $term instanceof WP_Term ) );
+			$objects  = array_merge( $objects, $filtered );
+			$total   += is_wp_error( $lang_total ) ? count( $filtered ) : (int) $lang_total;
 		}
-	);
-
-	list( $terms, $total ) = $result;
-	if ( is_wp_error( $terms ) ) {
-		return aafm_generic_error();
+	} else {
+		list( $terms, $lang_total ) = aafm_with_language( $lang, $build_page );
+		if ( is_wp_error( $terms ) ) {
+			return aafm_generic_error();
+		}
+		$objects = array_values( array_filter( (array) $terms, static fn( $term ): bool => $term instanceof WP_Term ) );
+		$total   = is_wp_error( $lang_total ) ? count( $objects ) : (int) $lang_total;
 	}
-
-	$objects = array_filter(
-		(array) $terms,
-		static fn( $term ): bool => $term instanceof WP_Term
-	);
 
 	return array(
 		'terms'    => array_values( array_map( 'aafm_redact_term', $objects ) ),
-		'total'    => is_wp_error( $total ) ? count( $objects ) : (int) $total,
+		'total'    => $total,
 		'language' => $lang,
 	);
 }

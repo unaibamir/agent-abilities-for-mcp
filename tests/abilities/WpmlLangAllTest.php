@@ -331,4 +331,56 @@ final class WpmlLangAllTest extends TestCase {
 		$this->assertSame( 3, $out['total'] );
 		$this->assertSame( 3, (int) ( (array) $out['by_mime'] )['image/jpeg'] );
 	}
+
+	/**
+	 * Fake WPML term-language filtering via get_terms_args, mirroring the post-side fake but for
+	 * get_terms()/wp_count_terms() (which wp_count_terms() delegates to internally).
+	 */
+	private function fake_wpml_term_filtering(): void {
+		$this->fake_wpml_with_post_filtering();
+		add_filter(
+			'get_terms_args',
+			function ( array $args ) {
+				$meta_query   = isset( $args['meta_query'] ) ? (array) $args['meta_query'] : array();
+				$meta_query[] = array(
+					'key'   => '_aafm_test_lang',
+					'value' => $this->current_lang,
+				);
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- test-only fake filtering get_terms_args, not a real query.
+				$args['meta_query'] = $meta_query;
+				return $args;
+			}
+		);
+	}
+
+	public function test_get_terms_lang_all_spans_every_active_language(): void {
+		$this->fake_wpml_term_filtering();
+		$this->acting_as( 'administrator' );
+
+		$is_terms = array();
+		for ( $i = 0; $i < 3; $i++ ) {
+			$is_terms[] = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		}
+		foreach ( $is_terms as $term_id ) {
+			update_term_meta( $term_id, '_aafm_test_lang', 'is' );
+		}
+		$en_terms = array();
+		for ( $i = 0; $i < 2; $i++ ) {
+			$en_terms[] = self::factory()->term->create( array( 'taxonomy' => 'category' ) );
+		}
+		foreach ( $en_terms as $term_id ) {
+			update_term_meta( $term_id, '_aafm_test_lang', 'en' );
+		}
+
+		$out = aafm_exec_get_terms(
+			array(
+				'taxonomy' => 'category',
+				'lang'     => 'all',
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 5, $out['total'], 'lang:"all" must count terms from every active language.' );
+		$this->assertCount( 5, $out['terms'] );
+	}
 }

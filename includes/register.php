@@ -427,6 +427,74 @@ function aafm_unreachable_meta_key_error( string $name, array $input ) {
 }
 
 /**
+ * The WordPress-reserved user-meta keys an agent reaches for by name, and the ability that
+ * actually does the job. Mirrors aafm_reserved_post_meta_routes() exactly, but for user meta:
+ * `wp_capabilities` is already hard-blocked outright (aafm_hard_blocked_user_meta_key()), and
+ * this is additive UX on top of that existing block, not a new security boundary. Deliberately
+ * scoped to this one key for now per planning doc 200 - a SHOULD-level wording improvement, not
+ * a gap to close urgently.
+ *
+ * @return array<string, array<string, string>> Canonical key => operation => sentence naming the route.
+ */
+function aafm_reserved_user_meta_routes(): array {
+	return array(
+		'wp_capabilities' => array(
+			'read'   => __( 'Call aafm-get-user, which returns the user\'s roles as a "roles" field.', 'agent-abilities-for-mcp' ),
+			'write'  => __( 'Call aafm-update-user and pass its "role" parameter.', 'agent-abilities-for-mcp' ),
+			'delete' => '',
+		),
+	);
+}
+
+/**
+ * User-meta counterpart to aafm_unreachable_meta_key_error() - same shape, same fail-closed
+ * re-check against the live hard-block, same operation-per-ability scoping, but reading the
+ * `key` input the three user-meta abilities actually use (not `meta_key`) and checking
+ * aafm_hard_blocked_user_meta_key() (not the post-scoped aafm_hard_blocked_meta_key()).
+ *
+ * @param string              $name  Ability name.
+ * @param array<string,mixed> $input Call arguments.
+ * @return \WP_Error|null The refusal, or null to leave the call on its normal path.
+ */
+function aafm_unreachable_user_meta_key_error( string $name, array $input ) {
+	$operations = array(
+		'aafm/get-user-meta'    => 'read',
+		'aafm/update-user-meta' => 'write',
+		'aafm/delete-user-meta' => 'delete',
+	);
+	if ( ! isset( $operations[ $name ] ) ) {
+		return null;
+	}
+
+	$raw = $input['key'] ?? null;
+	$key = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+	if ( '' === $key ) {
+		return null;
+	}
+
+	$routes    = aafm_reserved_user_meta_routes();
+	$canonical = '';
+	foreach ( array_keys( $routes ) as $candidate ) {
+		if ( 0 === strcasecmp( $candidate, $key ) ) {
+			$canonical = $candidate;
+			break;
+		}
+	}
+	if ( '' === $canonical || ! aafm_hard_blocked_user_meta_key( $key ) ) {
+		return null;
+	}
+
+	$route = (string) ( $routes[ $canonical ][ $operations[ $name ] ] ?? '' );
+	$lead  = sprintf(
+		/* translators: %s: the WordPress-reserved user-meta key the call named. */
+		__( 'The user meta key "%s" is protected by WordPress, so no user can reach it through this tool.', 'agent-abilities-for-mcp' ),
+		$canonical
+	);
+
+	return new WP_Error( 'aafm_user_meta_key_unreachable', '' === $route ? $lead : $lead . ' ' . $route );
+}
+
+/**
  * Register one ability through the audited, guarded, rate-limited choke point.
  *
  * @param string              $name Ability name.
@@ -566,7 +634,12 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// unchanged when a call is both malformed and reserved, and evaluated only on that branch
 		// so a malformed call is never asked about its key. See aafm_unreachable_meta_key_error()
 		// for why this discloses nothing a capability message would.
-		$unreachable = array() === $missing ? aafm_unreachable_meta_key_error( $name, $call_args ) : null;
+		// Two independent routing maps - post-meta and user-meta - each scoped to its own three
+		// abilities by name, so checking both here is always exactly one real lookup and one
+		// no-op, never both firing for the same call.
+		$unreachable = array() === $missing
+			? ( aafm_unreachable_meta_key_error( $name, $call_args ) ?? aafm_unreachable_user_meta_key_error( $name, $call_args ) )
+			: null;
 
 		if ( array() !== $missing ) {
 			// No try/catch around this one: building the refusal cannot crash, and it falls through

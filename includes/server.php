@@ -387,11 +387,17 @@ function aafm_ability_list_permission( string $name ): ?callable {
 				// map_meta_cap('edit_page', ...) can resolve to for SOME object, not just the
 				// author-editing-their-own-page case (cap->edit_posts, which for the page post
 				// type object IS the edit_pages capability). A role holding only
-				// edit_others_pages can still edit another author's draft/pending page; a role
-				// holding only edit_published_pages or edit_private_pages can still edit a
-				// published/private page they authored. Hiding the tool from any of those roles
-				// was the mismatch: the execute-time check on a real object would have let them
-				// through.
+				// edit_others_pages can still edit another author's draft/pending page, since
+				// that branch adds no other required cap. A role holding only
+				// edit_published_pages can still edit a published or scheduled page they
+				// authored themselves, again the only cap map_meta_cap adds for that case.
+				// edit_private_pages never resolves on its own - core only ever pairs it with
+				// edit_others_pages, for someone else's private page - but it stays in the
+				// floor rather than being carved out as a special case: the execute-time check
+				// on the real object is what enforces that pairing, so dropping it here would
+				// only add a special-cased exception without changing what execute allows.
+				// Hiding the tool from either of the first two roles was the original mismatch:
+				// the execute-time check on a real object would have let them through.
 				return current_user_can( $pto->cap->edit_posts )
 					|| current_user_can( $pto->cap->edit_others_posts )
 					|| current_user_can( $pto->cap->edit_published_posts )

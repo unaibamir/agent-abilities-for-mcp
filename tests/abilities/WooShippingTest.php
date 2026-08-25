@@ -819,4 +819,49 @@ final class WooShippingTest extends TestCase {
 			),
 		);
 	}
+
+	/**
+	 * Task 12a: the create/update-zone descriptions must name the zone_locations gap plainly and
+	 * point at the route that actually works (the WooCommerce admin), not just say "not settable"
+	 * with no next step.
+	 */
+	public function test_create_and_update_shipping_zone_descriptions_name_the_locations_gap(): void {
+		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-zone' )->get_description();
+		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-zone' )->get_description();
+
+		foreach ( array( $create_description, $update_description ) as $description ) {
+			$this->assertStringContainsString(
+				'zone_locations',
+				$description,
+				'the description must name the exact field that cannot be set, not just gesture at "locations".'
+			);
+			$this->assertStringContainsString(
+				'WooCommerce > Settings > Shipping',
+				$description,
+				'the description must point at the admin route that actually works.'
+			);
+		}
+	}
+
+	/**
+	 * Task 12a: the create/update-method descriptions must name the cost gap plainly and point at
+	 * the route that actually works.
+	 */
+	public function test_create_and_update_shipping_method_descriptions_name_the_cost_gap(): void {
+		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-method' )->get_description();
+		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-method' )->get_description();
+
+		foreach ( array( $create_description, $update_description ) as $description ) {
+			$this->assertStringContainsString(
+				'cost',
+				$description,
+				'the description must name the exact field that cannot be set.'
+			);
+			$this->assertStringContainsString(
+				"zone's shipping method settings",
+				$description,
+				'the description must point at the admin route that actually works.'
+			);
+		}
+	}
 }

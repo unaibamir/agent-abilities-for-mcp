@@ -76,7 +76,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		'aafm/wc-create-shipping-zone'   => array(
 			'label'        => __( 'Create WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Creates a WooCommerce shipping zone from a name and optional order. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Creates a WooCommerce shipping zone from a name and optional order. A new zone\'s locations (zone_locations) cannot be set through this plugin\'s abilities, so it matches nothing until they are assigned in the WooCommerce admin under WooCommerce > Settings > Shipping. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -85,7 +85,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		'aafm/wc-update-shipping-zone'   => array(
 			'label'        => __( 'Update WooCommerce shipping zone', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a WooCommerce shipping zone by id, changing only the fields you send. An empty request body is a no-op success. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a WooCommerce shipping zone by id, changing only the fields you send (zone_name, zone_order). An empty request body is a no-op success. The zone\'s locations (zone_locations) cannot be changed through this plugin\'s abilities; assign them in the WooCommerce admin under WooCommerce > Settings > Shipping. Returns the full zone shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -113,7 +113,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		'aafm/wc-create-shipping-method' => array(
 			'label'        => __( 'Create WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (e.g. flat_rate, free_shipping, local_pickup). Returns the new method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Adds a shipping method to a WooCommerce shipping zone. Provide the zone id and method type (e.g. flat_rate, free_shipping, local_pickup). A newly added method\'s cost is left at WooCommerce\'s own default (0 for flat_rate) until set; this plugin\'s abilities cannot write it, so set the method\'s cost in the WooCommerce admin under the zone\'s shipping method settings. Returns the new method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -122,7 +122,7 @@ function aafm_wc_shipping_registry_definitions(): array {
 
 		'aafm/wc-update-shipping-method' => array(
 			'label'        => __( 'Update WooCommerce shipping method', 'agent-abilities-for-mcp' ),
-			'description'  => __( 'Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send. Returns the updated method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
+			'description'  => __( 'Updates a shipping method in a WooCommerce shipping zone by zone id and instance id, changing only the fields you send (method_title, enabled). The method\'s cost cannot be changed through this plugin\'s abilities; set it in the WooCommerce admin under the zone\'s shipping method settings. Returns the updated method shape. Requires the manage-WooCommerce capability.', 'agent-abilities-for-mcp' ),
 			'group'        => 'writes',
 			'risk'         => 'write',
 			'subject'      => 'woocommerce',
@@ -233,8 +233,9 @@ function aafm_wc_shipping_zone_output_properties(): array {
 		'zone_name'      => array( 'type' => 'string' ),
 		'zone_order'     => array( 'type' => 'integer' ),
 		'zone_locations' => array(
-			'type'  => 'array',
-			'items' => array( 'type' => 'object' ),
+			'type'        => 'array',
+			'items'       => array( 'type' => 'object' ),
+			'description' => __( 'Countries, states, or postcodes this zone matches, as WooCommerce stores them. Read-only here: this plugin\'s abilities cannot set or change zone_locations, only report it. Assign locations in the WooCommerce admin under WooCommerce > Settings > Shipping.', 'agent-abilities-for-mcp' ),
 		),
 	);
 }

@@ -62,6 +62,95 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
 }
 
 /**
+ * Correlate a 'started' audit row opened by aafm_log_ability_invocation() with the decorated
+ * execute_callback that resolves it, for the SAME call.
+ *
+ * WP 7.1's wp_ability_invoked action fires before ANY short-circuit (wp_pre_execute_ability), so
+ * it is the only place a row can be opened for a call a third party later intercepts. On a normal
+ * (non-short-circuited) call, execute() goes on to invoke the decorated execute_callback for the
+ * same call, and that closure must resolve the SAME row rather than open a second one. A stack,
+ * not a scalar: an ability's own execute_callback can legitimately invoke another ability (a
+ * nested wp_get_ability()->execute() call), which would otherwise interleave two calls to the
+ * same name.
+ *
+ * @param string   $name   Ability name.
+ * @param int|null $row_id Row id to push, or null to pop the most recently pushed one.
+ * @return int|null The popped row id when reading (null if nothing was pending); always null when
+ *                   pushing.
+ */
+function aafm_pending_invocation_row( string $name, ?int $row_id = null ): ?int {
+	static $stacks = array();
+
+	if ( null !== $row_id ) {
+		$stacks[ $name ][] = $row_id;
+		return null;
+	}
+
+	if ( empty( $stacks[ $name ] ) ) {
+		return null;
+	}
+
+	return array_pop( $stacks[ $name ] );
+}
+
+/**
+ * Open a 'started' audit row the instant an ability we registered is invoked - before core's
+ * wp_pre_execute_ability filter gets a chance to short-circuit the rest of execute() and skip our
+ * decorated execute_callback (includes/register.php), which is otherwise the ONLY place this
+ * plugin writes an audit row. Closes a real visibility gap: a third party hooking
+ * wp_pre_execute_ability can otherwise return a result to an MCP client with zero audit rows
+ * logged, even though our own permission check already ran via the adapter's separate
+ * check_permission() call.
+ *
+ * $input here is RAW and UNNORMALISED (core's own docblock on wp_ability_invoked says so
+ * explicitly) - cast defensively before it reaches anything, the same way every other call site in
+ * this file treats caller input. aafm_build_activity_detail()'s own field-level checks
+ * (includes/audit/detail.php) already reject non-scalar values per key, so this is safe once cast.
+ *
+ * Scoped to abilities THIS PLUGIN registered: aafm_remember_raw_permission() (read mode) already
+ * remembers one for every ability aafm_register_ability_with_log() processes, so its presence is a
+ * free "is this ours" test with no new bookkeeping. wp_ability_invoked fires for every registered
+ * ability's execute() call, native or third-party, and this plugin's audit log is not the place to
+ * log a call it never registered.
+ *
+ * Known, deliberately out-of-scope observation: a call that short-circuits here never reaches the
+ * decorated execute_callback, which is also where the per-call rate-limit token is released
+ * (aafm_rate_limit_call_reset()). A short-circuited call therefore leaks that token for the rest of
+ * the request. That is a separate, pre-existing rate-limit question, not an audit-log one, and is
+ * left for a future pass.
+ *
+ * @param string     $ability_name The ability name.
+ * @param mixed      $input        Raw, unnormalized input.
+ * @param WP_Ability $ability      The ability instance (unused; required by the hook signature).
+ * @return void
+ */
+function aafm_log_ability_invocation( string $ability_name, $input, $ability ): void {
+	unset( $ability );
+
+	if ( null === aafm_remember_raw_permission( $ability_name ) ) {
+		return; // Not an ability this plugin registered through the choke point.
+	}
+
+	$call_args = is_array( $input ) ? $input : array();
+	$user      = wp_get_current_user();
+
+	$row_id = aafm_log_activity(
+		array(
+			'ability'           => $ability_name,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'started',
+			'arg_keys'          => array_keys( $call_args ),
+			'client_id'         => aafm_oauth_current_client_id(),
+			'detail'            => aafm_build_activity_detail( $ability_name, $call_args ),
+		)
+	);
+
+	aafm_pending_invocation_row( $ability_name, $row_id );
+}
+add_action( 'wp_ability_invoked', 'aafm_log_ability_invocation', 10, 3 );
+
+/**
  * Best-effort magnitude of a list/read ability's result, for activity-log observability only.
  *
  * Every list ability in this plugin returns an integer 'total' key alongside its items (see
@@ -582,23 +671,33 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// denial memoized for the rest of the request.
 			aafm_rate_limit_call_reset( $name );
 			$rate_detail = aafm_build_activity_detail( $name, $call_args );
-			$rate_row_id = aafm_log_activity(
-				array_merge(
-					$p,
-					array(
-						'ability'   => $name,
-						'status'    => 'denied',
-						'arg_keys'  => array_keys( $call_args ),
-						'client_id' => aafm_oauth_current_client_id(),
-						'detail'    => $rate_detail,
+			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
+			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
+			// ANY permission check). Resolve that same row instead of inserting a second one for the
+			// same call. On the adapter's earlier check_permission() fire (pre-execute()) nothing is
+			// pending yet, so this falls back to the original insert, unchanged. A popped row id that
+			// no longer resolves to a real row (the log was cleared, or the pending stack outlived
+			// its row for any other reason) also falls back to a fresh insert, rather than silently
+			// dropping the denial - a stray extra row is a far cheaper mistake than an unaudited one.
+			$rate_pending_row_id = aafm_pending_invocation_row( $name );
+			$rate_row_id         = null !== $rate_pending_row_id && aafm_update_activity_status( $rate_pending_row_id, 'denied', null, $rate_detail )
+				? $rate_pending_row_id
+				: aafm_log_activity(
+					array_merge(
+						$p,
+						array(
+							'ability'   => $name,
+							'status'    => 'denied',
+							'arg_keys'  => array_keys( $call_args ),
+							'client_id' => aafm_oauth_current_client_id(),
+							'detail'    => $rate_detail,
+						)
 					)
-				)
-			);
-			// A refused call is a call that finished, so it announces like any other resolve. This
-			// row is written rather than resolved - there is no 'started' row on the permission
-			// phase - so a landed INSERT announces its real id, and a failed one announces null:
-			// same treatment as the execute tail, because a denial a monitor cannot see while the
-			// audit table is failing is the same blind spot.
+				);
+			// A refused call is a call that finished, so it announces like any other resolve. A
+			// landed row (inserted or resolved above) announces its real id, and a failed insert
+			// announces null: same treatment as the execute tail, because a denial a monitor cannot
+			// see while the audit table is failing is the same blind spot.
 			if ( $rate_row_id > 0 ) {
 				aafm_announce_ability_resolved( $rate_row_id, 'denied', null, $rate_detail );
 			} else {
@@ -666,10 +765,18 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				$allowed = $original_permission( $input );
 			} catch ( \Throwable $e ) {
 				// Same operator switch as the execute-side catch, so one setting governs both phases.
-				// Re-throwing here deliberately writes NO row: there is no 'started' row on this path,
-				// so the absent row is this phase's version of the stuck row the execute side leaves.
+				// Re-throwing here deliberately writes NO row: on the pre-7.1 floor there never was a
+				// 'started' row on this path, so the absent row is this phase's version of the stuck
+				// row the execute side leaves. On WP 7.1+, when this fire is core's internal re-check
+				// inside execute(), a 'started' row MAY already be pending from
+				// aafm_log_ability_invocation() - that row is deliberately left stuck rather than
+				// resolved here (same reasoning as the execute-side rethrow), but the correlation
+				// stack entry still has to be popped, or a later, unrelated call for this same
+				// ability name would wrongly inherit and resolve this crashed call's row instead of
+				// opening its own.
 				/** This filter is documented in includes/register.php, at the execute-side catch. */
 				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
+					aafm_pending_invocation_row( $name );
 					// The consume above may have memoized an allow before the callback crashed, and this
 					// throw skips the non-true reset below - release the memo here or the dead call's
 					// allow pays for the next same-ability fire (the B12 leak, on its crash path).
@@ -698,18 +805,32 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// detail: the defect is what matters on this row, and the mapped detail is already on
 			// the ordinary-denial rows.
 			$denied_detail = null !== $crash_detail ? $crash_detail : aafm_build_activity_detail( $name, $call_args );
-			$denied_row_id = aafm_log_activity(
-				array_merge(
-					$p,
-					array(
-						'ability'   => $name,
-						'status'    => 'denied',
-						'arg_keys'  => array_keys( $call_args ),
-						'client_id' => aafm_oauth_current_client_id(),
-						'detail'    => $denied_detail,
+			// WP 7.1+: when this fire is core's internal re-check inside execute(), a 'started' row
+			// is already pending from aafm_log_ability_invocation() (wp_ability_invoked fires before
+			// ANY permission check, including this one). Resolve that same row instead of inserting
+			// a second one for the same call - otherwise the pending row is left stuck at 'started'
+			// forever (execute_callback never runs on a denied call) while a separate 'denied' row
+			// also exists, doubling the row count for one call. On the adapter's earlier
+			// check_permission() fire (pre-execute()) nothing is pending yet, so this falls back to
+			// the original insert, unchanged. A popped row id that no longer resolves to a real row
+			// (the log was cleared, or the pending stack outlived its row for any other reason) also
+			// falls back to a fresh insert, rather than silently dropping the denial - a stray extra
+			// row is a far cheaper mistake than an unaudited one.
+			$denied_pending_row_id = aafm_pending_invocation_row( $name );
+			$denied_row_id         = null !== $denied_pending_row_id && aafm_update_activity_status( $denied_pending_row_id, 'denied', null, $denied_detail )
+				? $denied_pending_row_id
+				: aafm_log_activity(
+					array_merge(
+						$p,
+						array(
+							'ability'   => $name,
+							'status'    => 'denied',
+							'arg_keys'  => array_keys( $call_args ),
+							'client_id' => aafm_oauth_current_client_id(),
+							'detail'    => $denied_detail,
+						)
 					)
-				)
-			);
+				);
 			// Announce, for the same reason the execute side does: a refused call has finished, and
 			// a permission callback that exploded is the failure an operator most wants paged
 			// about - it is the very class of crash the discovery guard in includes/server.php
@@ -735,22 +856,30 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// tools/call for this ability then consumes a fresh token instead of reusing this one's.
 		aafm_rate_limit_call_reset( $name );
 
-		// One row at 'started' (intent), then updated in place with the real outcome -
-		// one row per call, not two. A crash mid-execute leaves a visible 'started' row.
-		$row_id = aafm_log_activity(
-			array_merge(
-				$principal(),
-				array(
-					'ability'   => $name,
-					'status'    => 'started',
-					'arg_keys'  => $arg_keys,
-					'client_id' => aafm_oauth_current_client_id(),
-					// Identifier-only, and only for an ability the detail allowlist names. Null for
-					// everything else, which leaves the column exactly as it was before v5.
-					'detail'    => aafm_build_activity_detail( $name, $call_args ),
+		// WP 7.1+: aafm_log_ability_invocation() (hooked on wp_ability_invoked) already opened a
+		// 'started' row for this exact call before wp_pre_execute_ability could short-circuit past
+		// this closure entirely. Reuse that row rather than open a second one for the same call.
+		// Pre-7.1 core never fires that action, so the pop always returns null there and this falls
+		// back to opening the row exactly as before.
+		$row_id = aafm_pending_invocation_row( $name );
+		if ( null === $row_id ) {
+			// One row at 'started' (intent), then updated in place with the real outcome -
+			// one row per call, not two. A crash mid-execute leaves a visible 'started' row.
+			$row_id = aafm_log_activity(
+				array_merge(
+					$principal(),
+					array(
+						'ability'   => $name,
+						'status'    => 'started',
+						'arg_keys'  => $arg_keys,
+						'client_id' => aafm_oauth_current_client_id(),
+						// Identifier-only, and only for an ability the detail allowlist names. Null for
+						// everything else, which leaves the column exactly as it was before v5.
+						'detail'    => aafm_build_activity_detail( $name, $call_args ),
+					)
 				)
-			)
-		);
+			);
+		}
 
 		// Null on a clean call; the crash's class and throw site once the catch below has written it.
 		$crash_detail = null;

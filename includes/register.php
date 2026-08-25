@@ -536,6 +536,17 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		$args['meta']['annotations']['openWorldHint'] = false;
 	}
 
+	// Cheap insurance (WP 7.1 findings, 2026-08-21): the bundled mcp-adapter only ever reads
+	// meta.mcp.public from its DefaultServerFactory discovery path, which this plugin disables
+	// entirely (mcp_adapter_create_default_server returns false, includes/bootstrap.php) in favor
+	// of registering explicitly through create_server(). So this key is inert today - but stamping
+	// it removes an implicit dependency on which discovery path a future bundled adapter version
+	// defaults to. Applies to every ability this choke point registers, native and bridged alike,
+	// and never overwrites a caller's own explicit value.
+	if ( ! isset( $args['meta']['mcp']['public'] ) ) {
+		$args['meta']['mcp']['public'] = true;
+	}
+
 	$original_permission = $args['permission_callback'];
 	$original_execute    = $args['execute_callback'];
 	// L5: only a list/read ability's result gets a logged magnitude - a write ability's return

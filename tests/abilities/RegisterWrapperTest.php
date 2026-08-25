@@ -467,4 +467,68 @@ final class RegisterWrapperTest extends TestCase {
 		$annotations = wp_get_ability( 'aafm-bridge/some-foreign-tool' )->get_meta_item( 'annotations' );
 		$this->assertArrayNotHasKey( 'openWorldHint', $annotations );
 	}
+
+	/**
+	 * Every ability registered through the choke point advertises meta.mcp.public = true, so
+	 * this plugin's tool visibility never depends on which mcp-adapter discovery path a future
+	 * bundled version defaults to (McpAbilityHelperTrait::is_mcp_ability_public() and
+	 * DefaultServerFactory both read this key; this plugin bypasses that path today, but the key
+	 * costs nothing and removes the implicit dependency).
+	 */
+	public function test_native_ability_gets_mcp_public_true_by_default(): void {
+		$this->register(
+			'aafm/no-mcp-meta-declared',
+			array(
+				'label'               => 'No mcp meta declared',
+				'description'         => 'A native ability with no meta.mcp of its own.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$this->assertTrue( wp_get_ability( 'aafm/no-mcp-meta-declared' )->get_meta_item( 'mcp' )['public'] );
+	}
+
+	/**
+	 * A caller that already declared meta.mcp.public keeps that value - the default only fills a
+	 * gap, exactly like openWorldHint above.
+	 */
+	public function test_ability_with_explicit_mcp_public_false_is_not_overwritten(): void {
+		$this->register(
+			'aafm/mcp-public-declared',
+			array(
+				'label'               => 'MCP public declared',
+				'description'         => 'A native ability that already declares meta.mcp.public.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+				'meta'                => array( 'mcp' => array( 'public' => false ) ),
+			)
+		);
+
+		$this->assertFalse( wp_get_ability( 'aafm/mcp-public-declared' )->get_meta_item( 'mcp' )['public'] );
+	}
+
+	/**
+	 * A bridged wrapper gets the same default: it is still a real tool this plugin exposes and
+	 * governs, so it should not depend on adapter discovery internals either.
+	 */
+	public function test_bridged_wrapper_gets_mcp_public_true_by_default(): void {
+		$this->register(
+			'aafm-bridge/some-other-foreign-tool',
+			array(
+				'label'               => 'Some other foreign tool',
+				'description'         => 'A bridged wrapper with no meta.mcp of its own.',
+				'category'            => 'aafm-reads',
+				'output_schema'       => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		$this->assertTrue( wp_get_ability( 'aafm-bridge/some-other-foreign-tool' )->get_meta_item( 'mcp' )['public'] );
+	}
 }

@@ -389,6 +389,72 @@ final class MediaWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Post::class, $instance );
 	}
 
+	/**
+	 * THE POINT OF THIS DELEGATION: a site owner's own wp_handle_sideload_prefilter hook must fire
+	 * for an MCP upload, exactly as it would for wp-admin's own media uploader. Before this task,
+	 * the upload path used wp_upload_bits() directly and referenced no upload filter at all, so a
+	 * site owner who raises or lowers upload limits through this hook (the operator's own
+	 * documented use case) was silently bypassed.
+	 */
+	public function test_upload_media_fires_the_sideload_prefilter_hook(): void {
+		$this->acting_as( 'administrator' );
+
+		$fired = false;
+		add_filter(
+			'wp_handle_sideload_prefilter',
+			static function ( array $file ) use ( &$fired ): array {
+				$fired = true;
+				return $file;
+			}
+		);
+
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'test.png',
+				'data_base64' => self::PNG_B64,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $out );
+		$this->track_attachment_files( (int) $out['attachment_id'] );
+		$this->assertTrue( $fired, 'wp_handle_sideload_prefilter must fire for an MCP upload, the same as it would for wp-admin\'s own uploader.' );
+	}
+
+	/**
+	 * A site owner narrowing the allowed types through wp_handle_sideload_overrides (the same
+	 * mechanism WordPress core itself uses) must be respected - proving mechanics were genuinely
+	 * delegated, not merely that a filter fires inertly.
+	 *
+	 * The override deliberately does NOT pass an empty array: WordPress's own wp_check_filetype()
+	 * treats empty($mimes) as "no override" (empty(array()) is true in PHP) and silently falls back
+	 * to the full default allow-list, which would make the override a no-op and the test pass for
+	 * the wrong reason. A non-empty list that excludes png is what actually exercises the override.
+	 */
+	public function test_upload_media_respects_a_site_owners_sideload_mime_override(): void {
+		$this->acting_as( 'administrator' );
+
+		add_filter(
+			'wp_handle_sideload_overrides',
+			static function ( $overrides, array $file ): array {
+				unset( $file );
+				// A site owner locking uploads down to a type this plugin's own PNG upload is not.
+				$overrides['mimes'] = array( 'txt' => 'text/plain' );
+				return $overrides;
+			},
+			10,
+			2
+		);
+
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'test.png',
+				'data_base64' => self::PNG_B64,
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $out, 'A site owner\'s own sideload override must be able to refuse an upload this plugin\'s own allow-list would otherwise accept.' );
+	}
+
 	public function test_update_media_is_in_registry_as_write(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/update-media', $registry );

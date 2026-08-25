@@ -851,12 +851,28 @@ final class WooShippingTest extends TestCase {
 		$create_description = (string) wp_get_ability( 'aafm/wc-create-shipping-method' )->get_description();
 		$update_description = (string) wp_get_ability( 'aafm/wc-update-shipping-method' )->get_description();
 
+		// Test-quality finding 3 (fix round 1, 208): a bare 'cost' substring is an ordinary English
+		// word that a future edit could satisfy with unrelated cost-adjacent prose while silently
+		// dropping the actual capability-gap explanation. Assert the specific fragments that state
+		// the field cannot be written, matching the sibling zone_locations test's exact-field-name
+		// discipline instead of a generic word.
+		$this->assertStringContainsString(
+			"cost is left at WooCommerce's own default",
+			$create_description,
+			'the create description must explain that the method\'s cost is not settable through this ability.'
+		);
+		$this->assertStringContainsString(
+			'this plugin\'s abilities cannot write it',
+			$create_description,
+			'the create description must state plainly that this plugin cannot write the cost.'
+		);
+		$this->assertStringContainsString(
+			'cost cannot be changed through this plugin\'s abilities',
+			$update_description,
+			'the update description must state plainly that this plugin cannot write the cost.'
+		);
+
 		foreach ( array( $create_description, $update_description ) as $description ) {
-			$this->assertStringContainsString(
-				'cost',
-				$description,
-				'the description must name the exact field that cannot be set.'
-			);
 			$this->assertStringContainsString(
 				"zone's shipping method settings",
 				$description,

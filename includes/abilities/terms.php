@@ -791,7 +791,7 @@ function aafm_args_create_term(): array {
 				'taxonomy'    => array(
 					'type'        => 'string',
 					'default'     => 'category',
-					'description' => __( 'Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission.', 'agent-abilities-for-mcp' ),
+					'description' => __( 'Slug of the public taxonomy to create the term in. Defaults to category. Creating requires that taxonomy\'s own manage-terms capability (for example manage_categories for categories), not a fixed site-wide permission. A WooCommerce product attribute taxonomy (pa_color, pa_size, and similar) is usually not public and is refused here; add a new option to an attribute in the WooCommerce admin under Products > Attributes (or the product\'s own Attributes tab for a custom attribute), then use wc-create-product-variation or wc-update-product-variation to build variations that use it.', 'agent-abilities-for-mcp' ),
 				),
 				'name'        => array(
 					'type'        => 'string',

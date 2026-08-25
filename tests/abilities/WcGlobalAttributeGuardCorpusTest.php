@@ -495,6 +495,46 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	}
 
 	/**
+	 * Task 12b: this message and create-term's own taxonomy-description warning are the two
+	 * halves of the same real-world story ("add a new color to this product") - a caller who hits
+	 * this wall must be told the same route create-term's schema already names, not a dead end
+	 * that only says "use the WooCommerce admin" with no next step. Same error code as before.
+	 */
+	public function test_the_not_editable_message_names_the_multistep_route(): void {
+		$error = aafm_wc_global_attribute_change_error(
+			array(
+				array(
+					'name'    => self::TAXONOMY,
+					'options' => array( 'purple' ),
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			),
+			array(
+				$this->attribute(
+					array(
+						'id'      => 7,
+						'name'    => self::TAXONOMY,
+						'options' => array( 'blue', 'green' ),
+					)
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $error );
+		$this->assertSame( 'aafm_wc_global_attribute_not_editable', $error->get_error_code(), 'the error code must not change, wording only.' );
+		$this->assertStringContainsString( 'Products > Attributes', $error->get_error_message() );
+		$this->assertStringContainsString( 'wc-create-product-variation', $error->get_error_message() );
+	}
+
+	/**
 	 * Behaviour 5, from f291ea7 (R6-1): the builder leaves a global attribute's object exactly as handed
 	 * to it, so whatever the caller is given, the object that reaches set_attributes() is the one the
 	 * caller of the builder chose. That is what makes passing STORED objects sufficient.

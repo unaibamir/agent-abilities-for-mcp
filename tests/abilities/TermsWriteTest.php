@@ -214,6 +214,25 @@ final class TermsWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out );
 	}
 
+	/**
+	 * Task 12b: a WooCommerce product attribute taxonomy is usually not public (doc 206), so
+	 * aafm/create-term refuses it - and that refusal happens at the PERMISSION callback
+	 * (aafm_perm_manage_terms() calls the same aafm_validate_taxonomy() and denies before
+	 * execute ever runs), which is a flat, non-object-specific "not permitted" the ability
+	 * framework generates, not text this plugin controls or can safely enrich per doc 181's
+	 * B-01 precedent (a permission-stage refusal must not become object-specific). The only
+	 * place this plugin CAN tell the caller the real story is proactively, in the schema
+	 * description read before the call is ever attempted.
+	 */
+	public function test_create_term_taxonomy_description_warns_about_attribute_taxonomies(): void {
+		$schema      = wp_get_ability( 'aafm/create-term' )->get_input_schema();
+		$description = (string) $schema['properties']['taxonomy']['description'];
+
+		$this->assertStringContainsString( 'pa_', $description, 'must name the actual WooCommerce attribute taxonomy prefix.' );
+		$this->assertStringContainsString( 'Products > Attributes', $description, 'must point at the admin route that actually works.' );
+		$this->assertStringContainsString( 'wc-create-product-variation', $description, 'must name the follow-up ability, in its callable dash form.' );
+	}
+
 	public function test_create_term_sanitizes_script_in_description(): void {
 		$this->acting_as( 'editor' );
 		$out  = wp_get_ability( 'aafm/create-term' )->execute(

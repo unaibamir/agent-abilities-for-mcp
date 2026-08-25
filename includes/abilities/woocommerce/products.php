@@ -916,7 +916,7 @@ function aafm_wc_global_attribute_change_error( array $sanitized, array $stored,
 		'aafm_wc_global_attribute_not_editable',
 		sprintf(
 			/* translators: %s: comma-separated list of global attribute slugs the request tried to change. */
-			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Changing a global attribute\'s options is not available through this plugin\'s abilities; that has to be done in the WooCommerce admin. Send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
+			__( 'These are global attributes, shared with every other product that uses them, so their options cannot be changed through this product: %s. This field only describes a product\'s own custom attributes, and it has no way to express a global attribute\'s terms. Changing a global attribute\'s options is not available through this plugin\'s abilities; add or remove the option in the WooCommerce admin under Products > Attributes, then use wc-create-product-variation or wc-update-product-variation here to build variations with it. Send its current options back unchanged to leave it alone.', 'agent-abilities-for-mcp' ),
 			implode( ', ', $refused )
 		)
 	);

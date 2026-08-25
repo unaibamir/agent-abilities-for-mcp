@@ -133,4 +133,257 @@ final class AbilityInvokedHookTest extends TestCase {
 		$this->assertSame( array(), aafm_query_activity( array( 'ability' => 'demo/not-ours' ) ) );
 		wp_unregister_ability( 'demo/not-ours' );
 	}
+
+	/**
+	 * Fix round 1, Codex finding 1: aafm_log_ability_invocation() pushes a pending row before core
+	 * does any work, but a real WP 7.1 execute() returns directly - without ever reaching
+	 * check_permissions() or the decorated execute_callback - when validate_input() fails on a
+	 * malformed input. Before the fix that pending entry stayed on the per-name stack, and a LATER
+	 * call for the SAME ability, denied at a preliminary permission check that never goes through
+	 * execute() (exactly how the MCP adapter's own check_permission() call and this suite's own
+	 * test_denied_is_audited cases work), would pop and resolve the FIRST call's row instead of
+	 * writing its own - misattributing the second call's denial onto the first call, and leaving the
+	 * second call with no audit row of its own at all.
+	 */
+	public function test_a_validation_failure_leaves_no_dangling_row_for_a_later_denied_call(): void {
+		$name = 'aafm-test/invoked-hook-validation-then-denial';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (validation then denial)',
+						'description'         => 'Test fixture: strict input schema, denies on a marker value.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array(
+							'type'       => 'object',
+							'properties' => array( 'n' => array( 'type' => 'integer' ) ),
+							'required'   => array( 'n' ),
+						),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => static fn( $input ) => ! ( is_array( $input ) && 2 === ( $input['n'] ?? null ) ),
+					)
+				);
+			}
+		);
+
+		$first = wp_get_ability( $name )->execute( array( 'n' => 'not-an-integer' ) );
+		$this->assertTrue( is_wp_error( $first ), 'Fixture check: the malformed input must actually fail core validation before any permission check.' );
+
+		$rows_after_first = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows_after_first, 'Fixture check: the invalid call still opened its own started row.' );
+		$this->assertSame( 'started', $rows_after_first[0]['status'] );
+		$first_row_id = (int) $rows_after_first[0]['id'];
+
+		// Simulate the adapter's preliminary check_permission() call, exactly like this suite's own
+		// test_denied_is_audited cases: called directly, never through execute(), for a call that
+		// never opens its own pending row.
+		$second = wp_get_ability( $name )->check_permissions( array( 'n' => 2 ) );
+		$this->assertNotTrue( $second, 'Fixture check: the marker input must actually be denied.' );
+
+		$rows_after_second = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 2, $rows_after_second, "The second call must write its OWN row, not resolve the first call's dangling started row." );
+
+		$first_row_again = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] === $first_row_id ) );
+		$this->assertNotFalse( $first_row_again, "The first call's row must still exist, untouched." );
+		$this->assertSame( 'started', $first_row_again['status'], "The first call's row must remain at started - the second call must not have resolved it." );
+
+		$second_row = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] !== $first_row_id ) );
+		$this->assertSame( 'denied', $second_row['status'], 'The second call must be attributed as its own, distinct denied row.' );
+	}
+
+	/**
+	 * Fix round 1, Codex finding 1, short-circuit variant: an intentional wp_pre_execute_ability
+	 * short-circuit is the other real WP 7.1 exit path that returns from execute() without ever
+	 * reaching check_permissions() or the decorated execute_callback. Same contamination risk as the
+	 * validation-failure case above, same fix, separate proof.
+	 */
+	public function test_a_short_circuited_call_leaves_no_dangling_row_for_a_later_denied_call(): void {
+		$name = 'aafm-test/invoked-hook-short-circuit-then-denial';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (short-circuit then denial)',
+						'description'         => 'Test fixture: short-circuited execute(), denies on a marker value.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => static fn( $input ) => ! ( is_array( $input ) && 2 === ( $input['n'] ?? null ) ),
+					)
+				);
+			}
+		);
+
+		add_filter(
+			'wp_pre_execute_ability',
+			static function ( $pre, string $ability_name ) use ( $name ) {
+				if ( $name === $ability_name ) {
+					return array( 'intercepted' => true );
+				}
+				return $pre;
+			},
+			10,
+			2
+		);
+
+		$first = wp_get_ability( $name )->execute( array( 'n' => 1 ) );
+		$this->assertSame( array( 'intercepted' => true ), $first, 'Fixture check: the short-circuit itself must actually take effect.' );
+
+		$rows_after_first = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows_after_first );
+		$this->assertSame( 'started', $rows_after_first[0]['status'] );
+		$first_row_id = (int) $rows_after_first[0]['id'];
+
+		$second = wp_get_ability( $name )->check_permissions( array( 'n' => 2 ) );
+		$this->assertNotTrue( $second, 'Fixture check: the marker input must actually be denied.' );
+
+		$rows_after_second = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 2, $rows_after_second, "The second call must write its OWN row, not resolve the short-circuited call's dangling started row." );
+
+		$first_row_again = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] === $first_row_id ) );
+		$this->assertNotFalse( $first_row_again );
+		$this->assertSame( 'started', $first_row_again['status'] );
+
+		$second_row = current( array_filter( $rows_after_second, static fn( $r ) => (int) $r['id'] !== $first_row_id ) );
+		$this->assertSame( 'denied', $second_row['status'] );
+	}
+
+	/**
+	 * Test-quality finding 1: the plan's own regression, a denial reached through execute() itself
+	 * (not through check_permissions() called directly, which every pre-existing
+	 * test_denied_is_audited case uses instead), was never directly pinned. This is the minimal
+	 * dedicated proof: exactly one row, not a stuck 'started' row plus a separate 'denied' one.
+	 */
+	public function test_a_call_denied_through_execute_writes_exactly_one_row(): void {
+		$name = 'aafm-test/invoked-hook-denied-through-execute';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (denied through execute)',
+						'description'         => 'Test fixture whose permission callback always refuses.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_false',
+					)
+				);
+			}
+		);
+
+		$result = wp_get_ability( $name )->execute( array() );
+		$this->assertTrue( is_wp_error( $result ) );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows, 'A call denied through execute() must resolve the SAME hook-opened row, not leave it stuck AND write a second one.' );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+	}
+
+	/**
+	 * Test-quality finding 1's third requested case: a denial with genuinely nothing pending (no
+	 * wp_ability_invoked fire preceded it, matching every pre-existing test_denied_is_audited case)
+	 * must still fall back to a fresh insert rather than finding nothing and writing nothing.
+	 */
+	public function test_a_denial_with_no_pending_row_uses_the_fallback_insert(): void {
+		$name = 'aafm-test/invoked-hook-denied-no-pending-row';
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (denied, no pending row)',
+						'description'         => 'Test fixture whose permission callback always refuses, called directly.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_false',
+					)
+				);
+			}
+		);
+
+		// check_permissions() directly, never through execute(): wp_ability_invoked never fires, so
+		// there is genuinely no pending row for this call to find.
+		$denied = wp_get_ability( $name )->check_permissions( array() );
+		$this->assertNotTrue( $denied );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows, 'With nothing pending, the denial must fall back to a fresh insert.' );
+		$this->assertSame( 'denied', $rows[0]['status'] );
+	}
+
+	/**
+	 * Codex finding 1's suggested second case: a permission callback that throws and is configured
+	 * to re-throw must not leak its pending-stack entry into a LATER, unrelated call for the same
+	 * ability name that completes normally.
+	 *
+	 * Core's own WP_Ability::invoke_callback() (since 6.9.0) already wraps every permission_callback
+	 * fire in a try/catch and converts any Throwable - including one this plugin's own decorated
+	 * closure deliberately re-throws - into a WP_Error before it ever reaches execute(). So the
+	 * "rethrow" branch never surfaces a raw PHP exception to a caller; what it actually controls is
+	 * whether OUR OWN denial-audit code runs at all (rethrow skips it, matching the documented "no
+	 * row on this path" intent - true here for OUR write, though core's own wp_ability_invoked hook
+	 * still opened one first). execute() itself then raises _doing_it_wrong() for the WP_Error it
+	 * receives back, which is core's ordinary behavior for this case, not part of the defect.
+	 */
+	public function test_a_rethrown_permission_crash_leaves_no_dangling_row_for_a_later_call(): void {
+		$name = 'aafm-test/invoked-hook-crash-then-success';
+		add_filter( 'aafm_rethrow_ability_exceptions', '__return_true' );
+
+		$allow = false;
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function () use ( $name, &$allow ): void {
+				aafm_register_ability_with_log(
+					$name,
+					array(
+						'label'               => 'Invoked-hook fixture (crash then success)',
+						'description'         => 'Test fixture whose permission callback throws until a flag flips.',
+						'category'            => 'aafm-reads',
+						'input_schema'        => array( 'type' => 'object' ),
+						'output_schema'       => array( 'type' => 'object' ),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => static function () use ( &$allow ) {
+							if ( ! $allow ) {
+								throw new \RuntimeException( 'boom from the permission callback' );
+							}
+							return true;
+						},
+					)
+				);
+			}
+		);
+
+		$this->setExpectedIncorrectUsage( 'WP_Ability::execute' );
+		$first = wp_get_ability( $name )->execute( array() );
+		$this->assertTrue( is_wp_error( $first ), 'Fixture check: the crashed permission callback must deny the first call.' );
+
+		$rows_after_first = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 1, $rows_after_first, 'The crashed call leaves exactly its own row, stuck at started - the forensic signal core swallowing the rethrow does not erase.' );
+		$this->assertSame( 'started', $rows_after_first[0]['status'] );
+
+		$allow  = true;
+		$result = wp_get_ability( $name )->execute( array() );
+		$this->assertSame( array( 'ok' => true ), $result );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		// One row stuck at 'started' from the crashed call, one row 'success' from the later call -
+		// and critically, the success row must be its OWN row, not the crashed call's row
+		// resurrected via a leaked stack entry.
+		$this->assertCount( 2, $rows, 'The crashed call and the later successful call must each keep their own row.' );
+		$statuses = wp_list_pluck( $rows, 'status' );
+		sort( $statuses );
+		$this->assertSame( array( 'started', 'success' ), $statuses );
+	}
 }

@@ -14,7 +14,8 @@ if ( ! class_exists( 'WP_Ability' ) ) {
 }
 
 /**
- * A WP_Ability that always releases its per-call rate-limit memo when execute() resolves.
+ * A WP_Ability that always releases its per-call rate-limit memo and any dangling audit-log
+ * correlation when execute() resolves, however it resolves.
  *
  * The decorated permission callback (aafm_register_ability_with_log()) consumes a rate token on its
  * first fire and memoizes the allow so core's re-check inside execute() does not consume a second
@@ -24,15 +25,28 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * same ability in the same request then reused the stale allow and skipped its consume - a real
  * rate-limit bypass inside one JSON-RPC batch (finding B12, doc 167).
  *
- * Releasing in a finally around parent::execute() closes every in-execute path at once: input
- * refusal, the permission re-check, the callback itself, output refusal, and a rethrown crash. The
- * one dead-call path outside execute() - a consumer WP_Error on mcp_adapter_pre_tool_call - is
- * covered by aafm_release_rate_memo_on_aborted_tool_call() instead.
+ * Fix round 1 (Codex finding 1) added the second responsibility: on WP 7.1+, wp_ability_invoked
+ * (includes/register.php, aafm_log_ability_invocation()) pushes a pending audit row onto a per-name
+ * correlation stack the instant execute() begins, before core does any work. An intentional
+ * wp_pre_execute_ability short-circuit, a normalize_input() failure, or a validate_input() failure
+ * all return from execute() without ever reaching a denial write or the decorated execute_callback,
+ * so that entry would otherwise sit on the stack until a LATER, unrelated call for the same ability
+ * name - denied at a preliminary permission check that never goes through execute() at all - popped
+ * and resolved it instead of writing its own row, misattributing the second call's outcome onto the
+ * first and leaving the second with no row of its own. See aafm_discard_dangling_invocation_row()
+ * for the mechanism.
+ *
+ * Releasing both in a finally around parent::execute() closes every in-execute path at once, for
+ * both concerns: input refusal, the permission re-check, the callback itself, output refusal, and a
+ * rethrown crash. The one dead-call path outside execute() - a consumer WP_Error on
+ * mcp_adapter_pre_tool_call - is covered by aafm_release_rate_memo_on_aborted_tool_call() instead;
+ * that path never reaches wp_ability_invoked either, so it never has a pending row to discard.
  */
 class AAFM_Rate_Limited_Ability extends WP_Ability {
 
 	/**
-	 * Execute the ability, releasing the per-call rate memo however the call resolves.
+	 * Execute the ability, releasing the per-call rate memo and any dangling audit-log correlation
+	 * however the call resolves.
 	 *
 	 * @param mixed $input Optional. The input data for the ability. Default `null`.
 	 * @return mixed|WP_Error The result of the ability execution, or WP_Error on failure.
@@ -42,6 +56,7 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 			return parent::execute( $input );
 		} finally {
 			aafm_rate_limit_call_reset( $this->get_name() );
+			aafm_discard_dangling_invocation_row( $this->get_name() );
 		}
 	}
 }

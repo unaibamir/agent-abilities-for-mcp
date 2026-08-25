@@ -73,6 +73,21 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
  * nested wp_get_ability()->execute() call), which would otherwise interleave two calls to the
  * same name.
  *
+ * Fix round 1 (Codex finding 1): pushing here is only half the correctness story. Real WP 7.1
+ * returns from execute() WITHOUT ever reaching a denial write or the decorated execute_callback on
+ * THREE separate exit paths: an intentional wp_pre_execute_ability short-circuit, a normalize_input()
+ * failure, and a validate_input() failure. None of those consume the entry this function pushed, so
+ * it would sit on the stack until a LATER, unrelated call for the SAME ability name - denied at a
+ * preliminary permission check that never goes through execute() at all, exactly how the MCP
+ * adapter's own check_permission() call and this suite's own test_denied_is_audited cases work -
+ * popped and resolved it instead of writing its own row. AAFM_Rate_Limited_Ability::execute()
+ * (includes/class-aafm-rate-limited-ability.php) is what closes that gap: it already wraps every
+ * exit from parent::execute() in a finally for the identical reason on the rate-limit side, so its
+ * finally now also calls aafm_discard_dangling_invocation_row() below, guaranteeing that whatever
+ * THIS invocation pushed here is gone - resolved or discarded - before execute() ever returns to
+ * its caller. That is what makes it safe for a preliminary permission check for a later call to
+ * assume "nothing pending here is mine to worry about."
+ *
  * @param string   $name   Ability name.
  * @param int|null $row_id Row id to push, or null to pop the most recently pushed one.
  * @return int|null The popped row id when reading (null if nothing was pending); always null when
@@ -91,6 +106,27 @@ function aafm_pending_invocation_row( string $name, ?int $row_id = null ): ?int 
 	}
 
 	return array_pop( $stacks[ $name ] );
+}
+
+/**
+ * Discard (without touching the database) a pending invocation row left on the stack for $name.
+ *
+ * The request-scoped safety net for aafm_pending_invocation_row(): called from
+ * AAFM_Rate_Limited_Ability::execute()'s finally, once per execute() invocation, after
+ * parent::execute() returns however it returns. If this specific call's own decorated execute
+ * callback or a permission denial already popped its entry, this is a harmless no-op. If neither
+ * did - a wp_pre_execute_ability short-circuit, a normalize_input() or validate_input() failure, or
+ * a rethrown permission-callback crash - this pops and discards it, leaving the DATABASE row
+ * exactly as it was (still 'started', on purpose: that is the same "stuck row is the forensic
+ * signal" intent every other unresolved-row path in this file already relies on). Only the
+ * in-memory correlation is cleared, so it can never be inherited by a later, unrelated call for the
+ * same ability name.
+ *
+ * @param string $name Ability name.
+ * @return void
+ */
+function aafm_discard_dangling_invocation_row( string $name ): void {
+	aafm_pending_invocation_row( $name );
 }
 
 /**
@@ -113,11 +149,11 @@ function aafm_pending_invocation_row( string $name, ?int $row_id = null ): ?int 
  * ability's execute() call, native or third-party, and this plugin's audit log is not the place to
  * log a call it never registered.
  *
- * Known, deliberately out-of-scope observation: a call that short-circuits here never reaches the
- * decorated execute_callback, which is also where the per-call rate-limit token is released
- * (aafm_rate_limit_call_reset()). A short-circuited call therefore leaks that token for the rest of
- * the request. That is a separate, pre-existing rate-limit question, not an audit-log one, and is
- * left for a future pass.
+ * A call that short-circuits here never reaches the decorated execute_callback, but that does not
+ * leak the per-call rate-limit token: AAFM_Rate_Limited_Ability::execute() already wraps every exit
+ * from parent::execute() in a finally that releases it regardless (short-circuit included, since a
+ * finally runs on an early return the same as any other). See that class for the equivalent
+ * guarantee this fix round adds for the pending invocation row below.
  *
  * @param string     $ability_name The ability name.
  * @param mixed      $input        Raw, unnormalized input.
@@ -780,13 +816,13 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 				// row the execute side leaves. On WP 7.1+, when this fire is core's internal re-check
 				// inside execute(), a 'started' row MAY already be pending from
 				// aafm_log_ability_invocation() - that row is deliberately left stuck rather than
-				// resolved here (same reasoning as the execute-side rethrow), but the correlation
-				// stack entry still has to be popped, or a later, unrelated call for this same
-				// ability name would wrongly inherit and resolve this crashed call's row instead of
-				// opening its own.
+				// resolved here (same reasoning as the execute-side rethrow). No explicit pop is
+				// needed for the correlation stack: AAFM_Rate_Limited_Ability::execute()'s finally
+				// discards any entry this call left dangling once parent::execute() returns, however
+				// this throw resolves (core's own invoke_callback() converts it to a WP_Error before
+				// it ever reaches that finally, but the finally runs on that normal return too).
 				/** This filter is documented in includes/register.php, at the execute-side catch. */
 				if ( apply_filters( 'aafm_rethrow_ability_exceptions', defined( 'WP_DEBUG' ) && WP_DEBUG, $e ) ) {
-					aafm_pending_invocation_row( $name );
 					// The consume above may have memoized an allow before the callback crashed, and this
 					// throw skips the non-true reset below - release the memo here or the dead call's
 					// allow pays for the next same-ability fire (the B12 leak, on its crash path).

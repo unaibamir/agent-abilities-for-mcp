@@ -649,7 +649,13 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 	// is safe to keep - the adapter's own docblock on this filter recommends it for exactly this
 	// (PII redaction), and a WP_Error here becomes a proper MCP error result
 	// (ToolsHandler::handle_tool_call() checks is_wp_error() on this filter's return value).
-	if ( is_object( $result ) && ! is_wp_error( $result ) ) {
+	// Fix round 1 (correctness F1): a ZERO-property object is provably inert - it carries nothing to
+	// leak. This codebase's own house idiom, (object) array(), returns exactly such an object to
+	// force {} instead of [] on the wire for an empty map (see includes/helpers.php and several
+	// abilities files), so a bridged ability following the same convention must pass through
+	// unchanged rather than be refused. This narrows the predicate, it does not disable the guard:
+	// an object with at least one property is still refused exactly as before.
+	if ( is_object( $result ) && ! is_wp_error( $result ) && array() !== get_object_vars( $result ) ) {
 		return new WP_Error(
 			'aafm_bridge_unsupported_result_shape',
 			__( 'This bridged ability returned a raw object, which cannot be safely relayed over MCP. Contact the site administrator.', 'agent-abilities-for-mcp' )

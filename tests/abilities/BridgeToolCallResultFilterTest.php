@@ -246,4 +246,40 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 
 		$this->assertSame( $error, $result );
 	}
+
+	/**
+	 * Fix round 1, correctness F1: a zero-property stdClass carries nothing to leak. This codebase
+	 * itself uses (object) array() in several places for the "empty map serialises as {} not []"
+	 * idiom, so a bridged ability following the same convention must pass through unchanged, not be
+	 * refused as if it were an unvouched-for object.
+	 */
+	public function test_a_bridged_empty_object_result_passes_through_unchanged(): void {
+		$empty = new \stdClass();
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$empty,
+			array(),
+			'aafm-bridge-vendor-returns-an-empty-object'
+		);
+
+		$this->assertSame( $empty, $result );
+	}
+
+	/**
+	 * Companion to the empty-object case above: an object carrying even one property is still
+	 * refused exactly as before. Proves the fix narrows the predicate, it doesn't disable the guard.
+	 */
+	public function test_a_bridged_populated_object_result_is_still_refused(): void {
+		$leaky              = new \stdClass();
+		$leaky->still_leaky = 'one property is enough to refuse';
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$leaky,
+			array(),
+			'aafm-bridge-vendor-returns-a-populated-object'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
 }

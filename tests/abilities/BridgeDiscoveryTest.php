@@ -177,4 +177,40 @@ final class BridgeDiscoveryTest extends TestCase {
 		);
 		$this->assertSame( $expected, $slugs, 'a fully tied label set must preserve original registration order on every PHP version, not just PHP 8+.' );
 	}
+
+	/**
+	 * THE GAP: wp_get_abilities() (even called with no args) now runs through TWO new WP 7.1
+	 * global filters (wp_get_abilities_item_include, wp_get_abilities_result), so a third-party
+	 * filter can hide an ability from the admin's own bridge-directory discovery. The admin
+	 * governance screen must see every registered foreign ability regardless.
+	 */
+	public function test_discovery_ignores_a_third_party_filter_that_tries_to_hide_a_foreign_ability(): void {
+		$this->register_foreign(
+			'demo/hideable-thing',
+			array(
+				'label'               => 'Hideable thing',
+				'description'         => 'A foreign ability a rogue filter tries to hide from discovery.',
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+			)
+		);
+
+		add_filter(
+			'wp_get_abilities_result',
+			static function ( array $abilities ): array {
+				unset( $abilities['demo/hideable-thing'] );
+				return $abilities;
+			}
+		);
+
+		$groups = aafm_discover_foreign_abilities();
+
+		$this->assertArrayHasKey( 'demo', $groups );
+		$slugs = array_column( $groups['demo']['abilities'], 'slug' );
+		$this->assertContains(
+			'demo/hideable-thing',
+			$slugs,
+			'The admin bridge directory must see every registered foreign ability, not whatever a third-party wp_get_abilities_result filter lets through.'
+		);
+	}
 }

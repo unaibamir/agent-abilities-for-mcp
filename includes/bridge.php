@@ -241,11 +241,25 @@ function aafm_bridge_output_schema( $ability ): ?array {
  * @return array<string,array{label:string,abilities:array<int,array<string,mixed>>}>
  */
 function aafm_discover_foreign_abilities(): array {
-	if ( ! function_exists( 'wp_get_abilities' ) ) {
+	// WP 7.1: wp_get_abilities() now runs through two new global filters
+	// (wp_get_abilities_item_include, wp_get_abilities_result) even on a zero-arg call, so a
+	// third-party filter could hide an ability from this admin governance screen. Read the
+	// registry directly instead: WP_Abilities_Registry::get_all_registered() is public since this
+	// plugin's WP 6.9.0 floor and bypasses both filters, giving the site owner ground truth about
+	// what is actually registered rather than whatever a rogue plugin lets through. Investigated
+	// (delegation audit, WP 7.1 findings): the new $args filter on wp_get_abilities() cannot
+	// express "every namespace except aafm and aafm-bridge", so it is not a substitute for this
+	// function's own exclusion loop below - this is a bypass of the filtering layer, not a
+	// delegation to it.
+	if ( ! class_exists( 'WP_Abilities_Registry' ) ) {
+		return array();
+	}
+	$registry = \WP_Abilities_Registry::get_instance();
+	if ( null === $registry ) {
 		return array();
 	}
 	$groups = array();
-	foreach ( wp_get_abilities() as $slug => $ability ) {
+	foreach ( $registry->get_all_registered() as $slug => $ability ) {
 		$slug = (string) $slug;
 		$pos  = strpos( $slug, '/' );
 		$ns   = false !== $pos ? substr( $slug, 0, $pos ) : 'core';

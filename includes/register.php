@@ -659,6 +659,16 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		);
 	};
 
+	// WP 7.1 note (delegation audit, not a code change): core's WP_Ability::check_permissions()
+	// fires apply_filters('wp_ability_permission_result', ...) AFTER whatever this closure returns,
+	// and a filter attached there can flip our denial into a grant - for both the adapter's
+	// check_permission() call before execute() and core's own re-check inside execute(). This is
+	// not exploitable by this plugin's own code (nothing here hooks that filter) and there is no
+	// code fix available: a filter that runs after this closure returns can always override it, by
+	// design of the hook, the same way current_user_can() has always been overridable via
+	// map_meta_cap/user_has_cap. Decision (2026-08-22, delegation audit): ACCEPT and DOCUMENT rather
+	// than attempt a third permission check that would only race the filter's own intent. See
+	// .claude/planning/ROADMAP.md's decision log for the full reasoning.
 	$args['permission_callback'] = static function ( $input = null ) use ( $original_permission, $name, $principal, $required_input ) {
 		// Per-principal rate gate. Discovery (tools/list) is exempt automatically: it
 		// uses the raw permission stored above, which never enters this decorated closure

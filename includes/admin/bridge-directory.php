@@ -503,20 +503,11 @@ function aafm_render_bridge_ability_row( array $ability, array $enabled, bool $d
 	// annotation. A locked row renders the lock glyph and NO <input>, exactly like the native
 	// renderer, so the group's "Enable all" cannot sweep it back in.
 	//
-	// This deliberately does NOT call aafm_ability_lock_reason(), even though that is the single
-	// lock predicate everywhere else. That helper falls through to aafm_ability_is_locked(), which
-	// is a plain in_array() over aafm_high_risk_abilities(): the eight built-ins plus whatever the
-	// public aafm_high_risk_abilities filter adds. Passing a foreign slug to it is safe - it cannot
-	// fatal and normally returns false - but a site that names a foreign slug in that filter would
-	// make it return TRUE, and this row would then render a padlock with a note pointing at the
-	// high-risk switch while the ability still registered. The high-risk floor only ever subtracts
-	// from aafm_get_enabled_abilities(), which walks the NATIVE registry; the bridge keeps its own
-	// option and its own registration walk, which that floor never touches. See the filter's own
-	// docblock in includes/audit/high-risk.php, which states naming a bridged ability there has no
-	// effect. A lock the floor does not enforce is the exact class of defect 1.5.0 shipped, so the
-	// read-only clause is evaluated on its own here rather than through a helper that would add a
-	// second, unenforced one. Pinned by ReadOnlyUiTest::test_a_bridge_row_never_renders_a_high_risk_lock().
-	$lock_reason = aafm_read_only_mode() && ! aafm_ability_is_read( $slug ) ? 'read_only' : null;
+	// aafm_ability_is_high_risk() is namespace-aware (native aafm/* only, see
+	// includes/audit/high-risk.php), so calling the shared aafm_ability_lock_reason() predicate
+	// here is now safe: a foreign slug named in the aafm_high_risk_abilities filter can never make
+	// it report 'high_risk'. Pinned by ReadOnlyUiTest::test_a_bridge_row_never_renders_a_high_risk_lock().
+	$lock_reason = aafm_ability_lock_reason( $slug );
 
 	if ( null !== $lock_reason ) {
 		printf(

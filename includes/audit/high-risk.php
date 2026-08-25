@@ -102,6 +102,18 @@ function aafm_high_risk_unlocked(): bool {
  * @return bool
  */
 function aafm_ability_is_high_risk( string $name ): bool {
+	// Namespace-aware: the high-risk set only ever governs NATIVE aafm/* abilities. A bridged
+	// wrapper (aafm-bridge/*) or a foreign slug must never match here, even when a site names one
+	// in the aafm_high_risk_abilities filter - that filter's own docblock already says naming a
+	// bridged ability there has no effect, because the high-risk floor only subtracts inside
+	// aafm_get_enabled_abilities(), which walks the native registry and never touches the bridge.
+	// Without this guard, aafm_ability_is_locked() (and therefore aafm_ability_lock_reason())
+	// would still report a lock the floor does not enforce - the exact class of defect 1.5.0
+	// shipped. This is what makes it safe for aafm_ability_lock_reason() to accept a bridged slug;
+	// see that function's docblock in includes/audit/read-only.php.
+	if ( ! str_starts_with( $name, 'aafm/' ) ) {
+		return false;
+	}
 	return in_array( $name, aafm_high_risk_abilities(), true );
 }
 

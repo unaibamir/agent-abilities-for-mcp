@@ -688,27 +688,25 @@ final class ReadOnlyUiTest extends TestCase {
 	}
 
 	/**
-	 * The bridge renderer computes its read-only lock inline rather than through
-	 * aafm_ability_lock_reason(), and this is the test that pins WHY.
+	 * The aafm_ability_is_high_risk() predicate is now namespace-aware: it returns false outright for any name
+	 * not starting with "aafm/", so a site naming a foreign slug in the public
+	 * aafm_high_risk_abilities filter can never make the shared aafm_ability_lock_reason()
+	 * predicate report it locked. The high-risk floor only ever subtracts from
+	 * aafm_get_enabled_abilities(), which walks the NATIVE registry and never touches the bridge,
+	 * so a lock the floor does not enforce would be the exact defect class 1.5.0 shipped. This is
+	 * what makes it safe for the bridge row renderer to call the shared predicate directly instead
+	 * of hand-rolling its own read-only-only check.
 	 *
-	 * That helper falls through to aafm_ability_is_locked(), which is a plain
-	 * in_array() over aafm_high_risk_abilities() - the built-ins plus whatever the public
-	 * aafm_high_risk_abilities filter adds. A site that names a FOREIGN slug in that filter would
-	 * make it return true. The high-risk floor never subtracts from the bridged registration walk,
-	 * so the row would show a padlock over an ability that still registers: a lock the floor does
-	 * not enforce, which is exactly the defect class 1.5.0 shipped.
-	 *
-	 * So: a filter-added foreign slug must still render a live checkbox here. This fails the moment
-	 * anyone routes this renderer through the shared helper.
+	 * So: a filter-added foreign slug must still render a live checkbox here.
 	 */
 	public function test_a_bridge_row_never_renders_a_high_risk_lock(): void {
 		add_filter(
 			'aafm_high_risk_abilities',
 			static fn( array $e ): array => array_merge( $e, array( 'demo/writer' ) )
 		);
-		$this->assertTrue(
+		$this->assertFalse(
 			aafm_ability_is_locked( 'demo/writer' ),
-			'Fixture check: the filter must actually make the shared predicate report this slug locked.'
+			'Fixture check: the shared predicate must be namespace-aware, so naming a foreign slug in the aafm_high_risk_abilities filter must never lock it - the floor this filter feeds never reaches the bridge.'
 		);
 
 		$html = $this->render_bridge_group(

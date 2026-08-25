@@ -691,6 +691,15 @@ function aafm_fileinfo_available(): bool {
  *   own uploader, matching the audit's own rule - a plugin exposing core's capabilities should
  *   MATCH core's behaviour, not be safer than the admin UI.
  *
+ *   ACCEPTED RISK, operator decision (208 fix round 1). A review raised that matching a real
+ *   authenticated OOM path in wp-admin is not the same as closing it, since GD's own image editor
+ *   raises the memory limit and starts decoding before any dimension check runs, so this ability
+ *   again has no pre-decode ceiling on a GD host. The operator chose parity with core over
+ *   restoring a plugin-only ceiling for this release. Do not re-open this as a new finding without
+ *   a fresh operator decision, and do not silently restore a cap: if this is revisited, size it
+ *   deliberately (see the deleted aafm_derive_max_pixels() history in this file's git log) rather
+ *   than guessing a constant.
+ *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
  */

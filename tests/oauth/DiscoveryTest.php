@@ -83,6 +83,29 @@ class DiscoveryTest extends TestCase {
 	}
 
 	/**
+	 * RFC 9728 3.1: when the protected resource identifier has a path, the metadata document is
+	 * ALSO discoverable at a URL formed by inserting the well-known path segment between the
+	 * authority and that path - not only at the bare root form. Both routes must serve the SAME
+	 * document, so a strict client checking the identity match ("resource" equals the URL it
+	 * fetched the document from) succeeds either way it looks.
+	 */
+	public function test_match_well_known_also_matches_the_rfc9728_path_suffixed_form(): void {
+		$resource_path = ltrim( (string) wp_parse_url( aafm_endpoint_url(), PHP_URL_PATH ), '/' );
+
+		$this->assertSame(
+			'protected-resource',
+			aafm_oauth_match_well_known( '/.well-known/oauth-protected-resource/' . $resource_path )
+		);
+		$this->assertSame(
+			'protected-resource',
+			aafm_oauth_match_well_known( '.well-known/oauth-protected-resource/' . $resource_path )
+		);
+
+		// A DIFFERENT path appended must not match - only the resource's own path earns the suffix.
+		$this->assertSame( '', aafm_oauth_match_well_known( '.well-known/oauth-protected-resource/not-the-mcp-route' ) );
+	}
+
+	/**
 	 * Both feature toggles default to DISABLED when their options are unset: the
 	 * public OAuth surface and open client registration are opt-in, never a
 	 * fresh-install default. A stored truthy row (an existing install, or an

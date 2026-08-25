@@ -274,6 +274,18 @@ function aafm_discover_foreign_abilities(): array {
 	// express "every namespace except aafm and aafm-bridge", so it is not a substitute for this
 	// function's own exclusion loop below - this is a bypass of the filtering layer, not a
 	// delegation to it.
+	//
+	// Deliberate departure from core's documented contract (delegation audit, review round 1,
+	// 2026-08-26): core documents wp_get_abilities_item_include as enforcing "universal inclusion
+	// rules" that every caller is expected to respect, and get_all_registered() skips it entirely.
+	// The cost: a vendor that hides an internal, deprecated, license-gated or feature-flagged
+	// ability from wp_get_abilities() on purpose will see it listed here anyway, and an operator
+	// could select it in the bridge directory even though the vendor never intended it to be
+	// offered. Accepted because this is an ADMIN-facing governance screen, not a public listing -
+	// the operator is deciding what to enable on their own site, and should be able to see what is
+	// genuinely registered rather than whatever a third party's filter lets through. Execution still
+	// reaches the foreign ability's own permission_callback regardless of what this function
+	// displays, so the bypass affects visibility only, never authorization.
 	if ( ! class_exists( 'WP_Abilities_Registry' ) ) {
 		return array();
 	}

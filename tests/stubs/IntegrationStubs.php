@@ -481,7 +481,7 @@ PHP;
 		// line id resolves to this base class so the executor's method_exists() guard is exercisable.
 		if ( ! class_exists( 'WC_Order_Item' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Order_Item { protected $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } }' );
+			eval( 'class WC_Order_Item { protected $data = array(); public function __construct( $data = array() ) { $this->data = (array) $data; } public function get_id() { return (int) ( $this->data["id"] ?? 0 ); } public function get_type() { return (string) ( $this->data["type"] ?? "line_item" ); } }' );
 		}
 		// A product line item carries the tax map the refund executor reads via
 		// $order->get_item()->get_taxes(). get_taxes() returns the real WooCommerce shape:

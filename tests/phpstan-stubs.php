@@ -612,6 +612,9 @@ if ( ! class_exists( 'WC_Order_Item' ) ) {
 	class WC_Order_Item {
 		/** @return int */
 		public function get_id() { return 0; }
+
+		/** @return string */
+		public function get_type() { return 'line_item'; }
 	}
 }
 

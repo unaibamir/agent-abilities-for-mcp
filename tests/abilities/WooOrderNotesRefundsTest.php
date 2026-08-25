@@ -600,6 +600,71 @@ final class WooOrderNotesRefundsTest extends TestCase {
 	}
 
 	/**
+	 * R8C-3: a line_item_id resolving to a COUPON order item is a real, existing item - the
+	 * existing B24 guard (which only checks existence) lets it through - but wc_create_refund()'s
+	 * own loop only ever iterates line_item/fee/shipping items, so it silently drops a coupon or
+	 * tax id from the refund with no error. Refuse it before the call, mirroring the exact type set
+	 * wc_create_refund() itself consumes.
+	 */
+	public function test_create_order_refund_refuses_a_coupon_line_item_id(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+		WcOrderStubStore::$orders[5001]['items'][] = array(
+			'id'   => 55,
+			'name' => 'SAVE10',
+			'type' => 'coupon',
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 55,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $res, 'a coupon-type line_item_id must be refused, not silently dropped by wc_create_refund().' );
+		$this->assertSame( 'aafm_wc_unrefundable_line_item_type', $res->get_error_code() );
+		$this->assertSame( array(), WcOrderStubStore::$last_refund_args, 'wc_create_refund() must never run with a line id it would silently drop.' );
+	}
+
+	/**
+	 * The type guard's counterpart: a known line_item_id of the ALLOWED types still succeeds,
+	 * proving the new guard only bites the type it names.
+	 */
+	public function test_create_order_refund_known_fee_line_item_id_still_succeeds(): void {
+		$this->register_group_c();
+		$this->acting_as( 'administrator' );
+		WcOrderStubStore::seed_refunds( 5001, array() );
+		WcOrderStubStore::$orders[5001]['items'][] = array(
+			'id'   => 56,
+			'name' => 'Gift wrap',
+			'type' => 'fee',
+		);
+
+		$res = wp_get_ability( 'aafm/wc-create-order-refund' )->execute(
+			array(
+				'order_id'   => 5001,
+				'amount'     => '5.00',
+				'line_items' => array(
+					array(
+						'line_item_id' => 56,
+						'refund_total' => '5.00',
+					),
+				),
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+	}
+
+	/**
 	 * A non-numeric per-line refund amount must likewise be rejected before wc_create_refund().
 	 */
 	public function test_create_order_refund_rejects_non_numeric_line_amount(): void {

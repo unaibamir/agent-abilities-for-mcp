@@ -154,6 +154,29 @@ function aafm_bridge_risk( $ability ): array {
 }
 
 /**
+ * Strip JSON-Schema keywords an MCP client is not guaranteed to understand from a FOREIGN
+ * ability's schema, before it is copied onto our wrapper's registration.
+ *
+ * Delegates to WP 7.1's wp_prepare_json_schema_for_client() (Rule 1 of the delegation audit: this
+ * plugin has no way to know every keyword a third-party ability's author might have used, and core
+ * already maintains the allow-listed keyword set its own REST API and Abilities API clients
+ * expect). A no-op on the WP 6.9/7.0 floor, where the function does not exist yet. Only ever called
+ * on a BRIDGED (third-party-authored) schema - a native aafm/* ability's own schema is authored by
+ * this plugin and already kept to a known-safe keyword set, so running it through this too would
+ * add a dependency for no benefit.
+ *
+ * @param array<string,mixed> $schema A normalized (type always present) JSON schema.
+ * @return array<string,mixed> The same schema, with unsupported keywords stripped where core
+ *                              provides the stripper; unchanged otherwise.
+ */
+function aafm_prepare_bridge_schema_for_client( array $schema ): array {
+	if ( ! function_exists( 'wp_prepare_json_schema_for_client' ) ) {
+		return $schema;
+	}
+	return wp_prepare_json_schema_for_client( $schema );
+}
+
+/**
  * The foreign ability's input schema, normalized. Empty when none is exposed.
  *
  * @param \WP_Ability $ability The foreign ability.
@@ -161,7 +184,7 @@ function aafm_bridge_risk( $ability ): array {
  */
 function aafm_bridge_input_schema( $ability ): array {
 	$schema = method_exists( $ability, 'get_input_schema' ) ? $ability->get_input_schema() : array();
-	return aafm_normalize_json_schema( $schema );
+	return aafm_prepare_bridge_schema_for_client( aafm_normalize_json_schema( $schema ) );
 }
 
 /**
@@ -229,7 +252,7 @@ function aafm_bridge_output_schema( $ability ): ?array {
 	if ( ! is_array( $schema ) || array() === $schema ) {
 		return null;
 	}
-	return $schema;
+	return aafm_prepare_bridge_schema_for_client( $schema );
 }
 
 /**

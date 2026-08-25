@@ -901,4 +901,71 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertSame( (int) $rows[0]['id'], $fired[0]['row_id'], 'The announced row_id must be the row the call wrote.' );
 		$this->assertNull( $rows[0]['detail'], 'And the column agrees with the hook.' );
 	}
+
+	/**
+	 * Register a foreign ability whose input schema carries a keyword outside the set an MCP
+	 * client is guaranteed to understand, like a third-party ability author reasonably might.
+	 *
+	 * @return void
+	 */
+	private function register_foreign_with_unsupported_schema_keyword(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/schema-with-unsupported-keyword',
+					array(
+						'label'               => 'Schema with unsupported keyword',
+						'description'         => 'A foreign ability whose schema carries a keyword MCP clients do not expect.',
+						'category'            => 'demo-things',
+						'input_schema'        => array(
+							'type'               => 'object',
+							'properties'         => array(
+								'name' => array( 'type' => 'string' ),
+							),
+							'x-vendor-extension' => 'not a real JSON Schema keyword',
+						),
+						'execute_callback'    => static fn() => array(),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * A bridged ability's schema is prepared through WP 7.1's wp_prepare_json_schema_for_client()
+	 * before it is copied onto our wrapper's registration, so a keyword outside the REST-safe
+	 * allow-list a third-party author might have used never reaches an MCP client through us.
+	 * Skipped when core does not provide the function (this plugin's WP 6.9/7.0 floor).
+	 */
+	public function test_bridged_input_schema_strips_a_keyword_outside_the_client_allowlist(): void {
+		if ( ! function_exists( 'wp_prepare_json_schema_for_client' ) ) {
+			$this->markTestSkipped( 'wp_prepare_json_schema_for_client() requires WP 7.1+.' );
+		}
+
+		$this->register_foreign_with_unsupported_schema_keyword();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/schema-with-unsupported-keyword' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/demo-schema-with-unsupported-keyword' )->get_input_schema();
+
+		$this->assertArrayHasKey( 'type', $schema, 'A recognized keyword must survive.' );
+		$this->assertArrayHasKey( 'properties', $schema, 'A recognized keyword must survive.' );
+		$this->assertArrayNotHasKey( 'x-vendor-extension', $schema, 'An unsupported keyword must be stripped before it reaches an MCP client.' );
+	}
 }

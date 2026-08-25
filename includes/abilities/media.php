@@ -779,6 +779,34 @@ function aafm_exec_upload_media( array $input ) {
 		return aafm_generic_error();
 	}
 
+	// Security review finding 1 (fix round 1, 208): media_handle_sideload() -> wp_read_image_metadata()
+	// can populate post_content from the uploaded image's own IPTC/EXIF caption. Re-apply this
+	// plugin's own policy to whatever landed there, the same way aafm-update-media already runs its
+	// caller-supplied description through wp_kses_post() before writing the same column (:914) -
+	// this ability's guarantee must not depend on an upstream WP core implementation detail (verified
+	// as of WP 7.1, wp_read_image_metadata() already runs its whole return value through
+	// wp_kses_post_deep() before returning) that this plugin never signed a contract on and cannot
+	// verify holds on its stated 6.9 floor. get_post_field() with the 'raw' context reads storage
+	// directly, unaffected by any display filter, so this compares and rewrites the actual stored
+	// value rather than a filtered view of it.
+	$sideloaded_field   = get_post_field( 'post_content', $attachment_id, 'raw' );
+	$sideloaded_content = is_string( $sideloaded_field ) ? $sideloaded_field : '';
+	$sanitized_content  = wp_kses_post( $sideloaded_content );
+	if ( $sanitized_content !== $sideloaded_content ) {
+		$updated = wp_update_post(
+			wp_slash(
+				array(
+					'ID'           => $attachment_id,
+					'post_content' => $sanitized_content,
+				)
+			),
+			true
+		);
+		if ( is_wp_error( $updated ) ) {
+			return aafm_generic_error();
+		}
+	}
+
 	// The caller's own alt text wins over whatever media_handle_sideload() may already have set
 	// from the image's own EXIF/IPTC metadata. update_post_meta() unslashes the value, so a
 	// backslash in the alt text is stripped unless it is slashed first, exactly like the sibling

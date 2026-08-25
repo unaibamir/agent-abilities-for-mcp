@@ -455,6 +455,61 @@ final class MediaWriteTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $out, 'A site owner\'s own sideload override must be able to refuse an upload this plugin\'s own allow-list would otherwise accept.' );
 	}
 
+	/**
+	 * Security review finding 1 (fix round 1, 208).
+	 *
+	 * The finding as filed: media_handle_sideload() writes an IPTC/EXIF-derived caption straight
+	 * into the attachment's post_content, and core's wp_read_image_metadata() applies only trim(),
+	 * no HTML/JS stripping. Reproducing it directly (a real JPEG with an IPTC 2#120 caption of
+	 * "<script>alert(1)</script>", driven through this exact ability) does NOT go red on the WP
+	 * core installed in this environment (7.1): wp_read_image_metadata() itself unconditionally runs
+	 * the whole metadata array through wp_kses_post_deep() (wp-admin/includes/image.php:1061) before
+	 * ever returning it, regardless of the acting user's unfiltered_html capability, so the caption
+	 * already comes back as "alert(1)" before media_handle_sideload() or this ability's own code
+	 * ever sees it. A test driving the reported payload through the real path on this core version
+	 * would pass with or without this fix and would prove nothing - a can-go-red check exists to
+	 * catch exactly that, and it did.
+	 *
+	 * That upstream behavior is WP core's own implementation detail inside a private-in-spirit
+	 * helper, not a documented contract this plugin can rely on, and this plugin's stated floor is
+	 * WP 6.9 (not verifiable in this session - no 6.9 core checkout was available). The fix is
+	 * applied anyway, matching aafm-update-media's own explicit policy at media.php:914, so this
+	 * ability's guarantee does not depend on an upstream detail nobody promised. This test proves
+	 * the fix on the case it is actually responsible for: content reaching post_content AFTER
+	 * core's own sanitization pass, the shape a less careful third-party wp_read_image_metadata
+	 * filter callback (or a future core change) could produce. It hooks the real, documented
+	 * wp_read_image_metadata filter at a later priority than core's own processing to simulate that,
+	 * rather than trying to defeat wp_kses_post_deep() through the real IPTC path, which cannot be
+	 * done from this plugin's own execution context.
+	 */
+	public function test_upload_media_sanitizes_metadata_reintroduced_after_cores_own_pass(): void {
+		$this->acting_as( 'administrator' );
+
+		add_filter(
+			'wp_read_image_metadata',
+			static function ( $meta ) {
+				$meta['caption'] = '<script>alert(1)</script>';
+				return $meta;
+			},
+			PHP_INT_MAX
+		);
+
+		$out = wp_get_ability( 'aafm/upload-media' )->execute(
+			array(
+				'filename'    => 'test.png',
+				'data_base64' => self::PNG_B64,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $out );
+		$attachment_id = (int) $out['attachment_id'];
+		$this->track_attachment_files( $attachment_id );
+
+		$stored_content = get_post_field( 'post_content', $attachment_id, 'raw' );
+		$this->assertStringNotContainsString( '<script', $stored_content, 'content reintroduced after core\'s own sanitization pass must still be stripped by this plugin\'s own policy.' );
+		$this->assertSame( wp_kses_post( '<script>alert(1)</script>' ), $stored_content, 'the stored content must be exactly what wp_kses_post() produces, matching the aafm-update-media sibling policy (media.php:914).' );
+	}
+
 	public function test_update_media_is_in_registry_as_write(): void {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayHasKey( 'aafm/update-media', $registry );

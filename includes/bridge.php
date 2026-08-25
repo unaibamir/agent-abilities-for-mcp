@@ -602,6 +602,23 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 		return $result;
 	}
 
+	// A bare PHP object (not a WP_Error, not an array) reaches here un-redacted: nothing in this
+	// plugin or the adapter inspects an object's own properties before the wire. McpTool::execute()
+	// already wraps any non-array result as array('result' => $result), so the WIRE SHAPE is valid
+	// JSON either way - the risk is that json_encode() then walks the object's own public
+	// properties with no redaction at all. The docblock's own worked example: a raw WP_User exposes
+	// user_pass through its public `data` property. This plugin cannot know a third-party object's
+	// shape well enough to redact it selectively, so it refuses the call rather than guess at what
+	// is safe to keep - the adapter's own docblock on this filter recommends it for exactly this
+	// (PII redaction), and a WP_Error here becomes a proper MCP error result
+	// (ToolsHandler::handle_tool_call() checks is_wp_error() on this filter's return value).
+	if ( is_object( $result ) && ! is_wp_error( $result ) ) {
+		return new WP_Error(
+			'aafm_bridge_unsupported_result_shape',
+			__( 'This bridged ability returned a raw object, which cannot be safely relayed over MCP. Contact the site administrator.', 'agent-abilities-for-mcp' )
+		);
+	}
+
 	if ( ! is_array( $result ) || ! aafm_bridge_is_list( $result ) ) {
 		return $result;
 	}

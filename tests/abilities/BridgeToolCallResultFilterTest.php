@@ -209,4 +209,41 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 			'aafm_filter_bridged_tool_call_result must be hooked on mcp_adapter_tool_call_result at priority 10.'
 		);
 	}
+
+	/**
+	 * THE GAP THIS CLOSES: a bridged ability returning a bare PHP object (not an array, not a
+	 * WP_Error) reached the wire completely unredacted. A raw WP_User is the docblock's own worked
+	 * example - its public `data` property carries the hashed password. This plugin cannot know a
+	 * third-party object's shape well enough to redact it selectively, so it refuses the call
+	 * instead of guessing.
+	 */
+	public function test_a_bridged_bare_object_result_is_refused_not_leaked(): void {
+		$leaky               = new \stdClass();
+		$leaky->public_field = 'this must never reach the wire unredacted';
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$leaky,
+			array(),
+			'aafm-bridge-vendor-returns-a-raw-object'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * A genuine WP_Error from a bridged ability is itself an object - it must pass through
+	 * unchanged (as an ordinary failed call), not be caught by the new object guard above.
+	 */
+	public function test_a_bridged_wp_error_result_is_not_caught_by_the_object_guard(): void {
+		$error = new WP_Error( 'vendor_error', 'A real vendor failure.' );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$error,
+			array(),
+			'aafm-bridge-vendor-tool'
+		);
+
+		$this->assertSame( $error, $result );
+	}
 }

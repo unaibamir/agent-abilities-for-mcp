@@ -229,6 +229,25 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertFalse( wp_has_ability( 'aafm-bridge/demo-echo' ) );
 	}
 
+	/**
+	 * An enabled bridged slug whose host plugin is currently inactive is an ordinary state, not a
+	 * misuse - wp_get_ability() on it must never raise _doing_it_wrong(). The sibling read-only-mode
+	 * accessor (aafm_get_enabled_bridged_abilities()) already carries this guard; this pins the
+	 * registration walk, which reaches wp_get_ability() on every enabled slug when read-only mode
+	 * is off (the read-only accessor's own guard is bypassed entirely in that case).
+	 */
+	public function test_registration_walk_never_raises_doing_it_wrong_for_an_inactive_host(): void {
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/host-plugin-now-inactive' ) );
+
+		// No fixture registers this slug: it is enabled, but the "host plugin" is gone.
+		$this->register_wrappers();
+
+		$this->assertFalse(
+			wp_has_ability( 'aafm-bridge/demo-host-plugin-now-inactive' ),
+			'An inactive host plugin must never end up with a registered wrapper.'
+		);
+	}
+
 	public function test_foreign_permission_denial_is_enforced(): void {
 		$this->register_foreign( false );
 		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/echo' ) );

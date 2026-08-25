@@ -454,9 +454,18 @@ function aafm_register_enabled_bridged_abilities(): void {
 			$claimed[ $wrapper ] = $foreign_slug;
 			continue;
 		}
+		// wp_has_ability() first: an enabled slug whose host plugin is currently inactive is an
+		// ordinary state here, and wp_get_ability() would raise a _doing_it_wrong notice for it on
+		// every request when read-only mode is off. aafm_get_enabled_bridged_abilities()'s
+		// read-only-mode branch already carries this exact guard; this is the same fix for the
+		// registration walk, which reaches wp_get_ability() on every enabled slug regardless of
+		// read-only mode.
+		if ( function_exists( 'wp_has_ability' ) && ! wp_has_ability( $foreign_slug ) ) {
+			continue;
+		}
 		$foreign = wp_get_ability( $foreign_slug );
 		if ( ! $foreign instanceof WP_Ability ) {
-			continue; // Host plugin inactive / slug gone.
+			continue; // Belt-and-suspenders: still guard the return type.
 		}
 		$claimed[ $wrapper ] = $foreign_slug;
 		$risk                = aafm_bridge_risk( $foreign );

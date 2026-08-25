@@ -968,4 +968,72 @@ final class BridgeWrapperTest extends TestCase {
 		$this->assertArrayHasKey( 'properties', $schema, 'A recognized keyword must survive.' );
 		$this->assertArrayNotHasKey( 'x-vendor-extension', $schema, 'An unsupported keyword must be stripped before it reaches an MCP client.' );
 	}
+
+	/**
+	 * Register a foreign ability whose OUTPUT schema carries a keyword outside the client
+	 * allow-list, mirroring register_foreign_with_unsupported_schema_keyword() above but for
+	 * get_output_schema() instead of get_input_schema().
+	 *
+	 * @return void
+	 */
+	private function register_foreign_with_unsupported_output_schema_keyword(): void {
+		$this->in_action(
+			'wp_abilities_api_categories_init',
+			static function (): void {
+				if ( ! wp_has_ability_category( 'demo-things' ) ) {
+					wp_register_ability_category(
+						'demo-things',
+						array(
+							'label'       => 'Demo things',
+							'description' => 'Demo fixture category.',
+						)
+					);
+				}
+			}
+		);
+		$this->in_action(
+			'wp_abilities_api_init',
+			static function (): void {
+				wp_register_ability(
+					'demo/output-schema-with-unsupported-keyword',
+					array(
+						'label'               => 'Output schema with unsupported keyword',
+						'description'         => 'A foreign ability whose output schema carries a keyword MCP clients do not expect.',
+						'category'            => 'demo-things',
+						'output_schema'       => array(
+							'type'               => 'object',
+							'properties'         => array(
+								'ok' => array( 'type' => 'boolean' ),
+							),
+							'x-vendor-extension' => 'not a real JSON Schema keyword',
+						),
+						'execute_callback'    => static fn() => array( 'ok' => true ),
+						'permission_callback' => '__return_true',
+					)
+				);
+			}
+		);
+	}
+
+	/**
+	 * Fix round 1, test-quality F2: Task 8 delegated BOTH aafm_bridge_input_schema() and
+	 * aafm_bridge_output_schema() to wp_prepare_json_schema_for_client(), but only the input side
+	 * had a test. A regression that removed just the output-schema call would have passed clean.
+	 * Mirrors the input-schema test above, asserting on the specific stripped keyword.
+	 */
+	public function test_bridged_output_schema_strips_a_keyword_outside_the_client_allowlist(): void {
+		if ( ! function_exists( 'wp_prepare_json_schema_for_client' ) ) {
+			$this->markTestSkipped( 'wp_prepare_json_schema_for_client() requires WP 7.1+.' );
+		}
+
+		$this->register_foreign_with_unsupported_output_schema_keyword();
+		update_option( 'aafm_enabled_bridged_abilities', array( 'demo/output-schema-with-unsupported-keyword' ) );
+		$this->register_wrappers();
+
+		$schema = wp_get_ability( 'aafm-bridge/demo-output-schema-with-unsupported-keyword' )->get_output_schema();
+
+		$this->assertArrayHasKey( 'type', $schema, 'A recognized keyword must survive.' );
+		$this->assertArrayHasKey( 'properties', $schema, 'A recognized keyword must survive.' );
+		$this->assertArrayNotHasKey( 'x-vendor-extension', $schema, 'An unsupported keyword must be stripped from the output schema before it reaches an MCP client.' );
+	}
 }

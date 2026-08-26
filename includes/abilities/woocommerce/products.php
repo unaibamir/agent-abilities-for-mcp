@@ -433,37 +433,48 @@ function aafm_exec_wc_list_products( array $input ) {
 
 	// With paginate => true WooCommerce returns an object carrying ->products (the page) and ->total
 	// (the full matching count); total is the grand total for pagination, not the page row count.
-	$products = array();
-	$total    = 0;
+	//
+	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_wc_product() must
+	// run INSIDE the query's own aafm_with_language() scope, not after it restores to ambient -
+	// on both branches. WooCommerce's get_name(), get_price(), and get_category_ids() all apply
+	// vendor filters a theme or plugin can key off ambient language, same defect class as
+	// aafm_exec_get_posts() in posts.php.
+	$shape_language = static function ( ?string $code ) use ( $build_page ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_page ): array {
+				/**
+				 * The raw WooCommerce product query result.
+				 *
+				 * @var WC_Product[]|\stdClass $query
+				 */
+				$query      = $build_page();
+				$page_items = is_object( $query ) ? (array) $query->products : (array) $query;
+				$rows       = array();
+				foreach ( $page_items as $product ) {
+					if ( $product instanceof \WC_Product ) {
+						$rows[] = aafm_redact_wc_product( $product );
+					}
+				}
+				return array(
+					'rows'  => $rows,
+					'found' => is_object( $query ) ? (int) $query->total : count( $page_items ),
+				);
+			}
+		);
+	};
+
 	if ( 'all' === $lang ) {
 		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			/**
-			 * The raw WooCommerce product query result.
-			 *
-			 * @var WC_Product[]|\stdClass $query
-			 */
-			$query      = aafm_with_language( $code, $build_page );
-			$page_items = is_object( $query ) ? (array) $query->products : (array) $query;
-			$products   = array_merge( $products, $page_items );
-			$total     += is_object( $query ) ? (int) $query->total : count( $page_items );
+			$shaped          = $shape_language( $code );
+			$out['products'] = array_merge( $out['products'], $shaped['rows'] );
+			$out['total']   += $shaped['found'];
 		}
 	} else {
-		/**
-		 * The raw WooCommerce product query result.
-		 *
-		 * @var WC_Product[]|\stdClass $query
-		 */
-		$query    = aafm_with_language( $lang, $build_page );
-		$products = is_object( $query ) ? (array) $query->products : (array) $query;
-		$total    = is_object( $query ) ? (int) $query->total : count( $products );
+		$shaped          = $shape_language( $lang );
+		$out['products'] = $shaped['rows'];
+		$out['total']    = $shaped['found'];
 	}
-
-	foreach ( $products as $product ) {
-		if ( $product instanceof \WC_Product ) {
-			$out['products'][] = aafm_redact_wc_product( $product );
-		}
-	}
-	$out['total'] = $total;
 
 	return $out;
 }

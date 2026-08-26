@@ -846,7 +846,7 @@ class WC_Product {
 		$this->data = is_array( $stored ) ? $stored : array( 'id' => 0 );
 	}
 	public function get_id() { return (int) ( $this->data['id'] ?? 0 ); }
-	public function get_name() { return (string) ( $this->data['name'] ?? '' ); }
+	public function get_name() { return (string) apply_filters( 'woocommerce_product_get_name', $this->data['name'] ?? '', $this ); }
 	public function get_type() { return (string) ( $this->data['type'] ?? 'simple' ); }
 	public function get_status() { return (string) ( $this->data['status'] ?? 'publish' ); }
 	public function get_sku() { return (string) ( $this->data['sku'] ?? '' ); }

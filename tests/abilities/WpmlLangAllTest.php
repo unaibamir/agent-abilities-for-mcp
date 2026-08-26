@@ -711,4 +711,76 @@ final class WpmlLangAllTest extends TestCase {
 		$this->assertCount( 1, $out['results'] );
 		$this->assertSame( 'en', $out['results'][0]['excerpt'] );
 	}
+
+	/**
+	 * Branch review fix, round 3: aafm/get-media had the identical defect as the post/search
+	 * list paths - aafm_redact_media() (which calls the filterable get_the_title()) ran after
+	 * the language scope had already restored to ambient. Covers both explicit lang and "all",
+	 * since both now share the same $shape_language closure.
+	 */
+	public function test_get_media_shapes_each_result_under_its_own_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'the_title', fn() => $this->current_lang );
+
+		$en_id = self::factory()->attachment->create_object( 'en.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		update_post_meta( $en_id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$explicit = aafm_exec_get_media( array( 'lang' => 'en' ) );
+		$this->assertIsArray( $explicit );
+		$this->assertCount( 1, $explicit['media'] );
+		$this->assertSame( 'en', $explicit['media'][0]['title'], 'An explicit lang request must shape under the requested language, not ambient.' );
+
+		$is_id = self::factory()->attachment->create_object( 'is.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		update_post_meta( $is_id, '_aafm_test_lang', 'is' );
+
+		$all = aafm_exec_get_media( array( 'lang' => 'all' ) );
+		$this->assertIsArray( $all );
+		$titles_by_id = array();
+		foreach ( $all['media'] as $item ) {
+			$titles_by_id[ $item['id'] ] = $item['title'];
+		}
+		$this->assertSame( 'en', $titles_by_id[ $en_id ], 'the "en" attachment must be shaped under "en" even when merged with the "is" one under lang:"all".' );
+		$this->assertSame( 'is', $titles_by_id[ $is_id ], 'the "is" attachment must be shaped under "is".' );
+	}
+
+	/**
+	 * Same finding, aafm/get-media-item: the single-item path ran aafm_media_item_payload()
+	 * with no language wrapper at all, so it always shaped under ambient.
+	 */
+	public function test_get_media_item_shapes_under_the_requested_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'the_title', fn() => $this->current_lang );
+
+		$id = self::factory()->attachment->create_object( 'en.jpg', 0, array( 'post_mime_type' => 'image/jpeg' ) );
+		update_post_meta( $id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_get_media_item( array( 'attachment_id' => $id ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'en', $out['media']['title'], 'No explicit lang: must shape under the attachment\'s own language, not ambient "is".' );
+	}
+
+	/**
+	 * Same finding, aafm/wc-list-products: wc_get_products() selected inside the language
+	 * scope but aafm_redact_wc_product() (which calls the filterable get_name()) ran after it
+	 * restored to ambient.
+	 */
+	public function test_wc_list_products_shapes_under_the_requested_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		$this->stub_woocommerce();
+		add_filter( 'woocommerce_product_get_name', fn() => $this->current_lang );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_wc_list_products( array( 'lang' => 'en' ) );
+
+		$this->assertIsArray( $out );
+		$this->assertNotEmpty( $out['products'] );
+		$this->assertSame(
+			'en',
+			$out['products'][0]['name'],
+			'An explicit lang:"en" request must shape the product under "en", not ambient "is".'
+		);
+	}
 }

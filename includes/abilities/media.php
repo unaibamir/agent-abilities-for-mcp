@@ -203,25 +203,45 @@ function aafm_exec_get_media( array $input ) {
 		return new WP_Query( $args );
 	};
 
+	// Branch review fix (lang scope and result shaping, round 3): aafm_redact_media() must run
+	// INSIDE the query's own aafm_with_language() scope, not after it restores to ambient - on
+	// both branches. aafm_redact_media() calls filterable, language-sensitive accessors
+	// (get_the_title(), wp_get_attachment_url()) that a theme or plugin can key off ambient
+	// language, same defect class as aafm_exec_get_posts() in posts.php.
+	$shape_language = static function ( ?string $code ) use ( $build_query ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_query ): array {
+				$query = $build_query();
+				return array(
+					'rows'  => array_values(
+						array_map(
+							'aafm_redact_media',
+							array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+						)
+					),
+					'found' => (int) $query->found_posts,
+				);
+			}
+		);
+	};
+
 	$attachments = array();
 	$total       = 0;
 	if ( 'all' === $lang ) {
 		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$query       = aafm_with_language( $code, $build_query );
-			$attachments = array_merge(
-				$attachments,
-				array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
-			);
-			$total      += (int) $query->found_posts;
+			$shaped      = $shape_language( $code );
+			$attachments = array_merge( $attachments, $shaped['rows'] );
+			$total      += $shaped['found'];
 		}
 	} else {
-		$query       = aafm_with_language( $lang, $build_query );
-		$attachments = array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) );
-		$total       = (int) $query->found_posts;
+		$shaped      = $shape_language( $lang );
+		$attachments = $shaped['rows'];
+		$total       = $shaped['found'];
 	}
 
 	return array(
-		'media'    => array_values( array_map( 'aafm_redact_media', $attachments ) ),
+		'media'    => $attachments,
 		// Full match count for the search filter so an agent can page through the library.
 		'total'    => $total,
 		'language' => $lang,
@@ -281,6 +301,7 @@ function aafm_args_get_media_item(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_get_media_item( array $input ) {
+	$lang   = null;
 	$att_id = isset( $input['attachment_id'] ) ? absint( $input['attachment_id'] ) : 0;
 	if ( $att_id ) {
 		$lang = aafm_resolve_lang( $input );
@@ -304,7 +325,16 @@ function aafm_exec_get_media_item( array $input ) {
 		return aafm_generic_error();
 	}
 
-	return array( 'media' => aafm_media_item_payload( $attachment ) );
+	// Branch review fix (lang scope and result shaping, round 3): same reasoning as
+	// aafm_exec_get_post() in posts.php - shape under the requested language when one was
+	// resolved, or the attachment's own language for "all"/no lang, never ambient.
+	$shape_lang = ( is_string( $lang ) && 'all' !== $lang ) ? $lang : aafm_wpml_post_language( $attachment->ID );
+	return array(
+		'media' => aafm_with_language(
+			$shape_lang,
+			static fn(): array => aafm_media_item_payload( $attachment )
+		),
+	);
 }
 
 /**

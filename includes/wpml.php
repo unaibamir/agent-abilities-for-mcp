@@ -137,7 +137,23 @@ function aafm_with_language( ?string $lang, callable $fn ) {
 		return $fn();
 	}
 	$original = aafm_wpml_current_language();
-	$switch   = ( null !== $original && $lang !== $original );
+	// Investigated (doc 214, finding 4, LOW/SUSPECTED): if WPML reports itself loaded but
+	// $original comes back null, this skips the switch and $lang runs under whatever ambient
+	// language WPML actually holds - which looks like the same silent-wrong-language class fixed
+	// three times on this branch. Left alone deliberately, for two reasons. First, $original can
+	// only be null here if the documented `wpml_current_language` filter itself returns an empty
+	// or non-string value while `wpml_loaded` has fired - stock WPML always resolves to a real
+	// code (falling back to the site default) once loaded, so the only path to null is a
+	// misbehaving third party overriding that exact filter, and no such path is known to be
+	// reachable in practice. Second, and more importantly, the "obvious" fix of switching
+	// whenever `$lang !== $original` makes things WORSE in exactly that edge case: the restore in
+	// the finally block below would then call `do_action( 'wpml_switch_language', null )`,
+	// handing WPML's own action a value it does not document accepting. A crash or a corrupted
+	// "current language" there would outlive this one call, silently mis-scoping every WPML-aware
+	// operation for the rest of the request - a strictly worse failure than this function quietly
+	// not switching. So the asymmetry is a fail-safe: refuse to switch into a state this function
+	// cannot safely restore out of, rather than guess.
+	$switch = ( null !== $original && $lang !== $original );
 	if ( $switch ) {
 		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook.
 		do_action( 'wpml_switch_language', $lang );

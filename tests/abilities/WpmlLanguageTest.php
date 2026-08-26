@@ -130,6 +130,41 @@ final class WpmlLanguageTest extends TestCase {
 		$this->assertSame( 'is', end( $this->switches ) ); // Restored to original after.
 	}
 
+	/**
+	 * Doc 214, finding 4 (investigated, LEFT AS-IS): if a misbehaving third party overrides
+	 * `wpml_current_language` to return something empty while WPML otherwise reports itself
+	 * loaded, aafm_wpml_current_language() resolves that to null. This pins the deliberate
+	 * behavior: aafm_with_language() must skip the switch rather than switch into a state it
+	 * cannot safely restore out of. Restoring would call `wpml_switch_language` with null, an
+	 * undocumented input to a third party's own action - a strictly worse failure than not
+	 * switching, since it could mis-scope every WPML-aware operation for the rest of the request
+	 * instead of just this one call. See the comment on aafm_with_language() for the full reasoning.
+	 */
+	public function test_with_language_skips_the_switch_when_current_language_resolves_to_null(): void {
+		add_filter(
+			'wpml_active_languages',
+			fn() => array(
+				'is' => array( 'code' => 'is' ),
+				'en' => array( 'code' => 'en' ),
+			)
+		);
+		add_filter( 'wpml_current_language', '__return_empty_string' );
+		add_action(
+			'wpml_switch_language',
+			function ( $code ) {
+				$this->switches[] = $code;
+			}
+		);
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- third-party WPML hook fired to simulate WPML being loaded.
+		do_action( 'wpml_loaded' );
+		$this->assertNull( aafm_wpml_current_language(), 'The scenario requires $original to actually resolve to null.' );
+
+		$out = aafm_with_language( 'en', fn() => 'done' );
+
+		$this->assertSame( 'done', $out, 'The callback must still run even though the requested language could not be safely applied.' );
+		$this->assertSame( array(), $this->switches, 'No switch (and so no restore-to-null) may be attempted when the original language is unknown.' );
+	}
+
 	public function test_with_language_restores_on_exception(): void {
 		$this->fake_wpml( 'is', 'is' );
 		try {

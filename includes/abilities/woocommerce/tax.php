@@ -170,25 +170,20 @@ function aafm_wc_get_all_tax_rates(): array {
 /**
  * Return one normalised rate row by id, or null when not found.
  *
+ * FIX-3 item 1 (sweep finding, pilot doc 210): this used to run its own $wpdb->get_row() against
+ * the same table WooCommerce's own by-id lookup, \WC_Tax::_get_tax_rate( $rate_id, ARRAY_A )
+ * (class-wc-tax.php:1122), already reads - the exact function WooCommerce's own REST controller
+ * calls for a single-rate read (class-wc-rest-taxes-v1-controller.php:452). Both queries were
+ * identical (no caching, no hook, on either side), so this was drift-risk duplication, not a live
+ * gap. aafm_wc_tax_rate_shape() already tolerated `_get_tax_rate()`'s raw ARRAY_A column names
+ * (tax_rate_id, tax_rate_country, ...) via its own `??` fallback chain before this change, so no
+ * adaptation was needed there.
+ *
  * @param int $rate_id Rate id.
  * @return array<string,mixed>|null
  */
 function aafm_wc_get_tax_rate_by_id( int $rate_id ): ?array {
-	global $wpdb;
-	$table = $wpdb->prefix . 'woocommerce_tax_rates';
-	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- direct read of WC's own woocommerce_tax_rates table; no caching layer for admin-driven reads.
-	$row = $wpdb->get_row(
-		$wpdb->prepare(
-			'SELECT tax_rate_id AS id, tax_rate_country AS country, tax_rate_state AS state,
-			tax_rate AS rate, tax_rate_name AS name, tax_rate_priority AS priority,
-			tax_rate_compound AS compound, tax_rate_shipping AS shipping,
-			tax_rate_order AS `order`, tax_rate_class AS class
-			FROM %i WHERE tax_rate_id = %d',
-			$table,
-			$rate_id
-		),
-		ARRAY_A
-	);
+	$row = \WC_Tax::_get_tax_rate( $rate_id, ARRAY_A );
 	if ( ! is_array( $row ) ) {
 		return null;
 	}

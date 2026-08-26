@@ -1091,6 +1091,15 @@ if ( ! class_exists( 'WC_Tax' ) ) {
 		 * @return void
 		 */
 		public static function _update_tax_rate( int $tax_rate_id, array $tax_rate ): void {}
+
+		/**
+		 * Get tax rate by id (208 FIX-3 item 1).
+		 *
+		 * @param int    $tax_rate_id Tax rate id.
+		 * @param string $output_type ARRAY_A or OBJECT.
+		 * @return array<string,mixed>|object|null
+		 */
+		public static function _get_tax_rate( int $tax_rate_id, string $output_type = ARRAY_A ) { return null; }
 	}
 }
 if ( ! class_exists( 'WC_Payment_Gateway' ) ) {

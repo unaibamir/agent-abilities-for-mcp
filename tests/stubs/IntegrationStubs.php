@@ -1767,6 +1767,22 @@ class WC_Tax {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
 		$wpdb->update( $table, $tax_rate, array( 'tax_rate_id' => $tax_rate_id ) );
 	}
+
+	/**
+	 * Get tax rate by id, mirroring real WooCommerce's own single-row read
+	 * (class-wc-tax.php:1122): a plain SELECT * against the same real temp table
+	 * _insert_tax_rate()/_update_tax_rate() write to, returned in the requested output type.
+	 *
+	 * @param int    $tax_rate_id Tax rate id.
+	 * @param string $output_type ARRAY_A or OBJECT.
+	 * @return array<string,mixed>|object|null
+	 */
+	public static function _get_tax_rate( int $tax_rate_id, string $output_type = ARRAY_A ) {
+		global $wpdb;
+		$table = $wpdb->prefix . 'woocommerce_tax_rates';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE tax_rate_id = %d", $tax_rate_id ), $output_type );
+	}
 }
 PHP;
 	}

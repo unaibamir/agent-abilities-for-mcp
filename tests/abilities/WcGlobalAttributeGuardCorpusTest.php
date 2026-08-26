@@ -728,19 +728,21 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 	 * "Any <attribute>", a supported configuration.
 	 */
 	public function test_a_variation_attribute_value_the_parent_never_declared_is_refused(): void {
-		$parent_attributes = $this->corpus_parent()->get_attributes();
+		$parent            = $this->corpus_parent();
+		$parent_attributes = $parent->get_attributes();
+		$product_id        = $parent->get_id();
 
-		$error = aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'purple' ) );
+		$error = aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'purple' ), $product_id );
 		$this->assertInstanceOf( WP_Error::class, $error );
 		$this->assertSame( 'aafm_wc_invalid_variation_attribute_value', $error->get_error_code() );
 		$this->assertStringContainsString( 'blue', $error->get_error_message(), 'The error must list the real options.' );
 
 		$this->assertNull(
-			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'blue' ) ),
+			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => 'blue' ), $product_id ),
 			'A declared option must be accepted.'
 		);
 		$this->assertNull(
-			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => '' ) ),
+			aafm_wc_invalid_variation_attribute_values_error( $parent_attributes, array( self::TAXONOMY => '' ), $product_id ),
 			'An empty value is WooCommerce\'s "Any", and refusing it would break valid variations.'
 		);
 	}
@@ -771,6 +773,12 @@ final class WcGlobalAttributeGuardCorpusTest extends TestCase {
 			),
 		);
 		WcStubStore::seed( 500, $parent );
+
+		// 208 FIX-2 item 3: aafm_wc_variation_attribute_options() now delegates to
+		// wc_get_product_terms(), which reads real object-term relationships, so the corpus
+		// taxonomy's declared options ('blue', 'green') have to genuinely be assigned to product
+		// 500, matching what real WooCommerce's own read_attributes() would have populated from.
+		wp_set_object_terms( 500, array( $this->terms['blue'], $this->terms['green'] ), self::TAXONOMY );
 
 		$product = wc_get_product( 500 );
 		$this->assertInstanceOf( \WC_Product::class, $product );

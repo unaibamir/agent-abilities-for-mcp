@@ -325,6 +325,18 @@ if ( ! function_exists( 'wc_get_attribute' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_get_product_terms' ) ) {
+	/**
+	 * @param int                  $product_id
+	 * @param string               $taxonomy
+	 * @param array<string,mixed>  $args
+	 * @return array<int,mixed>
+	 */
+	function wc_get_product_terms( $product_id, $taxonomy, $args = array() ) {
+		return array();
+	}
+}
+
 if ( ! function_exists( 'wc_attribute_taxonomy_name' ) ) {
 	/**
 	 * @param string $attribute_name

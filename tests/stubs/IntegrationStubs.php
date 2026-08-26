@@ -394,6 +394,15 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_products( $args = array() ) { return \AAFM\Tests\WcStubStore::query( $args ); }' );
 		}
+		if ( ! function_exists( 'wc_get_product_terms' ) ) {
+			// Mirrors real WooCommerce's wc_get_product_terms() (wc-term-functions.php:178-184)
+			// without its caching wrapper (caching is transparent to the outcome under test): reads
+			// REAL WordPress object-term relationships via the real wp_get_post_terms(), so a product
+			// id genuinely has to carry a real term assignment (wp_set_object_terms()) for this to
+			// return anything - exactly the coupling the production delegation now relies on.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_product_terms( $product_id, $taxonomy, $args = array() ) { if ( ! taxonomy_exists( $taxonomy ) ) { return array(); } return apply_filters( "woocommerce_get_product_terms", wp_get_post_terms( $product_id, $taxonomy, $args ), $product_id, $taxonomy, $args ); }' );
+		}
 
 		// Global product attribute (taxonomy) stubs (W4-WC1c). Each mirrors the real WC function's
 		// signature and delegates to WcAttributeStubStore, which holds a stdClass row per attribute

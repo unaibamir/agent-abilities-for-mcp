@@ -95,8 +95,8 @@ final class WooVariationsTest extends TestCase {
 		$parent = (array) WcStubStore::get( 500 );
 
 		$parent['attributes'] = array(
-			'pa_color' => $this->wc_product_attribute( 1, 'pa_color', $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ) ), true ),
-			'pa_size'  => $this->wc_product_attribute( 2, 'pa_size', $this->seed_attribute_terms( 'pa_size', array( 'small', 'large' ) ), true ),
+			'pa_color' => $this->wc_product_attribute( 1, 'pa_color', $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ), 500 ), true ),
+			'pa_size'  => $this->wc_product_attribute( 2, 'pa_size', $this->seed_attribute_terms( 'pa_size', array( 'small', 'large' ), 500 ), true ),
 			'material' => $this->wc_product_attribute( 0, 'material', array( 'Cotton', 'Wool' ), true ),
 			'brand'    => $this->wc_product_attribute( 0, 'brand', array( 'Acme' ), false ),
 		);
@@ -110,11 +110,24 @@ final class WooVariationsTest extends TestCase {
 	 * Both are guarded so the seed is idempotent: one test re-seeds the parent mid-method, and
 	 * WP_UnitTestCase rolls the terms back per test while leaving a registered taxonomy in place.
 	 *
-	 * @param string        $taxonomy Attribute taxonomy name (pa_*).
-	 * @param array<string> $slugs    Term slugs to create.
+	 * 208 FIX-2 item 3: when $product_id is given, also assigns the terms to that post via
+	 * wp_set_object_terms(). This models what real WooCommerce's own
+	 * WC_Product_Data_Store_CPT::read_attributes() always does before a taxonomy attribute's
+	 * options ever contain a term id (it reads them via wc_get_object_terms(), i.e. a real object-
+	 * term relationship) - a coupling this test double did not previously model, because the
+	 * former per-option get_term_by() resolution only needed the term to EXIST, not to be assigned
+	 * to this specific product. The new aafm_wc_variation_attribute_options() delegates to
+	 * wc_get_product_terms(), which reads real object-term relationships, so the fixture now
+	 * creates the relationship the vendor function actually reads. Without $product_id, the
+	 * behaviour is unchanged (term creation only), for callers that seed terms without an object to
+	 * assign them to.
+	 *
+	 * @param string        $taxonomy   Attribute taxonomy name (pa_*).
+	 * @param array<string> $slugs      Term slugs to create.
+	 * @param int|null      $product_id When given, assign the created/found terms to this post id.
 	 * @return array<int> Term ids, in the order of $slugs.
 	 */
-	private function seed_attribute_terms( string $taxonomy, array $slugs ): array {
+	private function seed_attribute_terms( string $taxonomy, array $slugs, ?int $product_id = null ): array {
 		if ( ! taxonomy_exists( $taxonomy ) ) {
 			register_taxonomy( $taxonomy, 'product', array( 'public' => false ) );
 		}
@@ -129,6 +142,11 @@ final class WooVariationsTest extends TestCase {
 			$created = wp_insert_term( ucfirst( $slug ), $taxonomy, array( 'slug' => $slug ) );
 			$ids[]   = (int) $created['term_id'];
 		}
+
+		if ( null !== $product_id ) {
+			wp_set_object_terms( $product_id, $ids, $taxonomy );
+		}
+
 		return $ids;
 	}
 
@@ -970,6 +988,10 @@ final class WooVariationsTest extends TestCase {
 				),
 			)
 		);
+		// Only the resolvable option (blue) is really assigned to this product - "Chartreuse" is not
+		// a real term at all, so it stays absent from the object-term relationship
+		// wc_get_product_terms() reads, which is what makes it unresolvable under the new delegation.
+		wp_set_object_terms( 704, array( $ids[1] ), 'pa_color' );
 
 		$before = get_terms(
 			array(
@@ -1485,5 +1507,45 @@ final class WooVariationsTest extends TestCase {
 		);
 
 		$this->assertInstanceOf( \WP_Error::class, $result, 'An orphaned variation must not accept an attribute write.' );
+	}
+
+	/**
+	 * Sweep finding 1 (208 FIX-2 item 3): aafm_wc_variation_attribute_options() now delegates a
+	 * taxonomy attribute's option resolution to wc_get_product_terms(), which reads real
+	 * object-term relationships, rather than resolving each option id independently via
+	 * get_term_by(). This is the one case that genuinely discriminates the two approaches: a term
+	 * that EXISTS but was never actually assigned to this product (a real WooCommerce site cannot
+	 * reach this, since read_attributes() always populates a taxonomy attribute's options FROM a
+	 * real object-term relationship in the first place - but a hand-built test fixture, or a
+	 * genuinely corrupted site, can). The old per-option get_term_by() would have resolved it
+	 * anyway, since it only checks the term exists; the new delegation correctly cannot, since
+	 * wc_get_product_terms() only returns terms really assigned to the given product id. This
+	 * proves the delegation is real, not merely a relabelled copy of the old resolution.
+	 */
+	public function test_variation_attribute_options_requires_a_real_object_term_assignment(): void {
+		$ids = $this->seed_attribute_terms( 'pa_color', array( 'red', 'blue' ) );
+		// Deliberately do NOT call wp_set_object_terms() for product 705: the term exists, but is
+		// never assigned to this product, unlike every other fixture in this file.
+		WcStubStore::seed(
+			705,
+			array(
+				'id'         => 705,
+				'name'       => 'Unassigned Term Parent',
+				'type'       => 'variable',
+				'status'     => 'publish',
+				'attributes' => array(
+					'pa_color' => $this->wc_product_attribute( 1, 'pa_color', array( $ids[1] ), true ),
+				),
+			)
+		);
+
+		$parent = aafm_wc_get_product( 705 );
+		$this->assertInstanceOf( \WC_Product::class, $parent );
+		$options = aafm_wc_variation_attribute_options( $parent->get_attributes( 'edit' )['pa_color'], 705 );
+
+		$this->assertNull(
+			$options,
+			'a term that exists but was never assigned to this product must not be treated as a resolvable option.'
+		);
 	}
 }

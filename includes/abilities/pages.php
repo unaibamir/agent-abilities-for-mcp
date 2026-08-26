@@ -275,8 +275,16 @@ function aafm_exec_get_page( array $input ) {
 		return aafm_generic_error();
 	}
 	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	// Branch review fix (lang scope and result shaping): same reasoning as
+	// aafm_exec_get_post() in posts.php - see that function's comment for the full
+	// explanation. Shape under the requested language when one was resolved, or the post's
+	// own language for "all"/no lang, never ambient.
+	$shape_lang = ( is_string( $lang ) && 'all' !== $lang ) ? $lang : aafm_wpml_post_language( $post->ID );
 	return array(
-		'post' => aafm_rich_post( $post, array( 'content_format' => $format ) ),
+		'post' => aafm_with_language(
+			$shape_lang,
+			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+		),
 	);
 }
 

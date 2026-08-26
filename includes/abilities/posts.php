@@ -266,26 +266,6 @@ function aafm_exec_get_posts( array $input ) {
 		);
 	};
 
-	// 'all' iterates every active language and concatenates: page/per_page apply PER language
-	// (documented on the lang schema fragment), total is the sum of each language's own count.
-	// A single language (the overwhelming majority of calls) is byte-for-byte unchanged below.
-	$objects = array();
-	$total   = 0;
-	if ( 'all' === $lang ) {
-		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$query   = aafm_with_language( $code, $build_query );
-			$objects = array_merge(
-				$objects,
-				array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
-			);
-			$total  += (int) $query->found_posts;
-		}
-	} else {
-		$query   = aafm_with_language( $lang, $build_query );
-		$objects = array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) );
-		$total   = (int) $query->found_posts;
-	}
-
 	$format          = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
 	$include_content = ! empty( $input['include_content'] );
 	$options         = array(
@@ -293,10 +273,47 @@ function aafm_exec_get_posts( array $input ) {
 		'include_content' => $include_content,
 	);
 
-	$posts = array_map(
-		static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
-		$objects
-	);
+	// 'all' iterates every active language and concatenates: page/per_page apply PER language
+	// (documented on the lang schema fragment), total is the sum of each language's own count.
+	// A single language (the overwhelming majority of calls) is byte-for-byte unchanged below.
+	//
+	// Branch review fix (lang scope and result shaping): aafm_rich_post() must run INSIDE each
+	// language's own aafm_with_language() scope, not after the loop restores to ambient. A
+	// theme or plugin filtering get_the_excerpt() (or any other language-sensitive field
+	// aafm_rich_post() derives) by ambient language would otherwise stamp every translation
+	// with whichever language the loop happened to leave active - a silent wrong-language
+	// shape on a post the call still reports finding correctly. Needs both plan 207's fix
+	// (before it, the non-default-language rows were never returned at all) and plan 208's
+	// delegation to get_the_excerpt() (before it, the auto-excerpt never ran a filter chain
+	// ambient language could reach). See GetPostsLangShapeTest.
+	$posts = array();
+	$total = 0;
+	if ( 'all' === $lang ) {
+		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
+			$shaped = aafm_with_language(
+				$code,
+				static function () use ( $build_query, $options ): array {
+					$query = $build_query();
+					return array(
+						'rows'  => array_map(
+							static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
+							array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+						),
+						'found' => (int) $query->found_posts,
+					);
+				}
+			);
+			$posts  = array_merge( $posts, $shaped['rows'] );
+			$total += $shaped['found'];
+		}
+	} else {
+		$query = aafm_with_language( $lang, $build_query );
+		$posts = array_map(
+			static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
+			array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+		);
+		$total = (int) $query->found_posts;
+	}
 
 	return array(
 		'posts'    => $posts,
@@ -542,8 +559,20 @@ function aafm_exec_get_post( array $input ) {
 		return aafm_generic_error();
 	}
 	$format = isset( $input['content_format'] ) ? (string) $input['content_format'] : 'rendered';
+	// Branch review fix (lang scope and result shaping): shape under the CORRECT language,
+	// never ambient. An explicit requested language shapes under that language, matching the
+	// translation aafm_get_post_lang_resolved_id() already resolved above. "all" or no lang at
+	// all shapes under the POST'S OWN language instead - both already treat id resolution as a
+	// no-op passthrough above (aafm_get_post_lang_resolved_id() itself branches on
+	// !is_string($lang) || 'all' === $lang), so neither one names a specific target for us to
+	// switch to. aafm_wpml_post_language() and aafm_with_language() both no-op when WPML is
+	// off, so a non-multilingual site is unaffected either way.
+	$shape_lang = ( is_string( $lang ) && 'all' !== $lang ) ? $lang : aafm_wpml_post_language( $post->ID );
 	return array(
-		'post' => aafm_rich_post( $post, array( 'content_format' => $format ) ),
+		'post' => aafm_with_language(
+			$shape_lang,
+			static fn(): array => aafm_rich_post( $post, array( 'content_format' => $format ) )
+		),
 	);
 }
 

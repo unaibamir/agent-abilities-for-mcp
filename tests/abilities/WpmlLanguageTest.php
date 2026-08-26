@@ -216,4 +216,59 @@ final class WpmlLanguageTest extends TestCase {
 		$shape   = aafm_redact_post( get_post( $post_id ) );
 		$this->assertArrayNotHasKey( 'lang', $shape );
 	}
+
+	/**
+	 * Branch review fix (lang scope and result shaping): an EXPLICIT lang request on
+	 * aafm/get-post must shape the result under the REQUESTED language, not ambient. Uses the
+	 * same wpml_object_id translation fixture as
+	 * test_get_post_lang_resolution_uses_the_actual_post_type above, since a real single-item
+	 * lang request always goes through that same translation lookup before aafm_rich_post()
+	 * ever runs. Pre-fix, aafm_rich_post() ran fully unscoped after the id had already been
+	 * resolved to the translation, so the excerpt reflected whatever was ambient instead of
+	 * the language the caller actually asked for.
+	 */
+	public function test_get_post_with_explicit_lang_shapes_under_the_requested_language(): void {
+		$this->fake_wpml( 'is', 'is' );
+		add_filter( 'get_the_excerpt', static fn() => aafm_wpml_current_language() );
+
+		$original   = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+			)
+		);
+		$translated = (int) self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+			)
+		);
+		add_filter(
+			'wpml_object_id',
+			static function ( $id, $type ) use ( $original, $translated ) {
+				return ( 'post' === $type && $original === (int) $id ) ? $translated : $id;
+			},
+			10,
+			2
+		);
+
+		$this->acting_as( 'administrator' );
+		$out = aafm_exec_get_post(
+			array(
+				'post_id' => $original,
+				'lang'    => 'en',
+			)
+		);
+
+		remove_all_filters( 'wpml_object_id' );
+		remove_all_filters( 'get_the_excerpt' );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( $translated, $out['post']['id'], 'Fixture check: the request must resolve to the translated post.' );
+		$this->assertSame(
+			'en',
+			$out['post']['excerpt'],
+			'The excerpt must be shaped under the REQUESTED language ("en"), not ambient ("is").'
+		);
+	}
 }

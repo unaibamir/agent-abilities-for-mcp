@@ -502,4 +502,117 @@ final class WpmlLangAllTest extends TestCase {
 		$this->assertIsArray( $media_out );
 		$this->assertSame( $attachment_id, $media_out['media']['id'], 'get-media-item must not try to resolve a single id to "every language".' );
 	}
+
+	/**
+	 * Branch review fix (lang scope and result shaping): plan 207's lang:"all" fix and plan
+	 * 208's delegation of the auto-excerpt to get_the_excerpt() compose into a silent
+	 * wrong-language shape. A get_the_excerpt filter that returns the CURRENT ambient WPML
+	 * language must, on every post lang:"all" returns, produce an excerpt matching THAT
+	 * post's OWN tagged language - not whatever language the "all" loop happened to leave
+	 * ambient by the time shaping ran (pre-fix: always the language active BEFORE the loop
+	 * started, since aafm_with_language() restores to its own caller's ambient in a finally,
+	 * and the shape step ran after every iteration had already returned).
+	 */
+	public function test_get_posts_lang_all_shapes_each_result_under_its_own_language(): void {
+		$this->fake_wpml_with_post_filtering();
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		foreach ( array( 'is', 'en' ) as $lang ) {
+			for ( $i = 0; $i < 2; $i++ ) {
+				$id = self::factory()->post->create(
+					array(
+						'post_status'  => 'publish',
+						'post_excerpt' => '',
+					)
+				);
+				update_post_meta( $id, '_aafm_test_lang', $lang );
+			}
+		}
+		$this->acting_as( 'administrator' );
+
+		$all = aafm_exec_get_posts(
+			array(
+				'lang'     => 'all',
+				'per_page' => 50,
+			)
+		);
+
+		$this->assertIsArray( $all );
+		$this->assertCount( 4, $all['posts'] );
+		foreach ( $all['posts'] as $post ) {
+			$this->assertArrayHasKey( 'lang', $post );
+			$this->assertSame(
+				$post['lang'],
+				$post['excerpt'],
+				"a post tagged '{$post['lang']}' must be shaped under its OWN language, not whatever the lang:\"all\" loop happened to leave ambient."
+			);
+		}
+	}
+
+	/**
+	 * Same finding, the search-content list path: it shares the exact same "query then shape
+	 * after the loop restores" structure aafm_exec_get_posts() had, fixed the same way.
+	 */
+	public function test_search_content_lang_all_shapes_each_result_under_its_own_language(): void {
+		$this->fake_wpml_with_post_filtering();
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		foreach ( array( 'is', 'en' ) as $lang ) {
+			$id = self::factory()->post->create(
+				array(
+					'post_status'  => 'publish',
+					'post_title'   => 'findmelangshape',
+					'post_excerpt' => '',
+				)
+			);
+			update_post_meta( $id, '_aafm_test_lang', $lang );
+		}
+		$this->acting_as( 'administrator' );
+
+		$all = aafm_exec_search_content(
+			array(
+				'search'   => 'findmelangshape',
+				'lang'     => 'all',
+				'per_page' => 50,
+			)
+		);
+
+		$this->assertIsArray( $all );
+		$this->assertCount( 2, $all['results'] );
+		foreach ( $all['results'] as $result ) {
+			$this->assertArrayHasKey( 'lang', $result );
+			$this->assertSame( $result['lang'], $result['excerpt'] );
+		}
+	}
+
+	/**
+	 * The single-item equivalent: aafm/get-post with NO lang requested (the ability's own id
+	 * resolution already treats this the same as lang:"all" - a no-op passthrough on the id)
+	 * must shape the result under the POST'S OWN language, not whatever happens to be
+	 * ambient. Pre-fix, aafm_rich_post() ran fully unscoped, so the excerpt always reflected
+	 * ambient regardless of which post was actually being served.
+	 */
+	public function test_get_post_with_no_lang_shapes_under_the_posts_own_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		$id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+			)
+		);
+		update_post_meta( $id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_get_post( array( 'post_id' => $id ) );
+
+		$this->assertIsArray( $out );
+		$this->assertSame( 'en', $out['post']['lang'], 'Fixture check: the post must report its own tagged language.' );
+		$this->assertSame(
+			'en',
+			$out['post']['excerpt'],
+			'The excerpt must be shaped under the post\'s own language ("en"), not the ambient one left over from before the call ("is").'
+		);
+	}
 }

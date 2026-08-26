@@ -1319,7 +1319,14 @@ final class WooCommerceContractTest extends TestCase {
 		);
 		$this->assertInstanceOf( \WP_Error::class, $refused, 'A genuine change to a global attribute must be refused, not silently demoted.' );
 		$this->assertSame( 'aafm_wc_global_attribute_not_editable', $refused->get_error_code() );
-		$this->assertStringContainsString( 'wc-update-product-attribute', $refused->get_error_message(), 'The error must name the tool that CAN do it.' );
+		// Pinned to the CURRENT guidance (commit 77e9e6b): wc-update-product-attribute cannot
+		// change a global attribute's options either, so the refusal was rewritten to point at
+		// what actually can - the WooCommerce admin for the option itself, then the variation
+		// abilities to build variations with it. This test previously asserted the stale,
+		// pre-77e9e6b wording (doc 214, item B).
+		$message = $refused->get_error_message();
+		$this->assertStringContainsString( 'Products > Attributes', $message, "The error must name where a global attribute's own options can actually be changed." );
+		$this->assertStringContainsString( 'wc-update-product-variation', $message, 'The error must name a tool that CAN act on this attribute.' );
 
 		clean_post_cache( $fixture['product_id'] );
 		$meta = get_post_meta( $fixture['product_id'], '_product_attributes', true );

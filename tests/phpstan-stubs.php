@@ -136,6 +136,14 @@ if ( ! class_exists( 'WC_Product' ) ) {
 	}
 }
 
+if ( ! class_exists( 'WC_Product_Simple' ) ) {
+	/**
+	 * Minimal signature for static analysis only (208 FIX-2 item 4).
+	 */
+	class WC_Product_Simple extends WC_Product {
+	}
+}
+
 if ( ! class_exists( 'WC_Data_Exception' ) ) {
 	/**
 	 * Minimal WC_Data_Exception signature for static analysis only. Thrown by

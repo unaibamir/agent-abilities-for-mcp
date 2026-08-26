@@ -1048,4 +1048,27 @@ final class WooProductsTest extends TestCase {
 			'the description must say narrowing results is the caller\'s job.'
 		);
 	}
+
+	/**
+	 * Sweep finding 2 (208 FIX-2 item 4): create-product now instantiates WC_Product_Simple, matching
+	 * WooCommerce's own create path, rather than the bare WC_Product base class it never uses for a
+	 * new product. No observable difference exists to drive a behavioural test red - WC_Product::get_type()
+	 * already defaults to 'simple' and the response is rebuilt from a fresh wc_get_product() read
+	 * after save() either way, both confirmed by this file's existing create-product tests staying
+	 * green unchanged. What this test pins instead: the vendor's own create-path class is genuinely
+	 * the one instantiated, not merely available.
+	 */
+	public function test_create_product_instantiates_the_vendor_create_path_class(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/products.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			'new \WC_Product_Simple()',
+			$source,
+			'aafm_exec_wc_create_product() must instantiate WC_Product_Simple, matching WooCommerce\'s own create path.'
+		);
+		$this->assertStringNotContainsString(
+			'new \WC_Product()',
+			$source,
+			'the bare WC_Product base class must not be instantiated directly anywhere in this file.'
+		);
+	}
 }

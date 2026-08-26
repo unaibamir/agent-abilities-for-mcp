@@ -376,6 +376,15 @@ PHP;
 			// abilities call are implemented. A test-only stub, never shipped.
 			eval( $this->aafm_wc_product_class_source() ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'WC_Product_Simple' ) ) {
+			// 208 FIX-2 item 4: real WooCommerce's own create path instantiates WC_Product_Simple, not
+			// the bare WC_Product base class. Empty body is enough here - the only real difference,
+			// pushing 'ajax_add_to_cart' onto $supports in the constructor, is a front-end template
+			// flag this MCP ability never reads (it builds its response from accessors, never a
+			// template), and the object is superseded by a fresh wc_get_product() factory read
+			// before any response is built either way.
+			eval( 'class WC_Product_Simple extends WC_Product {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
+		}
 		if ( ! class_exists( 'WC_Product_Variation' ) ) {
 			// A minimal WC_Product_Variation backed by the same WcStubStore (a variation is a product
 			// row carrying type='variation' and a parent_id). Its get_attributes() returns the flat

@@ -1104,7 +1104,7 @@ function aafm_args_wc_create_product(): array {
  * @return array<string,mixed>|WP_Error
  */
 function aafm_exec_wc_create_product( array $input ) {
-	if ( ! class_exists( 'WC_Product' ) ) {
+	if ( ! class_exists( 'WC_Product' ) || ! class_exists( 'WC_Product_Simple' ) ) {
 		return aafm_generic_error();
 	}
 	$name = aafm_sanitize_plain_text( (string) ( $input['name'] ?? '' ) );
@@ -1121,7 +1121,14 @@ function aafm_exec_wc_create_product( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$product = new \WC_Product();
+	// Sweep finding 2 (208 FIX-2 item 4): WooCommerce's own create path
+	// (WC_REST_Products_Controller::prepare_object_for_database()) never instantiates the bare
+	// WC_Product base class - it builds a WC_Product_Simple when no type or id is given, matching
+	// this ability's exact case. No observable difference either way (WC_Product::get_type()
+	// already defaults to 'simple', and the response is rebuilt from a fresh wc_get_product() read
+	// after save() regardless), but this uses the vendor's own create-path class rather than one it
+	// never uses for a new product.
+	$product = new \WC_Product_Simple();
 	unset( $input['type'] );
 	$error = aafm_wc_apply_product_input( $product, $input );
 	if ( null !== $error ) {

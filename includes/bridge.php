@@ -651,12 +651,17 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
  * now hands this filter (accepted_args bumped to 4 on the add_filter() call in server.php), which
  * a wire-name rename never touches.
  *
- * McpTool::get_adapter_meta() does NOT carry the ability - verified against the bundled adapter
- * source (includes/Domain/Tools/RegisterAbilityAsMcpTool.php builds only input/output
- * schema-transform flags into it). The real source is McpTool::fromAbility()'s own
- * observability_context, which stamps 'ability_name' => $ability->get_name() - the ability's raw
- * registered name, untouched by any wire-name filter
- * (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:230-236).
+ * The identity is read from McpTool::fromAbility()'s own observability_context, which stamps
+ * 'ability_name' => $ability->get_name() - the ability's raw registered name, untouched by any
+ * wire-name filter (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:230-236).
+ *
+ * Correction, recorded because an earlier version of this comment claimed the opposite: the bundled
+ * adapter's get_adapter_meta() DOES also carry an 'ability' key
+ * (Domain/Tools/RegisterAbilityAsMcpTool.php:157-160 seeds it with the ability name before adding
+ * the schema-transform flags), so either source would work today. observability_context is kept
+ * because it is stamped in McpTool::fromAbility() itself rather than assembled by the registration
+ * path, so it is the narrower dependency of the two. Do not reintroduce the claim that adapter_meta
+ * lacks the ability; it does not lack it.
  *
  * Falls back to the wire-name prefix test when $mcp_tool is absent or its metadata is not in the
  * expected shape (an older call site still registered at accepted_args=3, a non-ability-backed

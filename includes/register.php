@@ -350,18 +350,31 @@ function aafm_rate_limit_call_reset( string $name ): void {
 }
 
 /**
- * Release a tool's rate memo when a consumer filter aborts its call.
+ * Release a tool's rate memo, and audit the call, when a consumer filter aborts it.
  *
  * The adapter fires mcp_adapter_pre_tool_call AFTER its permission fire (which consumed a token and
  * memoized the allow) and BEFORE execute(); a WP_Error short-circuit there kills the call without
  * ever entering execute(), so it is the one dead-call path AAFM_Rate_Limited_Ability's finally
- * cannot see. Without this release the stale allow paid for the next same-ability call in the same
- * request (finding B12, doc 167). Wired at PHP_INT_MAX in aafm_register_mcp_server() so it runs after
- * the adapter's own permission fire and sees a WP_Error short-circuit from any consumer whose filter
- * registered before this one; a same-priority consumer that registers later runs after this hook (core
- * runs equal-priority filters in registration order), so its short-circuit is not visible here. A
- * pass-through (array) result leaves the in-flight call's memo alone, since core's re-check inside
- * execute() still needs it.
+ * cannot see, and also the one path that never opens a 'started' row: wp_ability_invoked (which
+ * aafm_log_ability_invocation() listens for) only fires from inside execute(), which this
+ * short-circuit prevents from ever running. Without this handler a call our own permission check
+ * ALLOWED, then a third party's pre_tool_call filter killed, left no trace anywhere: no rate-memo
+ * release (finding B12, doc 167) and no audit row (the round-14 panel's finding 2, doc 214) - the
+ * client sees an error, and the activity log shows nothing happened.
+ *
+ * Wired at PHP_INT_MAX in aafm_register_mcp_server() so it runs after the adapter's own permission
+ * fire and sees a WP_Error short-circuit from any consumer whose filter registered before this one;
+ * a same-priority consumer that registers later runs after this hook (core runs equal-priority
+ * filters in registration order), so its short-circuit is not visible here. A pass-through (array)
+ * result leaves the in-flight call's memo alone, since core's re-check inside execute() still needs
+ * it, and writes no row - only an actual short-circuit is unaudited.
+ *
+ * The audit write is scoped to abilities THIS PLUGIN registered, the same "is this ours" test
+ * aafm_log_ability_invocation() uses (aafm_remember_raw_permission() in its read-mode), because
+ * get_observability_context()['ability_name'] is populated for ANY ability-backed MCP tool, not
+ * only ours - a native WordPress ability or another plugin's could be wrapped by the same adapter.
+ * The rate-memo reset above stays unscoped, unchanged from before this fix: it is a harmless no-op
+ * against an ability name this plugin never memoized.
  *
  * @param mixed       $args      The filtered tool arguments, or a WP_Error short-circuit.
  * @param string      $tool_name The MCP tool name (unused: the memo is keyed by ability name, which
@@ -376,9 +389,56 @@ function aafm_release_rate_memo_on_aborted_tool_call( $args, $tool_name = '', $m
 		$ability = isset( $context['ability_name'] ) ? (string) $context['ability_name'] : '';
 		if ( '' !== $ability ) {
 			aafm_rate_limit_call_reset( $ability );
+			if ( null !== aafm_remember_raw_permission( $ability ) ) {
+				aafm_log_aborted_tool_call( $ability, $args );
+			}
 		}
 	}
 	return $args;
+}
+
+/**
+ * Write the audit row a call would otherwise never get when a third-party
+ * mcp_adapter_pre_tool_call filter short-circuits it after this plugin's own permission check
+ * already allowed it. See aafm_release_rate_memo_on_aborted_tool_call() for the seam this closes.
+ *
+ * Logged as 'error', not 'denied': this plugin's own permission check never refused the call, so
+ * a 'denied' row would misattribute the outcome to a capability decision that never happened. It
+ * is not resolving a pending 'started' row either - none exists yet at this seam, since
+ * wp_ability_invoked (which opens one) only fires from inside execute(), which this short-circuit
+ * prevented from ever running - so this always inserts a fresh row, the same shape
+ * aafm_log_ability_invocation() would have opened had the call reached execute().
+ *
+ * The short-circuiting filter is third-party code (mcp_adapter_pre_tool_call is a globally
+ * unscoped hook name any co-installed plugin bundling the same adapter can hook), so its WP_Error
+ * is treated with the same caution aafm_build_activity_detail_from_result() applies to a bridged
+ * ability's error: only the code is read, filtered through the same identifier allowlist
+ * (aafm_activity_detail_field('key', ...)), and get_error_message() is never touched - a vendor or
+ * third-party message routinely interpolates argument values, which this log never stores.
+ *
+ * @param string   $ability The ability this short-circuited call targeted.
+ * @param WP_Error $error   The short-circuit result the consumer filter returned.
+ * @return void
+ */
+function aafm_log_aborted_tool_call( string $ability, WP_Error $error ): void {
+	$user   = wp_get_current_user();
+	$code   = aafm_activity_detail_field( 'key', $error->get_error_code() );
+	$detail = null !== $code
+		? "aborted by mcp_adapter_pre_tool_call: {$code}"
+		: 'aborted by mcp_adapter_pre_tool_call';
+
+	$row_id = aafm_log_activity(
+		array(
+			'ability'           => $ability,
+			'principal_user_id' => (int) $user->ID,
+			'principal_login'   => $user->user_login ? (string) $user->user_login : '',
+			'status'            => 'error',
+			'client_id'         => aafm_oauth_current_client_id(),
+			'detail'            => $detail,
+		)
+	);
+
+	aafm_announce_ability_resolved( $row_id > 0 ? $row_id : null, 'error', null, $detail );
 }
 
 /**

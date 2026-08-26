@@ -1237,4 +1237,21 @@ final class WooReportsTest extends TestCase {
 		$this->assertNotInstanceOf( WP_Error::class, $res );
 		$this->assertSame( aafm_wc_redaction_marker(), $res['settings']['api_secret'] );
 	}
+
+	/**
+	 * FIX-3 item 3 (sweep finding, A2 batch): the per-status order count now delegates to
+	 * wc_orders_count(), WooCommerce's own public, HPOS/legacy-abstracted, cache-backed count
+	 * helper, instead of a hand-rolled wc_get_orders() pagination probe. Both mechanisms read the
+	 * same underlying count, so there is no behavioural difference to drive a test red - this pins
+	 * the source-level fact instead, as the finding predicted, and states plainly it could not go
+	 * red any other way.
+	 */
+	public function test_count_orders_by_status_delegates_to_wc_orders_count(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/reports.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			"wc_orders_count( \$status, 'shop_order' )",
+			$source,
+			'aafm_wc_count_orders_by_status() must delegate to wc_orders_count(), pinning the shop_order type the same way it always has.'
+		);
+	}
 }

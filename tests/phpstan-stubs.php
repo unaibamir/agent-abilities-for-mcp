@@ -690,6 +690,19 @@ if ( ! function_exists( 'wc_get_orders' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_orders_count' ) ) {
+	/**
+	 * 208 FIX-3 item 3.
+	 *
+	 * @param string $status
+	 * @param string $type
+	 * @return int
+	 */
+	function wc_orders_count( $status, string $type = '' ) {
+		return 0;
+	}
+}
+
 if ( ! function_exists( 'wc_get_order' ) ) {
 	/**
 	 * Real WooCommerce returns a WC_Order_Refund when given a refund post id, so the

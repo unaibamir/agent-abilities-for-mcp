@@ -459,6 +459,14 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_orders( $args = array() ) { return \AAFM\Tests\WcOrderStubStore::query( $args ); }' );
 		}
+		if ( ! function_exists( 'wc_orders_count' ) ) {
+			// 208 FIX-3 item 3: mirrors what the production count executor asked wc_get_orders() for
+			// directly before this fix, now behind the real vendor function's own signature -
+			// reusing WcOrderStubStore::query() keeps the type/status filtering identical to every
+			// other order-reading stub in this trait.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_orders_count( $status, $type = "" ) { $args = array( "status" => $status, "limit" => 1, "paginate" => true, "return" => "ids" ); if ( "" !== $type ) { $args["type"] = $type; } $result = \AAFM\Tests\WcOrderStubStore::query( $args ); return ( is_object( $result ) && isset( $result->total ) ) ? (int) $result->total : 0; }' );
+		}
 		// NOTE: wc_get_order() is also defined above for products (returns WC_Product). WooCommerce
 		// uses the same function name for both - in real WC, wc_get_order() returns a WC_Order when
 		// the post type is shop_order. Since the stubs are process-wide, if wc_get_product() has

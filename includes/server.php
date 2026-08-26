@@ -969,9 +969,13 @@ function aafm_register_mcp_server( $adapter ): void {
 	// Advertise only the capabilities we actually implement (tools); strip prompts/resources.
 	add_filter( 'mcp_adapter_initialize_response', 'aafm_filter_initialize_capabilities', 10, 2 );
 
-	// Wrap a bridged ability's bare top-level list result under a `data` key (see
-	// aafm_filter_bridged_tool_call_result() in bridge.php for the full rationale).
-	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 3 );
+	// Wrap a bridged ability's bare top-level list result under a `data` key, and refuse a
+	// hidden unsafe object anywhere in it (see aafm_filter_bridged_tool_call_result() in
+	// bridge.php for the full rationale). Accepts 4 args (not 3) so the callback receives the
+	// McpTool instance and can classify by backing ability identity rather than by wire tool
+	// name alone - final gate round 3: a site can rename a tool via mcp_adapter_tool_name, so
+	// the wire name is not a reliable bridged/native discriminator on its own.
+	add_filter( 'mcp_adapter_tool_call_result', 'aafm_filter_bridged_tool_call_result', 10, 4 );
 
 	// A consumer WP_Error on this filter aborts a call AFTER the adapter's permission fire consumed
 	// a rate token but BEFORE execute(); release the aborted call's memo so the next same-ability

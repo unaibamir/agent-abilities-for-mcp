@@ -26,6 +26,63 @@ use WP_Error;
 
 final class BridgeToolCallResultFilterTest extends TestCase {
 
+	public function tear_down(): void {
+		foreach ( array( 'aafm-bridge/round3-renamed-vendor', 'aafm/round3-native-thing' ) as $slug ) {
+			if ( wp_has_ability( $slug ) ) {
+				wp_unregister_ability( $slug );
+			}
+		}
+		if ( wp_has_ability_category( 'round3-demo' ) ) {
+			wp_unregister_ability_category( 'round3-demo' );
+		}
+		parent::tear_down();
+	}
+
+	/**
+	 * Register a real ability and build the real McpTool the adapter would construct for it, so
+	 * the round 3 identity-classification tests exercise McpTool::get_observability_context() as
+	 * the bundled adapter actually shapes it, not a hand-rolled stand-in.
+	 *
+	 * @param string $name Ability name (e.g. 'aafm-bridge/round3-renamed-vendor').
+	 * @return \WP\MCP\Domain\Tools\McpTool
+	 */
+	private function build_mcp_tool_for_ability( string $name ): \WP\MCP\Domain\Tools\McpTool {
+		global $wp_current_filter;
+		$wp_current_filter[] = 'wp_abilities_api_categories_init';
+		if ( ! wp_has_ability_category( 'round3-demo' ) ) {
+			wp_register_ability_category(
+				'round3-demo',
+				array(
+					'label'       => 'Round 3 demo',
+					'description' => 'Demo fixture category for the identity-classification tests.',
+				)
+			);
+		}
+		array_pop( $wp_current_filter );
+
+		$wp_current_filter[] = 'wp_abilities_api_init';
+		wp_register_ability(
+			$name,
+			array(
+				'label'               => 'Round 3 demo ability',
+				'description'         => 'Demo fixture ability for the identity-classification tests.',
+				'category'            => 'round3-demo',
+				'input_schema'        => array( 'type' => 'object' ),
+				'execute_callback'    => static fn() => array(),
+				'permission_callback' => '__return_true',
+			)
+		);
+		array_pop( $wp_current_filter );
+
+		$ability = wp_get_ability( $name );
+		$this->assertInstanceOf( \WP_Ability::class, $ability, "Fixture ability {$name} must register." );
+
+		$tool = \WP\MCP\Domain\Tools\McpTool::fromAbility( $ability );
+		$this->assertInstanceOf( \WP\MCP\Domain\Tools\McpTool::class, $tool, 'McpTool::fromAbility() must succeed for this well-formed fixture.' );
+
+		return $tool;
+	}
+
 	/**
 	 * The one defect this filter exists to close: a bridged ability's bare top-level list
 	 * result must become an object on the wire.
@@ -523,5 +580,72 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		);
 
 		$this->assertSame( $original, $result );
+	}
+
+	// IDENTITY CLASSIFICATION, final gate round 3. The wire tool-name prefix test alone is
+	// bypassable: the adapter's PUBLIC mcp_adapter_tool_name filter can rename a tool's wire name
+	// after the ability name is sanitized, in either direction. These tests drive the actual
+	// McpTool instance the adapter passes (accepted_args=4), built via the real
+	// McpTool::fromAbility() the same way SafetyEnforcementTest.php already does elsewhere in this
+	// suite, so the classification is proven against the bundled adapter's real
+	// get_observability_context() shape, not a hand-rolled stand-in.
+
+	/**
+	 * A bridged tool renamed OUT of the aafm-bridge- wire prefix must still have its result
+	 * inspected: the guard must not be skippable just by renaming the wire tool.
+	 */
+	public function test_a_renamed_bridged_tool_still_refuses_a_wrapped_unsafe_object(): void {
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/round3-renamed-vendor' );
+
+		$leaky              = new \stdClass();
+		$leaky->still_leaky = 'must still be refused after a wire-name rename';
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'result' => $leaky ),
+			array(),
+			'site_renamed_wire_name_without_the_prefix',
+			$mcp_tool
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'A renamed bridged tool must still be classified as bridged and refuse the leaked object.' );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * Companion to the refusal case above: a renamed bridged tool must also still get the bare-list
+	 * `data` wrap, so identity classification fixes refusal without breaking the shaping half.
+	 */
+	public function test_a_renamed_bridged_tool_still_shapes_a_bare_list(): void {
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm-bridge/round3-renamed-vendor' );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'a', 'b', 'c' ),
+			array(),
+			'site_renamed_wire_name_without_the_prefix',
+			$mcp_tool
+		);
+
+		$this->assertSame( array( 'data' => array( 'a', 'b', 'c' ) ), $result );
+	}
+
+	/**
+	 * The opposite-direction case, and the one most likely to be forgotten: a NATIVE tool renamed
+	 * INTO an aafm-bridge-* wire name must NOT be treated as bridged. A wrapped object here is this
+	 * plugin's OWN native output, already asserted object-shaped by WireShapeTest against the same
+	 * execute() call - bridge shaping must not touch it, and a bare list must not be wrapped either.
+	 */
+	public function test_a_native_tool_renamed_into_the_bridge_prefix_is_not_treated_as_bridged(): void {
+		$mcp_tool = $this->build_mcp_tool_for_ability( 'aafm/round3-native-thing' );
+
+		$bare_list = array( 1, 2, 3 );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$bare_list,
+			array(),
+			'aafm-bridge-a-native-tool-renamed-into-the-prefix',
+			$mcp_tool
+		);
+
+		$this->assertSame( $bare_list, $result, 'A native ability renamed into the aafm-bridge- wire prefix must not receive bridge list-wrapping.' );
 	}
 }

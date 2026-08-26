@@ -637,6 +637,49 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
 }
 
 /**
+ * Whether a tool_call_result belongs to a BRIDGED (aafm-bridge/*) ability, classified by the
+ * backing ability's own identity rather than by the wire tool name.
+ *
+ * Final gate round 3: the wire-name prefix test alone is bypassable both directions. The adapter
+ * applies the PUBLIC mcp_adapter_tool_name filter to rename a tool's wire name AFTER sanitizing
+ * the ability name (RegisterAbilityAsMcpTool::resolve_tool_name), so a site hooking that filter
+ * could rename a bridged wrapper OUT of the aafm-bridge- prefix (skipping this guard entirely) or
+ * a NATIVE tool INTO it (wrongly subjecting it to bridge shaping). includes/server.php's own
+ * aafm_filter_mcp_tools_list() already solved the identical hazard for tools/list by re-applying
+ * that same filter to a name it derives itself; this takes the more direct route available here -
+ * reading the backing ability's own canonical name straight off the McpTool instance the adapter
+ * now hands this filter (accepted_args bumped to 4 on the add_filter() call in server.php), which
+ * a wire-name rename never touches.
+ *
+ * McpTool::get_adapter_meta() does NOT carry the ability - verified against the bundled adapter
+ * source (includes/Domain/Tools/RegisterAbilityAsMcpTool.php builds only input/output
+ * schema-transform flags into it). The real source is McpTool::fromAbility()'s own
+ * observability_context, which stamps 'ability_name' => $ability->get_name() - the ability's raw
+ * registered name, untouched by any wire-name filter
+ * (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:230-236).
+ *
+ * Falls back to the wire-name prefix test when $mcp_tool is absent or its metadata is not in the
+ * expected shape (an older call site still registered at accepted_args=3, a non-ability-backed
+ * tool built via McpTool::fromArray() which never stamps 'ability_name', or a future adapter
+ * version) - fails toward still inspecting the result, never toward silently skipping it.
+ *
+ * @param string $tool_name The wire tool name (fallback only).
+ * @param mixed  $mcp_tool  The McpTool instance the adapter passes as the 4th filter argument;
+ *                          may be absent or an unexpected type.
+ * @return bool
+ */
+function aafm_bridge_result_is_for_a_bridged_tool( string $tool_name, $mcp_tool ): bool {
+	if ( is_object( $mcp_tool ) && method_exists( $mcp_tool, 'get_observability_context' ) ) {
+		$context = $mcp_tool->get_observability_context();
+		if ( is_array( $context ) && isset( $context['ability_name'] ) && is_string( $context['ability_name'] ) ) {
+			return str_starts_with( $context['ability_name'], AAFM_BRIDGE_NAMESPACE . '/' );
+		}
+	}
+
+	return str_starts_with( $tool_name, AAFM_BRIDGE_NAMESPACE . '-' );
+}
+
+/**
  * Safety net for a bridged ability whose result is a bare top-level JSON list.
  *
  * When a foreign ability declares no output_schema, aafm_bridge_output_schema() returns null and
@@ -692,14 +735,18 @@ function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
  *
  * @param mixed $result    The raw tool execution result (may be WP_Error).
  * @param mixed $args      The tool arguments used (unused here).
- * @param mixed $tool_name The MCP tool name that was called.
+ * @param mixed $tool_name The MCP tool name that was called (fallback classification only - see
+ *                         aafm_bridge_result_is_for_a_bridged_tool()).
+ * @param mixed $mcp_tool  The McpTool instance the adapter passes (accepted_args=4 on the
+ *                         add_filter() call in server.php); used to classify by backing ability
+ *                         identity rather than by the (renamable) wire tool name.
  * @return mixed The result, wrapped under `data` for every bridged, bare-list result (including
  *               an empty one - see the M2 note above).
  */
-function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
+function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name, $mcp_tool = null ) {
 	unset( $args );
 
-	if ( ! is_string( $tool_name ) || ! str_starts_with( $tool_name, AAFM_BRIDGE_NAMESPACE . '-' ) ) {
+	if ( ! is_string( $tool_name ) || ! aafm_bridge_result_is_for_a_bridged_tool( $tool_name, $mcp_tool ) ) {
 		return $result;
 	}
 

@@ -411,4 +411,30 @@ final class WooAttributesTest extends TestCase {
 			'the three by-id assignments (create\'s re-read, update\'s resolve and its re-read) must call wc_get_attribute() directly.'
 		);
 	}
+
+	/**
+	 * Sweep finding B (208 FIX-2 item 2): update no longer seeds $args from the resolved attribute's
+	 * current values before calling wc_update_attribute(); the vendor function backfills any omitted
+	 * field itself on every WooCommerce version this ability can run on (the AAFM_WOOCOMMERCE_MIN_VERSION
+	 * floor is pinned to exactly the release that introduced that backfill). This test's stub already
+	 * tolerates a partial $args identically to a fully-seeded one (WcAttributeStubStore::update() only
+	 * ever writes the keys it is given), so a name-only update round-tripping every other field
+	 * unchanged - proven by the existing test_update_attribute_field_isolation-shaped coverage in this
+	 * file - cannot discriminate the old manual seeding from the new reliance on the vendor's own
+	 * backfill. What this test pins instead: the manual seed-from-current-row block is genuinely gone
+	 * from source, not merely dead code sitting unused.
+	 */
+	public function test_the_manual_backfill_seed_was_removed_not_just_unused(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/attributes.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringNotContainsString(
+			"'name'         => (string) ( \$attr->name",
+			$source,
+			'the update executor must not seed $args from the resolved attribute\'s current name.'
+		);
+		$this->assertStringNotContainsString(
+			"'has_archives' => (bool) ( \$attr->has_archives",
+			$source,
+			'the update executor must not seed $args from the resolved attribute\'s current has_archives value.'
+		);
+	}
 }

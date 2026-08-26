@@ -371,16 +371,23 @@ function aafm_args_wc_update_product_attribute(): array {
 /**
  * Execute aafm/wc-update-product-attribute.
  *
- * Resolve-before-mutate: unknown id returns a generic error.
+ * Resolve-before-mutate: unknown id returns a generic error. Passing an unresolvable id straight
+ * to wc_update_attribute() would fall through to its own `$args['id'] = $attribute ? $attribute->id
+ * : 0` branch and silently CREATE a new attribute instead of failing (wc-attribute-functions.php:701),
+ * so this check stays regardless of what else changes here.
  *
- * Version-safe (M3 / the WC 9.1 floor's belt-and-braces guard): rather than sending a partial
- * PATCH and relying on wc_update_attribute()'s own field backfill (only present from WC 9.1.0 -
- * below that, an omitted field is reset to its default, wiping has_archives/order_by/type), the
- * full field set is built here FIRST from the resolved attribute's current values, then
- * overwritten with whatever the caller actually sent. wc_update_attribute() always receives every
- * field, so this ability's correctness never depends on which WooCommerce version is installed.
- * $changed tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op
- * (no write) exactly as before.
+ * Sweep finding B (208 FIX-2 item 2): a prior version of this function manually rebuilt the full
+ * field set from the resolved attribute before calling wc_update_attribute(), guarding against
+ * that function's own backfill being "only present from WC 9.1.0". Verified that guard is now
+ * unreachable dead code: wc_update_attribute() (wc-attribute-functions.php:696-720) has done this
+ * exact backfill natively since exactly 9.1.0, and AAFM_WOOCOMMERCE_MIN_VERSION
+ * (includes/integrations.php:233-234) is pinned to that release for precisely this reason - the
+ * WooCommerce abilities, this one included, never register at all below that floor, so the
+ * "below 9.1 it wipes fields" case this guard defended against cannot occur on any WooCommerce
+ * version this code can actually run on. $args is now built from only the keys the caller sent;
+ * wc_update_attribute() backfills the rest from its own resolved current row, the same way its
+ * own callers (including WooCommerce's own REST controller) already rely on it to. $changed still
+ * tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|\WP_Error
@@ -392,13 +399,7 @@ function aafm_exec_wc_update_product_attribute( array $input ) {
 		return aafm_generic_error();
 	}
 
-	$args = array(
-		'name'         => (string) ( $attr->name ?? '' ),
-		'slug'         => (string) ( $attr->slug ?? '' ),
-		'type'         => (string) ( $attr->type ?? 'select' ),
-		'order_by'     => (string) ( $attr->order_by ?? 'menu_order' ),
-		'has_archives' => (bool) ( $attr->has_archives ?? false ),
-	);
+	$args = array();
 
 	$changed = false;
 	if ( array_key_exists( 'name', $input ) ) {

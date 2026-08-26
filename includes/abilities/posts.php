@@ -275,44 +275,49 @@ function aafm_exec_get_posts( array $input ) {
 
 	// 'all' iterates every active language and concatenates: page/per_page apply PER language
 	// (documented on the lang schema fragment), total is the sum of each language's own count.
-	// A single language (the overwhelming majority of calls) is byte-for-byte unchanged below.
 	//
-	// Branch review fix (lang scope and result shaping): aafm_rich_post() must run INSIDE each
-	// language's own aafm_with_language() scope, not after the loop restores to ambient. A
-	// theme or plugin filtering get_the_excerpt() (or any other language-sensitive field
-	// aafm_rich_post() derives) by ambient language would otherwise stamp every translation
-	// with whichever language the loop happened to leave active - a silent wrong-language
-	// shape on a post the call still reports finding correctly. Needs both plan 207's fix
-	// (before it, the non-default-language rows were never returned at all) and plan 208's
-	// delegation to get_the_excerpt() (before it, the auto-excerpt never ran a filter chain
-	// ambient language could reach). See GetPostsLangShapeTest.
+	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// INSIDE the query's own aafm_with_language() scope, not after that scope restores to
+	// ambient - on BOTH branches, not only 'all'. Round 1's fix moved the shaping for 'all'
+	// but a query for a single EXPLICIT language had the identical gap: aafm_with_language()
+	// restores the original language before returning, and the shape step used to run after
+	// that restore. A theme or plugin filtering get_the_excerpt() (or any other
+	// language-sensitive field aafm_rich_post() derives) by ambient language stamped the
+	// result with whichever language was active before the call, not the one actually
+	// requested - a silent wrong-language shape on a post the call still reports finding
+	// correctly. Needs both plan 207's fix (before it, the non-default-language rows were
+	// never returned at all) and plan 208's delegation to get_the_excerpt() (before it, the
+	// auto-excerpt never ran a filter chain ambient language could reach). See
+	// WpmlLangAllTest and WpmlLanguageTest for the regression proofs, list-path and
+	// single-item respectively.
+	$shape_language = static function ( ?string $code ) use ( $build_query, $options ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_query, $options ): array {
+				$query = $build_query();
+				return array(
+					'rows'  => array_map(
+						static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
+						array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
+					),
+					'found' => (int) $query->found_posts,
+				);
+			}
+		);
+	};
+
 	$posts = array();
 	$total = 0;
 	if ( 'all' === $lang ) {
 		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped = aafm_with_language(
-				$code,
-				static function () use ( $build_query, $options ): array {
-					$query = $build_query();
-					return array(
-						'rows'  => array_map(
-							static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
-							array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
-						),
-						'found' => (int) $query->found_posts,
-					);
-				}
-			);
+			$shaped = $shape_language( $code );
 			$posts  = array_merge( $posts, $shaped['rows'] );
 			$total += $shaped['found'];
 		}
 	} else {
-		$query = aafm_with_language( $lang, $build_query );
-		$posts = array_map(
-			static fn( WP_Post $post ): array => aafm_rich_post( $post, $options ),
-			array_values( array_filter( $query->posts, static fn( $post ): bool => $post instanceof WP_Post ) )
-		);
-		$total = (int) $query->found_posts;
+		$shaped = $shape_language( $lang );
+		$posts  = $shaped['rows'];
+		$total  = $shaped['found'];
 	}
 
 	return array(

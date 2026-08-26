@@ -615,4 +615,100 @@ final class WpmlLangAllTest extends TestCase {
 			'The excerpt must be shaped under the post\'s own language ("en"), not the ambient one left over from before the call ("is").'
 		);
 	}
+
+	/**
+	 * Branch review fix, round 2: the operator's own round-1 constraint (leave the
+	 * single-language branch byte-for-byte unchanged) preserved the identical defect on an
+	 * EXPLICIT lang request - aafm_with_language() restores ambient before returning either
+	 * way, "all" or one code. Withdrawn: a single non-"all" language must ALSO shape under the
+	 * requested language, not ambient.
+	 */
+	public function test_get_posts_explicit_lang_shapes_under_the_requested_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		$id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+			)
+		);
+		update_post_meta( $id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_get_posts(
+			array(
+				'lang'     => 'en',
+				'per_page' => 50,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertCount( 1, $out['posts'] );
+		$this->assertSame(
+			'en',
+			$out['posts'][0]['excerpt'],
+			'An explicit lang:"en" request must shape the result under "en", not ambient "is".'
+		);
+	}
+
+	/**
+	 * Same finding, aafm/get-pages: it delegates entirely to aafm_exec_get_posts(), so this
+	 * pins the delegation actually carries the fix through rather than assuming it.
+	 */
+	public function test_get_pages_explicit_lang_shapes_under_the_requested_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		$id = self::factory()->post->create(
+			array(
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_excerpt' => '',
+			)
+		);
+		update_post_meta( $id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_get_pages(
+			array(
+				'lang'     => 'en',
+				'per_page' => 50,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertCount( 1, $out['posts'] );
+		$this->assertSame( 'en', $out['posts'][0]['excerpt'] );
+	}
+
+	/**
+	 * Same finding, aafm/search-content.
+	 */
+	public function test_search_content_explicit_lang_shapes_under_the_requested_language(): void {
+		$this->fake_wpml_with_post_filtering( 'is' );
+		add_filter( 'get_the_excerpt', fn() => $this->current_lang );
+
+		$id = self::factory()->post->create(
+			array(
+				'post_status'  => 'publish',
+				'post_title'   => 'findmeexplicitlang',
+				'post_excerpt' => '',
+			)
+		);
+		update_post_meta( $id, '_aafm_test_lang', 'en' );
+		$this->acting_as( 'administrator' );
+
+		$out = aafm_exec_search_content(
+			array(
+				'search'   => 'findmeexplicitlang',
+				'lang'     => 'en',
+				'per_page' => 50,
+			)
+		);
+
+		$this->assertIsArray( $out );
+		$this->assertCount( 1, $out['results'] );
+		$this->assertSame( 'en', $out['results'][0]['excerpt'] );
+	}
 }

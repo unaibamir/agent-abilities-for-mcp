@@ -195,38 +195,40 @@ function aafm_exec_search_content( array $input ) {
 		'include_content' => $include_content,
 	);
 
-	// Branch review fix (lang scope and result shaping): aafm_rich_post() must run INSIDE
-	// each language's own aafm_with_language() scope, not after the loop restores to ambient.
+	// Branch review fix (lang scope and result shaping, round 2): aafm_rich_post() must run
+	// INSIDE the query's own aafm_with_language() scope on BOTH branches, not only 'all' - an
+	// explicit single language has the identical gap, since aafm_with_language() restores the
+	// original language before returning and the shape step used to run after that restore.
 	// Same reasoning as aafm_exec_get_posts() in posts.php - see that function's comment for
-	// the full explanation and GetPostsLangShapeTest for the regression proof. A single
-	// language (the overwhelming majority of calls) is byte-for-byte unchanged below.
+	// the full explanation and WpmlLangAllTest/WpmlLanguageTest for the regression proofs.
+	$shape_language = static function ( ?string $code ) use ( $build_query, $options ): array {
+		return aafm_with_language(
+			$code,
+			static function () use ( $build_query, $options ): array {
+				$query = $build_query();
+				return array(
+					'rows'  => array_map(
+						static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
+						array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) )
+					),
+					'found' => (int) $query->found_posts,
+				);
+			}
+		);
+	};
+
 	$results = array();
 	$total   = 0;
 	if ( 'all' === $lang ) {
 		foreach ( aafm_wpml_all_language_codes_for_iteration() as $code ) {
-			$shaped  = aafm_with_language(
-				$code,
-				static function () use ( $build_query, $options ): array {
-					$query = $build_query();
-					return array(
-						'rows'  => array_map(
-							static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
-							array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) )
-						),
-						'found' => (int) $query->found_posts,
-					);
-				}
-			);
+			$shaped  = $shape_language( $code );
 			$results = array_merge( $results, $shaped['rows'] );
 			$total  += $shaped['found'];
 		}
 	} else {
-		$query   = aafm_with_language( $lang, $build_query );
-		$results = array_map(
-			static fn( WP_Post $p ): array => aafm_rich_post( $p, $options ),
-			array_values( array_filter( $query->posts, static fn( $p ): bool => $p instanceof WP_Post ) )
-		);
-		$total   = (int) $query->found_posts;
+		$shaped  = $shape_language( $lang );
+		$results = $shaped['rows'];
+		$total   = $shaped['found'];
 	}
 
 	return array(

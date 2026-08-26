@@ -75,7 +75,7 @@ function aafm_render_bridge_directory(): void {
 	echo wp_kses(
 		aafm_get_notice_html(
 			'warning',
-			__( 'These abilities are written by other plugins, so what they read and change is up to them. A bridged ability can still only touch what the connected account\'s WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run.', 'agent-abilities-for-mcp' )
+			__( 'These abilities are written by other plugins, so what they read and change is up to them. Unlike this plugin\'s own abilities, a bridged ability\'s output is not filtered or redacted here: whatever the third-party ability returns is what the agent sees. It can still only touch what the connected account\'s WordPress role allows, and every call is recorded in the activity log. Turn on only what you trust the connected agent to run.', 'agent-abilities-for-mcp' )
 		),
 		aafm_admin_allowed_html()
 	);

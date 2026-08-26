@@ -20,6 +20,14 @@ namespace AAFM\Tests;
 
 /**
  * Process-wide backing store for the WooCommerce tax rate and class stubs.
+ *
+ * Doc 214, finding 6: this store deliberately applies no WooCommerce filters, checked and
+ * confirmed rather than assumed. Rate shaping (aafm_wc_tax_rate_shape() in tax.php) reads a raw
+ * $wpdb row straight off the real woocommerce_tax_rates temp table, the same strategy WooCommerce's
+ * own REST API v3 /taxes endpoint uses - no WC_Tax instance or getter is ever in the path. Tax
+ * CLASS reads go through \WC_Tax::get_tax_classes(), ::get_tax_class_slugs(), and
+ * ::_get_tax_rate() (tax.php); none of the three applies apply_filters() anywhere in their real
+ * WooCommerce bodies (class-wc-tax.php, checked line by line). There is nothing to wire.
  */
 class WcTaxStubStore {
 

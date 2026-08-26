@@ -195,6 +195,28 @@ final class WooCouponsTest extends TestCase {
 	}
 
 	/**
+	 * Doc 214, finding 6: the WC_Coupon stub's getters used to apply no WooCommerce filter at
+	 * all, unlike real WC_Coupon (get_prop()-backed, filtered 'woocommerce_coupon_get_{prop}').
+	 * A site-installed plugin hooking that real filter would have been silently invisible to
+	 * this suite. Hook two of the getters this ability's own shaping reads and confirm the
+	 * filtered value, not the stored one, reaches the wire.
+	 */
+	public function test_get_coupon_applies_real_woocommerce_coupon_filters(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'woocommerce_coupon_get_code', static fn() => 'filtered-code' );
+		add_filter( 'woocommerce_coupon_get_amount', static fn() => '999.00' );
+
+		$res = wp_get_ability( 'aafm/wc-get-coupon' )->execute( array( 'coupon_id' => 5001 ) );
+
+		remove_all_filters( 'woocommerce_coupon_get_code' );
+		remove_all_filters( 'woocommerce_coupon_get_amount' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'filtered-code', $res['code'], 'A real WooCommerce coupon filter must reach this shape.' );
+		$this->assertSame( '999.00', $res['amount'] );
+	}
+
+	/**
 	 * Email_restrictions surfaces as a config field (not PII), present in full shape.
 	 */
 	public function test_get_coupon_exposes_email_restrictions(): void {

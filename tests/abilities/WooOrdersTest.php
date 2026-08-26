@@ -334,6 +334,32 @@ final class WooOrdersTest extends TestCase {
 		$this->assertNotEmpty( $res['billing']['phone'], 'billing.phone must be non-empty for the seeded order.' );
 	}
 
+	/**
+	 * Doc 214, finding 6: the WC_Order stub's getters used to apply no WooCommerce filter at
+	 * all, unlike real WC_Order (a mix of get_prop()-backed getters filtered
+	 * 'woocommerce_order_get_{prop}', get_order_number()'s own 'woocommerce_order_number', and
+	 * get_items()'s 'woocommerce_order_get_items'). Hook three of the getters this ability's own
+	 * shaping reads - a plain prop, the order-number's distinctly-named filter, and a billing
+	 * address prop - and confirm the filtered value reaches the wire.
+	 */
+	public function test_get_order_applies_real_woocommerce_order_filters(): void {
+		$this->acting_as( 'administrator' );
+		add_filter( 'woocommerce_order_get_currency', static fn() => 'EUR' );
+		add_filter( 'woocommerce_order_number', static fn() => 'FILTERED-5001' );
+		add_filter( 'woocommerce_order_get_billing_email', static fn() => 'filtered@example.com' );
+
+		$res = wp_get_ability( 'aafm/wc-get-order' )->execute( array( 'order_id' => 5001 ) );
+
+		remove_all_filters( 'woocommerce_order_get_currency' );
+		remove_all_filters( 'woocommerce_order_number' );
+		remove_all_filters( 'woocommerce_order_get_billing_email' );
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( 'EUR', $res['currency'], 'A real WooCommerce order filter must reach this shape.' );
+		$this->assertSame( 'FILTERED-5001', $res['number'] );
+		$this->assertSame( 'filtered@example.com', $res['billing']['email'] );
+	}
+
 	public function test_get_order_empty_billing_and_shipping_encode_as_objects(): void {
 		// Seed an order with empty billing/shipping maps.
 		WcOrderStubStore::seed(

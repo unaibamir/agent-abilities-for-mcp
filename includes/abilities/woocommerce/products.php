@@ -1363,6 +1363,21 @@ function aafm_exec_wc_delete_product( array $input ) {
 	// WC_Data::delete() returns true whenever a data store exists, and a loaded product always has
 	// one, so its return never signals a store-level failure. Verify the row is actually gone by
 	// re-reading rather than trusting the return.
+	//
+	// Sweep flagged an asymmetry with its sibling wc-delete-product-variation: that ability does NOT
+	// trust a re-read here at all, because WC_Product_Data_Store_CPT::delete() (shared by both post
+	// types, confirmed at class-wc-product-data-store-cpt.php:406-431) never calls clear_caches(), so
+	// a stale product-instance-cache read is possible in principle. Live-probed rather than assumed
+	// either way (208 FIX-2 item 0, .scratch/wc-delete-product-cache-probe.php, throwaway product
+	// created and deleted, nothing else touched): on this WooCommerce install (11.0.1) the re-read
+	// after delete() correctly returns nothing, twice in a row. The reason the plain re-read is safe
+	// here even though the raw data-store gap is real: WooCommerce's own
+	// Automattic\WooCommerce\Internal\Caches\ProductCacheController hooks core's clean_post_cache
+	// action (fired unconditionally by the wp_delete_post() call inside delete()) and invalidates the
+	// product-instance cache from there, independently of clear_caches(). That hook is a newer,
+	// version-dependent internal, not a documented guarantee, so this is OBSERVED ONLY on 11.0.1 - if
+	// re-probing after a WooCommerce upgrade ever finds a stale read, switch to the variation
+	// sibling's clean_post_cache()-plus-existence-check pattern rather than assuming this is still safe.
 	if ( null !== aafm_wc_get_product( $id ) ) {
 		return aafm_generic_error();
 	}

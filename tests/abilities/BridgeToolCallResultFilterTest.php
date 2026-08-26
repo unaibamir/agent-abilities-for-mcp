@@ -282,4 +282,70 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		$this->assertInstanceOf( WP_Error::class, $result );
 		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
 	}
+
+	/**
+	 * Final-gate Codex finding 2 (208-final-gate-codex-round1.md): the fix round 1 narrowing was
+	 * exploitable. get_object_vars() called from OUTSIDE a class omits private and protected
+	 * properties, so an object holding only PRIVATE state read as "zero properties" from this
+	 * function's point of view and passed the old guard - but a JsonSerializable object with that
+	 * exact shape still leaks its private data once the adapter calls wp_json_encode() on it via
+	 * jsonSerialize(). This must be REFUSED, not exempted, proving the guard now checks the exact
+	 * class rather than merely the visible property count.
+	 */
+	public function test_a_bridged_propertyless_jsonserializable_object_with_private_data_is_refused(): void {
+		$leaky = new class() implements \JsonSerializable {
+			/**
+			 * Private state invisible to get_object_vars() called from outside the class.
+			 *
+			 * @var string
+			 */
+			private string $api_key = 'sk-super-secret-do-not-leak';
+
+			public function jsonSerialize(): mixed {
+				return array( 'api_key' => $this->api_key );
+			}
+		};
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$leaky,
+			array(),
+			'aafm-bridge-vendor-returns-json-serializable-secret'
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A propertyless-from-outside object must still be refused when it is not a literal stdClass, since it may hide private state that leaks through JsonSerializable.'
+		);
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * Companion proving the exemption checks the EXACT class, not `instanceof stdClass`: a stdClass
+	 * subclass with private properties must still be refused even though it satisfies
+	 * `instanceof stdClass` and, from outside, also reads as zero visible properties.
+	 */
+	public function test_a_bridged_stdclass_subclass_with_private_properties_is_refused(): void {
+		$leaky = new class() extends \stdClass {
+			/**
+			 * Private state a stdClass subclass CAN carry, unlike a literal stdClass instance.
+			 *
+			 * @var string
+			 */
+			private string $secret = 'still leaky through a subclass';
+		};
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$leaky,
+			array(),
+			'aafm-bridge-vendor-returns-a-stdclass-subclass'
+		);
+
+		$this->assertInstanceOf(
+			WP_Error::class,
+			$result,
+			'A stdClass SUBCLASS must never qualify for the empty-stdClass exemption, even though instanceof stdClass is true for it.'
+		);
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
 }

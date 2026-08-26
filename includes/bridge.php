@@ -661,13 +661,36 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 	// is safe to keep - the adapter's own docblock on this filter recommends it for exactly this
 	// (PII redaction), and a WP_Error here becomes a proper MCP error result
 	// (ToolsHandler::handle_tool_call() checks is_wp_error() on this filter's return value).
-	// Fix round 1 (correctness F1): a ZERO-property object is provably inert - it carries nothing to
-	// leak. This codebase's own house idiom, (object) array(), returns exactly such an object to
-	// force {} instead of [] on the wire for an empty map (see includes/helpers.php and several
-	// abilities files), so a bridged ability following the same convention must pass through
-	// unchanged rather than be refused. This narrows the predicate, it does not disable the guard:
-	// an object with at least one property is still refused exactly as before.
-	if ( is_object( $result ) && ! is_wp_error( $result ) && array() !== get_object_vars( $result ) ) {
+	// Fix round 1 (correctness F1) narrowed this guard to exempt a ZERO-property object, on the
+	// claim that `array() === get_object_vars( $result )` proves it is inert. THAT CLAIM WAS WRONG
+	// and was corrected in the final-gate round: get_object_vars() called from OUTSIDE a class
+	// omits private and protected properties, so a JsonSerializable object holding only private
+	// state (e.g. a private $api_key) also reads as zero properties from here, passes this guard,
+	// and then leaks through its own jsonSerialize() once the adapter calls wp_json_encode() on it -
+	// exactly the confidentiality hole Task 6 exists to close.
+	//
+	// The exemption is now EXACT: only a literal stdClass instance with zero properties. This
+	// codebase's own house idiom, (object) array(), returns exactly such an object to force {}
+	// instead of [] on the wire for an empty map (see includes/helpers.php and several abilities
+	// files), so a bridged ability following the same convention must still pass through unchanged.
+	// get_class() === 'stdClass' (not `instanceof stdClass`, which a subclass also satisfies) is
+	// what makes get_object_vars() trustworthy here: stdClass declares no properties of its own and
+	// cannot be given private or protected ones (every dynamic property added to a bare stdClass
+	// instance is public by definition), so "zero properties" read from outside really does mean
+	// zero properties, not zero VISIBLE properties. A subclass, or any other class, could add
+	// private state that is invisible the same way, so it is excluded from the exemption entirely
+	// regardless of how many properties get_object_vars() reports.
+	//
+	// An explicit JsonSerializable refusal was considered as defence in depth and is not needed:
+	// the exact-class check alone already closes the hole, because a literal stdClass instance can
+	// never implement JsonSerializable (or any interface) - only a declared class can, and a
+	// declared class is never 'stdClass'. Every other object, JsonSerializable or not, is refused
+	// exactly as before.
+	if (
+		is_object( $result )
+		&& ! is_wp_error( $result )
+		&& ! ( 'stdClass' === get_class( $result ) && array() === get_object_vars( $result ) )
+	) {
 		return new WP_Error(
 			'aafm_bridge_unsupported_result_shape',
 			__( 'This bridged ability returned a raw object, which cannot be safely relayed over MCP. Contact the site administrator.', 'agent-abilities-for-mcp' )

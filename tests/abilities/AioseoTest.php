@@ -619,4 +619,27 @@ final class AioseoTest extends TestCase {
 		$registry = aafm_get_abilities_registry();
 		$this->assertArrayNotHasKey( 'aafm/aioseo-get-post', $registry );
 	}
+
+	/**
+	 * Fix round 2, assertion-count reconciliation: pins the exact contract two GENERIC,
+	 * registry-wide scanner tests elsewhere in the suite (AbilitiesSaveTest::
+	 * test_every_registry_entry_declares_a_subject, AnnotationCorrectnessTest::
+	 * test_scan_reports_what_it_skipped_and_why) silently depend on without asserting it
+	 * themselves: that the stubbed AIOSEO represents a SUPPORTED install by real, UNFORCED
+	 * detection, not merely a present one. Deliberately does NOT call force_integration('aioseo')
+	 * (the outer aafm_integration_active_aioseo override every other test in this file uses,
+	 * which is immune to the version floor and would mask a regression here) - it asserts
+	 * aafm_aioseo_active() itself, the exact function the version floor lives in. Before the
+	 * version floor's own test-fixture fix, this failed silently everywhere except here: those two
+	 * scanners just iterated over fewer registry entries and stayed green, rather than naming what
+	 * broke.
+	 */
+	public function test_stub_represents_a_version_floor_supported_aioseo_by_default(): void {
+		$this->assertTrue(
+			aafm_aioseo_active(),
+			'The AIOSEO test stub must represent a version at or above AAFM_AIOSEO_MIN_VERSION by ' .
+			'default, so tests relying on real (unforced) detection see a supported host, not an ' .
+			'unversioned one the fail-closed floor correctly excludes.'
+		);
+	}
 }

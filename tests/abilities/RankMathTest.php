@@ -241,6 +241,57 @@ final class RankMathTest extends TestCase {
 		$this->assertSame( array( 'noindex', 'noarchive' ), $stored, 'An unknown robots token must be dropped.' );
 	}
 
+	/**
+	 * Fix round 1, delegation audit sweep (210-sweep-B5-report.md): a robots write must invalidate
+	 * Rank Math's own sitemap cache, since Cache_Watcher only listens on save_post/
+	 * transition_post_status, never on updated_post_meta, and sitemap inclusion reads exactly the
+	 * rank_math_robots meta key this ability writes.
+	 */
+	public function test_rankmath_update_post_robots_write_invalidates_the_sitemap_cache(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id' => $post_id,
+				'robots'  => 'noindex',
+			)
+		);
+
+		$this->assertSame(
+			array( $post_id ),
+			\RankMath\Sitemap\Cache_Watcher::$invalidated_post_ids,
+			'A robots write must invalidate the sitemap cache for that post, exactly once.'
+		);
+	}
+
+	/**
+	 * Companion negative case, pinning the scoping decision: title/description/focus_keyword writes
+	 * must NOT invalidate the sitemap cache. Rank Math's own bulk-edit REST controller writes those
+	 * same fields via raw update_post_meta with no invalidation either (210-sweep-B5-report.md), so
+	 * matching that vendor behaviour there is deliberate - only the robots field drives sitemap
+	 * inclusion and needs the extra call.
+	 */
+	public function test_rankmath_update_post_non_robots_fields_do_not_invalidate_the_sitemap_cache(): void {
+		$admin_id = $this->acting_as( 'administrator' );
+		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );
+
+		wp_get_ability( 'aafm/rankmath-update-post' )->execute(
+			array(
+				'post_id'       => $post_id,
+				'title'         => 'A title with no robots change',
+				'description'   => 'A description with no robots change.',
+				'focus_keyword' => 'a keyword',
+			)
+		);
+
+		$this->assertSame(
+			array(),
+			\RankMath\Sitemap\Cache_Watcher::$invalidated_post_ids,
+			'Title/description/focus_keyword writes must not invalidate the sitemap cache, matching Rank Math\'s own REST bulk-edit endpoint.'
+		);
+	}
+
 	public function test_rankmath_update_post_url_fields_are_url_sanitized(): void {
 		$admin_id = $this->acting_as( 'administrator' );
 		$post_id  = (int) self::factory()->post->create( array( 'post_author' => $admin_id ) );

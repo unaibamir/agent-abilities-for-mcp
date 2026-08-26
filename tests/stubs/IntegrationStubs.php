@@ -86,12 +86,27 @@ trait IntegrationStubs {
 	 * string. The rank_math_* post meta (incl. the serialized robots array and the dynamic schema
 	 * keys) is read/written with core get_post_meta/update_post_meta, so no extra store is needed.
 	 *
+	 * Also defines a stub \RankMath\Sitemap\Cache_Watcher (fix round 1, delegation audit sweep):
+	 * the real class's invalidate_post() is a public static that records nothing, so a stub that
+	 * only records its calls is enough to prove which write paths call it and which do not, without
+	 * modelling the real sitemap cache itself.
+	 *
 	 * @return void
 	 */
 	protected function stub_rankmath(): void {
 		if ( ! class_exists( 'RankMath' ) ) {
 			eval( 'class RankMath {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class-only marker stub for tests; never shipped.
 		}
+		if ( ! class_exists( 'RankMath\\Sitemap\\Cache_Watcher' ) ) {
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a call-recording stub for tests; never shipped.
+			eval(
+				'namespace RankMath\\Sitemap; class Cache_Watcher {'
+				. 'public static array $invalidated_post_ids = array();'
+				. 'public static function invalidate_post( $post_id ) { self::$invalidated_post_ids[] = (int) $post_id; }'
+				. '}'
+			);
+		}
+		\RankMath\Sitemap\Cache_Watcher::$invalidated_post_ids = array();
 		add_filter(
 			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'rankmath' === $plugin ? '<title>Rank Math head ' . $id . '</title>' : $head,

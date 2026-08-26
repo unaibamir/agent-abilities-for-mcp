@@ -1254,4 +1254,66 @@ final class WooReportsTest extends TestCase {
 			'aafm_wc_count_orders_by_status() must delegate to wc_orders_count(), pinning the shop_order type the same way it always has.'
 		);
 	}
+
+	/**
+	 * FIX-3 item 4 (sweep finding, B4 batch): the only live gap in this dispatch.
+	 * WC_Settings_API::process_admin_options() - the real admin-form gateway save path - fires
+	 * woocommerce_update_option with array('id' => $option_key) before its own update_option()
+	 * call. This ability never fired it, so WooCommerce's own opt-in usage-tracking snapshot
+	 * (WC_Settings_Tracking::add_option_to_list(), wired to this exact hook) never saw a gateway
+	 * change made through this ability. Asserts the real hook fires with the exact vendor payload
+	 * shape, not an invented one.
+	 */
+	public function test_update_payment_gateway_fires_the_vendor_update_option_hook(): void {
+		$this->acting_as( 'administrator' );
+
+		$captured = array();
+		add_action(
+			'woocommerce_update_option',
+			static function ( $arg ) use ( &$captured ): void {
+				$captured[] = $arg;
+			}
+		);
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'stripe',
+				'title'      => 'Stripe Renamed',
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertCount( 1, $captured, 'the hook must fire exactly once for one settings save.' );
+		$this->assertSame(
+			array( 'id' => 'woocommerce_stripe_settings' ),
+			$captured[0],
+			'the payload must match WC_Settings_API::process_admin_options()\'s own shape: array("id" => $option_key).'
+		);
+	}
+
+	/**
+	 * The hook must not fire when nothing on the gateway's own settings changed - only the display
+	 * order was sent, which is a separate option, not part of process_admin_options()'s scope.
+	 */
+	public function test_update_payment_gateway_order_only_does_not_fire_the_settings_hook(): void {
+		$this->acting_as( 'administrator' );
+
+		$captured = array();
+		add_action(
+			'woocommerce_update_option',
+			static function ( $arg ) use ( &$captured ): void {
+				$captured[] = $arg;
+			}
+		);
+
+		$res = aafm_exec_wc_update_payment_gateway(
+			array(
+				'gateway_id' => 'stripe',
+				'order'      => 3,
+			)
+		);
+
+		$this->assertNotInstanceOf( WP_Error::class, $res );
+		$this->assertSame( array(), $captured, 'an order-only update must not fire the settings-save hook.' );
+	}
 }

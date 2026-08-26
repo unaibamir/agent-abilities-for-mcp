@@ -262,12 +262,26 @@ function aafm_force_draft(): bool {
  * @return int Clamped to >= 0.
  */
 function aafm_max_title_len(): int {
+	$stored = max( 0, (int) get_option( 'aafm_max_title_len', 0 ) );
+
 	/**
 	 * Filters the maximum allowed title length. 0 means no cap.
 	 *
 	 * @param int $len Stored cap, clamped to >= 0.
 	 */
-	return (int) apply_filters( 'aafm_max_title_len', max( 0, (int) get_option( 'aafm_max_title_len', 0 ) ) );
+	$filtered = (int) apply_filters( 'aafm_max_title_len', $stored );
+
+	// Re-clamp the post-filter value so a buggy filter returning a negative number can't
+	// disable the cap. Mirrors aafm_rate_limit_per_min()'s guard exactly: a filter returning <= 0
+	// when a positive cap is stored keeps the stored cap (it cannot silently switch the cap off);
+	// a filter may still set any other positive value.
+	if ( $filtered < 0 ) {
+		return $stored;
+	}
+	if ( 0 === $filtered && $stored > 0 ) {
+		return $stored;
+	}
+	return $filtered;
 }
 
 /**

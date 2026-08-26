@@ -68,6 +68,26 @@ final class SafetyTest extends TestCase {
 	}
 
 	/**
+	 * Doc 214, finding 5: aafm_max_title_len() lacked the same post-filter re-clamp its sibling
+	 * aafm_rate_limit_per_min() already has, so a filter returning a negative value silently
+	 * disabled the cap (aafm_title_within_limit() treats $max <= 0 as unlimited).
+	 */
+	public function test_max_title_len_filter_cannot_disable_a_configured_cap(): void {
+		update_option( 'aafm_max_title_len', '120' );
+
+		$bad = static fn() => -1;
+		add_filter( 'aafm_max_title_len', $bad );
+		$this->assertSame( 120, aafm_max_title_len(), 'A filter returning -1 must not switch off a configured cap.' );
+		remove_filter( 'aafm_max_title_len', $bad );
+
+		// A filter may still RAISE or LOWER the cap to another positive value.
+		$lower = static fn() => 40;
+		add_filter( 'aafm_max_title_len', $lower );
+		$this->assertSame( 40, aafm_max_title_len(), 'A filter may set another positive cap.' );
+		remove_filter( 'aafm_max_title_len', $lower );
+	}
+
+	/**
 	 * T3-3: a filter returning an empty allowlist must not widen an operator-configured
 	 * non-empty allowlist to allow-all. The stored list wins when the filter empties it.
 	 */

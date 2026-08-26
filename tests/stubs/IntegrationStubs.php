@@ -181,6 +181,33 @@ class Post {
 		$model->post_id = (int) $post_id;
 		return $model;
 	}
+	public static function savePost( $postId, $data ) {
+		// Fix round 1, delegation audit sweep: mirrors the SHAPE of the real AIOSEO
+		// Post::savePost($postId, $data) - a patch-keyed $data array applied onto the CURRENT
+		// model, then saved - without replicating the real vendor's own internal filters/hooks/
+		// default-format-tracking, which are the real vendor's job, not this plugin's. What this
+		// stub exists to verify is the PATCH KEY MAPPING: the real vendor's robots patch keys are
+		// the bare 'noindex'/'nofollow'/'default', NOT the model column names
+		// 'robots_noindex'/'robots_nofollow'/'robots_default'. Records every call so a test can
+		// assert the vendor save path (not a bare property-set-then-save()) was actually taken.
+		\AAFM\Tests\AioseoStubStore::$save_post_calls[] = array( 'post_id' => (int) $postId, 'data' => $data );
+		if ( empty( $data ) ) {
+			return false;
+		}
+		$robots_columns = array(
+			'noindex'  => 'robots_noindex',
+			'nofollow' => 'robots_nofollow',
+			'default'  => 'robots_default',
+		);
+		$model = self::getPost( $postId );
+		foreach ( $data as $key => $value ) {
+			$column = $robots_columns[ $key ] ?? $key;
+			if ( property_exists( $model, $column ) ) {
+				$model->$column = $value;
+			}
+		}
+		$model->save();
+	}
 	public function save() {
 		// Real AIOSEO's Model::save() returns void, never a bool (L11) - a "failure" here means the
 		// write silently does not persist, exercisable only through the read-back verification the

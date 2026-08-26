@@ -3,13 +3,25 @@
  * AIOSEO / All in One SEO abilities (Wave 5): aioseo-get-post, aioseo-update-post, aioseo-get-head.
  *
  * Registers ONLY when AIOSEO is active (aafm_integration_active('aioseo')). AIOSEO v4+ keeps post
- * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta - the _aioseo_* meta keys are WPML-compat
- * shadow copies that AIOSEO does not honor on write. So reads and writes go through AIOSEO's own
- * Post model: AIOSEO\Plugin\Common\Models\Post::getPost($id) returns the row, set the public props,
- * ->save() writes the row through AIOSEO's ORM. This NEVER runs raw SQL and NEVER writes the
- * shadow meta. The model is guarded with class_exists/method_exists; on absence the ability returns
- * a generic error rather than fataling. Schema is OMITTED (AIOSEO's schema column is internal,
- * undocumented JSON). SEO data is post content, so every per-object ability gates on edit_post($id).
+ * SEO in a CUSTOM TABLE (wp_aioseo_posts), NOT post meta. So reads go through AIOSEO's own Post
+ * model: AIOSEO\Plugin\Common\Models\Post::getPost($id) returns the row. Writes go through the
+ * model's own AIOSEO\Plugin\Common\Models\Post::savePost($id, $data) (fix round 1, delegation
+ * audit sweep, 210-sweep-B5-report.md), the same method AIOSEO's own REST controller and every
+ * other real caller in its codebase use - NOT a bare property-set-then-save(), which skips
+ * savePost()'s own aioseo_save_post/aioseo_insert_post hooks, its default-title/description
+ * tracking, and its _aioseo_* traditional-post-meta sync.
+ *
+ * Correcting a previous misreading of that meta here: the _aioseo_* keys are WPML-compat SHADOW
+ * COPIES AIOSEO writes on save so that WPML/Polylang can carry them across when they duplicate a
+ * post into another language (those plugins copy post meta, not AIOSEO's own custom-table row) -
+ * they are not meant for AIOSEO itself to read back, and this plugin does not read them either.
+ * Going through savePost() keeps that shadow meta in sync, which matters for this plugin's own
+ * documented, tested WPML support.
+ *
+ * This NEVER runs raw SQL. The model is guarded with class_exists/method_exists; on absence the
+ * ability returns a generic error rather than fataling. Schema is OMITTED (AIOSEO's schema column
+ * is internal, undocumented JSON). SEO data is post content, so every per-object ability gates on
+ * edit_post($id).
  *
  * @package AgentAbilitiesForMCP
  */
@@ -243,6 +255,26 @@ function aafm_aioseo_robots_fields(): array {
 }
 
 /**
+ * The AIOSEO boolean robots fields: unified field => Post::savePost()'s own PATCH-DATA key.
+ *
+ * Fix round 1, delegation audit sweep: Post::savePost()'s field map (Model::getSanitizeFieldMap())
+ * uses BARE names for the robots flags - 'noindex', 'nofollow', 'default' - not the model COLUMN
+ * names ('robots_noindex', 'robots_nofollow', 'robots_default') aafm_aioseo_robots_fields() above
+ * returns for reading. Sending the column name as a $data key to savePost() would be silently
+ * ignored (patch semantics: only keys savePost() recognizes are applied), so the write path needs
+ * its own map. Verified against the real vendor source, not assumed from the naming pattern the
+ * other fields happen to follow.
+ *
+ * @return array<string,string>
+ */
+function aafm_aioseo_robots_save_data_keys(): array {
+	return array(
+		'robots_noindex'  => 'noindex',
+		'robots_nofollow' => 'nofollow',
+	);
+}
+
+/**
  * Whether the write carries a non-empty Twitter-specific field. AIOSEO's Twitter renderer returns
  * the Facebook/OpenGraph value whenever twitter_use_og is truthy (its default), so a written
  * twitter title/description/image only renders once that fallback is turned off - and only when a
@@ -467,10 +499,29 @@ function aafm_args_aioseo_update_post(): array {
 /**
  * Execute aafm/aioseo-update-post.
  *
- * Loads the model for the post, sets the allowlisted props (esc_url_raw on URL props,
- * aafm_sanitize_plain_text on text, bool on robots), then ->save() - AIOSEO's own ORM writes the
- * custom-table row. A prop absent on the installed model version is skipped rather than set (so the
- * write never invents a property). Returns the refreshed read shape.
+ * Fix round 1 (delegation audit sweep, 210-sweep-B5-report.md): builds a $data array (keyed by
+ * AIOSEO's OWN savePost() patch-data keys, sanitized: esc_url_raw on URL fields, aafm_sanitize_
+ * plain_text on text, bool on robots) and calls Post::savePost($id, $data) - the same method
+ * AIOSEO's own REST controller and every other real caller in its codebase use - instead of
+ * setting props on a fetched model and calling the low-level ORM ->save() directly. That gets this
+ * write the vendor's own aioseo_save_post/aioseo_insert_post hooks, its default-title/description
+ * tracking, and its _aioseo_* shadow-meta sync for WPML/Polylang, none of which a bare ->save()
+ * exercises. The image-type-flip and Twitter-fallback business logic below is this plugin's own,
+ * with no equivalent inside savePost() (confirmed against the real vendor source), so it still
+ * reads the CURRENT model state via getPost() to decide what to flip; it now writes its decisions
+ * into $data instead of onto the model object. A field absent on the installed model version is
+ * skipped rather than sent (so the write never invents a property). Returns the refreshed read
+ * shape.
+ *
+ * Known, deliberately unhandled edge case: savePost()'s own checkForDefaultFormat() nulls a
+ * caller-provided title/description that is byte-identical to the site's CURRENT default title/
+ * description FORMAT TEMPLATE (e.g. the literal tag string, not a rendered title), so that future
+ * template edits keep propagating to that post. Adopting that is the whole point of delegating to
+ * savePost() and is not treated as a defect - but it means a write whose literal value happens to
+ * match that template reads back as the vendor's dynamic default rather than the literal string, so
+ * the read-back verification below could report a false failure for that single, narrow case. Not
+ * modelled here: it requires an agent to write the exact configured template tag text verbatim,
+ * which is not a value an agent-driven title/description write would plausibly produce.
  *
  * @param array<string,mixed> $input Validated input.
  * @return array<string,mixed>|WP_Error
@@ -482,14 +533,19 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	}
 
 	$class = AAFM_AIOSEO_MODEL;
+	if ( ! method_exists( $class, 'savePost' ) ) {
+		return aafm_generic_error();
+	}
 	$model = $class::getPost( $id );
 	if ( ! is_object( $model ) ) {
 		return aafm_generic_error();
 	}
 
-	// Desired values keyed by unified field name (not model prop), so they can be diffed straight
-	// against aafm_aioseo_read_fields()'s output after save() - see the read-back comment below (L11).
+	// Desired values keyed by unified field name (not the savePost() data key), so they can be
+	// diffed straight against aafm_aioseo_read_fields()'s output after save() - see the read-back
+	// comment below (L11). $data is keyed by AIOSEO's OWN savePost() patch keys instead.
 	$desired = array();
+	$data    = array();
 
 	foreach ( aafm_aioseo_fields() as $field => $spec ) {
 		if ( ! array_key_exists( $field, $input ) ) {
@@ -500,8 +556,9 @@ function aafm_exec_aioseo_update_post( array $input ) {
 			continue; // The installed model version does not expose this prop; do not invent it.
 		}
 		$raw               = (string) $input[ $field ];
-		$model->$prop      = $spec['url'] ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
-		$desired[ $field ] = (string) $model->$prop;
+		$clean             = $spec['url'] ? esc_url_raw( $raw ) : aafm_sanitize_plain_text( $raw );
+		$data[ $prop ]     = $clean;
+		$desired[ $field ] = $clean;
 
 		// A custom social image renders ONLY when its *_image_type column reads 'custom_image'.
 		// That column defaults to 'default' (AIOSEO\Plugin\Common\Models\Post::getDefaults), which
@@ -512,13 +569,14 @@ function aafm_exec_aioseo_update_post( array $input ) {
 		// clears the URL, ONLY reset a type that currently reads 'custom_image' (it would otherwise
 		// point at the now-empty custom URL) - a type naming any other AIOSEO source (featured, attach,
 		// content, author, auto; see Image::getImage) is left untouched, so clearing a custom URL never
-		// silently swaps a rendered featured/attachment image for the site default.
+		// silently swaps a rendered featured/attachment image for the site default. Reads the model's
+		// CURRENT (pre-write) type, since $model is not mutated by this rewrite.
 		if ( isset( $spec['type_prop'] ) && property_exists( $model, $spec['type_prop'] ) ) {
 			$type_prop = $spec['type_prop'];
-			if ( '' !== $model->$prop ) {
-				$model->$type_prop = 'custom_image';
+			if ( '' !== $clean ) {
+				$data[ $type_prop ] = 'custom_image';
 			} elseif ( 'custom_image' === $model->$type_prop ) {
-				$model->$type_prop = 'default';
+				$data[ $type_prop ] = 'default';
 			}
 		}
 	}
@@ -535,17 +593,19 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	// Facebook/OG value (Twitter.php: `return $title ? $title : ...->facebook->getTitle()`), the same
 	// output as the truthy branch - so this never blanks a card that was rendering an OG title/desc.
 	if ( aafm_aioseo_twitter_fields_provided( $input ) && property_exists( $model, 'twitter_use_og' ) ) {
-		$model->twitter_use_og = false;
+		$data['twitter_use_og'] = false;
 	}
 
-	$robots_touched = false;
+	$robots_touched   = false;
+	$robots_data_keys = aafm_aioseo_robots_save_data_keys();
 	foreach ( aafm_aioseo_robots_fields() as $field => $prop ) {
 		if ( ! array_key_exists( $field, $input ) || ! property_exists( $model, $prop ) ) {
 			continue;
 		}
-		$model->$prop      = (bool) $input[ $field ];
-		$desired[ $field ] = $model->$prop;
-		$robots_touched    = true;
+		$value                               = (bool) $input[ $field ];
+		$data[ $robots_data_keys[ $field ] ] = $value;
+		$desired[ $field ]                   = $value;
+		$robots_touched                      = true;
 	}
 
 	// AIOSEO honors the per-post robots_noindex/robots_nofollow ONLY when robots_default is falsy
@@ -553,16 +613,23 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	// and the sitemap queries treat robots_default = 1 as "use site default, ignore noindex"). A fresh
 	// row defaults robots_default to true, so writing noindex/nofollow alone is a silent no-op. Flip it
 	// off whenever the caller sets an explicit robots flag, mirroring what the AIOSEO editor does.
+	// savePost()'s own patch-data key for this column is the bare 'default', not 'robots_default'.
 	if ( $robots_touched && property_exists( $model, 'robots_default' ) ) {
-		$model->robots_default = false;
+		$data['default'] = false;
 	}
 
-	// AIOSEO's model save() returns void, not bool (L11: the old `false === $model->save()` guard
-	// was dead code that could never trip, letting a genuinely failed custom-table write report
-	// success - pinned by SeoContractTest::test_aioseo_model_save_returns_void_not_bool()). Verify
-	// persistence a different way: force a fresh read of the model and diff it against what we just
-	// asked to be written, field by field. A real write failure now surfaces as a read-back mismatch.
-	$model->save();
+	// savePost() itself early-returns false on an empty $data without touching the row (real vendor
+	// source: `if ( empty( $data ) ) { return false; }`), so an empty PATCH (post_id only, or every
+	// field already skipped above) is correctly a no-op either way - skip the call entirely rather
+	// than rely on that early return, so the test-stub model does not need to replicate it too.
+	if ( array() !== $data ) {
+		// AIOSEO's savePost() reports failure as a DB error string or void, never a bool worth
+		// branching on directly (mirrors the prior ->save() shape, L11: SeoContractTest::
+		// test_aioseo_model_save_returns_void_not_bool()). Verify persistence a different way: force
+		// a fresh read of the model and diff it against what we just asked to be written, field by
+		// field. A real write failure still surfaces as a read-back mismatch.
+		$class::savePost( $id, $data );
+	}
 
 	$after     = aafm_aioseo_read_fields( $id );
 	$url_field = array();

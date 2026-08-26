@@ -533,6 +533,16 @@ function aafm_exec_aioseo_update_post( array $input ) {
 	}
 
 	$class = AAFM_AIOSEO_MODEL;
+	// Fix round 2 (test-quality sweep finding): this branch is untested in either direction, on
+	// purpose, not by oversight - it is the same shape as the sibling aafm_aioseo_model_available()
+	// guard just above and every other vendor-absence guard in this codebase (e.g. class_exists()
+	// checks for WC_Product_Simple). The test-environment stub (tests/stubs/IntegrationStubs.php)
+	// always defines the full model class with every method this file calls, and PHP cannot
+	// undefine a class or a method on it once the process has loaded it, so there is no clean way
+	// to drive method_exists() false here without a dedicated filterable seam over AAFM_AIOSEO_MODEL
+	// itself - a real code change purely to make this one guard testable, which would be
+	// contorting the stub for a defensive branch this codebase already accepts leaving unexercised
+	// elsewhere. Left as a documented gap rather than a fragile test.
 	if ( ! method_exists( $class, 'savePost' ) ) {
 		return aafm_generic_error();
 	}

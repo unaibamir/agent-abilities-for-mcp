@@ -585,6 +585,58 @@ function aafm_register_enabled_bridged_abilities(): void {
 }
 
 /**
+ * Whether $value contains, at $value itself or nested at any depth inside it, an object that is
+ * not an exact empty stdClass.
+ *
+ * Final gate round 2: the ORIGINAL top-level-only check inspected the wrong layer. On the real
+ * MCP wire, McpTool::execute() already wraps any non-array bridged result as
+ * array('result' => $value) BEFORE mcp_adapter_tool_call_result (this file's filter) ever runs
+ * (vendor/wordpress/mcp-adapter/includes/Domain/Tools/McpTool.php:295-299,
+ * ToolsHandler.php:189/205) - so a bare object at the FUNCTION's top level is a shape the real
+ * adapter never delivers; a hidden object one or more levels inside an array is exactly what it
+ * delivers instead. This walks the whole structure so the guard fires where the danger actually
+ * is, not only where the old (unreachable in production) shape assumed it would be.
+ *
+ * The house idiom (object) array() can legitimately appear at ANY depth, not only the root - a
+ * bridged ability might return {"items": [...], "meta": {}} where the empty map sits one level
+ * down. So the exemption for an exact, empty stdClass (get_class() === 'stdClass', not
+ * `instanceof`, which a subclass also satisfies - see the fix round 1 note this replaces) applies
+ * at whatever depth it is found, and nothing else does: any other object, at any depth, is
+ * refused.
+ *
+ * Recursion is depth-bounded, deliberately, using the same AAFM_SCHEMA_MAX_DEPTH bound
+ * aafm_sanitize_schema_array() uses for the identical reason: a bridged result is foreign data of
+ * unknown shape, and an unbounded walk risks exhausting the stack on a pathologically deep or (via
+ * a leaked reference) self-referential array. Real vendor response shapes are only a handful of
+ * levels deep, so the bound never clips legitimate output. Unlike the schema sanitizer, which
+ * drops a sub-tree past its bound (safe, because dropping IS the sanitizing action), this function
+ * REFUSES once the bound is hit rather than reporting "nothing found" - past the bound this
+ * function no longer knows what is down there, and this guard's whole job is refusing what it
+ * cannot vouch for, not assuming the unexamined remainder is safe.
+ *
+ * @param mixed $value Value to inspect (array, scalar, or object).
+ * @param int   $depth Current recursion depth (internal; callers pass 0).
+ * @return bool True if an unsafe object was found (or the depth bound was hit before ruling it out).
+ */
+function aafm_bridge_result_hides_an_object( $value, int $depth = 0 ): bool {
+	if ( is_object( $value ) ) {
+		return ! ( 'stdClass' === get_class( $value ) && array() === get_object_vars( $value ) );
+	}
+	if ( ! is_array( $value ) ) {
+		return false;
+	}
+	if ( $depth >= AAFM_SCHEMA_MAX_DEPTH ) {
+		return true; // Past the bound: cannot vouch for what is here, so refuse rather than assume.
+	}
+	foreach ( $value as $item ) {
+		if ( aafm_bridge_result_hides_an_object( $item, $depth + 1 ) ) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * Safety net for a bridged ability whose result is a bare top-level JSON list.
  *
  * When a foreign ability declares no output_schema, aafm_bridge_output_schema() returns null and
@@ -651,46 +703,21 @@ function aafm_filter_bridged_tool_call_result( $result, $args, $tool_name ) {
 		return $result;
 	}
 
-	// A bare PHP object (not a WP_Error, not an array) reaches here un-redacted: nothing in this
-	// plugin or the adapter inspects an object's own properties before the wire. McpTool::execute()
-	// already wraps any non-array result as array('result' => $result), so the WIRE SHAPE is valid
-	// JSON either way - the risk is that json_encode() then walks the object's own public
-	// properties with no redaction at all. The docblock's own worked example: a raw WP_User exposes
-	// user_pass through its public `data` property. This plugin cannot know a third-party object's
-	// shape well enough to redact it selectively, so it refuses the call rather than guess at what
-	// is safe to keep - the adapter's own docblock on this filter recommends it for exactly this
-	// (PII redaction), and a WP_Error here becomes a proper MCP error result
-	// (ToolsHandler::handle_tool_call() checks is_wp_error() on this filter's return value).
-	// Fix round 1 (correctness F1) narrowed this guard to exempt a ZERO-property object, on the
-	// claim that `array() === get_object_vars( $result )` proves it is inert. THAT CLAIM WAS WRONG
-	// and was corrected in the final-gate round: get_object_vars() called from OUTSIDE a class
-	// omits private and protected properties, so a JsonSerializable object holding only private
-	// state (e.g. a private $api_key) also reads as zero properties from here, passes this guard,
-	// and then leaks through its own jsonSerialize() once the adapter calls wp_json_encode() on it -
-	// exactly the confidentiality hole Task 6 exists to close.
-	//
-	// The exemption is now EXACT: only a literal stdClass instance with zero properties. This
-	// codebase's own house idiom, (object) array(), returns exactly such an object to force {}
-	// instead of [] on the wire for an empty map (see includes/helpers.php and several abilities
-	// files), so a bridged ability following the same convention must still pass through unchanged.
-	// get_class() === 'stdClass' (not `instanceof stdClass`, which a subclass also satisfies) is
-	// what makes get_object_vars() trustworthy here: stdClass declares no properties of its own and
-	// cannot be given private or protected ones (every dynamic property added to a bare stdClass
-	// instance is public by definition), so "zero properties" read from outside really does mean
-	// zero properties, not zero VISIBLE properties. A subclass, or any other class, could add
-	// private state that is invisible the same way, so it is excluded from the exemption entirely
-	// regardless of how many properties get_object_vars() reports.
-	//
-	// An explicit JsonSerializable refusal was considered as defence in depth and is not needed:
-	// the exact-class check alone already closes the hole, because a literal stdClass instance can
-	// never implement JsonSerializable (or any interface) - only a declared class can, and a
-	// declared class is never 'stdClass'. Every other object, JsonSerializable or not, is refused
-	// exactly as before.
-	if (
-		is_object( $result )
-		&& ! is_wp_error( $result )
-		&& ! ( 'stdClass' === get_class( $result ) && array() === get_object_vars( $result ) )
-	) {
+	// A genuine vendor failure is not a shape to inspect - pass it through so
+	// ToolsHandler::handle_tool_call() turns it into a proper MCP error result.
+	if ( is_wp_error( $result ) ) {
+		return $result;
+	}
+
+	// Nothing in this plugin or the adapter inspects an object's own properties before the wire, and
+	// this plugin cannot know a third-party object's shape well enough to redact it selectively - so
+	// it refuses the call outright rather than guess at what is safe to keep, exactly as the
+	// adapter's own docblock on this filter recommends (PII redaction). aafm_bridge_result_hides_an_
+	// object() (defined above) walks $result at every depth: on the real wire $result here is
+	// typically already the adapter's own array('result' => $value) wrapper (or a plain array a
+	// foreign ability returned directly), never a bare object at THIS function's top level - see
+	// that function's docblock for the full wire-order finding this replaces.
+	if ( aafm_bridge_result_hides_an_object( $result ) ) {
 		return new WP_Error(
 			'aafm_bridge_unsupported_result_shape',
 			__( 'This bridged ability returned a raw object, which cannot be safely relayed over MCP. Contact the site administrator.', 'agent-abilities-for-mcp' )

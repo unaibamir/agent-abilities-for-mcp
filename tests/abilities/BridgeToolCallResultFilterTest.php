@@ -210,6 +210,21 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 		);
 	}
 
+	// NOT WIRE COVERAGE, per the final-gate round 2 finding: every test from here down calls
+	// aafm_filter_bridged_tool_call_result() with a BARE object at the function's top level. On the
+	// real MCP wire this shape never occurs - McpTool::execute() already wraps any non-array
+	// bridged result as array('result' => $value) BEFORE this filter ever runs (vendored
+	// mcp-adapter, McpTool.php:295-299 / ToolsHandler.php:189,205), so the guard's real job happens
+	// against an ARRAY containing the object, not the object directly. These tests are kept because
+	// they are not wrong: aafm_bridge_result_hides_an_object() still handles a bare object at depth
+	// 0 the same way it handles one nested deeper, and defence-in-depth against a hypothetical
+	// direct call is free. But they must not be mistaken for proof the guard fires in production -
+	// the tests further below, wrapped in array('result' => ...) as the adapter actually delivers
+	// it, are what closed that gap. A genuine live tools/call end-to-end test is still missing (see
+	// ROADMAP.md's post-launch-backlog TODO, carried since 2026-08-03: the vendored McpServer/
+	// ToolsHandler is one-instance-per-process with no reset method, so this remains open by
+	// operator decision, not solved here).
+
 	/**
 	 * THE GAP THIS CLOSES: a bridged ability returning a bare PHP object (not an array, not a
 	 * WP_Error) reached the wire completely unredacted. A raw WP_User is the docblock's own worked
@@ -347,5 +362,166 @@ final class BridgeToolCallResultFilterTest extends TestCase {
 			'A stdClass SUBCLASS must never qualify for the empty-stdClass exemption, even though instanceof stdClass is true for it.'
 		);
 		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	// THE REAL WIRE SHAPE, from here down. Final-gate round 2 (208-final-gate-codex-round2.md):
+	// McpTool::execute() already wraps any non-array bridged result as array('result' => $value)
+	// before this filter ever runs, so on a real MCP call $result here is an ARRAY containing the
+	// dangerous object, never the object itself. Every test below drives that exact shape, which is
+	// what the fix round 1 predicate (and the original Task 6 guard before it) never exercised.
+
+	/**
+	 * The concrete failure scenario from the final-gate report: a bridged ability returns a real
+	 * WP_User, the adapter wraps it as array('result' => $user), and the wrapped user's public
+	 * `data` property (carrying the password hash) must never reach the wire.
+	 */
+	public function test_a_wp_user_wrapped_in_the_adapters_result_key_is_refused(): void {
+		$user_id = self::factory()->user->create();
+		$leaky   = new \WP_User( $user_id );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'result' => $leaky ),
+			array(),
+			'aafm-bridge-vendor-returns-a-wp-user'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * The JsonSerializable-with-private-state case, driven at the real wire shape: wrapped under
+	 * the adapter's own 'result' key rather than passed bare.
+	 */
+	public function test_a_jsonserializable_object_wrapped_in_result_with_private_data_is_refused(): void {
+		$leaky = new class() implements \JsonSerializable {
+			/**
+			 * Private state invisible to get_object_vars() called from outside the class.
+			 *
+			 * @var string
+			 */
+			private string $api_key = 'sk-super-secret-do-not-leak';
+
+			public function jsonSerialize(): mixed {
+				return array( 'api_key' => $this->api_key );
+			}
+		};
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'result' => $leaky ),
+			array(),
+			'aafm-bridge-vendor-returns-json-serializable-secret'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * The stdClass-subclass case, driven at the real wire shape.
+	 */
+	public function test_a_stdclass_subclass_wrapped_in_result_with_private_properties_is_refused(): void {
+		$leaky = new class() extends \stdClass {
+			/**
+			 * Private state a stdClass subclass CAN carry, unlike a literal stdClass instance.
+			 *
+			 * @var string
+			 */
+			private string $secret = 'still leaky through a subclass';
+		};
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array( 'result' => $leaky ),
+			array(),
+			'aafm-bridge-vendor-returns-a-stdclass-subclass'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * The house idiom (object) array() can legitimately sit at any depth, not only under the
+	 * adapter's own 'result' key - e.g. a bridged ability's own {"items":[...],"meta":{}} shape.
+	 * An exact empty stdClass nested this deeply must still be accepted.
+	 */
+	public function test_an_empty_object_nested_two_levels_deep_is_accepted(): void {
+		$original = array(
+			'items' => array( 'a', 'b' ),
+			'meta'  => (object) array(),
+		);
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$original,
+			array(),
+			'aafm-bridge-vendor-returns-a-nested-empty-object'
+		);
+
+		$this->assertSame( $original, $result, 'A nested exact empty stdClass must be accepted at any depth, not only at the root.' );
+	}
+
+	/**
+	 * Companion to the nested-acceptance case above: a leaky object at the SAME depth (inside an
+	 * array nested two levels under the top-level result) must still be refused. Proves the walk
+	 * actually recurses rather than only checking the adapter's immediate 'result' wrapper.
+	 */
+	public function test_an_object_nested_deeper_than_the_result_wrapper_is_refused(): void {
+		$leaky              = new \stdClass();
+		$leaky->still_leaky = 'buried two levels down';
+
+		$result = aafm_filter_bridged_tool_call_result(
+			array(
+				'result' => array(
+					'nested' => $leaky,
+				),
+			),
+			array(),
+			'aafm-bridge-vendor-buries-an-object'
+		);
+
+		$this->assertInstanceOf( WP_Error::class, $result, 'An object nested inside the result wrapper must be refused, not only one found at the top level.' );
+		$this->assertSame( 'aafm_bridge_unsupported_result_shape', $result->get_error_code() );
+	}
+
+	/**
+	 * The wrapped-and-accepted companion to the WP_User/JsonSerializable/subclass refusals above:
+	 * an exact empty stdClass under the adapter's own 'result' key is accepted, matching the
+	 * unwrapped case (test_a_bridged_empty_object_result_passes_through_unchanged) at this shape.
+	 */
+	public function test_an_empty_object_wrapped_in_the_adapters_result_key_is_accepted(): void {
+		$original = array( 'result' => (object) array() );
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$original,
+			array(),
+			'aafm-bridge-vendor-returns-an-empty-object-wrapped'
+		);
+
+		$this->assertSame( $original, $result );
+	}
+
+	/**
+	 * Regression safety for the walk itself: a plain, deeply-nested array carrying no objects at
+	 * all must still pass through unchanged, proving the recursive scan does not itself corrupt or
+	 * refuse ordinary bridged output.
+	 */
+	public function test_a_deeply_nested_plain_array_with_no_objects_is_unchanged(): void {
+		$original = array(
+			'result' => array(
+				'items' => array(
+					array( 'name' => 'first' ),
+					array( 'name' => 'second' ),
+				),
+				'count' => 2,
+			),
+		);
+
+		$result = aafm_filter_bridged_tool_call_result(
+			$original,
+			array(),
+			'aafm-bridge-vendor-returns-plain-nested-data'
+		);
+
+		$this->assertSame( $original, $result );
 	}
 }

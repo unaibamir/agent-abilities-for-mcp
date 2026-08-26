@@ -402,6 +402,13 @@ PHP;
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_get_attribute_taxonomies() { return \AAFM\Tests\WcAttributeStubStore::all(); }' );
 		}
+		if ( ! function_exists( 'wc_get_attribute' ) ) {
+			// Mirrors real WooCommerce's wc_get_attribute() (wc-attribute-functions.php:472-488)
+			// field-for-field: looks the id up in the same store wc_get_attribute_taxonomies() reads,
+			// then renames to the API shape, including wc_attribute_taxonomy_name() for slug.
+			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
+			eval( 'function wc_get_attribute( $id ) { $row = \AAFM\Tests\WcAttributeStubStore::$attributes[ (int) $id ] ?? null; if ( null === $row ) { return null; } $attribute = new \stdClass(); $attribute->id = (int) $row->attribute_id; $attribute->name = $row->attribute_label; $attribute->slug = wc_attribute_taxonomy_name( $row->attribute_name ); $attribute->type = $row->attribute_type; $attribute->order_by = $row->attribute_orderby; $attribute->has_archives = (bool) $row->attribute_public; return $attribute; }' );
+		}
 		if ( ! function_exists( 'wc_create_attribute' ) ) {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- function-only stub for tests; never shipped.
 			eval( 'function wc_create_attribute( $args ) { $id = \AAFM\Tests\WcAttributeStubStore::create( (array) $args ); return ( $id > 0 ) ? $id : new \WP_Error( "wc_attribute_create_failed", "Create failed." ); }' );

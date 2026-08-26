@@ -387,4 +387,28 @@ final class WooAttributesTest extends TestCase {
 		// sanitize_title( 'My Fabric' ) yields 'my-fabric'; wc_attribute_taxonomy_name adds 'pa_' prefix.
 		$this->assertSame( 'pa_my-fabric', $res['slug'] );
 	}
+
+	/**
+	 * Sweep finding A (208 FIX-2 item 1): create's and update's by-id reads now delegate to
+	 * wc_get_attribute() rather than a hand-rolled scan over wc_get_attribute_taxonomies(). Both
+	 * paths return the identical shape either way (both this test suite's create/update tests above
+	 * already assert on that shape, unchanged), so there is no behavioural difference to drive RED -
+	 * this is a drift-risk-only finding, stated honestly rather than dressed up as a live-bug fix.
+	 * What this test pins instead: the duplicate resolver is genuinely GONE from the source, not
+	 * merely unused, so a future edit cannot quietly resurrect the second copy of the field mapping.
+	 */
+	public function test_the_duplicate_by_id_resolver_was_removed_not_just_unused(): void {
+		$this->assertFalse(
+			function_exists( 'aafm_wc_get_attribute' ),
+			'aafm_wc_get_attribute() must be gone entirely, not left as dead code a future edit could call again.'
+		);
+
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/attributes.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringNotContainsString( 'aafm_wc_get_attribute(', $source, 'no call site may still reference the removed resolver.' );
+		$this->assertGreaterThanOrEqual(
+			3,
+			substr_count( $source, ' = wc_get_attribute( $id )' ),
+			'the three by-id assignments (create\'s re-read, update\'s resolve and its re-read) must call wc_get_attribute() directly.'
+		);
+	}
 }

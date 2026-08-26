@@ -315,6 +315,16 @@ if ( ! function_exists( 'wc_get_attribute_taxonomies' ) ) {
 	}
 }
 
+if ( ! function_exists( 'wc_get_attribute' ) ) {
+	/**
+	 * @param int $id
+	 * @return \stdClass|null
+	 */
+	function wc_get_attribute( $id ) {
+		return null;
+	}
+}
+
 if ( ! function_exists( 'wc_attribute_taxonomy_name' ) ) {
 	/**
 	 * @param string $attribute_name

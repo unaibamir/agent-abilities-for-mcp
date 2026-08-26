@@ -382,9 +382,16 @@ function aafm_args_wc_update_product_attribute(): array {
  * unreachable dead code: wc_update_attribute() (wc-attribute-functions.php:696-720) has done this
  * exact backfill natively since exactly 9.1.0, and AAFM_WOOCOMMERCE_MIN_VERSION
  * (includes/integrations.php:233-234) is pinned to that release for precisely this reason - the
- * WooCommerce abilities, this one included, never register at all below that floor, so the
- * "below 9.1 it wipes fields" case this guard defended against cannot occur on any WooCommerce
- * version this code can actually run on. $args is now built from only the keys the caller sent;
+ * WooCommerce abilities, this one included, never register at all below that floor, so on any
+ * install whose WooCommerce version can be read, the "below 9.1 it wipes fields" case this guard
+ * defended against cannot arise. One honest caveat on that, raised by the 208 sweep review: the
+ * floor gate is deliberately fail-OPEN on an undeterminable version - aafm_woocommerce_active()
+ * (includes/integrations.php:339) treats a null version as meeting the floor rather than refusing -
+ * so the guarantee rests on WC_VERSION being defined, which real WooCommerce always does whenever
+ * the WooCommerce class itself exists. It is a very strong guarantee, not an absolute one, and the
+ * distinction is recorded here rather than overstated.
+ *
+ * $args is now built from only the keys the caller sent;
  * wc_update_attribute() backfills the rest from its own resolved current row, the same way its
  * own callers (including WooCommerce's own REST controller) already rely on it to. $changed still
  * tracks whether the caller sent anything at all, so an empty patch stays a genuine no-op.

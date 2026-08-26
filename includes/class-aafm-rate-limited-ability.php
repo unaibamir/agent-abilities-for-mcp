@@ -33,8 +33,20 @@ if ( ! class_exists( 'WP_Ability' ) ) {
  * so that entry would otherwise sit on the stack until a LATER, unrelated call for the same ability
  * name - denied at a preliminary permission check that never goes through execute() at all - popped
  * and resolved it instead of writing its own row, misattributing the second call's outcome onto the
- * first and leaving the second with no row of its own. See aafm_discard_dangling_invocation_row()
- * for the mechanism.
+ * first and leaving the second with no row of its own.
+ *
+ * Final-gate fix (Codex finding 1, round 2): the fix round 1 version discarded whatever frame was
+ * on top of the per-name stack, with no way to tell whose frame that was. That is exactly wrong
+ * when the SAME ability is invoked recursively - a wp_pre_execute_ability filter that itself calls
+ * the same ability, which the Abilities API does not forbid. The nested call's own cleanup would
+ * discard the OUTER call's still-open frame: the outer row was left stuck at 'started' forever
+ * while the outer callback, finding nothing pending, opened and resolved a duplicate row.
+ * aafm_begin_invocation() now hands this specific execute() call a unique token before
+ * parent::execute() runs, and the finally passes that SAME token to
+ * aafm_discard_invocation_if_mine(), which discards the top frame only when it is still the one
+ * this token opened - never a nested or outer invocation's frame. See that function's own docblock
+ * in includes/register.php for the full mechanism and why the other consumers of this stack
+ * (the decorated permission and execute callbacks) do not need the same check.
  *
  * Releasing both in a finally around parent::execute() closes every in-execute path at once, for
  * both concerns: input refusal, the permission re-check, the callback itself, output refusal, and a
@@ -52,11 +64,12 @@ class AAFM_Rate_Limited_Ability extends WP_Ability {
 	 * @return mixed|WP_Error The result of the ability execution, or WP_Error on failure.
 	 */
 	public function execute( $input = null ) {
+		$invocation_token = aafm_begin_invocation( $this->get_name() );
 		try {
 			return parent::execute( $input );
 		} finally {
 			aafm_rate_limit_call_reset( $this->get_name() );
-			aafm_discard_dangling_invocation_row( $this->get_name() );
+			aafm_discard_invocation_if_mine( $this->get_name(), $invocation_token );
 		}
 	}
 }

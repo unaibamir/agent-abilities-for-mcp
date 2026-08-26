@@ -62,71 +62,136 @@ function aafm_remember_raw_permission( string $name, ?callable $callback = null 
 }
 
 /**
- * Correlate a 'started' audit row opened by aafm_log_ability_invocation() with the decorated
- * execute_callback that resolves it, for the SAME call.
+ * The single storage behind per-invocation audit-row correlation: a per-ability-name stack of
+ * {token, row_id} frames. Returned BY REFERENCE so every function below shares the same
+ * request-scoped state without each keeping its own copy. Never call this directly outside this
+ * file - use the named functions that follow.
  *
- * WP 7.1's wp_ability_invoked action fires before ANY short-circuit (wp_pre_execute_ability), so
- * it is the only place a row can be opened for a call a third party later intercepts. On a normal
- * (non-short-circuited) call, execute() goes on to invoke the decorated execute_callback for the
- * same call, and that closure must resolve the SAME row rather than open a second one. A stack,
- * not a scalar: an ability's own execute_callback can legitimately invoke another ability (a
- * nested wp_get_ability()->execute() call), which would otherwise interleave two calls to the
- * same name.
+ * Final-gate fix (Codex finding 1, its first review's proposal, not taken until now): a plain
+ * per-name stack (no token) cannot tell whose frame is on top when the SAME ability is invoked
+ * recursively - a wp_pre_execute_ability filter that itself calls the same ability is the
+ * concrete case, but the Abilities API places no restriction on same-name nesting. Under the
+ * name-only version, a nested call's own cleanup could discard the OUTER call's still-open frame:
+ * the outer row was left stuck at 'started' forever while the outer callback, finding nothing
+ * pending, opened and resolved a DUPLICATE row for the same call. A token turns every discard
+ * into "is this specific frame mine," not merely "is there a frame for this name," which closes
+ * the whole class of nesting bugs rather than the three exit paths (short-circuit,
+ * normalize_input() failure, validate_input() failure) a name-only stack happened to be tested
+ * against in fix round 1.
  *
- * Fix round 1 (Codex finding 1): pushing here is only half the correctness story. Real WP 7.1
- * returns from execute() WITHOUT ever reaching a denial write or the decorated execute_callback on
- * THREE separate exit paths: an intentional wp_pre_execute_ability short-circuit, a normalize_input()
- * failure, and a validate_input() failure. None of those consume the entry this function pushed, so
- * it would sit on the stack until a LATER, unrelated call for the SAME ability name - denied at a
- * preliminary permission check that never goes through execute() at all, exactly how the MCP
- * adapter's own check_permission() call and this suite's own test_denied_is_audited cases work -
- * popped and resolved it instead of writing its own row. AAFM_Rate_Limited_Ability::execute()
- * (includes/class-aafm-rate-limited-ability.php) is what closes that gap: it already wraps every
- * exit from parent::execute() in a finally for the identical reason on the rate-limit side, so its
- * finally now also calls aafm_discard_dangling_invocation_row() below, guaranteeing that whatever
- * THIS invocation pushed here is gone - resolved or discarded - before execute() ever returns to
- * its caller. That is what makes it safe for a preliminary permission check for a later call to
- * assume "nothing pending here is mine to worry about."
- *
- * @param string   $name   Ability name.
- * @param int|null $row_id Row id to push, or null to pop the most recently pushed one.
- * @return int|null The popped row id when reading (null if nothing was pending); always null when
- *                   pushing.
+ * @return array<string,array<int,array{token:string,row_id:int|null}>>
  */
-function aafm_pending_invocation_row( string $name, ?int $row_id = null ): ?int {
+function &aafm_invocation_stacks(): array {
 	static $stacks = array();
-
-	if ( null !== $row_id ) {
-		$stacks[ $name ][] = $row_id;
-		return null;
-	}
-
-	if ( empty( $stacks[ $name ] ) ) {
-		return null;
-	}
-
-	return array_pop( $stacks[ $name ] );
+	return $stacks;
 }
 
 /**
- * Discard (without touching the database) a pending invocation row left on the stack for $name.
+ * Open a new invocation frame for $name, before core does any work.
  *
- * The request-scoped safety net for aafm_pending_invocation_row(): called from
- * AAFM_Rate_Limited_Ability::execute()'s finally, once per execute() invocation, after
- * parent::execute() returns however it returns. If this specific call's own decorated execute
- * callback or a permission denial already popped its entry, this is a harmless no-op. If neither
- * did - a wp_pre_execute_ability short-circuit, a normalize_input() or validate_input() failure, or
- * a rethrown permission-callback crash - this pops and discards it, leaving the DATABASE row
- * exactly as it was (still 'started', on purpose: that is the same "stuck row is the forensic
- * signal" intent every other unresolved-row path in this file already relies on). Only the
- * in-memory correlation is cleared, so it can never be inherited by a later, unrelated call for the
- * same ability name.
+ * Called ONLY by AAFM_Rate_Limited_Ability::execute(), once per execute() invocation, before
+ * calling parent::execute(). The returned token is this specific invocation's identity: pass it
+ * back to aafm_discard_invocation_if_mine() in that same method's finally, and nowhere else. A
+ * nested same-ability call pushes its OWN frame on top of this one and is responsible for its own
+ * token, never this one.
  *
  * @param string $name Ability name.
+ * @return string A token unique to this invocation.
+ */
+function aafm_begin_invocation( string $name ): string {
+	static $counter = 0;
+
+	++$counter;
+	$token             = $name . ':' . $counter;
+	$stacks            =& aafm_invocation_stacks();
+	$stacks[ $name ][] = array(
+		'token'  => $token,
+		'row_id' => null,
+	);
+	return $token;
+}
+
+/**
+ * Attach the just-opened audit row id to the CURRENT invocation's frame.
+ *
+ * Called only from aafm_log_ability_invocation(), which core fires as the very first action
+ * inside execute() - synchronously, immediately after aafm_begin_invocation() pushed this
+ * invocation's own frame and before anything else for the same ability name could possibly run.
+ * The top frame at this exact moment is therefore always this invocation's own by construction;
+ * no token check is needed here; the check matters only later, in
+ * aafm_discard_invocation_if_mine(), once a nested call has had the chance to run in between.
+ *
+ * @param string $name   Ability name.
+ * @param int    $row_id The row id just opened for this invocation.
  * @return void
  */
-function aafm_discard_dangling_invocation_row( string $name ): void {
-	aafm_pending_invocation_row( $name );
+function aafm_tag_current_invocation_row( string $name, int $row_id ): void {
+	$stacks =& aafm_invocation_stacks();
+	if ( empty( $stacks[ $name ] ) ) {
+		return; // Defensive: no frame means execute() ran without the subclass, which never happens for our abilities.
+	}
+	$top           =& $stacks[ $name ][ count( $stacks[ $name ] ) - 1 ];
+	$top['row_id'] = $row_id;
+}
+
+/**
+ * Resolve (pop) the CURRENT invocation's own frame and return its row id.
+ *
+ * Called by the decorated permission callback's two denial-write sites and by the decorated
+ * execute_callback, each exactly once, at the point where THIS invocation's own permission or
+ * execute phase is running. By the time any of these run, any nested same-ability call that could
+ * have happened earlier in this same invocation (during wp_pre_execute_ability, for example) has
+ * already been fully pushed, resolved or discarded - so the top frame here is always this
+ * invocation's own, and no token check is needed. That guarantee is exactly what
+ * aafm_discard_invocation_if_mine()'s token check exists to protect: nesting only stays correctly
+ * ordered because the nested call's own finally never touches a frame that is not its own.
+ *
+ * @param string $name Ability name.
+ * @return int|null The row id, or null if nothing was pending (pre-7.1 core, where
+ *                   wp_ability_invoked never fires and the frame's row_id was never tagged).
+ */
+function aafm_resolve_current_invocation_row( string $name ): ?int {
+	$stacks =& aafm_invocation_stacks();
+	if ( empty( $stacks[ $name ] ) ) {
+		return null;
+	}
+	$frame = array_pop( $stacks[ $name ] );
+	return $frame['row_id'];
+}
+
+/**
+ * Discard the invocation frame for $name, but ONLY if it is still the one $token opened.
+ *
+ * Called from AAFM_Rate_Limited_Ability::execute()'s finally, once per execute() invocation,
+ * after parent::execute() returns however it returns, passing the exact token
+ * aafm_begin_invocation() returned for this same invocation. This is the ONE call site in this
+ * file that must check whose frame it is looking at: by the time it runs, a nested same-ability
+ * call may have already pushed and popped its own frame on top of this one and left THIS
+ * invocation's frame exposed again, or this invocation's own frame may already have been resolved
+ * by aafm_resolve_current_invocation_row() above. Either way, if the top frame's token is not
+ * this one, it belongs to an outer invocation that has not finished yet, and touching it would be
+ * exactly the corruption this token exists to prevent - so this leaves it strictly alone.
+ *
+ * When the token DOES match, the frame is discarded without touching the database row: if it
+ * still carries a row id, that row stays exactly where the short-circuit/normalize-failure/
+ * validate-failure path (or a rethrown permission crash) left it - stuck at 'started', the same
+ * forensic signal every other unresolved-row path in this file already relies on. Only the
+ * in-memory correlation is cleared, so it can never be inherited by a later, unrelated call for
+ * the same ability name.
+ *
+ * @param string $name  Ability name.
+ * @param string $token This invocation's own token, from aafm_begin_invocation().
+ * @return void
+ */
+function aafm_discard_invocation_if_mine( string $name, string $token ): void {
+	$stacks =& aafm_invocation_stacks();
+	if ( empty( $stacks[ $name ] ) ) {
+		return;
+	}
+	$top =& $stacks[ $name ][ count( $stacks[ $name ] ) - 1 ];
+	if ( $top['token'] === $token ) {
+		array_pop( $stacks[ $name ] );
+	}
 }
 
 /**
@@ -182,7 +247,7 @@ function aafm_log_ability_invocation( string $ability_name, $input, $ability ): 
 		)
 	);
 
-	aafm_pending_invocation_row( $ability_name, $row_id );
+	aafm_tag_current_invocation_row( $ability_name, $row_id );
 }
 add_action( 'wp_ability_invoked', 'aafm_log_ability_invocation', 10, 3 );
 
@@ -725,7 +790,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// no longer resolves to a real row (the log was cleared, or the pending stack outlived
 			// its row for any other reason) also falls back to a fresh insert, rather than silently
 			// dropping the denial - a stray extra row is a far cheaper mistake than an unaudited one.
-			$rate_pending_row_id = aafm_pending_invocation_row( $name );
+			$rate_pending_row_id = aafm_resolve_current_invocation_row( $name );
 			$rate_row_id         = null !== $rate_pending_row_id && aafm_update_activity_status( $rate_pending_row_id, 'denied', null, $rate_detail )
 				? $rate_pending_row_id
 				: aafm_log_activity(
@@ -862,7 +927,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 			// (the log was cleared, or the pending stack outlived its row for any other reason) also
 			// falls back to a fresh insert, rather than silently dropping the denial - a stray extra
 			// row is a far cheaper mistake than an unaudited one.
-			$denied_pending_row_id = aafm_pending_invocation_row( $name );
+			$denied_pending_row_id = aafm_resolve_current_invocation_row( $name );
 			$denied_row_id         = null !== $denied_pending_row_id && aafm_update_activity_status( $denied_pending_row_id, 'denied', null, $denied_detail )
 				? $denied_pending_row_id
 				: aafm_log_activity(
@@ -907,7 +972,7 @@ function aafm_register_ability_with_log( string $name, array $args ) {
 		// this closure entirely. Reuse that row rather than open a second one for the same call.
 		// Pre-7.1 core never fires that action, so the pop always returns null there and this falls
 		// back to opening the row exactly as before.
-		$row_id = aafm_pending_invocation_row( $name );
+		$row_id = aafm_resolve_current_invocation_row( $name );
 		if ( null === $row_id ) {
 			// One row at 'started' (intent), then updated in place with the real outcome -
 			// one row per call, not two. A crash mid-execute leaves a visible 'started' row.

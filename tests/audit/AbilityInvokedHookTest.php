@@ -386,4 +386,85 @@ final class AbilityInvokedHookTest extends TestCase {
 		sort( $statuses );
 		$this->assertSame( array( 'started', 'success' ), $statuses );
 	}
+
+	/**
+	 * Final-gate fix, Codex finding 1 (the minimum test it names): a wp_pre_execute_ability filter
+	 * that recursively executes the SAME ability is not misuse - the Abilities API places no
+	 * restriction on same-name nesting. A per-name-only correlation stack cannot tell whose frame
+	 * is on top: the nested call's own cleanup discarded the OUTER call's still-open frame, so the
+	 * outer's own execute_callback later found nothing pending and opened a duplicate row, while
+	 * the true outer row was left stuck at 'started' forever with no way back to it.
+	 *
+	 * The filter here returns $pre UNCHANGED after the nested call, so the OUTER call also
+	 * proceeds normally through its own decorated execute_callback - this is the shape that
+	 * actually exposes the bug: under the pre-fix (name-only) stack, the outer's execute_callback
+	 * would find its own frame already gone (eaten by the nested call's cleanup) and open a
+	 * replacement, yielding three rows (one stuck, two resolved) instead of the correct two.
+	 */
+	public function test_a_recursive_same_ability_call_resolves_exactly_two_rows(): void {
+		$name = 'aafm-test/invoked-hook-recursive-same-ability';
+		$this->register_fixture( $name );
+
+		$recursed = false;
+		add_filter(
+			'wp_pre_execute_ability',
+			static function ( $pre, string $ability_name ) use ( $name, &$recursed ) {
+				if ( $name === $ability_name && ! $recursed ) {
+					$recursed = true;
+					// The nested call must fully resolve - push, tag, resolve, discard - before
+					// this filter returns, per ordinary PHP call-stack nesting. Its result is not
+					// needed here; only that it runs and cleans up after itself correctly.
+					wp_get_ability( $name )->execute( array() );
+				}
+				return $pre; // Not a short-circuit: let the OUTER call proceed normally.
+			},
+			10,
+			2
+		);
+
+		$outer = wp_get_ability( $name )->execute( array() );
+		$this->assertSame( array( 'ok' => true ), $outer, 'Fixture check: the outer call must resolve normally (not short-circuited).' );
+
+		$rows = aafm_query_activity( array( 'ability' => $name ) );
+		$this->assertCount( 2, $rows, 'The outer call and the nested call must each resolve to exactly their own row - no stuck row, no duplicate.' );
+
+		$statuses = wp_list_pluck( $rows, 'status' );
+		$this->assertSame( array( 'success', 'success' ), $statuses, 'Both calls ran to completion and neither was left at started nor duplicated.' );
+	}
+
+	/**
+	 * The flat-case regression check alongside the recursive test above: nesting a DIFFERENT
+	 * ability inside a wp_pre_execute_ability filter must keep working exactly as before, since
+	 * the two abilities use entirely separate per-name stacks and neither invocation's token has
+	 * any reason to collide with the other's.
+	 */
+	public function test_nesting_a_different_ability_resolves_both_independently(): void {
+		$outer_name = 'aafm-test/invoked-hook-nesting-outer';
+		$inner_name = 'aafm-test/invoked-hook-nesting-inner';
+		$this->register_fixture( $outer_name );
+		$this->register_fixture( $inner_name );
+
+		add_filter(
+			'wp_pre_execute_ability',
+			static function ( $pre, string $ability_name ) use ( $outer_name, $inner_name ) {
+				if ( $outer_name === $ability_name ) {
+					wp_get_ability( $inner_name )->execute( array() );
+				}
+				return $pre;
+			},
+			10,
+			2
+		);
+
+		$outer = wp_get_ability( $outer_name )->execute( array() );
+		$this->assertSame( array( 'ok' => true ), $outer );
+
+		$outer_rows = aafm_query_activity( array( 'ability' => $outer_name ) );
+		$inner_rows = aafm_query_activity( array( 'ability' => $inner_name ) );
+
+		$this->assertCount( 1, $outer_rows, 'The outer ability must resolve to exactly one row.' );
+		$this->assertSame( 'success', $outer_rows[0]['status'] );
+		$this->assertCount( 1, $inner_rows, 'The nested, different-named ability must resolve to exactly one row of its own.' );
+		$this->assertSame( 'success', $inner_rows[0]['status'] );
+	}
 }

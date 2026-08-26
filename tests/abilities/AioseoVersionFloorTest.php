@@ -35,23 +35,28 @@ final class AioseoVersionFloorTest extends TestCase {
 	 * PHP constant can never be undefined once defined - a bare constant would let one case's
 	 * pinned version leak into every later test in this process.
 	 *
+	 * Registered at priority 20 (above the stub's default-priority baseline in
+	 * IntegrationStubs::stub_aioseo(), which reports the stubbed AIOSEO as a supported version so
+	 * OTHER tests relying on real detection are not broken by this floor) and removed by the exact
+	 * same callable afterward, never via remove_all_filters(). Wiping the whole hook would also
+	 * remove that baseline filter for the rest of the process, silently reintroducing the very
+	 * assertion-count drop this reconciliation fixed for every AIOSEO test that runs after this one.
+	 *
 	 * @dataProvider provide_aioseo_versions
 	 *
 	 * @param string|null $version       The version aafm_aioseo_version() reports.
 	 * @param bool        $expect_active Whether the site should be reported active at that version.
 	 */
 	public function test_aioseo_floor_gates_on_version( ?string $version, bool $expect_active ): void {
-		add_filter(
-			'aafm_aioseo_version',
-			static function () use ( $version ) {
-				return $version;
-			}
-		);
+		$override = static function () use ( $version ) {
+			return $version;
+		};
+		add_filter( 'aafm_aioseo_version', $override, 20 );
 
 		try {
 			$this->assertSame( $expect_active, aafm_aioseo_active() );
 		} finally {
-			remove_all_filters( 'aafm_aioseo_version' );
+			remove_filter( 'aafm_aioseo_version', $override, 20 );
 		}
 	}
 

@@ -132,6 +132,32 @@ trait IntegrationStubs {
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 			eval( $this->aafm_aioseo_post_model_source() );
 		}
+		// Fix round 2 (assertion-count reconciliation): the stubbed AIOSEO must look like a
+		// SUPPORTED one, since that is what it is standing in for. aafm_aioseo_version() has no
+		// real AIOSEO_VERSION constant to read in this environment (only the marker function
+		// above is defined), so without this the version floor added in fix round 2 fails closed
+		// for every test that relies on real (unforced) detection rather than the outer
+		// aafm_integration_active_aioseo filter.
+		//
+		// A real, defined constant here, NOT a filter - measured, not assumed. A filter added
+		// inside a test method does not survive to the NEXT test method: WP's own test base class
+		// snapshots $wp_filter once before the very first test runs and restores that exact
+		// snapshot in every test's tear_down() (_backup_hooks()/_restore_hooks() in
+		// wordpress-tests-lib/includes/abstract-testcase.php), which silently erases any filter a
+		// test adds, whether or not it is ever explicitly removed. Confirmed directly: an earlier
+		// attempt at this fix used add_filter() here and a later test in the same run still saw
+		// has_filter('aafm_aioseo_version') === false. A defined constant is a language-level fact,
+		// not a hook, so it survives that restore exactly the way the aioseo() marker function and
+		// the model class above already do - the established, working pattern in this same method.
+		// This does NOT reopen AioseoVersionFloorTest's below-floor/undetectable cases: aafm_aioseo_
+		// version() applies apply_filters() AFTER reading the constant, and that test's own filter
+		// callback ignores the value it receives and returns its own fixed one, so it fully
+		// overrides this constant for the one test method where it runs - constants and filters
+		// compose here, they do not conflict.
+		if ( ! defined( 'AIOSEO_VERSION' ) ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- mimicking AIOSEO's own constant so the version floor sees a supported install; a test stub, never shipped.
+			define( 'AIOSEO_VERSION', '5.0.0.1' );
+		}
 		add_filter(
 			'aafm_seo_rendered_head',
 			static fn( string $head, int $id, string $plugin ): string => 'aioseo' === $plugin ? '<title>AIOSEO head ' . $id . '</title>' : $head,

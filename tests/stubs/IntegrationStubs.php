@@ -1427,7 +1427,10 @@ PHP;
 			// zone_object key - the earlier stub fabricated one, which is exactly what hid the
 			// production bug that read $zone_data['zone_object'].
 			// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
-			eval( 'class WC_Shipping_Zones { public static function get_zones( $context = "admin" ) { if ( is_array( \AAFM\Tests\WcShippingStubStore::$rows_override ) ) { return \AAFM\Tests\WcShippingStubStore::$rows_override; } $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); if ( $zone_id < 1 ) { continue; } $z = new \WC_Shipping_Zone( $zone_id ); $data = $z->get_data(); $data["zone_id"] = $zone_id; $data["formatted_zone_location"] = ""; $data["shipping_methods"] = $z->get_shipping_methods( false ); $out[$zone_id] = $data; } return $out; } }' );
+			// get_zone() mirrors real WC_Shipping_Zones::get_zone_by() (208 FIX-3 item 2): instantiate
+			// inside try/catch(Exception), false on failure - the exact vendor pattern
+			// aafm_wc_get_shipping_zone_object() now delegates to.
+			eval( 'class WC_Shipping_Zones { public static function get_zones( $context = "admin" ) { if ( is_array( \AAFM\Tests\WcShippingStubStore::$rows_override ) ) { return \AAFM\Tests\WcShippingStubStore::$rows_override; } $rows = \AAFM\Tests\WcShippingStubStore::all(); $out = array(); foreach ( $rows as $row ) { $zone_id = (int)( $row["zone_id"] ?? 0 ); if ( $zone_id < 1 ) { continue; } $z = new \WC_Shipping_Zone( $zone_id ); $data = $z->get_data(); $data["zone_id"] = $zone_id; $data["formatted_zone_location"] = ""; $data["shipping_methods"] = $z->get_shipping_methods( false ); $out[$zone_id] = $data; } return $out; } public static function get_zone( $zone_id ) { try { return new \WC_Shipping_Zone( (int) $zone_id ); } catch ( \Exception $e ) { return false; } } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a class stub for tests; never shipped.
 		}
 	}
 

@@ -1036,6 +1036,14 @@ if ( ! class_exists( 'WC_Shipping_Zones' ) ) {
 		 * @return array<int,array<string,mixed>>
 		 */
 		public static function get_zones( $args = array() ) { return array(); }
+
+		/**
+		 * Get shipping zone using its ID (208 FIX-3 item 2).
+		 *
+		 * @param int $zone_id
+		 * @return \WC_Shipping_Zone|bool
+		 */
+		public static function get_zone( $zone_id ) { return false; }
 	}
 }
 if ( ! class_exists( 'WC_Tax' ) ) {

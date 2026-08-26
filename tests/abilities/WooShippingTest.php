@@ -880,4 +880,28 @@ final class WooShippingTest extends TestCase {
 			);
 		}
 	}
+
+	/**
+	 * FIX-3 item 2 (sweep finding A1): the shared zone resolver used by 7 of this file's 8
+	 * abilities now delegates to WC_Shipping_Zones::get_zone() instead of hand-instantiating
+	 * WC_Shipping_Zone in a try/catch with a redundant id re-check. Traced both paths line by
+	 * line against real WooCommerce source and found no observable difference today (the vendor
+	 * resolver does the identical instantiate-inside-try/catch internally), so there is no
+	 * behavioural difference to drive a test red - this pins the source-level fact instead, as the
+	 * finding predicted, and states plainly it could not go red any other way.
+	 */
+	public function test_zone_resolver_delegates_to_wc_shipping_zones(): void {
+		$source = (string) file_get_contents( AAFM_PLUGIN_DIR . 'includes/abilities/woocommerce/shipping.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading a local test fixture, not a remote URL.
+		$this->assertStringContainsString(
+			'\WC_Shipping_Zones::get_zone( $zone_id )',
+			$source,
+			'aafm_wc_get_shipping_zone_object() must delegate to WC_Shipping_Zones::get_zone(), the same resolver WooCommerce\'s own REST controller base class uses.'
+		);
+		preg_match( '/function aafm_wc_get_shipping_zone_object.*?\n}/s', $source, $matches );
+		$this->assertStringNotContainsString(
+			'new \WC_Shipping_Zone(',
+			$matches[0] ?? '',
+			'the zone resolver\'s own function body must not hand-instantiate WC_Shipping_Zone directly any more (a different function, wc-create-shipping-zone, legitimately still does).'
+		);
+	}
 }

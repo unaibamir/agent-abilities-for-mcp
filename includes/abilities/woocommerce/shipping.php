@@ -139,26 +139,29 @@ function aafm_wc_shipping_registry_definitions(): array {
 /**
  * Resolve a zone_id to a WC_Shipping_Zone, or null when unavailable or unknown.
  *
+ * FIX-3 item 2 (sweep finding, A1 batch): this used to hand-instantiate
+ * `new \WC_Shipping_Zone( $zone_id )` inside a try/catch plus a redundant id-match re-check.
+ * WooCommerce ships the exact resolver for this job, \WC_Shipping_Zones::get_zone( $zone_id )
+ * (class-wc-shipping-zones.php:78-80, a one-line wrapper around get_zone_by()), which does the
+ * identical instantiate-inside-try/catch(Exception) itself (class-wc-shipping-zones.php:90-112) -
+ * confirmed by reading the constructor and the data store's read_multiple(), which is what
+ * actually throws for a missing non-zero id. WooCommerce's own REST controller base class calls
+ * this vendor resolver rather than instantiating directly
+ * (class-wc-rest-shipping-zones-controller-base.php:43-48). Traced both paths line by line: no
+ * observable difference today (the plugin's own $zone_id < 0 guard and post-construction id
+ * re-check were both already redundant with what the vendor resolver does internally), so this
+ * was drift-risk duplication carried by 7 of this file's 8 abilities through this one shared
+ * helper, not a live gap.
+ *
  * @param int $zone_id Zone id (0 = Rest of World).
  * @return \WC_Shipping_Zone|null
  */
 function aafm_wc_get_shipping_zone_object( int $zone_id ): ?\WC_Shipping_Zone {
-	if ( $zone_id < 0 || ! class_exists( 'WC_Shipping_Zone' ) ) {
+	if ( ! class_exists( 'WC_Shipping_Zone' ) ) {
 		return null;
 	}
-	// B33: WooCommerce's zone data store THROWS for a missing non-zero id, inside the constructor
-	// (WC_Shipping_Zone_Data_Store::read_multiple(), "Invalid data store."), so without this catch
-	// the null branch below is dead on a real site and a routine unknown-zone request escapes to
-	// the catalog-wide Throwable catch as a crash-classified error plus a crash audit row.
-	try {
-		$zone = new \WC_Shipping_Zone( $zone_id );
-	} catch ( \Throwable $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- $e unused; a catch variable is required on the PHP 7.4 floor.
-		return null;
-	}
-	// A zone is valid when its data() id matches what we requested, OR for zone 0 (Rest of World)
-	// which always exists in WooCommerce. We check via get_data() to avoid an extra store read.
-	$data = $zone->get_data();
-	return ( (int) ( $data['id'] ?? -1 ) === $zone_id ) ? $zone : null;
+	$zone = \WC_Shipping_Zones::get_zone( $zone_id );
+	return $zone instanceof \WC_Shipping_Zone ? $zone : null;
 }
 
 /**

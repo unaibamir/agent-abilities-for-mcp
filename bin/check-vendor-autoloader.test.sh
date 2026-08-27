@@ -96,11 +96,18 @@ else
   bad "error message" "did not mention both 'myclabs' and 'phpunit'. Output: $out"
 fi
 
-echo "== 4. the REAL tracked autoloader files pass right now (regression check) =="
-if out="$("$TOOL" --worktree 2>&1)"; then
-  ok "the real tracked vendor/composer/*.php autoloader files are clean today"
+echo "== 4. the committed (index) autoloader files pass right now (regression check) =="
+# Deliberately --worktree is NOT used here: a local `composer install` (dev
+# deps, for phpunit/phpcs/phpstan) legitimately regenerates vendor/composer/*
+# on disk with phpunit/etc. references, same as this checkout has right now.
+# --worktree reads exactly that dev-polluted disk content and would fail on
+# every ordinary dev machine, which is not what this section means to prove.
+# The committed/index content - what the pre-commit hook actually gates and
+# what ships - is what "tracked" means here, so check that instead.
+if out="$("$TOOL" 2>&1)"; then
+  ok "the committed vendor/composer/*.php autoloader files are clean today"
 else
-  bad "real files" "the actual tracked autoloader failed the guard: $out"
+  bad "committed files" "the actual committed autoloader failed the guard: $out"
 fi
 
 echo "== 5. the STAGED-INDEX mode (no flag - what the pre-commit hook actually calls) catches corruption =="
@@ -108,33 +115,41 @@ echo "== 5. the STAGED-INDEX mode (no flag - what the pre-commit hook actually c
 # repeatable regression test: break the git show ":file" branch in a future
 # refactor and this section goes red, instead of the suite staying green
 # while the mode production actually uses is never exercised.
-AUTOLOADER="$REPO_ROOT/vendor/composer/autoload_static.php"
-if ! git -C "$REPO_ROOT" diff --quiet -- "$AUTOLOADER" || ! git -C "$REPO_ROOT" diff --cached --quiet -- "$AUTOLOADER"; then
-  bad "staged-mode precondition" "vendor/composer/autoload_static.php is not clean before this section (uncommitted changes present) - skipping rather than risk clobbering real work"
+#
+# Runs against an ISOLATED temporary index (GIT_INDEX_FILE), never the real
+# one. The real index/worktree can legitimately carry dev-regenerated
+# vendor/composer/* content (same reason as section 4) - staging a fixture on
+# top of that would either corrupt real work or refuse to run. A temp index
+# seeded from HEAD sidesteps both: nothing on disk or in the real index is
+# touched, so there is nothing to restore and no precondition to skip on.
+AUTOLOADER="vendor/composer/autoload_static.php"
+TMP_INDEX="$(mktemp)"
+trap 'rm -f "$TMP_INDEX"' EXIT
+
+GIT_INDEX_FILE="$TMP_INDEX" git -C "$REPO_ROOT" read-tree HEAD
+blob_sha="$(printf '%s\n%s\n' "$(git -C "$REPO_ROOT" show "HEAD:$AUTOLOADER")" "        'Test\\\\Fixture' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/TestCase.php'," | git -C "$REPO_ROOT" hash-object -w --stdin)"
+GIT_INDEX_FILE="$TMP_INDEX" git -C "$REPO_ROOT" update-index --add --cacheinfo 100644 "$blob_sha" "$AUTOLOADER"
+
+staged_out="$(GIT_INDEX_FILE="$TMP_INDEX" "$TOOL" 2>&1)"
+staged_rc=$?
+
+rm -f "$TMP_INDEX"
+trap - EXIT
+
+if [ "$staged_rc" -ne 0 ]; then
+  ok "default (staged) mode exits non-zero on a corrupted staged autoloader"
 else
-  printf '%s\n' "        'Test\\\\Fixture' => __DIR__ . '/..' . '/phpunit/phpunit/src/Framework/TestCase.php'," >> "$AUTOLOADER"
-  git -C "$REPO_ROOT" add "$AUTOLOADER"
-
-  staged_out="$("$TOOL" 2>&1)"
-  staged_rc=$?
-
-  git -C "$REPO_ROOT" restore --staged --worktree -- "$AUTOLOADER"
-
-  if [ "$staged_rc" -ne 0 ]; then
-    ok "default (staged) mode exits non-zero on a corrupted staged autoloader"
-  else
-    bad "default (staged) mode exit code" "expected non-zero, got 0"
-  fi
-  if printf '%s' "$staged_out" | grep -q "phpunit"; then
-    ok "default (staged) mode names the offending package (phpunit)"
-  else
-    bad "default (staged) mode message" "did not mention 'phpunit'. Output: $staged_out"
-  fi
-  if git -C "$REPO_ROOT" diff --quiet -- "$AUTOLOADER" && git -C "$REPO_ROOT" diff --cached --quiet -- "$AUTOLOADER"; then
-    ok "the staged corruption was restored cleanly"
-  else
-    bad "restore" "vendor/composer/autoload_static.php was not restored cleanly after this section"
-  fi
+  bad "default (staged) mode exit code" "expected non-zero, got 0"
+fi
+if printf '%s' "$staged_out" | grep -q "phpunit"; then
+  ok "default (staged) mode names the offending package (phpunit)"
+else
+  bad "default (staged) mode message" "did not mention 'phpunit'. Output: $staged_out"
+fi
+if git -C "$REPO_ROOT" diff --cached --quiet -- "$AUTOLOADER"; then
+  ok "the real index was never touched by this section"
+else
+  bad "real index" "vendor/composer/autoload_static.php ended up staged in the real index - the temp-index isolation leaked"
 fi
 
 echo ""
